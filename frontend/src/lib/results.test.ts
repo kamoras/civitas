@@ -8,6 +8,11 @@ import {
   UNCOVERED_FILL,
   heldByPhrase,
   describeUpdate,
+  formatLed,
+  POLLS_OPEN_FILL,
+  pollsClosed,
+  pollsStillOpen,
+  seatsLed,
   formatEasternTime,
   raceLabel,
   reportingText,
@@ -16,7 +21,7 @@ import {
   stateFill,
   summarizeState,
 } from "./results";
-import type { LiveRaceResult, ResultEvent } from "@/types/election";
+import type { ElectionPhaseInfo, LiveRaceResult, ResultEvent } from "@/types/election";
 
 function race(overrides: Partial<LiveRaceResult> = {}): LiveRaceResult {
   return {
@@ -87,6 +92,63 @@ describe("showsResults", () => {
       })
     ).toBe(true);
   });
+
+  it("is results only for the phases the backend names — never for a malformed one", () => {
+    expect(showsResults({} as ElectionPhaseInfo)).toBe(false);
+    expect(showsResults({ phase: "Results" } as unknown as ElectionPhaseInfo)).toBe(false);
+    expect(
+      showsResults({
+        phase: "results",
+        electionDate: "",
+        resultsUntil: null,
+        lastResultChange: null,
+      })
+    ).toBe(true);
+  });
+});
+
+describe("polls open or closed", () => {
+  const day = {
+    phase: "election_day" as const,
+    electionDate: "2026-11-03",
+    resultsUntil: null,
+    lastResultChange: null,
+  };
+  const t = Date.parse("2026-11-04T00:00:00Z");
+  const info = (over: Partial<Parameters<typeof pollsClosed>[0]> = {}) => ({
+    phase: day,
+    races: [],
+    pollsClose: { GA: "2026-11-04T00:30:00Z" },
+    feeds: {},
+    ...over,
+  });
+
+  it("goes by the closing time", () => {
+    expect(pollsStillOpen(info(), "GA", t)).toBe(true);
+    expect(pollsClosed(info(), "GA", t)).toBe(false);
+    expect(pollsStillOpen(info(), "GA", t + 3_600_000)).toBe(false);
+    expect(pollsClosed(info(), "GA", t + 3_600_000)).toBe(true);
+    // The closing time wins over a feed read minutes before it passed.
+    const read = { GA: { status: "polls_open", checkedAt: "", lastOkAt: null } };
+    expect(pollsStillOpen(info({ feeds: read }), "GA", t + 3_600_000)).toBe(false);
+  });
+
+  it("falls back to the feed's status, and treats unknown as not closed", () => {
+    const open = { GA: { status: "polls_open", checkedAt: "", lastOkAt: null } };
+    expect(pollsStillOpen(info({ pollsClose: undefined, feeds: open }), "GA", t)).toBe(true);
+    const ok = { GA: { status: "ok", checkedAt: "", lastOkAt: null } };
+    expect(pollsClosed(info({ pollsClose: undefined, feeds: ok }), "GA", t)).toBe(true);
+    expect(pollsClosed(info({ pollsClose: undefined }), "GA", t)).toBe(false);
+    expect(pollsStillOpen(info({ pollsClose: undefined }), "GA", t)).toBe(false);
+  });
+
+  it("is closed once a count is stored, and everywhere in the results phase", () => {
+    expect(pollsClosed(info({ races: [race()] }), "GA", t)).toBe(true);
+    expect(pollsStillOpen(info({ races: [race()] }), "GA", t)).toBe(false);
+    const results = { ...day, phase: "results" as const };
+    expect(pollsClosed(info({ phase: results }), "GA", t)).toBe(true);
+    expect(pollsStillOpen(info({ phase: results }), "GA", t)).toBe(false);
+  });
 });
 
 describe("resultFill", () => {
@@ -139,6 +201,13 @@ describe("stateFill", () => {
     expect(
       stateFill([race({ office: "H", district: 1, leaderParty: "IND" })], "H", true, true)
     ).toBe("rgba(201,149,255, 0.6)");
+  });
+
+  it("draws a covered state still voting as that, not as no votes yet", () => {
+    expect(stateFill([], "S", true, true, false, true)).toBe(POLLS_OPEN_FILL);
+    expect(stateFill([], "H", true, true, false, true)).toBe(POLLS_OPEN_FILL);
+    // Uncovered stays uncovered.
+    expect(stateFill([], "S", false, true, false, true)).toBe(UNCOVERED_FILL);
   });
 
   it("draws a covered state whose feed failed as that, not as no votes yet", () => {
@@ -199,6 +268,26 @@ describe("describeUpdate", () => {
     );
   });
 
+  it("says an exact tie is tied and never names the runner-up alone", () => {
+    // The backend sends no leader on a tie, and the second of the two
+    // level candidates as runnerUp.
+    const tie = { leader: null, runnerUp: { name: "Sam Roe", party: "REP", votes: 950, pct: 50 } };
+    for (const kind of ["first_returns", "all_reporting", "official", "update"]) {
+      const text = describeUpdate(event(kind, { ...tie, votesCounted: 1900 })).text;
+      expect(text).toMatch(/The top two are tied at 50% each\./);
+      expect(text).not.toMatch(/Sam Roe/);
+    }
+    // Nothing counted: no names, no tie.
+    const none = describeUpdate(
+      event("first_returns", {
+        leader: null,
+        runnerUp: { name: "Sam Roe", party: "REP", votes: 0, pct: null },
+        votesCounted: 0,
+      })
+    ).text;
+    expect(none).not.toMatch(/Sam Roe|tied/);
+  });
+
   it("never leaves a lead change dangling without a previous leader", () => {
     expect(describeUpdate(event("lead_change")).text).toMatch(/^Ray Jones \(R\) moves ahead\. /);
   });
@@ -257,5 +346,35 @@ describe("feedFailed", () => {
     expect(feedFailed({ status: "polls_open" })).toBe(false);
     for (const status of ["untrusted", "unavailable", "stale", "failed"])
       expect(feedFailed({ status })).toBe(true);
+  });
+});
+
+describe("seatsLed", () => {
+  it("counts a leader outside the known parties, and no one for a tie or nothing counted", () => {
+    const led = seatsLed([
+      race({ office: "H", district: 1, leaderParty: "DEM" }),
+      race({ office: "H", district: 2, leaderParty: "IND" }),
+      race({
+        office: "H",
+        district: 3,
+        leaderParty: null,
+        candidates: [
+          { name: "Pat Doe", party: null, votes: 1000, pct: 52.6, candidateId: null },
+          { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
+        ],
+      }),
+      race({ office: "H", district: 4, leaderParty: null, votesCounted: 0 }),
+      race({
+        office: "H",
+        district: 5,
+        leaderParty: null,
+        candidates: [
+          { name: "A", party: "REP", votes: 950, pct: 50, candidateId: null },
+          { name: "B", party: "DEM", votes: 950, pct: 50, candidateId: null },
+        ],
+      }),
+    ]);
+    expect(led).toEqual({ DEM: 1, IND: 1, OTHER: 1 });
+    expect(formatLed(led)).toBe("D 1 · R 0 · I 1 · OTHER 1");
   });
 });

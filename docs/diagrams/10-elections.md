@@ -353,12 +353,34 @@ On `/elections` the same distinction holds: a covered state whose latest read
 failed and has no count is drawn and listed as "feed not read" (its own fill
 and legend entry), never as "no votes yet", and one still showing an older
 count is marked stale with the time that count was read. An exact tie is
-tagged and worded as tied, never as a lead for whoever the feed lists first.
+tagged and worded as tied, never as a lead for whoever the feed lists first —
+and in the live-updates feed, where the backend sends no leader on a tie,
+as "the top two are tied", never naming the runner-up alone.
+
+**While a state is still voting** (its `pollsClose` ahead, or — from a
+backend that sends none — its last read `polls_open`) nothing is said about
+its count: `/elections` badges and fills it POLLS OPEN (its own legend
+entry), not LIVE or "no votes yet", and until any covered state's polls
+close the masthead says polls are open and counts come in as they close. A
+state page keeps its present-tense research framing ("Everyone on …'s
+ballot") until that state's polls close or the phase is `results`, with the
+count section saying when they close; only then does it read "… results" and
+"who was on the ballot". Unknown is treated as still voting.
+
+**Every House district is listed** once a state's feed is answering: a
+district with no row of its own (a contest the feed doesn't list or that
+couldn't be matched, an uncontested seat) is a row saying "no count from the
+state's feed" and is hatched on the district map, so it is neither drawn as
+"no votes yet" nor missing, and picking it lands on its row. A leader the
+feed gives no party the vocabulary knows is drawn purple, keyed on both
+maps, named "(other)", and counted in the seats-led tallies.
 
 **Open pages follow the phase.** A results page polls every minute while the
-tab is visible; a campaign page asks once, except within about a day of
-election day, when it asks every ten minutes so a page left open switches to
-the count by itself. When the window closes while a state page is open it
+tab is visible; a campaign page asks once, except from 36 hours before UTC
+midnight of election day's date until 48 hours after it (`electionIsNear`),
+when it asks every ten minutes so a page left open switches to the count by
+itself. A tab shown again asks at once, except mid-backoff, when it waits out
+the rest of the wait. When the window closes while a state page is open it
 says the live count has ended rather than that it hasn't started. A request
 that keeps failing backs off (1, 2, 5, then 10 minutes) and the page says the
 current interval.

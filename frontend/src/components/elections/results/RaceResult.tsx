@@ -194,3 +194,35 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
     </li>
   );
 }
+
+/** A House district on the ballot that the state's feed, while counting
+ * others, gives no count for: a contest it doesn't list or that couldn't be
+ * matched to the race, or an uncontested seat. Listed, so the table is
+ * every district and the map has a row to land on, and worded as exactly
+ * that absence — not "no votes yet", which says the count is under way. */
+export function HouseNoCountRow({
+  raceId,
+  state,
+  district,
+}: {
+  raceId: string;
+  state: string;
+  district: number | null;
+}) {
+  return (
+    <li
+      id={`result-${raceId}`}
+      tabIndex={-1}
+      className="scroll-mt-[var(--header-clearance)] grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-white/[0.07] px-4 py-3 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]"
+    >
+      <span className="font-mono text-sm text-ink-hi">
+        {raceLabel({ state, office: "H", district })}
+      </span>
+      <span className="min-w-0 text-sm text-ink-min">No count from the state&apos;s feed</span>
+      <span className="hidden font-mono text-xs text-ink-min sm:block">—</span>
+      <span className="justify-self-end border border-dashed border-white/25 px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] text-ink-min">
+        NO COUNT
+      </span>
+    </li>
+  );
+}

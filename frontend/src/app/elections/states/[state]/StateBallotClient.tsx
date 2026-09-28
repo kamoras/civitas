@@ -5,7 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
-import CoverageFeed, { useMounted } from "@/components/elections/CoverageFeed";
+import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
@@ -18,7 +18,9 @@ import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
 import StateResults from "@/components/elections/results/StateResults";
 import { electionIsNear, useLiveResults } from "@/hooks/useLiveResults";
-import { feedFailed, showsResults } from "@/lib/results";
+import { useHashAt } from "@/hooks/useHashAt";
+import { useNow } from "@/hooks/useNow";
+import { feedFailed, pollsClosed, pollsStillOpen, showsResults } from "@/lib/results";
 import { buildBallotContests, contestForHash, countBallotContests, type BallotContest } from "@/lib/ballotContests";
 import {
   candidateName,
@@ -607,12 +609,15 @@ function HouseDetail({
   pickedId,
   onPick,
   results,
+  feedAnswered,
 }: {
   ballot: StateBallot;
   pickedId: string | null;
   onPick: (id: string | null) => void;
   /** Live counts by district, from election day — the map shades by them. */
   results?: Map<number, LiveRaceResult>;
+  /** The state's feed has given a count for some race (DistrictMap). */
+  feedAnswered?: boolean;
 }) {
   const houseRaces = ballot.houseRaces;
   const [filter, setFilter] = useState("");
@@ -677,6 +682,7 @@ function HouseDetail({
         picked={null}
         onPick={(id) => onPick(id)}
         results={results}
+        feedAnswered={feedAnswered}
       />
       {houseRaces.length > 3 && <DistrictFinder races={houseRaces} picked={null} onPick={onPick} />}
       {houseRaces.length > 3 && (
@@ -964,6 +970,19 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     retryMs: liveRetryMs,
   } = useLiveResults(ballot.state, askForResults);
   const resultsMode = showsResults(ballot.phase) || (!!live && showsResults(live.phase));
+  // From election day the page reads the count — but it only talks about
+  // this state's results in the past tense ("results", "who was on the
+  // ballot") once its polls have closed. Until then people are voting, so
+  // the page keeps the research framing, present tense, with the count
+  // section saying when the polls close. Unknown is "not closed".
+  const now = useNow();
+  const resultsFraming =
+    resultsMode &&
+    (ballot.phase?.phase === "results" ||
+      (!!live && showsResults(live.phase) && pollsClosed(live, ballot.state, now)));
+  // Before the polls close no district is drawn by the count — not even as
+  // "no votes yet", which is a statement about the count.
+  const stillVoting = !!live && pollsStillOpen(live, ballot.state, now);
   // Only a state read live gets a count-shaded map: for any other, an
   // empty map would draw every district as "no votes yet" — a state with
   // no feed shown as one where nothing has happened. Likewise a state whose
@@ -971,11 +990,14 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // about whether counting has started.
   const liveByDistrict = useMemo(() => {
     if (!live || !showsResults(live.phase) || !live.liveStates.includes(ballot.state)) return undefined;
-    if (live.races.length === 0 && feedFailed(live.feeds?.[ballot.state])) return undefined;
+    if (live.races.length === 0 && (stillVoting || feedFailed(live.feeds?.[ballot.state]))) return undefined;
     const m = new Map<number, LiveRaceResult>();
     for (const r of live.races) if (r.office === "H") m.set(r.district ?? 0, r);
     return m;
-  }, [live, ballot.state]);
+  }, [live, ballot.state, stillVoting]);
+  // The feed has given this state a count for some race: a district with
+  // none of its own is "no count from the feed", not "no votes yet".
+  const feedAnswered = !!live && live.races.length > 0;
 
   const contests = useMemo(() => buildBallotContests(ballot, towns.length > 0), [ballot, towns.length]);
   // undefined = no choice made yet, so defer to the URL; null = closed.
@@ -984,11 +1006,13 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const [chosen, setChosen] = useState<{ key: string; houseRaceId: string | null } | null | undefined>(
     undefined,
   );
-  // A #race-{id} link (old /elections/{raceId} redirects, Bluesky posts)
-  // or a #ballot-{key} link opens that contest. The server render has no
-  // hash, so it is read only once mounted — the useMounted idiom avoids a
-  // hydration mismatch without setting state in an effect.
-  const mounted = useMounted();
+  // A #race-{id} link (old /elections/{raceId} redirects, Bluesky posts,
+  // the live-updates feed, the Action Center's follow-the-count links) or a
+  // #ballot-{key} link opens that contest. The server render has no hash,
+  // and a soft navigation's first render still sees the page the reader
+  // came from, so the hash is read only once the browser's URL is this
+  // page's (useHashAt: null until then).
+  const arrivalHash = useHashAt(`/elections/states/${ballot.state}`);
   // In results mode a #race- link to a race with a count lands on the
   // count (StateResults scrolls to it); to one without — no feed for the
   // state, nothing counted yet, a campaign-era link — it opens research as
@@ -1000,8 +1024,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // owns what is open. Latched with the render-time state update React
   // documents for "information from previous renders", not an effect.
   const [arrival, setArrival] = useState<{ hash: string; toCount: string | null } | undefined>(undefined);
-  if (mounted && arrival === undefined) {
-    const hash = window.location.hash;
+  if (arrivalHash !== null && arrival === undefined) {
+    const hash = arrivalHash;
     const race = /^#race-(.+)$/.exec(hash)?.[1];
     if (!race || (!askForResults && !resultsMode)) setArrival({ hash, toCount: null });
     else if (live) {
@@ -1054,6 +1078,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             pickedId={open?.houseRaceId ?? null}
             onPick={(id) => openContest("house", id)}
             results={liveByDistrict}
+            feedAnswered={feedAnswered}
           />
         );
       case "statewide":
@@ -1090,11 +1115,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <header className="mb-5 flex flex-col gap-4 border-b border-white/[0.14] pb-5 font-sans lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="font-mono text-xs tracking-[0.14em] text-phos">
-                {resultsMode ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
+                {resultsFraming ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
                 <span className="whitespace-nowrap">{ballot.electionDate.toUpperCase()}</span>
               </p>
               <h1 className="mt-1 font-display text-2xl font-extrabold text-ink-hi sm:text-[28px]">
-                {resultsMode ? `${stateName} results` : <>Everyone on {stateName}&apos;s ballot, and who is behind them</>}
+                {resultsFraming ? `${stateName} results` : <>Everyone on {stateName}&apos;s ballot, and who is behind them</>}
               </h1>
               <p className="mt-1.5 text-sm text-ink-lo">
                 {countBallotContests(contests, ballot)} contests · {federalCandidates.length} federal candidates
@@ -1145,9 +1170,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 arrivalRace={arrival?.toCount ?? null}
                 lookupHref={lookupHref}
               />
-              <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs tracking-[0.16em] text-ink-min">
-                BALLOT RESEARCH · WHO WAS ON THE BALLOT, AND WHO WAS BEHIND THEM
-              </h2>
+              {resultsFraming && (
+                <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs tracking-[0.16em] text-ink-min">
+                  BALLOT RESEARCH · WHO WAS ON THE BALLOT, AND WHO WAS BEHIND THEM
+                </h2>
+              )}
             </>
           )}
 

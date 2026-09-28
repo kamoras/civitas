@@ -3,8 +3,19 @@
 import { useEffect, useMemo, useRef } from "react";
 import DistrictMap from "@/components/elections/DistrictMap";
 import LiveUpdates from "@/components/elections/results/LiveUpdates";
-import { HouseResultRow, RaceResultCard } from "@/components/elections/results/RaceResult";
-import { feedFailed, formatEasternTime, seatsLed, showsResults } from "@/lib/results";
+import {
+  HouseNoCountRow,
+  HouseResultRow,
+  RaceResultCard,
+} from "@/components/elections/results/RaceResult";
+import {
+  feedFailed,
+  formatEasternTime,
+  formatLed,
+  pollsStillOpen,
+  seatsLed,
+  showsResults,
+} from "@/lib/results";
 import { describeInterval, RETRY_BACKOFF_MS } from "@/hooks/useLiveResults";
 import { useNow } from "@/hooks/useNow";
 import type { LiveRaceResult, LiveResults, StateBallot } from "@/types/election";
@@ -50,6 +61,24 @@ export default function StateResults({
     for (const r of house) m.set(r.district ?? 0, r);
     return m;
   }, [house]);
+  // Every district on the ballot, in order, with its count or none: a seat
+  // the feed gives no count for (unmatched, uncontested) is still a row,
+  // saying so, and the map has somewhere to land when it's picked. A count
+  // for a district the ballot doesn't list is kept too.
+  const houseRows = useMemo(() => {
+    const onBallot = new Set(ballot.houseRaces.map((r) => r.district ?? 0));
+    const rows: { key: string; district: number; raceId: string; result?: LiveRaceResult }[] =
+      ballot.houseRaces.map((r) => ({
+        key: r.id,
+        district: r.district ?? 0,
+        raceId: byDistrict.get(r.district ?? 0)?.raceId ?? r.id,
+        result: byDistrict.get(r.district ?? 0),
+      }));
+    for (const r of house)
+      if (!onBallot.has(r.district ?? 0))
+        rows.push({ key: r.raceId, district: r.district ?? 0, raceId: r.raceId, result: r });
+    return rows.sort((a, b) => a.district - b.district);
+  }, [ballot.houseRaces, byDistrict, house]);
   const isLive = !!results?.liveStates.includes(ballot.state);
   const stateName = ballot.stateName ?? ballot.state;
   const led = seatsLed(house);
@@ -57,6 +86,7 @@ export default function StateResults({
   const feed = results?.feeds?.[ballot.state];
   const failed = feedFailed(feed);
   const now = useNow();
+  const stillVoting = !!results && pollsStillOpen(results, ballot.state, now);
 
   // Scroll to the arrival race once. The page decided, when the count
   // first loaded, that this race has one — so it is on screen by now — and
@@ -146,9 +176,11 @@ export default function StateResults({
   return (
     <section aria-label={`${stateName} results`} className="mb-10 space-y-5">
       {races.length === 0 &&
-        (pollsClose && Date.parse(pollsClose) > now ? (
+        (stillVoting ? (
           <p className="border border-white/[0.09] bg-surface p-4 text-sm text-ink-lo">
-            {`${stateName}'s last polls close at ${formatEasternTime(pollsClose)}. Nothing of its count is shown before then.`}
+            {pollsClose && Date.parse(pollsClose) > now
+              ? `${stateName}'s last polls close at ${formatEasternTime(pollsClose)}. Nothing of its count is shown before then.`
+              : `${stateName}'s polls are still open. Nothing of its count is shown before they close.`}
           </p>
         ) : failed && feed ? (
           // Not "hasn't started": a feed that's down or refused says
@@ -186,7 +218,7 @@ export default function StateResults({
       {senate.map((r) => (
         <RaceResultCard key={r.raceId} result={r} headingLevel={2} />
       ))}
-      {house.length > 0 && (
+      {houseRows.length > 0 && races.length > 0 && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_26rem]">
           <section
             aria-labelledby="house-results-heading"
@@ -200,13 +232,22 @@ export default function StateResults({
                 U.S. House
               </h2>
               <span className="font-mono text-xs tracking-[0.1em] text-ink-lo">
-                D {led.DEM ?? 0} · R {led.REP ?? 0} LEADING
+                {formatLed(led)} LEADING
               </span>
             </div>
             <ol>
-              {house.map((r) => (
-                <HouseResultRow key={r.raceId} result={r} />
-              ))}
+              {houseRows.map((row) =>
+                row.result ? (
+                  <HouseResultRow key={row.key} result={row.result} />
+                ) : (
+                  <HouseNoCountRow
+                    key={row.key}
+                    raceId={row.raceId}
+                    state={ballot.state}
+                    district={row.district}
+                  />
+                )
+              )}
             </ol>
           </section>
           <div className="min-w-0 space-y-5">
@@ -215,6 +256,7 @@ export default function StateResults({
               races={ballot.houseRaces}
               picked={null}
               results={byDistrict}
+              feedAnswered
               onPick={(raceId) => {
                 // Move focus with the scroll, so a keyboard or screen-reader
                 // user who picked a district lands on its row.
@@ -227,7 +269,7 @@ export default function StateResults({
           </div>
         </div>
       )}
-      {house.length === 0 && results.updates.length > 0 && (
+      {!(houseRows.length > 0 && races.length > 0) && results.updates.length > 0 && (
         <LiveUpdates updates={results.updates} limit={8} linkToState={false} />
       )}
     </section>

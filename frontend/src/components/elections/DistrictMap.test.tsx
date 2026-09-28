@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DistrictMap, { fitMercator, leanFill } from "./DistrictMap";
@@ -140,5 +140,51 @@ describe("DistrictMap", () => {
     expect(await screen.findByText("tied, not called")).toBeInTheDocument();
     expect(screen.getByText("TIED")).toBeInTheDocument();
     expect(screen.getByText(/Ann Rep/)).not.toHaveClass("text-rep-red");
+  });
+
+  it("hatches a district the counting state's feed gives no count for, and keys purple", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    const ind = {
+      raceId: "2026-HOUSE-CT-2",
+      state: "CT",
+      office: "H",
+      district: 2,
+      isSpecial: false,
+      heldBy: "DEM",
+      official: false,
+      votesCounted: 2000,
+      reportingUnits: 90,
+      totalUnits: 100,
+      unitLabel: "towns",
+      sourceName: "CT SOTS",
+      sourceUrl: null,
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: "IND",
+      flip: false,
+      candidates: [
+        { name: "Ivy Ind", party: "IND", votes: 1200, pct: 60, candidateId: null },
+        { name: "Bo Dem", party: "DEM", votes: 800, pct: 40, candidateId: null },
+      ],
+    } as LiveRaceResult;
+    const { container } = render(
+      <DistrictMap
+        state="CT"
+        races={RACES}
+        picked={null}
+        onPick={vi.fn()}
+        results={new Map([[2, ind]])}
+      />
+    );
+    const other = await screen.findByRole("button", { name: "CT-3" });
+    expect(other.getAttribute("style") ?? "").toMatch(/fill: url\("?#no-count-/);
+    expect(container.querySelector("pattern[id^='no-count-']")).not.toBeNull();
+    expect(screen.getByText("no count from the state's feed")).toBeInTheDocument();
+    expect(screen.getByText(/purple = other party leads/)).toBeInTheDocument();
+    other.focus();
+    await waitFor(() =>
+      expect(screen.getAllByText("no count from the state's feed")).toHaveLength(2)
+    );
+    expect(screen.queryByText("no votes counted yet")).not.toBeInTheDocument();
   });
 });

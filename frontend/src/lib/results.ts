@@ -10,6 +10,7 @@
 import type {
   ElectionPhaseInfo,
   LiveRaceResult,
+  LiveResults,
   ResultEvent,
   ResultEventPerson,
 } from "@/types/election";
@@ -30,11 +31,55 @@ export const FEED_FAILED_FILL = "rgba(255, 216, 77, 0.28)";
 /** Votes counted, nobody ahead: an exact tie, or a House delegation split
  * evenly. Not "no votes yet", which is AWAITING_FILL. */
 export const TIED_FILL = "rgba(205, 199, 188, 0.45)";
+/** Fill for a state read live whose last polls are still open: nothing of
+ * its count is read or said until they close, so not "no votes yet" — a
+ * statement about the count — but voting under way. Faint cyan. */
+export const POLLS_OPEN_FILL = "rgba(77, 227, 232, 0.16)";
 
-/** Whether the page should lead with results rather than research. A
- * missing phase (an older backend mid-rollout) is the campaign page. */
+/** A House district in a state whose feed has answered but which has no
+ * count of its own from it — a contest the feed doesn't list or that
+ * couldn't be matched to the race, an uncontested seat. Neither "no votes
+ * yet" (the state is counting) nor uncovered (the state is read live):
+ * drawn hatched. The stripe colour; NO_COUNT_SWATCH is the legend key. */
+export const NO_COUNT_STRIPE = "rgba(205, 199, 188, 0.4)";
+export const NO_COUNT_SWATCH = `repeating-linear-gradient(45deg, ${NO_COUNT_STRIPE} 0 2px, transparent 2px 5px)`;
+
+/** Whether the page should lead with results rather than research: only
+ * the two results phases the backend names. A missing or malformed phase
+ * (an older backend mid-rollout, a cached error body) is the campaign
+ * page — never results by default. */
 export function showsResults(phase: ElectionPhaseInfo | null | undefined): boolean {
-  return !!phase && phase.phase !== "campaign";
+  return phase?.phase === "election_day" || phase?.phase === "results";
+}
+
+type PollsInfo = Pick<LiveResults, "phase" | "pollsClose" | "feeds" | "races">;
+
+/** Whether `state`'s last polls are known to have closed. The `results`
+ * phase is the day after election day, when every state's have; a count
+ * already stored for the state means they have (nothing is read before);
+ * otherwise the backend's closing time decides, or — from an older backend
+ * that sends none — a feed read that got past the polls-open gate. Unknown
+ * is "not closed": the page never talks about a count while people may
+ * still be voting. */
+export function pollsClosed(results: PollsInfo, state: string, now: number): boolean {
+  if (results.phase?.phase === "results") return true;
+  if (results.races.some((r) => r.state === state)) return true;
+  const close = Date.parse(results.pollsClose?.[state] ?? "");
+  if (!Number.isNaN(close)) return now >= close;
+  const feed = results.feeds?.[state];
+  return !!feed && feed.status !== "polls_open";
+}
+
+/** Whether a state read live is known to be still voting: its closing time
+ * is ahead (or, from an older backend with none, its feed says polls open)
+ * and no count is stored. The closing time wins over a feed status read
+ * minutes before it passed. */
+export function pollsStillOpen(results: PollsInfo, state: string, now: number): boolean {
+  if (results.phase?.phase === "results") return false;
+  if (results.races.some((r) => r.state === state)) return false;
+  const close = Date.parse(results.pollsClose?.[state] ?? "");
+  if (!Number.isNaN(close)) return now < close;
+  return results.feeds?.[state]?.status === "polls_open";
 }
 
 /** Whether a state's last feed read failed to give a count this page could
@@ -181,7 +226,17 @@ export interface UpdateText {
 /** One live update, worded from the event's own figures. */
 export function describeUpdate(event: ResultEvent): UpdateText {
   const d = event.detail ?? {};
-  const shares = [share(d.leader), share(d.runnerUp)].filter(Boolean).join(", ");
+  // No leader with votes counted is an exact tie: the backend then sends the
+  // second of the two level candidates as runnerUp, and naming only them
+  // ("Sam Roe (R) 50%") reads as their lead. Say tied and name neither.
+  const tied = !d.leader && ((d.votesCounted ?? 0) > 0 || (d.runnerUp?.votes ?? 0) > 0);
+  const shares = tied
+    ? d.runnerUp?.pct != null
+      ? `The top two are tied at ${d.runnerUp.pct}% each`
+      : "The top two are tied"
+    : d.leader
+      ? [share(d.leader), share(d.runnerUp)].filter(Boolean).join(", ")
+      : "";
   const reporting = reportingText(d);
   const holders = d.heldBy ? (HOLDERS[d.heldBy] ?? d.heldBy) : "another party";
   switch (event.kind) {
@@ -278,16 +333,28 @@ export interface StateResultSummary {
 export function summarizeState(races: LiveRaceResult[]): StateResultSummary {
   const senate = races.filter((r) => r.office === "S");
   const house = races.filter((r) => r.office === "H");
-  const houseLeads: Record<string, number> = {};
-  for (const r of house)
-    if (r.leaderParty) houseLeads[r.leaderParty] = (houseLeads[r.leaderParty] ?? 0) + 1;
-  return { senate, house, houseLeads, flips: races.filter((r) => r.flip).length };
+  return { senate, house, houseLeads: seatsLed(house), flips: races.filter((r) => r.flip).length };
 }
 
-/** Seats led, by party, over a set of races. */
+/** "D 3 · R 2 · I 1" — seats led by party, the two majors always named and
+ * any other party that leads one after them (as LedTally draws it). */
+export function formatLed(led: Record<string, number>): string {
+  const others = Object.entries(led)
+    .filter(([p, n]) => p !== "DEM" && p !== "REP" && n > 0)
+    .map(([p, n]) => `${partyLetter(p)} ${n}`);
+  return [`D ${led.DEM ?? 0}`, `R ${led.REP ?? 0}`, ...others].join(" · ");
+}
+
+/** Seats led, by party, over a set of races. A leader the feed gives no
+ * party the vocabulary knows still leads a seat: counted as "OTHER", not
+ * dropped. A tie, or nothing counted, is nobody's. */
 export function seatsLed(races: LiveRaceResult[]): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const r of races) if (r.leaderParty) out[r.leaderParty] = (out[r.leaderParty] ?? 0) + 1;
+  for (const r of races) {
+    if (!(r.votesCounted > 0) || isTied(r)) continue;
+    const party = r.leaderParty ?? "OTHER";
+    out[party] = (out[party] ?? 0) + 1;
+  }
   return out;
 }
 
@@ -301,10 +368,14 @@ export function stateFill(
   hasRace: boolean,
   /** The state's latest feed read failed (feedFailed): with no count to
    * show, it is drawn as FEED_FAILED_FILL, never as "no votes yet". */
-  feedDown = false
+  feedDown = false,
+  /** The state's polls are still open (pollsStillOpen): drawn as
+   * POLLS_OPEN_FILL, which says nothing about the count. */
+  pollsOpen = false
 ): string {
   if (!hasRace) return UNCOVERED_FILL;
   const mine = races.filter((r) => r.office === chamber);
+  if (!mine.length && covered && pollsOpen) return POLLS_OPEN_FILL;
   if (!mine.length && covered && feedDown) return FEED_FAILED_FILL;
   if (chamber === "S") return resultFill(mine[0], covered);
   if (!mine.length) return covered ? AWAITING_FILL : UNCOVERED_FILL;

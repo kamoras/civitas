@@ -53,7 +53,8 @@ export function describeInterval(ms: number): string {
  * server render that there are no results). A failed request is retried
  * on a growing backoff (RETRY_BACKOFF_MS; `retryMs` says the current wait).
  * A background tab stops polling and catches up the moment it's shown
- * again, so a laptop left open overnight doesn't poll.
+ * again, so a laptop left open overnight doesn't poll — except mid-backoff,
+ * when it waits out the rest of the wait: a tab switch doesn't skip it.
  */
 export function useLiveResults(
   state?: string,
@@ -76,6 +77,9 @@ export function useLiveResults(
     // The wait for the next scheduled ask; null once there's nothing more
     // to ask (a campaign far from election day).
     let nextWait: number | null = null;
+    // When the next ask is due (ms since epoch), so a tab shown again
+    // mid-backoff waits out the rest rather than asking at once.
+    let nextAt = 0;
     let failures = 0;
 
     const load = () => {
@@ -106,16 +110,23 @@ export function useLiveResults(
     };
     const schedule = (wait: number | null) => {
       nextWait = wait;
+      nextAt = wait != null ? Date.now() + wait : 0;
       if (timer) clearTimeout(timer);
       timer = null;
       if (wait != null && document.visibilityState === "visible") timer = setTimeout(load, wait);
     };
     const onVisible = () => {
       // Catch up only if the page was still asking — a campaign page that
-      // got its one answer asks nothing more on a tab switch.
-      if (document.visibilityState === "visible") {
-        if (nextWait != null) load();
-      } else if (timer) clearTimeout(timer);
+      // got its one answer asks nothing more on a tab switch. After a
+      // success a tab shown again asks at once; after a failure only once
+      // the backoff's wait is up, so a failing endpoint isn't asked again
+      // on every tab switch.
+      if (timer) clearTimeout(timer);
+      timer = null;
+      if (document.visibilityState !== "visible" || nextWait == null) return;
+      const due = failures > 0 ? nextAt - Date.now() : 0;
+      if (due <= 0) load();
+      else timer = setTimeout(load, due);
     };
 
     load();

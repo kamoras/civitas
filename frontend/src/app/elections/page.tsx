@@ -11,7 +11,8 @@ import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
 import { formatPvi, pviColor } from "@/lib/elections";
-import { formatEasternTime, showsResults } from "@/lib/results";
+import { formatEasternTime, pollsStillOpen, showsResults } from "@/lib/results";
+import { useNow } from "@/hooks/useNow";
 import { fetchPviMap } from "@/lib/api";
 import { describeInterval, useLiveResults } from "@/hooks/useLiveResults";
 import type { PviMap } from "@/types/election";
@@ -72,6 +73,22 @@ export default function ElectionsPage() {
   // check failed); the hook keeps retrying and switches when it answers.
   const phaseKnown = !!results || !!resultsError;
   const campaignMode = phaseKnown && !resultsMode;
+  // Election day before any covered state's polls close: people are still
+  // voting, so the masthead says results come in as polls close — not
+  // "results" as if there were some. Once one state's polls close, the count
+  // leads.
+  const now = useNow();
+  const stillVoting =
+    resultsMode &&
+    !!results &&
+    results.phase.phase === "election_day" &&
+    results.races.length === 0 &&
+    results.liveStates.every((st) => pollsStillOpen(results, st, now));
+  const firstClose = stillVoting
+    ? Object.values(results?.pollsClose ?? {})
+        .filter((t) => Date.parse(t) > now)
+        .sort((a, b) => Date.parse(a) - Date.parse(b))[0]
+    : undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -113,7 +130,30 @@ export default function ElectionsPage() {
       >
         <div className="mx-auto max-w-7xl">
           {/* ── Masthead ── */}
-          {resultsMode && results ? (
+          {stillVoting && results ? (
+            <PageMasthead
+              eyebrow={`Elections · election day · ${results.phase.electionDate}`}
+              title={`${results.cycleYear} midterms: polls are open`}
+              aside={
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="flex items-center gap-2 border border-signal-cyan/40 px-3 py-1.5 font-mono text-xs tracking-[0.12em] text-signal-cyan"
+                >
+                  <span aria-hidden="true" className="inline-block h-2 w-2 bg-signal-cyan" />
+                  {resultsError
+                    ? `REFRESH FAILED · RETRYING ${retryEvery}`
+                    : firstClose
+                      ? `POLLS OPEN · FIRST CLOSE ${formatEasternTime(firstClose).toUpperCase()}`
+                      : "POLLS OPEN"}
+                </p>
+              }
+            >
+              Voting is under way. Counts appear here as each state&apos;s polls close, as the state&apos;s own
+              election office publishes them — nothing of a state&apos;s count is shown before its last polls
+              close. Every state&apos;s ballot research is one click away.
+            </PageMasthead>
+          ) : resultsMode && results ? (
             <PageMasthead
               eyebrow={`Elections · ${results.phase.phase === "election_day" ? "election day" : "results"} · ${
                 results.phase.electionDate

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { afterEach, beforeEach } from "vitest";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
-import { FEED_FAILED_FILL } from "@/lib/results";
+import { FEED_FAILED_FILL, POLLS_OPEN_FILL } from "@/lib/results";
 import ElectionsPage from "./page";
 
 const fetchPviMap = vi.hoisted(() => vi.fn());
@@ -205,6 +205,78 @@ describe("ElectionsPage", () => {
     });
     expect(ga).toHaveTextContent("Senate: tied");
     expect(ga).not.toHaveTextContent(/leads/);
+  });
+
+  it("says polls are open on election day before any covered state's close, not results", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-03T20:00:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      phase: { ...RESULTS.phase, phase: "election_day", lastResultChange: null },
+      pollsClose: { GA: "2026-11-04T00:00:00Z" },
+      feeds: { GA: { status: "polls_open", checkedAt: "2026-11-03T19:55:00Z", lastOkAt: null } },
+      races: [],
+      updates: [],
+    });
+    render(<ElectionsPage />);
+    const h1 = await screen.findByRole("heading", { level: 1 });
+    expect(h1).toHaveTextContent("2026 midterms: polls are open");
+    expect(h1).not.toHaveTextContent(/results/);
+    expect(screen.getByText(/POLLS OPEN · FIRST CLOSE NOV 3, 7:00 PM ET/)).toBeInTheDocument();
+    expect(screen.getByText(/Counts appear here as each state.s polls close/)).toBeInTheDocument();
+    // The state itself: polls open, and nothing about its count.
+    const ga = within(screen.getByRole("region", { name: /By state/ })).getByRole("link", {
+      name: /^GA/,
+    });
+    expect(ga).toHaveTextContent("POLLS OPEN");
+    expect(ga).toHaveTextContent("Senate: polls still open");
+    expect(ga).not.toHaveTextContent(/LIVE|no votes yet/);
+    expect(mapFill.current?.("GA")).toBe(POLLS_OPEN_FILL);
+    expect(screen.getByText(/POLLS OPEN$/, { selector: "li" })).toBeInTheDocument();
+  });
+
+  it("names a leader with no party as other, keys purple on the Senate map, and counts other leads", async () => {
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    const ind = {
+      ...RESULTS.races[0],
+      raceId: "2026-SEN-GA",
+      leaderParty: null,
+      flip: false,
+      candidates: [
+        { name: "Dan Osborn", party: null, votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Pete Ricketts", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+      ],
+    };
+    const house = (district: number, leaderParty: string) => ({
+      ...RESULTS.races[0],
+      raceId: `2026-HOUSE-GA-${district}`,
+      office: "H",
+      district,
+      flip: false,
+      leaderParty,
+    });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      liveStates: ["GA", "NY"],
+      races: [ind, house(1, "REP"), house(2, "IND"), { ...house(3, "REP"), votesCounted: 0 }],
+      updates: [],
+    });
+    render(<ElectionsPage />);
+    const ga = within(await screen.findByRole("region", { name: /By state/ })).getByRole("link", {
+      name: /^GA/,
+    });
+    expect(ga).toHaveTextContent("Senate: Dan Osborn (other) leads");
+    expect(ga).not.toHaveTextContent("()");
+    expect(ga).toHaveTextContent("HOUSE D 0 · R 1 · I 1 LEADING");
+    // The Senate map's key has the purple an independent's lead is drawn in.
+    expect(screen.getByRole("button", { name: "SENATE" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/OTHER PARTY LEADS$/, { selector: "li" })).toBeInTheDocument();
+    expect(mapFill.current?.("GA")).toMatch(/^rgba\(201,149,255/);
+    // Districts with a count so far — not every district "read live".
+    const totals = screen.getByRole("region", { name: "Totals" });
+    expect(totals).toHaveTextContent("2 districts with a count so far, in 1 state, of 2 states read live");
+    expect(totals).not.toHaveTextContent(/districts in \d+ states read live/);
   });
 
   it("points the flip count at the rule rather than understating it", async () => {

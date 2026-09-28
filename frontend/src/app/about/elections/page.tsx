@@ -203,7 +203,11 @@ export default function ElectionsChapter() {
           shows its Senate race, every House district and a district map shaded the same way, above
           the ballot research, and a live-updates feed tells each change as it happens: first
           returns, a new leader, every reporting area in, a count called official, a seat changing
-          party.
+          party. A district the state&apos;s results feed gives no count for — a contest it
+          doesn&apos;t list, an uncontested seat — is listed and marked as exactly that, not as
+          &ldquo;no votes yet&rdquo;. While a state&apos;s polls are still open, its page stays a
+          ballot-research page and the national map marks it &ldquo;polls open&rdquo;: nothing is
+          said about a count until its last polls close.
         </P>
         <Sub title="Where the numbers come from">
           <P>

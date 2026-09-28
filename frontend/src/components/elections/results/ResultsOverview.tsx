@@ -8,16 +8,20 @@ import LiveUpdates from "@/components/elections/results/LiveUpdates";
 import {
   AWAITING_FILL,
   FEED_FAILED_FILL,
+  POLLS_OPEN_FILL,
   TIED_FILL,
   UNCOVERED_FILL,
   feedFailed,
   formatEasternTime,
+  formatLed,
   isTied,
   partyLetter,
+  pollsStillOpen,
   seatsLed,
   stateFill,
   summarizeState,
 } from "@/lib/results";
+import { useNow } from "@/hooks/useNow";
 import type { LiveRaceResult, LiveResults } from "@/types/election";
 
 const DC_FILL = "rgba(255, 255, 255, 0.06)";
@@ -82,6 +86,14 @@ export default function ResultsOverview({
   // "feed not read", never "no votes yet"; with an older count it is stale.
   const feeds = results.feeds ?? {};
   const readFailed = (state: string) => live.has(state) && feedFailed(feeds[state]);
+  // A covered state still voting: nothing is said about its count — not
+  // "no votes yet" — until its last polls close.
+  const now = useNow();
+  const voting = (state: string) => live.has(state) && pollsStillOpen(results, state, now);
+  // Districts with a count so far: a row with votes in it. Rows are only
+  // the races each state's feed lists, not every district in the state.
+  const houseCounted = house.filter((r) => r.votesCounted > 0).length;
+  const houseStates = new Set(house.filter((r) => r.votesCounted > 0).map((r) => r.state)).size;
 
   const fill = (state: string) =>
     state === "DC"
@@ -91,7 +103,8 @@ export default function ResultsOverview({
           chamber,
           live.has(state),
           chamber === "H" || senateStates.has(state),
-          readFailed(state)
+          readFailed(state),
+          voting(state)
         );
 
   // Covered states first (they have something to show), then the rest.
@@ -149,11 +162,14 @@ export default function ResultsOverview({
               <li className="flex items-center gap-1.5">
                 <Swatch color={TIED_FILL} /> {chamber === "S" ? "TIED" : "TIED / SPLIT"}
               </li>
-              {chamber === "H" && (
-                <li className="flex items-center gap-1.5">
-                  <Swatch color="rgba(201,149,255,0.6)" /> OTHER PARTY LEADS
-                </li>
-              )}
+              <li className="flex items-center gap-1.5">
+                {/* A Senate race led by an independent (Nebraska's, in 2026)
+                    is purple too, not only a House delegation. */}
+                <Swatch color="rgba(201,149,255,0.6)" /> OTHER PARTY LEADS
+              </li>
+              <li className="flex items-center gap-1.5">
+                <Swatch color={POLLS_OPEN_FILL} /> POLLS OPEN
+              </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={AWAITING_FILL} /> NO VOTES YET
               </li>
@@ -206,7 +222,9 @@ export default function ResultsOverview({
             <LedTally led={seatsLed(house)} />
           </div>
           <p className="mt-1 text-sm text-ink-lo">
-            {house.length} districts in {live.size} states read live
+            {houseCounted} {houseCounted === 1 ? "district" : "districts"} with a count so far
+            {houseCounted > 0 && `, in ${houseStates} ${houseStates === 1 ? "state" : "states"}`},
+            of {live.size} states read live
           </p>
         </div>
         <div
@@ -244,14 +262,17 @@ export default function ResultsOverview({
             const hasCount = (byState.get(state) ?? []).length > 0;
             const feed = feeds[state];
             const s = summary.senate[0];
+            const stillVoting = voting(state);
             const badge = !isLive
               ? { text: "NO FEED", className: "border-white/15 text-ink-min" }
-              : failed
-                ? {
-                    text: hasCount ? "STALE" : "FEED NOT READ",
-                    className: "border-signal-amber/50 text-signal-amber",
-                  }
-                : { text: "LIVE", className: "border-signal-amber/50 text-signal-amber" };
+              : stillVoting
+                ? { text: "POLLS OPEN", className: "border-signal-cyan/50 text-signal-cyan" }
+                : failed
+                  ? {
+                      text: hasCount ? "STALE" : "FEED NOT READ",
+                      className: "border-signal-amber/50 text-signal-amber",
+                    }
+                  : { text: "LIVE", className: "border-signal-amber/50 text-signal-amber" };
             return (
               <li key={state}>
                 <Link
@@ -270,21 +291,22 @@ export default function ResultsOverview({
                     {s && isTied(s)
                       ? `Senate: tied${s.official ? " · official" : ""}`
                       : s?.candidates[0] && s.votesCounted
-                        ? `Senate: ${s.candidates[0].name} (${partyLetter(s.candidates[0].party)}) ${
+                        ? `Senate: ${s.candidates[0].name} (${partyLetter(s.candidates[0].party) || "other"}) ${
                             s.official ? "official" : "leads"
                           }${s.flip ? " · flip" : ""}`
                         : senateStates.has(state)
                           ? isLive
-                            ? failed && !s
-                              ? "Senate: couldn't read its feed"
-                              : "Senate: no votes yet"
+                            ? stillVoting
+                              ? "Senate: polls still open"
+                              : failed && !s
+                                ? "Senate: couldn't read its feed"
+                                : "Senate: no votes yet"
                             : "Senate race: check the state's count"
                           : "No Senate race this year"}
                   </span>
                   {summary.house.length > 0 && (
                     <span className="font-mono text-xs text-ink-min">
-                      HOUSE D {summary.houseLeads.DEM ?? 0} · R {summary.houseLeads.REP ?? 0}{" "}
-                      LEADING
+                      HOUSE {formatLed(summary.houseLeads)} LEADING
                     </span>
                   )}
                   {failed && hasCount && (

@@ -77,7 +77,9 @@ export default async function StateBallotPage({ params }: { params: Promise<{ st
           { name: ballot.stateName ?? ballot.state, url: absoluteUrl(`/elections/states/${ballot.state}`) },
         ])}
       />
-      <StateBallotClient ballot={ballot} />
+      {/* Keyed by state: a soft navigation to another state is a new page
+          with its own #race- arrival, never the last one's latch. */}
+      <StateBallotClient key={ballot.state} ballot={ballot} />
     </>
   );
 }

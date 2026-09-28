@@ -122,6 +122,24 @@ describe("useLiveResults", () => {
     expect(fetchLiveResults).toHaveBeenCalledTimes(1);
   });
 
+  it("holds the backoff across a tab switch", async () => {
+    fetchLiveResults.mockRejectedValue(new Error("502"));
+    renderHook(() => useLiveResults());
+    await act(async () => {});
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(2);
+    // Waiting two minutes now. A quick tab switch mid-wait doesn't ask early…
+    act(() => setVisibility("hidden"));
+    await act(async () => vi.advanceTimersByTime(30_000));
+    await act(async () => setVisibility("visible"));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTime(89_000));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(2);
+    // …it asks when the wait is up.
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(3);
+  });
+
   it("backs off while the endpoint keeps failing, and says how long it waits", async () => {
     fetchLiveResults.mockRejectedValue(new Error("502"));
     const { result } = renderHook(() => useLiveResults());

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
 import type { RaceWithCandidates, StateBallot } from "@/types/election";
@@ -220,13 +220,43 @@ describe("the contest drawer", () => {
     // The bug this guards against: "nothing chosen yet" (defer to the
     // URL) and "closed" were once the same value, so a contest a link had
     // opened could never be closed.
-    window.location.hash = "#race-2026-HOUSE-OH-1";
+    window.history.replaceState(null, "", "/elections/states/OH#race-2026-HOUSE-OH-1");
     render(<StateBallotClient ballot={ballot()} />);
     const drawer = within(screen.getByRole("dialog"));
     expect(drawer.getByRole("heading", { name: "U.S. Representative" })).toBeInTheDocument();
     await userEvent.click(drawer.getByRole("button", { name: "ALL CONTESTS" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    window.location.hash = "";
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("opens a #race- link reached by in-app navigation, once the URL is this page's", async () => {
+    // A soft navigation renders the new page BEFORE Next commits its URL:
+    // the first render still sees the page the reader came from.
+    window.history.replaceState(null, "", "/elections");
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Next commits the URL (pushState: no event of its own); the page picks
+    // it up on its next look.
+    await act(async () => {
+      window.history.pushState(null, "", "/elections/states/OH#race-2026-HOUSE-OH-1");
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    const drawer = within(await screen.findByRole("dialog"));
+    expect(drawer.getByRole("heading", { name: "U.S. Representative" })).toBeInTheDocument();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("latches the page's own URL, not the hash of the page it came from", async () => {
+    // Came from another page that had a #race- hash of its own.
+    window.history.replaceState(null, "", "/elections/states/GA#race-2026-HOUSE-OH-1");
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await act(async () => {
+      window.history.pushState(null, "", "/elections/states/OH");
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    window.history.replaceState(null, "", "/");
   });
 });
 

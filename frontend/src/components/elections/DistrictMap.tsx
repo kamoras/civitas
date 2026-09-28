@@ -1,11 +1,21 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import type { LiveRaceResult, RaceWithCandidates } from "@/types/election";
 import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
-import { AWAITING_FILL, TIED_FILL, isTied, partyLetter, partyTextClass, reportingText, resultFill } from "@/lib/results";
+import {
+  AWAITING_FILL,
+  NO_COUNT_STRIPE,
+  NO_COUNT_SWATCH,
+  TIED_FILL,
+  isTied,
+  partyLetter,
+  partyTextClass,
+  reportingText,
+  resultFill,
+} from "@/lib/results";
 
 /**
  * Point at your neighbourhood; the page narrows to its district.
@@ -36,7 +46,9 @@ import { AWAITING_FILL, TIED_FILL, isTied, partyLetter, partyTextClass, reportin
  * From election day, given `results`, it shades by who LEADS each
  * district's count instead (lib/results resultFill — the same fill the
  * national map uses), and the preview shows the count. Lean says how a
- * seat usually votes; on the night itself, the count is the news.
+ * seat usually votes; on the night itself, the count is the news. A
+ * district the state's feed gives no count for while it counts others
+ * (`feedAnswered`) is hatched and says so — never "no votes yet".
  */
 
 const DEM = "#82acff";
@@ -91,6 +103,7 @@ export default function DistrictMap({
   picked,
   onPick,
   results,
+  feedAnswered,
 }: {
   state: string;
   races: RaceWithCandidates[];
@@ -98,7 +111,12 @@ export default function DistrictMap({
   onPick: (raceId: string) => void;
   /** Live counts by district; when given, the map shades by the count. */
   results?: Map<number, LiveRaceResult>;
+  /** The state's feed has given a count for some race (Senate or House):
+   * a district without one of its own is then "no count from the feed",
+   * not "no votes yet". Defaults to any district having a count. */
+  feedAnswered?: boolean;
 }) {
+  const hatchId = `no-count-${useId().replace(/:/g, "")}`;
   const [topo, setTopo] = useState<Topo | null>(null);
   const [failed, setFailed] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -138,6 +156,7 @@ export default function DistrictMap({
   const pickedDistrict = picked ? races.find((r) => r.id === picked)?.district ?? null : null;
   const focus = hovered ?? pickedDistrict;
   const focusRace = focus != null ? byDistrict.get(focus) : undefined;
+  const answered = feedAnswered ?? (!!results && results.size > 0);
 
   return (
     <div className="mb-4 border border-white/15">
@@ -146,10 +165,12 @@ export default function DistrictMap({
           {results ? "WHO LEADS EACH DISTRICT" : "POINT AT WHERE YOU LIVE"}
         </p>
         {results ? (
-          // Every fill resultFill can give, including the dark "no votes
-          // yet" a district without a count is drawn in.
+          // Every fill a district can get here: resultFill's (including
+          // purple for a leader outside the two major parties and the dark
+          // "no votes yet"), plus the hatch for a district the feed gives
+          // no count for.
           <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-ink-min">
-            <li>red = R leads · blue = D leads</li>
+            <li>red = R leads · blue = D leads · purple = other party leads</li>
             <li>paler = under half in · solid = official</li>
             <li className="flex items-center gap-1">
               <span aria-hidden="true" className="inline-block h-2 w-3" style={{ backgroundColor: TIED_FILL }} />
@@ -163,6 +184,16 @@ export default function DistrictMap({
               />
               no votes yet
             </li>
+            {answered && (
+              <li className="flex items-center gap-1">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-2 w-3 border border-white/30"
+                  style={{ backgroundImage: NO_COUNT_SWATCH }}
+                />
+                no count from the state&apos;s feed
+              </li>
+            )}
           </ul>
         ) : (
           <p className="font-mono text-[10px] text-ink-min">redder = safer R · bluer = safer D · paler = closer</p>
@@ -177,6 +208,14 @@ export default function DistrictMap({
         style={{ width: "100%", height: "auto" }}
         aria-label={`Congressional districts of ${state}`}
       >
+        {results && (
+          <defs>
+            <pattern id={hatchId} patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+              <rect width="6" height="6" fill={AWAITING_FILL} />
+              <rect width="2" height="6" fill={NO_COUNT_STRIPE} />
+            </pattern>
+          </defs>
+        )}
         {/* react-simple-maps' types admit only GeoJSON, but its runtime
             converts a Topology itself — it checks type === "Topology" and
             runs topojson's feature() on the first object (verified in the
@@ -187,8 +226,12 @@ export default function DistrictMap({
             geographies.map((geo) => {
               const district = geo.properties?.district as number;
               const race = byDistrict.get(district);
+              const counted = results?.get(district);
               const { fill, opacity } = results
-                ? { fill: resultFill(results.get(district), true), opacity: 1 }
+                ? {
+                    fill: !counted && answered ? `url(#${hatchId})` : resultFill(counted, true),
+                    opacity: 1,
+                  }
                 : leanFill(race?.pvi ?? null);
               const isPicked = district === pickedDistrict;
               const isHovered = district === hovered;
@@ -231,7 +274,12 @@ export default function DistrictMap({
         className="min-h-[3.25rem] border-t border-white/10 px-3 py-2 font-mono text-xs"
       >
         {focusRace && results ? (
-          <DistrictResultPreview state={state} district={focusRace.district ?? 0} result={results.get(focusRace.district ?? 0)} />
+          <DistrictResultPreview
+            state={state}
+            district={focusRace.district ?? 0}
+            result={results.get(focusRace.district ?? 0)}
+            feedAnswered={answered}
+          />
         ) : focusRace ? (
           <DistrictPreview state={state} race={focusRace} />
         ) : (
@@ -274,10 +322,12 @@ function DistrictResultPreview({
   state,
   district,
   result,
+  feedAnswered,
 }: {
   state: string;
   district: number;
   result: LiveRaceResult | undefined;
+  feedAnswered: boolean;
 }) {
   const [first, second] = result?.candidates ?? [];
   // An exact tie names both without either in a lead colour.
@@ -286,7 +336,9 @@ function DistrictResultPreview({
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span className="text-ink-hi">{district === 0 ? `${state} at-large` : `${state}-${district}`}</span>
       {tied && <span className="text-ink-hi">TIED</span>}
-      {!result || !result.votesCounted ? (
+      {!result && feedAnswered ? (
+        <span className="text-ink-min">no count from the state&apos;s feed</span>
+      ) : !result || !result.votesCounted ? (
         <span className="text-ink-min">no votes counted yet</span>
       ) : (
         <>
