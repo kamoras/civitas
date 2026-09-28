@@ -70,6 +70,56 @@
       "source_name": "Maine Secretary of State",
       "strategy": "me_citizens_guide",
       "description": "The 'Maine Citizen's Guide to the Referendum Election' (SOS with the Attorney General, Treasurer and Office of Fiscal and Program Review), found from the Upcoming Elections page / the SOS news release announcing it because its filename changes every year. Reads the AG's Intent and Content (official_summary) and verbatim 'A “YES” vote ...'/'A “NO” vote ...' sentences, plus Treasurer debt service and OFPR fiscal impact. Verified against the real 2024 (5 questions) and 2025 (2 questions) guides; the parsed list must match the guide's own question listing. 2026 guide not yet published as of 2026-09-28, so this reads not-yet-covered rather than guessing."
+    },
+    "AL": {
+      "source_name": "Alabama Secretary of State (Fair Ballot Commission ballot statements)",
+      "strategy": "al_fair_ballot_statements",
+      "description": "Per-amendment Fair Ballot Commission ballot statements (Ala. Code 17-6-81) linked from sos.alabama.gov/alabama-votes/voter/ballot-measures/statewide under a heading naming the election. Each gives the ballot text, a plain-language summary, the state's own YES/NO sentences and the cost statement. Statewide only (local amendments are not on the page). Verified live 2026-09-28: Amendments 1-4 on the November 3, 2026 ballot. See ballot_measures_al.py."
+    },
+    "AR": {
+      "source_name": "Arkansas Secretary of State",
+      "strategy": "ar_general_assembly_referrals",
+      "description": "Initiatives and Referenda page, section '<year> Proposed Initiatives as Certified by the General Assembly': one art. 19 s.22 public notice PDF per issue (Popular Name + Ballot Title, or Ballot Title + Ballot Question for a bond referral). The Attorney-General-certified petition section is not read (the page says a listing there is not ballot certification). Verified live 2026-09-28: Issues 1-4 on the November 3, 2026 ballot. See ballot_measures_ar.py."
+    },
+    "FL": {
+      "source_name": "Florida Division of Elections",
+      "strategy": "fl_initiatives_database",
+      "description": "Initiatives / Amendments / Revisions Database (constitutionalinitiatives.dos.fl.gov) queried with Year=<year>, Made Ballot=YES; each row's detail page gives the ballot title and summary. Drafter read per record: a court-ordered Attorney General rewrite (2026's Amendment 3) is attributed to the Attorney General. Verified live 2026-09-28: Amendments 1-3 on the November 3, 2026 ballot. See ballot_measures_fl.py."
+    },
+    "KY": {
+      "source_name": "Kentucky Secretary of State",
+      "strategy": "ky_constitutional_amendments",
+      "description": "sos.ky.gov/elections/Pages/Constitutional-Amendments.aspx, reused each cycle; its title's year is checked. The question as put to voters. Verified live 2026-09-28: one amendment (SB 10, pardon blackout) on the November 3, 2026 ballot. See ballot_measures_ky.py."
+    },
+    "MD": {
+      "source_name": "Maryland State Board of Elections",
+      "strategy": "md_ballot_questions",
+      "description": "elections.maryland.gov/elections/{year}/ballot_questions.html; only its statewide 'SBE' block is read (county questions are skipped by structure), and the <h1> must name the election date (the site answers a missing year with a 200 soft-404). Secretary of State ballot language with its own FOR/AGAINST explanations where published. Verified live 2026-09-28: Questions 1-3 on the November 3, 2026 ballot. See ballot_measures_md.py."
+    },
+    "NC": {
+      "source_name": "North Carolina State Board of Elections",
+      "strategy": "nc_statewide_referenda",
+      "description": "The Board's statewide 'Referendum Choices List' report (Elections/<year>/Candidate Filing/statewide_referendums_<yyyymmdd>.pdf, linked from ncsbe.gov/voting/upcoming-election as 'Statewide referenda'); its criteria line must name the election date, ALL COUNTIES and the STATE ONLY VIEW. Verified live 2026-09-28: three amendments on the November 3, 2026 ballot. See ballot_measures_nc.py."
+    },
+    "SC": {
+      "source_name": "South Carolina State Election Commission",
+      "strategy": "sc_vrems_referendums",
+      "description": "The Commission's VREMS referendum listing for the statewide general election (vrems.scvotes.sc.gov); statewide rows are those with no responsible county and no party. Re-checked every run. CONFIRMED NONE for November 3, 2026 as of 2026-09-28: 42 referendums listed, all county questions; the same query for November 5, 2024 returns that year's statewide amendment. See ballot_measures_sc.py."
+    },
+    "TN": {
+      "source_name": "Tennessee Secretary of State",
+      "strategy": "tn_proposed_amendments",
+      "description": "sos.tn.gov/elections/announcements/{year}-proposed-constitutional-amendments, section 'Proposed Amendments on the November <year> Ballot' only (the page also previews amendments pending for a later ballot). Attorney General summaries and the page's own YES/NO sentences. Verified live 2026-09-28: Amendments #1-#3 on the November 3, 2026 ballot. See ballot_measures_tn.py."
+    },
+    "TX": {
+      "source_name": "Texas Legislative Reference Library",
+      "strategy": "tx_lrl_amendment_elections",
+      "description": "lrl.texas.gov/legis/ConstAmends/electiondates.cfm lists every constitutional-amendment election (Texas's only statewide ballot measures); an entry for this year's general-election date is read, and its absence is a re-checked 'none'. CONFIRMED NONE for November 3, 2026 as of 2026-09-28: newest entry is November 4, 2025. See ballot_measures_tx.py."
+    },
+    "WV": {
+      "source_name": "West Virginia Secretary of State",
+      "strategy": "wv_amendment_notices",
+      "description": "The Secretary of State's dated public notice of each proposed amendment (found through the sos.wv.gov news listing), carrying the joint resolution's Title of Amendment and Summary of Purpose. Cannot establish 'none' (no notice found reads as not covered). Verified live 2026-09-28: Amendment 1 (SJR 9) on the November 3, 2026 ballot. See ballot_measures_wv.py."
     }
   }
 }

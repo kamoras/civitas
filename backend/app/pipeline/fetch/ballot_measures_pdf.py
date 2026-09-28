@@ -41,22 +41,33 @@ import pdfplumber
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
+from app.pipeline.fetch.ballot_measures_al import fetch_measures as al_fetch_measures
+from app.pipeline.fetch.ballot_measures_ar import fetch_measures as ar_fetch_measures
 from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_document
 from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
+from app.pipeline.fetch.ballot_measures_fl import fetch_measures as fl_fetch_measures
+from app.pipeline.fetch.ballot_measures_ky import fetch_measures as ky_fetch_measures
 from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_document
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
+from app.pipeline.fetch.ballot_measures_md import fetch_measures as md_fetch_measures
 from app.pipeline.fetch.ballot_measures_mo import fetch_measures as mo_fetch_measures
+from app.pipeline.fetch.ballot_measures_nc import fetch_measures as nc_fetch_measures
+from app.pipeline.fetch.ballot_measures_sc import fetch_measures as sc_fetch_measures
+from app.pipeline.fetch.ballot_measures_tn import fetch_measures as tn_fetch_measures
+from app.pipeline.fetch.ballot_measures_tx import fetch_measures as tx_fetch_measures
 from app.pipeline.fetch.ballot_measures_va import fetch_measures as va_fetch_measures
 from app.pipeline.fetch.ballot_measures_ct import fetch_measures as ct_fetch_measures
 from app.pipeline.fetch.ballot_measures_me import fetch_measures as me_fetch_measures
 from app.pipeline.fetch.ballot_measures_nj import fetch_measures as nj_fetch_measures
 from app.pipeline.fetch.ballot_measures_vt import parse_document as parse_vt_document
+from app.pipeline.fetch.ballot_measures_wv import fetch_measures as wv_fetch_measures
 
 logger = logging.getLogger(__name__)
 
 _PDF_LINK_RE = re.compile(r'<a[^>]+href=["\']([^"\']+\.pdf)["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
 _LINK_RE = re.compile(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<[^>]+>")
+_ID_KEY_RE = re.compile(r"[^A-Za-z0-9]+")
 
 # No state is required to name its guide any particular thing — there's
 # no format spec to target, only convention. These are generic election-
@@ -165,6 +176,20 @@ MULTI_DOCUMENT_STRATEGIES = {
     "ct_sample_ballots": ct_fetch_measures,
     "me_citizens_guide": me_fetch_measures,
     "nj_public_questions": nj_fetch_measures,
+    # Each reads that state's own certified list end to end (a landing
+    # page of per-measure PDFs, one HTML page, a search form, a one-page
+    # report) — see each module's docstring for the shape and what makes
+    # an empty answer a checked one.
+    "al_fair_ballot_statements": al_fetch_measures,
+    "ar_general_assembly_referrals": ar_fetch_measures,
+    "fl_initiatives_database": fl_fetch_measures,
+    "ky_constitutional_amendments": ky_fetch_measures,
+    "md_ballot_questions": md_fetch_measures,
+    "nc_statewide_referenda": nc_fetch_measures,
+    "sc_vrems_referendums": sc_fetch_measures,
+    "tn_proposed_amendments": tn_fetch_measures,
+    "tx_lrl_amendment_elections": tx_fetch_measures,
+    "wv_amendment_notices": wv_fetch_measures,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
@@ -193,8 +218,13 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
     _upsert_measure as both `raw` and `detail` — there's nothing a second
     fetch would add.
     """
+    # A state whose ballot doesn't number its measures (NC, SC) or whose
+    # page doesn't print the number (KY) supplies its own stable key
+    # instead of a number this module would have to invent.
+    id_key = parsed.get("id_key")
+    key = _ID_KEY_RE.sub("-", id_key).strip("-") if id_key else parsed["number"]
     return {
-        "id": f"{state}-{election_date}-{parsed['number']}",
+        "id": f"{state}-{election_date}-{key}",
         "state": state,
         "election_date": election_date,
         "number": parsed["number"],
@@ -206,6 +236,10 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
         "no_means": parsed["no_means"],
         "measure_type": None,
         "origin": parsed["origin"],
+        # Who drafted the quoted text — every strategy names it; carried
+        # through so the page can render "Drafted by ..." beside the quote.
+        "title_authority": parsed.get("title_authority"),
+        "fiscal_authority": parsed.get("fiscal_authority"),
         "source_url": source_url,
     }
 
