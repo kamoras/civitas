@@ -9,6 +9,8 @@ import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
 import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 
 const HOLDINGS_PER_PAGE = 15;
 // The scorecard's panel sets the list beside the pie: a page about as tall
@@ -464,7 +466,11 @@ export default function Holdings({
 
   if (variant === "panel") {
     return (
-      <section className="border border-white/25 bg-surface font-sans">
+      <section
+        id="holdings"
+        {...{ [SHARE_SECTION_ATTR]: "holdings" }}
+        className="scroll-mt-[var(--header-clearance)] border border-white/25 bg-surface font-sans"
+      >
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
           <div className="min-w-0">
             <h2 className="text-[19px] font-bold leading-tight text-ink-hi">Holdings</h2>
@@ -474,7 +480,10 @@ export default function Holdings({
               score
             </p>
           </div>
-          <span className="font-mono text-[13px]">{sourceLink}</span>
+          <span className="flex items-center gap-3 font-mono text-[13px]">
+            {sourceLink}
+            <ShareSectionButton label="Holdings" />
+          </span>
         </header>
         <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <div>

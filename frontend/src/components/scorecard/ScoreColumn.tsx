@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { displayScore } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
 
 /** One of a member's three scored dimensions, as a column: its name, its
  *  share of the Representation Score, the score itself, and the evidence
@@ -10,12 +12,15 @@ import { getScoreColor } from "@/lib/representation";
  *  edge, level across the row. */
 export default function ScoreColumn({
   title,
+  shareId,
   weight,
   score,
   more,
   children,
 }: {
   title: string;
+  /** The column's anchor id; also what its shared image and link are named by. */
+  shareId: string;
   /** Share of the overall score, 0–1; omitted when the config hasn't loaded. */
   weight?: number;
   score: number | null | undefined;
@@ -24,7 +29,11 @@ export default function ScoreColumn({
 }) {
   const shown = score == null ? null : displayScore(score);
   return (
-    <section className="flex flex-col border border-white/25 bg-surface font-sans">
+    <section
+      id={shareId}
+      {...{ [SHARE_SECTION_ATTR]: shareId }}
+      className="flex scroll-mt-[var(--header-clearance)] flex-col border border-white/25 bg-surface font-sans"
+    >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
         <div className="min-w-0">
           <h2 className="text-[19px] font-bold leading-tight text-ink-hi">{title}</h2>
@@ -45,15 +54,19 @@ export default function ScoreColumn({
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
         {children}
-        {more && (
-          <button
-            type="button"
-            onClick={more.onClick}
-            className="mt-auto min-h-[44px] self-start text-left font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos"
-          >
-            {more.label} &rarr;
-          </button>
-        )}
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
+          {more && (
+            <button
+              type="button"
+              onClick={more.onClick}
+              {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+              className="min-h-[44px] text-left font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos"
+            >
+              {more.label} &rarr;
+            </button>
+          )}
+          <ShareSectionButton label={title} className="ml-auto" />
+        </div>
       </div>
     </section>
   );
