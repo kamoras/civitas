@@ -9,12 +9,11 @@ Rate limit: 1,000 requests/hour with an API key.
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import httpx
 from sqlalchemy.orm import Session
 
-from app.api import throttle
 from app.config import settings
 from app.http_client import make_async_client
 from app.database import off_loop
@@ -96,7 +95,7 @@ async def fetch_comments(
     sort_order: str = "desc",
     *,
     db: Session | None = None,
-    spend: Callable[[int], None] | None = None,
+    spend: Callable[[int], Awaitable[None]] | None = None,
 ) -> dict:
     """Fetch public comments for a document from regulations.gov.
 
@@ -143,8 +142,7 @@ async def fetch_comments(
     if page is not None:
         return page
     if spend is not None:
-        # A write to the shared budget (api/throttle.py): off the event loop.
-        await throttle.run(spend, 1 if object_id else 2)
+        await spend(1 if object_id else 2)
 
     async with make_async_client() as client:
         try:

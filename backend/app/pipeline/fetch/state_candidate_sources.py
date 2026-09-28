@@ -22,9 +22,11 @@ import os
 from typing import Any
 
 from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
-from app.file_cache import Stamp, load_json_once, read_json_preferring, reload_if_moved, reload_lock
+from app.file_cache import Stamp, load_json_once, read_json_preferring, reload_if_moved, new_reload_lock
 
 logger = logging.getLogger(__name__)
+
+_discovered_reload_lock = new_reload_lock()
 
 _BUNDLED_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "data", "state_candidate_sources.json")
@@ -71,7 +73,7 @@ def _load_discovered() -> dict[str, Any]:
     # The election pipeline (the pipeline process) writes the file; the API
     # processes read it here and reload when its mtime moves
     # (file_cache.reload_if_moved) — invalidate_cache() reaches only its caller.
-    with reload_lock:
+    with _discovered_reload_lock:
         _discovered_cache, _discovered_stamp = reload_if_moved(
             [path], _discovered_cache, _discovered_stamp, lambda: _read_discovered(path),
         )

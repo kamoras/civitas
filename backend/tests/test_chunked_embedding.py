@@ -277,3 +277,33 @@ def test_a_busy_file_does_not_hold_the_first_search_up(tmp_path, monkeypatch):
     vs._enable_wal(follower)  # free now: switches
     assert follower.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     follower.close()
+
+
+def test_a_switch_that_failed_at_open_is_retried_later(tmp_path, monkeypatch):
+    # The open connection is kept for the process's life: one failed try at
+    # open must not leave the file in rollback mode until a restart.
+    import sqlite3
+
+    from app.pipeline import vector_store as vs
+
+    path = str(tmp_path / "vectors.db")
+    monkeypatch.setattr(vs, "_VECTOR_DB_PATH", path)
+    monkeypatch.setattr(vs, "_vec_conn", None)
+    monkeypatch.setattr(vs, "SQLITE_BUSY_TIMEOUT_S", 1)  # keep the test quick
+    writer = sqlite3.connect(path, isolation_level=None)
+    writer.execute("CREATE TABLE t (x)")
+    writer.execute("BEGIN EXCLUSIVE")
+    try:
+        conn = vs.get_vec_conn()
+    except sqlite3.OperationalError:
+        conn = None  # schema setup can't proceed under the exclusive lock either
+    writer.execute("ROLLBACK")
+    writer.close()
+    if conn is None:
+        conn = vs.get_vec_conn()
+    monkeypatch.setattr(vs, "_wal_retry_at", 0.0)  # the minute has passed
+    vs.get_vec_conn()
+    assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    assert vs._wal_retry_at is None
+    conn.close()
+    monkeypatch.setattr(vs, "_vec_conn", None)

@@ -323,7 +323,7 @@ def test_an_unreadable_database_does_not_stop_an_alert(monkeypatch):
     monkeypatch.setattr(ops_alerts.settings, "ALERT_NTFY_URL", "https://ntfy.invalid/x")
     sent = []
     monkeypatch.setattr(ops_alerts, "_send_ntfy", lambda subject, body: sent.append(subject))
-    monkeypatch.setattr(ops_alerts, "_sent_unrecorded", set())
+    monkeypatch.setattr(ops_alerts, "_sent_unrecorded", {})
     assert ops_alerts.send_ops_alert("down", "b", dedupe_key="k")
     assert sent == ["down"]
     # The next tick, database still down: not sent again from this process.

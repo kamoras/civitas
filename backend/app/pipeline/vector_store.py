@@ -41,6 +41,7 @@ import re
 import sqlite3
 import struct
 import threading
+import time
 
 from sentence_transformers import SentenceTransformer
 from app.atomic_write import write_text_atomic
@@ -184,26 +185,35 @@ def _serialize(vec) -> bytes:
     return struct.pack("%sf" % len(vec), *vec)
 
 
-def _enable_wal(conn: sqlite3.Connection) -> None:
-    """Switch the file to WAL if it isn't already. The switch needs the file
-    to itself, so while another process holds a write transaction it would
-    wait out the whole busy timeout — here under _vec_lock, holding every
-    search up — and then fail. It waits a second instead and, failing, goes
-    on in the current mode: the pipeline process makes the switch when it
-    next opens the file (ensure_explore_index, at its startup)."""
+# While the file isn't in WAL yet, how often an open connection tries the
+# switch again (get_vec_conn).
+_WAL_RETRY_EVERY_S = 60
+_wal_retry_at: float | None = None  # None: in WAL (or not yet opened)
+
+
+def _enable_wal(conn: sqlite3.Connection) -> bool:
+    """Switch the file to WAL if it isn't already; whether it is now. The
+    switch needs the file to itself, so while another process holds a
+    transaction on it it would wait out the whole busy timeout — here under
+    _vec_lock, holding every search up — and then fail. It waits a second
+    instead and, failing, goes on in the current mode; get_vec_conn tries
+    again a minute later, until it takes."""
     conn.execute("PRAGMA busy_timeout = 1000")
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
+        return conn.execute("PRAGMA journal_mode=WAL").fetchone()[0].lower() == "wal"
     except sqlite3.OperationalError:
-        logger.info("Vector store busy — WAL switch left to the next open")
+        logger.info("Vector store busy — WAL switch retried in %ds", _WAL_RETRY_EVERY_S)
+        return False
     finally:
         conn.execute(f"PRAGMA busy_timeout = {int(SQLITE_BUSY_TIMEOUT_S * 1000)}")
 
 
 def get_vec_conn() -> sqlite3.Connection:
     """Get or create the sqlite-vec connection (singleton, extension loaded)."""
-    global _vec_conn
+    global _vec_conn, _wal_retry_at
     with _vec_lock:
+        if _vec_conn is not None and _wal_retry_at is not None and time.monotonic() >= _wal_retry_at:
+            _wal_retry_at = None if _enable_wal(_vec_conn) else time.monotonic() + _WAL_RETRY_EVERY_S
         if _vec_conn is None:
             import sqlite_vec
 
@@ -217,7 +227,7 @@ def get_vec_conn() -> sqlite3.Connection:
             # every reader off until it commits. Persistent in the file, so
             # after the first switch this is a no-op — and every connection,
             # this one included, follows a switch made by another.
-            _enable_wal(conn)
+            _wal_retry_at = None if _enable_wal(conn) else time.monotonic() + _WAL_RETRY_EVERY_S
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)

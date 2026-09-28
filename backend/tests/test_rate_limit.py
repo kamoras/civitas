@@ -175,3 +175,17 @@ def test_an_uncounted_public_request_reports_no_remaining_quota():
     assert _rl_headers(counted)["X-RateLimit-Remaining"] == "5"
     assert "X-RateLimit-Remaining" not in _rl_headers(uncounted)
     assert _rl_headers(uncounted)["X-RateLimit-Limit"] == "60"
+
+
+async def test_the_upstream_budget_is_charged_asynchronously_and_refuses_when_spent(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    from app.api import rate_limit
+
+    monkeypatch.setattr(rate_limit, "_UPSTREAM_CALLS_PER_HOUR", 3)
+    rate_limit.reset_upstream_budget()
+    await rate_limit.spend_upstream(2)
+    with pytest.raises(HTTPException) as refused:
+        await rate_limit.spend_upstream(2)
+    assert refused.value.status_code == 503 and "Retry-After" in refused.value.headers

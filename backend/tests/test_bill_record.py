@@ -127,11 +127,11 @@ def test_only_cache_misses_are_charged_before_anything_is_fetched(senate, monkey
     fake, calls = _answers()
     monkeypatch.setattr(br, "_congress_get", fake)
     charged = []
-    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=charged.append))
-    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=charged.append))
+    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=_charging(charged)))
+    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=_charging(charged)))
     assert charged == [1, 4]  # the bill, then the rest; the cached call charges nothing
 
-    def refuse(n):
+    async def refuse(n):
         raise RuntimeError("budget spent")
     monkeypatch.setattr(br, "_congress_get", fake)
     n = len(calls)
@@ -270,6 +270,14 @@ def test_a_wrong_id_is_charged_only_for_the_one_request_it_makes(senate, monkeyp
     fake, calls = _answers(missing=True)
     monkeypatch.setattr(br, "_congress_get", fake)
     charged = []
-    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.99999", spend=charged.append))
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.99999", spend=_charging(charged)))
     assert raw["not_found"] is True
     assert charged == [1]
+
+
+def _charging(charged: list):
+    """An async spend callback (as rate_limit.spend_upstream is) recording
+    what it was charged."""
+    async def spend(n):
+        charged.append(n)
+    return spend

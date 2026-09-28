@@ -480,3 +480,18 @@ class TestPipelineServiceLiveness:
             async with main_module.lifespan(main_module.app):
                 await main_module.asyncio.sleep(0)
             assert watched == expected, value
+
+
+def test_a_second_outage_the_same_day_alerts_again(monkeypatch, tmp_path):
+    """Keyed per outage (its last beat), not per day."""
+    from datetime import timedelta
+
+    from app import ops_alerts
+    from app.time_utils import utcnow
+
+    keys = []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None: keys.append(dedupe_key))
+    for last in (utcnow() - timedelta(hours=9), utcnow() - timedelta(hours=1)):
+        monkeypatch.setattr("app.scheduler.read_heartbeat", lambda last=last: (last, {}))
+        ops_alerts.check_pipeline_service_alive()
+    assert len(keys) == 2 and keys[0] != keys[1]

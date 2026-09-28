@@ -133,16 +133,19 @@ async def upstream_route_limit(request: Request) -> None:
 UpstreamRouteLimit = Annotated[None, Depends(upstream_route_limit)]
 
 
-def spend_upstream(calls: int) -> None:
+async def spend_upstream(calls: int) -> None:
     """Charge `calls` upstream requests to this hour's public budget, or
     raise 503 when they don't fit. Call only for cache misses.
 
     One budget for the whole backend, in the shared throttle store: kept per
-    process, each API worker would spend its own full hour of the key."""
+    process, each API worker would spend its own full hour of the key. Async,
+    with the store's own threads inside (throttle.run): a charge is a write
+    to the store, and a caller handed a plain function could block the event
+    loop on it."""
     if calls <= 0:
         return
-    decision = throttle.hit(
-        _UPSTREAM_BUCKET, "all", limit=_UPSTREAM_CALLS_PER_HOUR, period=3600.0, cost=calls,
+    decision = await throttle.run(
+        throttle.hit, _UPSTREAM_BUCKET, "all", limit=_UPSTREAM_CALLS_PER_HOUR, period=3600.0, cost=calls,
     )
     if not decision.allowed:
         raise HTTPException(

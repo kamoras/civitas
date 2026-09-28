@@ -40,7 +40,7 @@ def send_ops_alert(subject: str, body: str, *, dedupe_key: str | None = None) ->
         # A read first, though _record's insert is what decides: a watchdog
         # re-raises a persisting condition every tick, and the read lets it
         # stop there without taking the database's write lock each time.
-        if dedupe_key and (dedupe_key in _sent_unrecorded or _already_sent(dedupe_key)):
+        if dedupe_key and (_sent_without_record(dedupe_key) or _already_sent(dedupe_key)):
             return False
         if not _record(subject, body, dedupe_key):
             return False  # another process recorded (and sent) it first
@@ -102,10 +102,21 @@ def _already_sent(dedupe_key: str) -> bool:
             db.close()
 
 
-# Dedupe keys this process sent while the history couldn't be written: the
-# database can't stop the next tick from sending again, so memory does —
-# once per process rather than once per watchdog tick.
-_sent_unrecorded: set[str] = set()
+# Dedupe keys this process sent while the history couldn't be written, with
+# when: the database can't stop the next tick from sending again, so memory
+# does — once per process rather than once per watchdog tick. Kept a day
+# (every dedupe key here is at most daily), so it stays small.
+_sent_unrecorded: dict[str, float] = {}
+_UNRECORDED_KEEP_S = 86400.0
+
+
+def _sent_without_record(dedupe_key: str) -> bool:
+    import time
+
+    now = time.monotonic()
+    for key in [k for k, at in _sent_unrecorded.items() if now - at > _UNRECORDED_KEEP_S]:
+        del _sent_unrecorded[key]
+    return dedupe_key in _sent_unrecorded
 
 
 def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
@@ -153,7 +164,9 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
     except Exception:
         logger.exception("Failed to record ops alert")
         if dedupe_key:
-            _sent_unrecorded.add(dedupe_key)
+            import time
+
+            _sent_unrecorded[dedupe_key] = time.monotonic()
     finally:
         if db is not None:
             db.close()
@@ -384,7 +397,7 @@ def check_pipeline_service_alive() -> None:
     scheduler, so none of them can report that process being gone — and
     since the two were split (settings.PROCESS_ROLE), the site stays up
     when it goes: a crash loop past Swarm's restart limit would stop every
-    nightly run with no page and no alert. Once a day at most.
+    nightly run with no page and no alert. Once per outage (keyed by its last beat).
     """
     from app.scheduler import read_heartbeat
     from app.shared_state import UNREADABLE
@@ -407,7 +420,9 @@ def check_pipeline_service_alive() -> None:
                 f"{_heartbeat_unreadable_since:%Y-%m-%d %H:%M} UTC, so it can't tell whether that "
                 "service is running. Check the heartbeat file (scheduler_heartbeat.json on the data "
                 "volume both services mount) and the backend's logs.",
-                dedupe_key=f"pipeline-heartbeat-unreadable-{now:%Y-%m-%d}",
+                # Once per unreadable spell (keyed by when it began), not
+                # per day: a second spell the same day alerts too.
+                dedupe_key=f"pipeline-heartbeat-unreadable-{_heartbeat_unreadable_since:%Y-%m-%dT%H:%M:%S}",
             )
         return
     _heartbeat_unreadable_since = None
@@ -420,7 +435,11 @@ def check_pipeline_service_alive() -> None:
         f"The pipeline service's scheduler has not reported {since}. The site is still being "
         "served, but no scheduled job — the nightly chain, the hourly refreshes — will run until "
         "it is back. Check `docker service ps civitas_pipeline` and its logs.",
-        dedupe_key=f"pipeline-service-silent-{utcnow():%Y-%m-%d}",
+        # Once per outage — keyed by the last beat before it, which each
+        # outage has its own of — not per day: a service that recovers and
+        # stops again the same day alerts again.
+        dedupe_key=f"pipeline-service-silent-{last:%Y-%m-%dT%H:%M:%S}" if last is not None
+        else f"pipeline-service-silent-never-{utcnow():%Y-%m-%d}",
     )
 
 

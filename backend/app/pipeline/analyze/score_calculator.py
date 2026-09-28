@@ -171,7 +171,7 @@ import math
 import statistics
 
 from app.atomic_write import update_json_file
-from app.file_cache import Stamp
+from app.file_cache import Stamp, new_reload_lock
 from app.config_definitions import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     CONSTITUENT_MIN_VOTES,
@@ -362,6 +362,7 @@ def _state_pvi() -> dict[str, int]:
 
 _member_ideal_points_cache: dict | None = None
 _member_ideal_points_stamp: Stamp = None
+_member_ideal_points_lock = new_reload_lock()
 
 
 _MEMBER_IDEAL_POINTS_PATH = "/data/member_ideal_points.json"
@@ -399,7 +400,7 @@ def _member_ideal_points(chamber: str) -> dict:
     """
     import pathlib
 
-    from app.file_cache import Uncached, read_json, reload_if_moved, reload_lock
+    from app.file_cache import Uncached, read_json, reload_if_moved
 
     global _member_ideal_points_cache, _member_ideal_points_stamp
     path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
@@ -422,7 +423,7 @@ def _member_ideal_points(chamber: str) -> dict:
 
     # Rewritten each run in the pipeline process; read by the API processes'
     # score breakdowns (explain_scores), which reload when it moves.
-    with reload_lock:
+    with _member_ideal_points_lock:
         _member_ideal_points_cache, _member_ideal_points_stamp = reload_if_moved(
             [path], _member_ideal_points_cache, _member_ideal_points_stamp, read,
         )
@@ -512,6 +513,7 @@ _district_pvi_cache: dict[str, int] | None = None
 # (settings.PROCESS_ROLE) — the writer's reset of _district_pvi_cache only
 # reaches its own process, so the readers notice the new file by its mtime.
 _district_pvi_stamp: Stamp = None
+_district_pvi_lock = new_reload_lock()
 
 
 def _district_pvi() -> dict[str, int]:
@@ -530,7 +532,7 @@ def _district_pvi() -> dict[str, int]:
     """
     import pathlib
 
-    from app.file_cache import Uncached, reload_if_moved, reload_lock
+    from app.file_cache import Uncached, reload_if_moved
 
     global _district_pvi_cache, _district_pvi_stamp
 
@@ -546,7 +548,7 @@ def _district_pvi() -> dict[str, int]:
         except Uncached as unreadable:
             raise Uncached(parse(unreadable.value)) from None
 
-    with reload_lock:
+    with _district_pvi_lock:
         _district_pvi_cache, _district_pvi_stamp = reload_if_moved(
             [pathlib.Path(_PVI_PERSISTENT_DIR) / "district_pvi.json"], _district_pvi_cache, _district_pvi_stamp, read,
         )

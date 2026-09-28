@@ -45,15 +45,15 @@ def test_comments_are_listed_by_the_documents_object_id(api):
 
 def test_object_id_and_pages_are_cached(api, db_session):
     charged = []
-    asyncio.run(rg.fetch_comments(URL, db=db_session, spend=charged.append))
-    asyncio.run(rg.fetch_comments(URL, db=db_session, spend=charged.append))       # page cached
-    asyncio.run(rg.fetch_comments(URL, page_number=2, db=db_session, spend=charged.append))  # objectId cached
+    asyncio.run(rg.fetch_comments(URL, db=db_session, spend=_charging(charged)))
+    asyncio.run(rg.fetch_comments(URL, db=db_session, spend=_charging(charged)))       # page cached
+    asyncio.run(rg.fetch_comments(URL, page_number=2, db=db_session, spend=_charging(charged)))  # objectId cached
     assert charged == [2, 1]
     assert sum("/documents/" in c for c in api) == 1
 
 
 def test_a_refused_budget_sends_nothing(api, db_session):
-    def refuse(n):
+    async def refuse(n):
         raise RuntimeError("spent")
     with pytest.raises(RuntimeError):
         asyncio.run(rg.fetch_comments(URL, db=db_session, spend=refuse))
@@ -70,9 +70,9 @@ def test_an_unknown_document_is_remembered(api, db_session):
     # spend the shared budget.
     charged = []
     first = asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1", db=db_session,
-                                          spend=charged.append))
+                                          spend=_charging(charged)))
     again = asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1", db=db_session,
-                                          spend=charged.append))
+                                          spend=_charging(charged)))
     assert first["retryable"] is False and again["error"] == first["error"]
     assert charged == [2]
     assert sum("/documents/" in c for c in api) == 1
@@ -130,3 +130,11 @@ def test_a_failed_lookup_is_classified_by_what_asking_again_could_do(monkeypatch
 def test_no_key_configured_is_never_cached(monkeypatch):
     monkeypatch.setattr(rg.settings, "DATA_GOV_API_KEY", "", raising=False)
     assert asyncio.run(rg.fetch_comments(URL))["retryable"] is True
+
+
+def _charging(charged: list):
+    """An async spend callback (as rate_limit.spend_upstream is) recording
+    what it was charged."""
+    async def spend(n):
+        charged.append(n)
+    return spend

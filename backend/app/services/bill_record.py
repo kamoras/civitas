@@ -15,12 +15,11 @@ import asyncio
 import html as html_lib
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import httpx
 from sqlalchemy.orm import Session
 
-from app.api import throttle
 from app.models import RollCall, RollCallPosition, Representative, Senator
 from app.config import settings
 from app.database import off_loop
@@ -78,7 +77,7 @@ async def _congress_get(client: httpx.AsyncClient, url: str):
 
 async def fetch_bill_record(
     client: httpx.AsyncClient, db: Session, congress: int, bill_id: str,
-    spend: Callable[[int], None] | None = None,
+    spend: Callable[[int], Awaitable[None]] | None = None,
 ) -> dict:
     """{bill, summaries, actions, cosponsors, text, unavailable: [...],
     not_found}: not_found when Congress.gov has no such bill.
@@ -102,9 +101,8 @@ async def fetch_bill_record(
     missing = [part for part in _PARTS if cached[part] is None]
 
     async def charge(n: int) -> None:
-        # A write to the shared budget (api/throttle.py): off the event loop.
         if spend is not None and n:
-            await throttle.run(spend, n)
+            await spend(n)
 
     # The bill itself is charged first, the other parts once it exists: a
     # wrong id stops after that one request and must not be charged for the

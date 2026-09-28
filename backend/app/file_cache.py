@@ -45,12 +45,14 @@ def files_stamp(paths: Iterable[str | os.PathLike]) -> Stamp:
 # A stamp no file ever has: a value stored under it is reloaded on next use.
 _RELOAD = ("reload",)
 
-# Held by every reload_if_moved caller around the call and its assignment:
-# a value and its stamp are two stores, and two threads reloading at once
-# could otherwise leave the older value under the newer stamp — served
-# until the file next changed. One lock for all: the section is a stat,
-# and a reload is rare. Re-entrant, so a loader may read another cache.
-reload_lock = threading.RLock()
+def new_reload_lock() -> threading.RLock:
+    """A lock for one reload_if_moved cache, held around the call and its
+    assignment: a value and its stamp are two stores, and two threads
+    reloading at once could otherwise leave the older value under the newer
+    stamp — served until the file next changed. One per cache, so a slow
+    reload of one file doesn't hold up readers of another. Re-entrant, so a
+    loader may read another cache."""
+    return threading.RLock()
 
 
 class Uncached(Exception):
