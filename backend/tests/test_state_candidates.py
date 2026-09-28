@@ -1503,3 +1503,24 @@ class TestFecPartyCodes:
         db_session.commit()
         summary = _candidate_summary(omar)
         assert summary["party"] == "DFL" and summary["partyGroup"] == "DEM"
+
+
+class TestSpecialSenateRace:
+    """Florida and Ohio elect a senator in 2026 only to fill a vacancy, so
+    their one Senate race is "-SPECIAL". A certified record keyed to the
+    regular id matched nothing, and both pages showed every FEC filer."""
+
+    def test_a_senate_record_confirms_into_the_states_only_senate_race(self, db_session):
+        _race(db_session, "2026-SEN-FL-SPECIAL", "FL", office="S")
+        _candidate(db_session, "S6FL", "2026-SEN-FL-SPECIAL", "MOODY, ASHLEY", party="REP")
+        db_session.commit()
+        rec = {"office": "S", "district": None, "party": "R", "last_name": "MOODY", "display_name": "Ashley Moody"}
+        sc._apply_ballot(db_session, 2026, "FL", [rec], keep_unlisted=True, authoritative=True)
+        assert db_session.get(Candidate, "S6FL").confirmed_general is True
+
+    def test_with_a_regular_and_a_special_race_it_stays_with_the_regular(self, db_session):
+        """Georgia, 2020: a record carries nothing to choose between them."""
+        _race(db_session, "2026-SEN-GA", "GA", office="S")
+        _race(db_session, "2026-SEN-GA-SPECIAL", "GA", office="S")
+        db_session.commit()
+        assert sc._race_id_for(db_session, 2026, "GA", "S", None) == "2026-SEN-GA"
