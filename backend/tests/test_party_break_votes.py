@@ -72,3 +72,19 @@ def test_every_break_is_listed_with_its_roll_call_in_both_chambers(db_session):
         assert senate["votes"][0]["rollCall"]["question"] == "On Cloture"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_housekeeping_questions_never_count_for_or_against_the_party():
+    from app.pipeline.transform.normalize_votes import is_housekeeping
+
+    members = [{"party": "R", "voteCast": "Nay"}] * 5 + [{"party": "D", "voteCast": "Yea"}] * 5
+    for question in ("On Motion to Recommit", "On Ordering the Previous Question", "On Motion to Table",
+                     "On the Motion to Table S.J.Res. 55", "On Motion to Adjourn", "On Approving the Journal"):
+        bill = {}
+        stamp_roll_call_outcome(bill, {"chamber": "House", "congress": 119, "session": 2, "rollNumber": 1,
+                                       "question": question, "members": members})
+        assert bill["partySplit"] is None, question
+    # Rule votes, cloture, passage and nominations still count.
+    for question in ("On Agreeing to the Resolution", "On the Cloture Motion", "On Passage",
+                     "On the Nomination", "On Agreeing to the Amendment"):
+        assert not is_housekeeping(question), question
