@@ -311,7 +311,9 @@ export default function AboutPage() {
                   raw defection from party. A vote is party-labeled only when the parties split on
                   its roll call (at least 65% of one party voting Yea and at most 35% of the other),
                   and a member breaks when they vote with the other side; a vote with no recorded
-                  roll call doesn&apos;t count. Every break on a profile shows the roll call&apos;s own
+                  roll call doesn&apos;t count, and neither does housekeeping (quorum calls,
+                  adjourning, the House&apos;s previous question, motions to table or to recommit),
+                  which splits on party lines as a matter of course. Every break on a profile shows the roll call&apos;s own
                   party tallies. Each member&apos;s break rate on party-labeled votes is
                   compared with the break rate that members of the same party and chamber show in
                   seats with the same partisan lean (Cook PVI). That expectation is measured from
