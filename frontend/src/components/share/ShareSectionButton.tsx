@@ -106,8 +106,10 @@ export default function ShareSectionButton({
     setOpen(true);
     // Set once the dialog (and its live region) is in the page: text a live
     // region is inserted with usually isn't announced. Skipped if the capture
-    // already finished.
-    setTimeout(() => setStatus((s) => (s === "" ? "Making the image…" : s)), 100);
+    // already finished, or this open was closed or replaced by another.
+    setTimeout(() => {
+      if (generation.current === mine) setStatus((s) => (s === "" ? "Making the image…" : s));
+    }, 100);
     captureSection(section, subject, { link: linkFor(id), withStrip })
       .then((blob) => {
         if (generation.current !== mine) return;
