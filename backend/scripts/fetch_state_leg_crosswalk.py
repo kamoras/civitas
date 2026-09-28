@@ -96,6 +96,15 @@ _STRONG_MCD_STATES = {
 _COUNTY_SUBDIVISION_LAYER = 1
 _INCORPORATED_PLACE_LAYER = 4
 
+# Hawaii has no incorporated municipality at all — its only local
+# governments are the four counties and the consolidated City and County
+# of Honolulu — so the incorporated-places layer returns nothing for it.
+# The places a resident names (Hilo, Kailua, Hanalei) are Census
+# Designated Places, Census's own name for exactly that case: a
+# recognised community with no municipal government.
+_CDP_STATES = {"HI"}
+_CENSUS_DESIGNATED_PLACE_LAYER = 5
+
 # Counties, used only as a fallback. A district can contain no
 # incorporated place at all — three of Georgia's 180 House districts sit
 # entirely in unincorporated county land, mostly suburban Atlanta — and
@@ -262,6 +271,7 @@ def _districts(state_fips: str, chamber: str) -> list[tuple[str, list, tuple]]:
 def _towns(state: str, state_fips: str) -> list[tuple[str, list]]:
     layer = (
         _COUNTY_SUBDIVISION_LAYER if state in _STRONG_MCD_STATES
+        else _CENSUS_DESIGNATED_PLACE_LAYER if state in _CDP_STATES
         else _INCORPORATED_PLACE_LAYER
     )
     features = _query_all(_TOWN_URL.format(layer=layer), {
