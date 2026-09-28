@@ -173,7 +173,8 @@ export interface KeyVote {
   voteCategory: "recent" | "key";
 }
 
-/** A bill the member voted on that the donor org's own LDA filing names. */
+/** A bill the member voted on that an LDA filing for a client of the donor's
+ * name names, one entry per client. */
 export interface LobbiedBill {
   /** Canonical id ("HR.1492"); `label` is how the Record prints it. */
   billId: string;
@@ -202,6 +203,8 @@ export interface LobbyingMatch {
   description: string;
   /** Absent from responses served before these fields existed. */
   lobbiedBills?: LobbiedBill[];
+  /** lobbyingSpend by the registry's client names, largest first. */
+  lobbyingClients?: { client: string; amount: number }[];
   /** false: the registry lookup failed, so lobbyingSpend is unknown, not $0. */
   lobbyingChecked?: boolean | null;
 }

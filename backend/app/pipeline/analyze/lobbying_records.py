@@ -6,8 +6,8 @@ legislation the registrant lobbied on, in the filer's own free text
 ("H.R. 1492, to equalize the negotiation period ..."; "S 526 - Pharmacy
 Benefit Manager Transparency Act of 2025"). That text is the only per-bill
 record the LDA publishes, and it is the difference between "this donor's
-industry overlaps this vote's topic" and "this donor's own lobbying filing
-names the bill this member voted on".
+industry overlaps this vote's topic" and "a lobbying filing under this
+donor's name names the bill this member voted on".
 
 Measured on 3,175 activity descriptions from 2025 filings by 48 large
 clients (scripts/calibrate_lda_bill_match.py reproduces every number here),

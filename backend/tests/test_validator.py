@@ -263,9 +263,11 @@ class TestValidateSenator:
             "donationToSenator": 1, "billsInfluenced": [], "description": "",
             "isConsensusVote": True, "lobbyingChecked": False,
             "lobbiedBills": [bill, {"no": "id"}, "junk"],
+            "lobbyingClients": [{"client": "PFIZER INC.", "amount": 5}, {"amount": 1}],
         }])
         m = validate_senator(senator)["lobbyingMatches"][0]
         assert m["lobbiedBills"] == [bill]
+        assert m["lobbyingClients"] == [{"client": "PFIZER INC.", "amount": 5}]
         assert m["lobbyingChecked"] is False
         assert m["isConsensusVote"] is True
 

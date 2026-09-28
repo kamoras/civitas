@@ -1,6 +1,6 @@
-"""lobbying matches: bills named in the org's LDA filings, lookup status
+"""lobbying matches: bills named in LDA filings, spend by client, lookup status
 
-Two nullable columns on each match table, so the previous image runs
+Three nullable columns on each match table, so the previous image runs
 unchanged against the migrated schema (it never reads them).
 
 Revision ID: 0008
@@ -23,10 +23,12 @@ def upgrade() -> None:
     for table in _TABLES:
         op.add_column(table, sa.Column("lobbied_bills", sa.Text(), nullable=True))
         op.add_column(table, sa.Column("lobbying_checked", sa.Boolean(), nullable=True))
+        op.add_column(table, sa.Column("lobbying_clients", sa.Text(), nullable=True))
 
 
 def downgrade() -> None:
     for table in _TABLES:
         with op.batch_alter_table(table) as batch:
+            batch.drop_column("lobbying_clients")
             batch.drop_column("lobbying_checked")
             batch.drop_column("lobbied_bills")

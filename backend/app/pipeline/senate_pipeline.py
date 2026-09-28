@@ -302,6 +302,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 is_consensus_vote=match_data.get("isConsensusVote"),
                 description=match_data.get("description") or "",
                 lobbied_bills=json.dumps(match_data.get("lobbiedBills") or []),
+                lobbying_clients=json.dumps(match_data.get("lobbyingClients") or []),
                 lobbying_checked=match_data.get("lobbyingChecked"),
             )
         )

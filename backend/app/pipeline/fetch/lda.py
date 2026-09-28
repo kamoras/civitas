@@ -10,7 +10,9 @@ self-reported expenses (in-house lobbying) across a filing year. The same
 filings list, per issue area, the legislation lobbied on; those bill
 numbers are matched against the member's own votes
 (analyze/lobbying_records.py), which turns a topical overlap into a
-record: this donor's filing names this bill, and the member voted on it.
+record: a filing for a client of this donor's name names this bill, and
+the member voted on it. The client is always shown: a name the donor's
+begins can be a subsidiary or a separate company (is_same_client).
 
 The registry moved from lda.senate.gov to lda.gov in 2026. The old host
 answers with a 301, which httpx does not follow by default, so every lookup
@@ -489,41 +491,45 @@ async def lobbied_bills_for(
             }
             if any(max(f) >= BILL_TITLE_MATCH_MIN for f in fits.values()):
                 previous = await _bill_titles(client, db, congress - 1, bill_key)
-                if previous is None:
-                    # Without the previous congress's same-numbered bill to
-                    # rule out, nothing is claimed for this one (and not
-                    # remembered, so a later member can try again).
-                    continue
-                for _, key in pending:
-                    _verdicts[key] = names_bill(key[2], key[3], titles, bill_key, pool, previous, fits[key])
+                # Without the previous congress's same-numbered bill to rule
+                # out, the new wordings stay unjudged (not remembered, so a
+                # later member can try again); verdicts already cached for
+                # this bill still stand.
+                if previous is not None:
+                    for _, key in pending:
+                        _verdicts[key] = names_bill(key[2], key[3], titles, bill_key, pool, previous, fits[key])
             else:
                 # No wording fits this bill at all: nothing to rule out, so
                 # the previous congress's titles aren't worth a request.
                 for _, key in pending:
                     _verdicts[key] = False
-        matching = [m for m, key in keyed if _verdicts[key]]
+        matching = [m for m, key in keyed if _verdicts.get(key)]
         if not matching:
             continue
-        filings = {f["url"]: (m.get("filingYear") or 0, f) for m in matching for f in m.get("filings", [])}
-        year, newest = max(filings.values(), key=lambda yf: (yf[0], yf[1].get("posted") or ""))
-        found.append({
-            "billId": bill_key,
-            "label": bill_label(bill_key) or bill_key,
-            "billName": (vote.get("billName") or "")[:160],
-            "vote": vote.get("vote"),
-            # None or "passage" when the vote shown is on the bill itself;
-            # otherwise which motion it was ("cloture", "amendment" ...).
-            "motionType": vote.get("motionType"),
-            "filingYear": year or None,
-            "filingUrl": newest.get("url"),
-            "registrant": newest.get("registrant"),
-            # The registry's name for the client the filing was for: the
-            # page says whose filing it is rather than asserting it's the
-            # donor's (is_same_client).
-            "client": newest.get("client"),
-            "filingCount": len(filings),
-        })
-    found.sort(key=lambda b: (-(b.get("filingYear") or 0), b.get("billId") or ""))
+        # One entry per client naming the bill: the registry's client name
+        # is shown, not assumed to be the donor (is_same_client), so one
+        # client's filings must not be counted under another's name.
+        by_client: dict[str, dict[str, tuple[int, dict]]] = {}
+        for m in matching:
+            for f in m.get("filings", []):
+                by_client.setdefault(f.get("client") or "", {})[f["url"]] = (m.get("filingYear") or 0, f)
+        for client_name, filings in by_client.items():
+            year, newest = max(filings.values(), key=lambda yf: (yf[0], yf[1].get("posted") or ""))
+            found.append({
+                "billId": bill_key,
+                "label": bill_label(bill_key) or bill_key,
+                "billName": (vote.get("billName") or "")[:160],
+                "vote": vote.get("vote"),
+                # None or "passage" when the vote shown is on the bill
+                # itself; otherwise which motion it was ("cloture" ...).
+                "motionType": vote.get("motionType"),
+                "filingYear": year or None,
+                "filingUrl": newest.get("url"),
+                "registrant": newest.get("registrant"),
+                "client": client_name or None,
+                "filingCount": len(filings),
+            })
+    found.sort(key=lambda b: (-(b.get("filingYear") or 0), b.get("billId") or "", b.get("client") or ""))
     return found[:MAX_LOBBIED_BILLS]
 
 
@@ -582,19 +588,23 @@ async def enrich_lobbying_matches_with_lda(
                 m["lobbyingChecked"] = spend_year is not None
                 if spend_year is not None:
                     m["lobbyingSpend"] = round(spend_year.total)
+                    # The total's parts by the registry's client names, so
+                    # the structured field isn't read as one company's.
+                    m["lobbyingClients"] = [
+                        {"client": name, "amount": round(spent)} for name, spent in spend_year.clients
+                    ]
                 if spend_year is not None and spend_year.total > 0:
                     # A total cut off at the page cap is a floor, not a total.
                     amount = f"${spend_year.total:,.0f}" if spend_year.complete else f"at least ${spend_year.total:,.0f}"
-                    parts = [
-                        f"${spent:,.0f} as {name.rstrip('. ')}"
-                        for name, spent in spend_year.clients[:3] if spent > 0
-                    ]
+                    parts = [f"${spent:,.0f} as {name}" for name, spent in spend_year.clients[:3] if spent > 0]
                     rest = len([c for c in spend_year.clients if c[1] > 0]) - len(parts)
                     filed_as = "; ".join(parts) + (f"; and {rest} more" if rest > 0 else "")
+                    # The name matched, not the donor's full name: a client
+                    # whose name begins with it may be a separate company.
                     m["description"] = (
                         m.get("description", "")
-                        + f" Registered federal lobbying (LDA {lda_year}) by clients named"
-                        f" {org.strip()}: {amount} ({filed_as})."
+                        + f" Registered federal lobbying (LDA {lda_year}) by clients whose names"
+                        f" begin with \"{search_name(org)}\": {amount} ({filed_as})"
                     )
                 lobbied = await lobbied_bills_for(
                     lda_client, db, [a for a in activities.values() if a is not None], voted, congress,

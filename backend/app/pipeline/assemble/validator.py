@@ -217,6 +217,10 @@ def validate_senator(senator: dict) -> dict:
                 b for b in (m.get("lobbiedBills") or [])
                 if isinstance(b, dict) and b.get("billId")
             ],
+            "lobbyingClients": [
+                c for c in (m.get("lobbyingClients") or [])
+                if isinstance(c, dict) and c.get("client")
+            ],
             "lobbyingChecked": (
                 m["lobbyingChecked"] if isinstance(m.get("lobbyingChecked"), bool) else None
             ),

@@ -17,6 +17,20 @@ const MOTION_LABELS: Record<string, string> = {
   nomination: " (on a nomination)",
 };
 
+// Registry names differ in punctuation ("PFIZER INC" / "PFIZER INC."); the
+// registrant is named only when it's someone other than the client, or the
+// client name already says who filed ("X ON BEHALF OF Y").
+function nameKey(name: string): string {
+  return name.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+}
+
+function filedBy(client: string | null | undefined, registrant: string | null | undefined): string {
+  if (!registrant) return "";
+  if (client && (nameKey(client) === nameKey(registrant) || / ON BEHALF OF | OBO /.test(` ${nameKey(client)} `)))
+    return "";
+  return ` by ${registrant}`;
+}
+
 function motionLabel(motionType: string | null | undefined): string {
   if (motionType === "passage") return "";
   // Unrecognized, or no question recorded: don't let it read as passage.
@@ -52,6 +66,15 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
 
               <div className="text-xs font-mono text-ink-lo mb-3 space-y-1">
                 <div>ASSOCIATED CONTRIBUTIONS: {formatCurrency(match.donationToSenator)}</div>
+                {(match.lobbyingClients ?? []).length > 0 && (
+                  <div>
+                    REGISTERED LOBBYING BY CLIENTS OF THIS NAME:{" "}
+                    {(match.lobbyingClients ?? [])
+                      .filter((c) => c.amount > 0)
+                      .map((c) => `${formatCurrency(c.amount)} as ${c.client}`)
+                      .join("; ") || "none reported"}
+                  </div>
+                )}
                 {match.lobbyingChecked === false && (
                   <div>LOBBYING REGISTRY: lookup failed on the last run, spend unknown</div>
                 )}
@@ -63,7 +86,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                         const bill = billUrl(b.billId);
                         const filing = b.filingUrl ? safeHref(b.filingUrl) : null;
                         return (
-                          <li key={b.billId}>
+                          <li key={`${b.billId}|${b.client ?? ""}`}>
                             {bill ? (
                               <a
                                 href={safeHref(bill) || "#"}
@@ -94,7 +117,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                                 >
                                   {b.filingYear ? `${b.filingYear} filing` : "filing"}
                                   {b.client ? ` for ${b.client}` : ""}
-                                  {b.registrant && b.registrant !== b.client ? ` by ${b.registrant}` : ""}
+                                  {filedBy(b.client, b.registrant)}
                                 </a>
                                 {b.filingCount > 1 && ` (+${b.filingCount - 1} more)`}
                               </>

@@ -1,5 +1,6 @@
 """Tests for fetch/lda.py — registered lobbying spend and the bills an
-organization's own LDA filings name, added to donor-vote lobbying matches.
+LDA filings for clients of the donor's name name, added to donor-vote
+lobbying matches (each with the client it was filed for).
 Shared by senate_pipeline.py and house_pipeline.py.
 """
 
@@ -459,9 +460,14 @@ class TestClientsShown:
         with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=act)):
             await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
         d = matches[0]["description"]
-        assert "by clients named COCA-COLA: $970,000" in d
-        assert "$900,000 as THE COCA-COLA COMPANY; $70,000 as COCA-COLA BOTTLING COMPANY UNITED, INC)" in d
-        assert ".." not in d
+        # The name matched, not the donor's full name, and registry names
+        # verbatim.
+        assert 'by clients whose names begin with "COCA COLA": $970,000' in d
+        assert "$900,000 as THE COCA-COLA COMPANY; $70,000 as COCA-COLA BOTTLING COMPANY UNITED, INC.)" in d
+        assert matches[0]["lobbyingClients"] == [
+            {"client": "THE COCA-COLA COMPANY", "amount": 900_000},
+            {"client": "COCA-COLA BOTTLING COMPANY UNITED, INC.", "amount": 70_000},
+        ]
 
     @pytest.mark.asyncio
     async def test_a_linked_bill_names_the_client_the_filing_was_for(self, db_session):
@@ -472,3 +478,38 @@ class TestClientsShown:
         with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(5.0, [mention]))):
             await enrich_lobbying_matches_with_lda(matches, db_session, 2025, votes=VOTES, congress=119)
         assert matches[0]["lobbiedBills"][0]["client"] == "PFIZER INC."
+
+    @pytest.mark.asyncio
+    async def test_a_bill_named_by_two_clients_is_one_entry_per_client(self, db_session):
+        text = ", to equalize the negotiation period between small-molecule and biologic candidates"
+        mention = _mention("HR.1492", text, url="https://lda.gov/a/")
+        mention["filings"] = [
+            {"url": "https://lda.gov/a/", "registrant": "R1", "client": "THE COCA-COLA COMPANY", "posted": "2025-04-01"},
+            {"url": "https://lda.gov/b/", "registrant": "R1", "client": "THE COCA-COLA COMPANY", "posted": "2025-07-01"},
+            {"url": "https://lda.gov/c/", "registrant": "R2", "client": "COCA-COLA BOTTLING COMPANY UNITED, INC.", "posted": "2025-10-01"},
+        ]
+        matches = [{"lobbyistOrg": "Coca-Cola", "description": ""}]
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(5.0, [mention]))):
+            await enrich_lobbying_matches_with_lda(matches, db_session, 2025, votes=VOTES, congress=119)
+        rows = {b["client"]: b for b in matches[0]["lobbiedBills"]}
+        assert rows["THE COCA-COLA COMPANY"]["filingCount"] == 2
+        assert rows["THE COCA-COLA COMPANY"]["filingUrl"] == "https://lda.gov/b/"
+        assert rows["COCA-COLA BOTTLING COMPANY UNITED, INC."]["filingCount"] == 1
+
+    @pytest.mark.asyncio
+    async def test_a_cached_verdict_stands_when_the_previous_congress_lookup_fails(self, db_session):
+        text = ", to equalize the negotiation period between small-molecule and biologic candidates"
+        first = [{"lobbyistOrg": "Pfizer", "description": ""}]
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(5.0, [_mention("HR.1492", text)]))):
+            await enrich_lobbying_matches_with_lda(first, db_session, 2025, votes=VOTES, congress=119)
+
+        async def _prev_fails(client, db, congress, bill_key):
+            return None if congress == 118 else list(TITLES.get(bill_key, []))
+
+        second = [{"lobbyistOrg": "Pfizer", "description": ""}]
+        mentions = [_mention("HR.1492", text), _mention("HR.1492", text + " and related provisions", url="https://lda.gov/z/")]
+        with patch.object(lda, "_bill_titles", new=_prev_fails), \
+                patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(5.0, mentions))):
+            await enrich_lobbying_matches_with_lda(second, db_session, 2025, votes=VOTES, congress=119)
+        # The first wording's verdict was cached; the new one stays unjudged.
+        assert [b["filingUrl"] for b in second[0]["lobbiedBills"]] == [first[0]["lobbiedBills"][0]["filingUrl"]]

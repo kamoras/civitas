@@ -292,8 +292,10 @@ class CommitteeSchema(CamelModel):
 
 
 class LobbiedBillSchema(CamelModel):
-    """A bill the member voted on that the donor org's own LDA filing
-    names (fetch/lda.lobbied_bills_for)."""
+    """A bill the member voted on that an LDA filing for a client of the
+    donor's name names, one entry per client (fetch/lda.lobbied_bills_for).
+    `client` is the registry's name for that client, which can be a separate
+    company sharing the name."""
     bill_id: str
     label: str = ""
     bill_name: str = ""
@@ -308,6 +310,12 @@ class LobbiedBillSchema(CamelModel):
     filing_count: int = 1
 
 
+class LobbyingClientSchema(CamelModel):
+    """One registry client counted in a match's lobbying spend."""
+    client: str
+    amount: float
+
+
 class LobbyingMatchSchema(CamelModel):
     lobbyist_org: str
     industry: str
@@ -317,6 +325,8 @@ class LobbyingMatchSchema(CamelModel):
     senator_vote_aligned: bool | None = None
     description: str
     lobbied_bills: list[LobbiedBillSchema] = []
+    # lobbying_spend's parts by the registry's client names.
+    lobbying_clients: list[LobbyingClientSchema] = []
     # False: the LDA lookup failed, so lobbying_spend is unknown, not zero.
     lobbying_checked: bool | None = None
 

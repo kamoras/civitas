@@ -57,7 +57,7 @@ export function generateCommentary(senator: Senator): string[] {
     }
   }
 
-  // Donor-vote connections: bills named in the donors' own lobbying filings
+  // Donor-vote connections: bills named in lobbying filings under donors' names
   const lobbiedBills = countLobbiedBills(lobbyingMatches);
   if (lobbiedBills > 0) {
     comments.push(
