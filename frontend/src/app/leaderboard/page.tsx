@@ -24,7 +24,6 @@ import MetricTooltip from "@/components/checker/MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { BOXED_CONTROL, boxedControl } from "@/lib/controlStyles";
 import { competitionRanks, displayScore, formatCurrency } from "@/lib/formatting";
-import { PresidentCard } from "@/components/president/PresidentClient";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
@@ -270,10 +269,15 @@ function termYears(start: string, end: string | null): string {
 }
 
 // The ranked table below excludes the currently-serving president
-// entirely (see fetchCurrentPresident's comment) — this renders their
-// profile separately, reusing PresidentCard (already surfaces
-// dimensionsAvailable, per-dimension N/A reasons, and the 90-day
-// rolling approval stat) rather than building a second, parallel view.
+// entirely (see fetchCurrentPresident's comment) — this names them and
+// their scores separately, linking to their scorecard for the evidence.
+const PRESIDENT_DIMENSIONS = [
+  ["publicMandate", "Public Mandate"],
+  ["effectiveness", "Effectiveness"],
+  ["agencyAlignment", "Agency Alignment"],
+  ["historicalLegacy", "Historical Legacy"],
+] as const;
+
 function CurrentPresidentSpotlight({
   president,
   loading,
@@ -304,7 +308,40 @@ function CurrentPresidentSpotlight({
           under one ordinal position isn&apos;t a fair fight.
         </p>
       </div>
-      <PresidentCard president={president} />
+      <div className="panel flex flex-wrap items-center gap-x-8 gap-y-4 p-5">
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-xs text-ink-min">President no. {president.number}</p>
+          <p className="text-xl font-bold text-ink-hi">{president.name}</p>
+          <Link
+            href={`/politicians/${president.id}`}
+            className="font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos"
+          >
+            Full scorecard &rarr;
+          </Link>
+        </div>
+        <dl className="flex flex-wrap gap-x-6 gap-y-2">
+          {PRESIDENT_DIMENSIONS.map(([key, label]) => {
+            const value = president.score[key];
+            return (
+              <div key={key} className="flex flex-col">
+                <dt className="font-mono text-xs text-ink-min">{label}</dt>
+                <dd
+                  className={`font-mono text-lg ${value == null ? "text-ink-min" : getScoreColor(displayScore(value))}`}
+                >
+                  {value == null ? "not rated" : displayScore(value)}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+        {president.score.dimensionsAvailable > 0 && (
+          <p
+            className={`font-display text-5xl font-extrabold ${getScoreColor(displayScore(president.score.overall))}`}
+          >
+            {displayScore(president.score.overall)}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1200,13 +1237,13 @@ function LeaderboardContent() {
                 <div className="mt-4 space-y-1 text-center">
                   <p className="font-sans text-xs text-ink-lo">
                     Higher score = better constituent representation. Computed from: funding
-                    independence (33%) + constituent alignment (33%) + legislative effectiveness (34%).
-                    Click any row to view full profile.
+                    independence (33%) + constituent alignment (33%) + legislative effectiveness
+                    (34%). Click any row to view full profile.
                   </p>
                   <p className="font-sans text-xs text-ink-min">
-                    Scores are shrunk toward a neutral value when data is thin — members with limited public
-                    data are not penalized or rewarded for it (the About page says how each score does
-                    this)
+                    Scores are shrunk toward a neutral value when data is thin — members with
+                    limited public data are not penalized or rewarded for it (the About page says
+                    how each score does this)
                   </p>
                 </div>
               )}
@@ -1228,7 +1265,15 @@ const EMPTY_JUSTICES: JusticeLeaderboardEntry[] = [];
 
 export default function LeaderboardPage() {
   return (
-    <Suspense fallback={<PageFallback eyebrow={"Leaderboard · ranked by representation score"} title={"Leaderboard"} rows={6} />}>
+    <Suspense
+      fallback={
+        <PageFallback
+          eyebrow={"Leaderboard · ranked by representation score"}
+          title={"Leaderboard"}
+          rows={6}
+        />
+      }
+    >
       <LeaderboardContent />
     </Suspense>
   );
