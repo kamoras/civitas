@@ -217,22 +217,35 @@ def is_same_client(searched: str, client_name: str) -> bool:
     client name the registry filed it under, and the page shows it.
     """
     q = searched
-    c = _name_key(client_name)
-    if not q or not c:
+    if not q or not _name_key(client_name):
         return False
-    if c == q or c.startswith(q + " "):
-        return True
-    for marker in (" ON BEHALF OF ", " OBO ", " D B A ", " DBA "):
-        i = c.find(marker)
-        if i >= 0:
-            rest = _name_key(c[i + len(marker):])
-            if rest == q or rest.startswith(q + " "):
-                return True
-    for part in re.findall(r"\(([^)]*)", (client_name or "").upper()):
-        rest = _name_key(part)
-        if rest == q or rest.startswith(q + " "):
-            return True
-    return False
+    return any(
+        name == q or name.startswith(q + " ")
+        for name in _names_in_client(client_name)
+    )
+
+
+# "On behalf of" as the registry spells it (and "doing business as"): every
+# name after one of these, at any position, is a name the filing is for. A
+# filing can pass through a chain of firms ("HARRIS LAW FIRM OBO ROBBINS
+# SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS"), and "O/B/O" alone is
+# used on 129 of 2025's filings ("GIBSON, DUNN & CRUTCHER LLP (O/B/O
+# PEPSICO, INC.)").
+_ON_BEHALF_RE = re.compile(r" (?:ON BEHALF OF|OBO|O B O|D B A|DBA) ")
+
+
+def _names_in_client(client_name: str) -> list[str]:
+    """Every name a registry client field carries, as name keys: the whole
+    field, each parenthesised part, and whatever follows each on-behalf-of
+    or d/b/a marker in any of them."""
+    parts = [client_name or ""] + re.findall(r"\(([^)]*)", client_name or "")
+    names: list[str] = []
+    for part in parts:
+        key = _name_key(part)
+        names.append(key)
+        for m in _ON_BEHALF_RE.finditer(f" {key} "):
+            names.append(_name_key(f" {key} "[m.end():]))
+    return names
 
 
 def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
@@ -243,7 +256,7 @@ def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
     client = _name_key(client_name or "")
     if client == _name_key(registrant) or search_name(client_name or "") == search_name(registrant):
         return None
-    if any(marker in f" {client} " for marker in (" ON BEHALF OF ", " OBO ", " O B O ")):
+    if _ON_BEHALF_RE.search(f" {client} "):
         return None
     return registrant
 
@@ -552,11 +565,14 @@ async def lobbied_bills_for(
 def _cap_bills(rows: list[dict]) -> list[dict]:
     """Newest filings first, capped at MAX_LOBBIED_BILLS *bills*: several
     clients can name one bill, and each is its own row."""
-    rows = sorted(rows, key=lambda b: (-(b.get("filingYear") or 0), b.get("billId") or "", b.get("client") or ""))
-    kept: list[str] = []
+    newest: dict[str, int] = {}
     for b in rows:
-        if b["billId"] not in kept and len(kept) < MAX_LOBBIED_BILLS:
-            kept.append(b["billId"])
+        newest[b["billId"]] = max(newest.get(b["billId"], 0), b.get("filingYear") or 0)
+    # Bills by their newest filing, each bill's client rows together.
+    rows = sorted(rows, key=lambda b: (
+        -newest[b["billId"]], b["billId"], -(b.get("filingYear") or 0), b.get("client") or "",
+    ))
+    kept = sorted(newest, key=lambda bid: (-newest[bid], bid))[:MAX_LOBBIED_BILLS]
     return [b for b in rows if b["billId"] in kept]
 
 
@@ -620,18 +636,18 @@ async def enrich_lobbying_matches_with_lda(
                     m["lobbyingClients"] = [
                         {"client": name, "amount": round(spent)} for name, spent in spend_year.clients
                     ]
-                if spend_year is not None and spend_year.total > 0:
-                    # A total cut off at the page cap is a floor, not a total.
-                    amount = f"${spend_year.total:,.0f}" if spend_year.complete else f"at least ${spend_year.total:,.0f}"
-                    parts = [f"${spent:,.0f} as {name}" for name, spent in spend_year.clients[:3] if spent > 0]
-                    rest = len([c for c in spend_year.clients if c[1] > 0]) - len(parts)
-                    filed_as = "; ".join(parts) + (f"; and {rest} more" if rest > 0 else "")
-                    # The name matched, not the donor's full name: a client
-                    # whose name begins with it may be a separate company.
+                    amount = (
+                        "none reported" if spend_year.total <= 0
+                        else f"${spend_year.total:,.0f}" if spend_year.complete
+                        else f"at least ${spend_year.total:,.0f}"
+                    )
+                    # The name searched, not the donor's full name: a client
+                    # matched to it may be a separate company, which is why
+                    # every client counted is listed (lobbyingClients).
                     m["description"] = (
                         m.get("description", "")
                         + f" Registered federal lobbying (LDA {lda_year}) by clients matched to a"
-                        f" registry search for \"{search_name(org)}\": {amount} ({filed_as})."
+                        f" registry search for \"{search_name(org)}\": {amount}."
                     )
                 lobbied = await lobbied_bills_for(
                     lda_client, db, [a for a in activities.values() if a is not None], voted, congress,

@@ -52,6 +52,18 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
 
               <div className="text-xs font-mono text-ink-lo mb-3 space-y-1">
                 <div>ASSOCIATED CONTRIBUTIONS: {formatCurrency(match.donationToSenator)}</div>
+                {(match.lobbyingClients ?? []).length > 0 && (
+                  <div>
+                    <div>REGISTERED LOBBYING, BY CLIENT (see the total below):</div>
+                    <ul className="mt-1 space-y-1 pl-3">
+                      {(match.lobbyingClients ?? []).map((c) => (
+                        <li key={c.client}>
+                          {c.client}: {c.amount > 0 ? formatCurrency(c.amount) : "no amount reported"}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {match.lobbyingChecked === false && (
                   <div>LOBBYING REGISTRY: lookup failed on the last run, spend unknown</div>
                 )}

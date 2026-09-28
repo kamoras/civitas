@@ -85,14 +85,15 @@ class TestEnrich:
         assert stats == {"lookups": 1, "failed": 0}
 
     @pytest.mark.asyncio
-    async def test_zero_spend_does_not_alter_description(self, db_session):
+    async def test_zero_spend_is_described_as_none_reported(self, db_session):
         matches = [{"lobbyistOrg": "Small Org", "description": "base description"}]
         with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(0.0))):
             await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
 
         assert matches[0]["lobbyingSpend"] == 0
         assert matches[0]["lobbyingChecked"] is True
-        assert matches[0]["description"] == "base description"
+        assert matches[0]["description"].startswith("base description")
+        assert "none reported" in matches[0]["description"]
 
     @pytest.mark.asyncio
     async def test_failed_lookup_is_unknown_not_zero(self, db_session):
@@ -403,6 +404,12 @@ class TestClientMatching:
         ("AMERICAN MEDICAL ASSOCIATION", "AMERICAN VETERINARY MEDICAL ASSOCIATION", False),
         ("NATIONAL EDUCATION ASSOCIATION", "NATIONAL ASSOCIATION FOR MUSIC EDUCATION", False),
         ("JPMORGAN CHASE", "JPMORGAN CHASE HOLDINGS LLC", True),
+        # Live 2025 client fields (review round 9).
+        ("PEPSICO", "GIBSON, DUNN & CRUTCHER LLP (O/B/O PEPSICO, INC.)", True),
+        ("COALITION OF GM CRASH VICTIMS", "HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS", True),
+        ("AXNES A S", "A1.9 STRATEGIES LLC O/B/O O'BRIEN, GENTRY, & SCOTT O/B/O AXNES A/S", True),
+        ("ROBBINS SALOMON", "HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS", True),
+        ("RAYTHEON", "RTX CORPORATION (FKA RAYTHEON TECHNOLOGIES CORPORATION)", False),
     ])
     def test_real_client_names_from_2025_filings(self, searched, client, same):
         assert lda.is_same_client(searched, client) is same
@@ -453,17 +460,16 @@ class TestClientsShown:
                                ("COCA-COLA BOTTLING COMPANY UNITED, INC.", 70_000.0)]
 
     @pytest.mark.asyncio
-    async def test_the_description_names_each_client_and_its_amount(self, db_session):
+    async def test_the_description_names_the_search_and_every_client_is_listed(self, db_session):
         matches = [{"lobbyistOrg": "Coca-Cola PAC", "lobbyingClient": "COCA-COLA", "description": ""}]
         act = LobbyingActivity(total=970_000.0, clients=[("THE COCA-COLA COMPANY", 900_000.0),
                                                          ("COCA-COLA BOTTLING COMPANY UNITED, INC.", 70_000.0)])
         with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=act)):
             await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
         d = matches[0]["description"]
-        # The name matched, not the donor's full name, and registry names
-        # verbatim.
-        assert 'by clients matched to a registry search for "COCA COLA": $970,000' in d
-        assert d.endswith("$900,000 as THE COCA-COLA COMPANY; $70,000 as COCA-COLA BOTTLING COMPANY UNITED, INC.).")
+        # The name searched, not the donor's full name; the clients are the
+        # structured list, every one of them.
+        assert d.endswith('by clients matched to a registry search for "COCA COLA": $970,000.')
         assert matches[0]["lobbyingClients"] == [
             {"client": "THE COCA-COLA COMPANY", "amount": 900_000},
             {"client": "COCA-COLA BOTTLING COMPANY UNITED, INC.", "amount": 70_000},
@@ -526,6 +532,23 @@ class TestFiledBy:
     ])
     def test_the_registrant_is_named_only_when_it_adds_something(self, client, registrant, shown):
         assert lda._filed_by(client, registrant) == shown
+
+
+def test_a_bills_client_rows_stay_together():
+    rows = [
+        {"billId": "HR.1", "filingYear": 2026, "client": "A"},
+        {"billId": "HR.2", "filingYear": 2026, "client": "A"},
+        {"billId": "HR.1", "filingYear": 2025, "client": "B"},
+    ]
+    assert [(b["billId"], b["client"]) for b in lda._cap_bills(rows)] == [("HR.1", "A"), ("HR.1", "B"), ("HR.2", "A")]
+
+
+@pytest.mark.asyncio
+async def test_a_checked_zero_is_said(db_session):
+    matches = [{"lobbyistOrg": "Small Org", "description": "d."}]
+    with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(0.0))):
+        await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
+    assert matches[0]["description"].endswith('registry search for "SMALL ORG": none reported.')
 
 
 def test_the_cap_counts_bills_not_client_rows():

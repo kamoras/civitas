@@ -312,7 +312,7 @@ export default function AboutPage() {
                   that industry&apos;s policy area. For the industry&apos;s largest donor we look up
                   the Lobbying Disclosure Act registry (lda.gov) under the donor&apos;s name — the
                   sponsoring company&apos;s when the donor is its PAC — and show registered lobbying
-                  spend by each client of that name, and any bill the member voted on that those
+                  spend for every client the search matched, each listed with its amount, and any bill the member voted on that those
                   filings name, linked to the filing and the client it was for. A client sharing
                   the name can be a subsidiary or a separate company (an independent bottler beside
                   The Coca-Cola Company), and no name rule can tell which, so the client is always

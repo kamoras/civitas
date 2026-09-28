@@ -44,6 +44,20 @@ describe("LobbyingMatches", () => {
     expect(items[2]).toMatch(/voted Nay \(on a motion, not necessarily passage\)/);
   });
 
+  it("lists every client counted in the spend, not only the largest", () => {
+    const m = match([]);
+    m.lobbyingClients = [
+      { client: "THE COCA-COLA COMPANY", amount: 900000 },
+      { client: "COCA-COLA BOTTLING COMPANY UNITED, INC.", amount: 70000 },
+      { client: "COCA-COLA BEVERAGES FLORIDA", amount: 0 },
+      { client: "COCA-COLA CONSOLIDATED", amount: 1000 },
+    ];
+    render(<LobbyingMatches matches={[m]} />);
+    expect(screen.getByText(/COCA-COLA BOTTLING COMPANY UNITED, INC\.:/)).toBeTruthy();
+    expect(screen.getByText(/COCA-COLA BEVERAGES FLORIDA: no amount reported/)).toBeTruthy();
+    expect(screen.getByText(/COCA-COLA CONSOLIDATED:/)).toBeTruthy();
+  });
+
   it("lists topically related bills only when there are any", () => {
     render(<LobbyingMatches matches={[match([lobbied({})])]} />);
     expect(screen.queryByText(/TOPICALLY RELATED BILLS/)).toBeNull();
