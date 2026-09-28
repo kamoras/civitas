@@ -190,6 +190,7 @@ export default function AlignmentColumn({
   return (
     <ScoreColumn
       title="Constituent Alignment"
+      shareId="constituent-alignment"
       weight={weight}
       score={score}
       more={{ label: "Every recorded vote", onClick: onMore }}

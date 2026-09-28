@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
+import { inOtherDialog } from "./focusedDialog";
 
 /** What makes a panel a real modal dialog: while it is mounted the page
  * behind can't scroll, Escape closes it, Tab stays inside it, and when it
@@ -25,6 +26,7 @@ export function useModalDialog(onClose: () => void): RefObject<HTMLDivElement | 
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (inOtherDialog(e, panel.current)) return;
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();

@@ -5,6 +5,12 @@ import type { Senator } from "@/types/senator";
 import type { Committee } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import { useConfig } from "@/hooks/useConfig";
+import { displayScore } from "@/lib/formatting";
+import { PARTY_LABELS } from "@/lib/partyStyles";
+import { getScoreColor } from "@/lib/representation";
+import { absoluteUrl } from "@/lib/site";
+import type { ShareSubject } from "@/lib/shareImage";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
 import Holdings from "@/components/checker/Holdings";
 import IndustryBreakdown from "@/components/checker/IndustryBreakdown";
@@ -76,6 +82,26 @@ export default function MemberScorecard({
       ? `seats that lean like ${member.state}-${district}`
       : `states that lean like ${stateName ?? member.state}`;
 
+  // What every section's share image says it is from: the member, and the
+  // headline score beside them.
+  const overall = displayScore(scores.overall);
+  const shareSubject: ShareSubject = {
+    title: member.name,
+    subtitle: [
+      chamber === "senate" ? "Senator" : "Representative",
+      chamber === "house" && district != null
+        ? `${member.state}-${district === 0 ? "AL" : district}`
+        : (stateName ?? member.state),
+      PARTY_LABELS[member.party] ?? member.party,
+    ].join(" · "),
+    badge: {
+      label: "Representation score",
+      value: String(overall),
+      colorClass: getScoreColor(overall),
+    },
+    url: absoluteUrl(`/politicians/${encodeURIComponent(member.id)}`),
+  };
+
   const drawerBody: Record<DrawerView, () => ReactNode> = {
     donors: () => (
       <div className="flex flex-col gap-8">
@@ -100,52 +126,54 @@ export default function MemberScorecard({
 
   return (
     <SectionHeadingLevelProvider value="h3">
-      <div className="flex flex-col gap-6">
-        <ScorecardHeader
-          member={member}
-          chamber={chamber}
-          thumbnailUrl={thumbnailUrl}
-          stateName={stateName}
-          district={district}
-          leadershipTitle={leadershipTitle}
-          committees={committees}
-          rank={rank}
-          titleAs={titleAs}
-        />
+      <ShareSubjectProvider subject={shareSubject}>
+        <div className="flex flex-col gap-6">
+          <ScorecardHeader
+            member={member}
+            chamber={chamber}
+            thumbnailUrl={thumbnailUrl}
+            stateName={stateName}
+            district={district}
+            leadershipTitle={leadershipTitle}
+            committees={committees}
+            rank={rank}
+            titleAs={titleAs}
+          />
 
-        <div className="grid items-stretch gap-5 lg:grid-cols-3">
-          <FundingColumn
-            funding={member.funding}
-            dimension={breakdown?.fundingIndependence}
-            score={scores.fundingIndependence}
-            weight={weights?.fundingIndependence}
-            onMore={() => setView("donors")}
-          />
-          <AlignmentColumn
-            memberId={member.id}
-            chamber={chamber}
-            name={member.name}
-            seat={seat}
-            breaks={member.votingRecord.votedAgainstPartyCount}
-            dimension={breakdown?.constituentAlignment}
-            score={scores.constituentAlignment}
-            weight={weights?.constituentAlignment}
-            onMore={() => setView("votes")}
-          />
-          <EffectivenessColumn
-            chamber={chamber}
-            bills={member.sponsoredBills ?? []}
-            dimension={breakdown?.legislativeEffectiveness}
-            score={scores.legislativeEffectiveness}
-            weight={weights?.legislativeEffectiveness}
-            onMore={() => setView("bills")}
-          />
+          <div className="grid items-stretch gap-5 lg:grid-cols-3">
+            <FundingColumn
+              funding={member.funding}
+              dimension={breakdown?.fundingIndependence}
+              score={scores.fundingIndependence}
+              weight={weights?.fundingIndependence}
+              onMore={() => setView("donors")}
+            />
+            <AlignmentColumn
+              memberId={member.id}
+              chamber={chamber}
+              name={member.name}
+              seat={seat}
+              breaks={member.votingRecord.votedAgainstPartyCount}
+              dimension={breakdown?.constituentAlignment}
+              score={scores.constituentAlignment}
+              weight={weights?.constituentAlignment}
+              onMore={() => setView("votes")}
+            />
+            <EffectivenessColumn
+              chamber={chamber}
+              bills={member.sponsoredBills ?? []}
+              dimension={breakdown?.legislativeEffectiveness}
+              score={scores.legislativeEffectiveness}
+              weight={weights?.legislativeEffectiveness}
+              onMore={() => setView("bills")}
+            />
+          </div>
+
+          <Holdings memberId={member.id} chamber={chamber} variant="panel" />
+
+          <AlsoOnRecord member={member} chamber={chamber} onOpen={setView} />
         </div>
-
-        <Holdings memberId={member.id} chamber={chamber} variant="panel" />
-
-        <AlsoOnRecord member={member} chamber={chamber} onOpen={setView} />
-      </div>
+      </ShareSubjectProvider>
 
       {view && (
         <ScorecardDrawer title={DRAWER_TITLE[view]} subtitle={member.name} onClose={close}>
