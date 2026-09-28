@@ -9,7 +9,9 @@ import { useRef, useState } from "react";
  * handling of rapid re-clicks (only one of the two cleared a pending
  * reset timer before starting a new one).
  */
-export function useCopyFeedback(ms = 1500): [boolean, (text: string) => Promise<void>] {
+/** `copy` resolves true once the text is on the clipboard, false if the
+ *  browser refused — it never rejects. */
+export function useCopyFeedback(ms = 1500): [boolean, (text: string) => Promise<boolean>] {
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -19,8 +21,10 @@ export function useCopyFeedback(ms = 1500): [boolean, (text: string) => Promise<
       setCopied(true);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => setCopied(false), ms);
+      return true;
     } catch {
       // clipboard not available
+      return false;
     }
   }
 

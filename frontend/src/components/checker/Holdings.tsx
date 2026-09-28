@@ -482,7 +482,10 @@ export default function Holdings({
           </div>
           <span className="flex items-center gap-3 font-mono text-[13px]">
             {sourceLink}
-            <ShareSectionButton label="Holdings" />
+            {/* anchored={false}: this panel renders only after a client
+                fetch, so a cold load of /politicians/x#holdings has nothing
+                to scroll to — the link is the scorecard page itself. */}
+            <ShareSectionButton label="Holdings" anchored={false} />
           </span>
         </header>
         <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">

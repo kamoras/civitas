@@ -95,9 +95,12 @@ export default function ShareSectionButton({
       .then((blob) => {
         if (generation.current !== mine) return;
         setCapture({ state: "ready", blob, previewUrl: URL.createObjectURL(blob) });
+        setStatus("Image ready.");
       })
       .catch(() => {
-        if (generation.current === mine) setCapture({ state: "failed" });
+        if (generation.current !== mine) return;
+        setCapture({ state: "failed" });
+        setStatus("The image couldn't be made in this browser. The link still works.");
       });
   }
 
@@ -133,7 +136,9 @@ export default function ShareSectionButton({
     a.href = capture.previewUrl;
     a.download = fileName;
     a.click();
-    setStatus(`Saved as ${fileName}.`);
+    // Only a request: some browsers (iOS Safari) open the image instead of
+    // saving it, so this can't claim the file was saved.
+    setStatus(`Downloading ${fileName}.`);
   }
 
   return (
@@ -157,7 +162,9 @@ export default function ShareSectionButton({
               <p className="font-mono text-xs text-ink-min">Making the image…</p>
             )}
             {capture.state === "failed" && (
-              <p className="px-4 py-6 font-mono text-xs text-ink-lo">
+              // Announced through the status line below; hidden here so a
+              // screen reader doesn't read it twice.
+              <p aria-hidden="true" className="px-4 py-6 font-mono text-xs text-ink-lo">
                 The image couldn&apos;t be made in this browser. The link below still works.
               </p>
             )}
@@ -202,7 +209,11 @@ export default function ShareSectionButton({
             </button>
             <button
               type="button"
-              onClick={() => copyLink(link)}
+              onClick={() =>
+                copyLink(link).then((ok) =>
+                  setStatus(ok ? "Link copied." : "This browser wouldn't copy the link.")
+                )
+              }
               className={`${ACTION} ${linkCopied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected}`}
             >
               {linkCopied ? "Link copied" : "Copy link"}

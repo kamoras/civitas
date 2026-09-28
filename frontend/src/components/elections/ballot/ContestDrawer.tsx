@@ -85,7 +85,7 @@ export default function ContestDrawer({
         <div data-drawer-body className="flex-1 overflow-y-auto px-4 pb-6 pt-4">
           {/* The contest and its research, as one shareable image. */}
           <div {...{ [SHARE_SECTION_ATTR]: `contest-${contest.key}` }} className="bg-surface-base">
-            <div className="mb-4 flex items-baseline justify-between gap-3 border border-white/25 bg-surface-raised px-4 py-3">
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2 border border-white/25 bg-surface-raised px-4 py-3">
               <div className="min-w-0">
                 <h2
                   id="contest-drawer-title"

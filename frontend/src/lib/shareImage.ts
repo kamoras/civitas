@@ -11,10 +11,13 @@
  * date below. The date matters because the numbers change nightly; the link
  * is how the friend who receives the picture gets to the rest of it.
  *
- * Nothing leaves the browser. The one network request a capture can add is
- * a member photo, fetched through this site's own `/photo/bioguide/…` route
- * (see `proxiedImageUrl`).
+ * Nothing leaves the browser, and a capture requests nothing from any host
+ * but this site: a member photo comes through the site's own
+ * `/photo/bioguide/…` route, and any other third-party image is left out
+ * (see `captureImageData`).
  */
+
+import { bioguideIdFromPhotoUrl } from "./bioguide";
 
 export const SHARE_EXCLUDE_ATTR = "data-share-exclude";
 export const SHARE_SECTION_ATTR = "data-share-section";
@@ -41,14 +44,42 @@ export interface ShareSubject {
 // nor fetch them itself. The site's own route fetches them server-side
 // (`app/photo/bioguide/[id]/route.ts`); only bioguide ids are accepted
 // there, so it is not an open proxy.
-const BIOGUIDE_PHOTO =
-  /^https:\/\/bioguide\.congress\.gov\/bioguide\/photo\/[A-Z]\/([A-Z]\d{6})\.jpg$/;
 
-/** Same-origin URL for an image the capture must read, or null when it can
- *  be read directly (same-origin, or a host that sends CORS headers). */
+/** Same-origin URL for a member photo the capture must read, or null for
+ *  any other image. */
 export function proxiedImageUrl(url: string): string | null {
-  const m = BIOGUIDE_PHOTO.exec(url);
-  return m ? `/photo/bioguide/${m[1]}` : null;
+  const id = bioguideIdFromPhotoUrl(url);
+  return id ? `/photo/bioguide/${id}` : null;
+}
+
+/** A 1x1 transparent PNG: what a third-party image becomes in a capture. */
+const BLANK_PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+/**
+ * How the capture gets each image's bytes. Same-origin (and inline) images
+ * load normally; a member photo goes through the site's own route; anything
+ * else is left blank without being requested, so a capture never sends a
+ * request from the visitor's browser to a third-party host. Sections mark
+ * such images `data-share-exclude` so the blank takes no space.
+ */
+export async function captureImageData(url: string): Promise<string | false> {
+  if (/^(data|blob):/.test(url)) return false;
+  let sameOrigin = false;
+  try {
+    sameOrigin = new URL(url, window.location.href).origin === window.location.origin;
+  } catch {
+    return BLANK_PIXEL;
+  }
+  const proxied = proxiedImageUrl(url);
+  if (!proxied) return sameOrigin ? false : BLANK_PIXEL;
+  try {
+    const res = await fetch(proxied);
+    if (!res.ok) return BLANK_PIXEL;
+    return await blobToDataUrl(await res.blob());
+  } catch {
+    return BLANK_PIXEL;
+  }
 }
 
 /** "civitas-research.org/politicians/tim-burchett#funding" — the URL as
@@ -193,31 +224,19 @@ export async function captureSection(
     document.fonts.load(`16px ${mono}`),
   ]).catch(() => {});
 
-  // At least 2x, so the text stays sharp once a phone or chat client
-  // scales the picture down; capped so a very wide section on a 3x screen
-  // stays inside every browser's canvas limit.
-  const scale = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3);
-
   const release = () => section.removeAttribute(CAPTURING_ATTR);
   section.setAttribute(CAPTURING_ATTR, "");
   let shot: HTMLCanvasElement;
+  let scale: number;
   try {
+    const box = section.getBoundingClientRect();
+    scale = captureScale(box.width, box.height, window.devicePixelRatio || 1);
     shot = await domToCanvas(section, {
       scale,
       backgroundColor: surfaceBase,
       onCloneNode: release,
       filter: (node) => !(node instanceof Element && node.hasAttribute(SHARE_EXCLUDE_ATTR)),
-      fetchFn: async (url) => {
-        const proxied = proxiedImageUrl(url);
-        if (!proxied) return false;
-        try {
-          const res = await fetch(proxied);
-          if (!res.ok) return false;
-          return await blobToDataUrl(await res.blob());
-        } catch {
-          return false;
-        }
-      },
+      fetchFn: captureImageData,
     });
   } finally {
     release();
@@ -270,7 +289,7 @@ export async function captureSection(
   const footH = 44 * scale + (oneLine ? 0 : linkLines.length * lineH);
 
   out.width = innerW + pad * 2;
-  out.height = stripH + shot.height + footH + pad * (withStrip ? 2 : 1);
+  out.height = stripH + shot.height + footH + pad * 2;
 
   ctx.fillStyle = surfaceBase;
   ctx.fillRect(0, 0, out.width, out.height);
@@ -324,6 +343,29 @@ export async function captureSection(
   return new Promise((resolve, reject) =>
     out.toBlob((b) => (b ? resolve(b) : reject(new Error("PNG encoding failed"))), "image/png")
   );
+}
+
+// iOS Safari won't allocate a canvas over 16,777,216 pixels (toBlob then
+// returns null), and a few browsers cap either side near 16k–32k. The frame
+// adds padding, the title strip and the footer around the section: at most
+// about 250 CSS px of height, 40 of width.
+const MAX_CANVAS_AREA = 16_000_000;
+const MAX_CANVAS_SIDE = 16_000;
+const FRAME_CSS = { width: 40, height: 260 };
+
+/**
+ * The pixel ratio to capture a `width` x `height` (CSS px) section at: at
+ * least 2x, so text stays sharp once a phone or chat client scales the
+ * picture down, up to the screen's own ratio (3x on most phones) — then
+ * lowered as far as it takes for the framed image to fit a canvas every
+ * browser will allocate. A tall section (a long contest drawer, a bill's
+ * votes) on a phone is exactly where the uncapped ratio failed.
+ */
+export function captureScale(width: number, height: number, devicePixelRatio: number): number {
+  const wanted = Math.min(Math.max(devicePixelRatio, 2), 3);
+  const w = width + FRAME_CSS.width;
+  const h = height + FRAME_CSS.height;
+  return Math.min(wanted, Math.sqrt(MAX_CANVAS_AREA / (w * h)), MAX_CANVAS_SIDE / Math.max(w, h));
 }
 
 /** Whether this browser can put an image on the clipboard. */

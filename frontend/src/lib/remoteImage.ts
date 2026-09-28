@@ -9,8 +9,11 @@
  * self-identifies as a bot/non-browser client — a browser-shaped User-Agent
  * gets a normal 200, confirmed live, so that's used here rather than a
  * self-identifying one. A 5s timeout keeps a slow/hanging host (also
- * observed live) from stalling the caller instead of just dropping the photo.
+ * observed live) from stalling the caller instead of just dropping the photo,
+ * and a size cap keeps an unexpected body from being buffered whole.
  */
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 export async function fetchRemoteImage(
   url: string
 ): Promise<{ bytes: Buffer; contentType: string } | null> {
@@ -24,7 +27,9 @@ export async function fetchRemoteImage(
     });
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok || !contentType.startsWith("image/")) return null;
-    return { bytes: Buffer.from(await res.arrayBuffer()), contentType };
+    if (Number(res.headers.get("content-length") ?? 0) > MAX_IMAGE_BYTES) return null;
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return bytes.length > MAX_IMAGE_BYTES ? null : { bytes, contentType };
   } catch {
     return null;
   }

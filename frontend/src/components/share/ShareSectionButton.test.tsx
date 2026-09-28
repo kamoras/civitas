@@ -133,7 +133,9 @@ describe("ShareSectionButton", () => {
       </Section>
     );
     await user.click(screen.getByRole("button", { name: /as an image/ }));
-    expect(await screen.findByText(/couldn.t be made in this browser/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(/couldn.t be made in this browser/)
+    );
     expect(screen.getByRole("button", { name: "Copy image" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Copy link" })).toBeEnabled();
   });

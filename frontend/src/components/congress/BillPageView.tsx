@@ -111,11 +111,15 @@ export default function BillPageView({
             className="grid scroll-mt-28 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]"
           >
             <header className="flex min-w-0 flex-col gap-4">
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
-                {label}
-                {record?.congress ? ` · ${record.congress}th Congress` : ""}
-                {record?.originChamber ? ` · ${record.originChamber}` : ""}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
+                  {label}
+                  {record?.congress ? ` · ${record.congress}th Congress` : ""}
+                  {record?.originChamber ? ` · ${record.originChamber}` : ""}
+                </p>
+                {/* The header names the bill itself: no title strip. */}
+                <ShareSectionButton label="Bill overview" withStrip={false} />
+              </div>
               <h1 className="font-display text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">{title}</h1>
               <div className="flex flex-wrap items-center gap-2">
                 {detail && stage && (
@@ -128,10 +132,6 @@ export default function BillPageView({
                     Became law
                   </span>
                 )}
-                {/* The header names the bill itself: no title strip. */}
-                <span className="ml-auto">
-                  <ShareSectionButton label="Bill overview" withStrip={false} />
-                </span>
               </div>
               {record?.latestAction?.text && (
                 <p className="text-[15px] leading-relaxed text-ink-lo">

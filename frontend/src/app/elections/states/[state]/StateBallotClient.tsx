@@ -1021,9 +1021,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
   const columns: BallotContest["column"][] = ["federal", "state", "local"];
 
-  // What a shared image of any contest says it is from.
+  // What a shared image of any contest says it is from. "Statewide", like
+  // the page itself: a precinct's ballot has more on it (ballot.omits).
   const shareSubject = {
-    title: `${stateName} ballot`,
+    title: `${stateName} statewide ballot`,
     subtitle: `${ballot.cycleYear} general election · ${ballot.electionDate}`,
     url: absoluteUrl(`/elections/states/${ballot.state}`),
   };
