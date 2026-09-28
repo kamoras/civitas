@@ -50,7 +50,9 @@ export interface DayCounts {
   committeeMeetings: number;
 }
 
-export type ChamberStatus = "final" | "live" | "not_in_session" | "no_record";
+/** no_record_published: the Congressional Record has no issue for the day
+ * (it is published for every day either chamber is in session). */
+export type ChamberStatus = "final" | "live" | "not_in_session" | "no_record" | "no_record_published";
 
 export interface ChamberDay {
   chamber: Chamber;
@@ -97,6 +99,8 @@ export interface PeriodTotals extends DayCounts {
 
 export interface PeriodDay {
   date: string;
+  /** No Congressional Record was published for this day. */
+  noRecordPublished: boolean;
   senate: PeriodChamberDay;
   house: PeriodChamberDay;
 }
