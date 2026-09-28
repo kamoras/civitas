@@ -36,6 +36,18 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     ],
   },
   {
+    version: "Justice v2",
+    date: "2026-09-29",
+    title: "Justices scored on independence from the president who appointed them",
+    tldr: "Supreme Court justices are now scored on one question: do they side with the federal government more often while the president who appointed them is in office than under other presidents? The two old measures, based on agreeing with the other party's appointees, turned out to rank justices by how close they sit to the Court's center. Each score is shown with its margin of error.",
+    changes: [
+      "The measure is Epstein and Posner's (2016): each justice's votes in cases the federal government argued, since 1937, comparing the share for the government under the appointing president with the share under others, with whether the government brought the case held fixed.",
+      "Each justice's estimate is pulled toward the average of all 42 justices measured by how uncertain it is, and shown with its standard error. The score is 100 at no favoritism either way and 0 at twice the spread between justices.",
+      "Consistency and Independence were removed. On today's Court every Republican appointee sits right of every Democratic appointee, so both ranked justices by distance from the Court's median (Spearman -0.82 and -0.75 against 2024 Martin-Quinn positions). The new measure's correlation with that distance is 0.28.",
+      "Martin-Quinn positions and the Oyez voting record are shown, not scored. The short profile written by the site's language model was removed. The study is in docs/research/justice-scores.md.",
+    ],
+  },
+  {
     version: "v6.19",
     date: "2026-09-28",
     title: "Housekeeping votes no longer count as breaks with the party",

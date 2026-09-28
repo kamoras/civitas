@@ -149,6 +149,7 @@ Pulls raw data from each government API and stores the complete response verbati
 | GovInfo API | Bill text; Congressional Record floor remarks (Explore) | 1.0 RPS |
 | Senate LDA | Registered lobbying spend for organizations in donor–vote matches | 0.2 RPS |
 | Oyez / supremecourt.gov | Justice voting records, case metadata, docket pages | ~2 RPS (fixed pauses) |
+| Supreme Court Database / FJC / Martin-Quinn | Justice votes in cases the federal government argued (newest release), each justice's nomination dates, ideal points per term | 1.0 RPS, cached |
 | BLS | Unemployment, inflation, job growth by administration | batch |
 | BEA | GDP growth by quarter | batch |
 | Federal Register | Executive orders signed per administration | 1.0 RPS |
@@ -204,11 +205,11 @@ not for scoring.
 
 ### Phase 5 — JUSTICES
 
-Fetches and scores Supreme Court justices from Oyez (`justice_analyzer.py`), weekly on Sunday UTC (or whenever the table is empty — the uncached per-case crawl takes hours):
+Fetches and scores Supreme Court justices, weekly on Sunday UTC (or whenever the table is empty — the uncached Oyez per-case crawl takes hours):
 - Pulls each justice's votes in the Court's decided cases. Oyez sometimes lists one justice twice in a decision (Ketanji Brown Jackson in two 2025-term cases, with Barrett and Gorsuch missing): identical rows count once, conflicting ones leave that vote out, and a missing justice's vote is never filled in. The duplicate had broken the one-vote-per-case key, so every Sunday refresh rolled back and the scorecards went stale with no alert. Now any pipeline step that fails and is carried past (`ProgressTracker.fail`) sends an ops alert, deduplicated per pipeline, step and day.
-- Scores consistency: how little a justice's agreement differs between their appointing party's bloc and the other, weighted toward close decisions
-- Scores independence: per non-unanimous case, the share of the opposing bloc on the justice's side times the share of their own bloc against it, averaged
-- Both are shrunk toward 50 when backed by few cases; a 9-justice profile summary is the one LLM step
+- The voting record from Oyez (`justice_analyzer.py`): majority, dissent and unanimous shares, opinions written, agreement with each sitting justice. Shown, not scored.
+- The score is independence from the appointing president (`justice_loyalty.py`, Epstein & Posner 2016): whether a justice sides with the federal government more often while that president is in office than under others, fit per justice with the government's side of the case held fixed, shrunk across every justice since 1937 (DerSimonian-Laird). Votes through 2014 are Epstein & Posner's, bundled; later terms come from the newest Supreme Court Database release, with each appointing president taken from the Federal Judicial Center's nomination dates (`fetch/justice_records.py`). 100 is no favoritism either way, 0 is two between-justice sds; each estimate is stored with its standard error. A source that can't be read leaves the stored scores standing.
+- Martin-Quinn positions per term, shown beside the score, not scored. No LLM step.
 
 ### Phase 6 — PRESIDENTS
 
@@ -269,7 +270,7 @@ The pipeline is structured around a specific set of constraints that shape every
 
 ### Why a Nightly Batch Pipeline?
 
-A 100-senator + 435-representative full refresh requires 4–6 hours cold (warm: 45–90 minutes). Online/streaming processing is not viable at these volumes on the target hardware: two sentence-transformer models occupy ~90 MB each and the LLM ~900 MB (a separate service, used only by the Action Center and justice summaries — the member pipelines make no LLM call). Batching allows us to control memory precisely, while a separate hourly pipeline handles the Action Center's lower-latency requirements.
+A 100-senator + 435-representative full refresh requires 4–6 hours cold (warm: 45–90 minutes). Online/streaming processing is not viable at these volumes on the target hardware: two sentence-transformer models occupy ~90 MB each and the LLM ~900 MB (a separate service, used only by the Action Center — the member and justice pipelines make no LLM call). Batching allows us to control memory precisely, while a separate hourly pipeline handles the Action Center's lower-latency requirements.
 
 Each pipeline holds a database-level lock rather than a process-level one: a run row with `status = "running"`, which a partial UNIQUE index lets only one process insert at a time (`run_tracker.acquire_pipeline_lock_why`), so two backend processes overlapping during a Swarm rollout can't both start the same pipeline. Pipelines run as threads of the backend, so a restart kills them without letting them record it; on startup the backend marks every pipeline's leftover `running` row `stale` (`main._invalidate_orphaned_pipelines`), sparing only a Senate run whose lease still holds (it may be live in the other task), and a row older than 12 hours is cleared at the next acquisition. `check-and-deploy.sh` does not deploy while any pipeline is running.
 
@@ -294,8 +295,7 @@ removal.
 The LLM is still used where the output genuinely requires natural-language
 synthesis from unstructured input: Action Center claim location (it
 points at an attributable sentence in a clustered article; the text shown is
-the source's own, checked verbatim) and Supreme Court justice
-profile summaries (9 justices, from pre-computed voting statistics).
+the source's own, checked verbatim).
 
 Everything else uses geometric methods in sentence-embedding space:
 
@@ -310,7 +310,7 @@ Everything else uses geometric methods in sentence-embedding space:
 | Issue deduplication | Post-LLM title embedding similarity | Catches LLM-generated near-duplicates missed by pre-filtering |
 | Issue topic continuity | Cosine similarity across 2-day lookback | Ensures same story maps to same DB row across runs and rank changes |
 
-LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). The LLM runs on its own schedule for Action Center claim location (hourly, a handful of calls per run) and the Supreme Court justice profiles (one call per justice, in the weekly Sunday refresh). Embedding operations per full nightly run: ~50,000. The pipeline is a **semantic classification and retrieval system** that uses a language model only where natural-language synthesis is unavoidable.
+LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). The LLM runs on its own schedule for Action Center claim location (hourly, a handful of calls per run). Embedding operations per full nightly run: ~50,000. The pipeline is a **semantic classification and retrieval system** that uses a language model only where natural-language synthesis is unavoidable.
 
 ### Why Local Inference?
 
@@ -319,7 +319,7 @@ LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). T
 3. **Reproducibility.** Model weights are pinned. An analysis run today produces identical output to one run six months ago on the same input. Cloud-hosted models update without notice.
 4. **Latency independence.** No rate limits, no network jitter, no API quota.
 
-The choice of LFM2.5-1.2B-Instruct over larger alternatives (7B+) is deliberate. The inference tasks here are structured extraction — completing a constrained template (key facts and actions from a cluster of news articles, a justice profile from precomputed voting statistics) — not open-ended generation. Empirically, a ~1B-class model produces acceptable quality on these tasks in a few seconds per call on ARM, vs. 25–45s for a 7B model. The quality ceiling is determined by the structure of the prompt, not model size.
+The choice of LFM2.5-1.2B-Instruct over larger alternatives (7B+) is deliberate. The inference tasks here are structured extraction — completing a constrained template (key facts and actions from a cluster of news articles) — not open-ended generation. Empirically, a ~1B-class model produces acceptable quality on these tasks in a few seconds per call on ARM, vs. 25–45s for a 7B model. The quality ceiling is determined by the structure of the prompt, not model size.
 
 ---
 
@@ -333,7 +333,7 @@ Classification decisions — what industry a donor belongs to, which direction a
 | 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%), bill classification from reference corpus |
-| 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Action Center issue synthesis, justice profile summaries |
+| 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Action Center issue synthesis |
 
 Key embedding-based classification features:
 - **Semantic prototypes** define each category via natural-language descriptions, not keyword lists. The embedding model matches entities to the nearest prototype by cosine similarity.
@@ -878,7 +878,7 @@ Additional member metrics, both chambers (informational, not scored):
 
 ### Supreme Court Justice Scores
 
-Each justice is scored on consistency and independence (`JUSTICE_SCORE_WEIGHTS`) from case-level voting data from the Oyez Project and supremecourt.gov — see Phase 5 above for the formulas.
+Each justice is scored on one measure (`JUSTICE_SCORE_WEIGHTS`): independence from the appointing president, from the Supreme Court Database's votes in cases the federal government argued, shown with its standard error — see Phase 5 above, and `docs/research/justice-scores.md` for why it replaced consistency and independence from the appointing party's bloc (both ranked justices by distance from the Court's median, Spearman −0.82 and −0.75).
 
 ### Presidential Scores
 
@@ -1001,7 +1001,7 @@ from the `ExploreDocument` rows already in the app database; search returns
 
 A senator's or representative's profile is the scorecard at a glance (`components/scorecard/MemberScorecard.tsx`): a header with who they are, how to reach them, the Representation Score, the rank the leaderboard gives it (served as `chamberRank` on `GET /api/politicians/{id}`) and its trend; then the three scored dimensions side by side, each showing what drives its number with nothing to expand; then their financial-disclosure holdings as a pie beside the list; then tiles for what is on record but not scored (stock trades, donor-vote links, positions by policy area). Every full list — every vote, every donor, every bill — opens in a drawer over the page; each vote there is one line (what was voted on, linked to the bill's page, the question, the date, the member's vote, and whether it went against the party). On a phone the columns stack.
 
-Each column's sentence and parts come from `GET /api/{senators|representatives}/{id}/score-breakdown`, which the profile page fetches with the profile. It recomputes each dimension from the member's stored records with the scorer's own functions (`score_calculator.explain_scores`) and returns every component (value, weight, and the scorer's own sentence on how it came about) plus `facts`: the numbers the scorecard's sentences state — PAC and small-donor shares and the comparison they are measured against, party-line votes and breaks and the seat's expected break rate, bills by the furthest stage each reached. The page formats them and computes none. Nothing in it is written by a model, and because it is the same code the pipeline scores with, the scorecard can't drift from its numbers. A president's profile is laid out the same way (`components/scorecard/PresidentScorecard.tsx`): the Presidential Score, with the rank the president leaderboard gives it (a sitting president is not ranked until the term ends), then Public Mandate, Effectiveness, Agency Alignment and Historical Legacy side by side, each stating its figures beside the all-president averages it is scored against (`facts` on `GET /api/presidents/{id}/score-breakdown`: approval and its trend, jobs per year and GDP growth, the rulemaking finalization rate, the historians' points, and the same person's other rated presidency), then stock trades and executive orders, on record and not scored. Justices keep the "show the math" panel (`ScoreBreakdownPanel`).
+Each column's sentence and parts come from `GET /api/{senators|representatives}/{id}/score-breakdown`, which the profile page fetches with the profile. It recomputes each dimension from the member's stored records with the scorer's own functions (`score_calculator.explain_scores`) and returns every component (value, weight, and the scorer's own sentence on how it came about) plus `facts`: the numbers the scorecard's sentences state — PAC and small-donor shares and the comparison they are measured against, party-line votes and breaks and the seat's expected break rate, bills by the furthest stage each reached. The page formats them and computes none. Nothing in it is written by a model, and because it is the same code the pipeline scores with, the scorecard can't drift from its numbers. A president's profile is laid out the same way (`components/scorecard/PresidentScorecard.tsx`): the Presidential Score, with the rank the president leaderboard gives it (a sitting president is not ranked until the term ends), then Public Mandate, Effectiveness, Agency Alignment and Historical Legacy side by side, each stating its figures beside the all-president averages it is scored against (`facts` on `GET /api/presidents/{id}/score-breakdown`: approval and its trend, jobs per year and GDP growth, the rulemaking finalization rate, the historians' points, and the same person's other rated presidency), then stock trades and executive orders, on record and not scored. A justice's profile follows (`components/scorecard/JusticeScorecard.tsx`): the Judicial Score and its rank, then the loyalty estimate with its standard error and the rates under the appointing president and under others, Martin-Quinn positions and the voting record (not scored), then agreement with each sitting justice, all read off `GET /api/justices/{id}`.
 
 The profile also lists the records the dimensions read:
 
@@ -1235,8 +1235,7 @@ connects to it via `http://llama-server:8070` (overlay-network service
 DNS). If llama-server is unavailable, LLM calls fail with a timeout and each
 caller degrades on its own: the member pipelines never call it, the
 Action Center publishes no issue from a cluster it can't read (never an
-unverified one), and a justice profile falls back to a template built from
-its statistics.
+unverified one).
 
 ### Health Check
 

@@ -16,7 +16,6 @@ from app.models import (
     Donor,
     IndustryDonation,
     Justice,
-    JusticeVote,
     KeyVote,
     LobbyingMatch,
     President,
@@ -200,36 +199,6 @@ class TestPresidentCoreConsistency:
         assert "note" in breakdown
 
 
-class TestJusticeBreakdownEnrichment:
-    def test_analyze_justice_votes_breakdown_present(self):
-        from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
-
-        votes = [
-            {
-                "case_id": f"case-{i}", "vote": "majority", "opinion_type": "none",
-                "is_unanimous": False, "is_close": True, "majority_votes": 5, "minority_votes": 4,
-            }
-            for i in range(5)
-        ]
-        all_case_votes = {
-            v["case_id"]: [
-                {**v, "justice_id": "me"},
-                {**v, "justice_id": "ally", "vote": "majority"},
-                {**v, "justice_id": "rival", "vote": "minority"},
-            ]
-            for v in votes
-        }
-        result = analyze_justice_votes(
-            justice_id="me", appointing_party="R",
-            votes=[{**v, "justice_id": "me"} for v in votes],
-            all_case_votes=all_case_votes,
-            party_map={"me": "R", "ally": "R", "rival": "D"},
-        )
-        assert "breakdown" in result
-        assert result["breakdown"]["consistency"]["own_bloc_agreement_rate"] is not None
-        assert set(result["breakdown"]) == {"consistency", "independence"}
-
-
 class TestSenatorScoreBreakdownService:
     def _seed_senator(self, db_session) -> None:
         senator = Senator(
@@ -338,24 +307,24 @@ class TestPresidentScoreBreakdownService:
 
 
 class TestJusticeScoreBreakdownService:
-    def test_returns_full_breakdown_for_real_justice(self, db_session):
-        j1 = Justice(id="j1", name="Justice One", last_name="One", appointing_party="R", is_active=True)
-        j2 = Justice(id="j2", name="Justice Two", last_name="Two", appointing_party="D", is_active=True)
-        db_session.add_all([j1, j2])
-        db_session.add(JusticeVote(
-            justice_id="j1", case_id="case-1", vote="majority", opinion_type="majority",
-            is_unanimous=False, is_close=True, majority_votes=5, minority_votes=4,
-        ))
-        db_session.add(JusticeVote(
-            justice_id="j2", case_id="case-1", vote="minority", opinion_type="dissent",
-            is_unanimous=False, is_close=True, majority_votes=5, minority_votes=4,
+    def test_returns_the_stored_loyalty_facts(self, db_session):
+        db_session.add(Justice(
+            id="j1", name="Justice One", last_name="One", appointing_party="R", is_active=True,
+            score_loyalty=72.5, loyalty=0.0412, loyalty_se=0.031, loyalty_votes_in=210,
+            loyalty_votes_out=380, loyalty_rate_in=0.55, loyalty_rate_out=0.49, loyalty_through_term=2025,
         ))
         db_session.commit()
-
         breakdown = get_justice_score_breakdown(db_session, "j1")
-        assert breakdown is not None
-        assert breakdown["cases_decided"] == 1
-        assert "breakdown" in breakdown
+        assert breakdown["loyalty"]["score"] == 72.5
+        assert breakdown["loyalty"]["facts"] == {
+            "estimate": 0.0412, "se": 0.031, "votesIn": 210, "votesOut": 380,
+            "rateIn": 0.55, "rateOut": 0.49, "throughTerm": 2025,
+        }
+
+    def test_an_unmeasured_justice_has_no_facts(self, db_session):
+        db_session.add(Justice(id="j2", name="Justice Two", last_name="Two", is_active=True))
+        db_session.commit()
+        assert get_justice_score_breakdown(db_session, "j2")["loyalty"] == {"score": None, "components": [], "facts": None}
 
     def test_returns_none_for_missing_justice(self, db_session):
         assert get_justice_score_breakdown(db_session, "nope") is None

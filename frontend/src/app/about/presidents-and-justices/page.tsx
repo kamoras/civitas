@@ -10,13 +10,12 @@ import {
   Item,
   More,
   Cite,
-  A,
 } from "@/components/about/AboutPage";
 
 export const metadata = pageMetadata({
   title: "How Presidents and Supreme Court Justices Are Scored",
   description:
-    "How Civitas scores every U.S. president — public mandate, economic effectiveness, agency follow-through and historical legacy — and how it scores Supreme Court justices' independence.",
+    "How Civitas scores every U.S. president — public mandate, economic effectiveness, agency follow-through and historical legacy — and how it scores Supreme Court justices' independence from the president who appointed them.",
   path: "/about/presidents-and-justices",
 });
 
@@ -28,8 +27,8 @@ export default function PresidentsAndJusticesChapter() {
       title="Presidents & justices"
       lede={
         <p>
-          Presidents are scored on how well they served the country; justices on how well they
-          served the law regardless of party. Both from records, not opinions typed in by us.
+          Presidents are scored on how well they served the country; justices on whether they favor
+          the president who appointed them. Both from records, not opinions typed in by us.
         </p>
       }
     >
@@ -44,8 +43,8 @@ export default function PresidentsAndJusticesChapter() {
           out of their overall score, rather than filled with a guess.
         </Point>
         <Point>
-          Justices are scored on whether they side with colleagues differently depending on which
-          party appointed them.
+          Justices are scored on whether they side with the federal government more often while the
+          president who appointed them is in office, shown with its margin of error.
         </Point>
         <Point>
           Three presidential scores were removed because no real data could support them. We say
@@ -172,35 +171,51 @@ export default function PresidentsAndJusticesChapter() {
 
       <Section id="justices" title="How Supreme Court justices are scored">
         <P>
-          From case-level votes in the Oyez Project and official Supreme Court records, with each
-          opinion linked to its official slip-opinion PDF. The question is whether a justice applies
-          consistent principles, or shifts with the politics of who appointed their colleagues.
+          One question: does a justice side with the federal government more often while the
+          president who appointed them is in office than under other presidents? Epstein and Posner
+          (2016) asked it of every justice since 1937. Comparing a justice with themselves cancels
+          out their ideology and how often they side with any government.
         </P>
         <List>
-          <Item label="Independence (56%)">
-            How often, in split decisions, a justice sides with the other party&apos;s appointees
-            against their own.
+          <Item label="The votes">
+            Every vote in a signed decision of a case the federal government argued: Epstein and
+            Posner&apos;s through 2014, and the Supreme Court Database&apos;s after. The appointing
+            president is whoever was in office on the nomination date, from the Federal Judicial
+            Center.
           </Item>
-          <Item label="Ideological consistency (44%)">
-            How differently a justice agrees with colleagues appointed by the same party versus the
-            other, weighting close decisions most because they reveal the most.
+          <Item label="The estimate">
+            How many points more often the justice sided with the government under the appointing
+            president, with whether the government brought the case held fixed. One justice&apos;s
+            record is a few hundred votes, so each estimate is pulled toward the average of all
+            justices by how uncertain it is, and shown with its margin of error.
+          </Item>
+          <Item label="The score">
+            100 at no favoritism either way, falling to 0 at twice the spread between justices.
+            Favoring the appointing president&apos;s government and disfavoring it both lower it.
           </Item>
         </List>
         <P>
-          When the source lists a justice twice in one decision, the vote counts once if the entries
-          agree and is left out if they don&apos;t; a vote the source omits is never filled in. Each
-          justice&apos;s dissent rate is shown as a plain statistic, not scored. A short profile of
-          each justice is written by the site&apos;s language model from these statistics — see{" "}
-          <A href="/about/data#ai">how AI is used</A>.
+          A justice the database doesn&apos;t cover yet is not scored. Each justice&apos;s
+          Martin-Quinn position (where they sit, liberal to conservative) and voting record from the
+          Oyez Project are shown beside the score and not scored: where a justice sits says nothing
+          about favoring the president who appointed them. When Oyez lists a justice twice in one
+          decision, the vote counts once if the entries agree and is left out if they don&apos;t.
         </P>
-        <More label="Two parts we removed">
+        <More label="Measures we removed">
           <P>
-            Until v6.13 there were two more. &ldquo;Judicial restraint&rdquo; scored how often a
-            justice dissents; tested on the Rehnquist Court&apos;s 1994–2004 votes, that measured
-            distance from the Court&apos;s median justice, who is in nearly every majority. In a
-            simulated 6–3 Court it put the smaller bloc about 21 points behind just for being
+            Until September 2026 justices were scored on consistency and independence from the
+            appointing party&apos;s bloc. On today&apos;s Court every Republican appointee sits
+            right of every Democratic appointee, so both measured how close a justice sits to the
+            Court&apos;s center: against Martin-Quinn positions for the 2024 term, they ranked
+            justices by distance from the median at −0.82 and −0.75.
+          </P>
+          <P>
+            Before that, until v6.13, there were two more. &ldquo;Judicial restraint&rdquo; scored
+            how often a justice dissents; tested on the Rehnquist Court&apos;s 1994–2004 votes, that
+            measured distance from the Court&apos;s median justice, who is in nearly every majority.
+            In a simulated 6–3 Court it put the smaller bloc about 21 points behind just for being
             outvoted. &ldquo;Bipartisan agreement&rdquo; measured the same thing as independence (a
-            0.86 correlation), so its weight moved there. The study is in the project repository at
+            0.86 correlation). Both studies are in the project repository at
             docs/research/justice-scores.md.
           </P>
         </More>

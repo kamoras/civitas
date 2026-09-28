@@ -29,13 +29,13 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
-from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.database import get_db
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
 from app.ordinals import ordinal
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.services.justice_service import justice_overall
 from app.services.senator_service import STATE_NAMES
 
 router = APIRouter()
@@ -92,13 +92,8 @@ def _president_overall(p: President) -> float | None:
 
 
 def _justice_overall(j: Justice) -> float | None:
-    if j.score_consistency == 0.0 and j.score_independence == 0.0:
-        return None
-    return round(
-        j.score_consistency * JUSTICE_SCORE_WEIGHTS["consistency"]
-        + j.score_independence * JUSTICE_SCORE_WEIGHTS["independence"],
-        1,
-    )
+    overall = justice_overall(j)
+    return round(overall, 1) if overall is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -367,8 +362,8 @@ def _chamber_rank(branch: str, entity, db: Session) -> dict | None:
     leaderboard's order — the overall score as displayed (a whole number,
     rounded half up), ties sharing a standard competition rank — so the
     profile states the rank the leaderboard shows. None for whom the
-    leaderboard doesn't rank: a member no longer serving, a sitting
-    president (only completed terms are ranked: get_president_leaderboard),
+    leaderboard doesn't rank: a member or justice no longer serving, a
+    sitting president (only completed terms are ranked: get_president_leaderboard),
     or anyone not scored."""
     shown = {}
     if branch == "president":
@@ -376,6 +371,11 @@ def _chamber_rank(branch: str, entity, db: Session) -> dict | None:
             return None
         for p in db.query(President).filter(President.is_current == False).all():  # noqa: E712
             shown[p.id] = math.floor(compute_president_overall_score(p) + 0.5)
+    elif branch == "scotus" and entity.is_active:
+        for j in db.query(Justice).filter(Justice.is_active == True).all():  # noqa: E712
+            overall = justice_overall(j)
+            if overall is not None:
+                shown[j.id] = math.floor(overall + 0.5)
     elif branch in ("senate", "house") and getattr(entity, "is_current", False):
         model = Senator if branch == "senate" else Representative
         for m in db.query(model).filter(model.is_current == True).all():  # noqa: E712

@@ -13,6 +13,7 @@ export default function ScoreColumn({
   weight,
   score,
   more,
+  aside,
   children,
 }: {
   title: string;
@@ -20,6 +21,8 @@ export default function ScoreColumn({
   weight?: number;
   score: number | null | undefined;
   more?: { label: string; onClick: () => void };
+  /** In place of the score, for a column on record but not scored. */
+  aside?: string;
   children: ReactNode;
 }) {
   const shown = score == null ? null : displayScore(score);
@@ -34,14 +37,20 @@ export default function ScoreColumn({
             </p>
           )}
         </div>
-        <span
-          className={`shrink-0 font-display text-[44px] font-extrabold leading-none ${
-            shown == null ? "text-ink-min" : getScoreColor(shown)
-          }`}
-          aria-label={shown == null ? "Not scored" : `${shown} out of 100`}
-        >
-          {shown ?? "—"}
-        </span>
+        {aside ? (
+          <span className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+            {aside}
+          </span>
+        ) : (
+          <span
+            className={`shrink-0 font-display text-[44px] font-extrabold leading-none ${
+              shown == null ? "text-ink-min" : getScoreColor(shown)
+            }`}
+            aria-label={shown == null ? "Not scored" : `${shown} out of 100`}
+          >
+            {shown ?? "—"}
+          </span>
+        )}
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
         {children}

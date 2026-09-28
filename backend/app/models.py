@@ -971,7 +971,8 @@ class RaceCoverageItem(Base):
 
 
 class Justice(Base):
-    """Supreme Court justice with ideological consistency scores."""
+    """Supreme Court justice: the voting record from Oyez, and loyalty to
+    the appointing president, the score (pipeline/analyze/justice_loyalty)."""
     __tablename__ = "justices"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)  # oyez identifier
@@ -985,13 +986,32 @@ class Justice(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     thumbnail_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Unscored since justice v2 (Consistency and Independence) and v6.13
+    # (the other two; justice_analyzer's module docstring), but NOT NULL
+    # columns the previous image reads, so kept until the contract release
+    # drops them (migrations/README.md). Never read.
     score_consistency: Mapped[float] = mapped_column(Float, default=0.0)
     score_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    # Unscored since v6.13 (justice_analyzer's module docstring) but still
-    # NOT NULL columns the previous image reads, so kept until the contract
-    # release drops them (migrations/README.md). Never read.
     score_bipartisan_agreement: Mapped[float] = mapped_column(Float, default=0.0)
     score_judicial_restraint: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Loyalty to the appointing president (justice_loyalty): the score, the
+    # shrunk effect (a share: 0.145 is 14.5 points) and its standard error,
+    # the votes under the appointing president and under others with the
+    # share of each for the government, and the Supreme Court Database term
+    # the record runs through. NULL until measured, or for a justice the
+    # Database doesn't cover yet.
+    score_loyalty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty_se: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty_votes_in: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    loyalty_votes_out: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    loyalty_rate_in: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty_rate_out: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty_through_term: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Martin-Quinn position per term, [[term, position], ...] as JSON: shown,
+    # not scored.
+    ideal_points: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     cases_decided: Mapped[int] = mapped_column(Integer, default=0)
     majority_pct: Mapped[float] = mapped_column(Float, default=0.0)

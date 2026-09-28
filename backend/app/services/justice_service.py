@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.models import Justice, JusticeVote
-from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 from app.schemas import (
     JusticeLeaderboardEntry,
+    JusticeLoyaltySchema,
     JusticeSchema,
     JusticeScoreSchema,
 )
@@ -19,19 +19,24 @@ from app.schemas import (
 logger = logging.getLogger(__name__)
 
 
+def justice_overall(j: Justice) -> float | None:
+    """The overall score: the weighted measures (JUSTICE_SCORE_WEIGHTS),
+    None until measured. Rounded like every other scorer's serializer."""
+    if j.score_loyalty is None:
+        return None
+    return round(j.score_loyalty * JUSTICE_SCORE_WEIGHTS["loyalty"], 2)
+
+
 def _build_score(j: Justice) -> JusticeScoreSchema:
-    overall = (
-        j.score_consistency * JUSTICE_SCORE_WEIGHTS["consistency"]
-        + j.score_independence * JUSTICE_SCORE_WEIGHTS["independence"]
-    )
-    # Round to match every other scorer's serializer (senators/reps/presidents
-    # all round(...,2)); without this the raw float reaches the UI verbatim as
-    # e.g. 62.165000000000006 on the SCOTUS leaderboard and profile card.
-    overall = round(overall, 2)
-    return JusticeScoreSchema(
-        consistency=j.score_consistency,
-        independence=j.score_independence,
-        overall=overall,
+    return JusticeScoreSchema(loyalty=j.score_loyalty, overall=justice_overall(j))
+
+
+def _loyalty(j: Justice) -> JusticeLoyaltySchema | None:
+    if j.loyalty is None or j.loyalty_se is None:
+        return None
+    return JusticeLoyaltySchema(
+        estimate=j.loyalty, se=j.loyalty_se, votes_in=j.loyalty_votes_in or 0, votes_out=j.loyalty_votes_out or 0,
+        rate_in=j.loyalty_rate_in or 0.0, rate_out=j.loyalty_rate_out or 0.0, through_term=j.loyalty_through_term,
     )
 
 
@@ -61,10 +66,18 @@ def _build_justice_response(j: Justice) -> JusticeSchema:
         authored_dissent=j.authored_dissent,
         authored_concurrence=j.authored_concurrence,
         close_case_majority_pct=j.close_case_majority_pct,
-        cross_bloc_pct=j.cross_bloc_pct,
         agreement_matrix=agreement,
-        summary=j.summary or "",
+        loyalty=_loyalty(j),
+        ideal_points=_ideal_points(j),
     )
+
+
+def _ideal_points(j: Justice) -> list[tuple[int, float]]:
+    try:
+        points = json.loads(j.ideal_points or "[]")
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return points if isinstance(points, list) else []
 
 
 def get_all_justices(db: Session) -> list[JusticeSchema]:
@@ -101,21 +114,17 @@ def get_justice_leaderboard(db: Session) -> list[JusticeLeaderboardEntry]:
             cases_decided=j.cases_decided,
             majority_pct=j.majority_pct,
             dissent_pct=j.dissent_pct,
-            cross_bloc_pct=j.cross_bloc_pct,
+            loyalty=_loyalty(j),
         ))
-    entries.sort(key=lambda e: e.score.overall, reverse=True)
+    # Unmeasured justices last, then by name, so ties keep one order.
+    entries.sort(key=lambda e: (e.score.overall is None, -(e.score.overall or 0), e.name))
     return entries
 
 
 def group_votes_by_case_and_justice(
     votes: list[dict],
 ) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
-    """Group a flat vote list into (case_id -> votes, justice_id -> votes).
-
-    Shared by justice_pipeline.py (grouping a fresh Oyez fetch) and
-    get_justice_score_breakdown below (grouping stored JusticeVote rows) —
-    one implementation of the grouping, two different vote sources.
-    """
+    """Group a flat vote list into (case_id -> votes, justice_id -> votes)."""
     case_votes: dict[str, list[dict]] = defaultdict(list)
     justice_votes: dict[str, list[dict]] = defaultdict(list)
     for v in votes:
@@ -125,46 +134,21 @@ def group_votes_by_case_and_justice(
 
 
 def get_justice_score_breakdown(db: Session, justice_id: str) -> dict | None:
-    """Recompute a justice's full score breakdown on-demand from stored
-    vote data (JusticeVote rows) — no re-fetch from Oyez needed, since
-    every case a justice voted on, and who else voted which way, is
-    already persisted. Reconstructs the same votes/all_case_votes/
-    party_map inputs justice_pipeline.py assembles from a fresh fetch.
-    """
-    justice = db.query(Justice).filter(Justice.id == justice_id).first()
-    if not justice:
+    """The justice's score and the figures behind it, as stored by the
+    pipeline (justice_loyalty): the loyalty estimate, its standard error,
+    the votes under the appointing president and under others and the share
+    of each for the government. Measured across every justice at once (the
+    estimate is shrunk toward all justices' mean), so it is read, not
+    recomputed for one."""
+    j = db.query(Justice).filter(Justice.id == justice_id).first()
+    if not j:
         return None
-
-    all_vote_rows = db.query(JusticeVote).all()
-    votes = [
-        {
-            "justice_id": v.justice_id,
-            "case_id": v.case_id,
-            "vote": v.vote,
-            "opinion_type": v.opinion_type,
-            "is_unanimous": v.is_unanimous,
-            "is_close": v.is_close,
-            "majority_votes": v.majority_votes,
-            "minority_votes": v.minority_votes,
-        }
-        for v in all_vote_rows
-    ]
-    case_votes, justice_votes = group_votes_by_case_and_justice(votes)
-
-    # party_map covers only the current bench, matching justice_pipeline.py's
-    # semantics — a case's all_case_votes can include a since-retired
-    # justice's historical vote, but they're not compared against as a
-    # "bloc" member (see justice_analyzer's all_active filter).
-    active_justices = db.query(Justice).filter(Justice.is_active.is_(True)).all()
-    party_map = {j.id: j.appointing_party or "" for j in active_justices}
-
-    return analyze_justice_votes(
-        justice_id=justice_id,
-        appointing_party=justice.appointing_party or "",
-        votes=justice_votes.get(justice_id, []),
-        all_case_votes=case_votes,
-        party_map=party_map,
-    )
+    loyalty = _loyalty(j)
+    return {"loyalty": {
+        "score": j.score_loyalty,
+        "components": [],
+        "facts": loyalty.model_dump(by_alias=True) if loyalty else None,
+    }}
 
 
 def upsert_justice(db: Session, data: dict, votes: list[dict]) -> None:
