@@ -57,6 +57,14 @@ through the admin dashboard. A cold full run is 4–6 hours; a warm rerun agains
 populated caches is 45–90 minutes, and most of that difference is these three
 layers.
 
+## HTTP caching
+
+Public read endpoints carry an ETag hashed from the uncompressed response
+body, and a request whose `If-None-Match` still matches gets a 304 with no
+body. The ETag middleware runs inside gzip: gzip writes the current time
+into its header, so an ETag hashed from compressed bytes changed every
+second and a revalidation almost never matched.
+
 ## Source map
 
 | Concern | Code |
@@ -65,4 +73,5 @@ layers.
 | API-response caching | `backend/app/pipeline/cache.py` |
 | LLM caching + hashing | `analyze/ollama_client.py` — `_make_input_hash`, `get/set_cached_llm_result` |
 | Fingerprint gate | `backend/app/pipeline/run_checks.py` |
+| HTTP ETags | `backend/app/api/cache_headers.py`; middleware order in `backend/app/main.py` |
 | Reference corpus | `analyze/bill_learning.py`, `pipeline/vector_store.py` |
