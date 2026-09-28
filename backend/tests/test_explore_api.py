@@ -314,8 +314,14 @@ class TestSummaryEndpointGuards:
             assert events[-1] == {"done": True, "summary": "The rule would apply.", "keyPoints": ["One"],
                                   "impact": ""}
             assert not mock_set_cache.called
-            # And the next reader may make it afresh at once.
-            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+        if ending == "fails":
+            # The LLM may be back: the next reader may make it afresh at once.
+            assert any("delta" in event for event in again)
+        else:
+            # The same prompt would take as long again: held off for a while,
+            # answered rather than generated over and over.
+            assert again == [{"done": True, "summary": "", "keyPoints": [], "impact": ""}]
 
     async def test_a_generation_at_its_token_limit_is_cached_without_the_cut_section(self, db_session):
         # The same prompt stops at the same place every time: what came out

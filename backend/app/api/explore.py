@@ -332,8 +332,10 @@ async def post_document_comment(
 # mid-generation.
 _SUMMARY_BUCKET = "explore-summary"
 _SLOT_BUCKET = "explore-summary-slot"
-# A document whose output couldn't be used is not generated again for a
-# while: the same prompt at temperature 0 comes out the same way.
+# A document whose output couldn't be used, or whose generation ran out of
+# time, is not generated again for a while: the same prompt at temperature 0
+# comes out the same way, and takes as long. (A generation that failed —
+# the LLM unreachable, say — may be tried again at once.)
 _UNUSABLE_BUCKET = "explore-summary-unusable"
 _UNUSABLE_FOR_S = 30 * 60.0
 _MAX_GENERATIONS = 2
@@ -526,11 +528,11 @@ class _Generation:
 
         try:
             try:
-                if not await self._claim(_SUMMARY_BUCKET, [str(self.doc_id)]):
-                    self._settle("held")
-                    return
                 if await throttle.run(throttle.held, _UNUSABLE_BUCKET, str(self.doc_id), period=_UNUSABLE_FOR_S):
                     self._settle("unusable")
+                    return
+                if not await self._claim(_SUMMARY_BUCKET, [str(self.doc_id)]):
+                    self._settle("held")
                     return
                 if not await self._claim(_SLOT_BUCKET, [str(slot) for slot in range(_MAX_GENERATIONS)]):
                     self._settle("busy")
@@ -560,7 +562,7 @@ class _Generation:
         from app.pipeline.analyze.ollama_client import StreamCutOff
 
         text = ""
-        finished = at_limit = False
+        finished = at_limit = timed_out = False
         try:
             async with asyncio.timeout(_SUMMARY_GENERATION_LIMIT_S):
                 async for delta in self._stream(
@@ -575,18 +577,22 @@ class _Generation:
             # At the token limit: as far as it will ever get (the same
             # prompt stops at the same place).
             at_limit = True
+        except TimeoutError:
+            logger.warning("Explore doc summary for doc_id=%s ran out of time", self.doc_id)
+            timed_out = True
         except Exception:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", self.doc_id)
 
         # Anything but a natural end stopped mid-sentence: the section it was
         # writing is dropped, for its reader as for the cache.
         parsed = self._parse(text, cut_off=not finished) if text else {"summary": "", "keyPoints": [], "impact": ""}
-        # A failed or timed-out generation is shown to its reader and made
-        # afresh for the next; one that ended, naturally or at its limit, is
-        # the document's summary.
+        # A generation that ended, naturally or at its limit, is the
+        # document's summary. One that failed or ran out of time is shown to
+        # its reader but not kept; one that ran out of time (or made nothing
+        # usable) holds the document off for a while (_UNUSABLE_BUCKET).
         if (finished or at_limit) and parsed["summary"]:
             await asyncio.to_thread(self._set_cached, self.prompt["promptVersion"], self.cache_key, parsed)
-        elif finished or at_limit:
+        elif finished or at_limit or timed_out:
             try:
                 await throttle.run(throttle.hold, _UNUSABLE_BUCKET, [str(self.doc_id)], period=_UNUSABLE_FOR_S)
             except Exception:

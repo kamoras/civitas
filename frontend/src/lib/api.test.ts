@@ -21,6 +21,7 @@ import {
   fetchTimeline,
   parseExploreSummaryText,
   splitHighlights,
+  abortableSleep,
   streamExploreDocumentSummary,
   submitDocumentComment,
   summaryRetryDelayMs,
@@ -418,5 +419,21 @@ describe("summaryRetryDelayMs", () => {
     expect(summaryRetryDelayMs("")).toBe(10_000);
     expect(summaryRetryDelayMs("0")).toBe(1_000);
     expect(summaryRetryDelayMs("3600")).toBe(60_000);
+  });
+});
+
+describe("abortableSleep", () => {
+  it("leaves no listener behind on a wait that ends normally", async () => {
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    await abortableSleep(1, controller.signal);
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+
+  it("ends at once, rejected, when the signal aborts", async () => {
+    const controller = new AbortController();
+    const waiting = abortableSleep(60_000, controller.signal);
+    controller.abort();
+    await expect(waiting).rejects.toBeDefined();
   });
 });

@@ -653,10 +653,11 @@ def hold(bucket: str, keys: list[str], *, period: float) -> tuple[str, float] | 
 
 def held(bucket: str, key: str, *, period: float) -> bool:
     """Whether `key` was claimed (claim or hold) in the last `period`
-    seconds — read only, claiming nothing. Unavailable when the store can't
+    seconds — read only, claiming nothing: a plain read (the connections
+    autocommit), never the write lock. Unavailable when the store can't
     answer."""
     try:
-        with _Txn() as conn:
+        with _using() as conn:
             return conn.execute(
                 "SELECT 1 FROM claims WHERE bucket = ? AND key = ? AND claimed_at > ?",
                 (bucket, key, time.time() - period),
