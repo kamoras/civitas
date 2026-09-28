@@ -689,6 +689,26 @@ describe("ballot measures", () => {
     expect(notice).not.toHaveTextContent("could not find");
   });
 
+  it("says a failed read failed, even when every card shown is removed", async () => {
+    // Round 6: the "latest list no longer includes" copy described a read
+    // that worked; on a night whose fetch failed it misdescribed it.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, status: "removed" }],
+          measureCoverage: {
+            status: "ingest_failed", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("latest attempt to re-read OH's measures failed (2026-09-28)");
+    expect(notice).not.toHaveTextContent("no longer includes");
+  });
+
   it("presents an operator's none as ours, never as the state's", async () => {
     render(
       <StateBallotClient

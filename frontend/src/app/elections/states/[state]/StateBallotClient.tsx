@@ -362,7 +362,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         : null;
     return (
       <div className="space-y-3">
-        {stale && allRemoved && (
+        {stale && allRemoved && measureCoverage.status === "not_yet_covered" && (
           // The latest read worked and dropped these; it names nothing
           // else for this ballot yet (Oklahoma's register re-dating its
           // only State Question). "Could not find the list" would be false.
@@ -386,7 +386,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
             </p>
           </div>
         )}
-        {stale && !allRemoved && (
+        {stale && !(allRemoved && measureCoverage.status === "not_yet_covered") && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
             <p className="text-xs text-signal-amber">
               {measureCoverage.status === "ingest_failed"
