@@ -14,6 +14,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
+import { ordinal } from "@/components/scorecard/format";
 
 const PART_NAME: Record<string, string> = {
   bill: "the bill's details",
@@ -84,7 +85,7 @@ export default function BillPageView({
   // What a shared image of any section says it is from.
   const shareSubject = {
     title: title ? `${label}: ${title}` : label,
-    subtitle: [record?.congress ? `${record.congress}th Congress` : null, stageName ?? detail?.stage]
+    subtitle: [record?.congress ? `${ordinal(record.congress)} Congress` : null, stageName ?? detail?.stage]
       .filter(Boolean)
       .join(" · "),
     url: absoluteUrl(`/congress/bills/${encodeURIComponent(billId)}`),
@@ -114,7 +115,7 @@ export default function BillPageView({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
                   {label}
-                  {record?.congress ? ` · ${record.congress}th Congress` : ""}
+                  {record?.congress ? ` · ${ordinal(record.congress)} Congress` : ""}
                   {record?.originChamber ? ` · ${record.originChamber}` : ""}
                 </p>
                 {/* The header names the bill itself: no title strip. */}

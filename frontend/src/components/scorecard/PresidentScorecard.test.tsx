@@ -122,6 +122,9 @@ describe("PresidentScorecard", () => {
       </main>
     );
     await screen.findByText("21,285 disclosed this term");
+    // The share buttons are part of what axe checks here: the summary and
+    // the four score columns.
+    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(5);
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });

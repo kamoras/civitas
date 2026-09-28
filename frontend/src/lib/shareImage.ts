@@ -177,7 +177,9 @@ function wrapWords(
     if (lines.length === maxLines - 1) {
       return [...lines, fitText(ctx, `${line} ${words.slice(i).join(" ")}`, max)];
     }
-    lines.push(line);
+    // A single word wider than the line would otherwise be pushed whole
+    // and run under the badge.
+    lines.push(fitText(ctx, line, max));
     line = words[i];
   }
   if (line) lines.push(fitText(ctx, line, max));
