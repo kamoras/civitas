@@ -61,7 +61,7 @@ export default function ChangelogPage() {
               so a methodology update is never mistaken for a change in a politician&apos;s
               behavior. See the{" "}
               <a
-                href="/about"
+                href="/about/scores"
                 className="text-signal-cyan hover:text-phos underline underline-offset-2"
               >
                 methodology page

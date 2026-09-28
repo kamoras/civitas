@@ -1,3 +1,5 @@
+import type { VoteRollCall } from "./senator";
+
 // Shapes returned by the /{entityType}/{id}/score-breakdown endpoints —
 // the "click a score, see the math" panel's data source. Senator,
 // representative, and president dimensions share the same shape;
@@ -34,6 +36,12 @@ export interface FundingFacts {
   smallDonorComparison: "house-median" | "state-size";
 }
 
+/** A vote against the party, as the chamber recorded the roll call. */
+export interface BreakVote {
+  vote: string;
+  rollCall: VoteRollCall | null;
+}
+
 /** constituentAlignment.facts */
 export interface AlignmentFacts {
   party: string;
@@ -41,6 +49,12 @@ export interface AlignmentFacts {
   breaks: number | null;
   breakRate: number | null;
   expectedBreakRate: number | null;
+  /** Votes against the party from its flank: listed, not counted. Absent
+   *  (with the two lists) until the member's whole-Congress record is
+   *  measured. */
+  flankBreaks?: number | null;
+  breakVotes?: BreakVote[];
+  flankBreakVotes?: BreakVote[];
 }
 
 /** legislativeEffectiveness.facts: bills whose furthest stage is each of

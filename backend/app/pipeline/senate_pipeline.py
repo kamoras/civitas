@@ -40,6 +40,7 @@ from app.models import (
 
 # Fetch modules
 from app.pipeline.analyze.bill_stage import became_law_action, classify_bill_stage_from_actions, is_enacted
+from app.pipeline.analyze.party_line_record import party_line_records
 from app.pipeline.fetch.congress import (
     extract_official_title,
     fetch_bill,
@@ -157,6 +158,10 @@ RECENT_RC_SESSIONS = 2
 MIN_CONGRESS_FOR_BILL_TITLES = 116
 
 
+def _record_json(record: dict | None) -> str | None:
+    return json.dumps(record) if record else None
+
+
 def upsert_senator(db: Session, data: dict) -> None:
     """
     Upsert a fully assembled senator record into the database.
@@ -194,6 +199,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "total_raised": funding.get("totalRaised") or 0,
         "total_contributions": funding.get("totalContributions"),
         "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),
+        "party_line_record": _record_json((data.get("votingRecord") or {}).get("partyLineRecord")),
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
         "website_url": data.get("officialWebsiteUrl") or "",
@@ -1880,6 +1886,13 @@ async def run_senate_pipeline(
         # is measured, since its stage totals are significance-weighted.
         from app.pipeline.analyze.commemorative import mark_commemorative
         mark_commemorative([sp for p in senator_prepared for sp in p.get("sponsoredBills", [])])
+
+        # Each senator's party-line record over the whole Congress (v6.20),
+        # before the reference is measured on it.
+        for p, record in zip(senator_prepared, party_line_records(
+            db, "senate", [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared],
+        )):
+            p["votingRecord"]["partyLineRecord"] = record
 
         funding_reference = live_funding_reference(
             "senate", [p.get("funding") or {} for p in senator_prepared],

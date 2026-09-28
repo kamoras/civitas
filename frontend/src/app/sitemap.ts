@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { STATE_CODES } from "@/lib/stateCodes";
 import { SITE_URL } from "@/lib/site";
+import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -71,6 +72,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/compare`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/explore`, changeFrequency: "daily", priority: 0.6 },
     { url: `${SITE_URL}/about`, changeFrequency: "monthly", priority: 0.5 },
+    ...ABOUT_CHAPTERS.map((c) => ({
+      url: `${SITE_URL}${c.href}`,
+      changeFrequency: "monthly" as const,
+      priority: 0.4,
+    })),
     { url: `${SITE_URL}/changelog`, changeFrequency: "weekly", priority: 0.3 },
     { url: `${SITE_URL}/accessibility`, changeFrequency: "monthly", priority: 0.3 },
     { url: `${SITE_URL}/environmental`, changeFrequency: "monthly", priority: 0.3 },
