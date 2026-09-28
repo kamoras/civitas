@@ -136,3 +136,17 @@ def test_a_killed_writers_temp_file_is_swept_up(workdir):
     os.utime(old, (an_hour_ago, an_hour_ago))
     write_text_atomic(target, "{}")
     assert not old.exists() and fresh.exists()
+
+
+def test_a_non_durable_write_is_still_atomic_but_not_fsynced(tmp_path, monkeypatch):
+    import os
+
+    from app.atomic_write import write_text_atomic
+
+    synced = []
+    monkeypatch.setattr(os, "fsync", lambda fd: synced.append(fd))
+    path = tmp_path / "beat.json"
+    write_text_atomic(path, "{}", durable=False)
+    assert path.read_text() == "{}" and synced == []
+    write_text_atomic(path, "{1}")
+    assert synced  # the default still syncs

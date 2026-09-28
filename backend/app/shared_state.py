@@ -218,10 +218,12 @@ def record_path(name: str) -> str:
 
 
 def write_record(path: str, value: Any) -> None:
-    """Replace the record at `path` with `value` (JSON), in one step."""
+    """Replace the record at `path` with `value` (JSON), in one step. Not
+    fsynced: these are rewritten every few minutes and worthless after a
+    crash, so a flush to the volume each time buys nothing."""
     from app.atomic_write import write_text_atomic
 
-    write_text_atomic(path, json.dumps(value))
+    write_text_atomic(path, json.dumps(value), durable=False)
 
 
 def read_record(path: str) -> "tuple[datetime, Any] | None | object":
