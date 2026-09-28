@@ -56,6 +56,12 @@ rotation decides. Only a complete read (every page) can retract a Senate
 election or mark the calendar read; a read cut short only adds, since a state
 missing from it may sit on the page that failed.
 
+A Clarity `landing_page` source scopes every linked election by that election's
+own settings (`internalname`, `electiondate`), so a results archive listing a
+decade of elections resolves to this cycle's primary, and a lone stale link is
+refused. West Virginia's source is that archive since its elections page dropped
+the primary link (September 2026).
+
 A confirmed Senate record goes to the state's one Senate race this cycle,
 regular or special (`state_candidates._race_id_for`). Keyed to the regular id
 alone, Florida's and Ohio's 2026 specials matched nothing and showed every FEC

@@ -1175,6 +1175,12 @@ export default function AboutPage() {
                   is treated as the final word: anyone not on it is taken off the page.
                 </P>
                 <P>
+                  Where the results are found through a link on a state&apos;s own site, each linked
+                  election is checked for its own name and date before it is read. West Virginia moved
+                  its primary link to an archive of every election since 2016; the check is what picks
+                  this year&apos;s primary from it.
+                </P>
+                <P>
                   Declared write-in candidates are not printed on the ballot, so they are
                   never shown as on it. Texas lists its write-ins in the same list as its
                   nominees, and until 27 September 2026 this page showed four of them
