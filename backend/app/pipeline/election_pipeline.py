@@ -482,6 +482,10 @@ def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: st
     measure.no_means = detail.get("no_means")
     measure.measure_type = detail.get("measure_type")
     measure.origin = detail.get("origin")
+    # Who drafted the title and fiscal statement. Every direct-from-state
+    # strategy has always produced these, and the API and card render
+    # them ("Drafted by ..."), but nothing wrote them to the row, so the
+    # drafter never reached a reader. Vote Smart supplies neither.
     measure.title_authority = detail.get("title_authority")
     measure.fiscal_authority = detail.get("fiscal_authority")
     measure.source_url = detail.get("source_url")

@@ -120,6 +120,51 @@
       "source_name": "West Virginia Secretary of State",
       "strategy": "wv_amendment_notices",
       "description": "The Secretary of State's dated public notice of each proposed amendment (found through the sos.wv.gov news listing), carrying the joint resolution's Title of Amendment and Summary of Purpose. Cannot establish 'none' (no notice found reads as not covered). Verified live 2026-09-28: Amendment 1 (SJR 9) on the November 3, 2026 ballot. See ballot_measures_wv.py."
+    },
+    "IL": {
+      "source_name": "Illinois State Board of Elections",
+      "strategy": "il_voters_guide_questions",
+      "description": "The Board's own Illinois Voters' Guide, 'Questions of Public Policy' page (votersguide.elections.il.gov), reached by the same WebForms postback the page's election dropdown makes. Verified live 2026-09-28: the 2026 general reads 'There are no statewide questions of public policy for this election.' — the Board's own statement, the only thing that becomes confirmed_none; 2024 (three advisory questions) and 2022 (one amendment) each list a PDF, which this strategy has no reader for yet and so reports as a failed ingest, never as none. Re-checked every run."
+    },
+    "IN": {
+      "source_name": "Indiana Election Division",
+      "strategy": "in_legislation_summary",
+      "description": "The Election Division's 'Summary of <year> Election Legislation' PDF (found by that link text on its legislation-summaries index page), whose 'INDIANA CONSTITUTIONAL AMENDMENTS' section quotes each public question's statutory ballot text in full. Verified live 2026-09-28: Public Questions #1 (bail) and #2 (city/town court judges' residence), each introduced as on 'the November 3, 2026, general election' ballot. A legislation summary is not a certified list, so an empty read is a failure, never confirmed_none."
+    },
+    "KS": {
+      "source_name": "Kansas Secretary of State",
+      "strategy": "ks_proposed_amendments",
+      "description": "The Secretary of State's evergreen 'Proposed Constitutional Amendments' HTML page, read only under its 'The following constitutional amendment will be voted on during the November 3, 2026 General Election.' sentence. Verified live 2026-09-28 (1 amendment, citizenship requirement to vote) and against the same URL's July 2026 capture carrying the August primary's amendment (correctly not read for November). Explanatory statement and the state's own 'A vote for/against this proposition would ...' lines, verbatim."
+    },
+    "MI": {
+      "source_name": "Michigan Bureau of Elections",
+      "strategy": "mi_ballot_questions",
+      "description": "The Bureau of Elections' '<year> November ballot questions' PDF, found by that link text on michigan.gov/sos/elections (its URL carries a ?rev= hash that changes on republish). Verified live 2026-09-28: Proposal 2026-1 (constitutional convention) and 2026-2 (initiated law on utility/contractor campaign contributions); bold title lines and the question read from the PDF's own fonts. michigan.gov's CDN rejects the '(+contact)' User-Agent comment (measured), so this source sends the standard headers with that comment dropped, still identifying as Civitas."
+    },
+    "MN": {
+      "source_name": "Minnesota Secretary of State",
+      "strategy": "mn_constitutional_amendments",
+      "description": "The Secretary of State's 'Constitutional amendments' page under What's On My Ballot. Verified live 2026-09-28: 'In 2026, there will be one proposed constitutional amendment on the ballot in Minnesota.' — that stated count must equal the number of ballot questions read ('Increasing funding to school districts'). The page sits behind a bot manager that intermittently serves a challenge page; that page carries no count sentence and reads as a failed fetch, never as none."
+    },
+    "ND": {
+      "source_name": "North Dakota Secretary of State",
+      "strategy": "nd_measures_on_ballot",
+      "description": "The Secretary of State's 'Measures on Ballot' page ('2026 General Election' section) and each measure's one-page 'Official Ballot Language' PDF. Verified live 2026-09-28: Constitutional Measure No. 1 (HCR 3003, 60% threshold for amendments) and Initiated Constitutional Measure No. 2 (school meals); explanation, the fiscal-impact sentence (the Legislative Council's estimate) and the state's own 'Yes – Means .../No – Means ...' lines, verbatim."
+    },
+    "NE": {
+      "source_name": "Nebraska Secretary of State",
+      "strategy": "ne_ballot_measures",
+      "description": "sos.nebraska.gov/elections lists the general-election measures: 'Initiative Nos. 440-442' (read from the Informational Pamphlet's 'Ballot Title and Text' pages — the question plus the state's own 'A vote “FOR”/“AGAINST” ...' framing) and the legislature-referred LR19CA (its ballot statement is a scanned image, so the Legislature's own enrolled resolution, linked from the same page, supplies its 'ballot language' instead). Verified live 2026-09-28: 4 measures; the page's initiative range must equal what the pamphlet yields."
+    },
+    "OK": {
+      "source_name": "Oklahoma Secretary of State",
+      "strategy": "ok_state_questions",
+      "description": "The Secretary of State's State Questions register (sos.ok.gov/gov/questions.aspx), rows dated 'ELECTION DATE: November 3, 2026'. Verified live 2026-09-28: SQ 845 (Judicial Nominating Commission) and SQ 847 (Real Property Valuation), matching the State Election Board's 'Two state questions have qualified'. The ballot titles exist only in scanned PDFs (845 no text layer, 847 OCR with errors), so only the register's own SQ number and subject line are stored and each links its filed PDF — no OCR'd text is presented as ballot language."
+    },
+    "SD": {
+      "source_name": "South Dakota Secretary of State",
+      "strategy": "sd_ballot_questions",
+      "description": "The Secretary of State's '<year> Ballot Questions' page ('2026 General Election Ballot Measures' section: Constitutional Amendments I, J, K, L, each 'Proposed and passed by the 2025 South Dakota Legislature') cross-checked against the Ballot Question Pro/Con Pamphlet, which prints the Attorney General's title, explanation and 'Vote “Yes”/“No” ...' recitation for each. Verified live 2026-09-28: 4/4. Circulating petitions, listed under separate headings on the same page, are never read."
     }
   }
 }

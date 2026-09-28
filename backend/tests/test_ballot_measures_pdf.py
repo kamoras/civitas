@@ -406,3 +406,32 @@ async def test_fetch_returns_none_when_discovery_finds_nothing(monkeypatch, db_s
     client = SimpleNamespace(get=fail_get)
     result = await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2026, "2026-11-03")
     assert result is None
+
+
+def test_to_measure_carries_drafters_and_an_explicit_official_title():
+    # Drafters are what the card's "Drafted by ..." line renders; a
+    # strategy whose `title` is a label (Oklahoma's register subject line)
+    # says so by passing official_title=None explicitly.
+    parsed = {
+        "number": "845", "title": "Judicial Nominating Commission", "official_title": None,
+        "origin": None, "official_summary": None, "fiscal_impact": "F",
+        "yes_means": None, "no_means": None,
+        "title_authority": "A Drafter", "fiscal_authority": "A Fiscal Office",
+    }
+    measure = pdf._to_measure("OK", parsed, "2026-11-03", "https://example.com/845.pdf")
+    assert measure["official_title"] is None
+    assert measure["title"] == "Judicial Nominating Commission"
+    assert measure["title_authority"] == "A Drafter"
+    assert measure["fiscal_authority"] == "A Fiscal Office"
+
+
+def test_every_registered_state_resolves_to_a_strategy():
+    # A typo'd strategy key silently leaves a state on Vote Smart; every
+    # entry in the bundled registry must resolve.
+    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
+
+    sources.invalidate_cache()
+    states = sources.configured_states()
+    assert {"IL", "IN", "KS", "MI", "MN", "ND", "NE", "OK", "SD"} <= states
+    for state in states:
+        assert pdf.is_configured(state), state
