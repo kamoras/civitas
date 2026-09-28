@@ -1120,3 +1120,33 @@ class TestIllinoisOffices:
             ("TREASURER", "treasurer"),
         ):
             assert common.parse_statewide_office(label) == (code, None), label
+
+
+class TestAlabamaAndConnecticutStatewideLabels:
+    """Real labels off Alabama's 2026 primary precinct workbooks and
+    Connecticut's 2026 certificates of party endorsement."""
+
+    def test_alabamas_psc_seats_are_places_not_districts(self):
+        assert common.parse_statewide_office(
+            "PUBLIC SERVICE COMMISSION, PLACE 1 (DEM)") == ("public_service_commission", "Place 1")
+        assert common.parse_statewide_office(
+            "PUBLIC SERVICE COMMISSION, PLACE 2 (REP)") == ("public_service_commission", "Place 2")
+
+    def test_alabamas_other_statewide_labels(self):
+        assert common.parse_statewide_office(
+            "COMMISSIONER OF AGRICULTURE AND INDUSTRIES (REP)") == ("agriculture_commissioner", None)
+        assert common.parse_statewide_office(
+            "STATE BOARD OF EDUCATION MEMBER DISTRICT 6 (REP)") == ("state_board_of_education", "6")
+        assert common.parse_statewide_office("STATE AUDITOR (REP)") == ("auditor", None)
+
+    def test_alabamas_county_boards_committees_and_amendments_are_refused(self):
+        for label in (
+            "MEMBER, BALDWIN COUNTY BOARD OF EDUCATION, DIST 5",
+            "STATE DEMOCRATIC EXECUTIVE COMMITTEE (MALE), DISTRICT 10 (DEM)",
+            "PROPOSED STATEWIDE AMENDMENT 1",
+            "SUPERINTENDENT, BIBB COUNTY BOARD OF EDUCATION",
+        ):
+            assert common.parse_statewide_office(label) is None, label
+
+    def test_connecticuts_secretary_of_the_state(self):
+        assert common.parse_statewide_office("Secretary of the State") == ("secretary_of_state", None)

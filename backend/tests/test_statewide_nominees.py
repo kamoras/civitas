@@ -580,7 +580,10 @@ class TestSourcesFileOptIns:
     contests at all — unless the state's calendar says there are none."""
 
     # Adapters that pass contest labels through parse_statewide_office.
-    READS_STATEWIDE = {"clarity", "enhanced_voting", "sd_vip", "tabular", "tally_enr", "totalvote_enr"}
+    READS_STATEWIDE = {
+        "clarity", "enhanced_voting", "sd_vip", "tabular", "tally_enr", "totalvote_enr",
+        "al_special_primary", "ct_enr",
+    }
 
     def _states(self):
         import json
@@ -603,3 +606,19 @@ class TestSourcesFileOptIns:
         from app.pipeline.fetch import state_candidates as sc
         for strategy in self.READS_STATEWIDE:
             assert "parse_statewide_office" in inspect.getsource(inspect.getmodule(sc.STRATEGIES[strategy])), strategy
+
+
+class TestStatewideSeatNamedByPlace:
+    """Alabama's two associate PSC seats are Places, elected statewide with
+    no district at all; labelling one "District Place 1" would be wrong."""
+
+    def test_a_place_renders_as_a_place(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "AL", SOURCE, [
+            {"office": "public_service_commission", "district": "Place 2", "party": "R", "last_name": "Jim Zig Zeigler"},
+            {"office": "public_service_commission", "district": "Place 1", "party": "R", "last_name": "Matt Gentry"},
+        ])
+        races, _ = _statewide_section(db_session, "AL", CYCLE)
+        assert [r["label"] for r in races] == [
+            "Public Service Commission, Place 1",
+            "Public Service Commission, Place 2",
+        ]
