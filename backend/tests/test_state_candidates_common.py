@@ -1120,3 +1120,52 @@ class TestIllinoisOffices:
             ("TREASURER", "treasurer"),
         ):
             assert common.parse_statewide_office(label) == (code, None), label
+
+
+class TestMassachusettsOffices:
+    """Labels state_candidates_ma builds from the Office and District cells
+    of Massachusetts's 2026 PD43+ primary archive."""
+
+    def test_its_executive_offices(self):
+        for label, code in (
+            ("Statewide Governor", "governor"),
+            ("Statewide Lieutenant Governor", "lt_governor"),
+            ("Statewide Attorney General", "attorney_general"),
+            ("Statewide Secretary of the Commonwealth", "secretary_of_commonwealth"),
+            ("Statewide Treasurer", "treasurer"),
+            # Printed bare; "Statewide" is the archive's own District cell.
+            ("Statewide Auditor", "auditor"),
+        ):
+            assert common.parse_statewide_office(label) == (code, None), label
+
+    def test_a_bare_auditor_is_still_refused(self):
+        assert common.parse_statewide_office("Auditor") is None
+
+    def test_the_governors_council_is_not_the_governor(self):
+        assert common.parse_statewide_office("Governor's Council 3rd District") == ("governors_council", "3")
+        assert common.parse_statewide_office("Governor’s Council 8th District") == ("governors_council", "8")
+
+    def test_its_county_offices_are_refused(self):
+        for label in (
+            "County Treasurer Bristol County District",
+            "District Attorney Berkshire District",
+            "Register of Probate Suffolk County District",
+            "Sheriff Franklin County District",
+            "Council of Governments Executive Committee Franklin District",
+        ):
+            assert common.parse_statewide_office(label) is None, label
+
+    def test_every_new_office_has_a_label(self):
+        for code in ("secretary_of_commonwealth", "governors_council"):
+            assert code in common.STATEWIDE_OFFICE_LABELS
+
+
+class TestWisconsinLegislature:
+    """Labels off Wisconsin's certified 2026 partisan-primary canvass."""
+
+    def test_both_chambers(self):
+        assert common.parse_state_leg_office("STATE SENATOR DISTRICT 7") == ("upper", "7", None)
+        assert common.parse_state_leg_office("REPRESENTATIVE TO THE ASSEMBLY DISTRICT 20") == ("lower", "20", None)
+
+    def test_the_congressional_seat_is_not_the_assembly(self):
+        assert common.parse_state_leg_office("REPRESENTATIVE IN CONGRESS DISTRICT 1") is None

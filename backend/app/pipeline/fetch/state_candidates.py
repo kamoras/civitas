@@ -1608,7 +1608,11 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # say about them this run: syncing an empty list would record the
         # state as checked and hold none, and the page would call that a
         # confirmed absence.
-        main_answered = records is not None
+        # An EMPTY answer is the same: adapters return [] for "results not
+        # settled yet" (the settle_days gate) and for a cycle whose primary
+        # has not been held, and neither read a single contest. A state
+        # that has really been read has federal nominees in the same feed.
+        main_answered = bool(records)
         records = records or []
 
         # Neither a statewide executive office (Governor, AG, ...) nor a
