@@ -26,8 +26,8 @@ Estimates:
     average sampling variance. The shrunk value is
     (rate*n_eff + mu*k) / (n_eff + k), and n_eff / (n_eff + k) is written
     as own_weight: how much of the figure is the member's own respondents.
-    The sampling noise subtracted from the observed spread is weighted the
-    same way that spread is (by n_eff). Both the raw rate and the shrunk one
+    tau^2 is the weighted random-effects method-of-moments estimate (see
+    priors()). Both the raw rate and the shrunk one
     are written, with mu and k, so any figure can be re-derived.
 
 Members are matched to the survey by the respondent's state, district
@@ -145,15 +145,21 @@ def priors(members: list[dict]) -> dict:
             continue
         total = sum(e["n_eff"] for e in ests)
         mu = sum(e["rate"] * e["n_eff"] for e in ests) / total
-        # The n_eff-weighted spread of observed rates around mu is, in
-        # expectation, tau^2 plus sampling noise of sum(n_i * mu(1-mu)/n_i)
-        # / sum(n_i) = mu(1-mu) * members / sum(n_eff). The noise term has to
-        # be weighted the same way as the spread it is taken from: an
-        # unweighted mean of mu(1-mu)/n_eff is larger whenever n_eff varies,
-        # and drove tau^2 below zero on genuinely varying cells.
-        observed = sum(e["n_eff"] * (e["rate"] - mu) ** 2 for e in ests) / total
-        sampling = mu * (1 - mu) * len(ests) / total
-        tau2 = observed - sampling
+        # Between-member variance tau^2 by the method of moments for an
+        # n_eff-weighted spread around an estimated mean (the weighted
+        # one-way random-effects ANOVA): with S = sum n_i (r_i - mu)^2,
+        # N = sum n_i and Q = sum n_i^2 / N,
+        #   E[S] = tau^2 (N - Q) + (m - 1)(mu(1-mu) - tau^2),
+        # since mu is estimated from the same m members and a member's own
+        # binomial variance p_i(1-p_i) averages mu(1-mu) - tau^2. Simpler
+        # noise terms (an unweighted mean of mu(1-mu)/n_i, or m mu(1-mu)/N)
+        # understate tau^2 and so overstate k; checked by simulation from
+        # Beta(mu, k) draws at each cell's real sample sizes.
+        m = len(ests)
+        S = sum(e["n_eff"] * (e["rate"] - mu) ** 2 for e in ests)
+        Q = sum(e["n_eff"] ** 2 for e in ests) / total
+        denom = total - Q - (m - 1)
+        tau2 = (S - (m - 1) * mu * (1 - mu)) / denom if denom > 0 else 0.0
         # No spread between members beyond sampling noise: the survey can't
         # tell one member's approval in this cell from another's, so the
         # cell is not measurable per member (k None). No cell of the 2024

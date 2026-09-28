@@ -686,8 +686,9 @@ export default function AboutPage() {
               actually differ. It is shown, not scored, until a second survey wave shows it is
               stable. The survey&apos;s size sets how sharp the House figures can be: a district has
               about a hundred respondents, so most House figures come mostly from what similar
-              members get (all but about half of Democrats&apos; ratings of Democratic members and a
-              third of their ratings of Republicans), and the profile marks every figure that does.
+              members get. Only Democrats&apos; ratings rest mostly on the district&apos;s own
+              respondents, for about three in five Democratic members and two in five Republican
+              ones, and the profile marks every figure that doesn&apos;t.
               Senators&apos; figures mostly rest on their own state&apos;s respondents (a median of
               672).
             </P>
