@@ -259,6 +259,8 @@ Three independent caching systems serve different purposes:
 
 The fingerprint check at pipeline start compares a SHA-256 of every analysis module's docstring-stripped AST to the hash stored in the last `PipelineRun`. If they differ, `AnalysisCache` and `LearnedClassification` are cleared so updated logic produces fresh results. `ApiCache` is never cleared by fingerprint — source data doesn't change when analysis code does.
 
+In front of all three, public read endpoints answer with an ETag hashed from the uncompressed response body, and a matching `If-None-Match` gets a 304 (`app/api/cache_headers.py`). The ETag middleware runs inside gzip, whose header carries a timestamp; hashed outside it, the same body got a new ETag every second.
+
 ---
 
 ## Data Pipeline: Design Rationale
