@@ -1343,6 +1343,14 @@ export default function AboutPage() {
               unrelated news stories, and four posts about them written by a language model before
               posts were changed to quote their sources word for word.
             </P>
+            <P>
+              The second, on 28 September 2026, withdrew 189 more of those model-written posts. Every
+              one of the 829 was checked against the articles its issue cites
+              (<code>backend/scripts/audit_bluesky_posts.py</code>), and these state a name, number or
+              official the articles never mention, or a sentence with no counterpart in them. 150
+              passed. 490 could not be checked, because at least one of their articles is from AP,
+              Politico or The Hill, which refuse automated reading; they remain up.
+            </P>
           </Section>
 
           <Section title="CONGRESS REPORTS" id="congress">
