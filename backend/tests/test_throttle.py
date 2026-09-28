@@ -373,7 +373,7 @@ def test_a_failed_commit_does_not_leave_the_connection_in_a_transaction(throttle
     # Reused mid-transaction, the connection's next BEGIN would fail and
     # the write lock it holds would stall every other worker.
     throttle.hit("b", "k", limit=10, period=60)
-    conn = throttle._conn()
+    conn, _lock = throttle._conn()
 
     class _CommitFails:
         def __init__(self, inner):
@@ -577,3 +577,32 @@ async def test_store_calls_do_not_queue_behind_the_default_executor():
     assert name.startswith("throttle") and time.monotonic() - start < 1
     release.set()
     await asyncio.gather(*busy)
+
+
+def test_use_path_never_closes_a_connection_mid_use(throttle_store):
+    """Closing a check_same_thread=False connection under another thread's
+    query can crash the interpreter: use_path waits for it instead."""
+    import threading
+    import time
+
+    started, finish = threading.Event(), threading.Event()
+    outcome = {}
+
+    def slow_user():
+        with throttle._Txn() as conn:
+            conn.execute("SELECT 1").fetchone()
+            started.set()
+            finish.wait(1)
+            outcome["still_open"] = conn.execute("SELECT 1").fetchone() == (1,)
+
+    worker = threading.Thread(target=slow_user)
+    worker.start()
+    started.wait()
+    closer = threading.Thread(target=throttle.use_path, args=(throttle_store,))
+    closer.start()
+    time.sleep(0.1)
+    assert closer.is_alive()  # waiting on the in-use connection
+    finish.set()
+    worker.join()
+    closer.join()
+    assert outcome["still_open"]

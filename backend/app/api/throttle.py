@@ -107,9 +107,13 @@ CREATE INDEX IF NOT EXISTS claims_expiry ON claims (expires_at);
 """
 
 _local = threading.local()
-# Every connection opened, so use_path can close them all — including those
-# of threads that won't come back to notice the path moved.
-_conns: list[sqlite3.Connection] = []
+# Every connection opened, with the lock its thread holds while using it, so
+# use_path can close them all — including those of threads that won't come
+# back to notice the path moved — but never one mid-use: a connection opened
+# with check_same_thread off and closed under another thread's query can
+# crash the interpreter (a CI run segfaulted at a test boundary, where the
+# test fixture calls use_path).
+_conns: list[tuple[sqlite3.Connection, threading.Lock]] = []
 _conns_lock = threading.Lock()
 _generation = 0  # bumped by use_path: every thread reconnects
 
@@ -126,9 +130,18 @@ def use_path(path: str) -> None:
         _path = path
         _generation += 1
         _salt_cache.clear()
-        for conn in _conns:
-            conn.close()
-        _conns.clear()
+        in_use = []
+        for conn, lock in _conns:
+            # One in use is left to its thread, which closes it when it
+            # next notices the new generation (_conn).
+            if lock.acquire(timeout=_BUSY_TIMEOUT_S):
+                try:
+                    conn.close()
+                finally:
+                    lock.release()
+            else:
+                in_use.append((conn, lock))
+        _conns[:] = in_use
 
 
 def _enable_wal(conn: sqlite3.Connection) -> None:
@@ -148,9 +161,13 @@ def _enable_wal(conn: sqlite3.Connection) -> None:
         time.sleep(0.01)
 
 
-def _conn() -> sqlite3.Connection:
+def _conn() -> tuple[sqlite3.Connection, threading.Lock]:
+    """This thread's connection and the lock to hold while using it."""
     conn = getattr(_local, "conn", None)
-    if conn is None or _local.generation != _generation:
+    if conn is not None and _local.generation != _generation:
+        _discard(conn)  # outdated: use_path left it to us (it was in use)
+        conn = None
+    if conn is None:
         # check_same_thread off only so use_path can close it; each
         # connection is still used by the one thread that opened it.
         conn = sqlite3.connect(_path, timeout=_BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False)
@@ -167,18 +184,18 @@ def _conn() -> sqlite3.Connection:
             # setup under contention would leave one open.
             conn.close()
             raise
+        lock = threading.Lock()
         with _conns_lock:
-            _conns.append(conn)
-        _local.conn, _local.generation = conn, _generation
-    return conn
+            _conns.append((conn, lock))
+        _local.conn, _local.lock, _local.generation = conn, lock, _generation
+    return conn, _local.lock
 
 
 def _discard(conn: sqlite3.Connection) -> None:
     """Close a connection that can't be trusted any more, and forget it, so
     this thread's next call opens a fresh one."""
     with _conns_lock:
-        if conn in _conns:
-            _conns.remove(conn)
+        _conns[:] = [(c, lock) for c, lock in _conns if c is not conn]
     try:
         conn.close()
     except sqlite3.Error:
@@ -196,8 +213,13 @@ class _Txn:
     and every other worker would wait on the lock it holds."""
 
     def __enter__(self) -> sqlite3.Connection:
-        self.conn = _conn()
-        self.conn.execute("BEGIN IMMEDIATE")
+        self.conn, self.lock = _conn()
+        self.lock.acquire()
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+        except BaseException:
+            self.lock.release()
+            raise
         return self.conn
 
     def __exit__(self, exc_type, *_exc) -> None:
@@ -210,9 +232,14 @@ class _Txn:
             except sqlite3.Error:
                 pass
             if self.conn.in_transaction:
+                self.lock.release()
                 _discard(self.conn)
+                self.lock = None
             if exc_type is None:
                 raise
+        finally:
+            if self.lock is not None:
+                self.lock.release()
 
 
 @dataclass(frozen=True)
@@ -332,7 +359,9 @@ def _truncate_wal() -> None:
     forget_stale_salt tick tries again."""
     global _truncate_pending
     try:
-        busy = _conn().execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+        conn, lock = _conn()
+        with lock:
+            busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
     except sqlite3.Error:
         busy = 1
         logger.warning("Could not truncate the throttle store's WAL", exc_info=True)
