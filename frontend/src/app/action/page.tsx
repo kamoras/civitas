@@ -224,7 +224,7 @@ function HeroIssue({
       {issue.facts.length > 0 && (
         <div className="mb-6">
           <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-            Key facts
+            Media coverage
           </h3>
           <ol className="space-y-2">
             {issue.facts.map((fact, i) => (
@@ -361,7 +361,7 @@ function SecondaryIssue({
           {issue.facts.length > 0 && (
             <div>
               <h4 className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-                Key facts
+                Media coverage
               </h4>
               <ol className="space-y-1.5">
                 {issue.facts.map((fact, i) => (
@@ -371,6 +371,11 @@ function SecondaryIssue({
                     </span>
                     <span className="font-display text-[15px] leading-relaxed text-ink">
                       {fact}
+                      {issue.factSources?.[i] && (
+                        <span className="ml-2 font-mono text-xs text-ink-min">
+                          {issue.factSources[i]}
+                        </span>
+                      )}
                       {isNewFact(issue.newFacts, fact) && <NewFactTag />}
                     </span>
                   </li>
