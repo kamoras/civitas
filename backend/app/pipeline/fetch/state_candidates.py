@@ -39,8 +39,12 @@ list is left exactly as it was for that race, which is always at least as
 accurate as before this sync ran, never worse.
 """
 
+import hashlib
 import logging
 import re
+import sys
+from contextvars import ContextVar
+from datetime import datetime, timedelta
 import unicodedata
 
 import httpx
@@ -54,12 +58,16 @@ from app.models import (
     StateLegNominee,
     StatewideNominee,
 )
+from app.atomic_write import NotSaved
 from app.time_utils import utcnow
-from app.pipeline.cache import api_cache_set
+from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch import state_candidate_sources
 from app.pipeline.fetch.state_candidate_sources import (
     _load as _sources_file,
     configured_states,
     discovered_states,
+    filings_for_state,
+    forget_results_source,
     save_discovered,
     source_for_state,
     states_with_filings,
@@ -75,6 +83,7 @@ from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
     PARTY_CODE_MAP,
+    fec_party,
     ballot_basis_key,
     clean_display_name,
     JUDICIAL_COURT_LABELS,
@@ -211,6 +220,19 @@ _NOT_A_NAME = frozenset({
 })
 
 
+def _without_trailing_suffix(name: str) -> str:
+    """"John A. Olszewski, Jr." without its ", Jr.": a comma before a
+    generational suffix is not the "Last, First" comma, and read as one it
+    left the name with no given name at all. Only after more than one word:
+    "LEE, JR." is a surname and its suffix, and stripped it would read its
+    surname as a given name."""
+    name = name.strip()
+    suffix = _SUFFIX_AFTER_COMMA_RE.search(name)
+    if suffix and len(name[: suffix.start()].split()) > 1:
+        return name[: suffix.start()]
+    return name
+
+
 def _given_names(name: str) -> list[str]:
     """The given-name tokens, folded, with honorifics and initials dropped.
 
@@ -219,6 +241,7 @@ def _given_names(name: str) -> list[str]:
     J. Jr." or "Daniel J. Sullivan Jr.". Taking the tokens AFTER any comma
     handles the first two; for the third the leading token already is the
     given name."""
+    name = _without_trailing_suffix(name)
     tail = name.split(",", 1)[1] if "," in name else name
     words = ("".join(ch for ch in token if ch.isalpha()) for token in _fold(tail).replace(".", " ").split())
     return [w for w in words if len(w) > 1 and w not in _NOT_A_NAME]
@@ -256,28 +279,31 @@ def _one_transposition_or_typo(a: str, b: str) -> bool:
 
 def _surname_fallbacks(
     candidates: list[Candidate], target: str, display_name: str | None,
+    keep=lambda found: found,
 ) -> list[Candidate]:
     """Candidates a state's surname reaches only indirectly. Each rule runs
-    only when the one before found nobody, and each still has to come out
-    UNIQUE in the race (the caller refuses anything ambiguous)."""
+    only when the one before found nobody — `keep` decides what "found"
+    means for a rule's result (the caller's plausibility test) — and each
+    still has to come out UNIQUE in the race (the caller refuses anything
+    ambiguous)."""
     # A MULTI-WORD surname survives on the FEC side ("WASSERMAN SCHULTZ,
     # DEBBIE") but not on the state's, because a state publishes a display
     # name and the trailing token is all that can be taken from "Debbie
     # Wasserman Schultz" without guessing where the surname begins.
-    found = [c for c in candidates if _candidate_surname(c.name).split()[-1:] == [target]]
+    found = keep([c for c in candidates if _candidate_surname(c.name).split()[-1:] == [target]])
     if found:
         return found
     # The mirror: the state prints the whole surname and FEC files only its
     # last word — Maryland's "McClain Delaney" is FEC's "DELANEY, APRIL
     # MCCLAIN" (MD-6, 2026).
     if len(target.split()) > 1:
-        found = [c for c in candidates if _candidate_surname(c.name) == target.split()[-1]]
+        found = keep([c for c in candidates if _candidate_surname(c.name) == target.split()[-1]])
         if found:
             return found
     # A married or former surname filed as a given name: the ballot says
     # "Ashley Hinson" and FEC has "ARENHOLZ, ASHLEY HINSON" (IA Senate,
     # 2026 — the Republican nominee, unmatched without this).
-    found = [c for c in candidates if _given_names(c.name)[-1:] == [target]]
+    found = keep([c for c in candidates if _given_names(c.name)[-1:] == [target]])
     if found:
         return found
     # A one-letter slip on either side, only with the given name agreeing
@@ -286,29 +312,126 @@ def _surname_fallbacks(
     # from "Lee" is too many real names.
     wanted = _first_name_key(display_name or "")
     if wanted and len(target) >= 5:
-        return [
+        return keep([
             c for c in candidates
             if _first_name_key(c.name) == wanted
             and _one_transposition_or_typo(_candidate_surname(c.name), target)
-        ]
+        ])
     return []
+
+
+_KNOWN_PARTIES = frozenset(PARTY_CODE_MAP.values())
+
+
+def _record_given(display_name: str | None, last_name: str) -> tuple[list[str], str]:
+    """(every full given name, leading initial if it leads with one) a
+    record's display name states — its surname's words, honorifics and
+    suffixes set aside, so "J. Smith" states only the initial "j", "Mary
+    Anne Smith" both "mary" and "anne", and "Smith", "Smith Jr." and "Dr.
+    Smith" state nothing."""
+    display = _without_trailing_suffix(display_name or "")
+    if "," in display:
+        words = _fold(display.split(",", 1)[1]).replace(".", " ").split()
+    else:
+        surname = set(_fold(last_name or "").replace(".", " ").split())
+        words = [w for w in _fold(display).replace(".", " ").split() if w not in surname]
+    words = ["".join(ch for ch in w if ch.isalpha()) for w in words]
+    words = [w for w in words if w and w not in _NOT_A_NAME]
+    full = [w for w in words if len(w) > 1]
+    # The leading initial, only when the name really leads with one
+    # ("J. Robert Smith"): "John Smith" states "john", not just "j".
+    return full, (words[0] if words and len(words[0]) == 1 else "")
+
+
+def _contradicts(
+    cand: Candidate, party_code: str, display_name: str | None, last_name: str = "",
+) -> bool:
+    """Whether a same-surname candidate is plainly someone else: a
+    different party AND a given name that fits none of theirs. Either alone
+    is not enough — a party can be coded differently between sources, and
+    a nickname ("Jim" for JAMES) fits no FEC token — but both together is a
+    different person (Mary Smith, Libertarian, is not John Smith, DEM)."""
+    expected = PARTY_CODE_MAP.get(party_code)
+    theirs = fec_party(cand.party)
+    # Only a party both sides name (fec_party): a code the map doesn't know
+    # says nothing either way.
+    if not expected or theirs not in _KNOWN_PARTIES or theirs == expected:
+        return False
+    wanted, initial = _record_given(display_name, last_name)
+    theirs_initial = _given_initial(cand.name or "")
+    if initial and initial == theirs_initial:
+        # Their first initial is the record's own ("J. Robert Smith" and
+        # JAMES, or J): that fits, whatever the middle name.
+        return False
+    if wanted:
+        if theirs_initial and _leads_with_initial(cand.name or "") and theirs_initial == wanted[0][0]:
+            # The mirror: FEC's own leading initial ("SMITH, J ROBERT") is
+            # the record's first given name's ("John Smith").
+            return False
+        tokens = _given_names(cand.name or "")
+        if tokens:
+            # The record's first given name against any of theirs (a short
+            # form either way), or FEC's first given name EXACTLY among the
+            # record's later ones: "Maria Elvira Salazar" is FEC's
+            # "SALAZAR, ELVIRA" and "Mary Anne Smith" is "SMITH, ANNE". Not
+            # any name against any: a shared middle name ("John Lee" and
+            # "MARY LEE") or a later prefix ("Mary Jo" and "JOHN") is not
+            # the same person.
+            first = wanted[0]
+            return not (
+                any(t == first or t.startswith(first) or first.startswith(t) for t in tokens)
+                or tokens[0] in wanted[1:]
+            )
+        return bool(theirs_initial) and theirs_initial != wanted[0][0]
+    if initial:  # an initial alone ("J. Smith") against theirs
+        return bool(theirs_initial) and theirs_initial != initial
+    return False  # no given name stated: nothing to contradict with
 
 
 def _match_candidate(
     candidates: list[Candidate], last_name: str, party_code: str,
     display_name: str | None = None,
 ) -> Candidate | None:
+    """The one candidate `last_name` (with party and display name to break
+    ties) names in `candidates`, or None. Whatever path chose it, a match
+    that is plainly someone else — another party AND another given name
+    (_contradicts) — is refused."""
+    match = _match_by_surname(candidates, last_name, party_code, display_name)
+    return None if match is not None and _contradicts(match, party_code, display_name, last_name) else match
+
+
+def _match_by_surname(
+    candidates: list[Candidate], last_name: str, party_code: str,
+    display_name: str | None = None,
+) -> Candidate | None:
     target = _candidate_surname(last_name)
-    matches = [c for c in candidates if _candidate_surname(c.name) == target]
+
+    def plausible(tier: list[Candidate]) -> list[Candidate]:
+        # A tier whose every candidate is plainly someone else (_contradicts)
+        # says nothing, and the next rule is tried: John Hinson, Libertarian,
+        # on the exact surname must not hide Ashley Hinson filed under her
+        # married name. A tier with anyone plausible is judged whole, as
+        # before — dropping only the implausible could turn an ambiguous
+        # pair into a false unique match.
+        return [] if tier and all(_contradicts(c, party_code, display_name, last_name) for c in tier) else tier
+
+    exact = [c for c in candidates if _candidate_surname(c.name) == target]
+    matches = plausible(exact)
     if not matches:
-        matches = _surname_fallbacks(candidates, target, display_name)
+        # Each fallback rule is judged the same way, over everyone but the
+        # exact-surname people just refused (the rule that reads a
+        # surname's last word would otherwise find John Hinson again).
+        refused = {id(c) for c in exact}
+        matches = _surname_fallbacks(
+            [c for c in candidates if id(c) not in refused], target, display_name, keep=plausible,
+        )
     if len(matches) == 1:
         return matches[0]
     if not matches:
         return None
 
     expected_party = PARTY_CODE_MAP.get(party_code)
-    pool = [c for c in matches if c.party == expected_party] or matches
+    pool = [c for c in matches if fec_party(c.party) == expected_party] or matches
     if len(pool) == 1:
         return pool[0]
     # Two candidates sharing a surname AND a party. A given name separates
@@ -329,7 +452,7 @@ def _match_candidate(
     # nominee unconfirmed. Same surname, given name and party inside one
     # race is the same person; confirm the record that raised money, and
     # the other drops off the page with every other unconfirmed filer.
-    if len({(_first_name_key(c.name), c.party) for c in pool}) == 1 and _first_name_key(pool[0].name):
+    if len({(_first_name_key(c.name), fec_party(c.party)) for c in pool}) == 1 and _first_name_key(pool[0].name):
         return max(pool, key=lambda c: (bool(c.has_raised_funds), c.contributions or 0, c.id))
     return None
 
@@ -370,7 +493,20 @@ def _fec_style_name(display_name: str, last_name: str) -> str:
     return display_name.upper()
 
 
-def _keep_ballot_only(db: Session, race: Race, record: dict) -> str | None:
+def _ballot_party(record: dict) -> str:
+    """The party a ballot-only row for `record` is stored under. A party
+    the matcher has no code for (South Carolina's Workers, say) keeps the
+    state's own label rather than reading as "unknown"."""
+    return (
+        PARTY_CODE_MAP.get(record.get("party") or "")
+        or (record.get("party_label") or "").strip().upper()
+        or "UNK"
+    )
+
+
+def _keep_ballot_only(
+    db: Session, race: Race, record: dict, claimed: set[str] = frozenset(),
+) -> str | None:
     """Record a state-listed candidate who has no FEC row, and return the
     row's id — or None when the record is not safe to show as a person.
 
@@ -385,16 +521,17 @@ def _keep_ballot_only(db: Session, race: Race, record: dict) -> str | None:
     cid = f"{BALLOT_ONLY_ID_PREFIX}{race.id}:{slug}"
     cand = db.query(Candidate).filter(Candidate.id == cid).first()
     if cand is None:
+        # The same person another source spelled differently ("Jane Q. Doe"
+        # and "Jane Doe") keeps one row; minting a second showed them twice
+        # wherever nothing prunes (_may_prune).
+        cand = _placeholder_for(db, race, record, claimed=claimed)
+        if cand is not None:
+            cid = cand.id
+    if cand is None:
         cand = Candidate(id=cid, race_id=race.id)
         db.add(cand)
     cand.name = _fec_style_name(display, record["last_name"])
-    # A party the matcher has no code for (South Carolina's Workers, say)
-    # keeps the state's own label rather than reading as "unknown".
-    cand.party = (
-        PARTY_CODE_MAP.get(record.get("party") or "")
-        or (record.get("party_label") or "").strip().upper()
-        or "UNK"
-    )
+    cand.party = _ballot_party(record)
     cand.has_raised_funds = False
     cand.incumbent_challenge = None
     cand.candidate_status = None
@@ -403,15 +540,29 @@ def _keep_ballot_only(db: Session, race: Race, record: dict) -> str | None:
     return cid
 
 
-def _has_general_filings(source: dict) -> bool:
-    """Whether this state has a filing list, whose general-election rows
-    then speak for its November ballot (North Carolina's do)."""
-    return bool(source.get("filings"))
+def _has_general_filings(state: str) -> bool:
+    """Whether this state's filing list speaks for its November ballot
+    (North Carolina's does) — its general rows, not the results pass,
+    deciding who is listed. For a hand-verified state only a list in its
+    own entry does: one the crawler found is unverified, and must not take
+    that authority from a certified ballot (TX, LA, ...) — its general rows
+    aren't applied at all (_filings_speak_for_november)."""
+    return bool(filings_for_state(state)) and _filings_speak_for_november(state)
+
+
+def _filings_speak_for_november(state: str) -> bool:
+    """Whether `state`'s filing list's general rows are applied. A
+    hand-verified state's are only if the list is its own; a crawler-found
+    list there contributes its primary rows alone. (Before, such a list was
+    not read at all.)"""
+    hand = (_sources_file().get("states") or {}).get(state.upper())
+    return not hand or bool(hand.get("filings"))
 
 
 def _apply_ballot(
     db: Session, cycle: int, state: str, records: list[dict],
     *, keep_unlisted: bool, authoritative: bool, scope: set[str] | None = None,
+    prune: bool = True,
 ) -> dict:
     """Confirm a state's federal records against its races.
 
@@ -419,7 +570,10 @@ def _apply_ballot(
     person on the ballot — show them (ballot-only row) rather than drop
     them. `authoritative`: these records ARE the certified November
     ballot, so anyone confirmed in a race they cover but not on them is
-    unconfirmed (_unconfirm_off_ballot)."""
+    unconfirmed (_unconfirm_off_ballot). `prune`: whether ballot-only rows
+    these records don't list are dropped — not when a weaker source is
+    answering for a state whose certified ballot listed them
+    (_may_prune)."""
     confirmed = unmatched = 0
     ballot_only: set[str] = set()
     listed: dict[str, set[str]] = {}
@@ -434,7 +588,7 @@ def _apply_ballot(
             _fec_candidates(race), record["last_name"], record["party"], record.get("display_name"),
         )
         if match is None:
-            kept = _keep_ballot_only(db, race, record) if keep_unlisted else None
+            kept = _keep_ballot_only(db, race, record, ballot_only) if keep_unlisted else None
             if kept:
                 ballot_only.add(kept)
                 continue
@@ -448,9 +602,10 @@ def _apply_ballot(
             match.confirmed_general = True
             db.commit()
         _note_ballot_name(db, match, record)
+        _drop_replaced_placeholder(db, race, record, match, ballot_only)
         listed[race.id].add(match.id)
         confirmed += 1
-    if keep_unlisted:
+    if keep_unlisted and prune:
         _prune_ballot_only(db, cycle, state, ballot_only, scope)
     withdrawn = _unconfirm_off_ballot(db, listed) if authoritative else 0
     return {
@@ -506,6 +661,120 @@ def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
     return changed
 
 
+def _given_initial(name: str) -> str:
+    """The first letter of an FEC-style name's given half, initials
+    included ("SMITH, T.J." gives "t"), honorifics skipped; "" for a name
+    with no given half."""
+    if "," not in name:
+        return ""
+    for token in _fold(name.split(",", 1)[1]).replace(".", " ").split():
+        word = "".join(ch for ch in token if ch.isalpha())
+        if word and word not in _NOT_A_NAME:
+            return word[0]
+    return ""
+
+
+def _leads_with_initial(name: str) -> bool:
+    """Whether an FEC-style name's given half leads with a bare initial
+    ("SMITH, J ROBERT", "SMITH, T.J."), honorifics skipped."""
+    if "," not in name:
+        return False
+    for token in _fold(name.split(",", 1)[1]).replace(".", " ").split():
+        word = "".join(ch for ch in token if ch.isalpha())
+        if word and word not in _NOT_A_NAME:
+            return len(word) == 1
+    return False
+
+
+def _same_given_name(a: str, b: str) -> bool:
+    """Whether two FEC-style names' given names can be the same person's:
+    equal, one a short form of the other ("DAN" / "DANIEL"), or — where
+    either side prints only initials ("T.J.") — the same first letter.
+    Mary and John never are; a name with no given half matches nothing."""
+    if "," not in a or "," not in b:
+        return False
+    ka, kb = _first_name_key(a), _first_name_key(b)
+    if ka and kb:
+        return ka == kb or ka.startswith(kb) or kb.startswith(ka)
+    ia, ib = _given_initial(a), _given_initial(b)
+    return bool(ia) and ia == ib
+
+
+def _surnames_agree(a: str, b: str) -> bool:
+    """Whether two folded surnames can be one person's: equal, or one the
+    last word of the other — the multi-word equivalence the matcher's first
+    two fallbacks accept ("LEGER FERNANDEZ, TERESA" printed by one source,
+    "Teresa Leger Fernandez", surname "Fernandez", by another)."""
+    return bool(a) and (a == b or a.split()[-1:] == [b] or b.split()[-1:] == [a])
+
+
+def _placeholder_for(
+    db: Session, race: Race, record: dict, *,
+    reference: str | None = None, claimed: set[str] = frozenset(),
+) -> Candidate | None:
+    """This race's ballot-only row for the same PERSON as `record`: same
+    party (_ballot_party), same surname (_surnames_agree), and a given name
+    compatible (_same_given_name) with `reference` — the FEC row the record matched, when dropping — or
+    with the record's own. Only a UNIQUE such row, the record's exact given
+    name breaking a tie, and never one this pass already `claimed` for
+    someone (Chris and Christine Smith both on one list). Nothing looser: a
+    surname and party alone would take Mary Smith's row for John's."""
+    display = (record.get("display_name") or "").strip()
+    if not display:
+        return None
+    # The party the row was stored under (_ballot_party), so an unaffiliated
+    # or third-party candidate's row is found as well as a Democrat's.
+    party = _ballot_party(record)
+    wanted = _fec_style_name(display, record["last_name"])
+    surname = _candidate_surname(wanted)
+    rows = [
+        c for c in db.query(Candidate)
+        .filter(Candidate.race_id == race.id, Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX))
+        .all()
+        if c.id not in claimed and c.party == party
+        and _surnames_agree(_candidate_surname(c.name or ""), surname)
+        and (
+            _same_given_name(c.name or "", wanted)
+            # The FEC row's name too — another source may have spelled the
+            # placeholder "Daniel" for tonight's "Dan" — but only a full
+            # given name: "SMITH, J" would fit Jane's row as well as John's.
+            or (reference and _first_name_key(reference) and _same_given_name(c.name or "", reference))
+        )
+    ]
+    if len(rows) > 1:
+        key = _first_name_key(wanted)
+        rows = [c for c in rows if key and _first_name_key(c.name or "") == key]
+    return rows[0] if len(rows) == 1 else None
+
+
+def _drop_replaced_placeholder(
+    db: Session, race: Race, record: dict, match: Candidate, keep: set[str] = frozenset(),
+) -> None:
+    """A record that now matches an FEC candidate replaces this race's
+    ballot-only row for the same person (they filed since). Part of
+    _prune_ballot_only's job, but not a judgement about who is on the
+    ballot, so it runs whatever source is answering — else the person is
+    shown twice while a weaker source answers. A row this pass itself kept
+    (`keep`) is someone else's, by construction."""
+    same = _placeholder_for(db, race, record, reference=match.name, claimed=keep)
+    if same is not None:
+        db.delete(same)
+        db.commit()
+        logger.info("%s: dropped ballot-only %s, now an FEC candidate", race.id, same.id)
+
+
+def _may_prune(configured: dict, answering: dict) -> bool:
+    """Whether tonight's answering source may drop ballot-only rows. Only a
+    source as authoritative as the state's configured one: a state with a
+    certified ballot (general_ballot_complete, or a general_list) had its
+    third-party and independent candidates listed by it, and a primary-
+    results file answering while it is down — a fallback, the crawler's
+    spare, the results beside a general_list — cannot list them, so its
+    silence says nothing about them."""
+    certified = bool(configured.get("general_ballot_complete") or configured.get("general_list"))
+    return not certified or bool(answering.get("general_ballot_complete"))
+
+
 def _prune_ballot_only(
     db: Session, cycle: int, state: str, kept: set[str], scope: set[str] | None = None,
 ) -> None:
@@ -534,12 +803,47 @@ def _prune_ballot_only(
         logger.info("%s: removed %d ballot-only candidate(s) no longer listed", state, len(removed))
 
 
+# Each state's crawl record ("{cycle}-{ST}" in api_cache): when its last
+# crawl completed, and since when its discovered results source has been
+# failing. A state is crawled once it is _CRAWL_EVERY past its last
+# completed crawl, so one that errored is retried the next night rather
+# than waiting a week — and one that errors every time can't hold up the
+# states after it, which a single weekly sweep in a fixed order did.
+CRAWL_TIER = "source-crawl"
+_CRAWL_EVERY = timedelta(days=7)
+# The election run starts at a different time each night (it is last in the
+# nightly chain), so a week to the hour would often slip a state to the
+# eighth night.
+_CRAWL_SLACK = timedelta(hours=12)
+# A discovered source that fails on consecutive crawls this long apart is
+# gone; one failed fetch is as likely an outage as a move, and forgetting
+# on it left the state dark until a later crawl could re-prove it.
+_FORGET_AFTER = timedelta(days=14)
+_CRAWL_RECORD_TTL_HOURS = 24 * 400
+# How an adopted results source's description begins — what tells the
+# crawler's own find from anything else in the discovered file.
+_FOUND_AUTOMATICALLY = "Found automatically"
+
+
+def _crawl_record(db: Session, cycle: int, state: str) -> dict:
+    return api_cache_get(
+        db, CRAWL_TIER, f"{cycle}-{state}", max_age_hours=_CRAWL_RECORD_TTL_HOURS,
+    ) or {}
+
+
+def _crawl_due(record: dict, now: datetime) -> bool:
+    last = record.get("lastOk")
+    return not last or now - datetime.fromisoformat(last) >= _CRAWL_EVERY - _CRAWL_SLACK
+
+
 async def crawl_for_new_sources(
     db: Session, client: httpx.AsyncClient, cycle: int,
 ) -> dict:
     """Look for a usable results source in every state that doesn't have a
-    hand-verified one, and keep the ones that prove out. Returns per-state
-    outcomes for the run report.
+    hand-verified one, and keep the ones that prove out. Runs nightly, over
+    the states due (_CRAWL_EVERY); returns per-state outcomes for the run
+    report. A state whose crawl raised or couldn't save ("error", "save
+    failed") is retried the next night, and the failures are alerted.
 
     Adoption needs POSITIVE proof, because this is the one path that adds
     a state with nobody reading it first: a discovered source is kept only
@@ -557,94 +861,185 @@ async def crawl_for_new_sources(
     lost by waiting — a source adopted the week after certification is
     still months before the general.
     """
+    # What another process wrote since this one last read either file.
+    state_candidate_sources.invalidate_cache()
+    election_dates.invalidate_cache()
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
-    for state in sorted(ELECTION_DOMAINS):
-        hand = hand_verified.get(state)
-        # A hand-verified state is left alone while its source works. When
-        # it STOPS working — a state moves hosts between cycles, which is
-        # the whole reason locations aren't trusted to stay put — it gets
-        # crawled like any other, so a replacement can be found without
-        # anyone editing a URL. Its LAW still comes from the hand-written
-        # entry; only the location is rediscovered.
-        if hand:
-            strategy = STRATEGIES.get(hand.get("strategy"))
-            still_works = await strategy(client, cycle, state, hand) if strategy else None
-            if still_works is not None:
-                # A primary date moves once a cycle, so it is read on the
-                # weekly pass rather than nightly — off the same feed the
-                # state's results already come from, never a stored
-                # calendar anybody has to maintain.
-                await _refresh_dates(client, cycle, state, hand)
-                if not hand.get("filings"):
-                    outcomes[state] = await _adopt_filings(db, client, cycle, state, hand)
-                # google_civic is a national fallback for a state with no
-                # real per-district vendor at all — unlike every other
-                # hand-verified strategy, it must never shadow discovery
-                # the way a working per-state source rightly does, or
-                # this state's only path to a REAL vendor being found
-                # (Clarity, Enhanced Voting, ...) is permanently blocked
-                # for the rest of the cycle. Falls through to the same
-                # discover_source() probe an unregistered state gets — a
-                # find still can't auto-override the hand-verified civic
-                # entry (see save_discovered/source_for_state
-                # precedence), it just lands in the discovered-sources
-                # file, visible for a human to hand-promote.
-                if hand.get("strategy") != "google_civic":
-                    continue
-            else:
-                logger.warning(
-                    "Hand-verified source for %s is not fetching — looking for a "
-                    "replacement location", state,
-                )
-        rules = {
-            k: v for k, v in (hand or {}).items()
-            if k in ("runoff_threshold_pct", "advance_count")
-        }
-        try:
-            found = await discover_source(client, state, cycle, rules)
-        except Exception:
-            logger.exception("Source discovery raised for %s", state)
-            outcomes[state] = "error"
-            continue
-        if not found:
-            outcomes[state] = await _forget_if_broken(client, cycle, state)
-            # A state with no usable RESULTS source can still publish a
-            # filing list, and before its primary that is the only answer
-            # there is — so it is looked for either way.
-            if outcomes[state] in ("none", "forgotten"):
-                filings = await _adopt_filings(db, client, cycle, state, {})
-                if filings != "none":
-                    outcomes[state] = filings
-            continue
-
-        strategy = STRATEGIES.get(found.get("strategy"))
-        records = await strategy(client, cycle, state, found) if strategy else None
-        if records is None:
-            outcomes[state] = "unusable"
-            continue
-        matched = sum(
-            1 for record in records
-            if _confirmed_match(db, cycle, state, record) is not None
+    problems: list[str] = []
+    raised_token = _RAISED.set([])
+    try:
+        await _crawl_due_states(db, client, cycle, hand_verified, outcomes, problems)
+    finally:
+        # Reported even if the loop itself raised: what the states crawled
+        # before it found is not lost with it.
+        report_file_problems(
+            "Election source crawl failed for some states",
+            "These states' crawl raised or couldn't save (an \"error\" or \"save failed\" is "
+            "retried the next night; a raise inside a step was treated as not fetching).",
+            problems + (_RAISED.get() or []), "election-source-crawl",
         )
-        if not matched:
-            logger.info(
-                "Not adopting a source for %s: it names %d nominee(s), %d of whom are "
-                "candidates on file for those races — %s",
-                state, len(records), matched, found.get("_evidence"),
-            )
-            outcomes[state] = "unproven" if not records else "rejected"
-            continue
-        save_discovered(state, {k: v for k, v in found.items() if not k.startswith("_")}
-                        | {"source_name": found.get("_evidence", "discovered"),
-                           "description": f"Found automatically on {utcnow().date().isoformat()}: "
-                                          f"{found.get('_evidence')}. Nomination rules are NOT "
-                                          f"inferred — a state needing a runoff threshold, a "
-                                          f"convention rule or top-two counting still needs a "
-                                          f"hand-verified entry, which overrides this one."})
-        outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
-        logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
+        _RAISED.reset(raised_token)
     return outcomes
+
+
+async def _crawl_due_states(
+    db: Session, client: httpx.AsyncClient, cycle: int, hand_verified: dict,
+    outcomes: dict[str, str], problems: list[str],
+) -> None:
+    for state in sorted(ELECTION_DOMAINS):
+        now = utcnow()
+        record = _crawl_record(db, cycle, state)
+        if not _crawl_due(record, now):
+            continue
+        try:
+            outcome = await _crawl_state(db, client, cycle, state, hand_verified.get(state), record, now)
+        except NotSaved as error:
+            db.rollback()
+            logger.error("Source crawl for %s found something it couldn't save: %s", state, error)
+            outcome = "save failed"
+            problems.append(f"{state}: {error}")
+        except Exception as error:
+            db.rollback()
+            logger.exception("Source crawl raised for %s — retried next night", state)
+            outcome = "error"
+            problems.append(f"{state}: {type(error).__name__}: {error}")
+        else:
+            record["lastOk"] = now.isoformat()
+        outcomes[state] = outcome
+        api_cache_set(db, CRAWL_TIER, f"{cycle}-{state}", record,
+                      normal_ttl_hours=_CRAWL_RECORD_TTL_HOURS)
+        db.commit()
+
+
+async def _crawl_state(
+    db: Session, client: httpx.AsyncClient, cycle: int, state: str,
+    hand: dict | None, record: dict, now: datetime,
+) -> str:
+    """One state's crawl; its outcome. Raises what its steps raise
+    (NotSaved included) — the caller contains it to this state."""
+    # A hand-verified state is left alone while its source works. When
+    # it STOPS working — a state moves hosts between cycles, which is
+    # the whole reason locations aren't trusted to stay put — it gets
+    # crawled like any other, so a replacement can be found without
+    # anyone editing a URL. Its LAW still comes from the hand-written
+    # entry; only the location is rediscovered.
+    outcome = "none"
+    looked_for_filings = False
+    if hand:
+        # Logged, not reported: the nightly sync fetches this same source
+        # and reports its raise already.
+        still_works = await _fetch(client, cycle, state, hand, "Hand-verified source", report=False)
+        if still_works is not None:
+            # A primary date moves once a cycle, so it is read on the
+            # weekly pass rather than nightly — off the same feed the
+            # state's results already come from, never a stored
+            # calendar anybody has to maintain.
+            await _refresh_dates(client, cycle, state, hand)
+            if not hand.get("filings"):
+                outcome = await _adopt_filings(db, client, cycle, state, hand)
+                looked_for_filings = True
+            # google_civic is a national fallback for a state with no
+            # real per-district vendor at all — unlike every other
+            # hand-verified strategy, it must never shadow discovery
+            # the way a working per-state source rightly does, or
+            # this state's only path to a REAL vendor being found
+            # (Clarity, Enhanced Voting, ...) is permanently blocked
+            # for the rest of the cycle. Falls through to the same
+            # discover_source() probe an unregistered state gets — a
+            # find still can't auto-override the hand-verified civic
+            # entry (see save_discovered/source_for_state
+            # precedence), it just lands in the discovered-sources
+            # file, visible for a human to hand-promote.
+            if hand.get("strategy") != "google_civic":
+                return outcome
+        else:
+            logger.warning(
+                "Hand-verified source for %s is not fetching — looking for a "
+                "replacement location", state,
+            )
+    rules = {
+        k: v for k, v in (hand or {}).items()
+        if k in ("runoff_threshold_pct", "advance_count")
+    }
+    earlier = outcome
+    outcome = await _crawl_results_source(db, client, cycle, state, rules, record, now)
+    if earlier != "none":  # what this state's filing-list pass already found
+        outcome = f"{outcome}; {earlier}" if outcome not in ("none", "kept") else earlier
+    # Every state is looked for a filing list, whatever became of its
+    # results source: the list's general rows are the only way to see a
+    # third-party or independent candidate, and a stored list is re-found
+    # each week, so one that moves is followed.
+    if not looked_for_filings:
+        filings = await _adopt_filings(db, client, cycle, state, hand or {})
+        if filings != "none":
+            outcome = filings if outcome in ("none", "kept", "filings only") else f"{outcome}; {filings}"
+    return outcome
+
+
+async def _crawl_results_source(
+    db: Session, client: httpx.AsyncClient, cycle: int, state: str,
+    rules: dict, record: dict, now: datetime,
+) -> str:
+    """Find, prove and keep (or retire) a state's RESULTS source; the
+    outcome."""
+    try:
+        found = await discover_source(client, state, cycle, rules)
+    except Exception:
+        # Portals' JSON has shapes nobody checked; a raise here must not
+        # keep the state from its forget check and filing-list search.
+        _note_raise(state, "Source discovery")
+        found = None
+    if not found:
+        return await _forget_if_broken(client, cycle, state, record, now)
+
+    records = await _fetch(client, cycle, state, found, "Discovered candidate source")
+    if records is None:
+        return "unusable"
+    matched = sum(
+        1 for record_ in records
+        if _confirmed_match(db, cycle, state, record_) is not None
+    )
+    if not matched:
+        logger.info(
+            "Not adopting a source for %s: it names %d nominee(s), %d of whom are "
+            "candidates on file for those races — %s",
+            state, len(records), matched, found.get("_evidence"),
+        )
+        return "unproven" if not records else "rejected"
+    # The state's filing list, if one was proved, is its own finding and
+    # stays with it.
+    kept = {k: v for k, v in (_discovered_source(state) or {}).items() if k == "filings"}
+    save_discovered(state, kept | {k: v for k, v in found.items() if not k.startswith("_")}
+                    | {"source_name": found.get("_evidence", "discovered"),
+                       "description": f"{_FOUND_AUTOMATICALLY} on {now.date().isoformat()}: "
+                                      f"{found.get('_evidence')}. Nomination rules are NOT "
+                                      f"inferred — a state needing a runoff threshold, a "
+                                      f"convention rule or top-two counting still needs a "
+                                      f"hand-verified entry, which overrides this one."})
+    record.pop("failingSince", None)
+    logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
+    return f"adopted ({matched}/{len(records)} matched)"
+
+
+def report_file_problems(subject: str, lead: str, problems: list[str], key: str) -> None:
+    """One ops alert (once a day per `key`) for failures a pass contained
+    rather than raised — so a state that went dark, or a change that was
+    never written, reaches someone instead of only the log."""
+    if not problems:
+        return
+    try:
+        from app.ops_alerts import send_ops_alert
+        # Once a day per set of failing states, not per day: the first
+        # alert of a day must not silence a different failure later in it.
+        failing = sorted({p.split(":", 1)[0] for p in problems})
+        digest = hashlib.sha1("|".join(failing).encode()).hexdigest()[:12]
+        send_ops_alert(
+            subject, lead + "\n" + "\n".join(problems),
+            dedupe_key=f"{key}-{utcnow().date().isoformat()}-{digest}",
+        )
+    except Exception:
+        logger.exception("Could not send the %s ops alert", key)
 
 
 async def _adopt_filings(
@@ -656,7 +1051,7 @@ async def _adopt_filings(
     try:
         filings = await discover_filings(client, state, cycle)
     except Exception:
-        logger.exception("Filing-list discovery raised for %s", state)
+        _note_raise(state, "Filing-list discovery")
         return "none"
     if not filings:
         return "none"
@@ -664,7 +1059,17 @@ async def _adopt_filings(
     candidate_source = {**base, "filings": {
         k: v for k, v in filings.items() if not k.startswith("_")
     }}
-    found = await fetch_ballot_candidates(client, cycle, state, candidate_source)
+    try:
+        found = await fetch_ballot_candidates(client, cycle, state, candidate_source)
+    except Exception:
+        # The list discovery validated can differ from the file this reads
+        # (a generalised link pattern), and a parse can raise on it. The
+        # list already on file is read (and reported) by the nightly sync.
+        if candidate_source["filings"] == filings_for_state(state):
+            logger.exception("Filing-list read raised for %s", state)
+        else:
+            _note_raise(state, "Filing-list read")
+        return "none"
     if not found:
         return "none"
     records = found["primary"] + found["general"]
@@ -678,7 +1083,18 @@ async def _adopt_filings(
         )
         return "filings rejected"
 
-    stored = dict(_discovered_source(state) or base or {})
+    # Only what was found here goes in the discovered file: for a
+    # hand-verified state, a copy of its entry would shadow later edits to
+    # it and serve as a stale "spare" source (sync_confirmed_candidates).
+    # An earlier version stored exactly such a copy; one is dropped as it
+    # is rewritten. A results source the crawler itself found and adopted
+    # (a replacement for a broken hand-verified one, which carries the
+    # hand entry's rules) says so in its description, and is kept whole.
+    existing = _discovered_source(state) or {}
+    if str(existing.get("description") or "").startswith(_FOUND_AUTOMATICALLY):
+        stored = dict(existing)
+    else:
+        stored = {}
     stored["filings"] = candidate_source["filings"]
     stored.setdefault("source_name", filings["_evidence"])
     save_discovered(state, stored)
@@ -697,14 +1113,57 @@ async def _refresh_dates(
     try:
         dates = await election_dates.discover_dates(client, cycle, state, source)
     except Exception:
-        logger.exception("Election-date read raised for %s", state)
+        _note_raise(state, "Election-date read")
         return
     if dates:
         election_dates.save(state, cycle, dates)
 
 
-async def _no_strategy(*_args, **_kwargs) -> None:
-    return None
+# The raises a pass contained, collected for its alert (_note_raise). A
+# contained raise is treated like a source that returned nothing — but a
+# programming error in an adapter looks exactly like an outage in the data,
+# so each one is still reported, not only logged.
+_RAISED: ContextVar[list[str] | None] = ContextVar("election_source_raised", default=None)
+
+
+def _note_raise(state: str, what: str) -> None:
+    """Log the exception being handled, and add it to the running pass's
+    report. Call from an except block."""
+    logger.exception("%s raised for %s", what, state)
+    raised = _RAISED.get()
+    if raised is not None:
+        error = sys.exc_info()[1]
+        raised.append(f"{state}: {what} raised {type(error).__name__}: {error}")
+
+
+def _report_raises(subject: str, key: str, extra: list[str] | None = None) -> None:
+    report_file_problems(
+        subject,
+        "Contained and treated as not fetching; each is also in the log with its traceback.",
+        (_RAISED.get() or []) + (extra or []), key,
+    )
+
+
+async def _fetch(
+    client: httpx.AsyncClient, cycle: int, state: str, source: dict, what: str,
+    *, report: bool = True,
+) -> list[dict] | None:
+    """Run `source`'s strategy, a raise counted as not fetching (None) and
+    reported (_note_raise): one source that breaks by raising (a host
+    serving HTML where a spreadsheet was) must not end a pass over every
+    state, nor keep its own state out of the "not fetching" handling —
+    replacement, retirement — a source that returns nothing gets."""
+    strategy = STRATEGIES.get(source.get("strategy"))
+    if strategy is None:
+        return None
+    try:
+        return await strategy(client, cycle, state, source)
+    except Exception:
+        if report:
+            _note_raise(state, f"{what} fetch")
+        else:
+            logger.exception("%s fetch raised for %s", what, state)
+        return None
 
 
 def _discovered_source(state: str) -> dict | None:
@@ -715,28 +1174,47 @@ def _discovered_source(state: str) -> dict | None:
     return _load_discovered().get(state.upper())
 
 
-async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -> str:
-    """Drop a previously discovered source that has stopped working.
+async def _forget_if_broken(
+    client: httpx.AsyncClient, cycle: int, state: str, record: dict, now: datetime,
+) -> str:
+    """Drop a previously discovered results source that has stopped working.
 
     The other half of self-healing: finding a state's new location is only
-    useful if the dead one goes away. A source that still fetches is kept
-    even when this week's crawl didn't re-find it (a page can be down for
-    an hour), so only one that actually fails is forgotten — and the state
-    then falls back to showing every FEC filer, which is where it was
-    before anything was discovered.
+    useful if the dead one goes away. But a failed fetch is as likely an
+    outage as a move, so a source is forgotten only once it has failed on
+    crawls _FORGET_AFTER apart ("failing since ..." until then) — and only
+    its results source: a filing list the state also has was proved on its
+    own. The state then falls back to showing every FEC filer, which is
+    where it was before anything was discovered.
     """
     if state not in discovered_states():
         return "none"
-    source = source_for_state(state) or {}
-    strategy = STRATEGIES.get(source.get("strategy"))
-    records = await strategy(client, cycle, state, source) if strategy else None
+    source = _discovered_source(state) or {}
+    if STRATEGIES.get(source.get("strategy")) is None:
+        # A filing list alone — no results source to test. The caller looks
+        # for the filing list again, which keeps it current if it moves.
+        return "filings only"
+    # Logged, not reported: the nightly sync fetches this same source and
+    # reports its raise already.
+    records = await _fetch(client, cycle, state, source, "Discovered source", report=False)
     if records is not None:
+        record.pop("failingSince", None)
         return "kept"
+    since = record.get("failingSince")
+    if since is None or now - datetime.fromisoformat(since) < _FORGET_AFTER:
+        record.setdefault("failingSince", now.isoformat())
+        logger.warning(
+            "The discovered source for %s is not fetching (since %s) — kept until "
+            "it has failed for %s: %s",
+            state, record["failingSince"][:10], _FORGET_AFTER, source.get("source_name"),
+        )
+        return f"failing since {record['failingSince'][:10]}"
     logger.warning(
-        "Forgetting the discovered source for %s — it no longer fetches: %s",
-        state, source.get("source_name"),
+        "Forgetting the discovered source for %s — it has not fetched since %s: %s",
+        state, since[:10], source.get("source_name"),
     )
-    save_discovered(state, None)
+    forget_results_source(state)
+    record.pop("failingSince", None)
     return "forgotten"
 
 
@@ -753,7 +1231,7 @@ def _note_ballot_name(db: Session, cand: Candidate, record: dict) -> None:
     printed = clean_display_name(record.get("display_name") or "")
     if len(printed.split()) < 2:
         return
-    if "," in printed and not _SUFFIX_AFTER_COMMA_RE.search(printed):
+    if "," in _without_trailing_suffix(printed):
         return
     if cand.ballot_name != printed:
         cand.ballot_name = printed
@@ -1012,28 +1490,60 @@ def _sync_judicial_nominees(
 
 
 async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
+    """_sync_confirmed_candidates, with every source raise it contained
+    reported in one alert."""
+    token = _RAISED.set([])
+    try:
+        return await _sync_confirmed_candidates(db, client, cycle)
+    finally:
+        _report_raises("Election sources raised in the ballot sync", "election-sync-raised")
+        _RAISED.reset(token)
+
+
+async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
     """Confirm every registered state's general-election candidates
     against this cycle's Race/Candidate rows. Returns per-state counts —
     `confirmed` (candidates newly or already flagged), `unmatched`
     (records that couldn't be safely matched to one FEC candidate), and
     `status` (`ok` / `fetch_failed` / `not_configured`)."""
-    # Refresh the national calendar FIRST and every run, not just on the
-    # weekly crawl: a state whose results file is addressed by election
-    # date (Minnesota) can't be fetched at all without it, so leaving it
-    # to the weekly pass would leave that state dark until the next
-    # Sunday — and dark on a fresh deploy. Three calls.
+    # Refresh the national calendar FIRST and every run, not just on each
+    # state's weekly crawl: a state whose results file is addressed by
+    # election date (Minnesota) can't be fetched at all without it, so
+    # leaving it to the weekly pass would leave that state dark for up to
+    # a week — and dark on a fresh deploy. Three calls.
+    #
+    # One locked write for the whole calendar. Only a COMPLETE read may
+    # retract a Senate election or mark the calendar read: the roster
+    # takes "not listed" to mean no race, and deletes it.
+    state_candidate_sources.invalidate_cache()
+    election_dates.invalidate_cache()
+    problems: list[str] = []
     try:
-        calendar = await election_dates.fetch_fec_calendar(client, cycle)
-        for state, dates in calendar.items():
-            election_dates.save(state, cycle, dates)
+        calendar, complete = await election_dates.fetch_fec_calendar(client, cycle)
         if calendar:
-            election_dates.mark_calendar_read(cycle, utcnow().date().isoformat())
-    except Exception:
+            election_dates.save_calendar(
+                cycle, calendar, complete=complete, read_on=utcnow().date().isoformat(),
+            )
+        if not complete:
+            problems.append(
+                "the FEC election-date calendar read was incomplete, so no Senate "
+                "election was retracted and the calendar was not marked read"
+            )
+    except NotSaved as error:
+        problems.append(f"the FEC election-date calendar was not saved: {error}")
+    except Exception as error:
         logger.exception("FEC election-date calendar read failed")
+        problems.append(f"the FEC election-date calendar read raised: {error}")
+    report_file_problems(
+        "Election-date calendar not recorded",
+        "Senate races and primary dates rest on this calendar; the next sync retries.",
+        problems, "election-date-calendar",
+    )
 
     results: dict[str, dict] = {}
     for state in sorted(configured_states()):
         source = source_for_state(state)
+        configured = source or {}
         strategy = STRATEGIES.get(source["strategy"]) if source else None
         if strategy is None:
             logger.error(
@@ -1049,18 +1559,10 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         # from primary results only to be unconfirmed moments later.
         general = source.get("general_list")
         general_records = None
-        if general and STRATEGIES.get(general.get("strategy")):
-            try:
-                general_records = await STRATEGIES[general["strategy"]](client, cycle, state, general)
-            except Exception:
-                logger.exception("Certified general list fetch raised for %s", state)
-                general_records = None
+        if general:
+            general_records = await _fetch(client, cycle, state, general, "Certified general list")
 
-        try:
-            records = await strategy(client, cycle, state, source)
-        except Exception:
-            logger.exception("Confirmed-candidate fetch raised for %s", state)
-            records = None
+        records = await _fetch(client, cycle, state, source, "Confirmed-candidate")
 
         fallback = source.get("fallback")
         if records is None and fallback and STRATEGIES.get(fallback.get("strategy")):
@@ -1068,11 +1570,7 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             # canvass file name changes between cycles, and until the new
             # one is known its national fallback still says something.
             logger.info("Falling back to %s for %s", fallback["strategy"], state)
-            try:
-                records = await STRATEGIES[fallback["strategy"]](client, cycle, state, fallback)
-            except Exception:
-                logger.exception("Fallback fetch raised for %s", state)
-                records = None
+            records = await _fetch(client, cycle, state, fallback, "Fallback")
             if records is not None:
                 source = fallback
         if records is None:
@@ -1082,9 +1580,11 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             spare = _discovered_source(state)
             if spare and spare != source:
                 logger.info("Falling back to the discovered source for %s", state)
-                records = await STRATEGIES.get(spare.get("strategy"), _no_strategy)(
-                    client, cycle, state, spare,
-                )
+                records = await _fetch(client, cycle, state, spare, "Discovered spare source")
+                if records is not None:
+                    # Its records are the spare's: never the broken entry's
+                    # authority (general_ballot_complete) or attribution.
+                    source = spare
         if records is None and general_records is None:
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
@@ -1113,7 +1613,7 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         # from that list (sync_ballot_filings), which is what may speak for
         # candidates this results file cannot see or has gone stale on.
         # Here, it only confirms who the results name.
-        ballot_is_elsewhere = _has_general_filings(source)
+        ballot_is_elsewhere = _has_general_filings(state)
         if general_records is not None:
             # The certified ballot answered: it alone decides every federal
             # race it covers. Races it does not cover — a national source
@@ -1132,9 +1632,13 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             )
             rest = [r for r in records if _race_id_for(cycle, state, r["office"], r["district"]) not in covered]
             if rest:
+                # Primary results beside a certified list never prune: a
+                # race the list didn't answer for tonight (an empty or
+                # partial read) may hold its certified third-party rows,
+                # which results can't list (_may_prune).
                 more = _apply_ballot(
                     db, cycle, state, rest, keep_unlisted=not ballot_is_elsewhere, authoritative=False,
-                    scope=races_here - covered,
+                    scope=races_here - covered, prune=_may_prune(configured, {}),
                 )
                 applied = {k: applied[k] + more[k] for k in applied}
             _record_ballot_basis(
@@ -1147,6 +1651,7 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
                 db, cycle, state, records,
                 keep_unlisted=not ballot_is_elsewhere,
                 authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
+                prune=_may_prune(configured, source),
             )
             if not ballot_is_elsewhere:
                 _record_ballot_basis(db, cycle, state, source)
@@ -1164,6 +1669,17 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
 
 
 async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
+    """_sync_ballot_filings, with every filing-list raise it contained
+    reported in one alert."""
+    token = _RAISED.set([])
+    try:
+        return await _sync_ballot_filings(db, client, cycle)
+    finally:
+        _report_raises("Filing lists raised in the ballot sync", "election-filings-raised")
+        _RAISED.reset(token)
+
+
+async def _sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
     """Flag what a state's own candidate filing list says about both its
     ballots, and record its primary date.
 
@@ -1179,20 +1695,32 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
     confirmation derived from primary results.
     """
     results: dict[str, dict] = {}
+    problems: list[str] = []
     for state in sorted(states_with_filings()):
-        source = source_for_state(state) or {}
+        source = {**(source_for_state(state) or {}), "filings": filings_for_state(state)}
         try:
             found = await fetch_ballot_candidates(client, cycle, state, source)
         except Exception:
-            logger.exception("Ballot-filing fetch raised for %s", state)
+            _note_raise(state, "Ballot-filing fetch")
             found = None
         if found is None:
+            if _filings_speak_for_november(state) and api_cache_get(
+                db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+                max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
+            ) is None:
+                # Nothing has said what this cycle's ballot rests on, and the
+                # page would otherwise fall back to the entry's claim of a
+                # complete one. A basis a good night recorded is left alone.
+                _record_ballot_basis(db, cycle, state, {**source, "general_ballot_complete": False})
             results[state] = {"primary": 0, "general": 0, "unmatched": 0,
                               "status": "fetch_failed"}
             continue
 
         if found["primary_date"]:
-            election_dates.save(state, cycle, {"primary": found["primary_date"]})
+            try:
+                election_dates.save(state, cycle, {"primary": found["primary_date"]})
+            except NotSaved as error:
+                problems.append(f"{state}: {error}")
         counts = {"primary": 0, "general": 0}
         unmatched = 0
         for record in found["primary"]:
@@ -1206,7 +1734,19 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
             _note_ballot_name(db, match, record)
             counts["primary"] += 1
         applied = {"ballotOnly": 0, "unconfirmed": 0}
-        if found["general"]:
+        if not found["general"] and _filings_speak_for_november(state):
+            # The list speaks for November but names nobody for it yet (a
+            # primary-season list): until it does, the ballot is not known
+            # whole, whatever the state's entry claims for later — and
+            # nothing else records a basis for this state.
+            _record_ballot_basis(db, cycle, state, {**source, "general_ballot_complete": False})
+        elif found["general"] and not _filings_speak_for_november(state):
+            logger.info(
+                "%s: %d general row(s) on a crawler-found filing list not applied — "
+                "the state's verified source speaks for November",
+                state, len(found["general"]),
+            )
+        elif found["general"]:
             applied = _apply_ballot(
                 db, cycle, state, found["general"], keep_unlisted=True,
                 authoritative=bool(source.get("general_ballot_complete")),
@@ -1219,4 +1759,9 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
             "ballotOnly": applied["ballotOnly"], "unconfirmed": applied["unconfirmed"],
             "primary_date": found["primary_date"], "status": "ok",
         }
+    report_file_problems(
+        "Primary dates from filing lists not saved",
+        "These states' filing lists dated their primary, but the date was not written.",
+        problems, "election-filing-dates",
+    )
     return results

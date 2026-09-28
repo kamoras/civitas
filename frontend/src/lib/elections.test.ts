@@ -263,7 +263,7 @@ describe("tierCandidates", () => {
     // DFL/DNL, not DEM. The bug this guards against: hardcoding the
     // literal "DEM" demoted a real, well-funded DFL nominee to the tail
     // and left the leader row saying "no funded Democrat".
-    const dfl = cand({ id: "DFL1", party: "DFL", cashOnHand: 5000000 });
+    const dfl = cand({ id: "DFL1", party: "DFL", partyGroup: "DEM", cashOnHand: 5000000 });
     const { leaders, tail } = tierCandidates([dfl, husted]);
     expect(leaders.map((c) => c.id).sort()).toEqual([dfl.id, husted.id].sort());
     expect(tail).toEqual([]);
@@ -283,13 +283,18 @@ describe("tierCandidates", () => {
 });
 
 describe("majorPartyOf", () => {
-  it("maps DEM and its state affiliates to DEM, REP to REP, and everyone else to null", () => {
-    expect(majorPartyOf("DEM")).toBe("DEM");
-    expect(majorPartyOf("DFL")).toBe("DEM");
-    expect(majorPartyOf("DNL")).toBe("DEM");
-    expect(majorPartyOf("REP")).toBe("REP");
-    expect(majorPartyOf("IND")).toBeNull();
-    expect(majorPartyOf("GRE")).toBeNull();
+  it("reads the backend's party group, so a DFL/DNL filer is a Democrat", () => {
+    expect(majorPartyOf({ party: "DEM", partyGroup: "DEM" })).toBe("DEM");
+    expect(majorPartyOf({ party: "DFL", partyGroup: "DEM" })).toBe("DEM");
+    expect(majorPartyOf({ party: "DNL", partyGroup: "DEM" })).toBe("DEM");
+    expect(majorPartyOf({ party: "REP", partyGroup: "REP" })).toBe("REP");
+    expect(majorPartyOf({ party: "NPA", partyGroup: "IND" })).toBeNull();
+    expect(majorPartyOf({ party: "GRE", partyGroup: "GRE" })).toBeNull();
+  });
+
+  it("takes a statewide nominee's party, already the group", () => {
+    expect(majorPartyOf({ party: "DEM" })).toBe("DEM");
+    expect(majorPartyOf({ party: "LIB" })).toBeNull();
   });
 });
 

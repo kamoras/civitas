@@ -87,3 +87,47 @@ def test_a_failed_publish_is_tried_again(db_session, posting, monkeypatch):
 def test_no_credentials_no_post(db_session, monkeypatch):
     monkeypatch.setattr(cb.settings, "BSKY_HANDLE", "", raising=False)
     assert cb.post_daily_congress(db_session, date(2026, 9, 25)) is None
+
+
+def _week(sentence="The Senate met 3 days and took 12 record votes. The House did not meet.", laws=()):
+    return {"start": "2026-09-21", "end": "2026-09-27", "sentence": sentence,
+            "becameLaw": [{"billId": b} for b in laws]}
+
+
+def test_the_weekly_post_is_the_week_sentence_and_new_laws():
+    assert cb.compose_week_post(_week(laws=["HR.1", "S.2"])) == (
+        "Congress, week of September 21–27. The Senate met 3 days and took 12 record votes. "
+        "The House did not meet. Became law: H.R. 1, S. 2."
+    )
+
+
+def test_a_week_across_two_months_names_both():
+    report = {**_week(), "start": "2026-09-28", "end": "2026-10-04"}
+    assert cb.compose_week_post(report).startswith("Congress, week of September 28–October 4. ")
+
+
+@pytest.fixture
+def week_posting(posting, monkeypatch):
+    monkeypatch.setattr(cb, "week_report", lambda db, day: {**_week(), "start": day.isoformat()})
+    return posting
+
+
+def test_last_week_posts_once_when_every_day_of_it_is_final(db_session, week_posting):
+    _day(db_session, "2026-09-22", "senate")
+    _day(db_session, "2026-09-24", "senate", final=False)
+    db_session.commit()
+    monday = date(2026, 9, 28)
+    assert cb.post_weekly_congress(db_session, monday) is None  # Thursday still the floor log
+    db_session.query(CongressDay).update({"is_final": True})
+    db_session.commit()
+    assert cb.post_weekly_congress(db_session, monday) == date(2026, 9, 21)
+    assert cb.post_weekly_congress(db_session, date(2026, 9, 30)) is None  # once
+    assert week_posting == ["https://civitas-research.org/congress/week/2026-09-21"]
+
+
+def test_a_week_nobody_met_or_an_older_week_is_not_posted(db_session, week_posting):
+    _day(db_session, "2026-09-22", "senate", in_session=False)
+    _day(db_session, "2026-09-15", "senate")
+    db_session.commit()
+    assert cb.post_weekly_congress(db_session, date(2026, 9, 28)) is None
+    assert week_posting == []

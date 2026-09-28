@@ -67,9 +67,9 @@ STALE_WHILE_REVALIDATE_S = 3600
 
 def _etag_for(body: bytes) -> str:
     digest = hashlib.sha256(body).hexdigest()[:32]
-    # Weak validator: the body hashed may be compressed or not
-    # (GZipMiddleware runs inside this one), so this claims equivalence of
-    # the representation, not byte equality across encodings.
+    # Weak validator: the body hashed is the uncompressed one (this runs
+    # inside GZipMiddleware), so it claims equivalence of the
+    # representation, not byte equality across encodings.
     return f'W/"{digest}"'
 
 

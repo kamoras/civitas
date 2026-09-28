@@ -60,6 +60,13 @@ const STAGE_STYLES: Record<string, BillStageStyle> = {
     bar: "bg-dem-blue",
     rule: "border-l-dem-blue",
   },
+  REPORTED: {
+    text: "text-ink-hi",
+    border: "border-ink-hi/30",
+    bg: "bg-ink-hi/10",
+    bar: "bg-ink-hi",
+    rule: "border-l-ink-hi",
+  },
   ON_FLOOR: {
     text: "text-signal-orange",
     border: "border-signal-orange/30",

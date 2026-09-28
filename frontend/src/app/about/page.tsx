@@ -435,9 +435,8 @@ export default function AboutPage() {
                   <Cite id="34">Volden &amp; Wiseman 2014</Cite> Legislative Effectiveness Score.
                   Each sponsored bill counts, by significance (5x for bills and joint resolutions,
                   1x for simple and concurrent resolutions), at every stage it reaches: introduced,
-                  committee action, passed its chamber, became law. (Bills pages also show when a
-                  bill is on the floor, debated but not yet passed; for this score that still
-                  counts as committee action.) At each stage the member&apos;s
+                  action in committee (a hearing or markup), action beyond committee (reported out,
+                  discharged, or on the floor), passed its chamber, became law. At each stage the member&apos;s
                   count is divided by the chamber&apos;s total at that stage, and the stages are
                   added up so that the average member scores 1.0. Few bills get far, so the later
                   stages have small totals, and a bill that becomes law counts for about as much as
@@ -470,15 +469,20 @@ export default function AboutPage() {
                   four introductions. Checked against Volden &amp; Wiseman&apos;s own published
                   scores for the 110th&ndash;118th Congresses, that version ranked members at a rank
                   correlation of 0.71 (House) and 0.76 (Senate) and mostly tracked how many bills a
-                  member introduced; the current one ranks them at 0.90 and 0.96. Commemorative
+                  member introduced; the current one ranks them at 0.90 and 0.97 (v6.17, which
+                  added action beyond committee as its own stage, raised the Senate from 0.96).
+                  The stage each bill is given was also checked bill by bill against their 118th
+                  Congress counts (<code>backend/scripts/research_les_stage_classifier.py</code>):
+                  a rank correlation of 0.94 or higher at every stage.
+                  Commemorative
                   bills (a post-office renaming, a Congressional Gold Medal) count 1x like simple
                   resolutions: they are recognised from the title by an embedding classifier
                   calibrated against Volden &amp; Wiseman&apos;s own commemorative counts
                   (<code>backend/scripts/calibrate_commemorative.py</code>; exact per-member counts
-                  for 87% of the 118th House, about 1 false flag per 1,000 bills). Two differences
-                  remain and are disclosed: their top &ldquo;substantive and significant&rdquo; tier
-                  (10x) comes from CQ Almanac coverage, which has no source here; and committee
-                  action is one stage rather than two. Members with few bills are not pulled toward 50 — their record
+                  for 87% of the 118th House, about 1 false flag per 1,000 bills). One difference
+                  remains and is disclosed: their top &ldquo;substantive and significant&rdquo; tier
+                  (10x) comes from CQ Almanac coverage, which has no source here. Members with few
+                  bills are not pulled toward 50 — their record
                   is every bill they sponsored, fully observed — and a member with no substantive
                   bills after half a year in office scores as a record of zero, so inaction never
                   outscores an attempt. The reproduction is{" "}
@@ -1358,7 +1362,9 @@ export default function AboutPage() {
               by the chamber it did not start in, which it can only reach by passing the first.
               A chamber that did not meet is shown as not in session, including on days the
               Senate publishes only the time it reconvenes. A source that could not be
-              read is shown as unavailable, never as a day with nothing in it.
+              read is shown as unavailable, never as a day with nothing in it. A day with no
+              Congressional Record, which is published for every day either chamber meets, says
+              that no Record was published.
             </P>
             <P>
               Every bill named in a report links to its page, including bills sponsored by
@@ -2013,11 +2019,11 @@ export default function AboutPage() {
               />
               <Row
                 label="GovInfo API"
-                value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis — both chambers"
+                value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis — both chambers. Each day's Record is read in full; until September 2026 only its first 100 sections were, which on the busiest days left out the Senate's floor remarks entirely"
               />
               <Row
                 label="Congressional Record Daily Digest"
-                value="The Record's own summary of each day in each chamber (measures passed, failed and reported, nominations confirmed, committee meetings, next meeting), via GovInfo, quoted as published — both chambers. Once a day's record is final, the Civitas Bluesky account posts it: the day's one-line count summary and the numbers of the bills passed, never their titles, since an official short title can read as advocacy"
+                value="The Record's own summary of each day in each chamber (measures passed, failed and reported, nominations confirmed, committee meetings, next meeting), via GovInfo, quoted as published — both chambers. Once a day's record is final, the Civitas Bluesky account posts it: the day's one-line count summary and the numbers of the bills passed, never their titles, since an official short title can read as advocacy. Each week, once every day of it is final, it posts the week's summary and the numbers of the bills that became law"
               />
               <Row
                 label="House Clerk"
@@ -2284,6 +2290,7 @@ export default function AboutPage() {
                 value="Nightly at 3:00 AM via APScheduler; in the 60 days before an election, ballot lists every 6 hours and race coverage every 15 minutes"
               />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
+              <Row label="HTTP Caching" value="ETag hashed from the uncompressed response body; a matching revalidation gets a 304" />
               <Row
                 label="Learning Store"
                 value="SQLite table for persistent classification memory, version-aware invalidation on code change"

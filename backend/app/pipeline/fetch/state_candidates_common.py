@@ -92,8 +92,10 @@ _SENATE_RE = re.compile(
 _PARTY_PATTERNS = [
     # Two states don't call their Democrats Democrats on the ballot:
     # Minnesota's party is the Democratic-Farmer-Labor (DFL) and North
-    # Dakota's the Democratic-NPL. Both are the state Democratic party and
-    # FEC files their candidates as DEM.
+    # Dakota's the Democratic-NPL. Both are the state Democratic party. FEC
+    # files some of their candidates as DEM and some under the state code
+    # (DFL, DNL — Ilhan Omar and Amy Klobuchar as DFL, Angie Craig as DEM),
+    # so FEC's side is read through fec_party (FEC_PARTY_ALIASES).
     (re.compile(r"\b(?:democratic|democrat|dem|dfl|d-npl|dnl|npl)\b", re.IGNORECASE), "D"),
     (re.compile(r"\b(?:republican|rep|gop)\b", re.IGNORECASE), "R"),
     # Arizona's own 3-letter codes ("LBT", "GRN") and Wyoming's "LBR" don't
@@ -298,6 +300,30 @@ _LOCAL_QUALIFIER_RE = re.compile(
 PARTY_CODE_MAP = {
     "R": "REP", "D": "DEM", "L": "LIB", "G": "GRE", "I": "IND", "C": "CON",
 }
+
+# FEC's own party codes that name one of PARTY_CODE_MAP's parties under
+# another code — a data-format translation of FEC's published party-code
+# table (https://www.fec.gov/campaign-finance-data/party-code-descriptions/),
+# not a classification. DFL and DNL are the Minnesota and North Dakota
+# Democratic parties. NPA ("No Party Affiliation"), UN ("Unaffiliated"),
+# NNE ("None"), NOP ("No Party Preference", CA and WA) and NON
+# ("Non-Party") are no-party codes, which a state's list prints as
+# independent. UST is the U.S. Taxpayers Party, the Constitution Party's
+# former name and still some state affiliates' label. Not CRV: that is the
+# Conservative Party, a different party from CON (Constitution).
+# The single source of this list: the elections API sends each
+# candidate's translated party as `partyGroup`, and the page reads that.
+FEC_PARTY_ALIASES = {
+    "DFL": "DEM", "DNL": "DEM",
+    "NPA": "IND", "UN": "IND", "NNE": "IND", "NOP": "IND", "NON": "IND",
+    "UST": "CON",
+}
+
+
+def fec_party(code: str | None) -> str | None:
+    """An FEC party code as the party PARTY_CODE_MAP names — so a
+    Minnesota DFL nominee reads as the Democrat the state's list says."""
+    return FEC_PARTY_ALIASES.get(code or "", code) if code else code
 
 # Where the pipeline records that it checked a state's statewide-executive
 # contests, and the API reads that back. Shared here rather than in

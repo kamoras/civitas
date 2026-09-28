@@ -42,53 +42,101 @@ once a cycle, and there is nothing to gain from asking every night.
 
 import json
 import logging
-import os
 import re
 from typing import Any
 
 import httpx
 
-from app.atomic_write import write_text_atomic
+from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
 
 logger = logging.getLogger(__name__)
 
 # Three pages covers a cycle's ~240 federal election dates with headroom;
-# a fourth would mean the endpoint's shape changed, which should stop
-# rather than page forever.
+# more than this would mean the endpoint's shape changed, which should stop
+# rather than page forever — and a read cut short there is incomplete.
 _FEC_MAX_PAGES = 6
 
-_PATHS = (
-    "/data/state_election_dates.json",
-    os.path.join(os.getcwd(), "data", "state_election_dates.json"),
-)
+_FILE = "state_election_dates.json"
+# Set by tests; otherwise runtime_data_path(_FILE).
+_PATH: str | None = None
 
 _cache: dict[str, Any] | None = None
+
+# Each state's entry ("{cycle}-{ST}") keeps what each source said under its
+# own keys, so neither overwrites the other: "primary"/"runoff" from the
+# state's own feed, "fec_primary"/"fec_runoff"/"senate" from the national
+# calendar. The state is the authority on its own election and wins where
+# both answer; a disagreement is logged, not averaged away. "state_feed"
+# lists which of primary/runoff a state's feed wrote: before the two were
+# kept apart, the calendar wrote those keys too, and a complete read drops
+# such a legacy value (primary_date falls back to fec_primary; a state with
+# its own feed rewrites its date within a week). Per key, not per entry: a
+# feed that states only the runoff says nothing about a legacy primary.
+_STATE_FEED = "state_feed"
+_STATE_KEYS = ("primary", "runoff")
+
+
+def _state_written(entry: dict) -> set[str]:
+    written = entry.get(_STATE_FEED)
+    if written is True:  # an earlier form of the marker, meaning both
+        return set(_STATE_KEYS)
+    return set(written) if isinstance(written, list) else set()
+
+
+def _path() -> str:
+    return _PATH or runtime_data_path(_FILE)
 
 
 def _load() -> dict[str, Any]:
     global _cache
     if _cache is not None:
         return _cache
-    for path in _PATHS:
-        try:
-            with open(path, encoding="utf-8") as fh:
-                _cache = json.load(fh) or {}
-                return _cache
-        except FileNotFoundError:
-            continue
-        except Exception:
-            logger.exception("Failed to read election dates file %s", path)
-    _cache = {}
+    path = _path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        data = {}
+    except ValueError:
+        logger.exception("Election dates file %s is not valid JSON", path)
+        data = {}
+    except OSError:
+        # Not cached: an unreadable file is not an empty one, and the next
+        # read tries again. (Writes re-read the file under their lock, so
+        # this can never be written back as the whole file.)
+        logger.exception("Failed to read election dates file %s", path)
+        return {}
+    _cache = data if isinstance(data, dict) else {}
     return _cache
+
+
+def invalidate_cache() -> None:
+    """Re-read the file on next use — at the start of each crawl or sync
+    pass, so a pass sees what another process wrote since."""
+    global _cache
+    _cache = None
+
+
+def _update(change) -> None:
+    """Apply `change` (dict -> dict) to the file as it is on disk now, under
+    its lock, so no concurrent writer's change is lost. Raises NotSaved."""
+    global _cache
+    path = _path()
+    try:
+        _cache = update_json_file(path, change, indent=2, sort_keys=True)
+    except (OSError, LockTimeout) as error:
+        raise NotSaved(f"election dates not saved to {path}: {error}") from error
 
 
 def primary_date(state: str, cycle: int) -> str | None:
     """The ISO date of `state`'s `cycle` primary, or None if unknown —
-    which is the honest answer for a state with no registered source."""
-    return (_load().get(f"{cycle}-{state.upper()}") or {}).get("primary")
+    which is the honest answer for a state with no registered source. The
+    state's own feed first, then the national calendar."""
+    entry = _load().get(f"{cycle}-{state.upper()}") or {}
+    return entry.get("primary") or entry.get("fec_primary")
 
 
-# The key under which a successful read of the national calendar is
+# The key under which a complete read of the national calendar is
 # recorded, so "the FEC lists no Senate election here" can be told apart
 # from "we have never read the calendar".
 _CALENDAR_KEY = "_CALENDAR"
@@ -96,8 +144,9 @@ _CALENDAR_KEY = "_CALENDAR"
 
 def senate_election_known(state: str, cycle: int) -> bool | None:
     """Whether the FEC's election calendar lists a `cycle` Senate general
-    election in `state` — True/False once the calendar has been read, None
-    if it never has (callers then fall back to the class rotation).
+    election in `state` — True/False once the calendar has been read in
+    full, None if it never has (callers then fall back to the class
+    rotation).
 
     The calendar is the only record of a Senate SPECIAL election that
     exists. Without it the roster treated any Senate filer in a state with
@@ -110,41 +159,96 @@ def senate_election_known(state: str, cycle: int) -> bool | None:
     return bool((known.get(f"{cycle}-{state.upper()}") or {}).get("senate"))
 
 
-def mark_calendar_read(cycle: int, on: str) -> None:
-    save(_CALENDAR_KEY, cycle, {"read": on})
-
-
 def all_dates() -> dict[str, Any]:
     """Every date known, keyed "{cycle}-{STATE}"."""
     return dict(_load())
 
 
+def _disagreement(state: str, entry: dict) -> None:
+    ours, fec = entry.get("primary"), entry.get("fec_primary")
+    if ours and fec and ours != fec:
+        logger.warning(
+            "%s's own feed dates its primary %s; the FEC calendar says %s — "
+            "showing the state's", state, ours, fec,
+        )
+
+
 def save(state: str, cycle: int, dates: dict) -> None:
-    """Record what is known about a state's cycle. Merges rather than
-    replaces, so a per-state read that knows only the primary doesn't drop
-    the runoff the national calendar supplied, or vice versa."""
-    global _cache
-    known = dict(_load())
+    """Record what a state's own feed says about its cycle ("primary",
+    "runoff"). Merges rather than replaces, so a read that knows only the
+    primary doesn't drop the runoff. Raises NotSaved."""
     key = f"{cycle}-{state.upper()}"
-    known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
-    for path in _PATHS:
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            # Replaced whole, never truncated in place for a reader to find
-            # empty (atomic_write).
-            write_text_atomic(path, json.dumps(known, indent=2, sort_keys=True))
-            break
-        except OSError:
-            continue
-    else:
-        logger.warning("Nowhere writable to record election dates for %s", state)
-    _cache = known
+    stated = {k: v for k, v in dates.items() if v and k in ("primary", "runoff")}
+
+    if not stated:
+        return
+
+    def change(known: dict) -> dict:
+        entry = known.get(key) or {}
+        known[key] = {
+            **entry, **stated,
+            _STATE_FEED: sorted(_state_written(entry) | set(stated)),
+        }
+        _disagreement(state.upper(), known[key])
+        return known
+
+    _update(change)
 
 
-async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str, dict]:
-    """{state: {"primary": iso, "runoff": iso|None}} for every state the
-    FEC lists a federal primary for. Empty on any failure — this augments
-    per-state reads, it never replaces them.
+def save_calendar(cycle: int, calendar: dict[str, dict], *, complete: bool, read_on: str) -> None:
+    """Record the national calendar in one locked write. A COMPLETE read
+    is the calendar: every state's FEC fields are replaced by what it says —
+    a Senate election it no longer lists is retracted — and the read is
+    marked, which is what lets "no Senate election here" be believed. An
+    incomplete read only adds: a state missing from it may be on a page
+    that failed, so nothing is retracted and the read isn't marked.
+    Raises NotSaved."""
+    prefix = f"{cycle}-"
+
+    def change(known: dict) -> dict:
+        states = set(calendar)
+        if complete:
+            states |= {
+                k[len(prefix):] for k in known
+                if k.startswith(prefix) and k != f"{prefix}{_CALENDAR_KEY}"
+            }
+        for state in states:
+            key = f"{prefix}{state}"
+            listed = calendar.get(state) or {}
+            fec = {
+                "fec_primary": listed.get("primary"),
+                "fec_runoff": listed.get("runoff"),
+                "senate": listed.get("senate"),
+            }
+            entry = dict(known.get(key) or {})
+            if complete:
+                for legacy in set(_STATE_KEYS) - _state_written(entry):
+                    entry.pop(legacy, None)
+            for field, value in fec.items():
+                if value:
+                    entry[field] = value
+                elif complete:
+                    entry.pop(field, None)
+            if entry:
+                known[key] = entry
+                _disagreement(state, entry)
+            else:
+                known.pop(key, None)
+        if complete:
+            known[f"{prefix}{_CALENDAR_KEY}"] = {"read": read_on}
+        return known
+
+    _update(change)
+
+
+async def fetch_fec_calendar(
+    client: httpx.AsyncClient, cycle: int,
+) -> tuple[dict[str, dict], bool]:
+    """({state: {"primary", "runoff", "senate"}}, complete) for every state
+    the FEC lists a federal election for. `complete` only when every page
+    came back and there was something on them — a read cut short is still
+    returned, since what it has is true, but it can't say what is absent
+    (save_calendar). Empty and incomplete on a failure of the first page.
 
     Special elections are excluded: a special primary is a different race
     on its own schedule, and folding one in would report a state's regular
@@ -153,7 +257,7 @@ async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str,
     from app.pipeline.fetch.fec import _fetch_with_retry
 
     rows: list[dict] = []
-    page = 1
+    page, complete = 1, False
     while page <= _FEC_MAX_PAGES:
         payload = await _fetch_with_retry(
             client,
@@ -161,11 +265,28 @@ async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str,
             f"?election_year={cycle}&per_page=100&page={page}",
         )
         if not payload:
+            logger.warning("FEC election-date calendar page %d failed — read incomplete", page)
             break
         rows += payload.get("results") or []
-        if page >= (payload.get("pagination") or {}).get("pages", 1):
+        pagination = payload.get("pagination") or {}
+        if page >= pagination.get("pages", 1):
+            # Complete only as the endpoint itself counts it: a page with
+            # no pagination, or one that came back short, can't say what
+            # is absent — and a complete read retracts (save_calendar).
+            count = pagination.get("count")
+            complete = bool(rows) and isinstance(count, int) and len(rows) == count
+            if not complete:
+                logger.warning(
+                    "FEC election-date calendar read %d row(s) of %s — read incomplete",
+                    len(rows), count,
+                )
             break
         page += 1
+    else:
+        logger.warning(
+            "FEC election-date calendar has more than %d pages — read incomplete",
+            _FEC_MAX_PAGES,
+        )
 
     calendar: dict[str, dict] = {}
     for row in sorted(rows, key=lambda r: r.get("election_date") or ""):
@@ -184,7 +305,7 @@ async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str,
             entry.setdefault("primary", held)
         elif "runoff" in kind and "general" not in kind:
             entry.setdefault("runoff", held)
-    return {s: d for s, d in calendar.items() if d}
+    return {s: d for s, d in calendar.items() if d}, complete
 
 
 async def discover_dates(

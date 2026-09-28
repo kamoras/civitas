@@ -12,6 +12,7 @@ const STATUS_LINE: Record<ChamberDay["status"], string> = {
   live: "Live floor log",
   not_in_session: "Not in session",
   no_record: "Nothing recorded yet",
+  no_record_published: "No Record for this day",
 };
 
 function passedTag(e: CongressEvent): string | null {

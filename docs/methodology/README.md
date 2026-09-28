@@ -11,7 +11,7 @@ and superseded ones sat side by side, and stale claims survived in both.
 |---|---|
 | [`member-score/`](member-score/) | One record per member-score `ALGORITHM_VERSION`, moved verbatim from `score_calculator.py`. `v4.md` also carries the v4.x–v5.9 notes that the docstring kept under its v3 → v4 heading. |
 | [`weights.md`](weights.md) | Why `SCORE_WEIGHTS` and `PRESIDENT_SCORE_WEIGHTS` are what they are, moved verbatim from `config_definitions.py` |
-| [`../research/`](../research/) | The evidence notes behind v6.13 onward (Constituent Alignment through v6.16, Legislative Effectiveness v6.14, funding, justices, presidents v5, embedding models), each with a reproduction script |
+| [`../research/`](../research/) | The evidence notes behind v6.13 onward (Constituent Alignment through v6.16, Legislative Effectiveness v6.14 and v6.17, funding, justices, presidents v5, embedding models), each with a reproduction script |
 | `frontend/src/lib/scoreVersions.ts` | The public, plain-language summary of each version, shown at `/changelog` |
 
 **When you change a score:**
