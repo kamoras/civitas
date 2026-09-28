@@ -3,19 +3,57 @@
 import { useEffect, useState } from "react";
 import { fetchLiveResults } from "@/lib/api";
 import { showsResults } from "@/lib/results";
-import type { LiveResults } from "@/types/election";
+import type { ElectionPhaseInfo, LiveResults } from "@/types/election";
 
 /** How often an open results page asks for the count. The count itself
  * moves on the backend's five-minute sync and nginx caches the route for
  * 30s, so a minute sees each sync land within about a minute. */
 export const RESULTS_POLL_MS = 60_000;
 
+/** How often a campaign page asks whether results have started, and only
+ * while election day is close (electionIsNear): a page left open on the
+ * eve of the election switches to the count on its own, and the rest of
+ * the year a campaign page asks once or not at all. */
+export const CAMPAIGN_POLL_MS = 10 * 60_000;
+
+/** Waits after consecutive failed refreshes: an endpoint that keeps failing
+ * is asked less and less often, not every minute forever. The last value
+ * repeats. */
+export const RETRY_BACKOFF_MS = [60_000, 2 * 60_000, 5 * 60_000, 10 * 60_000];
+
+const HOUR = 3_600_000;
+
+/** Whether election day is close enough that a page still in campaign mode
+ * should keep asking: from 36 hours before the day (UTC midnight of the
+ * date) until two days after it. Past that the phase has either turned or
+ * names the next cycle's election, two years out. */
+export function electionIsNear(
+  phase: Pick<ElectionPhaseInfo, "electionDate"> | null | undefined,
+  now: number = Date.now()
+): boolean {
+  if (!phase?.electionDate) return false;
+  const day = Date.parse(`${phase.electionDate}T00:00:00Z`);
+  if (Number.isNaN(day)) return false;
+  return now >= day - 36 * HOUR && now < day + 48 * HOUR;
+}
+
+/** "every minute", "every 2 minutes" — the retry wait, for a status line
+ * that has to say how often the page is really asking. */
+export function describeInterval(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  return minutes === 1 ? "every minute" : `every ${minutes} minutes`;
+}
+
 /**
  * The live count, polled while the page shows results and the tab is
  * visible. Outside the results window one request answers "campaign" and
- * nothing more is asked; `enabled: false` asks nothing at all (a page that
- * already knows from its server render that there are no results). A background tab stops polling and catches up the
- * moment it's shown again, so a laptop left open overnight doesn't poll.
+ * nothing more is asked — unless election day is near, when it asks again
+ * every CAMPAIGN_POLL_MS so an open page switches to results by itself.
+ * `enabled: false` asks nothing at all (a page that already knows from its
+ * server render that there are no results). A failed request is retried
+ * on a growing backoff (RETRY_BACKOFF_MS; `retryMs` says the current wait).
+ * A background tab stops polling and catches up the moment it's shown
+ * again, so a laptop left open overnight doesn't poll.
  */
 export function useLiveResults(
   state?: string,
@@ -23,37 +61,61 @@ export function useLiveResults(
 ): {
   data: LiveResults | null;
   error: string | null;
+  /** The wait before the next retry after a failure; null when the last
+   * request succeeded. */
+  retryMs: number | null;
 } {
   const [data, setData] = useState<LiveResults | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryMs, setRetryMs] = useState<number | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // The wait for the next scheduled ask; null once there's nothing more
+    // to ask (a campaign far from election day).
+    let nextWait: number | null = null;
+    let failures = 0;
 
     const load = () => {
       fetchLiveResults(state)
         .then((next) => {
           if (cancelled) return;
+          failures = 0;
           setData(next);
           setError(null);
-          if (showsResults(next.phase)) schedule();
+          setRetryMs(null);
+          schedule(
+            showsResults(next.phase)
+              ? RESULTS_POLL_MS
+              : electionIsNear(next.phase)
+                ? CAMPAIGN_POLL_MS
+                : null
+          );
         })
         .catch((err: Error) => {
           if (cancelled) return;
           // Keep the last good count on screen; say the refresh failed.
+          const wait = RETRY_BACKOFF_MS[Math.min(failures, RETRY_BACKOFF_MS.length - 1)];
+          failures += 1;
           setError(err.message || "Could not refresh the results");
-          schedule();
+          setRetryMs(wait);
+          schedule(wait);
         });
     };
-    const schedule = () => {
+    const schedule = (wait: number | null) => {
+      nextWait = wait;
       if (timer) clearTimeout(timer);
-      if (document.visibilityState === "visible") timer = setTimeout(load, RESULTS_POLL_MS);
+      timer = null;
+      if (wait != null && document.visibilityState === "visible") timer = setTimeout(load, wait);
     };
     const onVisible = () => {
-      if (document.visibilityState === "visible") load();
-      else if (timer) clearTimeout(timer);
+      // Catch up only if the page was still asking — a campaign page that
+      // got its one answer asks nothing more on a tab switch.
+      if (document.visibilityState === "visible") {
+        if (nextWait != null) load();
+      } else if (timer) clearTimeout(timer);
     };
 
     load();
@@ -65,5 +127,5 @@ export function useLiveResults(
     };
   }, [state, enabled]);
 
-  return { data, error };
+  return { data, error, retryMs };
 }

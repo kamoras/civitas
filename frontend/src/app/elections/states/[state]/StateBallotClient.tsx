@@ -17,8 +17,8 @@ import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
 import StateResults from "@/components/elections/results/StateResults";
-import { useLiveResults } from "@/hooks/useLiveResults";
-import { showsResults } from "@/lib/results";
+import { electionIsNear, useLiveResults } from "@/hooks/useLiveResults";
+import { feedFailed, showsResults } from "@/lib/results";
 import { buildBallotContests, contestForHash, countBallotContests, type BallotContest } from "@/lib/ballotContests";
 import {
   candidateName,
@@ -950,15 +950,28 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     };
   }, [ballot.state]);
 
-  // From election day the page leads with the count (backend election_phase);
-  // the server render says which, so a campaign-season page asks nothing.
-  const resultsMode = showsResults(ballot.phase);
-  const { data: live, error: liveError } = useLiveResults(ballot.state, resultsMode);
+  // From election day the page leads with the count (backend election_phase).
+  // The server render (ISR) says which, so a campaign-season page asks
+  // nothing — except near election day, when it keeps asking (slowly) so a
+  // page left open switches to the count by itself. An open page follows
+  // the live phase into results; one rendered in results mode stays there
+  // after the window closes, and StateResults says the count has ended.
+  // eslint-disable-next-line react-hooks/purity -- read once per render; a stale "near" only delays the first ask to the next render
+  const askForResults = showsResults(ballot.phase) || electionIsNear(ballot.phase, Date.now());
+  const {
+    data: live,
+    error: liveError,
+    retryMs: liveRetryMs,
+  } = useLiveResults(ballot.state, askForResults);
+  const resultsMode = showsResults(ballot.phase) || (!!live && showsResults(live.phase));
   // Only a state read live gets a count-shaded map: for any other, an
   // empty map would draw every district as "no votes yet" — a state with
-  // no feed shown as one where nothing has happened.
+  // no feed shown as one where nothing has happened. Likewise a state whose
+  // feed couldn't be read and has no count to show: that says nothing
+  // about whether counting has started.
   const liveByDistrict = useMemo(() => {
     if (!live || !showsResults(live.phase) || !live.liveStates.includes(ballot.state)) return undefined;
+    if (live.races.length === 0 && feedFailed(live.feeds?.[ballot.state])) return undefined;
     const m = new Map<number, LiveRaceResult>();
     for (const r of live.races) if (r.office === "H") m.set(r.district ?? 0, r);
     return m;
@@ -979,16 +992,26 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // In results mode a #race- link to a race with a count lands on the
   // count (StateResults scrolls to it); to one without — no feed for the
   // state, nothing counted yet, a campaign-era link — it opens research as
-  // it always has. Undecided until the count has loaded, so the drawer
-  // doesn't open and then vanish. Only the arrival matters: once the reader
-  // picks a contest, `chosen` owns what is open.
-  const hash = mounted ? window.location.hash : "";
-  const hashRace = /^#race-(.+)$/.exec(hash)?.[1];
-  const raceHasCount =
-    resultsMode && hashRace && live ? live.races.some((r) => r.raceId === decodeURIComponent(hashRace)) : false;
-  const waitingForCount = resultsMode && !!hashRace && !live && !liveError;
-  const fromHash =
-    mounted && !raceHasCount && !waitingForCount ? contestForHash(hash, contests, ballot) : null;
+  // it always has. Decided ONCE, when the count first loads (or fails to):
+  // re-deciding on every poll closed the research drawer by itself and
+  // scroll-jumped the page the moment first returns landed for the race.
+  // Until then nothing opens, so the drawer doesn't open and then vanish.
+  // Only the arrival matters: once the reader picks a contest, `chosen`
+  // owns what is open. Latched with the render-time state update React
+  // documents for "information from previous renders", not an effect.
+  const [arrival, setArrival] = useState<{ hash: string; toCount: string | null } | undefined>(undefined);
+  if (mounted && arrival === undefined) {
+    const hash = window.location.hash;
+    const race = /^#race-(.+)$/.exec(hash)?.[1];
+    if (!race || (!askForResults && !resultsMode)) setArrival({ hash, toCount: null });
+    else if (live) {
+      const id = decodeURIComponent(race);
+      const counted = showsResults(live.phase) && live.races.some((r) => r.raceId === id);
+      setArrival({ hash, toCount: counted ? id : null });
+    } else if (liveError) setArrival({ hash, toCount: null });
+    // else: the count is still loading — wait for it.
+  }
+  const fromHash = arrival && !arrival.toCount ? contestForHash(arrival.hash, contests, ballot) : null;
   const open = chosen !== undefined ? chosen : fromHash;
 
   const openContest = useCallback(
@@ -1114,7 +1137,14 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
           {resultsMode && (
             <>
-              <StateResults ballot={ballot} results={live} error={liveError} lookupHref={lookupHref} />
+              <StateResults
+                ballot={ballot}
+                results={live}
+                error={liveError}
+                retryMs={liveRetryMs}
+                arrivalRace={arrival?.toCount ?? null}
+                lookupHref={lookupHref}
+              />
               <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs tracking-[0.16em] text-ink-min">
                 BALLOT RESEARCH · WHO WAS ON THE BALLOT, AND WHO WAS BEHIND THEM
               </h2>

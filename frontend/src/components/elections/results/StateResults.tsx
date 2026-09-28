@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import DistrictMap from "@/components/elections/DistrictMap";
 import LiveUpdates from "@/components/elections/results/LiveUpdates";
 import { HouseResultRow, RaceResultCard } from "@/components/elections/results/RaceResult";
-import { feedFailed, formatEasternTime, seatsLed } from "@/lib/results";
+import { feedFailed, formatEasternTime, seatsLed, showsResults } from "@/lib/results";
+import { describeInterval, RETRY_BACKOFF_MS } from "@/hooks/useLiveResults";
 import { useNow } from "@/hooks/useNow";
 import type { LiveRaceResult, LiveResults, StateBallot } from "@/types/election";
 
@@ -13,12 +14,16 @@ import type { LiveRaceResult, LiveResults, StateBallot } from "@/types/election"
  * from its own election office, above the ballot research.
  *
  * A #race-{id} link (every election-night Bluesky post carries one) lands
- * on that race's count here rather than on its research drawer.
+ * on that race's count here rather than on its research drawer. Which of
+ * the two it lands on is decided once, by the page (StateBallotClient),
+ * when the count first loads; this only scrolls to `arrivalRace`.
  */
 export default function StateResults({
   ballot,
   results,
   error = null,
+  retryMs = null,
+  arrivalRace = null,
   lookupHref,
 }: {
   ballot: StateBallot;
@@ -26,6 +31,11 @@ export default function StateResults({
   /** The last refresh's failure, if any — shown only when there is no
    * count to show instead. */
   error?: string | null;
+  /** The wait before the next retry after a failure (useLiveResults). */
+  retryMs?: number | null;
+  /** The race a #race- arrival link was handed to the count for, or null
+   * (no such link, or it went to research). Decided once by the page. */
+  arrivalRace?: string | null;
   lookupHref: string;
 }) {
   const races = useMemo(() => results?.races ?? [], [results]);
@@ -48,21 +58,15 @@ export default function StateResults({
   const failed = feedFailed(feed);
   const now = useNow();
 
-  // The link the page was OPENED with, latched once: the page later writes
-  // #race- hashes itself (opening a research contest), and re-reading the
-  // hash on every poll scroll-jumped the reader to a count they never asked
-  // for (AGENTS.md: params describing how a page was opened are latched).
-  const arrival = useRef<string | null | undefined>(undefined);
+  // Scroll to the arrival race once. The page decided, when the count
+  // first loaded, that this race has one — so it is on screen by now — and
+  // never re-decides on a later poll.
+  const scrolledTo = useRef<string | null>(null);
   useEffect(() => {
-    if (arrival.current === undefined) {
-      const match = /^#race-(.+)$/.exec(window.location.hash);
-      arrival.current = match ? decodeURIComponent(match[1]) : null;
-    }
-    const target = arrival.current;
-    if (!target || !races.some((r) => r.raceId === target)) return;
-    arrival.current = null; // once
-    document.getElementById(`result-${target}`)?.scrollIntoView?.({ block: "start" });
-  }, [races]);
+    if (!arrivalRace || scrolledTo.current === arrivalRace) return;
+    scrolledTo.current = arrivalRace;
+    document.getElementById(`result-${arrivalRace}`)?.scrollIntoView?.({ block: "start" });
+  }, [arrivalRace]);
 
   if (!results && error) {
     return (
@@ -71,7 +75,7 @@ export default function StateResults({
           The live count couldn&apos;t be loaded
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
-          This page retries every minute.{" "}
+          This page retries {describeInterval(retryMs ?? RETRY_BACKOFF_MS[0])}.{" "}
           <a
             href={lookupHref}
             target="_blank"
@@ -90,6 +94,30 @@ export default function StateResults({
       <p role="status" className="mb-6 font-mono text-sm tracking-[0.12em] text-ink-min">
         READING THE COUNT…
       </p>
+    );
+  }
+
+  // The results window closed while the page was open (the backend's phase
+  // is back to the campaign): the count is no longer read here, and saying
+  // "hasn't started yet" of a finished election would be wrong.
+  if (!showsResults(results.phase)) {
+    return (
+      <section role="status" className="mb-8 border border-white/[0.09] bg-surface p-4">
+        <h2 className="font-display text-lg font-extrabold text-ink-hi">
+          The live count has ended here
+        </h2>
+        <p className="mt-1 max-w-3xl text-sm text-ink-lo">
+          This election&apos;s results are no longer followed live on this page.{" "}
+          <a
+            href={lookupHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-phos hover:underline"
+          >
+            {stateName}&apos;s election office publishes the final count ↗
+          </a>
+        </p>
+      </section>
     );
   }
 
@@ -187,11 +215,13 @@ export default function StateResults({
               races={ballot.houseRaces}
               picked={null}
               results={byDistrict}
-              onPick={(raceId) =>
-                document
-                  .getElementById(`result-${raceId}`)
-                  ?.scrollIntoView?.({ behavior: "smooth", block: "center" })
-              }
+              onPick={(raceId) => {
+                // Move focus with the scroll, so a keyboard or screen-reader
+                // user who picked a district lands on its row.
+                const row = document.getElementById(`result-${raceId}`);
+                row?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+                row?.focus({ preventScroll: true });
+              }}
             />
             <LiveUpdates updates={results.updates} limit={8} linkToState={false} />
           </div>

@@ -195,15 +195,22 @@ export default function ElectionsTab() {
       <div className="panel border-t-2 border-t-signal-amber p-6 text-center">
         {el.isElectionDay || el.phase === "results" ? (
           <div>
-            <div className="font-display font-semibold text-2xl sm:text-4xl text-signal-amber motion-safe:animate-pulse mb-3">
-              {el.isElectionDay ? "ELECTION DAY" : "RESULTS ARE COMING IN"}
+            {/* The results phase lasts until two weeks after the count last
+                moved (backend election_phase), so it doesn't claim results
+                are still "coming in", and only election day pulses. */}
+            <div
+              className={`font-display font-semibold text-2xl sm:text-4xl text-signal-amber mb-3 ${
+                el.isElectionDay ? "motion-safe:animate-pulse" : ""
+              }`}
+            >
+              {el.isElectionDay ? "ELECTION DAY" : "RESULTS"}
             </div>
             <p className="text-ink-lo text-base">{el.type}</p>
             <Link
               href="/elections"
               className="mt-4 inline-block border border-signal-amber/50 px-4 py-2 font-mono text-sm tracking-[0.1em] text-signal-amber hover:bg-signal-amber/10"
             >
-              FOLLOW THE LIVE COUNT →
+              {el.isElectionDay ? "FOLLOW THE LIVE COUNT →" : "SEE THE COUNT →"}
             </Link>
           </div>
         ) : (

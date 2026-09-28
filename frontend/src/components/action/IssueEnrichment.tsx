@@ -298,7 +298,7 @@ export function trackableActions(issue: ActionIssue): ActionItem[] {
 }
 
 /** A seat-flip issue's link to the live count (backend
- * analyze/election_signals.py). Same-site paths only: the backend writes
+ * live_results/signals.py). Same-site paths only: the backend writes
  * these, and anything else is not one of them. */
 export function followResultsActions(issue: ActionIssue): ActionItem[] {
   return issue.actions.filter(

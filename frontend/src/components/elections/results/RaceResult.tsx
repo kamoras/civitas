@@ -1,6 +1,7 @@
 import {
   formatEasternTime,
   heldByPhrase,
+  isTied,
   partyBarColor,
   partyLetter,
   partyTextClass,
@@ -12,10 +13,11 @@ import { safeHref } from "@/lib/formatting";
 import type { LiveRaceResult } from "@/types/election";
 
 /** Where the count stands, in the state's own words: official, leading,
- * or no votes yet. Never "won" without the state saying so. */
+ * tied, or no votes yet. Never "won" without the state saying so. */
 export function statusTag(r: LiveRaceResult): { text: string; className: string } {
   if (r.official) return { text: "OFFICIAL", className: "border-phos/60 text-phos" };
   if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
+  if (isTied(r)) return { text: "TIED", className: "border-white/40 text-ink-hi" };
   if (r.flip)
     return { text: "FLIP · LEADING", className: "border-signal-amber/60 text-signal-amber" };
   const share = reportingShare(r);
@@ -41,7 +43,9 @@ export function RaceResultCard({
     <article
       id={`result-${result.raceId}`}
       aria-labelledby={`result-${result.raceId}-title`}
-      className="border border-white/[0.09] bg-surface p-4 sm:p-5"
+      // A #race- link lands here: clear of the fixed header, as AboutPage's
+      // anchors are.
+      className="scroll-mt-[var(--header-clearance)] border border-white/[0.09] bg-surface p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Heading
@@ -100,9 +104,11 @@ export function RaceResultCard({
       <p className="mt-4 text-sm text-ink-lo">
         {result.official
           ? "The state lists this count as official."
-          : result.flip && result.heldBy
-            ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party. The count is not final.`
-            : "Leading, not called. The count is not final."}{" "}
+          : isTied(result)
+            ? "Tied, not called. The count is not final."
+            : result.flip && result.heldBy
+              ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party. The count is not final.`
+              : "Leading, not called. The count is not final."}{" "}
         {sourceHref ? (
           <a
             href={sourceHref}
@@ -126,18 +132,36 @@ export function RaceResultCard({
 export function HouseResultRow({ result }: { result: LiveRaceResult }) {
   const tag = statusTag(result);
   const leader = result.candidates[0];
+  const tied = isTied(result);
   const total = result.votesCounted || 1;
   const dem = result.candidates.find((c) => c.party === "DEM");
   const rep = result.candidates.find((c) => c.party === "REP");
   return (
     <li
       id={`result-${result.raceId}`}
-      className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-white/[0.07] px-4 py-3 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]"
+      // The district map moves focus here when a district is picked, and a
+      // #race- link lands here clear of the fixed header.
+      tabIndex={-1}
+      className="scroll-mt-[var(--header-clearance)] grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-white/[0.07] px-4 py-3 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]"
     >
       <span className="font-mono text-sm text-ink-hi">{raceLabel(result)}</span>
       <span className="min-w-0">
         <span className="block truncate text-sm text-ink">
-          {leader && result.votesCounted ? (
+          {tied ? (
+            // Nobody ahead: both names, neither in a party's lead colour.
+            <span className="text-ink-lo">
+              Tied:{" "}
+              {result.candidates
+                .slice(0, 2)
+                .map(
+                  (c) =>
+                    `${c.name} (${partyLetter(c.party) || "other"}) ${
+                      c.pct != null ? `${c.pct.toFixed(1)}%` : "—"
+                    }`
+                )
+                .join(" · ")}
+            </span>
+          ) : leader && result.votesCounted ? (
             <>
               <span className={partyTextClass(leader.party)}>{leader.name}</span>{" "}
               <span className="text-ink-lo">

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
 import type { LiveResults, RaceWithCandidates, StateBallot } from "@/types/election";
@@ -19,9 +19,10 @@ vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/BackToTop", () => ({ default: () => null }));
 // Records what each district map was handed, so a test can tell a
 // count-shaded map from a lean-shaded one.
-const districtMapProps = vi.hoisted(() => [] as { results?: Map<number, unknown> }[]);
+type MapProps = { results?: Map<number, unknown>; onPick: (raceId: string) => void };
+const districtMapProps = vi.hoisted(() => [] as MapProps[]);
 vi.mock("@/components/elections/DistrictMap", () => ({
-  default: (props: { results?: Map<number, unknown> }) => {
+  default: (props: MapProps) => {
     districtMapProps.push(props);
     return null;
   },
@@ -36,6 +37,7 @@ Element.prototype.scrollIntoView = vi.fn();
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
   districtMapProps.length = 0;
   window.location.hash = "";
@@ -261,5 +263,114 @@ describe("the state page in results mode", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("The live count couldn't be loaded");
     expect(within(alert).getByRole("link")).toHaveAttribute("href", "https://www.sos.state.oh.us/");
+  });
+
+  it("keeps research open for a #race- arrival when the race's first count lands later", async () => {
+    window.location.hash = "#race-2026-HOUSE-OH-1";
+    fetchLiveResults.mockResolvedValueOnce(live({ races: [] }));
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    // The next poll (a tab shown again asks at once) brings first returns.
+    fetchLiveResults.mockResolvedValue(live());
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await screen.findByRole("region", { name: "U.S. House" });
+    expect(fetchLiveResults).toHaveBeenCalledTimes(2);
+    // Decided once: the drawer stays, and the page doesn't jump to the count.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("hands a #race- arrival to research when the count fails to load", async () => {
+    window.location.hash = "#race-2026-HOUSE-OH-1";
+    fetchLiveResults.mockRejectedValue(new Error("502"));
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("This page retries every minute.");
+  });
+
+  it("gives a state whose feed failed, with no count, no count-shaded map", async () => {
+    fetchLiveResults.mockResolvedValue(
+      live({
+        races: [],
+        feeds: { OH: { status: "failed", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: null } },
+      })
+    );
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
+    await screen.findByText(/couldn.t read Ohio.s results feed/);
+    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    expect(districtMapProps.length).toBeGreaterThan(0);
+    expect(districtMapProps.every((p) => p.results === undefined)).toBe(true);
+  });
+
+  it("says the count has ended when the results window closes while the page is open", async () => {
+    fetchLiveResults.mockResolvedValue(
+      live({
+        phase: {
+          phase: "campaign",
+          electionDate: "2028-11-07",
+          resultsUntil: null,
+          lastResultChange: null,
+        },
+        races: [],
+      })
+    );
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(
+      await screen.findByRole("heading", { name: "The live count has ended here" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/hasn.t started yet/)).not.toBeInTheDocument();
+  });
+
+  it("switches a campaign page into results when election day arrives while it's open", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+    fetchLiveResults.mockResolvedValue(live({ phase: { ...PHASE, phase: "election_day" } }));
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          phase: {
+            phase: "campaign",
+            electionDate: "2026-11-03",
+            resultsUntil: null,
+            lastResultChange: null,
+          },
+        })}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ohio results")
+    );
+    expect(await screen.findByRole("region", { name: "U.S. House" })).toBeInTheDocument();
+  });
+
+  it("asks nothing from a campaign page far from election day", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          phase: {
+            phase: "campaign",
+            electionDate: "2099-11-03",
+            resultsUntil: null,
+            lastResultChange: null,
+          },
+        })}
+      />
+    );
+    expect(fetchLiveResults).not.toHaveBeenCalled();
+  });
+
+  it("moves focus to the row of a district picked on the results map", async () => {
+    fetchLiveResults.mockResolvedValue(live());
+    render(<StateBallotClient ballot={ballot()} />);
+    const house = await screen.findByRole("region", { name: "U.S. House" });
+    const map = districtMapProps.find((p) => p.results?.size);
+    expect(map).toBeDefined();
+    act(() => map!.onPick("2026-HOUSE-OH-1"));
+    expect(document.activeElement).toBe(within(house).getByRole("listitem"));
   });
 });

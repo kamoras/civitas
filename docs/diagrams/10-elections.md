@@ -302,7 +302,7 @@ flowchart TD
     GATE -- no --> NONE["nothing read, stored or said"]
     GATE -- yes --> READ["read every covered state at once<br/>(Clarity · Tally ENR · TotalVote · Enhanced Voting)"]
     READ --> TRUST{"test / preview / wrong date?<br/>older than stored? impossible?"}
-    TRUST -- yes --> REFUSE["UntrustedCount / stale:<br/>nothing stored, ops alert"]
+    TRUST -- yes --> REFUSE["UntrustedCount / stale:<br/>nothing stored;<br/>ops alert for untrusted only,<br/>stale only logs"]
     TRUST -- no --> STORE["RaceResult per race<br/>+ ElectionResultEvent on change"]
     READ & REFUSE & STORE --> FEED["LiveResultRead:<br/>how each state's read went"]
     STORE --> FLIP{"leader's party ≠ seat holder's,<br/>enough of the count in?"}
@@ -335,6 +335,11 @@ links to its election office, never as a state where nothing has happened.
   are places (counties, a state's cities and towns), which "report" on their
   first batch, it needs every place in and `COUNTY_FLIP_SETTLE` (6 h) since
   the first votes, or the source's official flag.
+- A House seat in a state whose congressional map was redrawn for the cycle
+  (`app/data/redrawn_congressional_maps.json`: AL, CA, FL, LA, NC, OH, TN,
+  TX, UT for 2026) has no known holder going in (`seat_holder_party` returns
+  none: the district of the same number is a different district), so no flip
+  is announced for it, on the page, in an issue or on Bluesky.
 - Events are diffed against what has already been announced
   (`announced_state`), not against the previous poll, so a change inside a
   held poll is still announced on the next one.
@@ -344,6 +349,19 @@ last read (`ok`, `polls_open`, `untrusted`, `unavailable`, `stale`,
 `failed`). A covered state with no stored count says either that its count
 hasn't started or that its feed couldn't be read, with the time; a state
 whose latest read was refused says the count shown is from an earlier read.
+On `/elections` the same distinction holds: a covered state whose latest read
+failed and has no count is drawn and listed as "feed not read" (its own fill
+and legend entry), never as "no votes yet", and one still showing an older
+count is marked stale with the time that count was read. An exact tie is
+tagged and worded as tied, never as a lead for whoever the feed lists first.
+
+**Open pages follow the phase.** A results page polls every minute while the
+tab is visible; a campaign page asks once, except within about a day of
+election day, when it asks every ten minutes so a page left open switches to
+the count by itself. When the window closes while a state page is open it
+says the live count has ended rather than that it hasn't started. A request
+that keeps failing backs off (1, 2, 5, then 10 minutes) and the page says the
+current interval.
 
 **The DEVELOPING issue** (`signals.py`) opens when a seat's leader is from
 another party than its holder (fixed at the first read), is refreshed while
@@ -356,7 +374,9 @@ own date.
 a Senate lead change with most of the count in, and every unit reporting in
 a Senate race. Six posts an hour and forty an election; one post per race
 per 20 minutes. A post the budget or cooldown holds back waits for a later
-pass (up to two hours), and a later post about the same race supersedes it.
+pass (up to two hours), and a later post about the same race supersedes it;
+every post is worded from the count as it stands when it goes out. A failed
+publish ends that pass, and the rest wait for the next one.
 A correction (a posted flip that reverted) is outside every cap and owed for
 up to a day. Posts are composed to fit — figures are dropped before the
 "Not final." qualifier, never the reverse — and the routine race-coverage

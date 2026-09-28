@@ -11,6 +11,7 @@ import {
   More,
   A,
 } from "@/components/about/AboutPage";
+import { ACTION_CENTER_HREF } from "@/lib/routes";
 
 export const metadata = pageMetadata({
   title: "How State Ballot Pages Work",
@@ -227,18 +228,25 @@ export default function ElectionsChapter() {
             We never call a race. A candidate &ldquo;leads&rdquo; until the state itself marks its
             count official. A seat is only described as changing party once half its reporting areas
             are in; where a state reports by county or town, each of which &ldquo;reports&rdquo;
-            with its first batch of ballots, it takes every county in and six hours since the first
-            votes, or the state&apos;s official count.
+            with its first batch of ballots, it takes every county or town in and six hours since
+            the first votes, or the state&apos;s official count. A House seat in a state whose
+            congressional map was redrawn for this election has no previous holder to compare
+            against — the district with the same number is a different district — so it is never
+            described as changing party.
           </P>
         </Sub>
         <Sub title="Developing stories and posts">
           <P>
             A seat changing party opens a <em>developing</em> story in the{" "}
-            <A href="/action?tab=issues">Action Center</A>, marked as not yet confirmed by the
-            press; it follows the count and is withdrawn if the lead reverts. The same moments are
-            posted to Civitas&apos;s Bluesky account, a few an hour at most, with a correction if a
-            posted change of party reverts. Every sentence in the feed, the story and the posts is a
-            fixed template around the state&apos;s own figures — no AI writes any of it.
+            <A href={ACTION_CENTER_HREF}>Action Center</A>, marked as not yet confirmed by the
+            press; it follows the count and is withdrawn if the lead reverts. Civitas&apos;s Bluesky
+            account posts fewer moments than the feed shows: a seat changing party, a count called
+            official (a Senate race, or a seat changing party), and the big moves in a Senate race —
+            a new leader with most of the count in, every reporting area in. A few an hour at most;
+            one that can&apos;t go out within two hours, or that a newer post about the same race
+            overtakes, is dropped rather than posted late, and a posted change of party that reverts
+            gets a correction. Every sentence in the feed, the story and the posts is a fixed
+            template around the state&apos;s own figures — no AI writes any of it.
           </P>
         </Sub>
         <P>

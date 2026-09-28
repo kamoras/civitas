@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DistrictMap, { fitMercator, leanFill } from "./DistrictMap";
-import type { RaceWithCandidates } from "@/types/election";
+import type { LiveRaceResult, RaceWithCandidates } from "@/types/election";
 
 // The real vendored file, so a regenerated topology that the component
 // can no longer read fails here rather than on the live page.
@@ -97,5 +97,48 @@ describe("DistrictMap", () => {
     );
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("keys every results fill, and never names a tied candidate as ahead", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    const tie = {
+      raceId: "2026-HOUSE-CT-2",
+      state: "CT",
+      office: "H",
+      district: 2,
+      isSpecial: false,
+      heldBy: "DEM",
+      official: false,
+      votesCounted: 2000,
+      reportingUnits: 90,
+      totalUnits: 100,
+      unitLabel: "towns",
+      sourceName: "CT SOTS",
+      sourceUrl: null,
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: null,
+      flip: false,
+      candidates: [
+        { name: "Ann Rep", party: "REP", votes: 1000, pct: 50, candidateId: null },
+        { name: "Bo Dem", party: "DEM", votes: 1000, pct: 50, candidateId: null },
+      ],
+    } as LiveRaceResult;
+    render(
+      <DistrictMap
+        state="CT"
+        races={RACES}
+        picked={null}
+        onPick={vi.fn()}
+        results={new Map([[2, tie]])}
+      />
+    );
+    const shape = await screen.findByRole("button", { name: "CT-2" });
+    expect(screen.getByText("no votes yet")).toBeInTheDocument();
+    expect(screen.getByText(/solid = official/)).toBeInTheDocument();
+    shape.focus();
+    expect(await screen.findByText("tied, not called")).toBeInTheDocument();
+    expect(screen.getByText("TIED")).toBeInTheDocument();
+    expect(screen.getByText(/Ann Rep/)).not.toHaveClass("text-rep-red");
   });
 });

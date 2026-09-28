@@ -7,9 +7,12 @@ import RaceMap from "@/components/elections/RaceMap";
 import LiveUpdates from "@/components/elections/results/LiveUpdates";
 import {
   AWAITING_FILL,
+  FEED_FAILED_FILL,
   TIED_FILL,
   UNCOVERED_FILL,
+  feedFailed,
   formatEasternTime,
+  isTied,
   partyLetter,
   seatsLed,
   stateFill,
@@ -19,12 +22,14 @@ import type { LiveRaceResult, LiveResults } from "@/types/election";
 
 const DC_FILL = "rgba(255, 255, 255, 0.06)";
 
-function Swatch({ color, outline = false }: { color: string; outline?: boolean }) {
+/** A legend key. Every swatch has a faint border, so the near-background
+ * fills (UNCOVERED_FILL, AWAITING_FILL) still read as a key and not a gap. */
+function Swatch({ color }: { color: string }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-block h-3 w-4"
-      style={outline ? { border: `2px solid ${color}` } : { backgroundColor: color }}
+      className="inline-block h-3 w-4 border border-white/30"
+      style={{ backgroundColor: color }}
     />
   );
 }
@@ -73,6 +78,10 @@ export default function ResultsOverview({
   const house = results.races.filter((r) => r.office === "H");
   const flips = results.races.filter((r) => r.flip);
   const liveSenate = [...senateStates].filter((s) => live.has(s)).length;
+  // A covered state whose latest feed read failed: with no count it is
+  // "feed not read", never "no votes yet"; with an older count it is stale.
+  const feeds = results.feeds ?? {};
+  const readFailed = (state: string) => live.has(state) && feedFailed(feeds[state]);
 
   const fill = (state: string) =>
     state === "DC"
@@ -81,7 +90,8 @@ export default function ResultsOverview({
           byState.get(state) ?? [],
           chamber,
           live.has(state),
-          chamber === "H" || senateStates.has(state)
+          chamber === "H" || senateStates.has(state),
+          readFailed(state)
         );
 
   // Covered states first (they have something to show), then the rest.
@@ -129,7 +139,12 @@ export default function ResultsOverview({
                 <Swatch color="rgba(255,137,137,0.85)" /> R LEADS
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color="rgba(130,172,255,0.3)" /> UNDER HALF IN
+                {/* Either party's colour, paler: not a blue-only state. */}
+                <span className="flex">
+                  <Swatch color="rgba(130,172,255,0.3)" />
+                  <Swatch color="rgba(255,137,137,0.3)" />
+                </span>{" "}
+                PALER: UNDER HALF IN
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={TIED_FILL} /> {chamber === "S" ? "TIED" : "TIED / SPLIT"}
@@ -141,6 +156,9 @@ export default function ResultsOverview({
               )}
               <li className="flex items-center gap-1.5">
                 <Swatch color={AWAITING_FILL} /> NO VOTES YET
+              </li>
+              <li className="flex items-center gap-1.5">
+                <Swatch color={FEED_FAILED_FILL} /> FEED NOT READ
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={UNCOVERED_FILL} />{" "}
@@ -163,7 +181,9 @@ export default function ResultsOverview({
             than half the precincts or counties are in; solid means the state calls its count
             official.
             {chamber === "H" &&
-              " For the House, a state is shaded by the party leading more of its districts."}
+              " For the House, a state is shaded by the party leading more of its districts."}{" "}
+            Amber means Civitas couldn&apos;t read that state&apos;s feed, which says nothing about
+            whether counting has started.
           </p>
         </section>
 
@@ -199,7 +219,11 @@ export default function ResultsOverview({
             {flips.length}
           </p>
           <p className="mt-1 text-sm text-ink-lo">
-            Leader from a different party than the holder, with half or more in
+            Leader from a different party than the holder, with enough of the count in (
+            <Link href="/about/elections#election-night" className="text-phos hover:underline">
+              what counts as enough
+            </Link>
+            )
           </p>
         </div>
       </section>
@@ -216,7 +240,18 @@ export default function ResultsOverview({
           {directory.map((state) => {
             const summary = summarizeState(byState.get(state) ?? []);
             const isLive = live.has(state);
+            const failed = readFailed(state);
+            const hasCount = (byState.get(state) ?? []).length > 0;
+            const feed = feeds[state];
             const s = summary.senate[0];
+            const badge = !isLive
+              ? { text: "NO FEED", className: "border-white/15 text-ink-min" }
+              : failed
+                ? {
+                    text: hasCount ? "STALE" : "FEED NOT READ",
+                    className: "border-signal-amber/50 text-signal-amber",
+                  }
+                : { text: "LIVE", className: "border-signal-amber/50 text-signal-amber" };
             return (
               <li key={state}>
                 <Link
@@ -226,30 +261,37 @@ export default function ResultsOverview({
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="font-mono text-sm text-ink-hi">{state}</span>
                     <span
-                      className={`border px-1.5 font-mono text-[11px] tracking-[0.1em] ${
-                        isLive
-                          ? "border-signal-amber/50 text-signal-amber"
-                          : "border-white/15 text-ink-min"
-                      }`}
+                      className={`border px-1.5 font-mono text-[11px] tracking-[0.1em] ${badge.className}`}
                     >
-                      {isLive ? "LIVE" : "NO FEED"}
+                      {badge.text}
                     </span>
                   </span>
                   <span className="text-sm text-ink-lo">
-                    {s?.candidates[0] && s.votesCounted
-                      ? `Senate: ${s.candidates[0].name} (${partyLetter(s.candidates[0].party)}) ${
-                          s.official ? "official" : "leads"
-                        }${s.flip ? " · flip" : ""}`
-                      : senateStates.has(state)
-                        ? isLive
-                          ? "Senate: no votes yet"
-                          : "Senate race: check the state's count"
-                        : "No Senate race this year"}
+                    {s && isTied(s)
+                      ? `Senate: tied${s.official ? " · official" : ""}`
+                      : s?.candidates[0] && s.votesCounted
+                        ? `Senate: ${s.candidates[0].name} (${partyLetter(s.candidates[0].party)}) ${
+                            s.official ? "official" : "leads"
+                          }${s.flip ? " · flip" : ""}`
+                        : senateStates.has(state)
+                          ? isLive
+                            ? failed && !s
+                              ? "Senate: couldn't read its feed"
+                              : "Senate: no votes yet"
+                            : "Senate race: check the state's count"
+                          : "No Senate race this year"}
                   </span>
                   {summary.house.length > 0 && (
                     <span className="font-mono text-xs text-ink-min">
                       HOUSE D {summary.houseLeads.DEM ?? 0} · R {summary.houseLeads.REP ?? 0}{" "}
                       LEADING
+                    </span>
+                  )}
+                  {failed && hasCount && (
+                    <span className="font-mono text-xs text-signal-amber">
+                      {feed?.lastOkAt
+                        ? `LATEST READ FAILED · COUNT FROM ${formatEasternTime(feed.lastOkAt).toUpperCase()}`
+                        : "LATEST READ FAILED · OLDER COUNT"}
                     </span>
                   )}
                 </Link>

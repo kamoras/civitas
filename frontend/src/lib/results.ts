@@ -2,7 +2,7 @@
  * Live election results: colour, labels and wording for the results pages.
  *
  * Every sentence here is a fixed frame around the state's own numbers,
- * matching the backend's templates (analyze/election_results_bluesky.py):
+ * matching the backend's templates (live_results/bluesky.py):
  * a race is "leading" until the state itself calls its count official, and
  * nothing on the page projects or calls a winner.
  */
@@ -22,6 +22,11 @@ const OTHER = "201,149,255"; // ind-purple #c995ff
 export const AWAITING_FILL = "#2a2520";
 /** Fill for a place this page has no live count for at all. */
 export const UNCOVERED_FILL = "rgba(255, 255, 255, 0.05)";
+/** Fill for a state read live whose latest feed read failed and which has
+ * no count to show: not "no votes yet" — a feed that's down says nothing
+ * about whether counting has begun. Amber, the colour of every
+ * couldn't-read notice on these pages. */
+export const FEED_FAILED_FILL = "rgba(255, 216, 77, 0.28)";
 /** Votes counted, nobody ahead: an exact tie, or a House delegation split
  * evenly. Not "no votes yet", which is AWAITING_FILL. */
 export const TIED_FILL = "rgba(205, 199, 188, 0.45)";
@@ -39,6 +44,15 @@ export function feedFailed(feed: { status: string } | null | undefined): boolean
   return !!feed && ["untrusted", "unavailable", "stale", "failed"].includes(feed.status);
 }
 
+/** Votes counted and the top two level: an exact tie, where the backend
+ * leaves leaderParty null. Read from the tallies (sorted, most votes first)
+ * rather than from a null leaderParty, which a leader whose party the feed
+ * doesn't name also has. Not a lead for whoever the feed lists first. */
+export function isTied(r: { votesCounted: number; candidates: { votes: number }[] }): boolean {
+  const [first, second] = r.candidates;
+  return r.votesCounted > 0 && !!first && !!second && first.votes === second.votes;
+}
+
 /** Share of reporting units in, 0..1, or null when the state gives none. */
 export function reportingShare(r: {
   reportingUnits: number | null;
@@ -54,11 +68,13 @@ function rgb(party: string | null): string {
   return OTHER;
 }
 
-/** A race's map fill: its leader's party, paler while fewer than half the
+/** A race's map fill: its leader's party (purple for one the feed gives no
+ * party the vocabulary knows), paler while fewer than half the
  * units are in, solid once the state calls it official. */
 export function resultFill(result: LiveRaceResult | undefined, covered: boolean): string {
   if (!result) return covered ? AWAITING_FILL : UNCOVERED_FILL;
-  if (!result.leaderParty) return result.votesCounted > 0 ? TIED_FILL : AWAITING_FILL;
+  if (!(result.votesCounted > 0)) return AWAITING_FILL;
+  if (isTied(result)) return TIED_FILL;
   if (result.official) return `rgba(${rgb(result.leaderParty)}, 1)`;
   const share = reportingShare(result);
   const opacity = share == null ? 0.55 : share < 0.5 ? 0.3 : 0.45 + 0.45 * share;
@@ -282,10 +298,14 @@ export function stateFill(
   races: LiveRaceResult[],
   chamber: "S" | "H",
   covered: boolean,
-  hasRace: boolean
+  hasRace: boolean,
+  /** The state's latest feed read failed (feedFailed): with no count to
+   * show, it is drawn as FEED_FAILED_FILL, never as "no votes yet". */
+  feedDown = false
 ): string {
   if (!hasRace) return UNCOVERED_FILL;
   const mine = races.filter((r) => r.office === chamber);
+  if (!mine.length && covered && feedDown) return FEED_FAILED_FILL;
   if (chamber === "S") return resultFill(mine[0], covered);
   if (!mine.length) return covered ? AWAITING_FILL : UNCOVERED_FILL;
   const leads = seatsLed(mine);

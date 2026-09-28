@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   AWAITING_FILL,
   feedFailed,
+  FEED_FAILED_FILL,
+  isTied,
   TIED_FILL,
   UNCOVERED_FILL,
   heldByPhrase,
@@ -95,7 +97,28 @@ describe("resultFill", () => {
   });
 
   it("draws a tie as a tie, not as nothing counted", () => {
-    expect(resultFill(race({ leaderParty: null, votesCounted: 1900 }), true)).toBe(TIED_FILL);
+    const tie = race({
+      leaderParty: null,
+      candidates: [
+        { name: "Ray Jones", party: "REP", votes: 950, pct: 50, candidateId: null },
+        { name: "Dana Smith", party: "DEM", votes: 950, pct: 50, candidateId: null },
+      ],
+    });
+    expect(resultFill(tie, true)).toBe(TIED_FILL);
+    expect(isTied(tie)).toBe(true);
+    expect(isTied(race())).toBe(false);
+    expect(isTied(race({ votesCounted: 0 }))).toBe(false);
+  });
+
+  it("draws a leader the feed gives no known party as a lead, not a tie", () => {
+    const unknown = race({
+      leaderParty: null,
+      candidates: [
+        { name: "Pat Doe", party: null, votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
+      ],
+    });
+    expect(resultFill(unknown, true)).toMatch(/^rgba\(201,149,255/);
   });
 
   it("is paler with under half in and solid only when official", () => {
@@ -116,6 +139,16 @@ describe("stateFill", () => {
     expect(
       stateFill([race({ office: "H", district: 1, leaderParty: "IND" })], "H", true, true)
     ).toBe("rgba(201,149,255, 0.6)");
+  });
+
+  it("draws a covered state whose feed failed as that, not as no votes yet", () => {
+    expect(stateFill([], "S", true, true, true)).toBe(FEED_FAILED_FILL);
+    expect(stateFill([], "H", true, true, true)).toBe(FEED_FAILED_FILL);
+    expect(stateFill([], "S", true, true, false)).toBe(AWAITING_FILL);
+    // A state with no feed at all is uncovered whatever its status says.
+    expect(stateFill([], "S", false, true, true)).toBe(UNCOVERED_FILL);
+    // An older count still shown keeps its colour.
+    expect(stateFill([race()], "S", true, true, true)).toMatch(/^rgba\(255,137,137/);
   });
 
   it("shades House by the party leading more districts", () => {

@@ -13,7 +13,7 @@ import ResultsOverview from "@/components/elections/results/ResultsOverview";
 import { formatPvi, pviColor } from "@/lib/elections";
 import { formatEasternTime, showsResults } from "@/lib/results";
 import { fetchPviMap } from "@/lib/api";
-import { useLiveResults } from "@/hooks/useLiveResults";
+import { describeInterval, useLiveResults } from "@/hooks/useLiveResults";
 import type { PviMap } from "@/types/election";
 
 /*
@@ -60,8 +60,11 @@ export default function ElectionsPage() {
   const [error, setError] = useState<string | null>(null);
   // From election day until the results window closes the page leads with
   // the live count (backend election_phase). One request says which; it
-  // polls only while there are results to show.
-  const { data: results, error: resultsError } = useLiveResults();
+  // polls while there are results to show, and — slowly — while election
+  // day is near, so a page left open switches over by itself. A request
+  // that keeps failing is retried on a growing backoff.
+  const { data: results, error: resultsError, retryMs } = useLiveResults();
+  const retryEvery = describeInterval(retryMs ?? 60_000).toUpperCase();
   const resultsMode = !!results && showsResults(results.phase);
   // The lean map waits until the phase is known: on election night a lean
   // map drawn first, then swapped for the count, reads as a prediction of
@@ -124,7 +127,7 @@ export default function ElectionsPage() {
                 >
                   <span aria-hidden="true" className="inline-block h-2 w-2 bg-signal-amber" />
                   {resultsError
-                    ? "REFRESH FAILED · RETRYING"
+                    ? `REFRESH FAILED · RETRYING ${retryEvery}`
                     : results.phase.lastResultChange
                       ? `LIVE · LAST CHANGE ${formatEasternTime(results.phase.lastResultChange)}`
                       : "LIVE · WAITING FOR FIRST COUNTS"}
@@ -151,7 +154,7 @@ export default function ElectionsPage() {
 
           {campaignMode && resultsError && !results && (
             <p role="status" className="mt-6 font-mono text-xs tracking-[0.1em] text-ink-min">
-              COULDN&apos;T CHECK FOR LIVE RESULTS · RETRYING EVERY MINUTE
+              COULDN&apos;T CHECK FOR LIVE RESULTS · RETRYING {retryEvery}
             </p>
           )}
 

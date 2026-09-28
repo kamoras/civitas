@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import type { LiveRaceResult, RaceWithCandidates } from "@/types/election";
 import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
-import { partyLetter, partyTextClass, reportingText, resultFill } from "@/lib/results";
+import { AWAITING_FILL, TIED_FILL, isTied, partyLetter, partyTextClass, reportingText, resultFill } from "@/lib/results";
 
 /**
  * Point at your neighbourhood; the page narrows to its district.
@@ -145,11 +145,28 @@ export default function DistrictMap({
         <p className="font-mono text-xs tracking-[0.1em] text-phos">
           {results ? "WHO LEADS EACH DISTRICT" : "POINT AT WHERE YOU LIVE"}
         </p>
-        <p className="font-mono text-[10px] text-ink-min">
-          {results
-            ? "red = R leads · blue = D leads · paler = under half in · grey = tied"
-            : "redder = safer R · bluer = safer D · paler = closer"}
-        </p>
+        {results ? (
+          // Every fill resultFill can give, including the dark "no votes
+          // yet" a district without a count is drawn in.
+          <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-ink-min">
+            <li>red = R leads · blue = D leads</li>
+            <li>paler = under half in · solid = official</li>
+            <li className="flex items-center gap-1">
+              <span aria-hidden="true" className="inline-block h-2 w-3" style={{ backgroundColor: TIED_FILL }} />
+              tied
+            </li>
+            <li className="flex items-center gap-1">
+              <span
+                aria-hidden="true"
+                className="inline-block h-2 w-3 border border-white/30"
+                style={{ backgroundColor: AWAITING_FILL }}
+              />
+              no votes yet
+            </li>
+          </ul>
+        ) : (
+          <p className="font-mono text-[10px] text-ink-min">redder = safer R · bluer = safer D · paler = closer</p>
+        )}
       </div>
 
       <ComposableMap
@@ -263,20 +280,25 @@ function DistrictResultPreview({
   result: LiveRaceResult | undefined;
 }) {
   const [first, second] = result?.candidates ?? [];
+  // An exact tie names both without either in a lead colour.
+  const tied = !!result && isTied(result);
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span className="text-ink-hi">{district === 0 ? `${state} at-large` : `${state}-${district}`}</span>
+      {tied && <span className="text-ink-hi">TIED</span>}
       {!result || !result.votesCounted ? (
         <span className="text-ink-min">no votes counted yet</span>
       ) : (
         <>
           {[first, second].filter(Boolean).map((c) => (
-            <span key={c.candidateId ?? c.name} className={partyTextClass(c.party)}>
+            <span key={c.candidateId ?? c.name} className={tied ? "text-ink-hi" : partyTextClass(c.party)}>
               {c.name} ({partyLetter(c.party) || "other"}) {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
             </span>
           ))}
           <span className="text-ink-min">{reportingText(result)}</span>
-          <span className="text-ink-lo">{result.official ? "official" : "leading, not called"}</span>
+          <span className="text-ink-lo">
+            {result.official ? "official" : tied ? "tied, not called" : "leading, not called"}
+          </span>
         </>
       )}
     </div>

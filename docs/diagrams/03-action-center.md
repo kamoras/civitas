@@ -180,12 +180,16 @@ time before the first fit.
 
 ## Issues drafted before the press has them
 
-Two sources open a DEVELOPING issue from a primary record, ranked below every
-confirmed issue and promoted when news coverage matches it: a Senate roll
-call (`early_signal.py`) and, on election night, a seat whose live count
-shows it changing party (`live_results/signals.py`, source type
-`election_results` — a fixed template around the state's own figures, no
-model text; see [Elections](10-elections.md#election-night-the-live-count)).
+Four kinds of primary record open a DEVELOPING issue, ranked below every
+confirmed issue and promoted when news coverage matches it. `early_signal.py`
+drafts three: a Senate roll call (`senate_roll_call_vote`), a House roll call
+(`house_roll_call_vote`), both final-passage votes only, and a Federal
+Register significant rule (`federal_register_significant_rule`). The fourth
+is election night's: a seat whose live count shows it changing party
+(`live_results/signals.py`, source type `election_results`, a fixed template
+around the state's own figures, no model text; see
+[Elections](10-elections.md#election-night-the-live-count)). The issue page
+names which record each was drafted from (`frontend/src/lib/developing.ts`).
 The issues list shows a current DEVELOPING issue beside the newest day's
 confirmed ones whatever its own date, so a flip drafted just before midnight
 Eastern doesn't drop off the list at the next refresh.
