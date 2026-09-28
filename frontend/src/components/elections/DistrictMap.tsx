@@ -147,7 +147,7 @@ export default function DistrictMap({
         </p>
         <p className="font-mono text-[10px] text-ink-min">
           {results
-            ? "red = R leads · blue = D leads · paler = under half in"
+            ? "red = R leads · blue = D leads · paler = under half in · grey = tied"
             : "redder = safer R · bluer = safer D · paler = closer"}
         </p>
       </div>
@@ -271,8 +271,8 @@ function DistrictResultPreview({
       ) : (
         <>
           {[first, second].filter(Boolean).map((c) => (
-            <span key={c.name} className={partyTextClass(c.party)}>
-              {c.name} ({partyLetter(c.party) || "other"}) {c.pct?.toFixed(1)}%
+            <span key={c.candidateId ?? c.name} className={partyTextClass(c.party)}>
+              {c.name} ({partyLetter(c.party) || "other"}) {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
             </span>
           ))}
           <span className="text-ink-min">{reportingText(result)}</span>

@@ -1,0 +1,6613 @@
+{
+ "_source": "Trimmed from each state's real Enhanced Voting /api/elections/{jurisdiction}/{id}/data response, fetched 2026-09-28 by the live-results review: every federal ballot item (ballot options cut to name/party/votes/write-in flags), two non-federal decoys each, localityElections cut to id + isProduction (their COUNT is what unit_label reads), and the election envelope's scalar fields. UT/VA/GA are real GENERAL elections (2024; GA also 2022, whose House labels mix two formats). WA/ID/RI hold no general yet (their indexes start in 2026), so their entry is the real 2026 primary: the label formats their general will print, verified the same way. WA's also carries one statewide non-federal contest (Supreme Court Position 1, 39 of 39 counties), because its 2026 ballot has no Senate race and unit_label is read off a statewide contest.",
+ "payloads": {
+  "UT24": {
+   "state": "UT",
+   "publicElectionId": "general11052024",
+   "election": {
+    "electionDate": "2024-11-05",
+    "isProduction": true,
+    "isOfficialResults": true,
+    "lastUpdated": "2024-11-22T22:37:41.7811251Z",
+    "asOf": "2025-11-04T18:26:56.0183194Z"
+   },
+   "localityElections": [
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    }
+   ],
+   "ballotItems": [
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Senate "
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 1463509,
+     "reportingStatus": {
+      "reportingUnits": 29,
+      "totalUnits": 29
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "CARLTON E. BOWEN"
+         }
+        ],
+        "voteCount": 83972,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IAP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "JOHN CURTIS"
+         }
+        ],
+        "voteCount": 914700,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "CAROLINE GLEICH"
+         }
+        ],
+        "voteCount": 464515,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "LAIRD FETZER HAMBLIN"
+         }
+        ],
+        "voteCount": 322,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": true,
+        "party": {
+         "abbreviation": "UNA"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. House 1 "
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 365895,
+     "reportingStatus": {
+      "reportingUnits": 8,
+      "totalUnits": 8
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "BILL CAMPBELL"
+         }
+        ],
+        "voteCount": 117319,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "DANIEL R. COTTAM"
+         }
+        ],
+        "voteCount": 17601,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "LIB"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "BLAKE D. MOORE"
+         }
+        ],
+        "voteCount": 230975,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. House 2 "
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 353838,
+     "reportingStatus": {
+      "reportingUnits": 13,
+      "totalUnits": 13
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "NATHANIEL E  WOODWARD"
+         }
+        ],
+        "voteCount": 121114,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "CASSIE EASLEY"
+         }
+        ],
+        "voteCount": 19650,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "CON"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "CELESTE MALOY"
+         }
+        ],
+        "voteCount": 205234,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "TYLER MURSET"
+         }
+        ],
+        "voteCount": 7840,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "UNA"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. House 3 "
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 365276,
+     "reportingStatus": {
+      "reportingUnits": 11,
+      "totalUnits": 11
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "MIKE KENNEDY"
+         }
+        ],
+        "voteCount": 242496,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "GLENN J. WRIGHT"
+         }
+        ],
+        "voteCount": 122780,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. House 4 "
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 363668,
+     "reportingStatus": {
+      "reportingUnits": 4,
+      "totalUnits": 4
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "M. EVAN BULLARD"
+         }
+        ],
+        "voteCount": 5856,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "UNA"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "VAUGHN R COOK"
+         }
+        ],
+        "voteCount": 17347,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "UUP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "KATRINA FALLICK-WANG"
+         }
+        ],
+        "voteCount": 109838,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "BURGESS OWENS"
+         }
+        ],
+        "voteCount": 230627,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Senate 2 (Multi-County) "
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 47257,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "CHRIS WILSON"
+         }
+        ],
+        "voteCount": 32995,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "NANCY HUNTLY"
+         }
+        ],
+        "voteCount": 14262,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Senate 3 (Multi-County) "
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 49037,
+     "reportingStatus": {
+      "reportingUnits": 3,
+      "totalUnits": 3
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "STACY BERNAL"
+         }
+        ],
+        "voteCount": 20824,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "JOHN D. JOHNSON"
+         }
+        ],
+        "voteCount": 28213,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "VA24": {
+   "state": "VA",
+   "publicElectionId": "2024NovemberGeneral",
+   "election": {
+    "electionDate": "2024-11-05",
+    "isProduction": true,
+    "isOfficialResults": true,
+    "lastUpdated": "2025-03-05T14:57:04.382766Z",
+    "asOf": "2025-03-05T14:57:37.4930252Z"
+   },
+   "localityElections": [
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    }
+   ],
+   "ballotItems": [
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, United States Senate"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro del Senado de los Estados Unidos"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 미국 상원"
+      },
+      {
+       "languageId": "5",
+       "text": "Thượng nghị sĩ Hoa Kỳ "
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 4445535,
+     "reportingStatus": {
+      "reportingUnits": 133,
+      "totalUnits": 133
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Timothy M. Kaine"
+         },
+         {
+          "languageId": "1",
+          "text": "Timothy M. Kaine"
+         },
+         {
+          "languageId": "2",
+          "text": "Timothy M. Kaine"
+         },
+         {
+          "languageId": "5",
+          "text": "Timothy M. Kaine"
+         }
+        ],
+        "voteCount": 2417115,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Hung Cao"
+         },
+         {
+          "languageId": "1",
+          "text": "Hung Cao"
+         },
+         {
+          "languageId": "2",
+          "text": "Hung Cao"
+         },
+         {
+          "languageId": "5",
+          "text": "Hung Cao"
+         }
+        ],
+        "voteCount": 2019911,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 8509,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (1st District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 1)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제1 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  1)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 478906,
+     "reportingStatus": {
+      "reportingUnits": 18,
+      "totalUnits": 18
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Leslie C. Mehta"
+         },
+         {
+          "languageId": "1",
+          "text": "Leslie C. Mehta"
+         },
+         {
+          "languageId": "2",
+          "text": "Leslie C. Mehta"
+         },
+         {
+          "languageId": "5",
+          "text": "Leslie C. Mehta"
+         }
+        ],
+        "voteCount": 208445,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Robert J. Wittman"
+         },
+         {
+          "languageId": "1",
+          "text": "Robert J. Wittman"
+         },
+         {
+          "languageId": "2",
+          "text": "Robert J. Wittman"
+         },
+         {
+          "languageId": "5",
+          "text": "Robert J. Wittman"
+         }
+        ],
+        "voteCount": 269657,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 804,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (2nd District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 2)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제2 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  2)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 408702,
+     "reportingStatus": {
+      "reportingUnits": 8,
+      "totalUnits": 8
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Missy Cotter Smasal"
+         },
+         {
+          "languageId": "1",
+          "text": "Missy Cotter Smasal"
+         },
+         {
+          "languageId": "2",
+          "text": "Missy Cotter Smasal"
+         },
+         {
+          "languageId": "5",
+          "text": "Missy Cotter Smasal"
+         }
+        ],
+        "voteCount": 191666,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jen A. Kiggans"
+         },
+         {
+          "languageId": "1",
+          "text": "Jen A. Kiggans"
+         },
+         {
+          "languageId": "2",
+          "text": "Jen A. Kiggans"
+         },
+         {
+          "languageId": "5",
+          "text": "Jen A. Kiggans"
+         }
+        ],
+        "voteCount": 207368,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Robert E. Reid, Jr. "
+         },
+         {
+          "languageId": "1",
+          "text": "Robert E. Reid, Jr. "
+         },
+         {
+          "languageId": "2",
+          "text": "Robert E. Reid, Jr. "
+         },
+         {
+          "languageId": "5",
+          "text": "Robert E. Reid, Jr. "
+         }
+        ],
+        "voteCount": 9197,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "I"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 471,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (3rd District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 3)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제3 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  3)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 314397,
+     "reportingStatus": {
+      "reportingUnits": 5,
+      "totalUnits": 5
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Robert C. \"Bobby\" Scott"
+         },
+         {
+          "languageId": "1",
+          "text": "Robert C. \"Bobby\" Scott"
+         },
+         {
+          "languageId": "2",
+          "text": "Robert C. \"Bobby\" Scott"
+         },
+         {
+          "languageId": "5",
+          "text": "Robert C. \"Bobby\" Scott"
+         }
+        ],
+        "voteCount": 219926,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "John Sitka, III"
+         },
+         {
+          "languageId": "1",
+          "text": "John Sitka, III"
+         },
+         {
+          "languageId": "2",
+          "text": "John Sitka, III"
+         },
+         {
+          "languageId": "5",
+          "text": "John Sitka, III"
+         }
+        ],
+        "voteCount": 93801,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 670,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (4th District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 4)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제4 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  4)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 375508,
+     "reportingStatus": {
+      "reportingUnits": 15,
+      "totalUnits": 15
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jennifer L. McClellan"
+         },
+         {
+          "languageId": "1",
+          "text": "Jennifer L. McClellan"
+         },
+         {
+          "languageId": "2",
+          "text": "Jennifer L. McClellan"
+         },
+         {
+          "languageId": "5",
+          "text": "Jennifer L. McClellan"
+         }
+        ],
+        "voteCount": 252885,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "William J. \"Bill\" Moher III"
+         },
+         {
+          "languageId": "1",
+          "text": "William J. \"Bill\" Moher III"
+         },
+         {
+          "languageId": "2",
+          "text": "William J. \"Bill\" Moher III"
+         },
+         {
+          "languageId": "5",
+          "text": "William J. \"Bill\" Moher III"
+         }
+        ],
+        "voteCount": 121814,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 809,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (5th District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 5)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제5 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  5)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 435839,
+     "reportingStatus": {
+      "reportingUnits": 24,
+      "totalUnits": 24
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Gloria Tinsley Witt"
+         },
+         {
+          "languageId": "1",
+          "text": "Gloria Tinsley Witt"
+         },
+         {
+          "languageId": "2",
+          "text": "Gloria Tinsley Witt"
+         },
+         {
+          "languageId": "5",
+          "text": "Gloria Tinsley Witt"
+         }
+        ],
+        "voteCount": 184229,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "John J. McGuire III"
+         },
+         {
+          "languageId": "1",
+          "text": "John J. McGuire III"
+         },
+         {
+          "languageId": "2",
+          "text": "John J. McGuire III"
+         },
+         {
+          "languageId": "5",
+          "text": "John J. McGuire III"
+         }
+        ],
+        "voteCount": 249564,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 2046,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (6th District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 6)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제6 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  6)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 407035,
+     "reportingStatus": {
+      "reportingUnits": 23,
+      "totalUnits": 23
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Ken L. Mitchell"
+         },
+         {
+          "languageId": "1",
+          "text": "Ken L. Mitchell"
+         },
+         {
+          "languageId": "2",
+          "text": "Ken L. Mitchell"
+         },
+         {
+          "languageId": "5",
+          "text": "Ken L. Mitchell"
+         }
+        ],
+        "voteCount": 141612,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Ben L. Cline"
+         },
+         {
+          "languageId": "1",
+          "text": "Ben L. Cline"
+         },
+         {
+          "languageId": "2",
+          "text": "Ben L. Cline"
+         },
+         {
+          "languageId": "5",
+          "text": "Ben L. Cline"
+         }
+        ],
+        "voteCount": 256933,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Robert C. \"Robby\" Wells, Jr."
+         },
+         {
+          "languageId": "1",
+          "text": "Robert C. \"Robby\" Wells, Jr."
+         },
+         {
+          "languageId": "2",
+          "text": "Robert C. \"Robby\" Wells, Jr."
+         },
+         {
+          "languageId": "5",
+          "text": "Robert C. \"Robby\" Wells, Jr."
+         }
+        ],
+        "voteCount": 7980,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "I"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 510,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (7th District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 7)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제7 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  7)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 397299,
+     "reportingStatus": {
+      "reportingUnits": 11,
+      "totalUnits": 11
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Eugene S. Vindman"
+         },
+         {
+          "languageId": "1",
+          "text": "Eugene S. Vindman"
+         },
+         {
+          "languageId": "2",
+          "text": "Eugene S. Vindman"
+         },
+         {
+          "languageId": "5",
+          "text": "Eugene S. Vindman"
+         }
+        ],
+        "voteCount": 203336,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Derrick M. Anderson"
+         },
+         {
+          "languageId": "1",
+          "text": "Derrick M. Anderson"
+         },
+         {
+          "languageId": "2",
+          "text": "Derrick M. Anderson"
+         },
+         {
+          "languageId": "5",
+          "text": "Derrick M. Anderson"
+         }
+        ],
+        "voteCount": 192847,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 1116,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (8th District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 8)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제8 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  8)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 383915,
+     "reportingStatus": {
+      "reportingUnits": 4,
+      "totalUnits": 4
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Donald S. Beyer, Jr."
+         },
+         {
+          "languageId": "1",
+          "text": "Donald S. Beyer, Jr."
+         },
+         {
+          "languageId": "2",
+          "text": "Donald S. Beyer, Jr."
+         },
+         {
+          "languageId": "5",
+          "text": "Donald S. Beyer, Jr."
+         }
+        ],
+        "voteCount": 274593,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jerry W. Torres"
+         },
+         {
+          "languageId": "1",
+          "text": "Jerry W. Torres"
+         },
+         {
+          "languageId": "2",
+          "text": "Jerry W. Torres"
+         },
+         {
+          "languageId": "5",
+          "text": "Jerry W. Torres"
+         }
+        ],
+        "voteCount": 94676,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "David R. Kennedy"
+         },
+         {
+          "languageId": "1",
+          "text": "David R. Kennedy"
+         },
+         {
+          "languageId": "2",
+          "text": "David R. Kennedy"
+         },
+         {
+          "languageId": "5",
+          "text": "David R. Kennedy"
+         }
+        ],
+        "voteCount": 9956,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "I"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Bentley F. Hensel"
+         },
+         {
+          "languageId": "1",
+          "text": "Bentley F. Hensel"
+         },
+         {
+          "languageId": "2",
+          "text": "Bentley F. Hensel"
+         },
+         {
+          "languageId": "5",
+          "text": "Bentley F. Hensel"
+         }
+        ],
+        "voteCount": 3656,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "I"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 1034,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (9th District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 9)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제9 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  9)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 400963,
+     "reportingStatus": {
+      "reportingUnits": 28,
+      "totalUnits": 28
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Karen G. H. Baker"
+         },
+         {
+          "languageId": "1",
+          "text": "Karen G. H. Baker"
+         },
+         {
+          "languageId": "2",
+          "text": "Karen G. H. Baker"
+         },
+         {
+          "languageId": "5",
+          "text": "Karen G. H. Baker"
+         }
+        ],
+        "voteCount": 109570,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "H. Morgan Griffith"
+         },
+         {
+          "languageId": "1",
+          "text": "H. Morgan Griffith"
+         },
+         {
+          "languageId": "2",
+          "text": "H. Morgan Griffith"
+         },
+         {
+          "languageId": "5",
+          "text": "H. Morgan Griffith"
+         }
+        ],
+        "voteCount": 290645,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 748,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (10th District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 10)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제10 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  10)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 413012,
+     "reportingStatus": {
+      "reportingUnits": 7,
+      "totalUnits": 7
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Suhas Subramanyam"
+         },
+         {
+          "languageId": "1",
+          "text": "Suhas Subramanyam"
+         },
+         {
+          "languageId": "2",
+          "text": "Suhas Subramanyam"
+         },
+         {
+          "languageId": "5",
+          "text": "Suhas Subramanyam"
+         }
+        ],
+        "voteCount": 215131,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mike W. Clancy"
+         },
+         {
+          "languageId": "1",
+          "text": "Mike W. Clancy"
+         },
+         {
+          "languageId": "2",
+          "text": "Mike W. Clancy"
+         },
+         {
+          "languageId": "5",
+          "text": "Mike W. Clancy"
+         }
+        ],
+        "voteCount": 196343,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 1538,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (11th District)"
+      },
+      {
+       "languageId": "1",
+       "text": "Miembro de la Cámara de Representantes (Distrito 11)"
+      },
+      {
+       "languageId": "2",
+       "text": "의원, 하원 (제11 지구)"
+      },
+      {
+       "languageId": "5",
+       "text": "Dân biểu Hạ viện (Đơn vị  11)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 410186,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Gerald E. \"Gerry\" Connolly"
+         },
+         {
+          "languageId": "1",
+          "text": "Gerald E. \"Gerry\" Connolly"
+         },
+         {
+          "languageId": "2",
+          "text": "Gerald E. \"Gerry\" Connolly"
+         },
+         {
+          "languageId": "5",
+          "text": "Gerald E. \"Gerry\" Connolly"
+         }
+        ],
+        "voteCount": 273529,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "D"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mike L. Van Meter"
+         },
+         {
+          "languageId": "1",
+          "text": "Mike L. Van Meter"
+         },
+         {
+          "languageId": "2",
+          "text": "Mike L. Van Meter"
+         },
+         {
+          "languageId": "5",
+          "text": "Mike L. Van Meter"
+         }
+        ],
+        "voteCount": 134802,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "R"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         },
+         {
+          "languageId": "1",
+          "text": "Votar por un candidato por nombre escrito a mano"
+         },
+         {
+          "languageId": "2",
+          "text": "기재"
+         },
+         {
+          "languageId": "5",
+          "text": "Viết tên vào phiếu bầu"
+         }
+        ],
+        "voteCount": 1855,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": null
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "GA22": {
+   "state": "GA",
+   "publicElectionId": "2022NovGen",
+   "election": {
+    "electionDate": "2022-11-08",
+    "isProduction": true,
+    "isOfficialResults": true,
+    "lastUpdated": "2024-12-04T19:04:56.9840254Z",
+    "asOf": "2025-01-02T19:12:37.9615261Z"
+   },
+   "localityElections": [
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    }
+   ],
+   "ballotItems": [
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US Senate"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 3935924,
+     "reportingStatus": {
+      "reportingUnits": 159,
+      "totalUnits": 159
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Herschel Junior Walker (Rep)"
+         }
+        ],
+        "voteCount": 1908442,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Raphael Warnock (I) (Dem)"
+         }
+        ],
+        "voteCount": 1946117,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Chase Oliver (Lib)"
+         }
+        ],
+        "voteCount": 81365,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "LIB"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House of Representatives - District 1"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 263965,
+     "reportingStatus": {
+      "reportingUnits": 15,
+      "totalUnits": 15
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Earl L. \"\"Buddy\"\" Carter (I) (Rep)"
+         }
+        ],
+        "voteCount": 156128,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Wade Herring (Dem)"
+         }
+        ],
+        "voteCount": 107837,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House of Representatives - District 2"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 241340,
+     "reportingStatus": {
+      "reportingUnits": 30,
+      "totalUnits": 30
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Chris West (Rep)"
+         }
+        ],
+        "voteCount": 108665,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Sanford Bishop (I) (Dem)"
+         }
+        ],
+        "voteCount": 132675,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House Dist 3"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 310581,
+     "reportingStatus": {
+      "reportingUnits": 15,
+      "totalUnits": 15
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Drew Ferguson (I) (Rep)"
+         }
+        ],
+        "voteCount": 213524,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Val Almonord (Dem)"
+         }
+        ],
+        "voteCount": 97057,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House of Representatives - District 4"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 275634,
+     "reportingStatus": {
+      "reportingUnits": 3,
+      "totalUnits": 3
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jonathan Chavez (Rep)"
+         }
+        ],
+        "voteCount": 59302,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Henry C \"\"Hank\"\" Johnson Jr (I) (Dem)"
+         }
+        ],
+        "voteCount": 216332,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House Dist 5"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 295456,
+     "reportingStatus": {
+      "reportingUnits": 3,
+      "totalUnits": 3
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Christian Zimm (Rep)"
+         }
+        ],
+        "voteCount": 51769,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Nikema Williams (I) (Dem)"
+         }
+        ],
+        "voteCount": 243687,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House Dist 6"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 332498,
+     "reportingStatus": {
+      "reportingUnits": 6,
+      "totalUnits": 6
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Rich McCormick (Rep)"
+         }
+        ],
+        "voteCount": 206886,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Bob Christian (Dem)"
+         }
+        ],
+        "voteCount": 125612,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House Dist 7"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 234325,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mark Gonsalves (Rep)"
+         }
+        ],
+        "voteCount": 91262,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Lucy McBath (I) (Dem)"
+         }
+        ],
+        "voteCount": 143063,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House of Representatives - District 8"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 260586,
+     "reportingStatus": {
+      "reportingUnits": 29,
+      "totalUnits": 29
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Austin Scott (I) (Rep)"
+         }
+        ],
+        "voteCount": 178700,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Darrius Butler (Dem)"
+         }
+        ],
+        "voteCount": 81886,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House of Representatives - District 9"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 294138,
+     "reportingStatus": {
+      "reportingUnits": 14,
+      "totalUnits": 14
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Andrew Clyde (I) (Rep)"
+         }
+        ],
+        "voteCount": 212820,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Michael \"\"Mike\"\" Ford (Dem)"
+         }
+        ],
+        "voteCount": 81318,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House of Representatives - District 10"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 307630,
+     "reportingStatus": {
+      "reportingUnits": 18,
+      "totalUnits": 18
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mike Collins (Rep)"
+         }
+        ],
+        "voteCount": 198523,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Tabitha Johnson-Green (Dem)"
+         }
+        ],
+        "voteCount": 109107,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House Dist 11"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 303657,
+     "reportingStatus": {
+      "reportingUnits": 4,
+      "totalUnits": 4
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Barry Loudermilk (I) (Rep)"
+         }
+        ],
+        "voteCount": 190086,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Antonio Daza (Dem)"
+         }
+        ],
+        "voteCount": 113571,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House of Representatives - District 12"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 265195,
+     "reportingStatus": {
+      "reportingUnits": 24,
+      "totalUnits": 24
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Rick W. Allen (I) (Rep)"
+         }
+        ],
+        "voteCount": 158047,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Elizabeth 'Liz' Johnson (Dem)"
+         }
+        ],
+        "voteCount": 107148,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House Dist 13"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 264616,
+     "reportingStatus": {
+      "reportingUnits": 6,
+      "totalUnits": 6
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Caesar Gonzales (Rep)"
+         }
+        ],
+        "voteCount": 48228,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "David Scott (I) (Dem)"
+         }
+        ],
+        "voteCount": 216388,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "US House Dist 14"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 258351,
+     "reportingStatus": {
+      "reportingUnits": 11,
+      "totalUnits": 11
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Marjorie Taylor Greene (I) (Rep)"
+         }
+        ],
+        "voteCount": 170162,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Marcus Flowers (Dem)"
+         }
+        ],
+        "voteCount": 88189,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Senate - District 1"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 70186,
+     "reportingStatus": {
+      "reportingUnits": 3,
+      "totalUnits": 3
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Ben Watson (I) (Rep)"
+         }
+        ],
+        "voteCount": 43080,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "James \"\"Jay\"\" Jones (Dem)"
+         }
+        ],
+        "voteCount": 27106,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Senate - District 2"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 57756,
+     "reportingStatus": {
+      "reportingUnits": 1,
+      "totalUnits": 1
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Clinton Young (Rep)"
+         }
+        ],
+        "voteCount": 16203,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Derek Mallow (Dem)"
+         }
+        ],
+        "voteCount": 41553,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "ID26": {
+   "state": "ID",
+   "publicElectionId": "may2026",
+   "election": {
+    "electionDate": "2026-05-19",
+    "isProduction": true,
+    "isOfficialResults": true,
+    "lastUpdated": "2026-08-24T18:09:27.7718127Z",
+    "asOf": "2026-08-24T18:09:52.2256356Z"
+   },
+   "localityElections": [
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    }
+   ],
+   "ballotItems": [
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "United States Senator - Democratic"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 47741,
+     "reportingStatus": {
+      "reportingUnits": 44,
+      "totalUnits": 44
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "David Roth"
+         }
+        ],
+        "voteCount": 29534,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Brad Moore"
+         }
+        ],
+        "voteCount": 14863,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Nickolas 007 Bonds"
+         }
+        ],
+        "voteCount": 3344,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "United States Senator - Libertarian"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 855,
+     "reportingStatus": {
+      "reportingUnits": 44,
+      "totalUnits": 44
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Matt Loesby"
+         }
+        ],
+        "voteCount": 855,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "LIB"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "United States Senator - Republican"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 232146,
+     "reportingStatus": {
+      "reportingUnits": 44,
+      "totalUnits": 44
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jim Risch"
+         }
+        ],
+        "voteCount": 156140,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Josh Roy"
+         }
+        ],
+        "voteCount": 33188,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Joe Evans"
+         }
+        ],
+        "voteCount": 32636,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Denny LaVe"
+         }
+        ],
+        "voteCount": 10182,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "United States Representative District 1 - Democratic"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 21710,
+     "reportingStatus": {
+      "reportingUnits": 19,
+      "totalUnits": 19
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Kaylee Peterson"
+         }
+        ],
+        "voteCount": 18907,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Kenneth Brungardt"
+         }
+        ],
+        "voteCount": 2803,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "United States Representative District 1 - Republican"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 127949,
+     "reportingStatus": {
+      "reportingUnits": 19,
+      "totalUnits": 19
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Russ Fulcher"
+         }
+        ],
+        "voteCount": 100104,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Andy Briner"
+         }
+        ],
+        "voteCount": 14438,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Joseph P Morrison"
+         }
+        ],
+        "voteCount": 13407,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "United States Representative District 2 - Democratic"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 26934,
+     "reportingStatus": {
+      "reportingUnits": 26,
+      "totalUnits": 26
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Ellie Gilbreath"
+         }
+        ],
+        "voteCount": 19523,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Julie Wiley"
+         }
+        ],
+        "voteCount": 7411,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "United States Representative District 2 - Republican"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 100225,
+     "reportingStatus": {
+      "reportingUnits": 26,
+      "totalUnits": 26
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mike Simpson"
+         }
+        ],
+        "voteCount": 63448,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Brian Keene"
+         }
+        ],
+        "voteCount": 20975,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Perry Shumway"
+         }
+        ],
+        "voteCount": 15802,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "United States Representative District 2 - Libertarian"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 336,
+     "reportingStatus": {
+      "reportingUnits": 26,
+      "totalUnits": 26
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Will Johanson"
+         }
+        ],
+        "voteCount": 336,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "LIB"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Senator District 1 - Republican"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 15230,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Scott Herndon"
+         }
+        ],
+        "voteCount": 8155,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jim Woodward"
+         }
+        ],
+        "voteCount": 7075,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Representative District 1 Seat A - Democratic"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 939,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Karen Matthee"
+         }
+        ],
+        "voteCount": 939,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "WA26": {
+   "state": "WA",
+   "publicElectionId": "20260804",
+   "election": {
+    "electionDate": "2026-08-04",
+    "isProduction": true,
+    "isOfficialResults": true,
+    "lastUpdated": "2026-09-11T17:36:49.6598238Z",
+    "asOf": "2026-09-11T17:36:54.6518537Z"
+   },
+   "localityElections": [
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    }
+   ],
+   "ballotItems": [
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 1"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 160573,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Benjamin Kincaid"
+         }
+        ],
+        "voteCount": 3580,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Suzan DelBene"
+         }
+        ],
+        "voteCount": 85156,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Bryce Nickel"
+         }
+        ],
+        "voteCount": 3929,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "James Etzkorn"
+         }
+        ],
+        "voteCount": 12023,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Hunter Gordon"
+         }
+        ],
+        "voteCount": 10014,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mary Silva"
+         }
+        ],
+        "voteCount": 42088,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Catherine Hildebrand"
+         }
+        ],
+        "voteCount": 3562,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "voteCount": 221,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 2"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 209510,
+     "reportingStatus": {
+      "reportingUnits": 5,
+      "totalUnits": 5
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Edwin H. Feller"
+         }
+        ],
+        "voteCount": 68713,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Tomas Scheel"
+         }
+        ],
+        "voteCount": 29133,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Devin Hermanson"
+         }
+        ],
+        "voteCount": 22775,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Rick Larsen"
+         }
+        ],
+        "voteCount": 88708,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "voteCount": 181,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 3"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 214491,
+     "reportingStatus": {
+      "reportingUnits": 7,
+      "totalUnits": 7
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Marie Gluesenkamp Perez"
+         }
+        ],
+        "voteCount": 78025,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Brent Hennrich"
+         }
+        ],
+        "voteCount": 35820,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "John P. Roco"
+         }
+        ],
+        "voteCount": 4102,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "John Saulie-Rohman"
+         }
+        ],
+        "voteCount": 3549,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Troy Rasband"
+         }
+        ],
+        "voteCount": 2058,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "John Braun"
+         }
+        ],
+        "voteCount": 85064,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Antony Barran"
+         }
+        ],
+        "voteCount": 1345,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "CAP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Austin Braswell"
+         }
+        ],
+        "voteCount": 1656,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Lawrence Kellogg"
+         }
+        ],
+        "voteCount": 2727,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-in"
+         }
+        ],
+        "voteCount": 145,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 4"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 142661,
+     "reportingStatus": {
+      "reportingUnits": 8,
+      "totalUnits": 8
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jacek \"Jack\" Kobiesa"
+         }
+        ],
+        "voteCount": 2214,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "NO"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Amanda McKinney"
+         }
+        ],
+        "voteCount": 49652,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "John Duresky"
+         }
+        ],
+        "voteCount": 42681,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "John C. Hughs"
+         }
+        ],
+        "voteCount": 1695,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Favian Valencia"
+         }
+        ],
+        "voteCount": 5776,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jerrod Sessler"
+         }
+        ],
+        "voteCount": 20808,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Devin Poore"
+         }
+        ],
+        "voteCount": 1956,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "CAP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Ken Vaz"
+         }
+        ],
+        "voteCount": 477,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Zac Rossi"
+         }
+        ],
+        "voteCount": 879,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "NO"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Elpidia Saavedra"
+         }
+        ],
+        "voteCount": 1393,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Matt Boehnke"
+         }
+        ],
+        "voteCount": 15013,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "voteCount": 117,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 5"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 204209,
+     "reportingStatus": {
+      "reportingUnits": 12,
+      "totalUnits": 12
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Nate Powell"
+         }
+        ],
+        "voteCount": 33443,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Carmela Conroy"
+         }
+        ],
+        "voteCount": 38487,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Matthew Hayes"
+         }
+        ],
+        "voteCount": 2417,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Bajun R. Mavalwalla"
+         }
+        ],
+        "voteCount": 6482,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Michael McGarr"
+         }
+        ],
+        "voteCount": 1152,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Kevin Fagan"
+         }
+        ],
+        "voteCount": 9048,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Michael Baumgartner"
+         }
+        ],
+        "voteCount": 96791,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Kyle Usrey"
+         }
+        ],
+        "voteCount": 2274,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Andrew Bartleson"
+         }
+        ],
+        "voteCount": 915,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Ann Marie Danimus"
+         }
+        ],
+        "voteCount": 2920,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Richard Freudenberg"
+         }
+        ],
+        "voteCount": 2866,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "David Womack"
+         }
+        ],
+        "voteCount": 7242,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-in"
+         }
+        ],
+        "voteCount": 172,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 6"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 225962,
+     "reportingStatus": {
+      "reportingUnits": 6,
+      "totalUnits": 6
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Emily Randall"
+         }
+        ],
+        "voteCount": 132805,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Brian P. O'Gorman"
+         }
+        ],
+        "voteCount": 7307,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Teresa Fox"
+         }
+        ],
+        "voteCount": 57700,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Macy Jones"
+         }
+        ],
+        "voteCount": 6044,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "NO"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Leon Lawson"
+         }
+        ],
+        "voteCount": 21965,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "TRU"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "voteCount": 141,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 7"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 216741,
+     "reportingStatus": {
+      "reportingUnits": 1,
+      "totalUnits": 1
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "David W. Blomstrom"
+         }
+        ],
+        "voteCount": 4294,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Pramila Jayapal"
+         }
+        ],
+        "voteCount": 182844,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Nirav Sheth"
+         }
+        ],
+        "voteCount": 21282,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Gwen Kirkland"
+         }
+        ],
+        "voteCount": 7519,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-in"
+         }
+        ],
+        "voteCount": 802,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 8"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 191585,
+     "reportingStatus": {
+      "reportingUnits": 6,
+      "totalUnits": 6
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Kim Schrier"
+         }
+        ],
+        "voteCount": 102853,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Trinh Ha"
+         }
+        ],
+        "voteCount": 28340,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Spencer Meline"
+         }
+        ],
+        "voteCount": 30324,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Keith Arnold"
+         }
+        ],
+        "voteCount": 4777,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Andres Valleza"
+         }
+        ],
+        "voteCount": 4549,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Bob Hagglund"
+         }
+        ],
+        "voteCount": 20382,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-in"
+         }
+        ],
+        "voteCount": 360,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 9"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 142356,
+     "reportingStatus": {
+      "reportingUnits": 1,
+      "totalUnits": 1
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jacob Perasso"
+         }
+        ],
+        "voteCount": 1588,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Kshama Sawant"
+         }
+        ],
+        "voteCount": 24583,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "IND"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Melissa Chaudhry"
+         }
+        ],
+        "voteCount": 17811,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Doug Basler"
+         }
+        ],
+        "voteCount": 31070,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Adam Smith"
+         }
+        ],
+        "voteCount": 67095,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-in"
+         }
+        ],
+        "voteCount": 209,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "U.S. Representative - Congressional District 10"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 155922,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Adam Arafat"
+         }
+        ],
+        "voteCount": 14695,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Marilyn Strickland"
+         }
+        ],
+        "voteCount": 73689,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Kurtis Engle"
+         }
+        ],
+        "voteCount": 713,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "UNI"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Alex Scheel"
+         }
+        ],
+        "voteCount": 16074,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Derek Maynes"
+         }
+        ],
+        "voteCount": 1431,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "NO"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Chris D. Chung"
+         }
+        ],
+        "voteCount": 48953,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "voteCount": 367,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Representative Pos. 1 - Legislative District 1"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 39374,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Davina Duerr"
+         }
+        ],
+        "voteCount": 29426,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Maggie Wang"
+         }
+        ],
+        "voteCount": 9878,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-in"
+         }
+        ],
+        "voteCount": 70,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State Representative Pos. 2 - Legislative District 1"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 39457,
+     "reportingStatus": {
+      "reportingUnits": 2,
+      "totalUnits": 2
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jeff Lyon"
+         }
+        ],
+        "voteCount": 2190,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "LIB"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Shelley Kloba"
+         }
+        ],
+        "voteCount": 19150,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Cliff Moon"
+         }
+        ],
+        "voteCount": 9110,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jenne Alderks"
+         }
+        ],
+        "voteCount": 8974,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "voteCount": 33,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Justice Position #01 - Supreme Court"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 1746550,
+     "reportingStatus": {
+      "reportingUnits": 39,
+      "totalUnits": 39
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Colleen Melody"
+         }
+        ],
+        "voteCount": 923965,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Laura Christensen Colberg"
+         }
+        ],
+        "voteCount": 305110,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Scott Edwards"
+         }
+        ],
+        "voteCount": 513394,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-in"
+         }
+        ],
+        "voteCount": 4081,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": null
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "RI26": {
+   "state": "RI",
+   "publicElectionId": "RI2026StatewidePrimary",
+   "election": {
+    "electionDate": "2026-09-09",
+    "isProduction": true,
+    "isOfficialResults": true,
+    "lastUpdated": "2026-09-15T20:21:33.8328962Z",
+    "asOf": "2026-09-15T21:17:17.466545Z"
+   },
+   "localityElections": [
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    }
+   ],
+   "ballotItems": [
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "DEM Senator in Congress"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 128194,
+     "reportingStatus": {
+      "reportingUnits": 40,
+      "totalUnits": 40
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "John F. Reed*"
+         }
+        ],
+        "voteCount": 98473,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Connor F. Burbridge"
+         }
+        ],
+        "voteCount": 17192,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Luis Daniel Muñoz"
+         }
+        ],
+        "voteCount": 12529,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "REP Senator in Congress"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 20354,
+     "reportingStatus": {
+      "reportingUnits": 40,
+      "totalUnits": 40
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Raymond T. McKay*"
+         }
+        ],
+        "voteCount": 20354,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "DEM Representative in Congress District 1"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 56255,
+     "reportingStatus": {
+      "reportingUnits": 20,
+      "totalUnits": 20
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Gabriel Amo*"
+         }
+        ],
+        "voteCount": 56255,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "REP Representative in Congress District 1"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 7155,
+     "reportingStatus": {
+      "reportingUnits": 20,
+      "totalUnits": 20
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Kellie Keenan*"
+         }
+        ],
+        "voteCount": 7155,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "DEM Representative in Congress District 2"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 55135,
+     "reportingStatus": {
+      "reportingUnits": 22,
+      "totalUnits": 22
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Seth Magaziner*"
+         }
+        ],
+        "voteCount": 55135,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "REP Representative in Congress District 2"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 15217,
+     "reportingStatus": {
+      "reportingUnits": 22,
+      "totalUnits": 22
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Victor Mellor"
+         }
+        ],
+        "voteCount": 8837,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Stephen T. Skoly*"
+         }
+        ],
+        "voteCount": 6380,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "REP"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "DEM Senator in General Assembly District 1"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 2356,
+     "reportingStatus": {
+      "reportingUnits": 1,
+      "totalUnits": 1
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jacob Bissaillon*"
+         }
+        ],
+        "voteCount": 2356,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "DEM Senator in General Assembly District 2"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 2231,
+     "reportingStatus": {
+      "reportingUnits": 1,
+      "totalUnits": 1
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Ana B. Quezada*"
+         }
+        ],
+        "voteCount": 2231,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false,
+        "party": {
+         "abbreviation": "DEM"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "indexes": {
+  "UT": {
+   "elections": [
+    {
+     "publicElectionId": "primary09052023_Demo",
+     "electionDate": "2023-09-05",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2023 Primary Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "PrimaryCD2Recount2024",
+     "electionDate": "2024-06-25",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2024 Primary Election - US House 2 Recount"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "primary03052024",
+     "electionDate": "2024-03-05",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2024 Presidential Preference Primary"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "primary06252024",
+     "electionDate": "2024-06-25",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2024 Primary Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2023-Nov-General",
+     "electionDate": "2023-11-21",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2023 General Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "general11052024",
+     "electionDate": "2024-11-05",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "2024 General Election"
+      }
+     ]
+    }
+   ]
+  },
+  "GA": {
+   "elections": [
+    {
+     "publicElectionId": "2022AprSpec",
+     "electionDate": "2022-04-05",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "April 5th, 2022 - Special Election "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2022DecHD129Spec",
+     "electionDate": "2022-12-20",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "December 20, 2022 GA House District 129 - Special Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024AprHD139Spec",
+     "electionDate": "2024-04-09",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "April 9, 2024 - House District 139 Special Election "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2022MayCD10DemPriRec",
+     "electionDate": "2022-06-10",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "May 24, 2022 - US Congressional District 10 (Dem) Primary Recount "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2022MaySpecRun",
+     "electionDate": "2022-05-03",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "May 3rd, 2022 Special Election Runoff "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2023MarHD75Spec",
+     "electionDate": "2023-03-21",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "March 21, 2023 - House District 75 - Special Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024HD105Recount",
+     "electionDate": "2024-12-03",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "State House of Representatives District 105 Recount"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024MayHD139SpecRun",
+     "electionDate": "2024-05-07",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "May 7, 2024 - House District 139 Special Election Runoff "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024JunPriRunoff",
+     "electionDate": "2024-06-18",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "June 18, 2024 - General Primary / Nonpartisan General Election Runoff "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024MarHD125Run",
+     "electionDate": "2024-03-12",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "March 12, 2024 - House District 125 Runoff"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024FebSpec",
+     "electionDate": "2024-02-13",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "February 13, 2024 Special Election "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2023JanHD7Spec",
+     "electionDate": "2023-01-03",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "January 3, 2023 GA House District 7 - Special Election "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2022DecGenRun",
+     "electionDate": "2022-12-06",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "December 6, 2022 - General Election Runoff "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2023JanSpec",
+     "electionDate": "2023-01-31",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "January 31, 2023 - Special Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024MarPPP",
+     "electionDate": "2024-03-12",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "March 12, 2024 Presidential Preference Primary "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2023FebHD119Run",
+     "electionDate": "2023-02-28",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "February 28, 2023 GA House District 119 - Runoff Election "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2023JunHD68Run",
+     "electionDate": "2023-06-13",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "June 13th, 2023 - House District 68 Runoff Election "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2022JunGenPriRun",
+     "electionDate": "2022-06-21",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "June 21, 2022 - General Primary -Nonpartisan General Election Runoff "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2023MayHD68Spec",
+     "electionDate": "2023-05-16",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "May 16, 2023 - House District 68 - Special Election "
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024NovGen",
+     "electionDate": "2024-11-05",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "November General Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2024MayGenPri",
+     "electionDate": "2024-05-21",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "May 21, 2024 - General Primary - Nonpartisan Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2022NovGen",
+     "electionDate": "2022-11-08",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "November 8, 2022 - General/Special Election"
+      }
+     ]
+    },
+    {
+     "publicElectionId": "2022MayGenPri",
+     "electionDate": "2022-05-24",
+     "name": [
+      {
+       "languageId": "en",
+       "text": "May 24, 2022 - General Primary -Nonpartisan General Election "
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

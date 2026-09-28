@@ -23,3 +23,10 @@ def test_every_link_is_a_page_the_site_has():
     links = {e["link"].split("?")[0] for e in events}
     assert "/scorecard" not in links
     assert links <= {"/politicians", "/leaderboard", "/action"}
+
+
+def test_election_day_is_on_the_calendar_on_election_day():
+    """next_election_day is strictly after its argument; the event must not
+    vanish on the day it happens."""
+    events = _upcoming_civic_events(2026, date(2026, 11, 3))
+    assert any(e["date"] == "2026-11-03" and e["category"] == "election" for e in events)

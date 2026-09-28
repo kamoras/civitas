@@ -29,6 +29,7 @@ from app.models import (
     Candidate,
     ElectionResultEvent,
     JudicialNominee,
+    LiveResultRead,
     MeasureCoverage,
     Race,
     RaceCoverageItem,
@@ -1229,6 +1230,19 @@ def live_results(
     from app.pipeline.fetch.poll_close import last_poll_close
 
     live = sorted(live_results_states())
+    feeds: dict[str, dict] = {}
+    if election.shows_results:
+        rq = db.query(LiveResultRead).filter(LiveResultRead.election_date == election.election_day.isoformat())
+        if st:
+            rq = rq.filter(LiveResultRead.state == st)
+        feeds = {
+            r.state: {
+                "status": r.status,
+                "checkedAt": r.checked_at.isoformat() + "Z",
+                "lastOkAt": r.last_ok_at.isoformat() + "Z" if r.last_ok_at else None,
+            }
+            for r in rq.all()
+        }
     senate_states = sorted({
         s for (s,) in db.query(Race.state).filter(Race.cycle_year == election.cycle, Race.office == "S")
     })
@@ -1242,6 +1256,10 @@ def live_results(
         # Which states elect a senator this cycle, so the Senate map can
         # tell "no race here" from "a race we have no count for".
         "senateStates": senate_states,
+        # How the last read of each live state's feed went, so a state with
+        # no stored count can say whether it hasn't started or couldn't be
+        # read (LiveResultRead).
+        "feeds": feeds,
         "races": races,
         "updates": updates,
     }, max_age=CACHE_TTL_RESULTS_S)

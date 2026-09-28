@@ -518,6 +518,23 @@ class TestLiveResults:
         assert data["senateStates"] == ["CO"]
         assert data["pollsClose"]["GA"] == "2026-11-04T00:00:00Z"  # 7 PM ET
 
+    def test_says_how_each_feed_read_went(self, db_session):
+        from datetime import datetime
+
+        from app.models import LiveResultRead
+
+        db_session.add(LiveResultRead(state="CO", election_date="2026-11-03", status="untrusted",
+                                      checked_at=datetime(2026, 11, 4, 3)))
+        db_session.add(LiveResultRead(state="GA", election_date="2026-11-03", status="ok",
+                                      checked_at=datetime(2026, 11, 4, 3), last_ok_at=datetime(2026, 11, 4, 3)))
+        db_session.flush()
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+            only_co = _body(elections.live_results("CO", db_session))
+        assert data["feeds"]["CO"] == {"status": "untrusted", "checkedAt": "2026-11-04T03:00:00Z", "lastOkAt": None}
+        assert data["feeds"]["GA"]["lastOkAt"] == "2026-11-04T03:00:00Z"
+        assert set(only_co["feeds"]) == {"CO"}
+
     def test_filters_by_state(self, db_session):
         self._seed(db_session)
         with self._results_window():

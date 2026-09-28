@@ -125,4 +125,23 @@ describe("ElectionsPage", () => {
 
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("2026 midterm ballot");
   });
+
+  it("holds the lean map back until it knows whether results are on", async () => {
+    fetchPviMap.mockResolvedValue({ states: { GA: 3, NY: -10 }, districts: {}, cycleYear: 2026 });
+    let answer: (v: unknown) => void = () => {};
+    fetchLiveResults.mockReturnValue(new Promise((r) => (answer = r)));
+    render(<ElectionsPage />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText(/D-LEANING/)).not.toBeInTheDocument();
+    answer(CAMPAIGN);
+    expect(await screen.findByText(/D-LEANING/)).toBeInTheDocument();
+  });
+
+  it("says so when it couldn't check for results, and shows the ballot page", async () => {
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockRejectedValue(new Error("502"));
+    render(<ElectionsPage />);
+    expect(await screen.findByText(/COULDN'T CHECK FOR LIVE RESULTS/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("2026 midterm ballot");
+  });
 });

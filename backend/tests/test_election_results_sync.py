@@ -43,7 +43,7 @@ def _apply(db, race, contest, **state_kw):
     applied = er.apply_count(db, race, contest, _state(**state_kw), DAY)
     db.flush()
     if not applied.held:
-        signals.update_developing_issues(db, [applied.result])
+        signals.update_developing_issues(db, [applied])
         db.flush()
     return [e.kind for e in applied.events], applied.result
 
@@ -310,7 +310,7 @@ def test_an_unmatched_candidates_party_is_the_same_vocabulary_as_the_holders(db_
     db_session.flush()
     assert json.loads(applied.result.tallies)[0]["party"] == "REP"
     assert er.is_flip(applied.result) is False
-    signals.update_developing_issues(db_session, [applied.result])
+    signals.update_developing_issues(db_session, [applied])
     assert _issues(db_session) == []
 
 
@@ -325,3 +325,114 @@ class TestOneStoryPerPoll:
         race = _setup(db_session)
         kinds, _ = _apply(db_session, race, _contest(100, 90, 100))
         assert kinds == [er.ALL_REPORTING]
+
+
+class TestAnnouncedBaseline:
+    def test_what_first_appears_in_a_held_poll_is_announced_next_poll(self, db_session):
+        """A correction that lowers the total in the same publish that marks
+        the count official: stored, silent, then announced."""
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(200, 150, 100))
+        kinds, _ = _apply(db_session, race, _contest(199, 150, 100), official=True)
+        assert kinds == []
+        kinds, _ = _apply(db_session, race, _contest(199, 150, 100), official=True)
+        assert kinds == [er.OFFICIAL]
+
+    def test_a_lead_change_inside_a_held_poll_is_announced_next_poll(self, db_session):
+        race = _setup(db_session)
+        db_session.query(Representative).delete()  # no known holder: a lead change, never a flip
+        _apply(db_session, race, _contest(200, 150, 100))
+        _apply(db_session, race, _contest(140, 160, 100))  # held: total fell
+        kinds, _ = _apply(db_session, race, _contest(141, 160, 100))
+        assert kinds == [er.LEAD_CHANGE]
+
+
+class TestIssueLifecycle:
+    def test_an_issue_the_action_center_retired_stays_retired_while_the_flip_merely_holds(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 60))
+        [issue] = _issues(db_session)
+        issue.is_current = False  # the hourly refresh's 24h retirement
+        _apply(db_session, race, _contest(1000, 1100, 70))
+        assert issue.is_current is False
+
+    def test_the_issue_is_dated_the_day_it_last_spoke(self, db_session):
+        race = _setup(db_session)
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 3)):
+            _apply(db_session, race, _contest(900, 1000, 60))
+        [issue] = _issues(db_session)
+        assert issue.date == "2026-11-03"
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 4)):
+            _apply(db_session, race, _contest(1000, 1100, 70))
+        assert issue.date == "2026-11-04"
+
+
+class TestWholePass:
+    def test_states_are_read_at_once_and_each_read_is_recorded(self, db_session):
+        """A slow or broken feed no longer holds up the states after it, and
+        the page can tell "couldn't read" from "nothing counted yet"."""
+        from app.models import LiveResultRead
+
+        _setup(db_session)
+        log = []
+
+        async def fake(client, state, day):
+            log.append(("start", state))
+            await asyncio.sleep(0.01)
+            log.append(("end", state))
+            if state == "CO":
+                raise RuntimeError("feed down")
+            return _state(contests=[_contest(100, 90, 60)])
+
+        with patch.object(er, "live_results_states", return_value={"CO", "GA"}), \
+                patch.object(er, "fetch_state_count", fake), \
+                patch.object(er, "utcnow", return_value=AFTER_CLOSE), \
+                patch.object(er, "send_ops_alert"):
+            summary = asyncio.run(er.sync_live_results(db_session, None, DAY))
+
+        assert [kind for kind, _ in log[:2]] == ["start", "start"]  # both in flight at once
+        assert summary["CO"]["status"] == "failed" and summary["GA"]["status"] == "ok"
+        co = db_session.get(LiveResultRead, ("CO", DAY.isoformat()))
+        ga = db_session.get(LiveResultRead, ("GA", DAY.isoformat()))
+        assert (co.status, co.last_ok_at) == ("failed", None)
+        assert (ga.status, ga.last_ok_at) == ("ok", AFTER_CLOSE)
+        assert db_session.get(RaceResult, "2026-HOUSE-GA-2").votes_counted == 190
+
+
+class TestCountyUnits:
+    """Where units are counties, a county "reports" on its first batch."""
+
+    def _race(self, db):
+        race = Race(id="2026-HOUSE-CO-8", cycle_year=2026, office="H", state="CO", district=8)
+        db.add(race)
+        db.add(Representative(id="C000008", name="Holder", state="CO", district=8, party="D"))
+        db.flush()
+        return race
+
+    def _apply_at(self, db, race, contest, at):
+        with patch.object(er, "utcnow", return_value=at):
+            return _apply(db, race, contest, unit_label="counties")
+
+    def test_every_county_in_is_not_enough_on_the_first_night(self, db_session):
+        race = self._race(db_session)
+        first = datetime(2026, 11, 4, 2)
+        self._apply_at(db_session, race, _contest(0, 0, 0, total=3, district=8), first - timedelta(hours=1))
+        kinds, result = self._apply_at(db_session, race, _contest(90, 100, 3, total=3, district=8), first)
+        assert er.FLIP not in kinds
+        assert result.first_reported_at == first  # the first votes, not the zero-vote read
+        assert not er.flip_qualifies(result, now=first + timedelta(hours=5))
+        assert er.flip_qualifies(result, now=first + er.COUNTY_FLIP_SETTLE)
+
+    def test_the_flip_is_announced_once_the_count_has_settled(self, db_session):
+        race = self._race(db_session)
+        first = datetime(2026, 11, 4, 2)
+        self._apply_at(db_session, race, _contest(90, 100, 3, total=3, district=8), first)
+        kinds, _ = self._apply_at(db_session, race, _contest(95, 110, 3, total=3, district=8),
+                                  first + er.COUNTY_FLIP_SETTLE)
+        assert er.FLIP in kinds
+
+    def test_half_the_counties_never_qualifies(self, db_session):
+        race = self._race(db_session)
+        first = datetime(2026, 11, 4, 2)
+        _, result = self._apply_at(db_session, race, _contest(90, 100, 2, total=3, district=8), first)
+        assert not er.flip_qualifies(result, now=first + timedelta(days=3))

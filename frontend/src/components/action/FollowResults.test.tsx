@@ -11,7 +11,13 @@ describe("FollowResults", () => {
   it("links a seat-flip issue to its live count", () => {
     render(
       <FollowResults
-        issue={issue([{ text: "Follow the count for Georgia's U.S. Senate", type: "follow_results", url: "/elections/states/GA#race-2026-SEN-GA" }])}
+        issue={issue([
+          {
+            text: "Follow the count for Georgia's U.S. Senate",
+            type: "follow_results",
+            url: "/elections/states/GA#race-2026-SEN-GA",
+          },
+        ])}
       />
     );
     expect(screen.getByRole("link", { name: /Follow the count for Georgia/ })).toHaveAttribute(

@@ -8,9 +8,10 @@ not unbounded: only the events a reader following the night would want
 pushed to them are posted, a few an hour, most important first.
 
 What is posted, in priority order:
-  0. a correction — a flip this account posted has reverted. Always
-     posted, outside every cap: leaving a stale "changing hands" post as
-     the account's last word is the one outcome worse than noise.
+  0. a correction — a flip this account posted has reverted. Posted
+     outside every cap and never counted against one, however late in
+     the day: leaving a stale "changing hands" post as the account's last
+     word is the one outcome worse than noise.
   1. a seat changing party (FLIP), any chamber.
   2. a count the state calls official — for a Senate race, or a flip.
   3. a Senate lead change with most of the count in.
@@ -32,7 +33,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import ElectionResultEvent, Race, RaceResult
 from app.live_results import sync as er
-from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags_and_truncate
+from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags
 from app.live_results.signals import holders_word, party_letter, race_label
 from app.time_utils import utcnow
 
@@ -50,8 +51,13 @@ MAX_POSTS_PER_ELECTION = 40
 # Two posts about one race inside this window read as a ticker.
 RACE_COOLDOWN_MINUTES = 20
 # An event this old when first considered is history, not news — e.g. the
-# sync ran while posting was down. Marked considered, never posted.
+# sync ran while posting was down, or the budget held it back all night.
+# Marked considered, never posted.
 MAX_EVENT_AGE_HOURS = 2
+# A correction is owed however late, but not forever: a day of failed
+# publishes means posting is down, and the account's next word is the
+# routine coverage, not a day-old retraction.
+MAX_CORRECTION_AGE_HOURS = 24
 
 CORRECTION = "correction"
 _PRIORITY = {CORRECTION: 0, er.FLIP: 1, er.OFFICIAL: 2, er.LEAD_CHANGE: 3, er.ALL_REPORTING: 4}
@@ -75,37 +81,66 @@ def _share(p: dict | None) -> str:
     return f"{_who(p)} {p['pct']}%" if p and p.get("pct") is not None else _who(p)
 
 
+def _shares(d: dict) -> str:
+    return ", ".join(x for x in (_share(d.get("leader")), _share(d.get("runnerUp"))) if x)
+
+
+def _fit(*variants: list[str]) -> str | None:
+    """The first variant that fits a post, sentences joined. Variants run
+    richest first and drop figures, never the qualifier: cutting a post to
+    length took its LAST sentence first — "Not final." — and could cut a
+    share mid-number ("49." for 49.6%). None when nothing fits; a post is
+    better missed than wrong."""
+    for parts in variants:
+        text = " ".join(p if p.endswith(".") else f"{p}." for p in parts if p)
+        text = strip_hashtags(text)
+        if len(text) <= MAX_POST_CHARS:
+            return text
+    return None
+
+
 def compose(kind: str, race: Race, d: dict) -> str | None:
     """The post for one event, or None when it has nothing true to say."""
     label = race_label(race)
-    leader, runner = d.get("leader"), d.get("runnerUp")
+    leader = d.get("leader")
+    reporting, shares = _reporting(d), _shares(d)
+    if kind == CORRECTION:
+        # FLIP_REVERSED: the holder's party leads again, or nobody does —
+        # an exact tie has no leader to name.
+        if leader and leader.get("party") == d.get("heldBy"):
+            head = f"Update on {label}: {_who(leader)} is ahead again, so the seat no longer shows a change of party"
+        elif not leader and (d.get("votesCounted") or 0) > 0:
+            head = f"Update on {label}: the count is now tied, so the seat no longer shows a change of party"
+        else:
+            head = f"Update on {label}: the count no longer shows the seat changing party"
+        return _fit([head, reporting], [head])
     if not leader:
         return None
-    reporting = _reporting(d)
-    if kind == CORRECTION:
-        text = (f"Update on {label}: {_who(leader)} is ahead again, so the seat no longer shows a change "
-                f"of party. {reporting}.")
-    elif kind == er.FLIP and d.get("official"):
-        text = (f"{label}: {_who(leader)} wins in the official count, taking a seat "
-                f"{holders_word(d.get('heldBy'))} held. {_share(leader)}, {_share(runner)}.")
-    elif kind == er.FLIP:
-        text = (f"{label}: {_who(leader)} leads in a seat {holders_word(d.get('heldBy'))} hold. "
-                f"{_share(leader)}, {_share(runner)}. {reporting}. Not final.")
-    elif kind == er.OFFICIAL:
-        text = f"{label}: the state lists its count as official. {_share(leader)}, {_share(runner)}."
-    elif kind == er.LEAD_CHANGE:
-        previous = d.get("previousLeader") or {}
-        text = (f"{label}: {_who(leader)} moves ahead of {_who(previous)}. "
-                f"{_share(leader)}, {_share(runner)}. {reporting}. Not final.")
-    elif kind == er.ALL_REPORTING:
-        text = (f"{label}: all {d['totalUnits']:,} {d['unitLabel']} have reported. {_share(leader)}, "
-                f"{_share(runner)}. Counting can continue after every unit reports.")
-    else:
-        return None
-    return strip_hashtags_and_truncate(text.replace(" .", "."), MAX_POST_CHARS)
+    holders = holders_word(d.get("heldBy"))
+    if kind == er.FLIP and d.get("official"):
+        head = f"{label}: {_who(leader)} wins in the official count, taking a seat {holders} held"
+        return _fit([head, shares], [head])
+    if kind == er.FLIP:
+        head = f"{label}: {_who(leader)} leads in a seat {holders} hold"
+        return _fit([head, shares, reporting, "Not final"], [head, reporting, "Not final"], [head, "Not final"])
+    if kind == er.OFFICIAL:
+        head = f"{label}: the state lists its count as official"
+        return _fit([head, shares], [head])
+    if kind == er.LEAD_CHANGE:
+        previous = d.get("previousLeader")
+        head = f"{label}: {_who(leader)} moves ahead"
+        against = f"{head} of {_who(previous)}" if previous else head
+        return _fit([against, shares, reporting, "Not final"], [against, reporting, "Not final"],
+                    [against, "Not final"], [head, "Not final"])
+    if kind == er.ALL_REPORTING:
+        head = f"{label}: all {d['totalUnits']:,} {d['unitLabel']} have reported"
+        tail = "Counting can continue after every unit reports"
+        return _fit([head, shares, tail], [head, tail])
+    return None
 
 
-def _postable_kind(event: ElectionResultEvent, race: Race, d: dict, flip_posted: bool) -> str | None:
+def _postable_kind(event: ElectionResultEvent, race: Race, result: RaceResult, d: dict,
+                   flip_posted: bool) -> str | None:
     """Which post this event earns, if any (see the module docstring)."""
     if event.kind == er.FLIP_REVERSED:
         return CORRECTION if flip_posted else None
@@ -117,8 +152,10 @@ def _postable_kind(event: ElectionResultEvent, race: Race, d: dict, flip_posted:
         return er.OFFICIAL
     if not senate:
         return None
-    if event.kind == er.LEAD_CHANGE and d.get("totalUnits") and \
-            (d.get("reportingUnits") or 0) >= er.FLIP_MIN_REPORTING_SHARE * d["totalUnits"]:
+    # "Most of the count in" is the flip's own bar, county units included.
+    if event.kind == er.LEAD_CHANGE and er.count_is_mostly_in(
+            d.get("reportingUnits"), d.get("totalUnits"), d.get("unitLabel"), bool(d.get("official")),
+            result.first_reported_at, event.created_at):
         return er.LEAD_CHANGE
     if event.kind == er.ALL_REPORTING:
         return er.ALL_REPORTING
@@ -126,17 +163,34 @@ def _postable_kind(event: ElectionResultEvent, race: Race, d: dict, flip_posted:
 
 
 def _published_since(db: Session, since, election_date: str | None = None) -> int:
+    """Posts that count against the budget — corrections never do."""
     q = db.query(ElectionResultEvent).filter(
         ElectionResultEvent.bsky_posted.is_(True), ElectionResultEvent.bsky_posted_at >= since,
+        ElectionResultEvent.kind != er.FLIP_REVERSED,
     )
     if election_date:
         q = q.filter(ElectionResultEvent.election_date == election_date)
     return q.count()
 
 
+def _still_true(kind: str, result: RaceResult, d: dict) -> bool:
+    """Whether a pending event still describes the count: one held back by
+    the budget can be overtaken before its turn comes."""
+    if kind == er.FLIP:
+        return er.is_flip(result)
+    if kind == er.LEAD_CHANGE:
+        now_leading = er._leader(json.loads(result.tallies or "[]"))
+        return er._key(now_leading) == er._key(d.get("leader"))
+    return True
+
+
 def post_result_updates(db: Session, election_date: str) -> int:
-    """Post this pass's worthwhile events within budget. Every event is
-    marked considered, posted or not, so none is weighed twice."""
+    """Post this pass's worthwhile events within budget, most important
+    first. An event is marked considered (bsky_posted_at) once it is
+    settled — posted, not worth a post, overtaken, or too old. One the
+    budget or a race's cooldown holds back, or whose publish failed, stays
+    pending for a later pass: throwing it away lost the lowest-ranked
+    flips of a busy hour for good."""
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return 0
     now = utcnow()
@@ -165,50 +219,58 @@ def post_result_updates(db: Session, election_date: str) -> int:
 
     queue = []
     for event in pending:
-        event.bsky_posted_at = now
-        if now - event.created_at > timedelta(hours=MAX_EVENT_AGE_HOURS):
-            continue
         race = db.get(Race, event.race_id)
         result = db.get(RaceResult, event.race_id)
         if race is None or result is None:
+            event.bsky_posted_at = now
             continue
         detail = json.loads(event.detail or "{}")
-        kind = _postable_kind(event, race, detail, event.race_id in posted_flip_races)
-        # A flip that has already reverted by the time it would post is not
-        # news; its reversal will not be a correction either.
-        if kind == er.FLIP and not er.is_flip(result):
+        kind = _postable_kind(event, race, result, detail, event.race_id in posted_flip_races)
+        max_age = MAX_CORRECTION_AGE_HOURS if kind == CORRECTION else MAX_EVENT_AGE_HOURS
+        if kind is None or now - event.created_at > timedelta(hours=max_age) \
+                or not _still_true(kind, result, detail):
+            event.bsky_posted_at = now
             continue
-        if kind:
-            queue.append((_PRIORITY[kind], event.created_at, kind, event, race, detail))
+        queue.append((_PRIORITY[kind], event.created_at, kind, event, race, detail))
     queue.sort(key=lambda q: (q[0], q[1]))
 
     posted = 0
-    for _, _, kind, event, race, detail in queue:
+    for priority, created, kind, event, race, detail in queue:
+        if event.bsky_posted_at is not None:
+            continue  # overtaken by a post earlier in this pass
         correction = kind == CORRECTION
-        if not correction:
-            if hour_left <= 0 or election_left <= 0 or race.id in recent_races:
-                continue
+        if not correction and (hour_left <= 0 or election_left <= 0 or race.id in recent_races):
+            continue  # held for a later pass
         text = compose(kind, race, detail)
         if not text:
+            event.bsky_posted_at = now
             continue
         url = f"{SITE}/elections/states/{race.state}#race-{race.id}"
-        if publish_post(text, url, success_msg=f"Posted result update: {race.id} {kind}",
-                        error_context=f"result event {event.id}"):
-            event.bsky_posted = True
-            posted += 1
-            recent_races.add(race.id)
-            if not correction:
-                hour_left -= 1
-                election_left -= 1
+        if not publish_post(text, url, success_msg=f"Posted result update: {race.id} {kind}",
+                            error_context=f"result event {event.id}"):
+            continue  # retried next pass, until it ages out
+        event.bsky_posted = True
+        event.bsky_posted_at = now
+        posted += 1
+        recent_races.add(race.id)
+        if not correction:
+            hour_left -= 1
+            election_left -= 1
+        # The race's post just now says where it stands; its older, lesser
+        # events waiting behind it would repeat that, stale, after the
+        # cooldown.
+        for p2, c2, _, other, _, _ in queue:
+            if other.race_id == race.id and other.bsky_posted_at is None and p2 >= priority and c2 <= created:
+                other.bsky_posted_at = now
     db.commit()
     return posted
 
 
-def counting_is_live() -> bool:
+def counting_is_live(db: Session | None = None) -> bool:
     """While results are on show and a count moved in the last day — when
     the routine race-coverage poster stands down for this one."""
     from app.election_phase import active_election
 
-    election = active_election()
+    election = active_election(db)
     last = election.last_result_change
     return election.shows_results and last is not None and utcnow() - last < timedelta(days=1)

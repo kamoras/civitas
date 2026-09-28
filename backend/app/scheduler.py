@@ -419,7 +419,7 @@ def _election_coverage_refresh() -> None:
                 # race's totals are still moving.
                 from app.live_results.bluesky import counting_is_live
 
-                posted = 0 if counting_is_live() else post_race_coverage_updates(db, deadline=deadline)
+                posted = 0 if counting_is_live(db) else post_race_coverage_updates(db, deadline=deadline)
                 logger.info(
                     "Election-season coverage refresh: %d ingested, %d posted",
                     ingested, posted,

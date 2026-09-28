@@ -12,19 +12,53 @@ reporting is most careful never to do.
 """
 
 import json
+import logging
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+logger = logging.getLogger(__name__)
+
 _PATH = Path(__file__).resolve().parents[2] / "data" / "poll_close_times.json"
 _cache: dict | None = None
+# Election years already warned about, so a stale file is logged once per
+# process and year rather than once per state on every five-minute pass.
+_warned_years: set[int] = set()
+
+
+def _load() -> dict:
+    global _cache
+    if _cache is None:
+        _cache = json.loads(_PATH.read_text()) if _PATH.exists() else {}
+    return _cache
 
 
 def _states() -> dict:
-    global _cache
-    if _cache is None:
-        _cache = (json.loads(_PATH.read_text()).get("states") or {}) if _PATH.exists() else {}
-    return _cache
+    return _load().get("states") or {}
+
+
+def file_year() -> int | None:
+    """The election year the file was generated for (its `year` key)."""
+    year = _load().get("year")
+    return year if isinstance(year, int) else None
+
+
+def _check_year(election_day: date) -> None:
+    """Warn when the file describes a different year's election than the
+    one being gated. Poll hours are statute and seldom move, so the file's
+    times are still used -- refusing to gate at all would be worse than a
+    year-old close time -- but a stale file is exactly the "regenerate
+    each cycle" step this module's docstring asks for having been missed,
+    and it must be visible rather than silently relied on."""
+    year = file_year()
+    if year == election_day.year or election_day.year in _warned_years:
+        return
+    _warned_years.add(election_day.year)
+    logger.warning(
+        "poll_close_times.json is for %s, not the %d election being gated; its closing times are used "
+        "as they stand -- regenerate it with scripts/fetch_poll_close_times.py %d",
+        year if year is not None else "no stated year", election_day.year, election_day.year,
+    )
 
 
 def _close_utc(entry: dict, election_day: date) -> datetime | None:
@@ -39,6 +73,7 @@ def last_poll_close(state: str, election_day: date) -> datetime:
     """Naive UTC instant of `state`'s last poll closing. A state whose
     hours vary, or that the file doesn't list, waits for the latest close
     of any listed state — the gate errs toward waiting."""
+    _check_year(election_day)
     states = _states()
     own = _close_utc(states.get(state.upper()) or {}, election_day)
     if own is not None:

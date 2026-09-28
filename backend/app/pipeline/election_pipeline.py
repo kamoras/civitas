@@ -140,9 +140,9 @@ async def run_ballot_sync(cycle: int | None = None) -> dict:
     never hold ballots back in the weeks voters are using them. Reads only
     state election offices' published lists, a handful of requests each at
     one per second; the roster and financial refresh stay nightly."""
-    cycle = cycle if cycle is not None else current_election_cycle()
     db = SessionLocal()
     try:
+        cycle = cycle if cycle is not None else current_election_cycle(db)
         async with make_async_client() as client:
             confirm_result, filing_result = await _sync_ballots(db, client, cycle)
     finally:
@@ -833,8 +833,8 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     """Sync candidate rosters, refresh a prioritized batch of financials,
     ingest race coverage, post grounded Bluesky updates, and snapshot
     fundraising. Returns a summary dict with counts."""
-    cycle = cycle if cycle is not None else current_election_cycle()
     db = SessionLocal()
+    cycle = cycle if cycle is not None else current_election_cycle(db)
     _run_token = None  # no run of ours for the finally to stop until start() below
 
     run, _run_token, refused = acquire_tracked_run(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
@@ -1031,7 +1031,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
                             from app.live_results.bluesky import counting_is_live
 
-                            if counting_is_live():
+                            if counting_is_live(db):
                                 # Election night: the live count's own posts
                                 # have the account while totals move.
                                 progress.complete("bluesky_posting", detail="stood down: the live count is posting")

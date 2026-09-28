@@ -714,13 +714,13 @@ class TestBallotMeasures:
     officialLookup, omits."""
 
     @staticmethod
-    def _election_day():
-        return elections.active_election().election_day.isoformat()
+    def _election_day(db):
+        return elections.active_election(db).election_day.isoformat()
 
     def test_measures_are_included_verbatim(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA")
         db_session.add(BallotMeasure(
-            id="ga-measure-1", state="GA", election_date=self._election_day(),
+            id="ga-measure-1", state="GA", election_date=self._election_day(db_session),
             number="Amendment 1", title="Property tax exemption",
             official_title="An act relating to property tax exemptions.",
             source_name="Vote Smart",
@@ -747,7 +747,7 @@ class TestBallotMeasures:
         state Civitas simply hasn't ingested yet."""
         _race(db_session, "2026-SEN-GA", "GA")
         db_session.add(MeasureCoverage(
-            state="GA", election_date=self._election_day(),
+            state="GA", election_date=self._election_day(db_session),
             status=MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart",
         ))
         db_session.commit()

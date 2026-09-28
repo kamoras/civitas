@@ -210,6 +210,16 @@ export default function LimitationsChapter() {
             <A href="/about/elections">Elections &amp; ballots</A>.
           </P>
         </Limitation>
+        <Limitation title="Live results cover fifteen states">
+          <P>
+            On election night the count is read from each state&apos;s own results site, and only
+            fifteen publish one in a form we can read reliably. Other states&apos; pages say they
+            have no live count and link to the office that publishes it; they are left unshaded on
+            the results map rather than drawn as having no votes. A count is never called: it reads
+            &ldquo;leading&rdquo; until the state marks it official. See{" "}
+            <A href="/about/elections#election-night">Elections &amp; ballots</A>.
+          </P>
+        </Limitation>
         <Limitation title="Ballot-measure coverage is still filling in">
           <P>
             Six states&apos; measures are read from their own official voter guides; the rest depend

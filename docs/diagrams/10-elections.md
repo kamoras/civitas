@@ -3,6 +3,8 @@
 How a state ballot page gets from "everyone who filed with the FEC" to "who
 is actually on your November ballot", and what the page says when it can't.
 
+Election night has its own section: [The live count](#election-night-the-live-count).
+
 Code: `backend/app/pipeline/election_pipeline.py` (the run),
 `backend/app/pipeline/fetch/state_candidates*.py` (per-state sources),
 `backend/app/data/state_candidate_sources.json` (which source each state
@@ -15,6 +17,7 @@ flowchart LR
     NIGHTLY(["Nightly chain<br/>(scheduler.py)"]) --> SEN[Senate] --> SUP[Supplementary] --> HOUSE[House] --> STOCK[Stock trades] --> ELEC["<b>Election pipeline</b>"]
     QUARTER(["Every 15 min,<br/>election season only"]) --> COV["Coverage + posting phases only<br/>(_election_coverage_refresh)"]
     SIX(["Every 6 h at :50 UTC,<br/>election season only"]) --> BAL["Ballot step only<br/>(_election_ballot_sync → run_ballot_sync)"]
+    FIVE(["Every 5 min, election day through<br/>the results window (hourly once settled)"]) --> RES["Live count<br/>(_election_results_sync → sync_live_results)"]
 ```
 
 The election pipeline is last in the nightly chain, so an earlier pipeline
@@ -274,3 +277,88 @@ On the national map (`RaceMap.tsx`), the eight states too small to tap —
 Rhode Island draws at 4×5 pixels on a phone — also get a labelled box off
 the coast joined to the state by a leader line, placed from the map's own
 path generator.
+
+## Election night: the live count
+
+From election day (Eastern date) the site's subject stays on the election
+just held while any count is still moving, then for `RESULTS_GRACE_DAYS`
+(14) after the last change, never past January 3 (the new Congress). Only
+then does it roll to the next cycle. `election_phase.active_election()` is
+the one answer for the pipeline's cycle, the API's `phase`, and the
+season jobs; `next_election_day()` alone flips to the next cycle the night
+polls close.
+
+Code: `backend/app/election_phase.py` (the window),
+`backend/app/pipeline/fetch/election_results.py` (vendor dispatch) and each
+vendor's `fetch_general_results`, `backend/app/live_results/sync.py`
+(store + events), `live_results/signals.py` (DEVELOPING issue),
+`live_results/bluesky.py` (posts), `api/elections.py` (`GET
+/api/elections/results`), `frontend/src/lib/results.ts` and
+`components/elections/results/`.
+
+```mermaid
+flowchart TD
+    TICK(["_election_results_sync<br/>every 5 min"]) --> GATE{"state's last polls<br/>closed? (poll_close.py)"}
+    GATE -- no --> NONE["nothing read, stored or said"]
+    GATE -- yes --> READ["read every covered state at once<br/>(Clarity · Tally ENR · TotalVote · Enhanced Voting)"]
+    READ --> TRUST{"test / preview / wrong date?<br/>older than stored? impossible?"}
+    TRUST -- yes --> REFUSE["UntrustedCount / stale:<br/>nothing stored, ops alert"]
+    TRUST -- no --> STORE["RaceResult per race<br/>+ ElectionResultEvent on change"]
+    READ & REFUSE & STORE --> FEED["LiveResultRead:<br/>how each state's read went"]
+    STORE --> FLIP{"leader's party ≠ seat holder's,<br/>enough of the count in?"}
+    FLIP -- yes --> ISSUE["DEVELOPING Action Center issue<br/>(fixed template)"]
+    STORE --> POST["Bluesky: flips, official counts,<br/>Senate moves — within budget"]
+    STORE & FEED --> API["GET /api/elections/results<br/>(30 s cache)"] --> PAGE["/elections map shaded by the count,<br/>state page leads with it"]
+```
+
+**Covered states** are the ones whose election office publishes a count one
+of the four vendor readers can read: AR, CO, GA, IA, ID, MT, ND, NE, NM, RI,
+SC, UT, VA, WA, WV. Every other state is drawn as "no live count here" and
+links to its election office, never as a state where nothing has happened.
+
+**Trust rules** (a wrong number on election night is worse than none):
+
+- Nothing is read, stored or said for a state before its last polls close
+  (`app/data/poll_close_times.json`, from `scripts/fetch_poll_close_times.py`;
+  regenerate each cycle).
+- Test, preview or mismatched data raises `UntrustedCount` and stores
+  nothing: Enhanced Voting `isProduction` and `_Demo` elections, Clarity
+  `istestmode`, Tally `previewElections`/`electionID` and a `versionID` that
+  changes mid-read. The election is found by its statutory date; a demo,
+  recount or runoff is never taken for the general, and two candidates for
+  the same day are refused rather than guessed between.
+- A feed that goes backwards in time or version, or is stamped in the
+  future, is refused. An impossible count (more units reporting than exist)
+  is dropped. A poll whose vote total fell is stored but announces nothing.
+- Civitas never calls a race. A count is "leading" until the source itself
+  says official. A flip needs half the reporting units in; where the units
+  are places (counties, a state's cities and towns), which "report" on their
+  first batch, it needs every place in and `COUNTY_FLIP_SETTLE` (6 h) since
+  the first votes, or the source's official flag.
+- Events are diffed against what has already been announced
+  (`announced_state`), not against the previous poll, so a change inside a
+  held poll is still announced on the next one.
+
+**What the page says about absence.** `LiveResultRead` records each state's
+last read (`ok`, `polls_open`, `untrusted`, `unavailable`, `stale`,
+`failed`). A covered state with no stored count says either that its count
+hasn't started or that its feed couldn't be read, with the time; a state
+whose latest read was refused says the count shown is from an earlier read.
+
+**The DEVELOPING issue** (`signals.py`) opens when a seat's leader is from
+another party than its holder (fixed at the first read), is refreshed while
+the flip holds, retires when it reverts, and returns only on a new flip. It
+is a fixed template around the source's figures, never model text. The
+Action Center lists it beside the newest day's confirmed issues whatever its
+own date.
+
+**Bluesky** (`bluesky.py`): a flip, an official count (Senate, or a flip),
+a Senate lead change with most of the count in, and every unit reporting in
+a Senate race. Six posts an hour and forty an election; one post per race
+per 20 minutes. A post the budget or cooldown holds back waits for a later
+pass (up to two hours), and a later post about the same race supersedes it.
+A correction (a posted flip that reverted) is outside every cap and owed for
+up to a day. Posts are composed to fit — figures are dropped before the
+"Not final." qualifier, never the reverse — and the routine race-coverage
+poster stands down while any count moved in the last day.
+

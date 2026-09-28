@@ -16,7 +16,9 @@ The election is found by its DATE — the statutory general election day —
 rather than by name, so no per-state wording has to be configured: every
 vendor's index carries a date per election. Where more than one election
 shares that date (a local special on the same ballot), the one named a
-general election is taken, and otherwise none (refusing to guess).
+general election is taken; a demo copy, recount or runoff is never it; and
+where that still leaves more than one, the read is refused with an alert
+rather than guessed (pick_general).
 
 Coverage is by vendor, as everywhere in this system: a state whose
 registered source (state_candidate_sources.json) runs on a vendor listed
@@ -110,16 +112,43 @@ def is_special_contest(name: str) -> bool:
     return bool(_SPECIAL_RE.search(name or ""))
 
 
-def pick_general(elections: list[tuple[str, dict]]) -> dict | None:
+# An election held on the general's date that is not the general's count
+# itself: a vendor's demo/test/preview copy, a recount, a runoff. A
+# recount can carry the very date of the election it recounts (Utah's
+# "2024 Primary Election - US House 2 Recount" is dated 2024-06-25, the
+# primary's own day, verified 2026-09-28), so a date match alone does not
+# rule one out.
+_NOT_THE_COUNT_RE = re.compile(r"\b(demo|test|preview|recount|runoff)\b", re.IGNORECASE)
+
+
+def pick_general(elections: list[tuple[str, dict]], state: str = "") -> dict | None:
     """The one election, among those held on the general's date, that is
-    the general itself: the only one, else the only one named "general".
-    `elections` is [(name, entry)]."""
-    if len(elections) == 1:
-        return elections[0][1]
-    named = [entry for name, entry in elections if _GENERAL_RE.search(name or "")]
+    the general itself. `elections` is [(name, entry)].
+
+    Demo/test/preview copies, recounts and runoffs are never it. Of what
+    remains: the only one; else the only one named "general" that is not
+    also a special; else the only one named "general" at all (Georgia
+    named its 2022 ballot "November 8, 2022 - General/Special Election").
+    None when nothing is held that day. When SEVERAL remain and no rule
+    singles one out, this raises UntrustedCount rather than returning
+    None: None reads downstream as "not published yet", and a state that
+    silently shows no count all election night because its index grew a
+    second same-day entry is exactly the failure that must page someone."""
+    candidates = [(name or "", entry) for name, entry in elections if not _NOT_THE_COUNT_RE.search(name or "")]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0][1]
+    named = [(name, entry) for name, entry in candidates if _GENERAL_RE.search(name)]
+    regular = [entry for name, entry in named if not _SPECIAL_RE.search(name)]
+    if len(regular) == 1:
+        return regular[0]
     if len(named) == 1:
-        return named[0]
-    return None
+        return named[0][1]
+    raise UntrustedCount(
+        f"{state or 'state'}: {len(candidates)} elections share the general's date and none is singly the "
+        f"general ({', '.join(repr(n) for n, _ in candidates)}); refusing to guess",
+    )
 
 
 def _readers() -> dict:
@@ -180,9 +209,33 @@ async def fetch_state_count(
     if reader is None:
         return None
     try:
-        return await reader(client, election_day, state.upper(), live_source(source))
+        count = await reader(client, election_day, state.upper(), live_source(source))
     except UntrustedCount:
         raise
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         logger.exception("%s live results read failed", state)
         return None
+    if count is not None:
+        count.contests = _without_unnumbered_house_collisions(state, count.contests)
+    return count
+
+
+def _without_unnumbered_house_collisions(state: str, contests: list[ContestCount]) -> list[ContestCount]:
+    """A House contest with no district is an at-large seat, and a state has
+    at most one. Two of them means the reader could not read the district
+    out of a label (Utah's "U.S. House 1", before its entry named the
+    format) and every district would land on the same seat — so none of
+    them is kept, and the gap is logged as the parsing failure it is,
+    rather than showing one district's count on another's race."""
+    groups: dict[bool, int] = {}
+    for c in contests:
+        if c.office == "H" and c.district is None:
+            groups[c.is_special] = groups.get(c.is_special, 0) + 1
+    clashing = {special for special, n in groups.items() if n > 1}
+    if not clashing:
+        return contests
+    logger.error(
+        "%s live results: %d House contests carry no district number; dropped rather than merged "
+        "(add the state's label format as house_label_regex)", state, sum(groups[s] for s in clashing),
+    )
+    return [c for c in contests if not (c.office == "H" and c.district is None and c.is_special in clashing)]

@@ -8,6 +8,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, field_validator
+from sqlalchemy import or_
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session, selectinload
 
@@ -28,7 +29,7 @@ from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
 from app.models import (
-    ActionIssue, ExploreDocument, IssueView, MonitorStatus,
+    ActionIssue, ActionIssueStatus, ExploreDocument, IssueView, MonitorStatus,
     NationalMonitor, Race, RepSponsoredBill, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
@@ -120,7 +121,20 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
             .all()
         )
 
+    # The newest day is the newest day of CONFIRMED issues, and a current
+    # DEVELOPING draft is listed beside it whatever its own date (it still
+    # ranks last). Keyed to the newest date of any current row, a draft
+    # dated before midnight Eastern dropped off the list at the first
+    # refresh after it — and one dated just after hid every confirmed story
+    # until that refresh ran.
+    not_developing = or_(ActionIssue.status.is_(None), ActionIssue.status != ActionIssueStatus.DEVELOPING)
     latest_date = (
+        db.query(ActionIssue.date)
+        .filter(ActionIssue.is_current == True, not_developing)  # noqa: E712
+        .order_by(ActionIssue.date.desc())
+        .limit(1)
+        .scalar()
+    ) or (
         db.query(ActionIssue.date)
         .filter(ActionIssue.is_current == True)  # noqa: E712
         .order_by(ActionIssue.date.desc())
@@ -130,7 +144,10 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
     if latest_date:
         return (
             db.query(ActionIssue)
-            .filter(ActionIssue.date == latest_date, ActionIssue.is_current == True)  # noqa: E712
+            .filter(
+                ActionIssue.is_current == True,  # noqa: E712
+                or_(ActionIssue.date == latest_date, ActionIssue.status == ActionIssueStatus.DEVELOPING),
+            )
             .order_by(ActionIssue.rank)
             .all()
         )
@@ -973,7 +990,8 @@ def days_until_next_election(today: date | None = None) -> int:
     return (_next_election_day(today) - today).days
 
 
-def is_election_season(today: date | None = None) -> bool:
+def is_election_season(today: date | None = None, db: Session | None = None,
+                       election=None) -> bool:
     """True within ELECTION_SEASON_WINDOW_DAYS of the next federal election,
     and on through the results window after it (election_phase) — the
     window the midterm-elections pipeline (election_pipeline.py) uses
@@ -981,9 +999,13 @@ def is_election_season(today: date | None = None) -> bool:
     (see scheduler.py). Public so scheduler.py doesn't need its own copy of
     this date arithmetic. The count after election day is when coverage
     moves fastest; ending the season the night polls closed stopped
-    coverage exactly then."""
+    coverage exactly then.
+
+    Pass the request's `db` (or the `election` already resolved from it)
+    where there is one: without either, active_election opens a session of
+    its own for the results window's lookup."""
     today = today or election_today()
-    if active_election(today=today).shows_results:
+    if (election or active_election(db, today)).shows_results:
         return True
     return days_until_next_election(today) <= ELECTION_SEASON_WINDOW_DAYS
 
@@ -1004,7 +1026,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
     el_year = election_day.year
     is_presidential = el_year % 4 == 0
     is_election_day = election.phase == ELECTION_DAY
-    is_election_season_flag = is_election_season(today)
+    is_election_season_flag = is_election_season(today, election=election)
 
     seats_up = _seats_up_for_year(el_year)
     # Special elections are additional to the class calendar and only
@@ -1180,7 +1202,9 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
     """Return known upcoming civic events for the given year."""
     events: list[dict] = []
 
-    election_day = _next_election_day(today)
+    # On the day itself too: next_election_day is strictly after `today`,
+    # which dropped election day from the calendar on election day.
+    election_day = today if previous_election_day(today) == today else _next_election_day(today)
     if election_day.year == year and election_day >= today:
         is_presidential = year % 4 == 0
         label = "Presidential & Congressional" if is_presidential else "Midterm Congressional"

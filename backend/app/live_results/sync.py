@@ -4,9 +4,10 @@ changed as ElectionResultEvents, and open a DEVELOPING Action Center issue
 when a seat is changing party (live_results/signals.py).
 
 Runs on its own clock from election day until the results window closes
-(scheduler._election_results_sync, election_phase). Each state is read
-independently: one state's feed being down leaves every other state's
-count moving.
+(scheduler._election_results_sync, election_phase). Every state is read at
+once and stored on its own: one state's feed being slow, down or refused
+leaves every other state's count moving, and how each read went is kept
+(LiveResultRead) so the page can say which absence it is.
 
 What an event is, and what it is not. Events are observed changes in the
 source's own numbers — first votes counted, a different candidate on top,
@@ -16,15 +17,18 @@ source's figures (the same "the page may only say what the count says"
 rule as RaceResult).
 """
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models import Candidate, ElectionResultEvent, Race, RaceResult, Representative, Senator
+from app.models import (
+    Candidate, ElectionResultEvent, LiveResultRead, Race, RaceResult, Representative, Senator,
+)
 from app.pipeline.candidate_dedup import normalized_surname
 from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.election_results import (
@@ -66,6 +70,15 @@ FLIP_REVERSED = "flip_reversed"
 # count is in"), not a calibrated value; it gates only the flip signal,
 # never what the page shows.
 FLIP_MIN_REPORTING_SHARE = 0.5
+# Where the units are places rather than precincts — counties, or a
+# state's cities and towns — "reporting" means a place has posted its first
+# batch, not that its count is in: Colorado's Clarity feed shows 2 of
+# CO-8's 3 counties reporting within minutes of the first dump, and its
+# counties keep counting for days. Half the places says nothing there, so
+# such a flip needs every place in AND this long since the race's first
+# votes — past the election-night dump and the batches after it — or the
+# source's official flag. Editorial, like the share above.
+COUNTY_FLIP_SETTLE = timedelta(hours=6)
 
 _MEMBER_PARTY = {"D": "DEM", "R": "REP", "I": "IND"}
 
@@ -148,15 +161,35 @@ def _key(row: dict | None):
     return (row.get("candidateId") or row.get("name")) if row else None
 
 
-def flip_qualifies(result: RaceResult) -> bool:
+def flip_qualifies(result: RaceResult, now: datetime | None = None) -> bool:
     """Enough of the count is in to report a seat changing party. An
-    official flag counts only where the state gives no reporting figure:
-    it is known to be wrong in the other direction (Enhanced Voting's
-    stayed false a month after Utah's canvass, verified 2026-09-28), and a
-    flag claiming "official" beside a count half in is the one to doubt."""
-    if not result.total_units or result.reporting_units is None:
-        return bool(result.official)
-    return result.reporting_units >= FLIP_MIN_REPORTING_SHARE * result.total_units
+    official flag counts only where the state gives no reporting figure,
+    or where its units are counties (below): it is known to be wrong in the
+    other direction (Enhanced Voting's stayed false a month after Utah's
+    canvass, verified 2026-09-28), and a flag claiming "official" beside a
+    count half in is the one to doubt.
+
+    Place units (counties, towns): every place in and COUNTY_FLIP_SETTLE
+    since the first votes (first_reported_at), or the official flag — see
+    the constant."""
+    return count_is_mostly_in(
+        result.reporting_units, result.total_units, result.unit_label, bool(result.official),
+        result.first_reported_at, now or utcnow(),
+    )
+
+
+def count_is_mostly_in(reporting: int | None, total: int | None, unit_label: str | None, official: bool,
+                       first_votes_at: datetime | None, now: datetime) -> bool:
+    """flip_qualifies' rule on bare figures — so a post can apply it to the
+    figures its event recorded, not to wherever the count is now."""
+    if not total or reporting is None:
+        return official
+    if (unit_label or "precincts") != "precincts":
+        if official:
+            return True
+        settled = first_votes_at is not None and now - first_votes_at >= COUNTY_FLIP_SETTLE
+        return reporting >= total and settled
+    return reporting >= FLIP_MIN_REPORTING_SHARE * total
 
 
 def is_flip(result: RaceResult) -> bool:
@@ -217,18 +250,33 @@ def contest_is_sane(contest: ContestCount) -> bool:
     return True
 
 
-def _last_flip_state(db: Session, race_id: str, election_date: str) -> bool:
-    """Whether the last flip the count announced still stands — read from
-    the events, not recomputed from the stored count, so a poll whose
-    events were held (below) can't silently swallow a flip."""
-    last = (
-        db.query(ElectionResultEvent.kind)
-        .filter(ElectionResultEvent.race_id == race_id, ElectionResultEvent.election_date == election_date,
-                ElectionResultEvent.kind.in_((FLIP, FLIP_REVERSED)))
-        .order_by(ElectionResultEvent.created_at.desc(), ElectionResultEvent.id.desc())
-        .first()
+def announced_state(db: Session, race_id: str, election_date: str) -> dict:
+    """What the count has already SAID about this race, read from its
+    events — the baseline every new event is measured against. Not the last
+    stored row: a held poll (apply_count) stores the state's figures but
+    announces nothing, and diffing against it would swallow whatever first
+    appeared there for good (an official flag published alongside a
+    correction that lowered the total was never announced)."""
+    rows = (
+        db.query(ElectionResultEvent.kind, ElectionResultEvent.detail)
+        .filter(ElectionResultEvent.race_id == race_id, ElectionResultEvent.election_date == election_date)
+        .order_by(ElectionResultEvent.created_at, ElectionResultEvent.id)
+        .all()
     )
-    return bool(last and last[0] == FLIP)
+    state = {"any": bool(rows), "leader": None, "official": False, "all_in": False, "flip": False}
+    for kind, detail in rows:
+        leader = (json.loads(detail or "{}") or {}).get("leader")
+        if leader:
+            state["leader"] = leader
+        if kind == OFFICIAL:
+            state["official"] = True
+        elif kind == ALL_REPORTING:
+            state["all_in"] = True
+        elif kind == FLIP:
+            state["flip"] = True
+        elif kind == FLIP_REVERSED:
+            state["flip"] = False
+    return state
 
 
 @dataclass
@@ -240,6 +288,11 @@ class Applied:
     # not an attribute on the row: the session holds clean rows weakly, so
     # anything set on one may not survive to the caller's next db.get.
     held: bool = False
+
+    @property
+    def new_flip(self) -> bool:
+        """This poll announced a seat changing party."""
+        return any(e.kind == FLIP for e in self.events)
 
 
 def apply_count(
@@ -274,14 +327,17 @@ def apply_count(
         )
         db.add(result)
     else:
-        before = {
-            "tallies": json.loads(result.tallies or "[]"), "counted": result.votes_counted or 0,
-            "reporting": result.reporting_units, "total": result.total_units,
-            "official": result.official,
-        }
+        # The stored row only decides whether the figures changed and
+        # whether the total fell; what to ANNOUNCE is measured against
+        # announced_state.
+        before = {"tallies": json.loads(result.tallies or "[]"), "counted": result.votes_counted or 0}
 
     old_tallies = before["tallies"] if before else []
     old_counted = before["counted"] if before else 0
+    if counted > 0 and old_counted == 0:
+        # first_reported_at is when votes were first counted, not when the
+        # row was made: a feed read at poll close lists every race at zero.
+        result.first_reported_at = now
     if before is None or [(_key(t), t["votes"]) for t in tallies] != [(_key(t), t["votes"]) for t in old_tallies] \
             or counted != old_counted:
         result.last_change_at = now
@@ -302,24 +358,23 @@ def apply_count(
                        race.id, old_counted, counted)
         return Applied(result, held=True)
 
+    said = announced_state(db, race.id, result.election_date)
     kinds: list[tuple[str, dict]] = []
-    old_leader, new_leader = _leader(old_tallies), _leader(tallies)
-    if old_counted <= 0 < counted:
+    old_leader, new_leader = said["leader"], _leader(tallies)
+    if not said["any"] and counted > 0:
         kinds.append((FIRST_RETURNS, {}))
     elif old_leader and new_leader and _key(old_leader) != _key(new_leader):
         kinds.append((LEAD_CHANGE, {"previousLeader": {
             "name": old_leader["name"], "party": old_leader.get("party"),
         }}))
-    was_all_in = bool(before and before["total"] and before["reporting"] == before["total"])
-    if result.total_units and result.reporting_units == result.total_units and not was_all_in and counted > 0:
+    if result.total_units and result.reporting_units == result.total_units and not said["all_in"] and counted > 0:
         kinds.append((ALL_REPORTING, {}))
-    if result.official and not (before and before["official"]):
+    if result.official and not said["official"]:
         kinds.append((OFFICIAL, {}))
     flipped = is_flip(result)
-    was_flipped = _last_flip_state(db, race.id, result.election_date)
-    if flipped and not was_flipped:
+    if flipped and not said["flip"]:
         kinds.append((FLIP, {}))
-    elif was_flipped and not flipped:
+    elif said["flip"] and not flipped:
         kinds.append((FLIP_REVERSED, {}))
     # One poll, one story per race: a flip already says who leads, and a
     # race whose first returns arrive complete is simply "all in" — without
@@ -374,23 +429,65 @@ def freshness_problem(db: Session, state: str, election_day: date, count: StateC
     return None
 
 
-async def sync_state(db: Session, client: httpx.AsyncClient, state: str, election_day: date) -> dict:
+@dataclass
+class StateRead:
+    """One state's feed, read — before anything touches the database, so
+    every state can be read at once (sync_live_results)."""
+    status: str  # "read", "polls_open", "untrusted", "unavailable", "failed"
+    count: StateCount | None = None
+    reason: str | None = None
+
+
+async def read_state(client: httpx.AsyncClient, state: str, election_day: date) -> StateRead:
     if not polls_closed(state, election_day, utcnow()):
         # Nothing is read, stored or said before a state's last polls
         # close (fetch/poll_close.py).
-        return {"status": "polls_open", "pollsClose": last_poll_close(state, election_day).isoformat() + "Z"}
+        return StateRead("polls_open")
     try:
         count = await fetch_state_count(client, state, election_day)
     except UntrustedCount as refused:
-        logger.warning("Live results refused for %s: %s", state, refused)
+        return StateRead("untrusted", reason=str(refused))
+    except Exception as exc:  # one state's broken feed never stops the pass
+        logger.exception("Live results read failed for %s", state)
+        return StateRead("failed", reason=type(exc).__name__)
+    if count is None:
+        return StateRead("unavailable")
+    return StateRead("read", count=count)
+
+
+def _record_read(db: Session, state: str, election_day: date, status: str) -> None:
+    now = utcnow()
+    row = db.get(LiveResultRead, (state, election_day.isoformat()))
+    if row is None:
+        row = LiveResultRead(state=state, election_date=election_day.isoformat(), status=status)
+        db.add(row)
+    row.status = status
+    row.checked_at = now
+    if status == "ok":
+        row.last_ok_at = now
+
+
+def apply_state(db: Session, state: str, election_day: date, read: StateRead) -> dict:
+    """Store what one state's read says, and record how the read went."""
+    outcome = _apply_state(db, state, election_day, read)
+    _record_read(db, state, election_day, outcome["status"])
+    return outcome
+
+
+def _apply_state(db: Session, state: str, election_day: date, read: StateRead) -> dict:
+    if read.status == "polls_open":
+        return {"status": "polls_open", "pollsClose": last_poll_close(state, election_day).isoformat() + "Z"}
+    if read.status == "untrusted":
+        logger.warning("Live results refused for %s: %s", state, read.reason)
         send_ops_alert(
             f"Live results: {state} feed refused",
-            f"{refused}. Nothing from it was stored or published; the page keeps the last trusted count.",
+            f"{read.reason}. Nothing from it was stored or published; the page keeps the last trusted count.",
             dedupe_key=f"results-untrusted-{state}-{election_day.isoformat()}",
         )
-        return {"status": "untrusted", "reason": str(refused)}
-    if count is None:
-        return {"status": "unavailable"}
+        return {"status": "untrusted", "reason": read.reason}
+    if read.status != "read":
+        return {"status": read.status, **({"reason": read.reason} if read.reason else {})}
+    count = read.count
     problem = freshness_problem(db, state, election_day, count)
     if problem:
         logger.warning("Live results for %s not stored: %s", state, problem)
@@ -403,7 +500,7 @@ async def sync_state(db: Session, client: httpx.AsyncClient, state: str, electio
         race = _contest_race(db, election_day.year, state, contest)
         if race is not None:
             by_race.setdefault(race.id, []).append(contest)
-    results: list[RaceResult] = []
+    results: list[Applied] = []
     events = 0
     for race_id, contests in by_race.items():
         if len(contests) > 1:
@@ -415,7 +512,7 @@ async def sync_state(db: Session, client: httpx.AsyncClient, state: str, electio
         applied = apply_count(db, db.get(Race, race_id), contests[0], count, election_day)
         events += len(applied.events)
         if not applied.held:
-            results.append(applied.result)
+            results.append(applied)
     db.flush()
     return {
         "status": "ok", "races": len(results), "contests": len(count.contests),
@@ -423,14 +520,36 @@ async def sync_state(db: Session, client: httpx.AsyncClient, state: str, electio
     }
 
 
+async def sync_state(db: Session, client: httpx.AsyncClient, state: str, election_day: date) -> dict:
+    """Read and store one state (sync_live_results does every state)."""
+    return apply_state(db, state, election_day, await read_state(client, state, election_day))
+
+
+# States read at once. The feeds sit on a handful of vendors' hosts, and
+# each read is a few requests; eight keeps any one host's share modest
+# while a slow or down feed (up to ~90 s with retries) no longer holds up
+# the states after it.
+MAX_CONCURRENT_READS = 8
+
+
 async def sync_live_results(db: Session, client: httpx.AsyncClient, election_day: date) -> dict:
-    """One pass over every covered state; commits per state."""
+    """One pass over every covered state: every feed read at once, then
+    each state stored and committed on its own, so one state's feed being
+    slow, down or refused leaves every other state's count moving."""
     from app.live_results.signals import update_developing_issues
 
+    states = sorted(live_results_states())
+    gate = asyncio.Semaphore(MAX_CONCURRENT_READS)
+
+    async def one(state: str) -> StateRead:
+        async with gate:
+            return await read_state(client, state, election_day)
+
+    reads = await asyncio.gather(*(one(state) for state in states))
     summary: dict[str, dict] = {}
-    for state in sorted(live_results_states()):
+    for state, read in zip(states, reads):
         try:
-            outcome = await sync_state(db, client, state, election_day)
+            outcome = apply_state(db, state, election_day, read)
             db.flush()
             outcome["issues"] = update_developing_issues(db, outcome.pop("results", []))
             db.commit()
@@ -438,6 +557,11 @@ async def sync_live_results(db: Session, client: httpx.AsyncClient, election_day
             db.rollback()
             logger.exception("Live results sync failed for %s", state)
             outcome = {"status": "failed"}
+            try:
+                _record_read(db, state, election_day, "failed")
+                db.commit()
+            except Exception:
+                db.rollback()
         summary[state] = outcome
     try:
         check_stalled_feeds(db, election_day)

@@ -97,9 +97,9 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    NOT_A_PERSON_RE,
     clean_display_name,
     federal_record,
+    is_not_a_person,
     normalize_party,
     parse_office,
     parse_state_leg_office,
@@ -370,7 +370,7 @@ def general_contests(search: dict, results: dict, parties: dict) -> list[Contest
             label = clean_display_name(meta.get("name") or "")
             # North Dakota lists a "write-in" row with isWriteIn false; its
             # votes stay in the contest total, it just isn't a candidate.
-            if meta.get("isWriteIn") or not label or NOT_A_PERSON_RE.search(label) or not isinstance(votes, int):
+            if meta.get("isWriteIn") or not label or is_not_a_person(label) or not isinstance(votes, int):
                 continue
             candidates.append((label, _party(ch.get("partyID"), meta.get("partyID"), parties), votes))
         total = result.get("totalVotes")
@@ -425,7 +425,7 @@ async def fetch_general_results(
     election = pick_general([
         (e.get("electionName") or "", e) for e in elections
         if str(e.get("electionDate") or "").startswith(day) and e.get("electionID")
-    ])
+    ], state)
     if election is None:
         return None
     eid = str(election["electionID"])
@@ -456,6 +456,16 @@ async def fetch_general_results(
         return None
     for body in (search, info, results):
         _check_answer(body, eid, state)
+    # The three calls are one read only if they describe one publication.
+    # The state republishes every few minutes on election night, and a
+    # republish landing between them pairs one version's contest and
+    # choice ids with another's counts -- a choice id that moved would put
+    # one candidate's votes on another's name. Refused whole, like any
+    # other answer that is not the count asked for; the next pass reads a
+    # single version again.
+    versions = {str(body.get("versionID") or "") for body in (search, info, results)}
+    if len(versions) != 1:
+        raise UntrustedCount(f"{state} election {eid} changed version mid-read ({sorted(versions)})")
     parties = ((info.get("response") or {}).get("parties")) or {}
     return StateCount(
         source_name=source.get("source_name") or f"{state} election results",

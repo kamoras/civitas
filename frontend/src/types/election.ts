@@ -563,7 +563,19 @@ export interface LiveResults {
   /** When each live state's last polls close (UTC ISO). Nothing of its
    * count is read or shown before then. Optional for an older backend. */
   pollsClose?: Record<string, string>;
+  /** How the last read of each live state's feed went (backend
+   * LiveResultRead): what tells "the count hasn't started" from "the
+   * state's feed couldn't be read". Optional for an older backend. */
+  feeds?: Record<string, LiveFeedStatus>;
   races: LiveRaceResult[];
   /** Newest first. */
   updates: ResultEvent[];
+}
+
+export interface LiveFeedStatus {
+  /** ok | polls_open | untrusted | unavailable | stale | failed */
+  status: string;
+  checkedAt: string;
+  /** The last read that was stored; null until one is. */
+  lastOkAt: string | null;
 }

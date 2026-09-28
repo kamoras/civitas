@@ -754,7 +754,9 @@ wrong number on election night is worse than none:
   DEVELOPING Action Center issue a seat flip opens (`live_results/signals.py`),
   the election-night Bluesky posts (`live_results/bluesky.py`) — is
   a fixed template around the source's figures, never model text. A flip needs
-  half the reporting units in.
+  half the reporting units in — and where the units are places (counties,
+  cities and towns), which "report" on their first batch, every place in and `COUNTY_FLIP_SETTLE`
+  since the first votes, or the source's official flag.
 
 After both member pipelines complete, `stock_pipeline.py` runs as a sibling
 phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction

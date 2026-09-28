@@ -109,6 +109,12 @@ def _content(result: RaceResult) -> dict:
 
 def _fill(issue: ActionIssue, result: RaceResult) -> None:
     content = _content(result)
+    # Dated the day it last said something: the Action Center lists the
+    # newest day's issues, and a flip drafted before midnight Eastern must
+    # not drop off the list at the first refresh after it.
+    from app.election_phase import election_today
+
+    issue.date = election_today().isoformat()
     facts = json.dumps(content["facts"])
     if issue.facts and issue.facts != facts:
         issue.previous_facts = issue.facts
@@ -140,13 +146,20 @@ def _create(db: Session, result: RaceResult) -> ActionIssue:
     return issue
 
 
-def update_developing_issues(db: Session, results: list[RaceResult]) -> int:
-    """Create, refresh or retire each race's flip issue. Returns how many
-    issues were created or retired."""
+def update_developing_issues(db: Session, applied: list) -> int:
+    """Create, refresh or retire each race's flip issue, from the polls
+    sync_state stored (`Applied`s; a held poll never reaches here). Returns
+    how many issues were created, retired or brought back.
+
+    A retired issue comes back only on a NEW flip — the lead having
+    reverted and then flipped again. Anything else that retired it (the
+    Action Center's own refresh retires an unmatched developing issue after
+    a day) stays retired: resurrecting on every poll while the flip merely
+    held made the issue vanish and reappear every hour."""
     now = utcnow()
     changed = 0
-    for result in results:
-        # A held poll (apply_count) never reaches here: the caller drops it.
+    for outcome in applied:
+        result = outcome.result
         if result is None:
             continue
         issue = db.get(ActionIssue, result.developing_issue_id) if result.developing_issue_id else None
@@ -158,6 +171,8 @@ def update_developing_issues(db: Session, results: list[RaceResult]) -> int:
                 changed += 1
                 continue
             if not issue.is_current:
+                if not outcome.new_flip:
+                    continue
                 if issue.confirmation_deadline and issue.confirmation_deadline < now:
                     continue  # expired unconfirmed; not resurrected
                 issue.is_current = True

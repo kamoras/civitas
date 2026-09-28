@@ -1,4 +1,5 @@
-"""race_results / election_result_events: live general-election counts
+"""race_results / election_result_events / live_result_reads: live
+general-election counts
 
 New tables only, so the previous image runs unchanged against the
 migrated schema.
@@ -35,6 +36,14 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_election_result_events_election_date'), ['election_date'], unique=False)
         batch_op.create_index(batch_op.f('ix_election_result_events_race_id'), ['race_id'], unique=False)
 
+    op.create_table('live_result_reads',
+    sa.Column('state', sa.String(length=2), nullable=False),
+    sa.Column('election_date', sa.String(length=10), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('checked_at', sa.DateTime(), nullable=False),
+    sa.Column('last_ok_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('state', 'election_date')
+    )
     op.create_table('race_results',
     sa.Column('race_id', sa.String(), nullable=False),
     sa.Column('election_date', sa.String(length=10), nullable=False),
@@ -68,6 +77,7 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_race_results_election_date'))
 
     op.drop_table('race_results')
+    op.drop_table('live_result_reads')
     with op.batch_alter_table('election_result_events', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_election_result_events_race_id'))
         batch_op.drop_index(batch_op.f('ix_election_result_events_election_date'))

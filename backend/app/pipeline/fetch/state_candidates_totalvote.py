@@ -126,8 +126,8 @@ from lxml import html as lxml_html
 
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    NOT_A_PERSON_RE,
     clean_display_name,
+    is_not_a_person,
     normalize_party,
     parse_office,
     parse_state_leg_office,
@@ -354,10 +354,18 @@ async def fetch_confirmed_candidates(
 _GENERAL_TITLE_RE = re.compile(
     r"General\s+Election\s*(?:-\s*)?([A-Za-z]+\s+\d{1,2},\s+\d{4})",
 )
-# "Results last updated: 12/19/2024 1:25:20 PM MT" — the page's own stamp,
-# in the state's zone abbreviation.
+# The page's own "Results last updated" stamp, in the state's zone
+# abbreviation. Two markups, both real: Montana's 2024 archive prints it as
+# one run of text with seconds ("last updated: 12/19/2024 1:25:20 PM MT"),
+# while Nebraska's and New Mexico's current pages split label and value
+# into two spans and stop at the minute
+# ("<span>Results last updated:</span><span>9/24/2026 2:59 PM MT</span>",
+# verified live 2026-09-28). A pattern that only knew the first read no
+# stamp at all on either state's election night.
 _UPDATED_RE = re.compile(
-    r"last\s+updated:?\s*(\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*[AP]M)\s*([A-Z]{1,3}T)\b", re.IGNORECASE,
+    r"last\s+updated:?\s*(?:<[^>]*>\s*)*"
+    r"(\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M)\s*([A-Z]{1,3}T)\b",
+    re.IGNORECASE,
 )
 _ZONES = {"ET": "America/New_York", "CT": "America/Chicago", "MT": "America/Denver", "PT": "America/Los_Angeles"}
 # "Precincts Fully: 727 / 727", per contest block.
@@ -404,8 +412,9 @@ def _updated_at(html: str) -> datetime | None:
     zone = _ZONES.get(abbr[0] + "T")
     if zone is None:
         return None
+    stamp = re.sub(r"\s+", " ", m.group(1)).upper()
     try:
-        local = datetime.strptime(re.sub(r"\s+", " ", m.group(1)).upper(), "%m/%d/%Y %I:%M:%S %p")
+        local = datetime.strptime(stamp, "%m/%d/%Y %I:%M:%S %p" if stamp.count(":") == 2 else "%m/%d/%Y %I:%M %p")
     except ValueError:
         return None
     return local.replace(tzinfo=ZoneInfo(zone)).astimezone(timezone.utc).replace(tzinfo=None)
@@ -423,7 +432,7 @@ def general_contests(html: str) -> list[ContestCount]:
         if parsed is None:
             continue
         candidates = [
-            (clean_display_name(n), p, v) for n, p, v in _candidate_rows(wrapper) if not NOT_A_PERSON_RE.search(n)
+            (clean_display_name(n), p, v) for n, p, v in _candidate_rows(wrapper) if not is_not_a_person(n)
         ]
         m = _PRECINCTS_RE.search(wrapper.text_content())
         reporting = total = None
@@ -442,7 +451,30 @@ async def fetch_general_results(
 ) -> StateCount | None:
     """The same no-eid pages the primary reader uses, which serve the
     general once the site rolls over to it; a page still showing another
-    election is "not published yet" (None), never read as this one."""
+    election is "not published yet" (None), never read as this one.
+
+    FRESHNESS. This vendor publishes no version id and no machine-readable
+    update time -- there is no lastUpdated field, as Tally and Enhanced
+    Voting carry -- so the guards are what the page itself prints:
+
+    - Which election: the hidden hidElectionType/hidElectionDate fields
+      (title as fallback) must name THIS general's date, or nothing on the
+      page is read. That is what stops a cached or not-yet-rolled-over
+      page (the primary, or 2024's general) from being taken as tonight's.
+    - How fresh: the visible "Results last updated" stamp, in the state's
+      zone, becomes source_updated, and the sync refuses a page whose stamp
+      goes BACKWARDS. Both Nebraska's and New Mexico's live pages print it
+      (verified 2026-09-28, New Mexico's even on its staged, uncounted
+      2026 general), but only to the MINUTE, so two republishes inside one
+      minute are indistinguishable -- neither is refused, since they are
+      the same age. A page that prints no stamp yields source_updated None,
+      which leaves only the election-date guard: the count is still this
+      election's, but a stale copy of it could not be told from a fresh
+      one. That is the residual gap for this vendor, and there is nothing
+      else on the page to close it with.
+    - With several queries (Nebraska's SW + CG) the OLDEST page's stamp is
+      taken, and a missing stamp on any page makes the whole read undated
+      rather than borrowing another page's."""
     base_url, queries = source.get("base_url"), source.get("queries")
     if not base_url or not queries:
         return None

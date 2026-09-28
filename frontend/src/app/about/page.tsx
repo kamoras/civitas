@@ -90,7 +90,7 @@ const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
   },
   {
     what: "Your state's ballot",
-    detail: "Federal and statewide contests, ballot measures quoted verbatim",
+    detail: "Federal and statewide contests, ballot measures quoted verbatim, and the live count on election night",
     href: "/elections",
   },
   {

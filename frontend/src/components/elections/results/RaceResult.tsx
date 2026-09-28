@@ -1,5 +1,6 @@
 import {
   formatEasternTime,
+  heldByPhrase,
   partyBarColor,
   partyLetter,
   partyTextClass,
@@ -7,27 +8,35 @@ import {
   reportingShare,
   reportingText,
 } from "@/lib/results";
+import { safeHref } from "@/lib/formatting";
 import type { LiveRaceResult } from "@/types/election";
-
-const HOLDERS: Record<string, string> = { DEM: "Democrats", REP: "Republicans", IND: "an independent" };
 
 /** Where the count stands, in the state's own words: official, leading,
  * or no votes yet. Never "won" without the state saying so. */
 export function statusTag(r: LiveRaceResult): { text: string; className: string } {
   if (r.official) return { text: "OFFICIAL", className: "border-phos/60 text-phos" };
   if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
-  if (r.flip) return { text: "FLIP · LEADING", className: "border-signal-amber/60 text-signal-amber" };
+  if (r.flip)
+    return { text: "FLIP · LEADING", className: "border-signal-amber/60 text-signal-amber" };
   const share = reportingShare(r);
-  if (share != null && share < 0.5) return { text: "EARLY", className: "border-white/20 text-ink-lo" };
+  if (share != null && share < 0.5)
+    return { text: "EARLY", className: "border-white/20 text-ink-lo" };
   return { text: "LEADING", className: "border-white/25 text-ink-lo" };
 }
 
 /** A race's full count: every candidate, a bar each, the reporting line and
  * the source. The Senate race on a state page, or any race when opened. */
-export function RaceResultCard({ result, headingLevel = 3 }: { result: LiveRaceResult; headingLevel?: 2 | 3 }) {
+export function RaceResultCard({
+  result,
+  headingLevel = 3,
+}: {
+  result: LiveRaceResult;
+  headingLevel?: 2 | 3;
+}) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
   const tag = statusTag(result);
   const reporting = reportingText(result);
+  const sourceHref = safeHref(result.sourceUrl);
   return (
     <article
       id={`result-${result.raceId}`}
@@ -35,10 +44,17 @@ export function RaceResultCard({ result, headingLevel = 3 }: { result: LiveRaceR
       className="border border-white/[0.09] bg-surface p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Heading id={`result-${result.raceId}-title`} className="font-display text-xl font-extrabold text-ink-hi">
-          {result.office === "S" ? `U.S. Senate${result.isSpecial ? " (special)" : ""}` : raceLabel(result)}
+        <Heading
+          id={`result-${result.raceId}-title`}
+          className="font-display text-xl font-extrabold text-ink-hi"
+        >
+          {result.office === "S"
+            ? `U.S. Senate${result.isSpecial ? " (special)" : ""}`
+            : raceLabel(result)}
         </Heading>
-        <span className={`border px-2 py-0.5 font-mono text-xs tracking-[0.1em] ${tag.className}`}>{tag.text}</span>
+        <span className={`border px-2 py-0.5 font-mono text-xs tracking-[0.1em] ${tag.className}`}>
+          {tag.text}
+        </span>
       </div>
       <p className="mt-1 font-mono text-xs tracking-[0.06em] text-ink-min">
         {[
@@ -50,18 +66,23 @@ export function RaceResultCard({ result, headingLevel = 3 }: { result: LiveRaceR
           .join(" · ")}
       </p>
       <ol className="mt-4 space-y-3">
-        {result.candidates.map((c) => (
+        {result.candidates.map((c, i) => (
           <li
-            key={`${c.name}-${c.party}`}
+            key={c.candidateId ?? `${i}-${c.name}`}
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[14rem_minmax(0,1fr)_5rem_7rem]"
           >
             <span className="min-w-0">
-              <span className="block truncate font-display text-base font-semibold text-ink-hi">{c.name}</span>
+              <span className="block truncate font-display text-base font-semibold text-ink-hi">
+                {c.name}
+              </span>
               <span className={`font-mono text-xs tracking-[0.1em] ${partyTextClass(c.party)}`}>
                 {c.party ?? "OTHER"}
               </span>
             </span>
-            <span className="order-last col-span-2 h-3 bg-surface-raised sm:order-none sm:col-span-1 sm:h-4" aria-hidden="true">
+            <span
+              className="order-last col-span-2 h-3 bg-surface-raised sm:order-none sm:col-span-1 sm:h-4"
+              aria-hidden="true"
+            >
               <span
                 className="block h-full"
                 style={{ width: `${c.pct ?? 0}%`, backgroundColor: partyBarColor(c.party) }}
@@ -80,10 +101,15 @@ export function RaceResultCard({ result, headingLevel = 3 }: { result: LiveRaceR
         {result.official
           ? "The state lists this count as official."
           : result.flip && result.heldBy
-            ? `The leader is from a different party than the ${HOLDERS[result.heldBy] ?? result.heldBy} who hold the seat. The count is not final.`
+            ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party. The count is not final.`
             : "Leading, not called. The count is not final."}{" "}
-        {result.sourceUrl ? (
-          <a href={result.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-phos hover:underline">
+        {sourceHref ? (
+          <a
+            href={sourceHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-phos hover:underline"
+          >
             {result.sourceName} ↗
           </a>
         ) : (
@@ -115,7 +141,8 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
             <>
               <span className={partyTextClass(leader.party)}>{leader.name}</span>{" "}
               <span className="text-ink-lo">
-                ({partyLetter(leader.party) || "other"}) {leader.pct?.toFixed(1)}%
+                ({partyLetter(leader.party) || "other"}){" "}
+                {leader.pct != null ? `${leader.pct.toFixed(1)}%` : "—"}
               </span>
             </>
           ) : (
@@ -123,12 +150,21 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
           )}
         </span>
         <span className="mt-1 flex h-1.5 bg-surface-raised" aria-hidden="true">
-          <span style={{ width: `${(100 * (dem?.votes ?? 0)) / total}%`, backgroundColor: "#82acff" }} />
-          <span className="ml-auto" style={{ width: `${(100 * (rep?.votes ?? 0)) / total}%`, backgroundColor: "#ff8989" }} />
+          <span
+            style={{ width: `${(100 * (dem?.votes ?? 0)) / total}%`, backgroundColor: "#82acff" }}
+          />
+          <span
+            className="ml-auto"
+            style={{ width: `${(100 * (rep?.votes ?? 0)) / total}%`, backgroundColor: "#ff8989" }}
+          />
         </span>
       </span>
-      <span className="hidden font-mono text-xs text-ink-min sm:block">{reportingText(result) || "—"}</span>
-      <span className={`justify-self-end border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] ${tag.className}`}>
+      <span className="hidden font-mono text-xs text-ink-min sm:block">
+        {reportingText(result) || "—"}
+      </span>
+      <span
+        className={`justify-self-end border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] ${tag.className}`}
+      >
         {tag.text}
       </span>
     </li>

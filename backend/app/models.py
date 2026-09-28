@@ -1021,6 +1021,8 @@ class RaceResult(Base):
     # a later read claiming an OLDER one is a rolled-back feed and refused.
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     source_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # When votes were first counted (the row's creation until then): the
+    # clock a county-unit flip waits on (sync.COUNTY_FLIP_SETTLE).
     first_reported_at: Mapped[datetime] = mapped_column(default=utcnow)
     # When the vote totals last moved. The results page stays up until a
     # grace period after the latest of these (election_phase.py).
@@ -1052,6 +1054,23 @@ class ElectionResultEvent(Base):
     bsky_posted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     race: Mapped["Race"] = relationship(back_populates="result_events")
+
+
+class LiveResultRead(Base):
+    """How the last read of a state's live-results feed went, per election:
+    what lets the page tell "the count hasn't started" from "Civitas
+    couldn't read the state's feed" — the same null-is-not-zero rule
+    MeasureCoverage applies to ballot measures. One row per state, updated
+    every sync pass (live_results/sync.py)."""
+    __tablename__ = "live_result_reads"
+
+    state: Mapped[str] = mapped_column(String(2), primary_key=True)
+    election_date: Mapped[str] = mapped_column(String(10), primary_key=True)
+    # ok / polls_open / untrusted / unavailable / stale / failed
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # The last read that was stored — NULL until one is.
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Justice(Base):

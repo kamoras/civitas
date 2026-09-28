@@ -953,13 +953,16 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // From election day the page leads with the count (backend election_phase);
   // the server render says which, so a campaign-season page asks nothing.
   const resultsMode = showsResults(ballot.phase);
-  const { data: live } = useLiveResults(ballot.state, resultsMode);
+  const { data: live, error: liveError } = useLiveResults(ballot.state, resultsMode);
+  // Only a state read live gets a count-shaded map: for any other, an
+  // empty map would draw every district as "no votes yet" — a state with
+  // no feed shown as one where nothing has happened.
   const liveByDistrict = useMemo(() => {
-    if (!live || !showsResults(live.phase)) return undefined;
+    if (!live || !showsResults(live.phase) || !live.liveStates.includes(ballot.state)) return undefined;
     const m = new Map<number, LiveRaceResult>();
     for (const r of live.races) if (r.office === "H") m.set(r.district ?? 0, r);
     return m;
-  }, [live]);
+  }, [live, ballot.state]);
 
   const contests = useMemo(() => buildBallotContests(ballot, towns.length > 0), [ballot, towns.length]);
   // undefined = no choice made yet, so defer to the URL; null = closed.
@@ -973,11 +976,19 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // hash, so it is read only once mounted — the useMounted idiom avoids a
   // hydration mismatch without setting state in an effect.
   const mounted = useMounted();
-  // In results mode a #race- link is for the race's count (StateResults
-  // scrolls to it); only a #ballot- link opens research.
+  // In results mode a #race- link to a race with a count lands on the
+  // count (StateResults scrolls to it); to one without — no feed for the
+  // state, nothing counted yet, a campaign-era link — it opens research as
+  // it always has. Undecided until the count has loaded, so the drawer
+  // doesn't open and then vanish. Only the arrival matters: once the reader
+  // picks a contest, `chosen` owns what is open.
   const hash = mounted ? window.location.hash : "";
+  const hashRace = /^#race-(.+)$/.exec(hash)?.[1];
+  const raceHasCount =
+    resultsMode && hashRace && live ? live.races.some((r) => r.raceId === decodeURIComponent(hashRace)) : false;
+  const waitingForCount = resultsMode && !!hashRace && !live && !liveError;
   const fromHash =
-    mounted && !(resultsMode && hash.startsWith("#race-")) ? contestForHash(hash, contests, ballot) : null;
+    mounted && !raceHasCount && !waitingForCount ? contestForHash(hash, contests, ballot) : null;
   const open = chosen !== undefined ? chosen : fromHash;
 
   const openContest = useCallback(
@@ -1103,7 +1114,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
           {resultsMode && (
             <>
-              <StateResults ballot={ballot} results={live} lookupHref={lookupHref} />
+              <StateResults ballot={ballot} results={live} error={liveError} lookupHref={lookupHref} />
               <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs tracking-[0.16em] text-ink-min">
                 BALLOT RESEARCH · WHO WAS ON THE BALLOT, AND WHO WAS BEHIND THEM
               </h2>

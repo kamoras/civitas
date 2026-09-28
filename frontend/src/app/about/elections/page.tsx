@@ -15,7 +15,7 @@ import {
 export const metadata = pageMetadata({
   title: "How State Ballot Pages Work",
   description:
-    "What Civitas's state ballot pages show, what they leave out and why, how candidate lists are confirmed, and why ballot measures are quoted word for word with their drafter named.",
+    "What Civitas's state ballot pages show, what they leave out and why, how candidate lists are confirmed, why ballot measures are quoted word for word with their drafter named, and how the live count is read on election night.",
   path: "/about/elections",
 });
 
@@ -48,6 +48,11 @@ export default function ElectionsChapter() {
         <Point>
           Each page says what its candidate lists are — a certified ballot, primary results, or
           campaign filings — and when a primary has already passed.
+        </Point>
+        <Point>
+          From election day the pages lead with the count, read from each state&apos;s own election
+          office. Civitas never calls a race: a candidate &ldquo;leads&rdquo; until the state says
+          its count is official.
         </Point>
       </Summary>
 
@@ -186,6 +191,60 @@ export default function ElectionsChapter() {
             the right race.
           </P>
         </More>
+      </Section>
+
+      <Section id="election-night" title="Election night: the count">
+        <P>
+          From election day, <span className="font-mono text-ink-hi">/elections</span> and each
+          state page put results first. The national map is shaded by who is leading each race
+          instead of by how the state usually leans — pale while fewer than half its reporting areas
+          (usually precincts) are in, solid once the state calls its count official. Each state page
+          shows its Senate race, every House district and a district map shaded the same way, above
+          the ballot research, and a live-updates feed tells each change as it happens: first
+          returns, a new leader, every reporting area in, a count called official, a seat changing
+          party.
+        </P>
+        <Sub title="Where the numbers come from">
+          <P>
+            Every five minutes, from the state&apos;s own election-night results site — the same
+            systems Civitas already reads for confirmed candidates. Fifteen states publish a count
+            we can read this way: Arkansas, Colorado, Georgia, Idaho, Iowa, Montana, Nebraska, New
+            Mexico, North Dakota, Rhode Island, South Carolina, Utah, Virginia, Washington and West
+            Virginia. Every other state&apos;s page says it has no live count here and links to the
+            office that publishes one; it is never drawn as a state where nothing has happened.
+          </P>
+        </Sub>
+        <Sub title="What we won’t show">
+          <P>
+            A wrong number on election night is worse than none. Nothing from a state is read until
+            its last polls close. A feed marked as test or practice data, one answering for the
+            wrong election, or one older than what we already show is refused, and the page keeps
+            the last count it trusted — and says so, with the time, if a state&apos;s feed
+            couldn&apos;t be read at all rather than implying counting hasn&apos;t started. A count
+            that goes down (a county pulling a bad upload) is shown but announces nothing.
+          </P>
+          <P>
+            We never call a race. A candidate &ldquo;leads&rdquo; until the state itself marks its
+            count official. A seat is only described as changing party once half its reporting areas
+            are in; where a state reports by county or town, each of which &ldquo;reports&rdquo;
+            with its first batch of ballots, it takes every county in and six hours since the first
+            votes, or the state&apos;s official count.
+          </P>
+        </Sub>
+        <Sub title="Developing stories and posts">
+          <P>
+            A seat changing party opens a <em>developing</em> story in the{" "}
+            <A href="/action?tab=issues">Action Center</A>, marked as not yet confirmed by the
+            press; it follows the count and is withdrawn if the lead reverts. The same moments are
+            posted to Civitas&apos;s Bluesky account, a few an hour at most, with a correction if a
+            posted change of party reverts. Every sentence in the feed, the story and the posts is a
+            fixed template around the state&apos;s own figures — no AI writes any of it.
+          </P>
+        </Sub>
+        <P>
+          The results stay up for two weeks after the last count changes, never past January 3, when
+          the new Congress is sworn in. Then the pages turn to the next election.
+        </P>
       </Section>
 
       <Section id="measures" title="Ballot measures: quoted, never rewritten">

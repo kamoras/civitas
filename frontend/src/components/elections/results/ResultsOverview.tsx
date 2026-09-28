@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import RaceMap from "@/components/elections/RaceMap";
 import LiveUpdates from "@/components/elections/results/LiveUpdates";
-import { UNCOVERED_FILL, formatEasternTime, partyLetter, seatsLed, stateFill, summarizeState } from "@/lib/results";
+import {
+  AWAITING_FILL,
+  TIED_FILL,
+  UNCOVERED_FILL,
+  formatEasternTime,
+  partyLetter,
+  seatsLed,
+  stateFill,
+  summarizeState,
+} from "@/lib/results";
 import type { LiveRaceResult, LiveResults } from "@/types/election";
 
 const DC_FILL = "rgba(255, 255, 255, 0.06)";
@@ -43,7 +52,13 @@ function LedTally({ led }: { led: Record<string, number> }) {
  * projection — and a state this page has no live feed for is drawn as
  * exactly that, never as a state where nothing has happened.
  */
-export default function ResultsOverview({ results, states }: { results: LiveResults; states: string[] }) {
+export default function ResultsOverview({
+  results,
+  states,
+}: {
+  results: LiveResults;
+  states: string[];
+}) {
   const router = useRouter();
   const [chamber, setChamber] = useState<"S" | "H">("S");
   const live = useMemo(() => new Set(results.liveStates), [results.liveStates]);
@@ -62,7 +77,12 @@ export default function ResultsOverview({ results, states }: { results: LiveResu
   const fill = (state: string) =>
     state === "DC"
       ? DC_FILL
-      : stateFill(byState.get(state) ?? [], chamber, live.has(state), chamber === "H" || senateStates.has(state));
+      : stateFill(
+          byState.get(state) ?? [],
+          chamber,
+          live.has(state),
+          chamber === "H" || senateStates.has(state)
+        );
 
   // Covered states first (they have something to show), then the rest.
   const directory = [...states].sort(
@@ -72,12 +92,19 @@ export default function ResultsOverview({ results, states }: { results: LiveResu
   return (
     <div className="mt-6 space-y-8">
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <section aria-labelledby="results-map-heading" className="min-w-0 border border-phos/20 bg-surface">
+        <section
+          aria-labelledby="results-map-heading"
+          className="min-w-0 border border-phos/20 bg-surface"
+        >
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-2.5">
             <h2 id="results-map-heading" className="sr-only">
               Results map
             </h2>
-            <div role="group" aria-label="Chamber" className="flex font-mono text-xs tracking-[0.12em]">
+            <div
+              role="group"
+              aria-label="Chamber"
+              className="flex font-mono text-xs tracking-[0.12em]"
+            >
               {(["S", "H"] as const).map((c) => (
                 <button
                   key={c}
@@ -105,10 +132,19 @@ export default function ResultsOverview({ results, states }: { results: LiveResu
                 <Swatch color="rgba(130,172,255,0.3)" /> UNDER HALF IN
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color="#2a2520" /> NO VOTES YET
+                <Swatch color={TIED_FILL} /> {chamber === "S" ? "TIED" : "TIED / SPLIT"}
+              </li>
+              {chamber === "H" && (
+                <li className="flex items-center gap-1.5">
+                  <Swatch color="rgba(201,149,255,0.6)" /> OTHER PARTY LEADS
+                </li>
+              )}
+              <li className="flex items-center gap-1.5">
+                <Swatch color={AWAITING_FILL} /> NO VOTES YET
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={UNCOVERED_FILL} /> {chamber === "S" ? "NO RACE / NO LIVE FEED" : "NO LIVE FEED"}
+                <Swatch color={UNCOVERED_FILL} />{" "}
+                {chamber === "S" ? "NO RACE / NO LIVE FEED" : "NO LIVE FEED"}
               </li>
             </ul>
           </div>
@@ -123,9 +159,11 @@ export default function ResultsOverview({ results, states }: { results: LiveResu
             />
           </div>
           <p className="border-t border-white/[0.07] px-4 py-3 text-xs text-ink-min">
-            Colour is who leads each state&apos;s own count, not a projection. Paler means fewer than half the
-            precincts or counties are in; solid means the state calls its count official.
-            {chamber === "H" && " For the House, a state is shaded by the party leading more of its districts."}
+            Colour is who leads each state&apos;s own count, not a projection. Paler means fewer
+            than half the precincts or counties are in; solid means the state calls its count
+            official.
+            {chamber === "H" &&
+              " For the House, a state is shaded by the party leading more of its districts."}
           </p>
         </section>
 
@@ -147,12 +185,22 @@ export default function ResultsOverview({ results, states }: { results: LiveResu
           <div className="mt-2">
             <LedTally led={seatsLed(house)} />
           </div>
-          <p className="mt-1 text-sm text-ink-lo">{house.length} districts in {live.size} states read live</p>
+          <p className="mt-1 text-sm text-ink-lo">
+            {house.length} districts in {live.size} states read live
+          </p>
         </div>
-        <div className={`border bg-surface p-4 ${flips.length ? "border-signal-amber/60" : "border-white/[0.09]"}`}>
-          <p className="font-mono text-xs tracking-[0.12em] text-signal-amber">SEATS CHANGING PARTY</p>
-          <p className="mt-2 font-display text-3xl font-extrabold tabular-nums text-ink-hi">{flips.length}</p>
-          <p className="mt-1 text-sm text-ink-lo">Leader from a different party than the holder, with half or more in</p>
+        <div
+          className={`border bg-surface p-4 ${flips.length ? "border-signal-amber/60" : "border-white/[0.09]"}`}
+        >
+          <p className="font-mono text-xs tracking-[0.12em] text-signal-amber">
+            SEATS CHANGING PARTY
+          </p>
+          <p className="mt-2 font-display text-3xl font-extrabold tabular-nums text-ink-hi">
+            {flips.length}
+          </p>
+          <p className="mt-1 text-sm text-ink-lo">
+            Leader from a different party than the holder, with half or more in
+          </p>
         </div>
       </section>
 
@@ -179,7 +227,9 @@ export default function ResultsOverview({ results, states }: { results: LiveResu
                     <span className="font-mono text-sm text-ink-hi">{state}</span>
                     <span
                       className={`border px-1.5 font-mono text-[11px] tracking-[0.1em] ${
-                        isLive ? "border-signal-amber/50 text-signal-amber" : "border-white/15 text-ink-min"
+                        isLive
+                          ? "border-signal-amber/50 text-signal-amber"
+                          : "border-white/15 text-ink-min"
                       }`}
                     >
                       {isLive ? "LIVE" : "NO FEED"}
@@ -198,7 +248,8 @@ export default function ResultsOverview({ results, states }: { results: LiveResu
                   </span>
                   {summary.house.length > 0 && (
                     <span className="font-mono text-xs text-ink-min">
-                      HOUSE D {summary.houseLeads.DEM ?? 0} · R {summary.houseLeads.REP ?? 0} LEADING
+                      HOUSE D {summary.houseLeads.DEM ?? 0} · R {summary.houseLeads.REP ?? 0}{" "}
+                      LEADING
                     </span>
                   )}
                 </Link>
@@ -207,8 +258,9 @@ export default function ResultsOverview({ results, states }: { results: LiveResu
           })}
         </ul>
         <p className="mt-3 max-w-3xl text-sm text-ink-min">
-          Live counts come from the {live.size} states whose election offices publish a results feed this page can
-          read. For every other state, its own election office publishes the count; each state page links there.
+          Live counts come from the {live.size} states whose election offices publish a results feed
+          this page can read. For every other state, its own election office publishes the count;
+          each state page links there.
           {results.phase.lastResultChange && (
             <> Last change {formatEasternTime(results.phase.lastResultChange)}.</>
           )}

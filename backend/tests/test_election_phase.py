@@ -96,3 +96,15 @@ class TestActiveElectionReadsTheCount:
         assert got.phase == RESULTS
         assert got.last_result_change == changed
         assert got.results_until == date(2026, 11, 20) + timedelta(days=RESULTS_GRACE_DAYS)
+
+    def test_the_grace_period_counts_from_the_eastern_date(self, db_session):
+        """Stored stamps are UTC: 9 PM ET on the 16th is the 17th in UTC,
+        which held the page a day longer than the rule says."""
+        db_session.add(Race(id="2026-SEN-CO", cycle_year=2026, office="S", state="CO"))
+        db_session.add(RaceResult(
+            race_id="2026-SEN-CO", election_date=ELECTION.isoformat(), source_name="x",
+            last_change_at=datetime(2026, 11, 17, 2),
+        ))
+        db_session.flush()
+        got = active_election(db_session, today=date(2026, 11, 20))
+        assert got.results_until == date(2026, 11, 16) + timedelta(days=RESULTS_GRACE_DAYS)

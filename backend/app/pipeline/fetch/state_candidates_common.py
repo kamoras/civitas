@@ -911,13 +911,44 @@ async def discover_certification_link(
     return urljoin(page_url, links.pop())
 
 
-# What a results file can print where a candidate's name goes. None of it
-# is a person, and a ballot-only row makes whatever it is visible.
+# What a results file prints IN PLACE OF a candidate's name: the aggregate
+# rows every vendor's results carry beside the real choices. The WHOLE
+# label has to be one of these (fullmatch, see is_not_a_person) -- never a
+# word found inside a label. A search for "blank" drops a real candidate
+# surnamed Blank, and a search for "withdrawn" drops "Jane Doe
+# (Withdrawn)", a candidate who left the race too late to leave the ballot
+# and whose votes are still votes; both were live bugs in the live-count
+# readers before this was anchored. Each arm is a vendor's own printed
+# convention (Washington/Idaho's "Write-in: Not Certified", Vermont's
+# "OTHER WRITE-INS", Maine's "BLANK", Louisiana's "Write-In Scattering"),
+# a data-format vocabulary like FEC's "SELF-EMPLOYED", not a guess about
+# who a person is.
 NOT_A_PERSON_RE = re.compile(
-    r"write[\s-]*ins?\b|scattering|\b(over|under)\s*votes?\b|\bblank\b|"
-    r"none of (these|the above)|uncommitted|withdrawn",
-    re.IGNORECASE,
+    r"""
+    (?:(?:other|total|unresolved|unassigned|unqualified|uncertified|non[\s-]*certified|qualified|certified)\s+)?
+        write[\s-]*ins?
+        (?:\s+(?:votes?|totals?|scatter(?:ing|ed)))?
+        (?:\s*[:(\-]\s*(?:not\s+(?:assigned|certified|qualified)|unassigned|unresolved|unqualified
+                          |uncertified|scatter(?:ing|ed))\s*\)?)?
+    | scatter(?:ing|ed)
+    | (?:over|under)\s*-?\s*votes?
+    | blank(?:\s+(?:votes?|ballots?))?
+    | none\s+of\s+(?:these|the\s+above)(?:\s+candidates)?
+    | uncommitted
+    | withdrawn
+    | total\s+votes(?:\s+cast)?
+    | ballots\s+cast
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
+
+
+def is_not_a_person(label: str) -> bool:
+    """True when the whole of `label` is an aggregate row (NOT_A_PERSON_RE),
+    not a candidate. Surrounding whitespace and a trailing period are the
+    only slack: "Write-In " and "Blank." are the row, "John Blank" and
+    "Jane Doe (Withdrawn)" are people."""
+    return bool(NOT_A_PERSON_RE.fullmatch((label or "").strip().rstrip(".").strip()))
 
 
 def last_name_matches(last_name: str, full_name: str) -> bool:

@@ -25,7 +25,7 @@ STRATEGIES-dispatch shape as ballot_measures_pdf.py.
 
 Matching a state's reported (office, district, party, last_name) against
 Civitas's own FEC-derived Candidate rows compares surname to surname
-directly — NOT candidate_dedup.last_name_matches, which matches a surname
+directly — NOT state_candidates_common.last_name_matches, which matches a surname
 against the TRAILING tokens of a "First Last"-formatted name (that's the
 right shape for _incumbent_link's target, Representative/Senator.name, but
 Candidate.name is FEC's own "LAST, FIRST MIDDLE" format, so the surname is
@@ -82,10 +82,10 @@ from app.pipeline.fetch.state_source_crawler import (
 from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
-    NOT_A_PERSON_RE,
     PARTY_CODE_MAP,
     fec_party,
     ballot_basis_key,
+    is_not_a_person,
     clean_display_name,
     JUDICIAL_COURT_LABELS,
     JUDICIAL_MARKER_TIER,
@@ -475,6 +475,14 @@ def _fec_candidates(race: Race) -> list[Candidate]:
 
 
 
+# A ballot-only row claims a PERSON printed on the November ballot. A
+# name the source itself marks as a write-in or withdrawn is not that
+# claim ("Redkey, David (Write-In)", "Write-In - David Fey"), even though a
+# live count keeps their votes -- is_not_a_person only refuses aggregate
+# rows, so this is the narrower question asked on top of it.
+_NOT_ON_THE_BALLOT_RE = re.compile(r"\bwrite[\s-]*ins?\b|\bwithdrawn\b|\bscattering\b", re.IGNORECASE)
+
+
 def _fec_style_name(display_name: str, last_name: str) -> str:
     """The printed name in FEC's "LAST, GIVEN" shape, which is how every
     other candidate on the page is named: 'Walter "Rocky" Beach' ->
@@ -516,7 +524,7 @@ def _keep_ballot_only(
     results file's non-candidate rows must never become one."""
     display = (record.get("display_name") or "").strip()
     words = [w for w in re.split(r"[\s,]+", display) if any(ch.isalpha() for ch in w)]
-    if len(words) < 2 or NOT_A_PERSON_RE.search(display):
+    if len(words) < 2 or is_not_a_person(display) or _NOT_ON_THE_BALLOT_RE.search(display):
         return None
     slug = re.sub(r"[^a-z0-9]+", "-", _fold(display)).strip("-")
     cid = f"{BALLOT_ONLY_ID_PREFIX}{race.id}:{slug}"

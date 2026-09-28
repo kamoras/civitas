@@ -224,7 +224,7 @@ def test_state_ballot_defaults_to_not_yet_covered(db_session):
 
 def test_state_ballot_distinguishes_confirmed_none(db_session):
     election_pipeline._set_coverage(
-        db_session, "GA", elections.active_election().election_day.isoformat(),
+        db_session, "GA", elections.active_election(db_session).election_day.isoformat(),
         MeasureCoverage.CONFIRMED_NONE, 0, source_name="Vote Smart",
     )
     db_session.commit()
@@ -237,11 +237,11 @@ def test_state_ballot_distinguishes_confirmed_none(db_session):
 
 def test_state_ballot_returns_measures_and_races(db_session):
     db_session.add(Race(
-        id="2026-SEN-GA", cycle_year=election_pipeline.current_election_cycle(),
+        id="2026-SEN-GA", cycle_year=election_pipeline.current_election_cycle(db_session),
         office="S", state="GA", district=None,
     ))
     db_session.add(Race(
-        id="2026-HOUSE-GA-7", cycle_year=election_pipeline.current_election_cycle(),
+        id="2026-HOUSE-GA-7", cycle_year=election_pipeline.current_election_cycle(db_session),
         office="H", state="GA", district=7,
     ))
     _measure(db_session, "vs-1", official_title="Official title",

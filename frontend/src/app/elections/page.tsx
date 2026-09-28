@@ -63,6 +63,12 @@ export default function ElectionsPage() {
   // polls only while there are results to show.
   const { data: results, error: resultsError } = useLiveResults();
   const resultsMode = !!results && showsResults(results.phase);
+  // The lean map waits until the phase is known: on election night a lean
+  // map drawn first, then swapped for the count, reads as a prediction of
+  // it. If the results check fails the campaign page stands (and says the
+  // check failed); the hook keeps retrying and switches when it answers.
+  const phaseKnown = !!results || !!resultsError;
+  const campaignMode = phaseKnown && !resultsMode;
 
   useEffect(() => {
     let cancelled = false;
@@ -128,7 +134,7 @@ export default function ElectionsPage() {
               Counts as each state&apos;s own election office publishes them, refreshed every minute. A race is
               leading until the state calls its count official; Civitas does not call races.
             </PageMasthead>
-          ) : (
+          ) : campaignMode ? (
             <PageMasthead
               eyebrow="Elections · partisan lean by state"
               title={pvi?.cycleYear ? `${pvi.cycleYear} midterm ballot` : "Midterm ballot"}
@@ -136,11 +142,20 @@ export default function ElectionsPage() {
               Pick a state for its candidates, their filings, statewide ballot measures, and the
               coverage we have ingested. Shading is partisan lean, not a forecast.
             </PageMasthead>
+          ) : (
+            // Phase not known yet: say nothing either mode would contradict.
+            <PageMasthead eyebrow="Elections" title={pvi?.cycleYear ? `${pvi.cycleYear} midterm elections` : "Midterm elections"} />
           )}
 
           {resultsMode && results && <ResultsOverview results={results} states={STATES} />}
 
-          {error && !resultsMode && (
+          {campaignMode && resultsError && !results && (
+            <p role="status" className="mt-6 font-mono text-xs tracking-[0.1em] text-ink-min">
+              COULDN&apos;T CHECK FOR LIVE RESULTS · RETRYING EVERY MINUTE
+            </p>
+          )}
+
+          {error && campaignMode && (
             <div
               role="alert"
               className="mt-6 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
@@ -149,7 +164,7 @@ export default function ElectionsPage() {
             </div>
           )}
 
-          {!error && !pvi && !resultsMode && (
+          {!error && (!pvi || !phaseKnown) && !resultsMode && (
             <p
               role="status"
               aria-live="polite"
@@ -159,7 +174,7 @@ export default function ElectionsPage() {
             </p>
           )}
 
-          {pvi && !resultsMode && (
+          {pvi && campaignMode && (
             <>
               {/* ── Map ── */}
               <section className="mt-6 border border-phos/20 bg-surface">

@@ -63,7 +63,9 @@ describe("useLiveResults", () => {
   });
 
   it("keeps the last good count when a refresh fails", async () => {
-    fetchLiveResults.mockResolvedValueOnce(phase("results")).mockRejectedValueOnce(new Error("offline"));
+    fetchLiveResults
+      .mockResolvedValueOnce(phase("results"))
+      .mockRejectedValueOnce(new Error("offline"));
     const { result } = renderHook(() => useLiveResults());
     await act(async () => {});
     await act(async () => vi.advanceTimersByTime(RESULTS_POLL_MS));

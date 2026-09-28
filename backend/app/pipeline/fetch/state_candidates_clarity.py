@@ -81,6 +81,7 @@ the shared parsers had never seen:
 
 import logging
 import re
+import time
 from datetime import timezone
 from email.utils import parsedate_to_datetime
 
@@ -88,7 +89,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    NOT_A_PERSON_RE,
+    is_not_a_person,
     normalize_party as _parse_party,
     clean_display_name as _clean_display_name,
     parse_office as _parse_office,
@@ -349,10 +350,43 @@ def _clarity_date(raw: str) -> str | None:
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
-# (host, state, election day) -> EID. An election's id never changes once
-# it is proven to be that day's general, so a landing page's links are
-# walked once per process rather than on every five-minute pass.
+# (host, state, election day) -> EID, recorded only once a read of that
+# EID has passed every trust check in fetch_general_results (never on
+# discovery alone: a landing page can link a test copy first, and a cached
+# test id would be re-read every pass without ever re-discovering).
 _general_eids: dict[tuple[str, str, str], str] = {}
+# (host, state, election day) -> monotonic time a landing-page walk last
+# found nothing. A results archive links every election back a decade
+# (South Carolina's page, ~60 links, two requests each at 1 rps): walking
+# it on every five-minute pass until the state links the new election
+# would spend the whole pass on it. So a miss is remembered for
+# _MISS_TTL_S and the walk is retried after that -- never remembered for
+# good, since the link appearing later that night is the expected case.
+_general_eid_misses: dict[tuple[str, str, str], float] = {}
+_MISS_TTL_S = 20 * 60
+# The most EIDs one walk probes. Newest first (Clarity's EIDs only grow),
+# after the ones whose link text names the year, so the general is
+# reached long before the cap on any real archive page.
+_MAX_WALK = 16
+# How much text after a link's href is read as its link text when looking
+# for the year -- bounded, so a page whose markup never closes the anchor
+# can't make "the rest of the document" count as one link's text.
+_LINK_TEXT_WINDOW = 300
+
+
+def _link_text(page: str, after: int) -> str:
+    """The visible text of the link whose href ends at `after`: up to its
+    closing </a>, never past _LINK_TEXT_WINDOW characters, and nothing at
+    all when no </a> follows (str.find's -1 would otherwise slice to the
+    page's last character)."""
+    close = page.find("</a>", after, after + _LINK_TEXT_WINDOW)
+    if close == -1:
+        return ""
+    return re.sub(r"<[^>]+>", "", page[after:close])
+
+
+def _eid_order(eid: str) -> tuple[int, str]:
+    return (-int(eid), eid) if eid.isdigit() else (0, eid)
 
 
 async def _general_election_id(
@@ -364,47 +398,54 @@ async def _general_election_id(
     if key in _general_eids:
         return _general_eids[key]
     if discovery.get("mode") == "landing_page":
+        missed = _general_eid_misses.get(key)
+        if missed is not None and time.monotonic() - missed < _MISS_TTL_S:
+            return None
         page_url, link_regex = discovery.get("page_url"), discovery.get("link_regex")
         if not page_url or not link_regex:
             return None
         resp = await _get(client, page_url, f"{state} Clarity landing page")
         if resp is None:
             return None
-        ids = {m.group(1) for m in re.finditer(link_regex, resp.text)}
-        # A results archive links every election back a decade (South
-        # Carolina's page, ~60): try first the ones whose link text names
-        # the year, and walk the rest only if none of those is the one.
+        page = resp.text
         year = election_day[:4]
-        named = {
-            m.group(1) for m in re.finditer(link_regex, resp.text)
-            if year in re.sub(r"<[^>]+>", "", resp.text[m.end():resp.text.find("</a>", m.end())])
-        }
+        ids, named = set(), set()
+        for m in re.finditer(link_regex, page):
+            ids.add(m.group(1))
+            if year in _link_text(page, m.end()):
+                named.add(m.group(1))
+        # Try first the links whose text names the year, then the rest,
+        # newest first; stop at the first batch that holds that day.
+        order = sorted(named, key=_eid_order) + sorted(ids - named, key=_eid_order)
         held = []
-        for batch in (sorted(named), sorted(ids - named)):
-            for eid in batch:
-                meta = await _election_meta(client, state, eid, base)
-                if meta is not None and _clarity_date(meta["Date"]) == election_day:
-                    held.append((meta.get("ElectionName") or "", eid))
-            if held:
+        for i, eid in enumerate(order[:_MAX_WALK]):
+            if held and i == len(named):
                 break
-        found = pick_general(held)
-    else:
-        resp = await _get(client, f"{base}/{state}/elections.json", f"{state} Clarity elections")
-        if resp is None:
-            return None
-        try:
-            elections = resp.json() or []
-        except ValueError:
-            return None
-        held = [
-            (e.get("ElectionName") or "", e.get("EID"))
-            for e in elections
-            if isinstance(e, dict) and _clarity_date(str(e.get("Date") or "")) == election_day and e.get("EID")
-        ]
-        found = pick_general(held)
-    if found:
-        _general_eids[key] = found
-    return found
+            meta = await _election_meta(client, state, eid, base)
+            if meta is not None and _clarity_date(meta["Date"]) == election_day:
+                held.append((meta.get("ElectionName") or "", eid))
+        if len(order) > _MAX_WALK and not held:
+            logger.warning(
+                "%s Clarity landing page links %d elections; probed the newest %d, none held %s",
+                state, len(order), _MAX_WALK, election_day,
+            )
+        found = pick_general(held, state)
+        if not found:
+            _general_eid_misses[key] = time.monotonic()
+        return found
+    resp = await _get(client, f"{base}/{state}/elections.json", f"{state} Clarity elections")
+    if resp is None:
+        return None
+    try:
+        elections = resp.json() or []
+    except ValueError:
+        return None
+    held = [
+        (e.get("ElectionName") or "", e.get("EID"))
+        for e in elections
+        if isinstance(e, dict) and _clarity_date(str(e.get("Date") or "")) == election_day and e.get("EID")
+    ]
+    return pick_general(held, state)
 
 
 def general_contests(summary: dict) -> list[ContestCount]:
@@ -427,14 +468,18 @@ def general_contests(summary: dict) -> list[ContestCount]:
             if not isinstance(votes[i], int):
                 continue
             code = str(parties[i]).strip() if i < len(parties) and parties[i] else ""
-            name = str(raw).strip()
+            # Not `name`: that is the CONTEST's label, read again below for
+            # is_special. Reusing it here once left is_special reading the
+            # last candidate's name, so a state's special Senate election
+            # was merged into its regular one.
+            choice = str(raw).strip()
             # South Carolina prints the party code before the name
             # ("REP Nancy Mace"); it is the choice's own `P`, not a name.
-            if code and name.upper().startswith(code.upper() + " "):
-                name = name[len(code) + 1:]
-            if NOT_A_PERSON_RE.search(name):
+            if code and choice.upper().startswith(code.upper() + " "):
+                choice = choice[len(code) + 1:]
+            if is_not_a_person(choice):
                 continue
-            candidates.append((_clean_display_name(name), _parse_party(code) if code else None, votes[i]))
+            candidates.append((_clean_display_name(choice), _parse_party(code) if code else None, votes[i]))
         tp, pr = contest.get("TP"), contest.get("PR")
         out.append(ContestCount(
             office=parsed[0], district=parsed[1], candidates=candidates,
@@ -479,10 +524,16 @@ async def fetch_general_results(
         details = None
     if details is None:
         return None
+    key = (base, state, day)
     if details.get("istestmode") or details.get("showtestdatawatermark"):
+        _general_eids.pop(key, None)
         raise UntrustedCount(f"{state} Clarity election {eid} is in test mode")
     if _clarity_date(str(details.get("electiondate") or "")) != day:
+        _general_eids.pop(key, None)
         raise UntrustedCount(f"{state} Clarity election {eid} is dated {details.get('electiondate')!r}, not {day}")
+    # Trusted: this id is that day's production count, and is kept.
+    _general_eids[key] = eid
+    _general_eid_misses.pop(key, None)
     # A state-level Clarity summary aggregates its counties' own sub-
     # elections, and `TP` counts those counties, not precincts — Colorado's
     # Senate contest reads 64 of 64, its county count. Said as what it is.

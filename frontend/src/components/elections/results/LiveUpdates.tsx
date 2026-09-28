@@ -31,7 +31,10 @@ export default function LiveUpdates({
 }) {
   const shown = limit ? updates.slice(0, limit) : updates;
   return (
-    <section aria-labelledby="live-updates-heading" className={`border border-white/[0.09] bg-surface ${className}`}>
+    <section
+      aria-labelledby="live-updates-heading"
+      className={`border border-white/[0.09] bg-surface ${className}`}
+    >
       <div className="flex items-baseline justify-between border-b border-white/[0.09] px-4 py-3">
         <h2 id="live-updates-heading" className="font-display text-lg font-extrabold text-ink-hi">
           Live updates

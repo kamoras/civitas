@@ -297,12 +297,13 @@ class TestElectionCoverageRefresh:
 
     def _run(
         self, in_season: bool, pipeline_running: bool = False, pipeline_age=None,
-        coverage_running: bool = False, coverage_age=None,
+        coverage_running: bool = False, coverage_age=None, counting_live: bool = False,
     ):
         from app import scheduler
 
         with patch("app.background.threading.Thread", _SyncThread), \
              patch("app.api.action.is_election_season", return_value=in_season), \
+             patch("app.live_results.bluesky.counting_is_live", return_value=counting_live), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
              _tracker_running(coverage_tracker(), coverage_running, coverage_age), \
@@ -331,6 +332,11 @@ class TestElectionCoverageRefresh:
         ingest, post = self._run(in_season=True)
         ingest.assert_called_once()
         post.assert_called_once()
+
+    def test_posting_stands_down_while_the_live_count_is_moving(self):
+        ingest, post = self._run(in_season=True, counting_live=True)
+        ingest.assert_called_once()
+        post.assert_not_called()
 
     def test_skips_when_election_pipeline_is_running_and_recent(self):
         ingest, post = self._run(

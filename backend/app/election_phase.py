@@ -25,7 +25,7 @@ The database is consulted only between an election day and that January
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
@@ -70,6 +70,14 @@ def election_today() -> date:
     return datetime.now(ELECTION_TZ).date()
 
 
+def eastern_date(stamp: datetime) -> date:
+    """The Eastern calendar date of a stored (naive UTC) timestamp: a count
+    that last moved at 9 PM ET on the 16th is stored as the 17th."""
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(ELECTION_TZ).date()
+
+
 def results_window_end(election_day: date, last_change: date | None) -> date:
     """The last day an election's results are the page's subject."""
     settled_from = max(election_day, last_change or election_day)
@@ -84,7 +92,7 @@ def resolve_active_election(
     held = previous_election_day(today)
     if held is not None and today <= new_congress_day(held):
         last_change = last_change_for(held)
-        until = results_window_end(held, last_change.date() if last_change else None)
+        until = results_window_end(held, eastern_date(last_change) if last_change else None)
         if today <= until:
             return ActiveElection(
                 election_day=held,

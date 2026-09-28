@@ -64,6 +64,24 @@ RI_SOURCE = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _as_of_capture(monkeypatch):
+    """The settle window is measured against the wall clock. Pinned to the
+    day these fixtures were captured: unpinned, the "unsettled" tests
+    (a 2026-09-09 primary, settle_days 21) started asserting the opposite
+    on 2026-09-30 and would have turned CI red on their own."""
+    import datetime as _dt
+
+    from app.pipeline.fetch import state_candidates_tabular as tabular
+
+    class _Pinned(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _dt.datetime(2026, 9, 17, 12, tzinfo=tz or _dt.UTC)
+
+    monkeypatch.setattr(tabular, "datetime", _Pinned)
+
+
 def _patched(monkeypatch, index=INDEX, results=RESULTS):
     """Both GETs, answered from fixtures. `index`/`results` may be set to
     None to simulate that hop failing."""

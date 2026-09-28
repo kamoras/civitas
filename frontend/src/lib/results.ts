@@ -7,7 +7,12 @@
  * nothing on the page projects or calls a winner.
  */
 
-import type { ElectionPhaseInfo, LiveRaceResult, ResultEvent, ResultEventPerson } from "@/types/election";
+import type {
+  ElectionPhaseInfo,
+  LiveRaceResult,
+  ResultEvent,
+  ResultEventPerson,
+} from "@/types/election";
 
 const DEM = "130,172,255"; // dem-blue #82acff
 const REP = "255,137,137"; // rep-red #ff8989
@@ -17,6 +22,9 @@ const OTHER = "201,149,255"; // ind-purple #c995ff
 export const AWAITING_FILL = "#2a2520";
 /** Fill for a place this page has no live count for at all. */
 export const UNCOVERED_FILL = "rgba(255, 255, 255, 0.05)";
+/** Votes counted, nobody ahead: an exact tie, or a House delegation split
+ * evenly. Not "no votes yet", which is AWAITING_FILL. */
+export const TIED_FILL = "rgba(205, 199, 188, 0.45)";
 
 /** Whether the page should lead with results rather than research. A
  * missing phase (an older backend mid-rollout) is the campaign page. */
@@ -24,8 +32,18 @@ export function showsResults(phase: ElectionPhaseInfo | null | undefined): boole
   return !!phase && phase.phase !== "campaign";
 }
 
+/** Whether a state's last feed read failed to give a count this page could
+ * use — down, refused as test or mismatched data, or older than the one
+ * already shown. */
+export function feedFailed(feed: { status: string } | null | undefined): boolean {
+  return !!feed && ["untrusted", "unavailable", "stale", "failed"].includes(feed.status);
+}
+
 /** Share of reporting units in, 0..1, or null when the state gives none. */
-export function reportingShare(r: { reportingUnits: number | null; totalUnits: number | null }): number | null {
+export function reportingShare(r: {
+  reportingUnits: number | null;
+  totalUnits: number | null;
+}): number | null {
   if (!r.totalUnits || r.reportingUnits == null) return null;
   return Math.min(1, r.reportingUnits / r.totalUnits);
 }
@@ -40,7 +58,7 @@ function rgb(party: string | null): string {
  * units are in, solid once the state calls it official. */
 export function resultFill(result: LiveRaceResult | undefined, covered: boolean): string {
   if (!result) return covered ? AWAITING_FILL : UNCOVERED_FILL;
-  if (!result.leaderParty) return AWAITING_FILL;
+  if (!result.leaderParty) return result.votesCounted > 0 ? TIED_FILL : AWAITING_FILL;
   if (result.official) return `rgba(${rgb(result.leaderParty)}, 1)`;
   const share = reportingShare(result);
   const opacity = share == null ? 0.55 : share < 0.5 ? 0.3 : 0.45 + 0.45 * share;
@@ -62,13 +80,37 @@ export function partyBarColor(party: string | null | undefined): string {
   return "#8f8980";
 }
 
-const LETTER: Record<string, string> = { DEM: "D", REP: "R", IND: "I", LIB: "L", GRE: "G", CON: "C" };
+const LETTER: Record<string, string> = {
+  DEM: "D",
+  REP: "R",
+  IND: "I",
+  LIB: "L",
+  GRE: "G",
+  CON: "C",
+};
 const HOLDERS: Record<string, string> = {
-  DEM: "Democrats", REP: "Republicans", IND: "independents", LIB: "Libertarians", GRE: "Greens",
+  DEM: "Democrats",
+  REP: "Republicans",
+  IND: "independents",
+  LIB: "Libertarians",
+  GRE: "Greens",
+};
+const HOLDER: Record<string, string> = {
+  DEM: "a Democrat",
+  REP: "a Republican",
+  IND: "an independent",
+  LIB: "a Libertarian",
+  GRE: "a Green",
+  CON: "a Constitution Party member",
 };
 
+/** "a Democrat" — who held the seat going in, for "held by …". */
+export function heldByPhrase(party: string | null | undefined): string {
+  return (party && HOLDER[party]) || "another party";
+}
+
 export function partyLetter(party: string | null | undefined): string {
-  return party ? LETTER[party] ?? party : "";
+  return party ? (LETTER[party] ?? party) : "";
 }
 
 export function withParty(p: { name: string; party: string | null } | null | undefined): string {
@@ -83,7 +125,12 @@ function share(p: ResultEventPerson | null | undefined): string {
 }
 
 /** "GA Senate", "GA Senate (special)", "GA-2", "AK at-large". */
-export function raceLabel(r: { state: string; office: string; district: number | null; isSpecial?: boolean }): string {
+export function raceLabel(r: {
+  state: string;
+  office: string;
+  district: number | null;
+  isSpecial?: boolean;
+}): string {
   if (r.office === "S") return `${r.state} Senate${r.isSpecial ? " (special)" : ""}`;
   return r.district ? `${r.state}-${r.district}` : `${r.state} at-large`;
 }
@@ -120,7 +167,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
   const d = event.detail ?? {};
   const shares = [share(d.leader), share(d.runnerUp)].filter(Boolean).join(", ");
   const reporting = reportingText(d);
-  const holders = d.heldBy ? HOLDERS[d.heldBy] ?? d.heldBy : "another party";
+  const holders = d.heldBy ? (HOLDERS[d.heldBy] ?? d.heldBy) : "another party";
   switch (event.kind) {
     case "first_returns":
       return { tag: "FIRST", tone: "neutral", text: sentence("First returns", reporting, shares) };
@@ -129,7 +176,9 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         tag: "LEAD",
         tone: "lead",
         text: sentence(
-          `${withParty(d.leader)} moves ahead of ${withParty(d.previousLeader ?? null)}`,
+          d.previousLeader
+            ? `${withParty(d.leader)} moves ahead of ${withParty(d.previousLeader)}`
+            : `${withParty(d.leader)} moves ahead`,
           shares,
           reporting
         ),
@@ -145,21 +194,39 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         ),
       };
     case "official":
-      return { tag: "OFFICIAL", tone: "official", text: sentence("The state lists its count as official", shares) };
+      return {
+        tag: "OFFICIAL",
+        tone: "official",
+        text: sentence("The state lists its count as official", shares),
+      };
     case "flip":
       return {
         tag: "FLIP",
         tone: "flip",
         text: d.official
-          ? sentence(`${withParty(d.leader)} wins in the official count, taking a seat ${holders} held`, shares)
-          : sentence(`${withParty(d.leader)} leads in a seat ${holders} hold`, shares, reporting, "Not final"),
+          ? sentence(
+              `${withParty(d.leader)} wins in the official count, taking a seat ${holders} held`,
+              shares
+            )
+          : sentence(
+              `${withParty(d.leader)} leads in a seat ${holders} hold`,
+              shares,
+              reporting,
+              "Not final"
+            ),
       };
     case "flip_reversed":
+      // The holder's party ahead again — or nobody: an exact tie has no
+      // leader to name.
       return {
         tag: "UPDATE",
         tone: "lead",
         text: sentence(
-          `${withParty(d.leader)} is ahead again, so the seat no longer shows a change of party`,
+          d.leader && d.leader.party === d.heldBy
+            ? `${withParty(d.leader)} is ahead again, so the seat no longer shows a change of party`
+            : !d.leader && (d.votesCounted ?? 0) > 0
+              ? "The count is now tied, so the seat no longer shows a change of party"
+              : "The count no longer shows the seat changing party",
           reporting
         ),
       };
@@ -168,13 +235,17 @@ export function describeUpdate(event: ResultEvent): UpdateText {
   }
 }
 
-/** "9:42 PM ET" — election night is told in Eastern time, as every
- * network does, whatever the reader's own zone. */
+/** "Nov 3, 9:42 PM ET" — election night is told in Eastern time, as every
+ * network does, whatever the reader's own zone. Always with its date: the
+ * results stay up for weeks, and a bare "9:42 PM" read on the 15th means
+ * the wrong night. */
 export function formatEasternTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return `${date.toLocaleTimeString("en-US", {
+  return `${date.toLocaleString("en-US", {
     timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   })} ET`;
@@ -192,7 +263,8 @@ export function summarizeState(races: LiveRaceResult[]): StateResultSummary {
   const senate = races.filter((r) => r.office === "S");
   const house = races.filter((r) => r.office === "H");
   const houseLeads: Record<string, number> = {};
-  for (const r of house) if (r.leaderParty) houseLeads[r.leaderParty] = (houseLeads[r.leaderParty] ?? 0) + 1;
+  for (const r of house)
+    if (r.leaderParty) houseLeads[r.leaderParty] = (houseLeads[r.leaderParty] ?? 0) + 1;
   return { senate, house, houseLeads, flips: races.filter((r) => r.flip).length };
 }
 
@@ -219,8 +291,15 @@ export function stateFill(
   const leads = seatsLed(mine);
   const d = leads.DEM ?? 0;
   const r = leads.REP ?? 0;
-  if (!d && !r) return AWAITING_FILL;
-  if (d === r) return "rgba(205, 199, 188, 0.45)";
+  const others = Object.entries(leads).reduce(
+    (n, [p, c]) => (p === "DEM" || p === "REP" ? n : n + c),
+    0
+  );
+  if (!d && !r) {
+    if (others) return `rgba(${OTHER}, 0.6)`;
+    return mine.some((x) => x.votesCounted > 0) ? TIED_FILL : AWAITING_FILL;
+  }
+  if (d === r) return TIED_FILL;
   const party = d > r ? "DEM" : "REP";
   const margin = Math.abs(d - r) / (d + r);
   return `rgba(${rgb(party)}, ${(0.35 + 0.55 * margin).toFixed(2)})`;

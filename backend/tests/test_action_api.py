@@ -8,7 +8,7 @@ import pytest
 
 from app.api.action import _latest_current_issues
 from app.issue_ids import to_public_id
-from app.models import ActionIssue
+from app.models import ActionIssue, ActionIssueStatus
 
 
 def _make_issue(date: str, rank: int, title: str, is_current: bool) -> ActionIssue:
@@ -96,6 +96,38 @@ class TestLatestCurrentIssues:
 
         assert sorted(i.rank for i in issues) == [1, 2]
 
+
+    def test_a_developing_draft_from_before_midnight_stays_listed(self, db_session):
+        """An election-night flip drafted at 11:50 PM ET must not drop off
+        the list when the first confirmed story of the next day lands."""
+        db_session.add(_make_issue("2026-11-04", 1, "Morning story", is_current=True))
+        draft = _make_issue("2026-11-03", 999, "Leads in a seat", is_current=True)
+        draft.status = ActionIssueStatus.DEVELOPING
+        db_session.add(draft)
+        db_session.commit()
+
+        issues = _latest_current_issues(db_session)
+
+        assert [i.title for i in issues] == ["Morning story", "Leads in a seat"]
+
+    def test_a_developing_draft_dated_ahead_does_not_hide_the_confirmed_day(self, db_session):
+        db_session.add(_make_issue("2026-11-03", 1, "Evening story", is_current=True))
+        draft = _make_issue("2026-11-04", 999, "Leads in a seat", is_current=True)
+        draft.status = ActionIssueStatus.DEVELOPING
+        db_session.add(draft)
+        db_session.commit()
+
+        issues = _latest_current_issues(db_session)
+
+        assert [i.title for i in issues] == ["Evening story", "Leads in a seat"]
+
+    def test_only_developing_drafts_are_still_listed(self, db_session):
+        draft = _make_issue("2026-11-04", 999, "Leads in a seat", is_current=True)
+        draft.status = ActionIssueStatus.DEVELOPING
+        db_session.add(draft)
+        db_session.commit()
+
+        assert [i.title for i in _latest_current_issues(db_session)] == ["Leads in a seat"]
 
 class TestRenumberForDisplay:
     def test_preserves_relative_order_when_ranks_already_distinct(self, db_session):
@@ -287,8 +319,32 @@ class TestElectionsAndTimelineRoutesUseCanonicalClock:
 
         result = await get_election_info(Response(), db=db_session)
         assert "nextElection" in result
-        assert result["nextElection"]["daysUntil"] >= 0
+        election = result["nextElection"]
+        # Counting down in a campaign; zero or less while the election
+        # just held has its results on show (election_phase).
+        if election["phase"] == "campaign":
+            assert election["daysUntil"] >= 0
+        else:
+            assert election["daysUntil"] <= 0
         assert result["senateSeatsUp"] > 0
+
+    async def test_get_election_info_in_election_week(self, db_session):
+        """Inside the results window the phase lookup must use the
+        request's session — its own reached a database with no tables."""
+        from datetime import date
+        from unittest.mock import patch
+
+        from fastapi import Response
+
+        from app.api.action import get_election_info
+
+        with patch("app.api.action.election_today", return_value=date(2026, 11, 5)), \
+                patch("app.election_phase.election_today", return_value=date(2026, 11, 5)), \
+                patch("app.database.SessionLocal", side_effect=AssertionError("opened its own session")):
+            result = await get_election_info(Response(), db=db_session)
+        assert result["nextElection"]["phase"] == "results"
+        assert result["nextElection"]["daysUntil"] == -2
+        assert result["nextElection"]["isElectionSeason"] is True
 
     def test_get_open_comments_runs_against_an_empty_db(self, db_session):
         from fastapi import Response
