@@ -175,7 +175,9 @@ export interface KeyVote {
 
 /** A bill the member voted on that the donor org's own LDA filing names. */
 export interface LobbiedBill {
+  /** Canonical id ("HR.1492"); `label` is how the Record prints it. */
   billId: string;
+  label: string;
   billName: string;
   vote: string | null;
   filingYear: number | null;

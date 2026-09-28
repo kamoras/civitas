@@ -59,6 +59,7 @@ from app.pipeline.fetch.fec import (
     resolve_committee_meta,
     reset_run_state as reset_fec_run_state,
 )
+from app.pipeline.fetch.floor_logs import bill_id_from_number
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.transform.normalize_members import normalize_house_members
@@ -715,6 +716,12 @@ async def run_house_pipeline() -> dict:
                             ),
                             "voteCategory": "recent",
                             "rcKey": rv.get("billId", ""),
+                            # The measure the roll call was on ("H R 1492"
+                            # -> "HR.1492"): billId here is synthetic, and
+                            # the LDA bill links match on the measure.
+                            "measureId": bill_id_from_number(
+                                (recent_rc_map.get(rv.get("billId", "")) or {}).get("documentName"),
+                            ),
                         })
 
                     rep["votingRecord"] = voting_data

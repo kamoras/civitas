@@ -254,6 +254,21 @@ class TestValidateSenator:
         result = validate_senator(senator)
         assert result["lobbyingMatches"][0]["industry"] == "OTHER"
 
+    def test_lobbying_match_keeps_lda_fields_and_consensus_flag(self):
+        # The Senate path saves what the validator returns; these were
+        # dropped, so no senator ever showed a filing-named bill.
+        bill = {"billId": "H.R. 1492", "vote": "Yea", "filingUrl": "https://lda.gov/f/1/print/"}
+        senator = _make_senator(lobbyingMatches=[{
+            "lobbyistOrg": "Pfizer", "industry": "PHARMA", "lobbyingSpend": 1,
+            "donationToSenator": 1, "billsInfluenced": [], "description": "",
+            "isConsensusVote": True, "lobbyingChecked": False,
+            "lobbiedBills": [bill, {"no": "id"}, "junk"],
+        }])
+        m = validate_senator(senator)["lobbyingMatches"][0]
+        assert m["lobbiedBills"] == [bill]
+        assert m["lobbyingChecked"] is False
+        assert m["isConsensusVote"] is True
+
     def test_bioguide_id_preserved(self):
         senator = _make_senator(bioguideId="B001230")
         result = validate_senator(senator)

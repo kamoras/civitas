@@ -642,26 +642,38 @@ async def fetch_pac_receipts(
 COMMITTEE_TYPE_CACHE_TTL_HOURS = 24 * 90
 
 
-async def fetch_committee_type(
+async def fetch_committee_meta(
     client: httpx.AsyncClient, db: Session, committee_id: str,
-) -> str | None:
-    """A PAC's FEC committee_type code, for computing its per-election
-    contribution cap (see score_calculator._funding_independence_core):
-    "Q" = PAC-Qualified (multicandidate, $5,000/election cap), "N" =
-    PAC-Nonqualified (capped at the same per-election limit as an
-    individual). Returns None if the committee isn't found or has no
-    committee_type on record.
+) -> dict | None:
+    """One committee's FEC registration from the per-committee API, in the
+    committee master's shape ({"type", "designation", "connectedOrg"}): the
+    fallback for a committee the bulk master lacks, such as one registered
+    since the last weekly file. committee_type "Q" = PAC-Qualified
+    (multicandidate, $5,000/election cap), "N" = PAC-Nonqualified; the
+    designation carries the leadership-PAC and candidate-committee codes
+    (is_political_committee). The connected organization is left None: the
+    API's affiliated-committee field is not the sponsor field, and the
+    lobbying lookup would rather search the donor's own name than a wrong one.
+    Returns None if the committee isn't found.
     """
-    cache_key = f"committee-type-v1-{committee_id}"
+    cache_key = f"committee-meta-v1-{committee_id}"
     cached = api_cache_get(db, "fec", cache_key, max_age_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
     if cached is not None:
-        return cached.get("committee_type")
+        return cached.get("meta")
 
     data = await _fetch_with_retry(client, f"{FEC_API_BASE}/committee/{committee_id}/")
     results = (data or {}).get("results", [])
-    committee_type = results[0].get("committee_type") if results else None
-    api_cache_set(db, "fec", cache_key, {"committee_type": committee_type})
-    return committee_type
+    meta = {
+        "type": results[0].get("committee_type"),
+        "designation": results[0].get("designation"),
+        "connectedOrg": None,
+    } if results else None
+    if data is not None:
+        # A failed fetch (None) is not cached: an outage mustn't mark a real
+        # committee as unknown for 90 days.
+        api_cache_set(db, "fec", cache_key, {"meta": meta},
+                      normal_ttl_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
+    return meta
 
 
 # ── Committee master file (bulk) ─────────────────────────────────
@@ -678,21 +690,32 @@ COMMITTEE_MASTER_CACHE_TTL_HOURS = 24 * 7
 
 # Column positions in cm.txt, per the FEC's published data dictionary
 # ("Committee master file description"): pipe-delimited, no header row.
-_CM_ID, _CM_DESIGNATION, _CM_TYPE, _CM_CONNECTED_ORG = 0, 8, 9, 13
+_CM_ID, _CM_DESIGNATION, _CM_TYPE, _CM_ORG_TYPE, _CM_CONNECTED_ORG = 0, 8, 9, 12, 13
 
 
 def parse_committee_master(text: str) -> dict[str, dict]:
     """cm.txt -> {committee_id: {"type", "designation", "connectedOrg"}}.
-    Empty fields become None; a malformed short line is skipped."""
+    Empty fields become None; a malformed short line is skipped.
+
+    The connected organization is a PAC's sponsor only for a separate
+    segregated fund, which is exactly the committee the FEC gives an
+    interest-group category (ORG_TP: corporation, labor, membership, trade,
+    cooperative, corporation without stock). Elsewhere the same column
+    holds joint-fundraising partners ("TAKE BACK THE HOUSE 2022", "TRUMP
+    VICTORY") or the form's "NONE" placeholder (28,595 of the 2020-2026
+    files' rows), neither of which is a lobbying client.
+    """
     out: dict[str, dict] = {}
     for line in text.splitlines():
         cols = line.split("|")
         if len(cols) <= _CM_CONNECTED_ORG or not cols[_CM_ID]:
             continue
+        org = cols[_CM_CONNECTED_ORG].strip()
+        sponsored = bool(cols[_CM_ORG_TYPE].strip()) and org.upper() not in ("", "NONE")
         out[cols[_CM_ID]] = {
             "type": cols[_CM_TYPE] or None,
             "designation": cols[_CM_DESIGNATION] or None,
-            "connectedOrg": cols[_CM_CONNECTED_ORG].strip() or None,
+            "connectedOrg": org if sponsored else None,
         }
     return out
 
@@ -713,7 +736,7 @@ async def fetch_committee_master(
 
     merged: dict[str, dict] = {}
     for cycle in sorted(set(cycles)):
-        cache_key = f"committee-master-v1-{cycle}"
+        cache_key = f"committee-master-v2-{cycle}"
         cached = api_cache_get(
             db, "fec", cache_key, max_age_hours=COMMITTEE_MASTER_CACHE_TTL_HOURS,
         )
@@ -751,13 +774,13 @@ POLITICAL_COMMITTEE_DESIGNATIONS = frozenset({"A", "P", "J", "D"})
 
 
 def committee_master_cycles(today: date | None = None) -> list[int]:
-    """The cycles whose committee files cover every funding window: a
-    senator's most recent completed election spans three cycles, and the
-    current cycle catches committees registered since (fec.py's
-    _ELECTION_PERIOD_CYCLES, plus one)."""
+    """The cycles whose committee files cover every funding window, plus
+    the current cycle for committees registered since."""
     year = (today or utcnow().date()).year
     current = year + (year % 2)
-    return [current - 2 * k for k in range(_ELECTION_PERIOD_CYCLES["S"] + 1)]
+    # A senator's most recent completed election can be six years back, and
+    # its window spans the three cycles before it: 2026 back to 2016.
+    return [current - 2 * k for k in range(2 * _ELECTION_PERIOD_CYCLES["S"])]
 
 
 async def resolve_committee_meta(
@@ -766,18 +789,18 @@ async def resolve_committee_meta(
     """(committee_type_map, committee_meta_map) for the contributing PACs.
 
     The bulk master answers almost every committee; the per-committee API
-    (fetch_committee_type) is asked only for one the master lacks, such as a
-    committee registered after the last weekly file.
+    (fetch_committee_meta) is asked only for one the master lacks, such as a
+    committee registered after the last weekly file, or every committee if
+    the bulk files couldn't be downloaded. Either way the political-committee
+    rule sees a type and designation.
     """
     types: dict[str, str | None] = {}
     metas: dict[str, dict] = {}
     for cid in committee_ids:
-        meta = master.get(cid)
+        meta = master.get(cid) or await fetch_committee_meta(client, db, cid)
+        types[cid] = (meta or {}).get("type")
         if meta:
             metas[cid] = meta
-            types[cid] = meta.get("type")
-        else:
-            types[cid] = await fetch_committee_type(client, db, cid)
     return types, metas
 
 

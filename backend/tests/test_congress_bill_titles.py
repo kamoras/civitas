@@ -36,7 +36,8 @@ def test_a_failed_listing_is_not_cached(db_session, monkeypatch):
         return None if "/s?" in url else {"bills": []}
 
     monkeypatch.setattr(congress, "_fetch_with_retry", _fails_for_senate)
-    asyncio.run(congress.fetch_congress_bill_titles(None, db_session, 119))
+    # A partial pool is never returned: it could lack the sibling that wins.
+    assert asyncio.run(congress.fetch_congress_bill_titles(None, db_session, 119)) is None
 
     async def _works(client, url):
         return {"bills": [{"number": "1", "title": "x"}]} if "/s?" in url else {"bills": []}

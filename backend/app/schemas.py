@@ -295,6 +295,7 @@ class LobbiedBillSchema(CamelModel):
     """A bill the member voted on that the donor org's own LDA filing
     names (fetch/lda.lobbied_bills_for)."""
     bill_id: str
+    label: str = ""
     bill_name: str = ""
     vote: str | None = None
     filing_year: int | None = None

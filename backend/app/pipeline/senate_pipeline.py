@@ -1405,7 +1405,7 @@ async def run_senate_pipeline(
             # PAC-utilization signal in _funding_independence_core. A single
             # global pass here (rather than a per-senator lookup) means a PAC
             # that gives to 30 different senators is looked up exactly once,
-            # not 30 times, on top of fetch_committee_type's own long-TTL cache.
+            # not 30 times, on top of the committee master's weekly cache.
             pac_committee_ids: set[str] = set()
             for fec in fec_data.values():
                 for r in fec.get("pacReceipts") or []:

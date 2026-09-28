@@ -5,7 +5,6 @@ from app.pipeline.analyze.lobbying_records import (
     BILL_TITLE_MATCH_MIN,
     TitlePool,
     bill_mentions,
-    congress_of_year,
     names_bill,
     title_match_score,
 )
@@ -87,12 +86,6 @@ class TestTitleMatch:
     def test_no_titles(self):
         assert title_match_score("anything", []) == 0.0
 
-
-def test_congress_of_year():
-    assert congress_of_year(2025) == 119
-    assert congress_of_year(2026) == 119
-    assert congress_of_year(2027) == 120
-    assert congress_of_year(1789) == 1
 
 
 class TestNamesBill:

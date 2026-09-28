@@ -103,6 +103,25 @@ class TestEnrich:
         assert matches == []
 
     @pytest.mark.asyncio
+    async def test_a_failed_current_year_counts_toward_the_outage_alert(self, db_session):
+        # The finished year can come from the 30-day cache while every live
+        # request fails; that must still look like an outage.
+        matches = [{"lobbyistOrg": "Pfizer", "description": ""}]
+        mock = AsyncMock(side_effect=lambda c, d, org, year: _activity(9.0) if year == 2025 else None)
+        with patch.object(lda, "fetch_lobbying_activity", new=mock):
+            stats = await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
+        assert stats == {"lookups": 1, "failed": 1}
+        assert matches[0]["lobbyingChecked"] is True and matches[0]["lobbyingSpend"] == 9
+
+    @pytest.mark.asyncio
+    async def test_a_capped_total_is_described_as_a_floor(self, db_session):
+        matches = [{"lobbyistOrg": "Pfizer", "description": ""}]
+        capped = LobbyingActivity(total=5_000_000.0, complete=False)
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=capped)):
+            await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
+        assert "at least $5,000,000" in matches[0]["description"]
+
+    @pytest.mark.asyncio
     async def test_one_org_failing_does_not_block_the_others(self, db_session):
         matches = [
             {"lobbyistOrg": "Failing Org", "description": ""},
@@ -154,10 +173,27 @@ class TestLobbiedBills:
             "HR.1492", "prescription drug value, including , to equalize the negotiation period between "
             "small-molecule and biologic candidates under the Drug Price Negotiation Program",
         )])
-        assert [b["billId"] for b in m["lobbiedBills"]] == ["H.R. 1492"]
+        assert [b["billId"] for b in m["lobbiedBills"]] == ["HR.1492"]
+        assert m["lobbiedBills"][0]["label"] == "H.R. 1492"
         assert m["lobbiedBills"][0]["vote"] == "Yea"
         assert m["lobbiedBills"][0]["filingUrl"].startswith("https://lda.gov/")
-        assert m["billsInfluenced"] == ["S.2296", "H.R. 1492"]
+        assert m["billsInfluenced"] == ["S.2296", "HR.1492"]
+
+    @pytest.mark.asyncio
+    async def test_a_bill_already_listed_under_another_spelling_is_not_repeated(self, db_session):
+        matches = [{"lobbyistOrg": "Pfizer", "description": "", "billsInfluenced": ["H.R. 1492"]}]
+        mention = _mention("HR.1492", ", to equalize the negotiation period between small-molecule and biologic candidates")
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(5.0, [mention]))):
+            await enrich_lobbying_matches_with_lda(matches, db_session, 2025, votes=VOTES, congress=119)
+        assert matches[0]["billsInfluenced"] == ["H.R. 1492"]
+
+    @pytest.mark.asyncio
+    async def test_a_house_recent_roll_call_matches_on_its_measure(self, db_session):
+        votes = [{"billId": "HouseRC-2025-309", "measureId": "HR.1492", "billName": "", "vote": "Nay", "date": "2025-06-01"}]
+        m = await self._run(db_session, [_mention(
+            "HR.1492", ", to equalize the negotiation period between small-molecule and biologic candidates",
+        )], votes=votes)
+        assert [b["billId"] for b in m["lobbiedBills"]] == ["HR.1492"]
 
     @pytest.mark.asyncio
     async def test_same_number_different_bill_is_not(self, db_session):

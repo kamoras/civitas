@@ -39,20 +39,19 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.http_client import make_async_client
-from app.pipeline.analyze.lobbying_records import (
-    TitlePool,
-    bill_mentions,
-    congress_of_year,
-    names_bill,
-)
+from app.pipeline.analyze.lobbying_records import TitlePool, bill_mentions, names_bill
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.congress import congress_first_year, congress_for_year
+from app.pipeline.fetch.floor_logs import bill_id_from_number
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.services.congress_service import bill_label
 from app.pipeline.rate_limiter import RateLimiter
 from app.time_utils import utcnow
 
@@ -60,12 +59,19 @@ logger = logging.getLogger(__name__)
 
 LDA_API_BASE = "https://lda.gov/api/v1"
 
-# Anonymous LDA limit is ~15 requests/minute — stay safely under it.
-_rate_limiter = RateLimiter(0.2)
+# The registry allows ~15 requests/minute anonymously; a free API key
+# (LDA_API_KEY, sent as "Authorization: Token <key>", the API's Django REST
+# Framework token scheme) raises the limit. One request a second stays well
+# under the registered limit. Each matched organization costs a request per
+# filing year per page, so the key is the difference between minutes and
+# an hour of the nightly run when many organizations are new to the cache.
+_rate_limiter = RateLimiter(1.0 if settings.LDA_API_KEY else 0.2)
 
-# A finished year's filings change only by amendment; the current year's
-# grow every quarter, so they use the normal pipeline cache TTL.
+# A finished year's filings change only by amendment. The current year's
+# grow once a quarter (reports are due 20 days after it ends), so a week-old
+# copy misses at most one quarter's reports for a few days.
 _FINISHED_YEAR_CACHE_HOURS = 24 * 30
+_CURRENT_YEAR_CACHE_HOURS = 24 * 7
 # Bounds on what one org-year keeps: a heavy lobbyist files dozens of
 # reports, and each names the same bills quarter after quarter.
 _MAX_PAGES = 10
@@ -148,12 +154,9 @@ async def fetch_lobbying_activity(
     if len(org_key) < 3:
         return LobbyingActivity(total=0.0)
 
-    finished = year < utcnow().year
+    ttl = _FINISHED_YEAR_CACHE_HOURS if year < utcnow().year else _CURRENT_YEAR_CACHE_HOURS
     cache_key = _cache_key(org_key, year)
-    cached = api_cache_get(
-        db, "lda", cache_key,
-        max_age_hours=_FINISHED_YEAR_CACHE_HOURS if finished else None,
-    )
+    cached = api_cache_get(db, "lda", cache_key, max_age_hours=ttl)
     if cached is not None:
         return LobbyingActivity(
             total=float(cached.get("total", 0.0)),
@@ -172,12 +175,14 @@ async def fetch_lobbying_activity(
     mentions: list[dict] = []
     url: str | None = f"{LDA_API_BASE}/filings/"
     params: dict | None = {"client_name": org_key, "filing_year": year, "page_size": 25}
+    headers = {"Authorization": f"Token {settings.LDA_API_KEY}"} if settings.LDA_API_KEY else None
     pages = 0
     try:
         while url and pages < _MAX_PAGES:
             await _rate_limiter.acquire()
             resp = await client.get(
-                url, params=params, timeout=DEFAULT_FETCH_TIMEOUT_S, follow_redirects=True,
+                url, params=params, headers=headers, timeout=DEFAULT_FETCH_TIMEOUT_S,
+                follow_redirects=True,
             )
             if resp.status_code == 429:
                 logger.warning("LDA rate limited for %s — skipping (uncached)", org_key)
@@ -213,36 +218,23 @@ async def fetch_lobbying_activity(
     api_cache_set(
         db, "lda", cache_key,
         {"total": round(total, 2), "mentions": mentions, "complete": complete},
-        normal_ttl_hours=_FINISHED_YEAR_CACHE_HOURS if finished else None,
+        normal_ttl_hours=ttl,
     )
     return LobbyingActivity(total=total, mentions=mentions, complete=complete)
 
 
-async def fetch_lobbying_spend(
-    client: httpx.AsyncClient, db: Session, org_name: str, year: int,
-) -> float | None:
-    """Total registered lobbying for an organization in a year, or None
-    when the lookup failed."""
-    activity = await fetch_lobbying_activity(client, db, org_name, year)
-    return None if activity is None else activity.total
-
-
-def _vote_bill_key(bill_id: str | None) -> str | None:
-    """A vote's bill id ("H.R. 1492", "S. 4668", "H.Con.Res. 89") in the
-    form bill_mentions produces ("HR.1492"); None for a nomination or an
-    amendment roll call, which no filing can name by bill number."""
-    from app.pipeline.fetch.floor_logs import bill_id_from_number
-
-    return bill_id_from_number(bill_id)
-
-
 def _voted_bills(votes: list[dict] | None) -> dict[str, dict]:
-    """The member's Yea/Nay votes by bill, latest first per bill."""
+    """The member's Yea/Nay votes by bill, latest first per bill, keyed the
+    way bill_mentions names bills ("HR.1492"). A vote's billId comes in the
+    Senate's spelling ("H.R. 1492", "S. 4668") or the site's ("HR.1492"); a
+    recent House roll call's billId is synthetic ("HouseRC-2026-309"), so
+    the House pipeline carries the roll call's own measure as `measureId`.
+    Nominations and amendment roll calls name no bill and are skipped."""
     out: dict[str, dict] = {}
     for v in sorted(votes or [], key=lambda v: v.get("date") or "", reverse=True):
         if v.get("vote") not in ("Yea", "Nay"):
             continue
-        key = _vote_bill_key(v.get("billId"))
+        key = v.get("measureId") or bill_id_from_number(v.get("billId"))
         if key and key not in out:
             out[key] = v
     return out
@@ -263,31 +255,38 @@ async def _bill_titles(client: httpx.AsyncClient, db: Session, congress: int, bi
     return [r.get("title") for r in rows or [] if r.get("title")]
 
 
-# One pool per congress per day: the index over ~16,000 titles is built
-# once and shared by every member of the night's run.
-_pools: dict[tuple[int, str], TitlePool | None] = {}
+# The index over a congress's ~16,000 titles is built once and shared by
+# every member of a run: {congress: (pool or None, built at)}. A pool is
+# reused for a day; a failed listing is retried after half an hour rather
+# than on every member (each attempt is ~65 requests).
+_pools: dict[int, tuple[TitlePool | None, datetime]] = {}
+_POOL_REUSE = timedelta(days=1)
+_POOL_RETRY = timedelta(minutes=30)
 
 
 async def _title_pool(client: httpx.AsyncClient, db: Session, congress: int) -> TitlePool | None:
     """Every current-congress bill title, for the rival check in
-    lobbying_records.names_bill. None when the listing is unavailable, in
-    which case nothing is claimed (see lobbied_bills_for)."""
+    lobbying_records.names_bill. None when the full listing is unavailable,
+    in which case nothing is claimed (see lobbied_bills_for): a partial pool
+    can lack exactly the sibling that should have won."""
     from app.pipeline.fetch.congress import fetch_congress_bill_titles
 
-    key = (congress, f"{utcnow():%Y-%m-%d}")
-    if key not in _pools:
-        _pools.clear()
-        try:
-            titles = await fetch_congress_bill_titles(client, db, congress)
-        except Exception:
-            logger.exception("Congress %d bill titles unavailable", congress)
-            titles = {}
-        _pools[key] = TitlePool({k: [v] for k, v in titles.items()}) if titles else None
-    return _pools[key]
+    now = utcnow()
+    held = _pools.get(congress)
+    if held and now - held[1] < (_POOL_REUSE if held[0] is not None else _POOL_RETRY):
+        return held[0]
+    try:
+        titles = await fetch_congress_bill_titles(client, db, congress)
+    except Exception:
+        logger.exception("Congress %d bill titles unavailable", congress)
+        titles = None
+    pool = TitlePool({k: [v] for k, v in titles.items()}) if titles else None
+    _pools[congress] = (pool, now)
+    return pool
 
 
 def _congress_years(congress: int) -> list[int]:
-    first = 1789 + (congress - 1) * 2
+    first = congress_first_year(congress)
     return [y for y in (first, first + 1) if y <= utcnow().year]
 
 
@@ -308,7 +307,7 @@ async def lobbied_bills_for(
     for activity in activities:
         for m in activity.mentions:
             year = m.get("filingYear")
-            if not isinstance(year, int) or congress_of_year(year) != congress:
+            if not isinstance(year, int) or congress_for_year(year) != congress:
                 continue
             if m.get("billId") in voted:
                 candidates.setdefault(m["billId"], []).append(m)
@@ -336,7 +335,8 @@ async def lobbied_bills_for(
             continue
         newest = max(matching, key=lambda m: (m.get("filingYear") or 0))
         found.append({
-            "billId": vote.get("billId"),
+            "billId": bill_key,
+            "label": bill_label(bill_key) or bill_key,
             "billName": (vote.get("billName") or "")[:160],
             "vote": vote.get("vote"),
             "filingYear": newest.get("filingYear"),
@@ -391,17 +391,22 @@ async def enrich_lobbying_matches_with_lda(
                 activities: dict[int, LobbyingActivity | None] = {}
                 for year in years:
                     activities[year] = await fetch_lobbying_activity(lda_client, db, org, year)
+                # Any failed year counts toward the outage alert: a cached
+                # finished year can succeed while every live request fails.
+                if any(a is None for a in activities.values()):
+                    stats["failed"] += 1
                 spend_year = activities.get(lda_year)
                 if spend_year is None:
-                    stats["failed"] += 1
                     m["lobbyingChecked"] = False
                     continue
                 m["lobbyingChecked"] = True
                 m["lobbyingSpend"] = round(spend_year.total)
                 if spend_year.total > 0:
+                    # A total cut off at the page cap is a floor, not a total.
+                    amount = f"${spend_year.total:,.0f}" if spend_year.complete else f"at least ${spend_year.total:,.0f}"
                     m["description"] = (
                         m.get("description", "")
-                        + f" Registered federal lobbying (LDA {lda_year}): ${spend_year.total:,.0f}."
+                        + f" Registered federal lobbying (LDA {lda_year}): {amount}."
                     )
                 lobbied = await lobbied_bills_for(
                     lda_client, db, [a for a in activities.values() if a is not None], voted, congress,
@@ -409,8 +414,11 @@ async def enrich_lobbying_matches_with_lda(
                 m["lobbiedBills"] = lobbied
                 if lobbied:
                     bills = list(m.get("billsInfluenced") or [])
+                    # The topical list spells bills as the votes do; compare
+                    # by the canonical id so one bill isn't listed twice.
+                    have = {bill_id_from_number(b) or b for b in bills}
                     for b in lobbied:
-                        if b["billId"] not in bills:
+                        if b["billId"] not in have:
                             bills.append(b["billId"])
                     m["billsInfluenced"] = bills
             except Exception:
@@ -423,8 +431,9 @@ async def enrich_lobbying_matches_with_lda(
 
 
 def alert_if_lda_down(stats: dict, chamber: str) -> None:
-    """One ops alert when every lookup in a run failed — the signature of
-    the 2026 host move, which read as "no lobbying" for months."""
+    """One ops alert when every organization's lookups failed in part or
+    whole — the signature of the 2026 host move, which read as "no
+    lobbying" for months."""
     if stats.get("lookups", 0) and stats.get("failed", 0) >= stats["lookups"]:
         from app.ops_alerts import send_ops_alert
 

@@ -219,12 +219,6 @@ def title_match_score(context: str, titles: list[str], years: bool = False) -> f
     return best
 
 
-def congress_of_year(year: int) -> int:
-    """The congress in session during a calendar year's filing period (the
-    1st Congress convened in 1789; each lasts two years)."""
-    return (year - 1789) // 2 + 1
-
-
 # Words shared by more titles than this don't nominate rival bills: "act",
 # "amend", "united", "states" would make every bill a rival of every other.
 _RIVAL_WORD_MAX_DF = 2000

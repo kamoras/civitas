@@ -40,6 +40,7 @@ from datetime import date
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from app.pipeline.analyze import lobbying_records as lr  # noqa: E402
+from app.pipeline.fetch.congress import congress_for_year  # noqa: E402
 
 UA = {"User-Agent": "CivitasCivicPlatform/1.0 (bill title calibration)"}
 BULK = "https://www.govinfo.gov/bulkdata/BILLSTATUS/{congress}/{kind}/BILLSTATUS-{congress}-{kind}.zip"
@@ -215,7 +216,7 @@ def calibrate(current: dict[str, list[str]], display: dict[str, str], previous: 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--congress", type=int, default=lr.congress_of_year(date.today().year))
+    ap.add_argument("--congress", type=int, default=congress_for_year(date.today().year))
     ap.add_argument("--skip-df", action="store_true")
     ap.add_argument("--skip-calibration", action="store_true")
     ap.add_argument("--cache-dir", type=pathlib.Path)

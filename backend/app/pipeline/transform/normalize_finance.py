@@ -113,7 +113,7 @@ def normalize_finance(
         aggregated_contributors: Top contributors by total.
         ai_classifications: Optional AI classifications for donors (type + industry).
         committee_type_map: Optional contributor_id -> FEC committee_type code,
-            pre-resolved by the caller (see fec.fetch_committee_type). Passed
+            pre-resolved by the caller (see fec.resolve_committee_meta). Passed
             through to build_top_donors for the PAC-utilization signal.
         committee_meta_map: Optional contributor_id -> the FEC committee
             master's {"type", "designation", "connectedOrg"} (see
@@ -213,7 +213,7 @@ def build_top_donors(
 
     committee_type_map: contributor_id -> FEC committee_type code ("Q"=
     Qualified/multicandidate, "N"=Nonqualified), pre-resolved by the caller
-    (see fec.fetch_committee_type) for each PAC that appears in
+    (see fec.resolve_committee_meta) for each PAC that appears in
     pac_receipts. Feeds the PAC-utilization signal in
     score_calculator._funding_independence_core.
     """

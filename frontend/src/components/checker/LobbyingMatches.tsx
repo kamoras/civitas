@@ -1,6 +1,6 @@
 import { LobbyingMatch } from "@/types/senator";
 import { formatCurrency, safeHref } from "@/lib/formatting";
-import { billUrl } from "@/lib/sources";
+import { billUrl, canonicalBillId } from "@/lib/sources";
 
 interface LobbyingMatchesProps {
   matches: LobbyingMatch[];
@@ -21,8 +21,8 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
       <div className="space-y-4">
         {matches.map((match, i) => {
           const lobbied = match.lobbiedBills ?? [];
-          const lobbiedIds = new Set(lobbied.map((b) => b.billId));
-          const topical = match.billsInfluenced.filter((b) => !lobbiedIds.has(b));
+          const lobbiedIds = new Set(lobbied.map((b) => canonicalBillId(b.billId)));
+          const topical = match.billsInfluenced.filter((b) => !lobbiedIds.has(canonicalBillId(b)));
           return (
             <div key={i} className="panel p-4 border-l-2 border-l-signal-cyan/40">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -53,10 +53,10 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                                 rel="noopener noreferrer"
                                 className="text-ink hover:text-phos underline underline-offset-2 transition-colors"
                               >
-                                {b.billId}
+                                {b.label || b.billId}
                               </a>
                             ) : (
-                              <span className="text-ink">{b.billId}</span>
+                              <span className="text-ink">{b.label || b.billId}</span>
                             )}
                             {b.vote && <> · voted {b.vote}</>}
                             {filing && (
