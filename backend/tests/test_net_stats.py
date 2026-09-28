@@ -13,6 +13,7 @@ def _at(monkeypatch, tmp_path, host="c1"):
     monkeypatch.setattr("app.shared_state.record_path", lambda name: str(tmp_path / name))
     monkeypatch.setattr("socket.gethostname", lambda: host)
     monkeypatch.setattr(net_stats, "_previous", None)
+    monkeypatch.setattr(net_stats, "_forgotten", False)
 
 
 def test_the_api_records_its_rate_over_its_interval(tmp_path, monkeypatch):
@@ -85,4 +86,17 @@ def test_a_stopping_container_forgets_its_record(tmp_path, monkeypatch):
     _at(monkeypatch, tmp_path, host="leaving")
     write_record(str(tmp_path / "api_network-leaving.json"), {"rxRate": 9.0, "txRate": 9.0})
     net_stats.forget_own_record()
+    assert net_stats.api_rates() is None
+
+
+def test_a_recording_in_flight_as_the_container_stops_doesnt_write_it_back(tmp_path, monkeypatch):
+    # The recorder's thread keeps running after its loop is cancelled.
+    _at(monkeypatch, tmp_path, host="leaving")
+    totals = iter([(1000, 100), (4000, 700)])
+    clock = iter([10.0, 13.0])
+    monkeypatch.setattr(net_stats, "own_totals", lambda: next(totals))
+    monkeypatch.setattr(net_stats.time, "monotonic", lambda: next(clock))
+    net_stats.record_api_rate()
+    net_stats.forget_own_record()
+    assert not net_stats.record_api_rate()
     assert net_stats.api_rates() is None

@@ -17,6 +17,7 @@ container and no record.
 """
 
 import logging
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,11 @@ _FORGET_AFTER_S = 24 * 3600
 
 # This process's previous sample: (rx, tx, monotonic time).
 _previous: tuple[int, int, float] | None = None
+# Set once this process has removed its record on the way out
+# (forget_own_record), under the lock the write takes: a recording already
+# on its thread when the loop is cancelled would otherwise write it back.
+_record_lock = threading.Lock()
+_forgotten = False
 
 
 def own_totals() -> tuple[int, int] | None:
@@ -72,10 +78,13 @@ def record_api_rate() -> bool:
     if previous is None or now <= previous[2] or rx < previous[0] or tx < previous[1]:
         return False
     elapsed = now - previous[2]
-    write_record(_record_path(), {
-        "rxRate": (rx - previous[0]) / elapsed,
-        "txRate": (tx - previous[1]) / elapsed,
-    })
+    with _record_lock:
+        if _forgotten:
+            return False
+        write_record(_record_path(), {
+            "rxRate": (rx - previous[0]) / elapsed,
+            "txRate": (tx - previous[1]) / elapsed,
+        })
     return True
 
 
@@ -128,10 +137,13 @@ def forget_own_record() -> None:
     keeps running, writes it again within a round."""
     import os
 
-    try:
-        os.unlink(_record_path())
-    except OSError:
-        pass
+    global _forgotten
+    with _record_lock:
+        _forgotten = True
+        try:
+            os.unlink(_record_path())
+        except OSError:
+            pass
 
 
 async def run_recorder() -> None:

@@ -165,6 +165,36 @@ class TestSummaryEndpointGuards:
             # The next reader may try at once rather than meet a 429.
             await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
 
+    async def test_a_reader_who_leaves_mid_stream_still_gets_the_summary_made(self, db_session):
+        """Stopped with its reader, a generation cached nothing while its
+        claim held every other reader off: a client abandoning a stream
+        each cooldown could keep a document's summary from ever existing."""
+        import asyncio
+
+        from app.api import explore
+
+        doc = _make_doc(db_session)
+        second_delta = asyncio.Event()
+
+        async def _slow_stream(*_args, **_kwargs):
+            yield "SUMMARY: A test summary.\n"
+            await second_delta.wait()
+            yield "IMPACT: Matters."
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _slow_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
+        ):
+            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            body = response.body_iterator
+            assert "delta" in await body.__anext__()
+            await body.aclose()  # the reader leaves
+            second_delta.set()
+            await asyncio.gather(*list(explore._generations))
+        mock_set_cache.assert_called_once()
+        assert mock_set_cache.call_args.args[2]["summary"].startswith("A test summary.")
+
     async def test_an_unavailable_cooldown_refuses_rather_than_generates(self, db_session, tmp_path):
         """The cooldown fails closed: without it every POST is a fresh
         generation on the device's one LLM."""

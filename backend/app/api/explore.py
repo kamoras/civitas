@@ -323,6 +323,9 @@ async def post_document_comment(
 _SUMMARY_BUCKET = "explore-summary"
 _SUMMARY_COOLDOWN = 30.0
 _SUMMARY_CACHE_KEY_VERSION = 4  # bump alongside explore_document_summary_prompt's promptVersion
+# Generations under way, held so the event loop doesn't collect a task
+# whose reader has gone.
+_generations: set[asyncio.Task] = set()
 
 
 # A stream is read as it is written: nginx buffers proxied responses by
@@ -399,33 +402,51 @@ async def get_explore_document_summary(
     if not claimed:
         raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
 
-    async def event_stream():
+    # The generation runs as a task of its own, feeding the reader through a
+    # queue: a reader who leaves mid-stream doesn't stop it, and it finishes
+    # and is cached. Stopped with the reader, the claim bought nothing — a
+    # client could start and abandon a document's generation every cooldown
+    # and hold it off for every other reader indefinitely; finished, the
+    # next reader gets the summary free. (The claim is kept either way: the
+    # prompt was already sent, and processing it is most of a generation's
+    # cost on this hardware.)
+    events: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def generate():
         full_text = ""
         try:
-            async for delta in stream_llm(
-                system_prompt=prompt["systemPrompt"],
-                user_prompt=prompt["userPrompt"],
-                max_tokens=512,
-            ):
-                full_text += delta
-                yield _sse({"delta": delta})
-        # A reader who leaves mid-stream (GeneratorExit, not caught here)
-        # keeps the claim, on purpose: the prompt was already sent, and
-        # processing it before the first token is most of a generation's
-        # cost on this hardware — given back, a client could start and
-        # abandon generations back to back.
-        except Exception:
-            logger.exception("Explore doc summary streaming failed for doc_id=%s", doc_id)
-            if not full_text:
-                # Nothing was generated: the next reader may try at once.
-                await throttle.run(throttle.release, _SUMMARY_BUCKET, str(doc_id))
-                yield _sse({"done": True, "summary": "", "keyPoints": [], "impact": ""})
-                return
+            try:
+                async for delta in stream_llm(
+                    system_prompt=prompt["systemPrompt"],
+                    user_prompt=prompt["userPrompt"],
+                    max_tokens=512,
+                ):
+                    full_text += delta
+                    events.put_nowait(_sse({"delta": delta}))
+            except Exception:
+                logger.exception("Explore doc summary streaming failed for doc_id=%s", doc_id)
+                if not full_text:
+                    # Nothing was generated: the next reader may try at once.
+                    await throttle.run(throttle.release, _SUMMARY_BUCKET, str(doc_id))
+                    events.put_nowait(_sse({"done": True, "summary": "", "keyPoints": [], "impact": ""}))
+                    return
 
-        parsed = parse_explore_document_summary(full_text)
-        if parsed["summary"]:
-            await asyncio.to_thread(set_cached_llm_result, prompt["promptVersion"], cache_key, parsed)
-        yield _sse({"done": True, **parsed})
+            parsed = parse_explore_document_summary(full_text)
+            events.put_nowait(_sse({"done": True, **parsed}))
+            if parsed["summary"]:
+                await asyncio.to_thread(set_cached_llm_result, prompt["promptVersion"], cache_key, parsed)
+        except Exception:
+            logger.exception("Explore doc summary failed for doc_id=%s", doc_id)
+        finally:
+            events.put_nowait(None)
+
+    task = asyncio.create_task(generate())
+    _generations.add(task)
+    task.add_done_callback(_generations.discard)
+
+    async def event_stream():
+        while (event := await events.get()) is not None:
+            yield event
 
     return StreamingResponse(event_stream(), media_type="text/event-stream", headers=_STREAM_HEADERS)
 

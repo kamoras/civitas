@@ -511,7 +511,9 @@ class PulseVoteRequest(BaseModel):
 # client's previous-day key too, so the dedup is a rolling 24 hours, not
 # reset at midnight. Held in the store every API worker process shares, in
 # RAM (api/throttle.py): a per-process record let a second vote through on
-# the other worker.
+# the other worker. That store is the container's own, so a deploy starts it
+# empty (as the per-process record was) — the 429 says "recently", not "in
+# the last 24 hours", which a deploy in between would make untrue.
 _PULSE_BUCKET = "pulse"
 _PULSE_DEDUP_WINDOW = 60.0 * 60 * 24
 
@@ -596,7 +598,7 @@ async def record_pulse_vote(
     if issue == "duplicate":
         raise HTTPException(
             status_code=429,
-            detail="You've already registered a stance on this issue in the last 24 hours.",
+            detail="You've already registered a stance on this issue recently.",
         )
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found")

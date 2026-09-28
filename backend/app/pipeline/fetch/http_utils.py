@@ -106,6 +106,17 @@ BROWSER_JSON_HEADERS = {
 }
 
 
+def retryable_status(status: int) -> bool:
+    """Whether a failed HTTP status could succeed if asked again without
+    the resource changing: a rate limit or a server error can, and so can a
+    refusal (401/403) — a key the operator has to fix, or a site's bot
+    challenge that refuses for a while and then doesn't; remembered, the
+    refusal would keep being served after it lifted. Any other client
+    error (not found, gone, a malformed request) is the same answer next
+    time, and may be remembered."""
+    return status in (401, 403, 429) or status >= 500
+
+
 async def fetch_with_retry(
     client: httpx.AsyncClient,
     rate_limiter: RateLimiter,

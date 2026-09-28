@@ -79,15 +79,38 @@ fi
 # pipeline run that starts mid-build sails right through. Second call
 # sits immediately before the stack deploy, as close to the actual
 # restart as this script gets.
+# The pipeline's status asked of its own container, bypassing nginx: the
+# admin API on its loopback, with the token the container already has from
+# .env. Fails (non-zero, no output) when no pipeline container is running
+# here or it doesn't answer.
+pipeline_status_directly() {
+  local container
+  container=$(docker ps -q --filter "label=com.docker.swarm.service.name=civitas_pipeline" | head -n1)
+  [[ -n "$container" ]] || return 1
+  docker exec "$container" python -c '
+import os, sys, urllib.request
+req = urllib.request.Request("http://localhost:8000/api/admin/pipeline/status",
+                             headers={"Authorization": "Bearer " + os.environ.get("ADMIN_TOKEN", "")})
+try:
+    sys.stdout.write(urllib.request.urlopen(req, timeout=5).read().decode())
+except Exception:
+    sys.exit(1)
+' 2>/dev/null
+}
+
 _busy_reason=""
 pipeline_is_busy() {
   local admin_token status
   _busy_reason=""
   admin_token=$(grep '^ADMIN_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
   [[ -z "$admin_token" ]] && return 1   # not configured — can't check, don't block
+  # Through nginx first; when that fails, from inside the pipeline's own
+  # container — a broken nginx (the release this deploy would fix) must not
+  # read as a pipeline that can't be seen, or every deploy defers forever.
   if ! status=$(curl -fsS --max-time 5 \
     -H "Authorization: Bearer $admin_token" \
-    "http://localhost:8081/api/admin/pipeline/status" 2>/dev/null); then
+    "http://localhost:8081/api/admin/pipeline/status" 2>/dev/null) \
+    && ! status=$(pipeline_status_directly); then
     # The status lives in the pipeline service. If that service exists and
     # has no task running or starting — a starting task may already be
     # running its startup jobs before its healthcheck passes — nothing can

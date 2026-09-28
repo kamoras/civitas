@@ -67,6 +67,7 @@ import io
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town
+from app.pipeline.fetch.http_utils import retryable_status
 
 logger = logging.getLogger(__name__)
 
@@ -275,10 +276,10 @@ async def fetch_town_ballot_pdf(
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
         logger.warning("Ballot PDF fetch failed for %s: HTTP %d", town, status)
-        if status in (404, 410):
-            # Gone: not a moment's error. A 401/403 is not remembered — a
-            # clerk's site or its bot challenge refuses for a while and then
-            # doesn't, like a 5xx (regulations_gov._retryable, the same rule).
+        if not retryable_status(status):
+            # Not a moment's error (gone, moved, malformed): asking again
+            # soon gets the same answer. A refusal, a rate limit or a 5xx
+            # is not remembered.
             await remember_failure(f"HTTP {status}")
         return None
     except Exception:

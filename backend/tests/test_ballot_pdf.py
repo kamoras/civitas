@@ -259,7 +259,8 @@ def test_candidate_regex_is_not_vulnerable_to_catastrophic_backtracking():
     assert elapsed < 1.0, f"regex took {elapsed:.2f}s — catastrophic backtracking regressed"
 
 
-async def test_a_failure_that_would_repeat_is_remembered_not_refetched(db_session, monkeypatch):
+@pytest.mark.parametrize("status", [400, 404, 410])
+async def test_a_failure_that_would_repeat_is_remembered_not_refetched(db_session, monkeypatch, status):
     """A 404 (or a PDF that parses to nothing) fails the same way on every
     retry; the route's own failure response lasts seconds, so without this
     each retry downloaded and parsed the whole PDF again."""
@@ -272,7 +273,7 @@ async def test_a_failure_that_would_repeat_is_remembered_not_refetched(db_sessio
 
     def handler(request):
         fetched.append(request.url)
-        return httpx.Response(404)
+        return httpx.Response(status)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         assert await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville") is None
@@ -280,7 +281,8 @@ async def test_a_failure_that_would_repeat_is_remembered_not_refetched(db_sessio
     assert len(fetched) == 1
 
 
-async def test_a_moments_failure_is_not_remembered(db_session, monkeypatch):
+@pytest.mark.parametrize("status", [429, 500, 503])
+async def test_a_moments_failure_is_not_remembered(db_session, monkeypatch, status):
     import httpx
 
     monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
@@ -290,7 +292,7 @@ async def test_a_moments_failure_is_not_remembered(db_session, monkeypatch):
 
     def handler(request):
         fetched.append(request.url)
-        return httpx.Response(503)
+        return httpx.Response(status)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")

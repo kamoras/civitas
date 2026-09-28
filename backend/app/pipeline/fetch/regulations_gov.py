@@ -18,7 +18,7 @@ from app.config import settings
 from app.http_client import make_async_client
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async
-from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, retryable_status
 
 logger = logging.getLogger(__name__)
 
@@ -60,15 +60,6 @@ async def _object_id(client: httpx.AsyncClient, api_key: str, document_id: str) 
         logger.warning("Regulations.gov document %s returned %d", document_id, resp.status_code)
         return None, resp.status_code
     return ((resp.json().get("data") or {}).get("attributes") or {}).get("objectId") or None, 200
-
-
-def _retryable(status: int) -> bool:
-    """Whether a failed status could succeed if asked again without the
-    document changing: a rate limit or a server error can, and so can a
-    refused key (401/403) — the operator's to fix, and once fixed a cached
-    refusal would keep being served. Any other refusal (a malformed id) is
-    the same answer next time."""
-    return status in (401, 403, 429) or status >= 500
 
 
 def _failed(error: str, *, retryable: bool) -> dict:
@@ -160,7 +151,7 @@ async def fetch_comments(
                 if status == 429:
                     return _failed("Rate limit reached", retryable=True)
                 if status not in (200, 404, 410):
-                    return _failed(f"API error: {status}", retryable=_retryable(status))
+                    return _failed(f"API error: {status}", retryable=retryable_status(status))
                 if not object_id:
                     if db is not None:
                         await api_cache_set_async(
@@ -191,7 +182,7 @@ async def fetch_comments(
 
             if resp.status_code != 200:
                 logger.warning("Regulations.gov returned %d", resp.status_code)
-                return _failed(f"API error: {resp.status_code}", retryable=_retryable(resp.status_code))
+                return _failed(f"API error: {resp.status_code}", retryable=retryable_status(resp.status_code))
 
             data = resp.json()
             raw_comments = data.get("data", [])
