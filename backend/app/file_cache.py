@@ -5,7 +5,11 @@ files it rewrites at runtime are cached in memory by the API processes that
 read them. A writer clearing its module's cache only clears its own
 process's copy; the readers have to notice the new file themselves. Each
 cache keeps the stamp its copy was loaded under and reloads when
-files_stamp() says otherwise — one stat per path per read.
+files_stamp() says otherwise — one stat per path per read. The one mechanism
+for every such cache: district PVI and member ideal points
+(score_calculator), the population references (population_reference),
+ballot lookup links, discovered candidate sources and election dates
+(fetch/).
 """
 
 import os

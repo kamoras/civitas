@@ -24,6 +24,7 @@ import logging
 import pathlib
 
 from app.atomic_write import update_json_file
+from app.file_cache import files_stamp
 from app.config_definitions import CONSTITUENT_REFERENCE_STATISTIC
 from app.time_utils import utcnow
 
@@ -39,13 +40,6 @@ def _read_json(path: pathlib.Path) -> dict:
         return json.loads(path.read_text())
     except Exception:
         return {}
-
-
-def _mtime(path: pathlib.Path) -> float | None:
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return None
 
 
 class ChamberReference:
@@ -83,7 +77,7 @@ class ChamberReference:
         Re-read whenever either file changes on disk (mtime), so the API
         worker that didn't run the pipeline doesn't keep serving the
         previous run's numbers."""
-        key = (_mtime(self.live_path), _mtime(self.bundled_path))
+        key = files_stamp([self.live_path, self.bundled_path])
         if self._cache is not None and self._cache[0] == key:
             return self._cache[1]
         bundled, live = _read_json(self.bundled_path), _read_json(self.live_path)

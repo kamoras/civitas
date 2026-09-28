@@ -177,6 +177,22 @@ def _serialize(vec) -> bytes:
     return struct.pack("%sf" % len(vec), *vec)
 
 
+def _enable_wal(conn: sqlite3.Connection) -> None:
+    """Switch the file to WAL if it isn't already. The switch needs the file
+    to itself, so while another process holds a write transaction it would
+    wait out the whole busy timeout — here under _vec_lock, holding every
+    search up — and then fail. It waits a second instead and, failing, goes
+    on in the current mode: the pipeline process makes the switch when it
+    next opens the file (ensure_explore_index, at its startup)."""
+    conn.execute("PRAGMA busy_timeout = 1000")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.OperationalError:
+        logger.info("Vector store busy — WAL switch left to the next open")
+    finally:
+        conn.execute(f"PRAGMA busy_timeout = {int(SQLITE_BUSY_TIMEOUT_S * 1000)}")
+
+
 def get_vec_conn() -> sqlite3.Connection:
     """Get or create the sqlite-vec connection (singleton, extension loaded)."""
     global _vec_conn
@@ -192,8 +208,9 @@ def get_vec_conn() -> sqlite3.Connection:
             # this file while the API processes search it (PROCESS_ROLE),
             # and under the default rollback journal a long write holds
             # every reader off until it commits. Persistent in the file, so
-            # setting it on every open is a no-op after the first.
-            conn.execute("PRAGMA journal_mode=WAL")
+            # after the first switch this is a no-op — and every connection,
+            # this one included, follows a switch made by another.
+            _enable_wal(conn)
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)

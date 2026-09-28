@@ -144,3 +144,19 @@ def test_todays_salt_is_kept(monkeypatch):
     monkeypatch.setattr(visits, "_salt_cache", (today, b"x" * 32))
     visits._forget_stale_salts()
     assert visits._salt_cache == (today, b"x" * 32)
+
+
+def test_a_salt_outage_falls_back_to_one_salt_for_every_worker(monkeypatch, throttle_store):
+    # Two workers are two processes; what they share is the RAM store.
+    # Simulated by clearing this process's cached fallback between calls.
+    def boom(date):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(visits, "_salt_cache", None)
+    monkeypatch.setattr(visits, "_load_or_create_salt", boom)
+    today = __import__("datetime").datetime.now(__import__("datetime").UTC).date().isoformat()
+    monkeypatch.setattr(visits, "_fallback_salt", None)
+    worker_a = asyncio.run(_daily_salt(today))
+    monkeypatch.setattr(visits, "_fallback_salt", None)
+    worker_b = asyncio.run(_daily_salt(today))
+    assert worker_a == worker_b

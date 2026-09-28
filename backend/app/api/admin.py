@@ -1583,9 +1583,10 @@ async def admin_reset_data():
         raise HTTPException(status_code=409, detail=f"Cannot reset while running: {busy}") from None
     # Every API process holds a bills collection built from what was just
     # wiped: tell them (bill_service records the change for other processes).
+    # A database write in the pipeline process: off the event loop.
     from app.services.bill_service import warm_bill_collection_cache
 
-    warm_bill_collection_cache()
+    await asyncio.to_thread(warm_bill_collection_cache)
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

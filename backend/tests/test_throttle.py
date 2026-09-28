@@ -341,3 +341,25 @@ def test_a_claim_that_must_not_fail_open_raises(monkeypatch, tmp_path):
             throttle.claim("pulse", None, period=60, fail_open=False)
     finally:
         throttle.use_path(previous)
+
+
+def test_a_dropped_salt_leaves_no_bytes_behind(throttle_store, monkeypatch):
+    # Not in a freed page, not in the WAL: anyone who could read /dev/shm
+    # could otherwise still recompute yesterday's keys.
+    import os
+
+    throttle.client_key("203.0.113.1", "write")
+    old_salt = _rows(throttle_store, "SELECT salt FROM salts")[0][0]
+
+    class _Tomorrow(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2099, 1, 2, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+    throttle.client_key("203.0.113.1", "write")
+    for suffix in ("", "-wal"):
+        path = throttle_store + suffix
+        if os.path.exists(path):
+            with open(path, "rb") as fh:
+                assert old_salt not in fh.read(), path

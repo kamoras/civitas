@@ -248,3 +248,32 @@ class TestSharedAcrossProcesses:
         finally:
             writer.rollback()
             writer.close()
+
+
+def test_a_busy_file_does_not_hold_the_first_search_up(tmp_path, monkeypatch):
+    # First deploy: the file is still in rollback mode and the pipeline
+    # process is mid-write. Switching needs the file to itself; waiting the
+    # full busy timeout would stall every search behind _vec_lock.
+    import sqlite3
+    import time
+
+    from app.pipeline import vector_store as vs
+
+    path = str(tmp_path / "vectors.db")
+    writer = sqlite3.connect(path, isolation_level=None)
+    writer.execute("CREATE TABLE t (x)")
+    writer.execute("BEGIN EXCLUSIVE")
+    try:
+        reader = sqlite3.connect(path, isolation_level=None)
+        started = time.monotonic()
+        vs._enable_wal(reader)
+        assert time.monotonic() - started < 5
+        assert reader.execute("PRAGMA busy_timeout").fetchone()[0] == int(vs.SQLITE_BUSY_TIMEOUT_S * 1000)
+        reader.close()
+    finally:
+        writer.execute("ROLLBACK")
+        writer.close()
+    follower = sqlite3.connect(path)
+    vs._enable_wal(follower)  # free now: switches
+    assert follower.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    follower.close()

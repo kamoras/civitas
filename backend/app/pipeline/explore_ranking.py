@@ -89,8 +89,14 @@ def _load_from_db() -> dict | None:
     return None
 
 
+_UNKNOWN = object()
+
+
 def _stored_at():
-    """When the stored calibration was written, or None."""
+    """When the stored calibration was written; None when there is none;
+    _UNKNOWN when the database couldn't be asked — which must not read as a
+    change, or a moment's lock would swap the fitted calibration for the
+    bundled one."""
     try:
         from app.database import SessionLocal
         from app.models import ApiCache
@@ -105,7 +111,8 @@ def _stored_at():
         finally:
             db.close()
     except Exception:
-        return None
+        logger.debug("Couldn't check the stored ranking calibration", exc_info=True)
+        return _UNKNOWN
 
 
 def _load_bundled() -> dict | None:
@@ -125,12 +132,20 @@ def ranking(*, force_reload: bool = False) -> dict:
     if _override is not None and set(_override) >= _REQUIRED_KEYS:
         return _override
 
+    # The replaced-row check queries the database, so it runs outside _lock:
+    # every search thread waits on that lock.
+    now = time.monotonic()
+    replaced = False
     with _lock:
-        now = time.monotonic()
-        fresh = _cached is not None and (now - _cached_at) < _RELOAD_AFTER_SECONDS
-        if fresh and now - _checked_at >= _CHECK_STORED_EVERY_SECONDS:
+        check = _cached is not None and now - _checked_at >= _CHECK_STORED_EVERY_SECONDS
+        if check:
             _checked_at = now
-            fresh = _stored_at() == _cached_stored_at
+    if check:
+        stored = _stored_at()
+        replaced = stored is not _UNKNOWN and stored != _cached_stored_at
+
+    with _lock:
+        fresh = _cached is not None and (now - _cached_at) < _RELOAD_AFTER_SECONDS and not replaced
         if fresh and not force_reload:
             # Merge here too, not only on a cache miss. Overriding one key
             # against a warm cache used to be silently ignored, which would
@@ -139,6 +154,10 @@ def ranking(*, force_reload: bool = False) -> dict:
             return {**_cached, **_override} if _override else _cached
 
         stored_at = _stored_at()
+        if stored_at is _UNKNOWN and _cached is not None and not force_reload:
+            # The database can't be read right now: keep what we have
+            # rather than fall back to the bundled calibration.
+            return {**_cached, **_override} if _override else _cached
         loaded = _load_from_db() or _load_bundled()
         if not loaded:
             raise RankingCalibrationMissing(
@@ -147,7 +166,8 @@ def ranking(*, force_reload: bool = False) -> dict:
                 "the explore pipeline, which calibrates as its last step."
             )
         _cached, _cached_at = loaded, time.monotonic()
-        _cached_stored_at, _checked_at = stored_at, _cached_at
+        _cached_stored_at = None if stored_at is _UNKNOWN else stored_at
+        _checked_at = _cached_at
         return {**_cached, **_override} if _override else _cached
 
 

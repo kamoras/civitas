@@ -96,8 +96,12 @@ pipeline_is_busy() {
     # "Starting", but its restart_policy (max_attempts: 3,
     # docker-compose.swarm.yml) ends the loop within minutes, and from
     # then on this lets the fix through (live-checked on a swarm).
+    # Only a listing that succeeded counts: a `docker service ps` that
+    # failed says nothing about the tasks, and must defer like the curl.
+    local tasks
     if docker service inspect civitas_pipeline >/dev/null 2>&1 \
-      && [[ "$(docker service ps civitas_pipeline --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | grep -cE '^(Running|Starting)' || true)" == "0" ]]; then
+      && tasks=$(docker service ps civitas_pipeline --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null) \
+      && ! grep -qE '^(Running|Starting)' <<<"$tasks"; then
       log "pipeline status unreachable and civitas_pipeline has no running or starting task — nothing to wait for"
       return 1
     fi

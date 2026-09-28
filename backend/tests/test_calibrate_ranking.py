@@ -207,3 +207,23 @@ def test_a_recalibration_by_another_process_is_picked_up(db_session, monkeypatch
     monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
     assert explore_ranking.source_diversity_cap() == 7
     explore_ranking.reset_cache()
+
+
+def test_a_moment_the_database_is_unreadable_keeps_the_calibration(db_session, monkeypatch):
+    # Not a change: falling back to the bundled weights for an hour because
+    # one check met a lock would rank worse for no reason.
+    from app.pipeline import explore_ranking
+
+    from tests.conftest import TEST_RANKING_CALIBRATION
+
+    monkeypatch.setattr(explore_ranking, "_override", None)
+    explore_ranking.reset_cache()
+    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: None)
+    monkeypatch.setattr(explore_ranking, "_load_from_db",
+                        lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 9})
+    assert explore_ranking.source_diversity_cap() == 9
+    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: explore_ranking._UNKNOWN)
+    monkeypatch.setattr(explore_ranking, "_load_from_db", lambda: None)  # would fall back to bundled
+    monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
+    assert explore_ranking.source_diversity_cap() == 9
+    explore_ranking.reset_cache()

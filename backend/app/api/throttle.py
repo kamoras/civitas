@@ -117,6 +117,23 @@ def use_path(path: str) -> None:
         _conns.clear()
 
 
+def _enable_wal(conn: sqlite3.Connection) -> None:
+    """Switch the store to WAL. Two workers creating it at the same moment
+    race for the switch, and SQLite can refuse the loser at once rather than
+    wait on the busy timeout — so retry for as long as that timeout, and
+    accept a file another process has already switched."""
+    deadline = time.monotonic() + _BUSY_TIMEOUT_S
+    while True:
+        try:
+            if conn.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal":
+                return
+        except sqlite3.OperationalError:
+            pass
+        if time.monotonic() >= deadline:
+            raise sqlite3.OperationalError("throttle store: could not switch to WAL")
+        time.sleep(0.01)
+
+
 def _conn() -> sqlite3.Connection:
     conn = getattr(_local, "conn", None)
     if conn is None or _local.generation != _generation:
@@ -124,9 +141,12 @@ def _conn() -> sqlite3.Connection:
         # connection is still used by the one thread that opened it.
         conn = sqlite3.connect(_path, timeout=_BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False)
         try:
-            conn.execute("PRAGMA journal_mode=WAL")
+            _enable_wal(conn)
             # In RAM already: a sync would buy nothing.
             conn.execute("PRAGMA synchronous=OFF")
+            # A deleted salt must be gone, not left in a freed page
+            # (_drop_salts also truncates the WAL, the other place it lingers).
+            conn.execute("PRAGMA secure_delete=ON")
             conn.executescript(_SCHEMA)
         except sqlite3.Error:
             # Not kept, so the next call retries — close it, or each failed
@@ -206,11 +226,22 @@ def _salt_for(today: str) -> bytes:
         conn.execute(
             "INSERT OR IGNORE INTO salts (date, salt) VALUES (?, ?)", (today, secrets.token_bytes(32)),
         )
-        conn.execute("DELETE FROM salts WHERE date != ?", (today,))
+        dropped = conn.execute("DELETE FROM salts WHERE date != ?", (today,)).rowcount
         salt = conn.execute("SELECT salt FROM salts WHERE date = ?", (today,)).fetchone()[0]
+    if dropped:
+        _truncate_wal()
     with _salt_lock:
         _salt_cache = (today, salt)
     return salt
+
+
+def _truncate_wal() -> None:
+    """Checkpoint the WAL and truncate it to nothing: its frames still hold
+    the page a deleted salt was on."""
+    try:
+        _conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.Error:
+        logger.warning("Could not truncate the throttle store's WAL", exc_info=True)
 
 
 def forget_stale_salt() -> None:
@@ -232,9 +263,24 @@ def forget_stale_salt() -> None:
         return
     try:
         with _Txn() as conn:
-            conn.execute("DELETE FROM salts WHERE date != ?", (today,))
+            dropped = conn.execute("DELETE FROM salts WHERE date != ?", (today,)).rowcount
+        if dropped:
+            _truncate_wal()
     except sqlite3.Error:
         logger.warning("Could not drop a stale throttle salt", exc_info=True)
+
+
+def derived_salt(purpose: str) -> bytes | None:
+    """A salt for today, the same in every process of this container, that
+    lives only as long as the store's own (RAM, this UTC day): for a caller
+    whose shared salt is unavailable (visits' fallback). None if the store
+    can't be read either."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    try:
+        salt = _salt_for(today)
+    except sqlite3.Error:
+        return None
+    return hmac.new(salt, f"derived\x00{purpose}".encode(), hashlib.sha256).digest()
 
 
 def client_key(ip: str, purpose: str, scope: str = "") -> str | None:

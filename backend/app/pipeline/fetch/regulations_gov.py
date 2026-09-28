@@ -71,6 +71,12 @@ def _failed(error: str, *, retryable: bool) -> dict:
 
 _NOT_FOUND = "Document not found on Regulations.gov"
 
+# How long "Regulations.gov has no such document" is remembered: long enough
+# that repeats don't spend the shared budget, short enough that a document
+# published before Regulations.gov indexed it is found once it has — not the
+# year a found objectId is kept.
+_NOT_FOUND_CACHE_HOURS = 6
+
 
 async def fetch_comments(
     comment_url: str,
@@ -105,15 +111,15 @@ async def fetch_comments(
     size = max(min(page_size, 25), 5)
     sort = f"{'-' if sort_order == 'desc' else ''}{sort_by}"
     id_key = f"objectid-{document_id}"
+    missing_key = f"objectid-missing-{document_id}"
     page_key = f"comments-{document_id}-{size}-{page_number}-{sort}"
     object_id = page = None
     if db is not None:
-        known = api_cache_get(db, _CACHE_TIER, id_key, max_age_hours=_OBJECT_ID_CACHE_HOURS) or {}
-        if known.get("notFound"):
-            # Asked before, and Regulations.gov has no such document: asking
-            # again would only spend the shared budget.
+        if api_cache_get(db, _CACHE_TIER, missing_key, max_age_hours=_NOT_FOUND_CACHE_HOURS):
+            # Asked recently, and Regulations.gov had no such document:
+            # asking again so soon would only spend the shared budget.
             return _failed(_NOT_FOUND, retryable=False)
-        object_id = known.get("objectId")
+        object_id = (api_cache_get(db, _CACHE_TIER, id_key, max_age_hours=_OBJECT_ID_CACHE_HOURS) or {}).get("objectId")
         page = api_cache_get(db, _CACHE_TIER, page_key, max_age_hours=_COMMENTS_CACHE_HOURS)
     if page is not None:
         return page
@@ -131,8 +137,8 @@ async def fetch_comments(
                     return _failed(f"API error: {status}", retryable=True)
                 if not object_id:
                     if db is not None:
-                        api_cache_set(db, _CACHE_TIER, id_key, {"notFound": True},
-                                      normal_ttl_hours=_OBJECT_ID_CACHE_HOURS)
+                        api_cache_set(db, _CACHE_TIER, missing_key, {"notFound": True},
+                                      normal_ttl_hours=_NOT_FOUND_CACHE_HOURS)
                     return _failed(_NOT_FOUND, retryable=False)
                 if db is not None:
                     api_cache_set(db, _CACHE_TIER, id_key, {"objectId": object_id},

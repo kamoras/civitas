@@ -15,6 +15,7 @@ import hmac
 import logging
 import re
 import secrets
+import time
 from dataclasses import dataclass
 from datetime import datetime, UTC
 
@@ -195,9 +196,13 @@ async def run_visit_consumer() -> None:
     asyncio.to_thread — the whole point of this consumer disappears if
     its own write blocks the loop the same way the old inline write did.
     """
+    last_check = -_STALE_SALT_CHECK_S
     while True:
-        # Off the loop: dropping the throttle's stale salt is a small write.
-        await asyncio.to_thread(_forget_stale_salts)
+        now = time.monotonic()
+        if now - last_check >= _STALE_SALT_CHECK_S:
+            last_check = now
+            # Off the loop: dropping the throttle's stale salt is a write.
+            await asyncio.to_thread(_forget_stale_salts)
         try:
             event = await asyncio.wait_for(_visit_queue.get(), timeout=_STALE_SALT_CHECK_S)
         except TimeoutError:
@@ -283,13 +288,15 @@ async def _daily_salt(date: str) -> bytes:
     try:
         salt = await asyncio.to_thread(_load_or_create_salt, date)
     except Exception:
-        # Degrade to a process-local salt: this worker's count of today's
-        # uniques may overlap the other worker's, but nothing reversible is
-        # ever stored. The shared salt is retried on the next call (this
-        # isn't cached as it). One fallback per process per day, not one per
-        # call: a fresh salt each time made every visit during the outage a
-        # new unique visitor, inflating the day's count.
-        logger.warning("Visit salt unavailable — using this process's fallback salt", exc_info=True)
+        # Degrade to a fallback salt; nothing reversible is ever stored. The
+        # shared salt is retried on the next call (this isn't cached as it).
+        # One fallback for the whole container for the day where possible —
+        # derived from the rate limits' RAM salt, which every worker shares
+        # — so a visitor during the outage counts once, not once per worker
+        # (a fresh salt per call made every visit a new unique). Visitors
+        # who span the outage and the recovery still count twice: no salt
+        # matching the shared one exists while it can't be read.
+        logger.warning("Visit salt unavailable — using a fallback salt", exc_info=True)
         return _fallback_salt_for(date)
     _salt_cache = (date, salt)
     return salt
@@ -322,7 +329,10 @@ def _forget_stale_salts() -> None:
 def _fallback_salt_for(date: str) -> bytes:
     global _fallback_salt
     if _fallback_salt is None or _fallback_salt[0] != date:
-        _fallback_salt = (date, secrets.token_bytes(32))
+        from app.api import throttle
+
+        # This process's own, only if the shared RAM store is down too.
+        _fallback_salt = (date, throttle.derived_salt(f"visits:{date}") or secrets.token_bytes(32))
     return _fallback_salt[1]
 
 

@@ -92,3 +92,19 @@ def test_a_failed_lookup_is_not_taken_for_an_unknown_document(monkeypatch, db_se
         transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"data": {"attributes": {"objectId": "x"}}})
                                       if "/documents/" in r.url.path else httpx.Response(200, json={"data": [], "meta": {}}))))
     assert "error" not in asyncio.run(rg.fetch_comments(URL, db=db_session))
+
+
+def test_an_unknown_document_is_asked_about_again_after_a_few_hours(api, db_session, monkeypatch):
+    # Published before Regulations.gov indexed it: found once it has, not a
+    # year later.
+    from datetime import timedelta
+
+    from app.models import ApiCache
+
+    asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1", db=db_session))
+    row = db_session.query(ApiCache).filter(ApiCache.cache_key == "objectid-missing-NOPE-1").one()
+    row.cached_at = row.cached_at - timedelta(hours=rg._NOT_FOUND_CACHE_HOURS + 1)
+    db_session.commit()
+    before = sum("/documents/" in c for c in api)
+    asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1", db=db_session))
+    assert sum("/documents/" in c for c in api) == before + 1
