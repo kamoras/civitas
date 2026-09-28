@@ -7,7 +7,7 @@ import {
   VoteCounts,
   VotingRecord as VotingRecordType,
 } from "@/types/senator";
-import { voteSourceUrl } from "@/lib/sources";
+import { billPageHref } from "@/lib/congress";
 import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
@@ -46,8 +46,9 @@ function VoteBadge({ vote }: { vote: string }) {
 function VoteRow({ vote }: { vote: KeyVote }) {
   const rc = vote.rollCall;
   const title = voteTitle(rc?.title, rc?.billLabel, vote.billName);
-  const href = rc?.billId ? `/congress/bills/${encodeURIComponent(rc.billId)}` : null;
-  const external = !href && !rc ? voteSourceUrl(vote.billId) : null;
+  // The roll call's bill, or, for a vote stored before its roll call was
+  // recorded, the vote's own bill id. A nomination has no bill page.
+  const href = billPageHref(rc ? rc.billId : vote.billId);
   return (
     <li className="flex items-start justify-between gap-3 border-b border-white/[0.07] py-2.5">
       <div className="min-w-0">
@@ -59,15 +60,6 @@ function VoteRow({ vote }: { vote: KeyVote }) {
           >
             {title}
           </Link>
-        ) : external ? (
-          <a
-            href={external}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="line-clamp-2 text-sm text-ink underline decoration-white/20 underline-offset-2 hover:text-phos"
-          >
-            {title}
-          </a>
         ) : (
           <span className="line-clamp-2 text-sm text-ink">{title}</span>
         )}
