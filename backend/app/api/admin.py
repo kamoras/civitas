@@ -249,15 +249,15 @@ def _read_system_stats() -> dict:
         stats["uptimeSeconds"] = None
 
     try:
-        # The backend's traffic across its containers: this one's (the
-        # pipeline's, under Swarm) plus what the API containers recorded
-        # (net_stats) — a container sees only its own interfaces.
-        from app.net_stats import backend_totals
+        # This container's counters (the pipeline's, under Swarm), and the
+        # rate the API containers recorded (net_stats: a container sees only
+        # its own interfaces). The dashboard adds the two rates.
+        from app.net_stats import api_rates, own_totals
 
-        totals = backend_totals()
-        stats["netRxBytes"] = totals["rx"]
-        stats["netTxBytes"] = totals["tx"]
-        stats["netIncludesApi"] = totals["includesApi"]
+        stats["netRxBytes"], stats["netTxBytes"] = own_totals()
+        rates = api_rates()
+        stats["apiNetRxRate"] = rates["rxRate"] if rates else None
+        stats["apiNetTxRate"] = rates["txRate"] if rates else None
     except Exception:
         stats["netRxBytes"] = 0
         stats["netTxBytes"] = 0

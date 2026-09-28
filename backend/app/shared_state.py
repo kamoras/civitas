@@ -194,3 +194,44 @@ def decode_json_dict(value) -> dict | None:
         except ValueError:
             return None
     return value if isinstance(value, dict) else None
+
+
+# Small records one process writes to a file on the data volume and another
+# (in another container) reads — the scheduler's heartbeat, the API's
+# network rate. Files, not rows: a write must not wait on the database's
+# write lock, which a long pipeline transaction can hold for minutes.
+
+def record_path(name: str) -> str:
+    from app.atomic_write import runtime_data_path
+
+    return runtime_data_path(name)
+
+
+def write_record(path: str, value: Any) -> None:
+    """Replace the record at `path` with `value` (JSON), in one step."""
+    from app.atomic_write import write_text_atomic
+
+    write_text_atomic(path, json.dumps(value))
+
+
+def read_record(path: str) -> "tuple[datetime, Any] | None | object":
+    """(when it was written — naive UTC, from the file — and its decoded
+    value, None if it won't decode), None when there is no record, or
+    UNREADABLE when the file exists but can't be read. The caller decides
+    how old is too old."""
+    import os
+    from datetime import timezone
+
+    try:
+        with open(path, encoding="utf-8") as fh:
+            written = datetime.fromtimestamp(os.fstat(fh.fileno()).st_mtime, timezone.utc).replace(tzinfo=None)
+            text = fh.read()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        logger.warning("Couldn't read %s", path, exc_info=True)
+        return UNREADABLE
+    try:
+        return written, json.loads(text)
+    except ValueError:
+        return written, None

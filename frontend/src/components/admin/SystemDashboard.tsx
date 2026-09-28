@@ -231,8 +231,9 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
       <div>
         <div className="flex items-center justify-between mb-1">
           {/* The backend's containers together: the pipeline's own
-              interfaces plus what the API containers record (net_stats.py) —
-              a container sees only its own. */}
+              interfaces plus the rate the API containers record
+              (net_stats.py) — a container sees only its own. The byte
+              totals below are the pipeline container's alone. */}
           <span className="text-ink-lo text-xs font-mono tracking-wider">NETWORK</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">
             {rx != null && tx != null ? formatRate(rx + tx) : "—"}
@@ -244,7 +245,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
         </div>
         <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
           {stats.netRxBytes != null
-            ? `↓${formatBytes(stats.netRxBytes)} ↑${formatBytes(stats.netTxBytes ?? 0)}`
+            ? `pipeline ↓${formatBytes(stats.netRxBytes)} ↑${formatBytes(stats.netTxBytes ?? 0)}`
             : ""}
         </div>
       </div>

@@ -83,9 +83,9 @@ async def fetch_bill_record(
     """{bill, summaries, actions, cosponsors, text, unavailable: [...],
     not_found}: not_found when Congress.gov has no such bill.
 
-    `spend(n)` is charged, before any request goes out, with the number of
-    parts not already cached (the public route's upstream budget; it raises
-    to refuse). A bill Congress.gov has no record of is cached too, so the
+    `spend(n)` is charged, before the requests it pays for go out, with the
+    parts not already cached — the bill first, the rest once it exists (the
+    public route's upstream budget; it raises to refuse). A bill Congress.gov has no record of is cached too, so the
     same wrong id asked again costs nothing upstream."""
     type_path, number = parse_bill_id(bill_id)
     out: dict = {"unavailable": [], "not_found": False}
@@ -99,10 +99,18 @@ async def fetch_bill_record(
     if (cached["bill"] or {}).get("not_found"):
         out["not_found"] = True
         return out
-    missing = sum(1 for part in _PARTS if cached[part] is None)
-    if spend is not None and missing:
+    missing = [part for part in _PARTS if cached[part] is None]
+
+    async def charge(n: int) -> None:
         # A write to the shared budget (api/throttle.py): off the event loop.
-        await throttle.run(spend, missing)
+        if spend is not None and n:
+            await throttle.run(spend, n)
+
+    # The bill itself is charged first, the other parts once it exists: a
+    # wrong id stops after that one request and must not be charged for the
+    # four it never makes. Each charge still comes before its requests.
+    await charge(1 if "bill" in missing else 0)
+    rest_charged = False
     fetched: dict = {}  # written in one transaction, in the finally below
     try:
         for part, suffix in _PARTS.items():
@@ -110,6 +118,9 @@ async def fetch_bill_record(
             if cached[part] is not None:
                 out[part] = cached[part].get("value")
                 continue
+            if part != "bill" and not rest_charged:
+                rest_charged = True
+                await charge(sum(1 for p in missing if p != "bill"))
             data = await _congress_get(client, f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}")
             if data is NOT_FOUND:
                 if part == "bill":

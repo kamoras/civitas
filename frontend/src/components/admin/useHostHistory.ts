@@ -70,8 +70,11 @@ export function useHostHistory(token: string, initial?: HostStats) {
         const prev = prevNet.current;
         if (prev && now > prev.time) {
           const dt = (now - prev.time) / 1000;
-          rxRate = Math.max(0, (s.netRxBytes - prev.rx) / dt);
-          txRate = Math.max(0, (s.netTxBytes - prev.tx) / dt);
+          // This container's rate from its counters, plus the rate the
+          // API containers recorded (a container sees only its own
+          // interfaces; a missing record counts as nothing, never a jump).
+          rxRate = Math.max(0, (s.netRxBytes - prev.rx) / dt) + (s.apiNetRxRate ?? 0);
+          txRate = Math.max(0, (s.netTxBytes - prev.tx) / dt) + (s.apiNetTxRate ?? 0);
         }
         prevNet.current = { rx: s.netRxBytes, tx: s.netTxBytes, time: now };
       }

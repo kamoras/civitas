@@ -1,25 +1,34 @@
-"""Network byte counters for the admin dashboard, across the backend's
-containers.
+"""Network traffic for the admin dashboard, across the backend's containers.
 
 A container sees only its own interfaces (its network namespace). Under
 Swarm the admin API is served by the pipeline service, whose counters are
 the pipeline's own upstream fetches; the visitors' traffic goes through the
-API containers. So the API process records its container's totals to a
-file on the data volume both services mount (record_api_totals), and the
-admin endpoint adds them to its own (backend_totals). With both roles in
-one process (PROCESS_ROLE=all) there is one container and no file.
+API containers. So the API records its container's *rate* — bytes per
+second over its own last interval — to a record on the data volume both
+services mount, and the admin endpoint reports it beside its own cumulative
+counters (the dashboard turns those into a rate and adds the API's).
+
+A rate, not the API's cumulative counters: a sum of counters from
+containers that start and stop at different times jumps by a container's
+whole lifetime of bytes whenever its record appears, lapses, or passes to
+a new task in a rolling update. A rate is only ever absent (counted as 0)
+or right. With both roles in one process (PROCESS_ROLE=all) there is one
+container and no record.
 """
 
-import json
 import logging
 import time
 
 logger = logging.getLogger(__name__)
 
-# How often the API process records its totals, and how old a record may be
-# before it is taken for an API container that is gone.
-RECORD_EVERY_S = 30
-_STALE_AFTER_S = 4 * RECORD_EVERY_S
+# How often the API records its rate (one worker per round), and how old a
+# record may be before the API is taken for gone.
+RECORD_EVERY_S = 60
+_STALE_AFTER_S = 3 * RECORD_EVERY_S
+_RECORD = "api_network.json"
+
+# This process's previous sample: (rx, tx, monotonic time).
+_previous: tuple[int, int, float] | None = None
 
 
 def own_totals() -> tuple[int, int]:
@@ -42,51 +51,65 @@ def own_totals() -> tuple[int, int]:
     return rx, tx
 
 
-def _api_path() -> str:
-    from app.atomic_write import runtime_data_path
+def record_api_rate() -> bool:
+    """Record this container's rate since this process's last sample; False
+    (nothing written) on a first sample or a counter that went backwards."""
+    from app.shared_state import write_record
 
-    return runtime_data_path("api_network.json")
-
-
-def record_api_totals() -> None:
-    """Write this (API) container's totals for the admin endpoint to read.
-    Every worker in the container writes the same numbers: one namespace."""
-    from app.atomic_write import write_text_atomic
-
+    global _previous
     rx, tx = own_totals()
-    write_text_atomic(_api_path(), json.dumps({"rx": rx, "tx": tx, "at": time.time()}))
+    now = time.monotonic()
+    previous, _previous = _previous, (rx, tx, now)
+    if previous is None or now <= previous[2] or rx < previous[0] or tx < previous[1]:
+        return False
+    elapsed = now - previous[2]
+    write_record(_record_path(), {
+        "rxRate": (rx - previous[0]) / elapsed,
+        "txRate": (tx - previous[1]) / elapsed,
+    })
+    return True
 
 
-def api_totals() -> tuple[int, int] | None:
-    """The API containers' last recorded totals, or None when none were
-    recorded recently (one process runs both roles, or the API is down)."""
+def api_rates() -> dict | None:
+    """{"rxRate", "txRate"} the API recorded recently, or None."""
+    from app.shared_state import read_record
+    from app.time_utils import utcnow
+
+    record = read_record(_record_path())
+    if not isinstance(record, tuple) or not isinstance(record[1], dict):
+        return None
+    if (utcnow() - record[0]).total_seconds() > _STALE_AFTER_S:
+        return None
     try:
-        with open(_api_path()) as fh:
-            data = json.load(fh)
-        if time.time() - float(data["at"]) > _STALE_AFTER_S:
-            return None
-        return int(data["rx"]), int(data["tx"])
-    except (OSError, ValueError, KeyError, TypeError):
+        return {"rxRate": float(record[1]["rxRate"]), "txRate": float(record[1]["txRate"])}
+    except (KeyError, TypeError, ValueError):
         return None
 
 
-def backend_totals() -> dict:
-    """{"rx", "tx", "includesApi"}: this container's totals plus the API
-    containers' when they recorded some recently."""
-    rx, tx = own_totals()
-    api = api_totals()
-    if api is not None:
-        rx, tx = rx + api[0], tx + api[1]
-    return {"rx": rx, "tx": tx, "includesApi": api is not None}
+def _record_path() -> str:
+    from app.shared_state import record_path
+
+    return record_path(_RECORD)
 
 
 async def run_recorder() -> None:
-    """The API process's recording loop (main.lifespan, PROCESS_ROLE=api)."""
+    """The API process's recording loop (main.lifespan, PROCESS_ROLE=api).
+    Every worker in the container runs it; each round goes to one of them
+    (the throttle store's claim), so the volume sees one write a round."""
     import asyncio
+
+    from app.api import throttle
 
     while True:
         try:
-            await asyncio.to_thread(record_api_totals)
+            if await throttle.run(throttle.claim, "net-record", "api", period=RECORD_EVERY_S * 0.9):
+                await asyncio.to_thread(record_api_rate)
+            else:
+                # Keep this worker's own sample current, so the round it
+                # wins measures a recent interval rather than a long one.
+                global _previous
+                rx, tx = own_totals()
+                _previous = (rx, tx, time.monotonic())
         except Exception:
-            logger.debug("Couldn't record API network totals", exc_info=True)
+            logger.debug("Couldn't record the API's network rate", exc_info=True)
         await asyncio.sleep(RECORD_EVERY_S)

@@ -1073,8 +1073,13 @@ export interface HostStats {
   diskFreeBytes: number;
   diskUsedPct: number;
   uptimeSeconds: number | null;
+  /** This container's cumulative counters (the pipeline's, under Swarm). */
   netRxBytes?: number;
   netTxBytes?: number;
+  /** Bytes/s the API containers recorded over their last interval; null
+   * when there is no recent record (one process runs both roles). */
+  apiNetRxRate?: number | null;
+  apiNetTxRate?: number | null;
   /** Cumulative CPU ticks since boot (/proc/stat); utilisation is the delta. */
   cpuBusyTicks?: number | null;
   cpuTotalTicks?: number | null;

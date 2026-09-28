@@ -276,7 +276,9 @@ if [[ "$deploy_ok" == "1" ]]; then
   } >> deploy-poll.log 2>&1 || deploy_ok=0
 fi
 
+stack_deployed=0
 if [[ "$deploy_ok" == "1" ]]; then
+  stack_deployed=1
   for svc in civitas_backend civitas_pipeline civitas_frontend civitas_nginx; do
     wait_for_rollout "$svc" 180 || deploy_ok=0
   done
@@ -284,8 +286,8 @@ fi
 
 # nginx caches every public API read (nginx/civitas.conf), and during a
 # rollout the new nginx task can cache the old backend's responses — a
-# response shape the new frontend may not read. Once every service runs the
-# new release, drop what was cached: an entry whose file is gone is simply a
+# response shape the new frontend may not read (and, if a service rolled
+# back, the reverse). Once the rollout has settled, drop what was cached: an entry whose file is gone is simply a
 # miss (checked live), so this never serves an error. The cache lives in the
 # nginx container's own filesystem, so there is nothing else to clear.
 purge_nginx_cache() {
@@ -296,8 +298,13 @@ purge_nginx_cache() {
   done
 }
 
-if [[ "$deploy_ok" == "1" ]]; then
+# After any rollout, successful or not: a service that rolled back still
+# ran the new release for a while, and nginx may hold what it served.
+if [[ "$stack_deployed" == "1" ]]; then
   purge_nginx_cache
+fi
+
+if [[ "$deploy_ok" == "1" ]]; then
   log "deploy OK"
   echo "$REMOTE" > "$DEPLOYED_MARKER"
 

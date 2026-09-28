@@ -683,35 +683,17 @@ _HEARTBEAT_STALE = timedelta(minutes=3 * _HEARTBEAT_MINUTES)
 
 
 def heartbeat_path() -> str:
-    from app.atomic_write import runtime_data_path
+    from app.shared_state import record_path
 
-    return runtime_data_path("scheduler_heartbeat.json")
+    return record_path("scheduler_heartbeat.json")
 
 
 def read_heartbeat():
     """(when the scheduler last beat, what it recorded), None when it never
-    has, or shared_state.UNREADABLE when the file can't be read."""
-    import json
-    import os
-    from datetime import datetime, timezone
+    has, or shared_state.UNREADABLE (shared_state.read_record)."""
+    from app.shared_state import read_record
 
-    from app.shared_state import UNREADABLE
-
-    path = heartbeat_path()
-    try:
-        with open(path) as fh:
-            beat = datetime.fromtimestamp(os.fstat(fh.fileno()).st_mtime, timezone.utc).replace(tzinfo=None)
-            text = fh.read()
-    except FileNotFoundError:
-        return None
-    except OSError:
-        logger.warning("Scheduler heartbeat unreadable", exc_info=True)
-        return UNREADABLE
-    try:
-        value = json.loads(text)
-    except ValueError:
-        value = None
-    return beat, value
+    return read_record(heartbeat_path())
 
 
 def _live_next_run() -> str | None:
@@ -722,11 +704,9 @@ def _live_next_run() -> str | None:
 
 
 def _record_next_run() -> None:
-    import json
+    from app.shared_state import write_record
 
-    from app.atomic_write import write_text_atomic
-
-    write_text_atomic(heartbeat_path(), json.dumps({"nextRun": _live_next_run()}))
+    write_record(heartbeat_path(), {"nextRun": _live_next_run()})
 
 
 def _heartbeat() -> None:
