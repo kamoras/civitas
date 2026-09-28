@@ -13,6 +13,8 @@
     "WA judicial": "Supreme Court justices six years (Wash. Const. art. IV §3).",
     "SD public_utilities_commission": "Three commissioners elected statewide to six-year staggered terms (Ballotpedia, South Dakota Public Utilities Commission).",
     "SD school_public_lands_commissioner": "Four-year term (Ballotpedia, South Dakota Commissioner of School and Public Lands).",
+    "VT statewide": "All six executive officers are elected biennially, to two-year terms (Vt. Const. ch. II sec. 43).",
+    "NH governor": "Two-year term (N.H. Const. pt. II art. 42).",
     "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade."
   },
   "statewide": {
@@ -59,7 +61,12 @@
     "SD": {
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4,
       "treasurer": 4, "school_public_lands_commissioner": 4, "public_utilities_commission": 6
-    }
+    },
+    "VT": {
+      "governor": 2, "lt_governor": 2, "treasurer": 2, "secretary_of_state": 2,
+      "auditor": 2, "attorney_general": 2
+    },
+    "NH": {"governor": 2}
   },
   "legislature": {
     "AK": {"upper": 4, "lower": 2},

@@ -1107,7 +1107,14 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # actually close, or it stops describing the page and starts
             # being boilerplate a reader learns to skip.
             "Governor and other statewide executive contests",
-        ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else []) + ([
+        ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else [
+            # What a covered state's executive section still leaves out,
+            # named by its source entry: an office on every voter's ballot
+            # that the page deliberately does not list (New Hampshire's
+            # Executive Council, elected seat by seat, district by
+            # district). Before coverage the line above already says it.
+            str(o) for o in ((source_for_state(state) or {}).get("statewide_omits") or [])
+        ]) + ([
             "State legislative districts",
         ] if not state_leg_races else []) + (
             # Same rule as the two above: the line shrinks the moment this
