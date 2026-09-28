@@ -17,6 +17,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
 )
+from app.services.constituent_survey import constituent_approval
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.schemas import (
@@ -325,6 +326,9 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         bipartisanship_score=senator.bipartisanship_score,
         ideology_score=senator.ideology_score,
         sponsorship_description=getattr(senator, "sponsorship_description", "") or "",
+        constituent_approval=constituent_approval(
+            "senate", senator.state, senator.name, senator.party, senator.years_in_office or 0,
+        ),
         website_url=getattr(senator, "website_url", "") or "",
         contact_form_url=getattr(senator, "contact_form_url", "") or "",
         office_phone=getattr(senator, "office_phone", "") or "",

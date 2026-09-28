@@ -659,9 +659,10 @@ export default function AboutPage() {
               voters and copartisans) as well as the geographic one (Fenno 1978; Clinton 2006).
               Through v6.12 that was the stated reason for shrinking credit and penalties in safe
               seats. Tested against House re-election results, safe-seat voters responded to both
-              just as much as competitive-seat voters did, so v6.13 removed the scaling. Issue-level
-              opinion data (e.g. MRP estimates or CES roll-call-matched items) remains the named
-              next step for this dimension.
+              just as much as competitive-seat voters did, so v6.13 removed the scaling. How the
+              member&apos;s own constituents rate them is now shown beside the score on each profile
+              (see below). Issue-level opinion (e.g. MRP estimates or CES roll-call-matched items)
+              remains the named next step for the score itself.
             </P>
             <Gist>
               the votes alone can&apos;t tell a member who breaks often because it wins over voters
@@ -676,9 +677,18 @@ export default function AboutPage() {
               other way: in Senate general elections from 1990 to 2024, members who broke more than
               their seat&apos;s norm did somewhat better, and some heavy breakers keep winning
               statewide by appealing to both sides. A roll-call record can&apos;t separate those
-              members from ones whose breaks cost them their base. Telling them apart would take
-              opinion data split by party, such as approval of each member among Democrats and
-              Republicans in their state, which is the same survey data named above.
+              members from ones whose breaks cost them their base. Telling them apart takes
+              opinion data split by party, so each profile now shows it: approval of the member
+              among the Democrats, Republicans and independents they represent, from the Cooperative
+              Election Study (60,000 respondents, October–November 2024), for every member who held
+              the seat when it was asked. Small groups are pulled toward what a typical member of
+              the same party gets from that group, by an amount estimated from how much members
+              actually differ. It is shown, not scored, until a second survey wave shows it is
+              stable. One part can&apos;t be measured this way: a House district has about a hundred
+              respondents, too few to tell one member&apos;s approval among the other party&apos;s
+              voters or independents from another&apos;s, so for Democratic House members those
+              figures (and for Republicans, independents&apos; approval) are marked as not
+              measurable rather than shown.
             </P>
             <Gist>
               two of the checks that used to lower Constituent Alignment were computed from the same

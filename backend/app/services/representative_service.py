@@ -29,6 +29,7 @@ from app.schemas import (
     StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
+from app.services.constituent_survey import constituent_approval
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.services.senator_service import (
@@ -191,6 +192,9 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
         bipartisanship_score=rep.bipartisanship_score,
         ideology_score=rep.ideology_score,
         sponsorship_description=rep.sponsorship_description or "",
+        constituent_approval=constituent_approval(
+            "house", rep.state, rep.name, rep.party, rep.years_in_office or 0, rep.district,
+        ),
         website_url=getattr(rep, "website_url", "") or "",
         contact_form_url=getattr(rep, "contact_form_url", "") or "",
         office_phone=getattr(rep, "office_phone", "") or "",

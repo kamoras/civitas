@@ -66,6 +66,10 @@ export interface Senator {
   leadershipScore: number | null;
   ideologyScore: number | null;
   sponsorshipDescription: string;
+  /** How the member's own constituents rated them in the Cooperative
+   * Election Study, by the respondent's party. Absent when the survey has
+   * none for them (e.g. took office after it was fielded). */
+  constituentApproval?: ConstituentApproval | null;
   websiteUrl?: string;
   contactFormUrl?: string;
   officePhone?: string;
@@ -311,4 +315,20 @@ export interface Holdings {
   page: number;
   perPage: number;
   totalPages: number;
+}
+
+export interface ConstituentApprovalParty {
+  party: "D" | "R" | "I";
+  /** Share approving (0-1), pulled toward the typical member for small
+   * groups; null when the survey can't tell members apart for this group. */
+  approve: number | null;
+  respondents: number;
+}
+
+export interface ConstituentApproval {
+  survey: string;
+  fielded: string;
+  /** The name the survey showed respondents. */
+  surveyedAs: string;
+  byParty: ConstituentApprovalParty[];
 }

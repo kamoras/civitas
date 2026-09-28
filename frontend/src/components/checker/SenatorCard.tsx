@@ -19,6 +19,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
 import ScoreTrendSection from "./ScoreTrendSection";
 import NotablePartyBreaks from "./NotablePartyBreaks";
+import ConstituentApproval from "./ConstituentApproval";
 import Link from "next/link";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_LABELS } from "@/lib/partyStyles";
 
@@ -409,6 +410,9 @@ export default function SenatorCard({
             entityType={chamber}
             votedAgainstPartyCount={senator.votingRecord.votedAgainstPartyCount}
           />
+
+          {/* ── Survey approval among their own constituents, by party ── */}
+          <ConstituentApproval approval={senator.constituentApproval} />
 
           {/* ── Collapsible detail sections ── */}
 

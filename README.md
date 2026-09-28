@@ -150,6 +150,7 @@ Pulls raw data from each government API and stores the complete response verbati
 | Senate LDA | Registered lobbying spend for organizations in donor–vote matches | 0.2 RPS |
 | Oyez / supremecourt.gov | Justice voting records, case metadata, docket pages | ~2 RPS (fixed pauses) |
 | BLS | Unemployment, inflation, job growth by administration | batch |
+| Cooperative Election Study (Harvard Dataverse, CC0) | Approval of each member among their own constituents, by the respondent's party (informational; `scripts/fetch_ces_approval.py`, per survey release) | one-off download |
 | BEA | GDP growth by quarter | batch |
 | Federal Register | Executive orders signed per administration | 1.0 RPS |
 | House Clerk / Senate eFD | STOCK Act periodic transaction reports (PDF/HTML, parsed) | 1.0 / 0.5 RPS |
