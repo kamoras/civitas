@@ -69,6 +69,11 @@ def api_cache_get(
 EMPTY_RESPONSE_TTL_HOURS = 6
 
 
+# How an empty payload is stored (json.dumps of the falsy values a caller
+# passes): what an empty write may replace.
+_EMPTY_JSON = ("null", "[]", "{}", '""', "0", "false", "0.0")
+
+
 def api_cache_set(
     db: Session, tier: str, key: str, data, *, normal_ttl_hours: int | None = None,
 ) -> None:
@@ -111,13 +116,20 @@ def api_cache_set(
         entry.data_json = data_json
         entry.cached_at = cached_at
     else:
-        entry = ApiCache(
-            tier=tier,
-            cache_key=key,
-            data_json=data_json,
-            cached_at=cached_at,
+        # An upsert, not an insert: another process (the API workers, the
+        # pipeline) may have written this key since the read above, and a
+        # plain insert would then fail on the primary key. An empty payload
+        # still never replaces a non-empty one written meanwhile.
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        upsert = sqlite_insert(ApiCache).values(
+            tier=tier, cache_key=key, data_json=data_json, cached_at=cached_at,
         )
-        db.add(entry)
+        db.execute(upsert.on_conflict_do_update(
+            index_elements=["tier", "cache_key"],
+            set_={"data_json": upsert.excluded.data_json, "cached_at": upsert.excluded.cached_at},
+            where=ApiCache.data_json.in_(_EMPTY_JSON) if is_empty else None,
+        ))
     db.commit()
 
 

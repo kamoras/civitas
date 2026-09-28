@@ -451,4 +451,9 @@ async def search(
     # Keyword channel only (the vector index missing or mid-rebuild): a
     # partial answer, kept no longer than a failed fetch is.
     max_age = FAILURE_RETRY_S if outcome["semanticUnavailable"] else CACHE_TTL_SEARCH_S
-    return _pub_json({"query": q, "results": results, "count": len(results)}, request, max_age=max_age)
+    return _pub_json({
+        "query": q, "results": results, "count": len(results),
+        # True when the keyword channel alone answered: a partial ranking,
+        # said so rather than presented as the whole one.
+        "semanticUnavailable": bool(outcome["semanticUnavailable"]),
+    }, request, max_age=max_age)

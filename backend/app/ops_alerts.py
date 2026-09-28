@@ -37,6 +37,9 @@ def send_ops_alert(subject: str, body: str, *, dedupe_key: str | None = None) ->
     once, not every watchdog tick. Returns True if the alert fired.
     """
     try:
+        # A read first, though _record's insert is what decides: a watchdog
+        # re-raises a persisting condition every tick, and the read lets it
+        # stop there without taking the database's write lock each time.
         if dedupe_key and _already_sent(dedupe_key):
             return False
         if not _record(subject, body, dedupe_key):
@@ -372,10 +375,10 @@ def check_pipeline_service_alive() -> None:
     global _heartbeat_unreadable_since
     row = read_heartbeat()
     if row is UNREADABLE:
-        # One unreadable round is a moment's lock, not evidence of anything.
-        # A database this process can't read for as long as the pipeline is
-        # allowed to be silent is its own fault — and would otherwise hide a
-        # dead pipeline service indefinitely.
+        # One unreadable round is a moment's I/O error, not evidence of
+        # anything. A heartbeat file this process can't read for as long as
+        # the pipeline is allowed to be silent is its own fault — and would
+        # otherwise hide a dead pipeline service indefinitely.
         now = utcnow()
         if _heartbeat_unreadable_since is None:
             _heartbeat_unreadable_since = now
@@ -385,7 +388,8 @@ def check_pipeline_service_alive() -> None:
                 "Pipeline heartbeat unreadable",
                 f"The API process has not been able to read the pipeline service's heartbeat since "
                 f"{_heartbeat_unreadable_since:%Y-%m-%d %H:%M} UTC, so it can't tell whether that "
-                "service is running. Check the backend's logs and the data volume.",
+                "service is running. Check the heartbeat file (scheduler_heartbeat.json on the data "
+                "volume both services mount) and the backend's logs.",
                 dedupe_key=f"pipeline-heartbeat-unreadable-{now:%Y-%m-%d}",
             )
         return

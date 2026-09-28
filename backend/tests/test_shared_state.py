@@ -123,3 +123,28 @@ class TestPolledRow:
         polled = PolledRow("t", "k", every_s=30, decode=decode_json_dict, reader=reader)
         assert polled.get() == {"old": True}  # this caller still gets what it read
         assert polled.current() is None  # but it isn't kept
+
+
+def test_api_cache_set_survives_a_concurrent_first_write(db_session, monkeypatch):
+    """Two API workers can both miss a key and both write it: the second
+    must update, not fail on the primary key."""
+    from app.models import ApiCache
+    from app.pipeline import cache
+
+    real_query = db_session.query
+
+    class _Nothing:
+        def filter(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+    # Both writers read "no row" before either writes.
+    monkeypatch.setattr(db_session, "query", lambda *a, **k: _Nothing())
+    cache.api_cache_set(db_session, "t", "k", {"a": 1})
+    cache.api_cache_set(db_session, "t", "k", {"a": 2})
+    cache.api_cache_set(db_session, "t", "k", {})  # empty never replaces non-empty
+    monkeypatch.setattr(db_session, "query", real_query)
+    row = db_session.get(ApiCache, ("t", "k"))
+    assert row.data_json == '{"a": 2}'

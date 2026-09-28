@@ -564,16 +564,22 @@ async def record_pulse_vote(
         # Decided here, in the thread that commits, not by the awaiting
         # request: a request cancelled mid-commit (a disconnect) doesn't
         # stop this thread, which may still count the vote.
+        # A session of its own, on the request's engine: the request's is
+        # closed by get_db's cleanup when the request is cancelled, which
+        # would otherwise happen under this thread mid-commit.
+        own = Session(bind=db.get_bind())
         try:
             counted = (
-                db.query(ActionIssue)
+                own.query(ActionIssue)
                 .filter(ActionIssue.id == body.issue_id)
                 .update({column: func.coalesce(column, 0) + 1}, synchronize_session=False)
             )
-            db.commit()
+            own.commit()
         except BaseException:
             throttle.release(_PULSE_BUCKET, key)
             raise
+        finally:
+            own.close()
         if not counted:
             throttle.release(_PULSE_BUCKET, key)
         return bool(counted)

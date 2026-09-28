@@ -93,14 +93,11 @@ async def test_a_failure_after_the_vote_commits_keeps_the_claim(db_session):
     # The vote is counted; releasing the claim on a later error would let
     # the visitor's retry count a second one.
     issue_id = _issue(db_session)
-    real_query = db_session.query
-    calls = []
 
     def query_then_lose_the_connection(*args, **kwargs):
-        calls.append(args)
-        if len(calls) > 1:  # the totals read, after the vote committed
-            raise RuntimeError("connection lost")
-        return real_query(*args, **kwargs)
+        # The request session's only query is the totals read, after the
+        # vote committed on the counting thread's own session.
+        raise RuntimeError("connection lost")
 
     with patch.object(db_session, "query", query_then_lose_the_connection), pytest.raises(RuntimeError):
         await _vote(db_session, "203.0.113.9", issue_id)
@@ -146,14 +143,16 @@ async def test_a_request_cancelled_while_the_vote_commits_keeps_the_claim(db_ses
     import asyncio
     import time
 
+    from sqlalchemy.orm import Session
+
     issue_id = _issue(db_session)
-    real_commit = db_session.commit
+    real_commit = Session.commit
 
-    def slow_commit():
+    def slow_commit(self):
         time.sleep(0.2)
-        real_commit()
+        real_commit(self)
 
-    with patch.object(db_session, "commit", slow_commit):
+    with patch.object(Session, "commit", slow_commit):
         task = asyncio.create_task(_vote(db_session, "203.0.113.30", issue_id))
         await asyncio.sleep(0.05)
         task.cancel()

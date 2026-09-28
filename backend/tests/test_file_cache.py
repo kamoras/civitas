@@ -192,3 +192,49 @@ class TestReadJson:
         with pytest.raises(Uncached) as fell_back:
             read_json_preferring(tmp_path, bundled, default={})  # the runtime copy unreadable
         assert fell_back.value.value == {"b": 1}
+
+
+@pytest.mark.parametrize("module", ["town_directory", "ballot_pdf_sources", "ballot_measure_pdf_sources"])
+def test_an_operator_override_unreadable_for_a_moment_is_not_kept(module, tmp_path, monkeypatch):
+    # Kept, the bundled fallback (or nothing) would stand for the life of
+    # the process after one transient read error.
+    import importlib
+
+    mod = importlib.import_module(f"app.pipeline.fetch.{module}")
+    volume = tmp_path / "override.json"
+    volume.write_text(json.dumps({"override": True}))
+    monkeypatch.setattr(mod, "_VOLUME_PATH", str(volume))
+    monkeypatch.setattr(mod, "_cache", None)
+    real_open = open
+    failing = [True]
+
+    def flaky_open(path, *a, **k):
+        if str(path) == str(volume) and failing[0]:
+            raise PermissionError("busy")
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr("builtins.open", flaky_open)
+    assert "override" not in mod._load()
+    failing[0] = False
+    assert mod._load() == {"override": True}
+
+
+def test_committee_data_unreadable_for_a_moment_is_not_kept(tmp_path, monkeypatch):
+    from app.pipeline.transform import committee_data
+
+    (tmp_path / "leadership_roles.json").write_text(json.dumps({"roles": {"X1": "Leader"}}))
+    monkeypatch.setattr(committee_data, "_PERSISTENT_DATA_DIR", tmp_path)
+    committee_data.clear_committee_data_cache()
+    real_open = open
+    failing = [True]
+
+    def flaky_open(path, *a, **k):
+        if str(path) == str(tmp_path / "leadership_roles.json") and failing[0]:
+            raise PermissionError("busy")
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr("builtins.open", flaky_open)
+    assert "X1" not in committee_data.load_leadership_roles()
+    failing[0] = False
+    assert committee_data.load_leadership_roles() == {"X1": "Leader"}
+    committee_data.clear_committee_data_cache()
