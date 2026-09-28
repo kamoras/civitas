@@ -40,11 +40,10 @@ from datetime import date
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from app.pipeline.analyze import lobbying_records as lr  # noqa: E402
-from app.pipeline.fetch.congress import congress_for_year  # noqa: E402
+from app.pipeline.fetch.congress import BILL_TYPES, congress_first_year, congress_for_year  # noqa: E402
 
 UA = {"User-Agent": "CivitasCivicPlatform/1.0 (bill title calibration)"}
 BULK = "https://www.govinfo.gov/bulkdata/BILLSTATUS/{congress}/{kind}/BILLSTATUS-{congress}-{kind}.zip"
-KINDS = ("hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", "sres")
 LDA = "https://lda.gov/api/v1/filings/"
 OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "bill_title_token_df.json"
 
@@ -89,7 +88,7 @@ def bill_titles(congress: int) -> tuple[dict[str, list[str]], dict[str, str]]:
     display title}) for one congress."""
     out: dict[str, list[str]] = {}
     display: dict[str, str] = {}
-    for kind in KINDS:
+    for kind in BILL_TYPES:
         url = BULK.format(congress=congress, kind=kind)
         print(f"  {url}", file=sys.stderr)
         with zipfile.ZipFile(io.BytesIO(_get(url))) as zf:
@@ -235,7 +234,7 @@ def main() -> None:
         print(f"Wrote {OUTPUT} ({table['documents']} titles, {len(table['df'])} words)", file=sys.stderr)
         lr._document_frequencies.cache_clear()
     if not args.skip_calibration:
-        first_year = 1789 + (args.congress - 1) * 2
+        first_year = congress_first_year(args.congress)
         calibrate(titles[args.congress], fetched[args.congress][1], titles[args.congress - 1], first_year)
 
 

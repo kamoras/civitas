@@ -37,7 +37,7 @@ four facts about the text decide the design:
    the previous congress's bill with the same number doesn't fit them
    better either (a 2025 filing's "H.R. 82 - Social Security Fairness Act"
    is the 118th's H.R. 82). 1,349 mentions clear the fit threshold and
-   1,301 survive these checks; the ones read by hand after them were the
+   1,295 survive these checks; the ones read by hand after them were the
    right bill, except that a Review Act resolution's number can't always be
    told from the text alone. Correct bills lost by a margin over the
    tolerance are dropped (H.R. 1492 against the Inflation Reduction Act
@@ -222,8 +222,13 @@ def title_match_score(context: str, titles: list[str], years: bool = False) -> f
 # Words shared by more titles than this don't nominate rival bills: "act",
 # "amend", "united", "states" would make every bill a rival of every other.
 _RIVAL_WORD_MAX_DF = 2000
-# Rivals scored per mention, most shared words first.
-_MAX_RIVALS = 300
+# Rivals given the full (typo-tolerant) fit, best exact-word fit first. The
+# exact fit is a few set operations per title; the full one runs
+# SequenceMatcher per word pair. On the calibration sample, 30 agrees with
+# scoring every rival on all but 2 of 2,530 mentions (one Review Act
+# resolution whose winning rival wins only through a misspelling), at 4 ms
+# a check instead of 120 ms; 60 and 100 disagree on the same 2.
+_MAX_RIVALS = 30
 
 
 class TitlePool:
@@ -235,30 +240,47 @@ class TitlePool:
     title words with their siblings ("Department of Defense Appropriations
     Act, 2026" vs "Department of Education Appropriations Act, 2026"), so a
     filing about one clears any fixed threshold against the other's number.
-    The number counts only when its own bill fits the wording at least as
-    well as any rival does.
+    The number counts only when its own bill fits the wording about as well
+    as any rival does (names_bill).
     """
 
     def __init__(self, titles: dict[str, list[str]]):
         self._titles = titles
         self._index: dict[str, set[str]] = {}
+        # Per title: its words' rarity weights and their total, so a rival's
+        # exact-word fit is a lookup rather than a rescoring.
+        self._weights: dict[str, list[tuple[dict[str, float], float]]] = {}
         for bill_id, ts in titles.items():
+            entries = []
             for t in ts:
-                for w in _tokens(t):
+                words = _tokens(t)
+                weights = {w: max(_idf(w), 0.0) for w in words}
+                entries.append((weights, sum(weights.values())))
+                for w in words:
                     self._index.setdefault(w, set()).add(bill_id)
+            self._weights[bill_id] = entries
+
+    def _exact_fit(self, bill_id: str, context_words: set[str]) -> float:
+        return max(
+            (sum(v for w, v in weights.items() if w in context_words) / total
+             for weights, total in self._weights[bill_id] if total > 0),
+            default=0.0,
+        )
 
     def best_rival_score(self, context: str, bill_id: str) -> float:
         """The best title fit among bills other than `bill_id`."""
         _, df = _document_frequencies()
-        shared: dict[str, int] = {}
-        for w in _tokens(context):
-            if df.get(w, 1) > _RIVAL_WORD_MAX_DF:
-                continue
-            for b in self._index.get(w, ()):
-                if b != bill_id:
-                    shared[b] = shared.get(b, 0) + 1
-        rivals = sorted(shared, key=shared.get, reverse=True)[:_MAX_RIVALS]
-        return max((title_match_score(context, self._titles[b]) for b in rivals), default=0.0)
+        context_words = _tokens(context)
+        rivals: set[str] = set()
+        for w in context_words:
+            if df.get(w, 1) <= _RIVAL_WORD_MAX_DF:
+                rivals |= self._index.get(w, set())
+        rivals.discard(bill_id)
+        ranked = sorted(rivals, key=lambda b: self._exact_fit(b, context_words), reverse=True)
+        return max(
+            (title_match_score(context, self._titles[b]) for b in ranked[:_MAX_RIVALS]),
+            default=0.0,
+        )
 
 
 def names_bill(

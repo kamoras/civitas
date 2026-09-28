@@ -510,6 +510,31 @@ BILL_TYPES = ("hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", "sres")
 CONGRESS_BILL_TITLES_CACHE_HOURS = 24 * 7
 
 
+async def _list_bill_titles(
+    client: httpx.AsyncClient, congress: int, bill_type: str,
+) -> tuple[dict[str, str], int | None] | None:
+    """One pass over a bill type's listing: ({site bill id: title}, the
+    listing's own count), or None when a page fails."""
+    found: dict[str, str] = {}
+    expected: int | None = None
+    offset = 0
+    while True:
+        data = await _fetch_with_retry(
+            client,
+            f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}?limit=250&offset={offset}",
+        )
+        if data is None:
+            return None
+        expected = (data.get("pagination") or {}).get("count", expected)
+        page = data.get("bills") or []
+        for b in page:
+            if b.get("number") and b.get("title"):
+                found[f"{bill_type.upper()}.{b['number']}"] = b["title"]
+        if len(page) < 250:
+            return found, expected
+        offset += 250
+
+
 async def fetch_congress_bill_titles(
     client: httpx.AsyncClient, db: Session, congress: int,
 ) -> dict[str, str] | None:
@@ -519,9 +544,9 @@ async def fetch_congress_bill_titles(
     wording against, so a named number is kept only when its own bill fits
     the wording at least as well as any other bill does.
 
-    None when any type's listing fails: a partial pool could lack exactly
-    the sibling bill that should win a comparison, so it is never returned
-    or cached.
+    None when any type's listing fails or comes back short of its own
+    count: a partial pool could lack exactly the sibling bill that should
+    win a comparison, so it is never returned or cached.
     """
     cache_key = f"congress-bill-titles-v1-{congress}"
     cached = api_cache_get(db, "congress", cache_key, max_age_hours=CONGRESS_BILL_TITLES_CACHE_HOURS)
@@ -529,26 +554,25 @@ async def fetch_congress_bill_titles(
         return cached
 
     titles: dict[str, str] = {}
-    complete = True
     for bill_type in BILL_TYPES:
-        offset = 0
-        while True:
-            data = await _fetch_with_retry(
-                client,
-                f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}?limit=250&offset={offset}",
+        # The listing is ordered by last update, so a bill acted on during
+        # the crawl moves to a page already read and the one beside it is
+        # skipped. The listing states its own total; a short crawl is
+        # retried once, then the whole pool is refused.
+        for _attempt in range(2):
+            listed = await _list_bill_titles(client, congress, bill_type)
+            if listed is None:
+                return None
+            found, expected = listed
+            if expected is None or len(found) >= expected:
+                break
+        else:
+            logger.warning(
+                "Congress %d %s listing came back short twice (%d of %s)",
+                congress, bill_type, len(found), expected,
             )
-            if data is None:
-                complete = False
-                break
-            page = data.get("bills") or []
-            for b in page:
-                if b.get("number") and b.get("title"):
-                    titles[f"{bill_type.upper()}.{b['number']}"] = b["title"]
-            if len(page) < 250:
-                break
-            offset += 250
-    if not complete:
-        return None
+            return None
+        titles.update(found)
     api_cache_set(
         db, "congress", cache_key, titles, normal_ttl_hours=CONGRESS_BILL_TITLES_CACHE_HOURS,
     )
@@ -570,17 +594,46 @@ async def fetch_bill_titles(
     passed.  The official title (titleTypeCode 6) provides the most
     descriptive text for semantic classification.
     """
+    return await fetch_bill_titles_or_none(client, db, congress, bill_type, bill_number) or []
+
+
+async def fetch_bill_titles_or_none(
+    client: httpx.AsyncClient,
+    db: Session,
+    congress: int,
+    bill_type: str,
+    bill_number: int,
+) -> list[dict] | None:
+    """fetch_bill_titles, telling a failed fetch (None, not cached) from a
+    bill with no titles or no such bill (a 404 is a real answer: []).
+
+    The distinction matters to the LDA bill matcher, which reads "the
+    previous congress had no H.R. 82" as permission: a timeout must not.
+    fetch_bill_titles used to cache a failure as [] for the cache lifetime.
+    """
     cache_key = f"bill-titles-{congress}-{bill_type}-{bill_number}"
     cached = api_cache_get(db, "congress", cache_key)
     if cached is not None:
         return cached
 
-    data = await _fetch_with_retry(
-        client,
-        f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/titles",
+    url = f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/titles"
+    full_url = str(
+        httpx.URL(url).copy_merge_params({"api_key": settings.DATA_GOV_API_KEY, "format": "json"})
     )
-    raw = (data or {}).get("titles", [])
-    results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url,
+        request_url=full_url, expected_statuses=(404,), log_label="Congress API",
+    )
+    if resp is None:
+        return None
+    if resp.status_code == 404:
+        results: list[dict] = []
+    else:
+        try:
+            raw = resp.json().get("titles", [])
+        except ValueError:
+            return None
+        results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
 

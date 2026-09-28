@@ -1,6 +1,7 @@
 import { fundingShareBase, pacSharePct } from "@/lib/funding";
 import { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
+import { countLobbiedBills } from "@/lib/lobbying";
 
 export function generateCommentary(senator: Senator): string[] {
   const comments: string[] = [];
@@ -57,7 +58,7 @@ export function generateCommentary(senator: Senator): string[] {
   }
 
   // Donor-vote connections: bills named in the donors' own lobbying filings
-  const lobbiedBills = lobbyingMatches.reduce((n, m) => n + (m.lobbiedBills?.length ?? 0), 0);
+  const lobbiedBills = countLobbiedBills(lobbyingMatches);
   if (lobbiedBills > 0) {
     comments.push(
       `${lobbiedBills} bill${lobbiedBills !== 1 ? "s" : ""} ${senator.name} voted on ${lobbiedBills !== 1 ? "are" : "is"} named in the lobbying filings of an organization among their largest donor industries. A filing records that the organization lobbied on a bill, not which way, and none of this shows influence.`

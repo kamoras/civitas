@@ -660,6 +660,17 @@ async def fetch_committee_meta(
     cached = api_cache_get(db, "fec", cache_key, max_age_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
     if cached is not None:
         return cached.get("meta")
+    # The type-only entries this replaced are still warm (90-day TTL). One
+    # answers the PAC-cap question without a request; the designation is
+    # then unknown, so the leadership-PAC half of the political rule can't
+    # fire for it until the entry ages out, but party and candidate
+    # committees (by type) still do. Only reached when the bulk master
+    # lacks the committee.
+    legacy = api_cache_get(
+        db, "fec", f"committee-type-v1-{committee_id}", max_age_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS,
+    )
+    if legacy is not None and legacy.get("committee_type"):
+        return {"type": legacy["committee_type"], "designation": None, "connectedOrg": None}
 
     data = await _fetch_with_retry(client, f"{FEC_API_BASE}/committee/{committee_id}/")
     results = (data or {}).get("results", [])

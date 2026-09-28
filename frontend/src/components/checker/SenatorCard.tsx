@@ -21,6 +21,7 @@ import ScoreTrendSection from "./ScoreTrendSection";
 import NotablePartyBreaks from "./NotablePartyBreaks";
 import Link from "next/link";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_LABELS } from "@/lib/partyStyles";
+import { countLobbiedBills } from "@/lib/lobbying";
 
 interface SenatorCardProps {
   senator: Senator;
@@ -545,10 +546,7 @@ export default function SenatorCard({
               titleColor="text-signal-magenta"
               summary={(() => {
                 const base = `${senator.lobbyingMatches.length} donor-vote overlap${senator.lobbyingMatches.length !== 1 ? "s" : ""}`;
-                const named = senator.lobbyingMatches.reduce(
-                  (n, m) => n + (m.lobbiedBills?.length ?? 0),
-                  0
-                );
+                const named = countLobbiedBills(senator.lobbyingMatches);
                 return named > 0
                   ? `${base} · ${named} bill${named !== 1 ? "s" : ""} named in the donors' own lobbying filings`
                   : base;

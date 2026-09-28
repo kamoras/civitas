@@ -86,7 +86,9 @@ class LobbyingActivity:
     """One organization's registered lobbying in one filing year."""
 
     total: float
-    # {"billId", "before", "after", "filingUrl", "filingYear", "registrant"}
+    # {"billId", "before", "after", "filingYear", "filings": [{"url",
+    #  "registrant", "posted"}]}: one mention per distinct wording, with every
+    # filing that used it
     mentions: list[dict] = field(default_factory=list)
     # False when the page cap was hit: the total is a lower bound.
     complete: bool = True
@@ -115,7 +117,8 @@ def _sum_filing_amounts(results: list[dict]) -> float:
 
 
 def _filing_mentions(results: list[dict]) -> list[dict]:
-    """Every bill number named in the filings' activity descriptions."""
+    """Every bill number named in the filings' activity descriptions, one
+    entry per (filing, bill, wording)."""
     out: list[dict] = []
     for filing in results or []:
         registrant = (filing.get("registrant") or {}).get("name") or ""
@@ -125,9 +128,12 @@ def _filing_mentions(results: list[dict]) -> list[dict]:
                     "billId": bill_id,
                     "before": before,
                     "after": after,
-                    "filingUrl": filing.get("filing_document_url") or "",
                     "filingYear": filing.get("filing_year"),
-                    "registrant": registrant,
+                    "filings": [{
+                        "url": filing.get("filing_document_url") or "",
+                        "registrant": registrant,
+                        "posted": filing.get("dt_posted") or "",
+                    }],
                 })
     return out
 
@@ -137,7 +143,7 @@ def _cache_key(org_key: str, year: int) -> str:
     # share an 80-char prefix (e.g. federal vs. state PAC variants of one
     # sponsor) can't collide onto one cached figure.
     key_hash = hashlib.sha256(org_key.encode()).hexdigest()[:12]
-    return f"lda-activity-v2-{year}-{org_key[:60]}-{key_hash}"
+    return f"lda-activity-v3-{year}-{org_key[:60]}-{key_hash}"
 
 
 async def fetch_lobbying_activity(
@@ -205,16 +211,18 @@ async def fetch_lobbying_activity(
             "LDA activity for %s (%d) hit the %d-page cap — total may be a lower bound",
             org_key, year, _MAX_PAGES,
         )
-    # Quarterly reports repeat the same description word for word; keep one
-    # of each (first seen, i.e. the API's order) before bounding the list.
-    seen: set[tuple[str, str, str]] = set()
-    unique: list[dict] = []
+    # Quarterly reports repeat the same description word for word: keep one
+    # entry per wording (the matcher's unit of work) carrying every filing
+    # that used it, so the page can link the latest and count the rest.
+    merged: dict[tuple[str, str, str], dict] = {}
     for m in mentions:
         key = (m["billId"], " ".join(m["before"].split()), " ".join(m["after"].split()))
-        if key not in seen:
-            seen.add(key)
-            unique.append(m)
-    mentions = unique[:_MAX_MENTIONS]
+        if key in merged:
+            known = {f["url"] for f in merged[key]["filings"]}
+            merged[key]["filings"].extend(f for f in m["filings"] if f["url"] not in known)
+        else:
+            merged[key] = m
+    mentions = list(merged.values())[:_MAX_MENTIONS]
     api_cache_set(
         db, "lda", cache_key,
         {"total": round(total, 2), "mentions": mentions, "complete": complete},
@@ -240,19 +248,24 @@ def _voted_bills(votes: list[dict] | None) -> dict[str, dict]:
     return out
 
 
-async def _bill_titles(client: httpx.AsyncClient, db: Session, congress: int, bill_key: str) -> list[str]:
-    """Every title Congress.gov records for a bill (cached by
-    fetch_bill_titles; the significant-bill fetch has usually already paid
-    for it)."""
-    from app.pipeline.fetch.congress import fetch_bill_titles
+async def _bill_titles(
+    client: httpx.AsyncClient, db: Session, congress: int, bill_key: str,
+) -> list[str] | None:
+    """Every title Congress.gov records for a bill (cached; the
+    significant-bill fetch has usually already paid for it). [] when the
+    congress has no such bill; None when the fetch failed, which the caller
+    must not read as "no such bill"."""
+    from app.pipeline.fetch.congress import fetch_bill_titles_or_none
 
     prefix, _, number = bill_key.partition(".")
     try:
-        rows = await fetch_bill_titles(client, db, congress, prefix.lower(), int(number))
+        rows = await fetch_bill_titles_or_none(client, db, congress, prefix.lower(), int(number))
     except Exception:
         logger.exception("Bill titles unavailable for %s", bill_key)
-        return []
-    return [r.get("title") for r in rows or [] if r.get("title")]
+        return None
+    if rows is None:
+        return None
+    return [r.get("title") for r in rows if r.get("title")]
 
 
 # The index over a congress's ~16,000 titles is built once and shared by
@@ -282,7 +295,14 @@ async def _title_pool(client: httpx.AsyncClient, db: Session, congress: int) -> 
         titles = None
     pool = TitlePool({k: [v] for k, v in titles.items()}) if titles else None
     _pools[congress] = (pool, now)
+    _verdicts.clear()
     return pool
+
+
+# names_bill verdicts for the run, keyed by (congress, bill, before, after):
+# a trade group heading a hundred House members' matches names the same
+# bills in the same words for every one of them. Cleared with the pool.
+_verdicts: dict[tuple[int, str, str, str], bool] = {}
 
 
 def _congress_years(congress: int) -> list[int]:
@@ -324,25 +344,33 @@ async def lobbied_bills_for(
     for bill_key, mentions in candidates.items():
         vote = voted[bill_key]
         titles = await _bill_titles(client, db, congress, bill_key)
+        previous = await _bill_titles(client, db, congress - 1, bill_key)
+        if titles is None or previous is None:
+            # Without this bill's titles, or the previous congress's
+            # same-numbered bill to rule out, nothing is claimed for it.
+            continue
         if vote.get("billName"):
             titles.append(vote["billName"])
-        previous = await _bill_titles(client, db, congress - 1, bill_key)
-        matching = [
-            m for m in mentions
-            if names_bill(m.get("before", ""), m.get("after", ""), titles, bill_key, pool, previous)
-        ]
+        matching = []
+        for m in mentions:
+            key = (congress, bill_key, m.get("before", ""), m.get("after", ""))
+            if key not in _verdicts:
+                _verdicts[key] = names_bill(key[2], key[3], titles, bill_key, pool, previous)
+            if _verdicts[key]:
+                matching.append(m)
         if not matching:
             continue
-        newest = max(matching, key=lambda m: (m.get("filingYear") or 0))
+        filings = {f["url"]: (m.get("filingYear") or 0, f) for m in matching for f in m.get("filings", [])}
+        year, newest = max(filings.values(), key=lambda yf: (yf[0], yf[1].get("posted") or ""))
         found.append({
             "billId": bill_key,
             "label": bill_label(bill_key) or bill_key,
             "billName": (vote.get("billName") or "")[:160],
             "vote": vote.get("vote"),
-            "filingYear": newest.get("filingYear"),
-            "filingUrl": newest.get("filingUrl"),
+            "filingYear": year or None,
+            "filingUrl": newest.get("url"),
             "registrant": newest.get("registrant"),
-            "filingCount": len({m.get("filingUrl") for m in matching}),
+            "filingCount": len(filings),
         })
     found.sort(key=lambda b: (-(b.get("filingYear") or 0), b.get("billId") or ""))
     return found[:MAX_LOBBIED_BILLS]
@@ -377,6 +405,10 @@ async def enrich_lobbying_matches_with_lda(
     congress = congress or settings.CURRENT_CONGRESS
     years = sorted({lda_year, *_congress_years(congress)})
     voted = _voted_bills(votes)
+    measure_of = {
+        v.get("billId"): v.get("measureId") or bill_id_from_number(v.get("billId"))
+        for v in votes or [] if v.get("billId")
+    }
 
     async with make_async_client() as lda_client:
         for m in matches:
@@ -387,14 +419,14 @@ async def enrich_lobbying_matches_with_lda(
                 continue
             org = m.get("lobbyingClient") or m.get("lobbyistOrg", "")
             stats["lookups"] += 1
+            failed = False
             try:
                 activities: dict[int, LobbyingActivity | None] = {}
                 for year in years:
                     activities[year] = await fetch_lobbying_activity(lda_client, db, org, year)
                 # Any failed year counts toward the outage alert: a cached
                 # finished year can succeed while every live request fails.
-                if any(a is None for a in activities.values()):
-                    stats["failed"] += 1
+                failed = any(a is None for a in activities.values())
                 spend_year = activities.get(lda_year)
                 if spend_year is None:
                     m["lobbyingChecked"] = False
@@ -413,20 +445,26 @@ async def enrich_lobbying_matches_with_lda(
                 )
                 m["lobbiedBills"] = lobbied
                 if lobbied:
-                    bills = list(m.get("billsInfluenced") or [])
-                    # The topical list spells bills as the votes do; compare
-                    # by the canonical id so one bill isn't listed twice.
-                    have = {bill_id_from_number(b) or b for b in bills}
-                    for b in lobbied:
-                        if b["billId"] not in have:
-                            bills.append(b["billId"])
-                    m["billsInfluenced"] = bills
+                    # billsInfluenced stays the topical list; a bill a filing
+                    # names is listed there instead, not twice. Votes' ids
+                    # map to the bill they were on (a House recent roll
+                    # call's synthetic id through its measureId).
+                    named = {b["billId"] for b in lobbied}
+                    m["billsInfluenced"] = [
+                        b for b in (m.get("billsInfluenced") or [])
+                        if measure_of.get(b, bill_id_from_number(b)) not in named
+                    ]
             except Exception:
-                stats["failed"] += 1
-                m["lobbyingChecked"] = False
+                failed = True
+                m.setdefault("lobbyingChecked", False)
                 logger.exception(
                     "LDA enrichment failed for %s (non-fatal)", m.get("lobbyistOrg", "?"),
                 )
+            finally:
+                # Once per match, whichever way it failed (the `continue`
+                # above included).
+                if failed:
+                    stats["failed"] += 1
     return stats
 
 
@@ -439,9 +477,11 @@ def alert_if_lda_down(stats: dict, chamber: str) -> None:
 
         send_ops_alert(
             "LDA lobbying lookups all failed",
-            f"Every Lobbying Disclosure Act lookup in tonight's {chamber} run failed "
-            f"({stats['failed']} of {stats['lookups']}). Donor-vote matches are marked "
-            "lobbying-unchecked rather than $0; see the server logs for the cause "
-            f"(a moved host, a changed API, or a block). Base URL: {LDA_API_BASE}.",
+            f"Every organization's Lobbying Disclosure Act lookups failed in whole or in "
+            f"part in tonight's {chamber} run ({stats['failed']} of {stats['lookups']}). "
+            "Where a spend year failed the match is marked lobbying-unchecked rather than "
+            "$0; where only another year failed, filing-named bills from it are missing. "
+            "See the server logs for the cause (a moved host, a changed API, a block, or "
+            f"rate limiting). Base URL: {LDA_API_BASE}.",
             dedupe_key=f"lda-down-{chamber}-{utcnow():%Y-%m-%d}",
         )

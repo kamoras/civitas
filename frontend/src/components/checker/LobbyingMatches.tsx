@@ -1,6 +1,6 @@
 import { LobbyingMatch } from "@/types/senator";
 import { formatCurrency, safeHref } from "@/lib/formatting";
-import { billUrl, canonicalBillId } from "@/lib/sources";
+import { billUrl } from "@/lib/sources";
 
 interface LobbyingMatchesProps {
   matches: LobbyingMatch[];
@@ -21,8 +21,8 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
       <div className="space-y-4">
         {matches.map((match, i) => {
           const lobbied = match.lobbiedBills ?? [];
-          const lobbiedIds = new Set(lobbied.map((b) => canonicalBillId(b.billId)));
-          const topical = match.billsInfluenced.filter((b) => !lobbiedIds.has(canonicalBillId(b)));
+          // The backend keeps billsInfluenced to bills no filing names.
+          const topical = match.billsInfluenced;
           return (
             <div key={i} className="panel p-4 border-l-2 border-l-signal-cyan/40">
               <div className="flex items-center gap-2 mb-2 flex-wrap">

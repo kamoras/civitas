@@ -44,3 +44,18 @@ def test_a_failed_listing_is_not_cached(db_session, monkeypatch):
 
     monkeypatch.setattr(congress, "_fetch_with_retry", _works)
     assert asyncio.run(congress.fetch_congress_bill_titles(None, db_session, 119)) == {"S.1": "x"}
+
+
+def test_a_listing_short_of_its_own_count_is_retried_then_refused(db_session, monkeypatch):
+    calls = []
+
+    async def _short(client, url):
+        calls.append(url)
+        if "/hr?" in url:
+            # A bill moved pages mid-crawl: 2 listed, the listing says 3.
+            return {"bills": [{"number": "1", "title": "a"}, {"number": "2", "title": "b"}], "pagination": {"count": 3}}
+        return {"bills": [], "pagination": {"count": 0}}
+
+    monkeypatch.setattr(congress, "_fetch_with_retry", _short)
+    assert asyncio.run(congress.fetch_congress_bill_titles(None, db_session, 119)) is None
+    assert sum("/hr?" in u for u in calls) == 2

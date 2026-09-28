@@ -46,7 +46,7 @@ export function currentCongressLabel(): string {
  */
 /** "H.R. 7147" / "S. 1234" / "HR.7147" -> "HR.7147": one spelling per bill,
  * so lists built from differently spelled sources can be compared. */
-export function canonicalBillId(billId: string): string {
+function canonicalBillId(billId: string): string {
   return billId
     .replace(/^H\.R\.\s*/i, "HR.")
     .replace(/^S\.\s*/i, "S.")

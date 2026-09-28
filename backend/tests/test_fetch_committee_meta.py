@@ -52,3 +52,14 @@ async def test_a_failed_fetch_is_not_cached(db_session):
         assert await fetch_committee_meta(client=None, db=db_session, committee_id="C00027466") is None
         again = await fetch_committee_meta(client=None, db=db_session, committee_id="C00027466")
     assert again["type"] == "Y"
+
+
+@pytest.mark.asyncio
+async def test_a_warm_type_only_entry_answers_without_a_request(db_session):
+    from app.pipeline.cache import api_cache_set
+
+    api_cache_set(db_session, "fec", "committee-type-v1-C00350744", {"committee_type": "Q"})
+    with patch("app.pipeline.fetch.fec._fetch_with_retry", new=AsyncMock()) as mocked:
+        meta = await fetch_committee_meta(client=None, db=db_session, committee_id="C00350744")
+    assert meta == {"type": "Q", "designation": None, "connectedOrg": None}
+    mocked.assert_not_awaited()
