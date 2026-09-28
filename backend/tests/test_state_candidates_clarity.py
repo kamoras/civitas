@@ -207,6 +207,28 @@ _WV_DISCOVERY = {
 }
 
 
+_ELECTIONS = {
+    "119000": ("2024 Primary", "5/14/2024"),
+    "126209": ("2026 Primary", "5/12/2026"),
+    "126300": ("2026 General", "11/3/2026"),
+}
+
+
+def _clarity(url):
+    """Clarity's per-election version and settings files, for the ids in
+    _ELECTIONS; None for anything else."""
+    for eid, (name, date) in _ELECTIONS.items():
+        if url.endswith(f"/WV/{eid}/current_ver.txt"):
+            return _Resp(text="1")
+        if url.endswith(f"/WV/{eid}/1/json/en/electionsettings.json"):
+            return _Resp(json_body={"settings": {"electiondetails": {"internalname": name, "electiondate": date}}})
+    return None
+
+
+def _links(*eids):
+    return "".join(f'<a href="https://results.enr.clarityelections.com/WV/{e}">{e}</a>' for e in eids)
+
+
 class TestDiscoverElectionId:
     """West Virginia's own copy of elections.json is empty even though its
     real results are live — verified 2026-09-03 — so it discovers its EID
@@ -215,8 +237,9 @@ class TestDiscoverElectionId:
     @pytest.mark.asyncio
     async def test_landing_page_mode_extracts_the_eid(self, monkeypatch):
         async def fake_get(client, url, label):
-            assert url == "https://sos.wv.gov/elections"
-            return _Resp(text='<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>')
+            if url == "https://sos.wv.gov/elections":
+                return _Resp(text=_links("126209"))
+            return _clarity(url)
 
         monkeypatch.setattr(cl, "_get", fake_get)
         eid = await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY)
@@ -243,16 +266,36 @@ class TestDiscoverElectionId:
         assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
 
     @pytest.mark.asyncio
-    async def test_two_different_links_refuses_rather_than_guessing(self, monkeypatch):
-        # This page carries no date to scope by, unlike elections.json's
-        # own Date field -- if it ever lists an archived prior election's
-        # link alongside the current one, silently trusting document
-        # order could return a stale id with no error at all.
+    async def test_an_archive_of_links_is_scoped_by_each_elections_own_date(self, monkeypatch):
+        """West Virginia's current page dropped its primary link before the
+        general; the results archive still has it, beside every election
+        back to 2016. Each id's own settings say which is this cycle's."""
         async def fake_get(client, url, label):
-            return _Resp(text=(
-                '<a href="https://results.enr.clarityelections.com/WV/119000">2024 archive</a>'
-                '<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>'
-            ))
+            if url == "https://sos.wv.gov/elections":
+                return _Resp(text=_links("119000", "126209", "126300"))
+            return _clarity(url)
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) == "126209"
+
+    @pytest.mark.asyncio
+    async def test_a_lone_stale_link_is_not_trusted(self, monkeypatch):
+        async def fake_get(client, url, label):
+            if url == "https://sos.wv.gov/elections":
+                return _Resp(text=_links("119000"))
+            return _clarity(url)
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
+
+    @pytest.mark.asyncio
+    async def test_two_primaries_for_the_cycle_refuses_rather_than_guessing(self, monkeypatch):
+        async def fake_get(client, url, label):
+            if url == "https://sos.wv.gov/elections":
+                return _Resp(text=_links("126209", "126210"))
+            if "/126210/" in url:
+                return _clarity(url.replace("126210", "126209"))
+            return _clarity(url)
 
         monkeypatch.setattr(cl, "_get", fake_get)
         assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
@@ -260,10 +303,9 @@ class TestDiscoverElectionId:
     @pytest.mark.asyncio
     async def test_same_link_repeated_is_not_treated_as_ambiguous(self, monkeypatch):
         async def fake_get(client, url, label):
-            return _Resp(text=(
-                '<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>'
-                '<a href="https://results.enr.clarityelections.com/WV/126209">same, again</a>'
-            ))
+            if url == "https://sos.wv.gov/elections":
+                return _Resp(text=_links("126209", "126209"))
+            return _clarity(url)
 
         monkeypatch.setattr(cl, "_get", fake_get)
         assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) == "126209"
@@ -276,10 +318,12 @@ class TestDiscoverElectionId:
         calls = []
 
         async def fake_get(client, url, label):
+            if url != "https://sos.wv.gov/elections":
+                return _clarity(url)
             calls.append(url)
             if len(calls) == 1:
                 return _Resp(text="<html>challenge page, no links yet</html>")
-            return _Resp(text='<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>')
+            return _Resp(text=_links("126209"))
 
         monkeypatch.setattr(cl, "_get", fake_get)
         eid = await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY)
@@ -330,7 +374,9 @@ class TestFetchConfirmedCandidatesLandingPageDiscovery:
     async def test_real_wv_field_resolves_real_winners(self, monkeypatch):
         async def fake_get(client, url, label):
             if url == "https://sos.wv.gov/elections":
-                return _Resp(text='<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>')
+                return _Resp(text=_links("126209"))
+            if "electionsettings" in url:
+                return _clarity(url.replace("/375698/", "/1/"))
             if url.endswith("current_ver.txt"):
                 return _Resp(text="375698")
             return _Resp(json_body={"Contests": _wv_contests()})
