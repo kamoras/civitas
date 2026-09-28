@@ -290,6 +290,13 @@ _STATEWIDE_PHRASES = [
     # refused by the locality gate on "commissioner" otherwise.
     ("railroad_commissioner", re.compile(
         r"\bRailroad\s+Commission(?:er)?\b", re.IGNORECASE)),
+    # Oklahoma's Corporation Commission (its utilities and oil-and-gas
+    # regulator), off its 2026 November List of Elections: three
+    # commissioners elected statewide to staggered six-year terms (Okla.
+    # Const. art. IX sec. 15). Refused by the locality gate on
+    # "commissioner" otherwise.
+    ("corporation_commissioner", re.compile(
+        r"\bCorporation\s+Commission(?:er)?\b", re.IGNORECASE)),
     ("land_office_commissioner", re.compile(
         r"\bCommissioner\s+of\s+the\s+General\s+Land\s+Office\b", re.IGNORECASE)),
     # New Mexico's land office, off its 2026 general candidate list. Not
@@ -422,7 +429,12 @@ def _phrase_leads(name: str, start: int) -> bool:
 _LOCAL_QUALIFIER_RE = re.compile(
     r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|district|"
     r"municipal|school|council|mayor|alderman|commissioner|judge|justice|court|"
-    r"assembly|senate|house|representative|senator|committee|delegate)\b"
+    r"assembly|senate|house|representative|senator|committee|delegate|"
+    # A university's own board, whatever it calls its members: Michigan
+    # elects "Governor of Wayne State University" and "Trustee of
+    # Michigan State University" statewide, and neither is the governor.
+    # (Regents are read by their own phrase, which runs first.)
+    r"university|college|trustees?)\b"
     r"|:",  # "Cranston: ..." -- a real vendor prefix marking one town's race
     re.IGNORECASE,
 )
@@ -576,6 +588,7 @@ STATEWIDE_OFFICE_LABELS = {
     "school_public_lands_commissioner": "Commissioner of School and Public Lands",
     "public_utilities_commission": "Public Utilities Commission",
     "railroad_commissioner": "Railroad Commissioner",
+    "corporation_commissioner": "Corporation Commissioner",
     "land_office_commissioner": "Commissioner of the General Land Office",
     "public_lands_commissioner": "Commissioner of Public Lands",
     "governors_council": "Governor's Council",
@@ -806,6 +819,10 @@ _STATE_LEG_CHAMBERS = [
     #   "STATE SENATOR DISTRICT 7", off its certified 2026 primary canvass
     #   (99 Assembly contests). No federal office is called that.
     ("lower", re.compile(r"\bRepresentative\s+to\s+the\s+Assembly\b", re.IGNORECASE)),
+    #   Michigan: "1st District Representative in State Legislature", beside
+    #   "1st District State Senator", off its 2026 Official Candidate
+    #   Listing (110 House districts).
+    ("lower", re.compile(r"\bRepresentative\s+in\s+State\s+Legislature\b", re.IGNORECASE)),
 ]
 
 # Some districts elect SEVERAL members from a single contest, with no

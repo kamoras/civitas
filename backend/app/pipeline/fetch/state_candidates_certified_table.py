@@ -52,6 +52,14 @@ Optional, each because a live state needed it:
                                      row is read — last cycle's list would
                                      confirm last cycle's people; year_regex
                                      is honoured on a discovered page too
+  discovery.url with {year}          the fixed address names the election's
+                                     year (Michigan's candidate report)
+  discovery.after_primary_days       read only this many days after the
+                                     state's primary (the FEC calendar's
+                                     date): Michigan's general listing is
+                                     one report filled in as candidates
+                                     file, so before its primary it could
+                                     hold every primary filer
   discovery.form_button              the list is the page's own "Export to CSV"
                                      button (Hawaii's candidate report): the
                                      page's form is posted back with that
@@ -115,6 +123,33 @@ Optional, each because a live state needed it:
                                      the next is followed until there is
                                      none (Alaska's 3 pages: its House
                                      districts run onto pages 2 and 3)
+  format.outline_rows                the page is an indented outline, one
+                                     line per one-row table, indented by
+                                     empty leading cells (Oklahoma's List
+                                     of Elections: county, section, office,
+                                     then "NAME, PARTY"); each line becomes
+                                     a row carrying the lines above it,
+                                     keyed by indent: outline_2 is a line
+                                     indented two cells (outline_rows)
+  format.report_grid                 the page is one report laid out on an
+                                     HTML grid by colspan (a JasperReports
+                                     export: Michigan's Official Candidate
+                                     Listing); each value belongs to the
+                                     header column starting where it
+                                     starts, and an office heading spanning
+                                     the columns is carried down as
+                                     `heading` (report_grid_rows)
+  format.office_regex                the office is the first group of this
+                                     regex over the office cell (Michigan
+                                     follows it with the term and seat
+                                     count: "1st District State Senator 4
+                                     Year Term (1) Position Files In WAYNE
+                                     County"); a cell it does not match is
+                                     read whole
+  format.name_regex                  the name is inside a longer cell; the
+                                     regex's first group is the name
+                                     (Oklahoma prints "KEVIN HERN,
+                                     REPUBLICAN" in one cell)
   statewide_offices                  also read the state's own executive
                                      contests and legislative seats, through
                                      parse_statewide_office and
@@ -145,6 +180,7 @@ import html
 import io
 import logging
 import re
+from datetime import date, timedelta
 from urllib.parse import urljoin
 
 import httpx
@@ -168,6 +204,7 @@ from app.pipeline.fetch.state_candidates_common import (
     parse_statewide_office,
     surname,
 )
+from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.fetch.state_candidates_tabular import _html_rows, _xlsx_rows
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -266,6 +303,84 @@ def html_table_rows(page: bytes, headings: list[str]) -> list[dict]:
     return []
 
 
+def outline_rows(page: bytes) -> list[dict]:
+    """Rows of a page printed as an indented outline: every line is a
+    one-row table whose leading EMPTY cells indent it (Oklahoma's List of
+    Elections: a section indented one cell, an office two, each candidate
+    three beneath it). Each line becomes a row carrying itself and the
+    nearest line above it at every shallower indent, keyed by its indent
+    (outline_0 .. outline_N), so office_column can name the office's
+    indent and the name columns the candidate's. A shallower line clears everything deeper,
+    exactly as a new heading does in html_headings; the text outside any
+    table (Oklahoma's county names) is not part of the outline."""
+    try:
+        page.decode("utf-8")
+    except UnicodeDecodeError:
+        tree = lxml_html.fromstring(page)
+    else:
+        tree = lxml_html.fromstring(page, parser=lxml_html.HTMLParser(encoding="utf-8"))
+    rows: list[dict] = []
+    stack: dict[int, str] = {}
+    for tr in tree.iter("tr"):
+        cells = [" ".join(td.text_content().split()) for td in tr.xpath("./td|./th")]
+        depth = next((i for i, text in enumerate(cells) if text), None)
+        if depth is None:
+            continue
+        stack = {k: v for k, v in stack.items() if k < depth}
+        stack[depth] = cells[depth]
+        rows.append({f"outline_{k}": v for k, v in stack.items()})
+    return rows
+
+
+def report_grid_rows(page: bytes, headings: list[str]) -> list[dict]:
+    """Rows of a report laid out on one HTML grid (a JasperReports export
+    -- Michigan's Official Candidate Listing): every line is a <tr> of
+    cells placed by colspan, so a value belongs to the header column that
+    starts where it starts. The header row is the first whose cells name
+    every configured heading. A line whose only text is one cell spanning
+    more than one header column is a heading, carried onto the rows below
+    it as `heading` (Michigan's "U.S. Senate 6 Year Term (1) Position");
+    a repeat of the header row (a new report page) is skipped."""
+    try:
+        page.decode("utf-8")
+    except UnicodeDecodeError:
+        tree = lxml_html.fromstring(page)
+    else:
+        tree = lxml_html.fromstring(page, parser=lxml_html.HTMLParser(encoding="utf-8"))
+    columns: dict[int, str] | None = None
+    heading = ""
+    rows: list[dict] = []
+    for tr in tree.iter("tr"):
+        cells, at = [], 0
+        for td in tr.xpath("./td|./th"):
+            try:
+                span = max(1, int(td.get("colspan") or 1))
+            except ValueError:
+                span = 1
+            text = " ".join(td.text_content().split())
+            if text:
+                cells.append((at, span, text))
+            at += span
+        if not cells:
+            continue
+        texts = [text for _, _, text in cells]
+        if columns is None:
+            if set(headings) <= set(texts):
+                columns = {start: text for start, _, text in cells}
+            continue
+        if texts == list(columns.values()):
+            continue
+        if len(cells) == 1:
+            start, span, text = cells[0]
+            if sum(1 for c in columns if start <= c < start + span) > 1:
+                heading = text
+                continue
+        row = {columns[start]: text for start, _, text in cells if start in columns}
+        if row:
+            rows.append({**row, "heading": heading})
+    return rows
+
+
 def _reading_order(printed: str) -> tuple[str, str]:
     """("Given Surname Suffix", "Surname") for a "Surname, Given Suffix"
     name -- "Sullivan, Daniel J. Jr." reads "Daniel J. Sullivan Jr."."""
@@ -309,7 +424,11 @@ def _headings(fmt: dict) -> list[str]:
 
 
 def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
-    if payload.lstrip()[:1] == b"<":
+    if payload.lstrip()[:1] == b"<" or payload.lstrip()[:4] == b"\xef\xbb\xbf<":
+        if fmt.get("outline_rows"):
+            return outline_rows(payload)
+        if fmt.get("report_grid"):
+            return report_grid_rows(payload, [c for c in _headings(fmt) if c != fmt["office_column"]])
         if fmt.get("html_headings"):
             return _html_rows(payload, {})
         return html_table_rows(payload, _headings(fmt))
@@ -366,6 +485,9 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
         if any(rx.search(str(row.get(col) or "")) for col, rx in exclude_re.items()):
             continue
         label = " ".join(str(row.get(fmt["office_column"]) or "").split())
+        if fmt.get("office_regex"):
+            found = re.search(fmt["office_regex"], label)
+            label = found.group(1).strip() if found else label
         party_label = next(
             (str(row[col]).strip() for col in _party_columns(fmt) if str(row.get(col) or "").strip()), "",
         )
@@ -374,6 +496,9 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
             party_label = found.group(1).strip() if found else ""
         party_label = party_names.get(" ".join(party_label.split()).upper(), party_label)
         printed = " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"]).strip()
+        if fmt.get("name_regex"):
+            found = re.search(fmt["name_regex"], printed)
+            printed = found.group(1).strip() if found else ""
         printed_last = ""
         if fmt.get("name_last_first") and "," in printed:
             # A joint ticket prints both names, slash-separated ("Bronson,
@@ -499,12 +624,16 @@ async def fetch_confirmed_candidates(
         logger.warning("%s certified_table statewide_offices needs format.office_parse or state_office_codes", state)
         return None
 
+    if not _primary_settled(discovery, year, state):
+        return None
+
     if discovery.get("url"):
-        payloads = await _download(client, discovery["url"], discovery, year, state)
+        url = discovery["url"].replace("{year}", str(year))
+        payloads = await _download(client, url, discovery, year, state)
         if payloads is None:
             return None
         return _records(
-            state, [row for p in payloads for row in (_rows(p, discovery["url"], fmt) or [])], fmt,
+            state, [row for p in payloads for row in (_rows(p, url, fmt) or [])], fmt,
             bool(source.get("statewide_offices")),
         )
 
@@ -547,6 +676,27 @@ async def fetch_confirmed_candidates(
                 return None
             rows += part
     return _records(state, rows, fmt, bool(source.get("statewide_offices")))
+
+
+def _primary_settled(discovery: dict, year: int, state: str) -> bool:
+    """Whether the list may be read yet. With discovery.after_primary_days,
+    only that many days after the state's primary (the national FEC
+    calendar's date, state_election_dates): a general-election listing
+    that also exists before the primary -- Michigan's is one report per
+    election, filled in as candidates file -- could otherwise name every
+    primary filer as a November candidate. No known date is no read: a
+    list that confirmed the wrong people is worse than one read late."""
+    days = discovery.get("after_primary_days")
+    if days is None:
+        return True
+    held = primary_date(state, year)
+    if not held:
+        logger.info("%s %d primary date unknown; the general list is not read yet", state, year)
+        return False
+    if date.today() < date.fromisoformat(held) + timedelta(days=int(days)):
+        logger.info("%s %d general list waits until %d days after the %s primary", state, year, days, held)
+        return False
+    return True
 
 
 async def _download(

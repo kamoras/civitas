@@ -120,6 +120,7 @@ from app.pipeline.fetch.state_candidates_me import fetch_confirmed_candidates as
 from app.pipeline.fetch.state_candidates_ms import fetch_confirmed_candidates as _fetch_ms
 from app.pipeline.fetch.state_candidates_nh import fetch_confirmed_candidates as _fetch_nh
 from app.pipeline.fetch.state_candidates_nj import fetch_confirmed_candidates as _fetch_nj
+from app.pipeline.fetch.state_candidates_oh import fetch_confirmed_candidates as _fetch_oh
 from app.pipeline.fetch.state_candidates_or import fetch_confirmed_candidates as _fetch_or
 from app.pipeline.fetch.state_candidates_sd_vip import fetch_confirmed_candidates as _fetch_sd_vip
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
@@ -171,6 +172,7 @@ STRATEGIES = {
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
+    "oh_canvass_xlsx": _fetch_oh,
 }
 
 # The strategies whose rows are a state's list of who is on the November
@@ -185,7 +187,7 @@ STRATEGIES = {
 # the general report once final, primary winners before). Not listed:
 # nj_certification (party nominees only) and every results reader.
 BALLOT_LIST_STRATEGIES = frozenset({
-    "certified_table",    # the certified general lists (AK CO DE HI IA MD ME ND NE NM TN WY)
+    "certified_table",    # the certified general lists (AK CO DE HI IA MD ME ND NE NM OK TN WY)
     "grouped_list_pdf",   # Illinois's website candidate list
     "dos_canlist",        # Florida's general candidate list
     "certified_pdf",      # Missouri's certification of candidates
