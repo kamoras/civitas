@@ -12,16 +12,16 @@ image runs unchanged against the migrated schema (expand only):
   shorter list has come back on MEASURE_SHRINK_CONFIRM_RUNS consecutive
   runs; these remember which list and how many runs.
 
-Revision ID: 0009
-Revises: 0008
+Revision ID: 0010
+Revises: 0009
 Create Date: 2026-09-28
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0009"
-down_revision = "0008"
+revision = "0010"
+down_revision = "0009"
 branch_labels = None
 depends_on = None
 
