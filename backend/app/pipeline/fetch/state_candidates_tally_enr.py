@@ -385,21 +385,31 @@ def general_contests(search: dict, results: dict, parties: dict) -> list[Contest
     return out
 
 
-async def _refuse_preview(client: httpx.AsyncClient, state: str, source: dict, eid: str) -> None:
+async def _refuse_preview(client: httpx.AsyncClient, state: str, source: dict, eid: str) -> bool:
     """The state's own front-end config names its demo mode and the
-    election ids it serves as previews (North Dakota's lists three,
-    verified 2026-09-28); a count from either is a test."""
+    election ids it serves as previews; a count from either is a test.
+    Returns False when the config couldn't be fetched (the read is simply
+    unavailable this pass, not refused).
+
+    A preview is its own pseudo-id ("346_Preview"), listed beside the real
+    election and left there after it goes live: North Dakota's config still
+    lists 346_Preview while 346, its 2026 primary, is the default and
+    official (verified 2026-09-28). So only the id itself being listed
+    marks a preview — refusing `eid` because "`eid`_Preview" is listed
+    would refuse the real count all night. A preview id that answers with
+    another election's data is caught by _check_answer."""
     config_url = source.get("client_config")
     if not config_url:
-        return
+        return True
     config = await fetch_json_with_retry(client, _rate_limiter, config_url, f"{state} results site config")
     if not isinstance(config, dict):
-        raise UntrustedCount(f"{state} results site config unreadable; can't rule out a preview")
+        return False
     if str(config.get("clientEnvDemo")).lower() == "true":
         raise UntrustedCount(f"{state} results site is in demo mode")
     previews = {str(p) for p in config.get("previewElections") or []}
-    if eid in previews or f"{eid}_Preview" in previews:
+    if eid in previews:
         raise UntrustedCount(f"{state} election {eid} is a preview")
+    return True
 
 
 def _check_answer(body: dict, eid: str, state: str) -> None:
@@ -429,7 +439,8 @@ async def fetch_general_results(
     if election is None:
         return None
     eid = str(election["electionID"])
-    await _refuse_preview(client, state, source, eid)
+    if not await _refuse_preview(client, state, source, eid):
+        return None
     search = await fetch_json_with_retry(
         client, _rate_limiter, f"{base_url}/Contest/GetContestSearchList?cid={cid}&electionID={eid}",
         f"{state} contest names",

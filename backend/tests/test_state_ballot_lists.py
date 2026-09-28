@@ -339,7 +339,10 @@ async def test_a_person_named_blank_is_a_person_but_a_write_in_is_not_on_the_bal
     db_session.commit()
     only("LA", [_rec("H", 2, "D", "Blank", "Mary Blank"),
                 _rec("H", 2, None, "Redkey", "Redkey, David (Write-In)"),
-                _rec("H", 2, None, "Blank", "Blank Votes")])
+                _rec("H", 2, None, "Blank", "Blank Votes"),
+                _rec("H", 2, None, "Voted", "Times Blank Voted"),
+                _rec("H", 2, None, "Delegates", "Uncommitted Delegates"),
+                _rec("H", 2, None, "Votes", "Over/Under Votes")])
 
     await sc.sync_confirmed_candidates(db_session, None, 2026)
 

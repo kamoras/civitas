@@ -480,9 +480,14 @@ def general_contests(summary: dict) -> list[ContestCount]:
             if is_not_a_person(choice):
                 continue
             candidates.append((_clean_display_name(choice), _parse_party(code) if code else None, votes[i]))
-        tp, pr = contest.get("TP"), contest.get("PR")
+        tp, pr, total = contest.get("TP"), contest.get("PR"), contest.get("T")
+        # The contest's own total (`T`) counts the write-in and other rows
+        # dropped above; without it every share came out a little high.
+        # Only a total at least the candidates' sum is believed.
+        counted = sum(v for _, _, v in candidates)
         out.append(ContestCount(
             office=parsed[0], district=parsed[1], candidates=candidates,
+            total_votes=total if isinstance(total, int) and total >= counted else None,
             reporting_units=pr if isinstance(pr, int) else None,
             total_units=tp if isinstance(tp, int) and tp > 0 else None,
             is_special=is_special_contest(name),

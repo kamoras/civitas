@@ -480,7 +480,15 @@ def _fec_candidates(race: Race) -> list[Candidate]:
 # claim ("Redkey, David (Write-In)", "Write-In - David Fey"), even though a
 # live count keeps their votes -- is_not_a_person only refuses aggregate
 # rows, so this is the narrower question asked on top of it.
-_NOT_ON_THE_BALLOT_RE = re.compile(r"\bwrite[\s-]*ins?\b|\bwithdrawn\b|\bscattering\b", re.IGNORECASE)
+_NOT_ON_THE_BALLOT_RE = re.compile(
+    r"\bwrite[\s-]*ins?\b|\bwithdrawn\b|\bscattering\b|\buncommitted\b|\b(?:over|under)[\s/-]*votes?\b"
+    # Summary rows the old substring filter caught and is_not_a_person's
+    # whole-label match doesn't: ES&S's "Times Blank Voted", "Blank/Void",
+    # "Over Votes (Not Counted)". A person surnamed Blank is still a
+    # person: "blank" counts only beside a ballot word.
+    r"|\btimes\s+blank\b|\bblank\s*(?:/|votes?\b|ballots?\b)|\bvoid(?:ed)?\s+(?:ballots?|votes?)\b",
+    re.IGNORECASE,
+)
 
 
 def _fec_style_name(display_name: str, last_name: str) -> str:

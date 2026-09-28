@@ -20,6 +20,7 @@ rule as RaceResult).
 import asyncio
 import json
 import logging
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
@@ -94,15 +95,33 @@ def _party_group(code: str | None) -> str | None:
     return PARTY_CODE_MAP.get(code) or fec_party(code) or code
 
 
+_redrawn_cache: dict | None = None
+
+
+def redrawn_states(cycle: int) -> set[str]:
+    """States whose congressional map changed for `cycle`
+    (app/data/redrawn_congressional_maps.json)."""
+    global _redrawn_cache
+    if _redrawn_cache is None:
+        path = Path(__file__).resolve().parent.parent / "data" / "redrawn_congressional_maps.json"
+        _redrawn_cache = json.loads(path.read_text())
+    return set(_redrawn_cache.get(str(cycle), []))
+
+
 def seat_holder_party(db: Session, race: Race) -> str | None:
     """The party that held this seat going into the election, or None when
     it can't be known without guessing.
 
-    House: the district's sitting representative. Senate: the senator the
+    House: the district's sitting representative — unless the state's map
+    was redrawn for this cycle (redrawn_states), when the district of that
+    number is a different district and its member held something else.
+    Senate: the senator the
     race's incumbent candidate is (a state has two, and nothing stored says
     which seat is up), else — an open seat — the state's senators' party
     only when both share it."""
     if race.office == "H":
+        if race.state in redrawn_states(race.cycle_year):
+            return None  # the same number names a different district now
         rep = (
             db.query(Representative)
             .filter(Representative.state == race.state, Representative.district == (race.district or 0),
@@ -158,7 +177,13 @@ def _leader(tallies: list[dict]) -> dict | None:
 
 
 def _key(row: dict | None):
-    return (row.get("candidateId") or row.get("name")) if row else None
+    """Who a tally row is, as the source prints them: name and party. Not
+    the matched candidateId — a Candidate row appearing between polls (the
+    ballot sync runs through the count) re-keyed the same leader and read
+    as "Dana Smith moves ahead of Dana Smith"."""
+    if not row:
+        return None
+    return (" ".join(str(row.get("name") or "").split()).casefold(), row.get("party"))
 
 
 def flip_qualifies(result: RaceResult, now: datetime | None = None) -> bool:
@@ -382,7 +407,7 @@ def apply_count(
     present = {k for k, _ in kinds}
     if FLIP in present or FLIP_REVERSED in present:
         kinds = [(k, x) for k, x in kinds if k != LEAD_CHANGE]
-    if ALL_REPORTING in present:
+    if ALL_REPORTING in present or FLIP in present:
         kinds = [(k, x) for k, x in kinds if k != FIRST_RETURNS]
     events = [_event(db, result, kind, **extra) for kind, extra in kinds]
     return Applied(result, events)
@@ -401,31 +426,31 @@ def _contest_race(db: Session, cycle: int, state: str, contest: ContestCount) ->
 _FUTURE_SKEW = timedelta(hours=1)
 
 
-def _last_accepted(db: Session, state: str, election_day: date):
+def _stored(db: Session, state: str, election_day: date):
     return (
         db.query(RaceResult.source_updated_at, RaceResult.source_version)
         .join(Race, Race.id == RaceResult.race_id)
-        .filter(Race.state == state, RaceResult.election_date == election_day.isoformat(),
-                RaceResult.source_updated_at.isnot(None))
-        .order_by(RaceResult.source_updated_at.desc())
-        .first()
+        .filter(Race.state == state, RaceResult.election_date == election_day.isoformat())
+        .all()
     )
 
 
 def freshness_problem(db: Session, state: str, election_day: date, count: StateCount) -> str | None:
     """Why this read must not replace what is stored: a source that has
     gone BACKWARDS (an older copy from a cache, CDN or mirror), or one
-    dated in the future. None when it is fine to store."""
+    dated in the future. None when it is fine to store. The stamp and the
+    version are each checked on their own, so a source that gives only one
+    of them is still protected by it."""
     now = utcnow()
     if count.source_updated and count.source_updated > now + _FUTURE_SKEW:
         return f"source is stamped {count.source_updated.isoformat()}, in the future"
-    last = _last_accepted(db, state, election_day)
-    if last is None or count.source_updated is None:
-        return None
-    if count.source_updated < last[0]:
-        return f"source went back from {last[0].isoformat()} to {count.source_updated.isoformat()}"
-    if (count.source_version or "").isdigit() and (last[1] or "").isdigit() and int(count.source_version) < int(last[1]):
-        return f"source version went back from {last[1]} to {count.source_version}"
+    stored = _stored(db, state, election_day)
+    stamps = [u for u, _ in stored if u is not None]
+    if count.source_updated is not None and stamps and count.source_updated < max(stamps):
+        return f"source went back from {max(stamps).isoformat()} to {count.source_updated.isoformat()}"
+    versions = [int(v) for _, v in stored if (v or "").isdigit()]
+    if (count.source_version or "").isdigit() and versions and int(count.source_version) < max(versions):
+        return f"source version went back from {max(versions)} to {count.source_version}"
     return None
 
 

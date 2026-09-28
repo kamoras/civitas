@@ -1,5 +1,5 @@
-"""The live-results sync (pipeline/election_results.py) and the seat-flip
-DEVELOPING issue it opens (analyze/election_signals.py)."""
+"""The live-results sync (live_results/sync.py) and the seat-flip
+DEVELOPING issue it opens (live_results/signals.py)."""
 
 import asyncio
 import json
@@ -436,3 +436,41 @@ class TestCountyUnits:
         first = datetime(2026, 11, 4, 2)
         _, result = self._apply_at(db_session, race, _contest(90, 100, 2, total=3, district=8), first)
         assert not er.flip_qualifies(result, now=first + timedelta(days=3))
+
+
+class TestRoundTwo:
+    def test_a_candidate_row_appearing_is_not_a_lead_change(self, db_session):
+        """The ballot sync runs through the count; matching the same leader
+        to a new Candidate row re-keyed them ("X moves ahead of X")."""
+        race = Race(id="2026-HOUSE-GA-2", cycle_year=2026, office="H", state="GA", district=2)
+        db_session.add(race)
+        db_session.add(Representative(id="S000001", name="Dana Smith", state="GA", district=2, party="D"))
+        db_session.flush()
+        _apply(db_session, race, _contest(100, 90, 5))
+        before = db_session.get(RaceResult, race.id).last_change_at
+        db_session.add(Candidate(id="H6GA02001", race_id=race.id, name="SMITH, DANA", party="DEM"))
+        db_session.flush()
+        with patch.object(er, "utcnow", return_value=utcnow() + timedelta(minutes=5)):
+            kinds, result = _apply(db_session, race, _contest(100, 90, 5))
+        assert kinds == []
+        assert result.last_change_at == before
+
+    def test_a_redrawn_states_house_seat_has_no_holder(self, db_session):
+        race = Race(id="2026-HOUSE-UT-3", cycle_year=2026, office="H", state="UT", district=3)
+        db_session.add(race)
+        db_session.add(Representative(id="U3", name="Holder", state="UT", district=3, party="R"))
+        db_session.flush()
+        assert "UT" in er.redrawn_states(2026)
+        assert er.seat_holder_party(db_session, race) is None
+
+    def test_first_returns_that_are_already_a_flip_are_one_story(self, db_session):
+        race = _setup(db_session)
+        kinds, _ = _apply(db_session, race, _contest(10, 90, 60))
+        assert kinds == [er.FLIP]
+
+    def test_a_version_only_source_is_protected_from_rollback(self, db_session):
+        race = _setup(db_session)
+        er.apply_count(db_session, race, _contest(10, 9, 5), _state(source_version="12"), DAY)
+        db_session.flush()
+        problem = er.freshness_problem(db_session, "GA", DAY, _state(source_version="11"))
+        assert problem == "source version went back from 12 to 11"

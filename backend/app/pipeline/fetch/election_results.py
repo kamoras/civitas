@@ -73,7 +73,9 @@ class StateCount:
     contests: list[ContestCount] = field(default_factory=list)
     # When the source says it last updated (naive UTC), and its own version
     # id where it keeps one — what the sync compares to refuse a feed that
-    # has gone BACKWARDS (a cache or a mirror serving an older copy).
+    # has gone BACKWARDS (a cache or a mirror serving an older copy). A
+    # version is compared only when it is a plain number (Clarity's);
+    # Tally's "v1-1" form has no order, so only its time guards it.
     source_updated: datetime | None = None
     source_version: str | None = None
 

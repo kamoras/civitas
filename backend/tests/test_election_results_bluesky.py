@@ -1,4 +1,4 @@
-"""Election-night Bluesky posts (analyze/election_results_bluesky.py):
+"""Election-night Bluesky posts (live_results/bluesky.py):
 what earns a post, the order and budget, and corrections outside it."""
 
 from datetime import date, timedelta
@@ -245,3 +245,59 @@ def test_counting_is_live_only_while_totals_move(db_session):
         assert rb.counting_is_live() is True
     with patch("app.election_phase.active_election", return_value=settled):
         assert rb.counting_is_live() is False
+
+
+class TestRoundTwo:
+    def test_a_failed_publish_ends_the_pass(self, db_session):
+        """Every attempt is a login; retrying the whole queue every pass ran
+        into Bluesky's session limits."""
+        calls = []
+        for i in range(3):
+            _race(db_session, f"2026-HOUSE-GA-{i}", office="H", district=i)
+            _event(db_session, f"2026-HOUSE-GA-{i}", er.FLIP)
+        with patch.object(rb, "publish_post", side_effect=lambda *a, **k: calls.append(a) or False):
+            rb.post_result_updates(db_session, DAY)
+        assert len(calls) == 1
+
+    def test_a_published_post_survives_a_later_failure_in_the_pass(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-1", office="H", district=1)
+        _race(db_session, "2026-HOUSE-GA-2", office="H", district=2)
+        first = _event(db_session, "2026-HOUSE-GA-1", er.FLIP, age=timedelta(minutes=1))
+        _event(db_session, "2026-HOUSE-GA-2", er.FLIP)
+        sent = []
+
+        def publish(text, url, **kw):
+            if sent:
+                raise RuntimeError("boom")
+            sent.append(text)
+            return True
+
+        with patch.object(rb, "publish_post", publish), pytest.raises(RuntimeError):
+            rb.post_result_updates(db_session, DAY)
+        db_session.rollback()
+        db_session.refresh(first)
+        assert first.bsky_posted is True  # never sent twice
+
+    def test_a_correction_is_dropped_once_the_flip_is_back(self, db_session):
+        _race(db_session, "2026-SEN-GA", flip=True)
+        _event(db_session, "2026-SEN-GA", er.FLIP, bsky_posted=True, bsky_posted_at=utcnow() - timedelta(hours=1))
+        correction = _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
+        assert _run(db_session) == []
+        assert correction.bsky_posted_at is not None and not correction.bsky_posted
+
+    def test_a_post_says_where_the_count_stands_now(self, db_session):
+        """Held behind the budget, the event's own figures can be two
+        hours old; the post uses the stored count."""
+        import json
+
+        _race(db_session, "2026-SEN-GA")
+        db_session.flush()
+        result = db_session.get(RaceResult, "2026-SEN-GA")
+        result.official = True
+        result.reporting_units = 100
+        result.tallies = json.dumps([{"name": "Ray Jones", "party": "REP", "votes": 1200},
+                                     {"name": "Dana Smith", "party": "DEM", "votes": 800}])
+        result.votes_counted = 2000
+        _event(db_session, "2026-SEN-GA", er.FLIP, _detail(reporting=60))
+        [(text, _)] = _run(db_session)
+        assert "wins in the official count" in text and "60.0%" in text and "Not final" not in text

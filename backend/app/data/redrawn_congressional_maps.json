@@ -1,0 +1,5 @@
+{
+  "_source": "Wikipedia, '2025–2026 United States redistricting' (infobox 'Redistricting plan enacted', read 2026-09-28): congressional maps enacted between the 2024 and 2026 elections. A hand-maintained list of a legal fact, not a calculated value (AGENTS.md 3a); update it when a state's map changes for a cycle.",
+  "_use": "A U.S. House seat in one of these states for that cycle has no knowable holder going into the election: the district of the same number is a different district. live_results/sync.seat_holder_party returns None for it, so no flip is announced against the old district's representative.",
+  "2026": ["AL", "CA", "FL", "LA", "NC", "OH", "TN", "TX", "UT"]
+}

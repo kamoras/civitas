@@ -19,7 +19,7 @@ What is posted, in priority order:
 House first returns and lead changes stay on the site: 435 seats of them
 would bury everything else.
 
-Like the developing issue (election_signals.py), every post is a fixed
+Like the developing issue (live_results/signals.py), every post is a fixed
 template around the state's own figures, never model text, and says
 "leads" until the state calls the count official.
 """
@@ -175,22 +175,34 @@ def _published_since(db: Session, since, election_date: str | None = None) -> in
 
 def _still_true(kind: str, result: RaceResult, d: dict) -> bool:
     """Whether a pending event still describes the count: one held back by
-    the budget can be overtaken before its turn comes."""
+    the budget, or retried after a failed publish, can be overtaken before
+    its turn comes — a correction included, when the flip it corrects has
+    come back."""
     if kind == er.FLIP:
         return er.is_flip(result)
+    if kind == CORRECTION:
+        return not er.is_flip(result)
     if kind == er.LEAD_CHANGE:
         now_leading = er._leader(json.loads(result.tallies or "[]"))
         return er._key(now_leading) == er._key(d.get("leader"))
     return True
 
 
+def _as_of_now(result: RaceResult, d: dict) -> dict:
+    """What a post says, from the count as it stands — a post can wait up
+    to two hours behind the budget, and its event's own figures would be
+    that old — keeping only what the event alone knows (who led before)."""
+    return er.event_detail(result, **({"previousLeader": d["previousLeader"]} if d.get("previousLeader") else {}))
+
+
 def post_result_updates(db: Session, election_date: str) -> int:
     """Post this pass's worthwhile events within budget, most important
     first. An event is marked considered (bsky_posted_at) once it is
     settled — posted, not worth a post, overtaken, or too old. One the
-    budget or a race's cooldown holds back, or whose publish failed, stays
-    pending for a later pass: throwing it away lost the lowest-ranked
-    flips of a busy hour for good."""
+    budget or a race's cooldown holds back stays pending for a later pass:
+    throwing it away lost the lowest-ranked flips of a busy hour for good.
+    A failed publish ends the pass, and what it didn't reach waits too.
+    Every post is worded from the count as it stands (_as_of_now)."""
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return 0
     now = utcnow()
@@ -233,6 +245,9 @@ def post_result_updates(db: Session, election_date: str) -> int:
             continue
         queue.append((_PRIORITY[kind], event.created_at, kind, event, race, detail))
     queue.sort(key=lambda q: (q[0], q[1]))
+    # Settle what was decided before any network call: a write transaction
+    # held open across logins and sends blocked every other writer.
+    db.commit()
 
     posted = 0
     for priority, created, kind, event, race, detail in queue:
@@ -241,14 +256,20 @@ def post_result_updates(db: Session, election_date: str) -> int:
         correction = kind == CORRECTION
         if not correction and (hour_left <= 0 or election_left <= 0 or race.id in recent_races):
             continue  # held for a later pass
-        text = compose(kind, race, detail)
+        text = compose(kind, race, _as_of_now(db.get(RaceResult, race.id), detail))
         if not text:
             event.bsky_posted_at = now
+            db.commit()
             continue
         url = f"{SITE}/elections/states/{race.state}#race-{race.id}"
         if not publish_post(text, url, success_msg=f"Posted result update: {race.id} {kind}",
                             error_context=f"result event {event.id}"):
-            continue  # retried next pass, until it ages out
+            # Posting is down or refusing us: stop the pass. Every attempt
+            # is a fresh login, and retrying the whole queue every five
+            # minutes ran into Bluesky's session limits (about 30 logins
+            # per 5 minutes) — which would lock out the routine poster too.
+            # The events stay pending for the next pass.
+            break
         event.bsky_posted = True
         event.bsky_posted_at = now
         posted += 1
@@ -262,6 +283,9 @@ def post_result_updates(db: Session, election_date: str) -> int:
         for p2, c2, _, other, _, _ in queue:
             if other.race_id == race.id and other.bsky_posted_at is None and p2 >= priority and c2 <= created:
                 other.bsky_posted_at = now
+        # Committed per post: a failure later in the pass rolled back
+        # posts already published, and the next pass sent them again.
+        db.commit()
     db.commit()
     return posted
 

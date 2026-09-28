@@ -77,10 +77,10 @@ def _content(result: RaceResult) -> dict:
     holders = holders_word(result.held_by_party)
     label = race_label(result.race)
     if result.official:
-        title = f"{noun.capitalize()} wins {label} in the official count, taking a seat {holders} held"
+        title = f"{noun[:1].upper()}{noun[1:]} wins {label} in the official count, taking a seat {holders} held"
         lede = f"{result.source_name} lists its count as official."
     else:
-        title = f"{noun.capitalize()} leads {label} count in a seat {holders} hold"
+        title = f"{noun[:1].upper()}{noun[1:]} leads {label} count in a seat {holders} hold"
         lede = ("The count is not final and the lead can change. "
                 "Press coverage has not yet confirmed it.")
     against = f" ahead of {_person(runner)}" if runner else ""

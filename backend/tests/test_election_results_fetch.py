@@ -334,7 +334,17 @@ class TestTallyRefusesTestData:
 
     async def test_preview_election(self, monkeypatch):
         with pytest.raises(election_results.UntrustedCount):
-            await self._fetch(monkeypatch, config={"clientEnvDemo": "false", "previewElections": ["1846_Preview"]})
+            await self._fetch(monkeypatch, config={"clientEnvDemo": "false", "previewElections": ["1846"]})
+
+    async def test_the_real_election_beside_its_own_preview_id_is_read(self, monkeypatch):
+        """North Dakota's config keeps "346_Preview" listed while 346, its
+        real primary, is live and official (verified 2026-09-28): the
+        preview is its own pseudo-id, not a flag on the real one."""
+        got = await self._fetch(monkeypatch, config={"clientEnvDemo": "false", "previewElections": ["1846_Preview"]})
+        assert got is not None and got.contests
+
+    async def test_an_unreadable_config_is_unavailable_not_refused(self, monkeypatch):
+        assert await self._fetch(monkeypatch, config="<html>502</html>") is None
 
     async def test_placeholder_answer(self, monkeypatch):
         """An unknown id answers 200 with lastUpdated 0001-01-01 and no id."""
@@ -633,6 +643,17 @@ class TestClaritySpecialSenate:
                                  "V": [5, 4, 3, 2], "P": ["DEM", "REP", "", ""]}]}
         [contest] = clarity.general_contests(summary)
         assert contest.candidates == [("John Blank", "D", 5), ("Ann Lee", "R", 4)]
+
+
+    def test_the_contests_own_total_counts_the_dropped_rows(self):
+        """Clarity's `T` includes write-ins; summing the kept candidates
+        overstated every share."""
+        summary = {"Contests": [{"C": "United States Senator", "CH": ["Jane Roe", "Write-In"], "V": [60, 10],
+                                 "P": ["DEM", ""], "T": 100}]}
+        [contest] = clarity.general_contests(summary)
+        assert contest.votes_counted == 100
+        summary["Contests"][0]["T"] = 5  # a total below the candidates' own sum is not believed
+        assert clarity.general_contests(summary)[0].votes_counted == 60
 
 
 class TestClarityLandingPage:
