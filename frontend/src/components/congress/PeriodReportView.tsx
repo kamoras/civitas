@@ -9,6 +9,7 @@ import { Empty, Figure, FigureGroup, Section, VoteRow } from "./ReportParts";
 
 function chamberCell(day: PeriodDay, chamber: "senate" | "house") {
   const c = day[chamber];
+  if (day.noRecordPublished) return <span className="text-ink-min">No Record</span>;
   if (!c.recorded) return <span className="text-ink-min">—</span>;
   if (!c.inSession) return <span className="text-ink-min">Not in session</span>;
   const parts = [];
