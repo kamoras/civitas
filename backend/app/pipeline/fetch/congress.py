@@ -621,8 +621,8 @@ async def fetch_bill_titles_or_none(
     if cached is not None:
         return cached
     # A 404 is stored as a marker: api_cache_set treats an empty payload as
-    # a likely failure and keeps it only a few hours, and "no such bill"
-    # doesn't expire.
+    # a likely failure and keeps it only a few hours, while the marker lasts
+    # the normal cache lifetime before "no such bill" is checked again.
     if api_cache_get(db, "congress", f"{cache_key}-absent") is not None:
         return []
 
