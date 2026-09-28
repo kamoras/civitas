@@ -865,7 +865,7 @@ def _calc_funding_independence(
          utilization factor meant to correct that (before v6.19) measured how
          close each contributing PAC came to a one-election cap, over
          totals spanning a primary and a general, rather than how much the
-         campaign depended on PACs. With the size fit, r=+0.11 / -0.06.
+         campaign depended on PACs. With the size fit, r=+0.05 / -0.06.
       2. Small-donor share (10/53): unitemized (<$200) contributions,
          against what the state's size predicts for senators
          (small_donor_baseline.json) and against the House median for

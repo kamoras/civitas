@@ -250,7 +250,7 @@ export default function AboutPage() {
                   campaign dilutes the same PAC dollars to a smaller share. Measured in September
                   2026, a senator&apos;s PAC dollars barely grow with campaign size, and scored
                   against one chamber-wide median the share tracked size (a correlation of 0.58
-                  between this score and campaign size in the Senate; 0.11 with the adjustment).
+                  between this score and campaign size in the Senate; 0.05 with the adjustment).
                   Each member is compared only with their own chamber, whose members&apos; funding
                   covers the same span of time (six years of fundraising for a senator&apos;s
                   election, two for a House member&apos;s); (2) the share of funding from small (&lt;$200,
