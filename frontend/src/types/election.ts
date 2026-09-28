@@ -317,6 +317,10 @@ export interface StateBallot {
   cycleYear: number;
   electionDate: string;
   electionType: string;
+  /** Which stage the election is in. Optional only for a newer frontend
+   * running against an older backend mid-rollout: absent reads as
+   * "campaign", the page as it always was. */
+  phase?: ElectionPhaseInfo;
   /** This state's own primary date, read from the state's election feed.
    * Null when that state publishes nothing this can be read from — an
    * unknown date is shown as unknown, never guessed. */
@@ -454,4 +458,112 @@ export interface TownBallot {
   electionName: string | null;
   electionDate: string | null;
   contests: TownBallotItem[];
+}
+
+
+// ── Live results (GET /elections/results) ──────────────────────────────
+
+/** campaign: ballot research, lean maps. election_day / results: the page
+ * leads with the live count (backend app/election_phase.py). */
+export type ElectionPhase = "campaign" | "election_day" | "results";
+
+export interface ElectionPhaseInfo {
+  phase: ElectionPhase;
+  electionDate: string;
+  /** Last day the results stay the page's subject; null in a campaign. */
+  resultsUntil: string | null;
+  lastResultChange: string | null;
+}
+
+export interface LiveCandidateResult {
+  /** As the state's results feed prints it. */
+  name: string;
+  /** partyGroup: DEM / REP / IND / LIB / ... — null when the feed's party
+   * isn't one the shared vocabulary knows. */
+  party: string | null;
+  votes: number;
+  pct: number | null;
+  /** Set only for a unique match to one of the race's candidates. */
+  candidateId: string | null;
+}
+
+export interface LiveRaceResult {
+  raceId: string;
+  state: string;
+  office: "S" | "H";
+  district: number | null;
+  isSpecial: boolean;
+  /** The party that held the seat going in; null when not knowable. */
+  heldBy: string | null;
+  /** True only when the state itself calls its count official. Until
+   * then a race is "leading", never won — Civitas does not call races. */
+  official: boolean;
+  votesCounted: number;
+  reportingUnits: number | null;
+  totalUnits: number | null;
+  /** "precincts" or "counties" — what the state counts reporting in. */
+  unitLabel: string;
+  sourceName: string;
+  sourceUrl: string | null;
+  fetchedAt: string;
+  lastChangeAt: string;
+  /** Null before any votes and on an exact tie. */
+  leaderParty: string | null;
+  /** Leader's party differs from the holder's, with enough in to say so. */
+  flip: boolean;
+  candidates: LiveCandidateResult[];
+}
+
+export type ResultEventKind =
+  | "first_returns"
+  | "lead_change"
+  | "all_reporting"
+  | "official"
+  | "flip"
+  | "flip_reversed";
+
+export interface ResultEventPerson {
+  name: string;
+  party: string | null;
+  votes: number;
+  pct: number | null;
+}
+
+export interface ResultEvent {
+  id: number;
+  raceId: string;
+  state: string;
+  office: "S" | "H";
+  district: number | null;
+  isSpecial: boolean;
+  kind: ResultEventKind | string;
+  at: string;
+  detail: {
+    leader?: ResultEventPerson | null;
+    runnerUp?: ResultEventPerson | null;
+    previousLeader?: { name: string; party: string | null } | null;
+    votesCounted?: number;
+    reportingUnits?: number | null;
+    totalUnits?: number | null;
+    unitLabel?: string;
+    heldBy?: string | null;
+    official?: boolean;
+  };
+}
+
+export interface LiveResults {
+  cycleYear: number;
+  phase: ElectionPhaseInfo;
+  /** States whose own reporting system is read live. Every other state
+   * has no count here — which the page says, rather than drawing it as
+   * a state where nothing has happened. */
+  liveStates: string[];
+  /** States electing a senator this cycle. */
+  senateStates: string[];
+  /** When each live state's last polls close (UTC ISO). Nothing of its
+   * count is read or shown before then. Optional for an older backend. */
+  pollsClose?: Record<string, string>;
+  races: LiveRaceResult[];
+  /** Newest first. */
+  updates: ResultEvent[];
 }

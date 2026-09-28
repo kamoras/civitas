@@ -86,6 +86,8 @@ civitas/
 │   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling phase)
 │   │   │   ├── vector_store.py  # sqlite-vec + sentence-transformer model management
 │   │   │   └── lexical_index.py # SQLite FTS5 keyword index (BM25F) over explore docs
+│   │   ├── live_results/        # Election-night count sync, seat-flip issues, results posts — outside
+│   │   │                        #   pipeline/ so it never moves the analysis-code fingerprint
 │   │   ├── models.py            # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
 │   │   ├── schemas.py           # Pydantic response schemas (incl. PaginatedVotesSchema)
 │   │   ├── database.py          # DB engine + session management
@@ -721,6 +723,39 @@ After issues are committed, the Action Center pipeline also:
   timeline updates in `monitor_updates`. Existing monitors are deduplicated
   by embedding similarity; dormant monitors are marked "watching"
 
+**Election night and after** (`election_phase.py`, `live_results/sync.py`).
+The site's election is not simply the *next* one: from election day (Eastern
+date) it stays on the election just held while any race's vote totals are
+still moving and for `RESULTS_GRACE_DAYS` (14) after the last change, capped at
+January 3 (20th Amendment), and only then rolls to the next cycle.
+`active_election()` is the one answer for the pipeline's cycle, the API's
+`electionDate`/`phase` and the season jobs — never `next_election_day()`
+directly, which flips to the next cycle the night polls close.
+
+In that window a five-minute job (`scheduler._election_results_sync`) reads
+each covered state's own election-night feed — Clarity, Tally ENR, TotalVote,
+Enhanced Voting, one reader per vendor beside its primary adapter
+(`fetch_general_results`), dispatched by `fetch/election_results.py`; a
+state's `live_results` block in `state_candidate_sources.json` names a feed its
+primary adapter doesn't read. The count is stored per race (`RaceResult`) with
+structured events (`ElectionResultEvent`), and the rules are strict because a
+wrong number on election night is worse than none:
+
+- Nothing is read, stored or said for a state before its last polls close
+  (`fetch/poll_close.py`, `app/data/poll_close_times.json` from
+  `scripts/fetch_poll_close_times.py` — regenerate each cycle).
+- Test, preview or mismatched data raises `UntrustedCount` and stores nothing
+  (Enhanced Voting `isProduction`, Clarity `istestmode`, Tally
+  `previewElections`/`electionID`); a feed that goes backwards in time or
+  version is refused; an impossible count is dropped; a poll whose total fell
+  is stored but announces nothing.
+- Civitas never calls a race. A count is "leading" until the source itself
+  says official, and every sentence about it — the live-updates feed, the
+  DEVELOPING Action Center issue a seat flip opens (`live_results/signals.py`),
+  the election-night Bluesky posts (`live_results/bluesky.py`) — is
+  a fixed template around the source's figures, never model text. A flip needs
+  half the reporting units in.
+
 After both member pipelines complete, `stock_pipeline.py` runs as a sibling
 phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
 reports plus the sitting president's OGE Form 278-T filings (PDF, from OGE's
@@ -900,6 +935,10 @@ the pending list).
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
 | Justice profile summary (LLM, from pre-computed statistics) | `backend/app/pipeline/justice_pipeline.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
+| Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
+| Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
+| Seat-flip DEVELOPING issues + election-night Bluesky posts | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
+| Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures.py` |
 | Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |

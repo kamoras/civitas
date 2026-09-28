@@ -17,7 +17,8 @@ from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db, get_visits_db
-from app.election_calendar import next_election_day, seats_up_for_year
+from app.election_calendar import next_election_day, previous_election_day, seats_up_for_year
+from app.election_phase import ELECTION_DAY, active_election, election_today
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
@@ -297,6 +298,7 @@ def _build_issue_response(
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
+        source_type=getattr(issue, "source_type", None),
         image_url=getattr(issue, "image_url", None),
         image_alt=getattr(issue, "image_alt", "") or "",
         image_credit=getattr(issue, "image_credit", "") or "",
@@ -953,32 +955,48 @@ ELECTION_SEASON_WINDOW_DAYS = 60
 
 
 def days_until_next_election(today: date | None = None) -> int:
-    """Days remaining until the next federal Election Day (0 = today)."""
-    today = today or utcnow().date()
+    """Days remaining until the next federal Election Day (0 = today).
+
+    next_election_day is strictly AFTER its argument, so on election day
+    itself it answers two years out — this used to return ~730 that day,
+    and "0 = today" (the teaser's ELECTION DAY badge) never happened."""
+    today = today or election_today()
+    if previous_election_day(today) == today:
+        return 0
     return (_next_election_day(today) - today).days
 
 
 def is_election_season(today: date | None = None) -> bool:
-    """True within ELECTION_SEASON_WINDOW_DAYS of the next federal election
-    — the window the midterm-elections pipeline (election_pipeline.py) uses
+    """True within ELECTION_SEASON_WINDOW_DAYS of the next federal election,
+    and on through the results window after it (election_phase) — the
+    window the midterm-elections pipeline (election_pipeline.py) uses
     to switch its coverage-ingestion phase from nightly to a tighter cadence
     (see scheduler.py). Public so scheduler.py doesn't need its own copy of
-    this date arithmetic."""
+    this date arithmetic. The count after election day is when coverage
+    moves fastest; ending the season the night polls closed stopped
+    coverage exactly then."""
+    today = today or election_today()
+    if active_election(today=today).shows_results:
+        return True
     return days_until_next_election(today) <= ELECTION_SEASON_WINDOW_DAYS
 
 
 @router.get("/elections")
 async def get_election_info(response: Response, db: Session = Depends(get_db)):
     """Return upcoming election info: dates, senate races, state data."""
-    # Election dates and race rosters change on the order of days, not
-    # minutes — same reasoning as /open-comments above.
-    response.headers["Cache-Control"] = "public, max-age=3600"
-    today = utcnow().date()
-    election_day = _next_election_day(today)
-    days_until = days_until_next_election(today)
+    # Race rosters change on the order of days, but this also carries the
+    # election phase (election_phase), which turns over at midnight on
+    # election day — five minutes, matching nginx's cache for this route.
+    response.headers["Cache-Control"] = "public, max-age=300"
+    today = election_today()
+    # The election the site is about — the one just held while its results
+    # are on show, not already the next one (election_phase).
+    election = active_election(db, today)
+    election_day = election.election_day
+    days_until = (election_day - today).days
     el_year = election_day.year
     is_presidential = el_year % 4 == 0
-    is_election_day = days_until == 0
+    is_election_day = election.phase == ELECTION_DAY
     is_election_season_flag = is_election_season(today)
 
     seats_up = _seats_up_for_year(el_year)
@@ -1044,6 +1062,9 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
             "daysUntil": days_until,
             "isElectionDay": is_election_day,
             "isElectionSeason": is_election_season_flag,
+            # "campaign" | "election_day" | "results"; while results are
+            # on show daysUntil is zero or negative.
+            "phase": election.phase,
         },
         "senateSeatsUp": len(seats_up) + len(special_states),
         "houseSeatsUp": 435,

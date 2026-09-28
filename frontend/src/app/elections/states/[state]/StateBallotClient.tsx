@@ -16,6 +16,9 @@ import ContestBox from "@/components/elections/ballot/ContestBox";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
+import StateResults from "@/components/elections/results/StateResults";
+import { useLiveResults } from "@/hooks/useLiveResults";
+import { showsResults } from "@/lib/results";
 import { buildBallotContests, contestForHash, countBallotContests, type BallotContest } from "@/lib/ballotContests";
 import {
   candidateName,
@@ -31,6 +34,7 @@ import {
 import { safeHref } from "@/lib/formatting";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type {
+  LiveRaceResult,
   RaceWithCandidates,
   StateBallot,
   StateLegChamber,
@@ -602,10 +606,13 @@ function HouseDetail({
   ballot,
   pickedId,
   onPick,
+  results,
 }: {
   ballot: StateBallot;
   pickedId: string | null;
   onPick: (id: string | null) => void;
+  /** Live counts by district, from election day — the map shades by them. */
+  results?: Map<number, LiveRaceResult>;
 }) {
   const houseRaces = ballot.houseRaces;
   const [filter, setFilter] = useState("");
@@ -664,7 +671,13 @@ function HouseDetail({
         </a>
         .
       </p>
-      <DistrictMap state={ballot.state} races={houseRaces} picked={null} onPick={(id) => onPick(id)} />
+      <DistrictMap
+        state={ballot.state}
+        races={houseRaces}
+        picked={null}
+        onPick={(id) => onPick(id)}
+        results={results}
+      />
       {houseRaces.length > 3 && <DistrictFinder races={houseRaces} picked={null} onPick={onPick} />}
       {houseRaces.length > 3 && (
         <div className="mb-3">
@@ -937,6 +950,17 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     };
   }, [ballot.state]);
 
+  // From election day the page leads with the count (backend election_phase);
+  // the server render says which, so a campaign-season page asks nothing.
+  const resultsMode = showsResults(ballot.phase);
+  const { data: live } = useLiveResults(ballot.state, resultsMode);
+  const liveByDistrict = useMemo(() => {
+    if (!live || !showsResults(live.phase)) return undefined;
+    const m = new Map<number, LiveRaceResult>();
+    for (const r of live.races) if (r.office === "H") m.set(r.district ?? 0, r);
+    return m;
+  }, [live]);
+
   const contests = useMemo(() => buildBallotContests(ballot, towns.length > 0), [ballot, towns.length]);
   // undefined = no choice made yet, so defer to the URL; null = closed.
   // Collapsing the two meant a contest opened by a link could never be
@@ -949,7 +973,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // hash, so it is read only once mounted — the useMounted idiom avoids a
   // hydration mismatch without setting state in an effect.
   const mounted = useMounted();
-  const fromHash = mounted ? contestForHash(window.location.hash, contests, ballot) : null;
+  // In results mode a #race- link is for the race's count (StateResults
+  // scrolls to it); only a #ballot- link opens research.
+  const hash = mounted ? window.location.hash : "";
+  const fromHash =
+    mounted && !(resultsMode && hash.startsWith("#race-")) ? contestForHash(hash, contests, ballot) : null;
   const open = chosen !== undefined ? chosen : fromHash;
 
   const openContest = useCallback(
@@ -991,6 +1019,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             ballot={ballot}
             pickedId={open?.houseRaceId ?? null}
             onPick={(id) => openContest("house", id)}
+            results={liveByDistrict}
           />
         );
       case "statewide":
@@ -1027,17 +1056,17 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <header className="mb-5 flex flex-col gap-4 border-b border-white/[0.14] pb-5 font-sans lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="font-mono text-xs tracking-[0.14em] text-phos">
-                BALLOT RESEARCH · {stateName.toUpperCase()} ·{" "}
+                {resultsMode ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
                 <span className="whitespace-nowrap">{ballot.electionDate.toUpperCase()}</span>
               </p>
               <h1 className="mt-1 font-display text-2xl font-extrabold text-ink-hi sm:text-[28px]">
-                Everyone on {stateName}&apos;s ballot, and who is behind them
+                {resultsMode ? `${stateName} results` : <>Everyone on {stateName}&apos;s ballot, and who is behind them</>}
               </h1>
               <p className="mt-1.5 text-sm text-ink-lo">
                 {countBallotContests(contests, ballot)} contests · {federalCandidates.length} federal candidates
                 {thirdParty > 0 && `, ${thirdParty} outside the two major parties`}
                 {withRecords > 0 && ` · ${withRecords} with a congressional voting record`}
-                {ballot.statePvi !== null && (
+                {ballot.statePvi !== null && !resultsMode && (
                   <>
                     {" · "}
                     <span className={`font-mono ${pviColor(ballot.statePvi)}`}>{formatPvi(ballot.statePvi)}</span>{" "}
@@ -1048,7 +1077,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               {ballot.primaryDate && (
                 <p className="mt-0.5 font-mono text-xs text-ink-min">PRIMARY: {ballot.primaryDate}</p>
               )}
-              {ballot.statePvi !== null && (
+              {/* From election day the page is about the count; a lean
+                  readout beside live results reads as a prediction of them. */}
+              {ballot.statePvi !== null && !resultsMode && (
                 <div className="mt-1 max-w-2xl">
                   <PviMethodologyNote />
                 </div>
@@ -1069,6 +1100,15 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               </a>
             </div>
           </header>
+
+          {resultsMode && (
+            <>
+              <StateResults ballot={ballot} results={live} lookupHref={lookupHref} />
+              <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs tracking-[0.16em] text-ink-min">
+                BALLOT RESEARCH · WHO WAS ON THE BALLOT, AND WHO WAS BEHIND THEM
+              </h2>
+            </>
+          )}
 
           {/* What the candidate lists on this page actually ARE — above the
               ballot, not under it: in a state still on FEC filers after its

@@ -97,6 +97,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    NOT_A_PERSON_RE,
     clean_display_name,
     federal_record,
     normalize_party,
@@ -106,6 +107,14 @@ from app.pipeline.fetch.state_candidates_common import (
     pick_nominees,
 )
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
+from app.pipeline.fetch.election_results import (
+    ContestCount,
+    StateCount,
+    UntrustedCount,
+    is_special_contest,
+    parse_utc,
+    pick_general,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -320,3 +329,139 @@ async def fetch_confirmed_candidates(
                 record["seat"] = st_seat
             records.append(record)
     return records
+
+
+# --- Live general-election counts (fetch/election_results.py) -------------
+
+def _party(choice_party: str, meta_party: str, parties: dict) -> str | None:
+    """A choice's party. Arkansas's results carry a numeric partyID to look
+    up in the election's party table; North Dakota's table is null
+    (`partyInfo: None`, verified 2026-09-28) and the search list's choice
+    carries the code itself ("REP"), with the results' partyID blank."""
+    for pid in (str(choice_party or "").strip(), str(meta_party or "").strip()):
+        if not pid:
+            continue
+        name = (parties.get(pid) or {}).get("partyName") or pid
+        party = normalize_party(name)
+        if party is not None:
+            return party
+    return None
+
+
+def general_contests(search: dict, results: dict, parties: dict) -> list[ContestCount]:
+    """Every federal contest, joined across the search list (names) and
+    the results (votes, precincts), with party read per choice through the
+    election's own party table — a general-election contest's name carries
+    no party the way a primary's does."""
+    named = ((search.get("response") or {}).get("contests")) or {}
+    counted = ((results.get("response") or {}).get("contests")) or {}
+    out = []
+    for contest_id, contest in named.items():
+        name = contest.get("contestName") or ""
+        parsed = parse_office(name)
+        result = counted.get(contest_id)
+        if parsed is None or not isinstance(result, dict):
+            continue
+        choice_names = contest.get("choices") or {}
+        candidates = []
+        for ch in result.get("choices") or []:
+            meta = choice_names.get(ch.get("choiceID")) or {}
+            votes = ch.get("totalVotes")
+            label = clean_display_name(meta.get("name") or "")
+            # North Dakota lists a "write-in" row with isWriteIn false; its
+            # votes stay in the contest total, it just isn't a candidate.
+            if meta.get("isWriteIn") or not label or NOT_A_PERSON_RE.search(label) or not isinstance(votes, int):
+                continue
+            candidates.append((label, _party(ch.get("partyID"), meta.get("partyID"), parties), votes))
+        total = result.get("totalVotes")
+        reporting, precincts = result.get("precinctsReporting"), result.get("totalPrecincts")
+        out.append(ContestCount(
+            office=parsed[0], district=parsed[1], candidates=candidates,
+            total_votes=total if isinstance(total, int) else None,
+            reporting_units=reporting if isinstance(reporting, int) else None,
+            total_units=precincts if isinstance(precincts, int) and precincts > 0 else None,
+            is_special=is_special_contest(name),
+        ))
+    return out
+
+
+async def _refuse_preview(client: httpx.AsyncClient, state: str, source: dict, eid: str) -> None:
+    """The state's own front-end config names its demo mode and the
+    election ids it serves as previews (North Dakota's lists three,
+    verified 2026-09-28); a count from either is a test."""
+    config_url = source.get("client_config")
+    if not config_url:
+        return
+    config = await fetch_json_with_retry(client, _rate_limiter, config_url, f"{state} results site config")
+    if not isinstance(config, dict):
+        raise UntrustedCount(f"{state} results site config unreadable; can't rule out a preview")
+    if str(config.get("clientEnvDemo")).lower() == "true":
+        raise UntrustedCount(f"{state} results site is in demo mode")
+    previews = {str(p) for p in config.get("previewElections") or []}
+    if eid in previews or f"{eid}_Preview" in previews:
+        raise UntrustedCount(f"{state} election {eid} is a preview")
+
+
+def _check_answer(body: dict, eid: str, state: str) -> None:
+    """Tally answers an unknown id with a 200 placeholder, and a preview id
+    with a DIFFERENT election's data (348_Preview returned 346's, verified
+    2026-09-28) — so every response must name the election asked for."""
+    if str(body.get("electionID") or "") != str(eid) or parse_utc(body.get("lastUpdated")) is None:
+        raise UntrustedCount(f"{state} answered for election {body.get('electionID')!r}, not {eid}")
+
+
+async def fetch_general_results(
+    client: httpx.AsyncClient, election_day, state: str, source: dict,
+) -> StateCount | None:
+    base_url, cid = source.get("base_url"), source.get("cid")
+    if not base_url or not cid:
+        return None
+    day = election_day.isoformat()
+    elections = await fetch_json_with_retry(
+        client, _rate_limiter, f"{base_url}/Election/GetElectionList?cid={cid}", f"{state} election list",
+    )
+    if not isinstance(elections, list):
+        return None
+    election = pick_general([
+        (e.get("electionName") or "", e) for e in elections
+        if str(e.get("electionDate") or "").startswith(day) and e.get("electionID")
+    ])
+    if election is None:
+        return None
+    eid = str(election["electionID"])
+    await _refuse_preview(client, state, source, eid)
+    search = await fetch_json_with_retry(
+        client, _rate_limiter, f"{base_url}/Contest/GetContestSearchList?cid={cid}&electionID={eid}",
+        f"{state} contest names",
+    )
+    info = await fetch_json_with_retry(
+        client, _rate_limiter, f"{base_url}/Election/GetElectionInfo?cid={cid}&electionID={eid}",
+        f"{state} election info",
+    )
+    if not isinstance(search, dict) or not isinstance(info, dict):
+        return None
+    # Scope the results request to the federal contests' own type code when
+    # they share one (Arkansas's general files them "FED"; its primary said
+    # "Federal"): the unscoped call is every city and county contest too.
+    types = {
+        c.get("contestTypeCode")
+        for c in (((search.get("response") or {}).get("contests")) or {}).values()
+        if parse_office(c.get("contestName") or "") is not None
+    }
+    url = f"{base_url}/Contest/GetContestResults?cId={cid}&electionID={eid}"
+    if len(types) == 1 and next(iter(types)):
+        url += f"&contestType={next(iter(types))}"
+    results = await fetch_json_with_retry(client, _rate_limiter, url, f"{state} results")
+    if not isinstance(results, dict):
+        return None
+    for body in (search, info, results):
+        _check_answer(body, eid, state)
+    parties = ((info.get("response") or {}).get("parties")) or {}
+    return StateCount(
+        source_name=source.get("source_name") or f"{state} election results",
+        page_url=source.get("results_page"),
+        official=bool(results.get("isOfficial")),
+        contests=general_contests(search, results, parties),
+        source_updated=parse_utc(results.get("lastUpdated")),
+        source_version=str(results.get("versionID") or "") or None,
+    )

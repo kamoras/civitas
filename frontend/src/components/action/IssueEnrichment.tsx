@@ -1,5 +1,7 @@
 "use client";
 
+import { developingSource } from "@/lib/developing";
+
 /**
  * The enrichment an Action Center issue carries beyond its own prose: the
  * monitors tracking it, the representatives involved, the legislation and
@@ -114,12 +116,13 @@ export function DevelopingBadge() {
 }
 
 /** One-line disclosure paired with DevelopingBadge — explains what
- *  "developing" means rather than leaving readers to guess. */
-export function DevelopingDisclosure() {
+ *  "developing" means, and names what the story was drafted from, rather
+ *  than leaving readers to guess. */
+export function DevelopingDisclosure({ sourceType }: { sourceType?: string | null }) {
+  const source = developingSource(sourceType);
   return (
     <p className="mb-4 font-mono text-xs text-ink-min">
-      Based on a primary-source vote record; broader news coverage has not
-      yet confirmed this story.
+      Based on {source}; broader news coverage has not yet confirmed this story.
     </p>
   );
 }
@@ -292,6 +295,34 @@ export function trackActionText(action: ActionItem, internal: boolean): string {
 
 export function trackableActions(issue: ActionIssue): ActionItem[] {
   return issue.actions.filter((a) => a.type === "track_legislation" && a.url);
+}
+
+/** A seat-flip issue's link to the live count (backend
+ * analyze/election_signals.py). Same-site paths only: the backend writes
+ * these, and anything else is not one of them. */
+export function followResultsActions(issue: ActionIssue): ActionItem[] {
+  return issue.actions.filter(
+    (a) => a.type === "follow_results" && typeof a.url === "string" && a.url.startsWith("/elections/")
+  );
+}
+
+export function FollowResults({ issue }: { issue: ActionIssue }) {
+  const actions = followResultsActions(issue);
+  if (actions.length === 0) return null;
+  return (
+    <div className="mb-6 space-y-2">
+      {actions.map((action) => (
+        <Link
+          key={action.url}
+          href={action.url!}
+          className="flex items-center gap-3 border border-signal-amber/40 bg-signal-amber/10 p-3 transition-all hover:border-signal-amber/70 group"
+        >
+          <span className="flex-1 text-sm text-ink group-hover:text-phos">{action.text}</span>
+          <span className="shrink-0 font-mono text-xs tracking-wide text-signal-amber">LIVE COUNT →</span>
+        </Link>
+      ))}
+    </div>
+  );
 }
 
 export function TrackLegislation({ issue }: { issue: ActionIssue }) {

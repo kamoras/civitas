@@ -15,8 +15,10 @@ import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
 import ShareButtons from "@/components/action/ShareButtons";
 import {
+  FollowResults,
   RepresentativeContacts,
   TrackLegislation,
+  followResultsActions,
   OfficialLegislation,
   RelatedDocuments,
   SourceList,
@@ -39,6 +41,7 @@ export default function IssueActions({
   const hasWhatYouCanDo =
     (issue.relatedSenators?.length ?? 0) > 0 ||
     issue.actions.some((a) => a.type === "track_legislation" && a.url) ||
+    followResultsActions(issue).length > 0 ||
     userState !== null;
 
   return (
@@ -46,6 +49,7 @@ export default function IssueActions({
       {hasWhatYouCanDo && (
         <section className="mb-10">
           <h2 className="text-xs text-ink-min mb-4 tracking-widest">WHAT YOU CAN DO</h2>
+          <FollowResults issue={issue} />
           <RepresentativeContacts issue={issue} userState={userState} />
           <TrackLegislation issue={issue} />
         </section>

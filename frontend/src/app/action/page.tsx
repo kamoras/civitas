@@ -32,6 +32,7 @@ import {
   NewFactTag,
   MonitorChips,
   RepresentativeContacts,
+  FollowResults,
   TrackLegislation,
   OfficialLegislation,
   RelatedDocuments,
@@ -42,6 +43,7 @@ import {
   trackActionText,
   trackableActions,
 } from "@/components/action/IssueEnrichment";
+import { factsHeading } from "@/lib/developing";
 
 const CivicActionWidget = dynamic(() => import("@/components/action/CivicTracker"), { ssr: false });
 import type { ActionIssue } from "@/types/action";
@@ -207,7 +209,7 @@ function HeroIssue({
         {issue.summary}
       </p>
 
-      {issue.status === "developing" && <DevelopingDisclosure />}
+      {issue.status === "developing" && <DevelopingDisclosure sourceType={issue.sourceType} />}
 
       {issue.policyAreas.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap mb-6">
@@ -224,7 +226,7 @@ function HeroIssue({
       {issue.facts.length > 0 && (
         <div className="mb-6">
           <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-            Media coverage
+            {factsHeading(issue.sourceType)}
           </h3>
           <ol className="space-y-2">
             {issue.facts.map((fact, i) => (
@@ -248,6 +250,7 @@ function HeroIssue({
       )}
 
       {/* Specific actions only — representative contact handled above */}
+      <FollowResults issue={issue} />
       <TrackLegislation issue={issue} />
 
       <OfficialLegislation issue={issue} />
@@ -339,7 +342,7 @@ function SecondaryIssue({
               {issue.summary}
             </p>
           )}
-          {expanded && issue.status === "developing" && <DevelopingDisclosure />}
+          {expanded && issue.status === "developing" && <DevelopingDisclosure sourceType={issue.sourceType} />}
         </div>
         <span
           className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
@@ -361,7 +364,7 @@ function SecondaryIssue({
           {issue.facts.length > 0 && (
             <div>
               <h4 className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-                Media coverage
+                {factsHeading(issue.sourceType)}
               </h4>
               <ol className="space-y-1.5">
                 {issue.facts.map((fact, i) => (

@@ -4,7 +4,7 @@ prioritization/snapshot helper functions directly."""
 
 import asyncio
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -159,15 +159,22 @@ class TestCurrentElectionCycle:
     """current_election_cycle() replaces what used to be a frozen
     CURRENT_ELECTION_CYCLE = 2026 constant, so the pipeline (and the
     /elections/races filter) point at the next cycle automatically once
-    an election passes, with no code change."""
+    an election is over, with no code change — "over" meaning its results
+    have stopped moving and had their grace period (election_phase), not
+    the morning after polls close."""
 
-    def test_during_2026_cycle_returns_2026(self):
-        with patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 7, 25)):
-            assert election_pipeline.current_election_cycle() == 2026
+    def test_during_2026_cycle_returns_2026(self, db_session):
+        with patch("app.election_phase.election_today", return_value=date(2026, 7, 25)):
+            assert election_pipeline.current_election_cycle(db_session) == 2026
 
-    def test_after_2026_election_day_returns_2028(self):
-        with patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 11, 4)):
-            assert election_pipeline.current_election_cycle() == 2028
+    def test_morning_after_2026_election_day_is_still_2026(self, db_session):
+        """Counting is still going on: this used to say 2028."""
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 4)):
+            assert election_pipeline.current_election_cycle(db_session) == 2026
+
+    def test_after_the_results_window_returns_2028(self, db_session):
+        with patch("app.election_phase.election_today", return_value=date(2026, 12, 1)):
+            assert election_pipeline.current_election_cycle(db_session) == 2028
 
     def test_run_election_pipeline_defaults_to_current_cycle(self, db_session):
         seen_cycles = []
@@ -178,7 +185,7 @@ class TestCurrentElectionCycle:
 
         with (
             patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
-            patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 11, 4)),
+            patch("app.election_phase.election_today", return_value=date(2027, 2, 1)),
             patch(
                 "app.pipeline.election_pipeline.fetch_all_candidates",
                 side_effect=_fake_fetch_all_candidates,

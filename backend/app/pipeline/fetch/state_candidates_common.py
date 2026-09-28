@@ -911,6 +911,30 @@ async def discover_certification_link(
     return urljoin(page_url, links.pop())
 
 
+# What a results file can print where a candidate's name goes. None of it
+# is a person, and a ballot-only row makes whatever it is visible.
+NOT_A_PERSON_RE = re.compile(
+    r"write[\s-]*ins?\b|scattering|\b(over|under)\s*votes?\b|\bblank\b|"
+    r"none of (these|the above)|uncommitted|withdrawn",
+    re.IGNORECASE,
+)
+
+
+def last_name_matches(last_name: str, full_name: str) -> bool:
+    """True if `last_name` (FEC's — possibly multi-word, e.g. "van
+    hollen") exactly matches the TRAILING tokens of `full_name`.
+    Deliberately token-exact rather than a raw substring check: a
+    substring match would let "lee" match "leeman" by coincidence,
+    which is exactly the kind of wrong-person attribution
+    api/elections._incumbent_link's docstring warns against. Token-trailing (not
+    single-last-token) so multi-word surnames like "Van Hollen" still
+    match against a full name of "Chris Van Hollen". Shared by that
+    scorecard link and the live-results sync's seat-holder lookup."""
+    cand_tokens = last_name.split()
+    name_tokens = full_name.lower().split()
+    return bool(cand_tokens) and name_tokens[-len(cand_tokens):] == cand_tokens
+
+
 def federal_record(
     office: str, district: int | None, party: str | None, name: str,
     *, last_first: bool = False,

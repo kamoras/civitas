@@ -62,6 +62,26 @@ def next_election_day(after: date) -> date:
         year += 2
 
 
+
+def previous_election_day(on_or_before: date) -> date | None:
+    """The most recent federal election day on or before `on_or_before`,
+    by the same statutory rule as next_election_day — the election a
+    results page is still about after the calendar has moved past it."""
+    candidate = next_election_day(date(on_or_before.year - 2, 1, 1))
+    latest = None
+    while candidate <= on_or_before:
+        latest = candidate
+        candidate = next_election_day(candidate)
+    return latest
+
+
+def new_congress_day(election_day: date) -> date:
+    """January 3 after `election_day`, when the terms it filled begin
+    (U.S. Const. amend. XX §1). After it the winners are serving and the
+    election is history, whatever its count still says."""
+    return date(election_day.year + 1, 1, 3)
+
+
 # Single source of truth for the rotation: each class's first modern
 # election year, and the state set it elects. seats_up_for_year and
 # next_senate_election_year both read this instead of each hand-typing

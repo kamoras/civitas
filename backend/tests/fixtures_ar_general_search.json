@@ -1,0 +1,278 @@
+{
+ "isOfficial": true,
+ "response": {
+  "contests": {
+   "130": {
+    "contestId": "130",
+    "contestName": "State Senate District 20",
+    "contestTypeCode": "SEN",
+    "contestOrder": 260,
+    "voteFor": 1,
+    "locationType": null,
+    "locationID": null,
+    "message": "",
+    "messageLink": "",
+    "choices": {
+     "275": {
+      "id": "275",
+      "name": "Erika Askeland",
+      "pictureFilename": "",
+      "partyID": "2099",
+      "color": "#2D4A7C",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "276": {
+      "id": "276",
+      "name": "State Senator Dan Sullivan",
+      "pictureFilename": "",
+      "partyID": "2096",
+      "color": "#A02626",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     }
+    }
+   },
+   "161": {
+    "contestId": "161",
+    "contestName": "U.S. Congress District 03",
+    "contestTypeCode": "FED",
+    "contestOrder": 130,
+    "voteFor": 1,
+    "locationType": null,
+    "locationID": null,
+    "message": "",
+    "messageLink": "",
+    "choices": {
+     "340": {
+      "id": "340",
+      "name": "Bobby Wilson",
+      "pictureFilename": "",
+      "partyID": "1",
+      "color": "#6BB2D3",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "341": {
+      "id": "341",
+      "name": "Caitlin Draper",
+      "pictureFilename": "",
+      "partyID": "2099",
+      "color": "#2D4A7C",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "342": {
+      "id": "342",
+      "name": "Congressman Steve Womack",
+      "pictureFilename": "",
+      "partyID": "2096",
+      "color": "#A02626",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     }
+    }
+   },
+   "227": {
+    "contestId": "227",
+    "contestName": "U.S. Congress District 02",
+    "contestTypeCode": "FED",
+    "contestOrder": 120,
+    "voteFor": 1,
+    "locationType": null,
+    "locationID": null,
+    "message": "",
+    "messageLink": "",
+    "choices": {
+     "471": {
+      "id": "471",
+      "name": "Congressman French Hill",
+      "pictureFilename": "",
+      "partyID": "2096",
+      "color": "#A02626",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "472": {
+      "id": "472",
+      "name": "Marcus A. Jones",
+      "pictureFilename": "",
+      "partyID": "2099",
+      "color": "#2D4A7C",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     }
+    }
+   },
+   "237": {
+    "contestId": "237",
+    "contestName": "U.S. Congress District 04",
+    "contestTypeCode": "FED",
+    "contestOrder": 140,
+    "voteFor": 1,
+    "locationType": null,
+    "locationID": null,
+    "message": "",
+    "messageLink": "",
+    "choices": {
+     "512": {
+      "id": "512",
+      "name": "Congressman Bruce Westerman",
+      "pictureFilename": "",
+      "partyID": "2096",
+      "color": "#A02626",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "513": {
+      "id": "513",
+      "name": "Risie Howard",
+      "pictureFilename": "",
+      "partyID": "2099",
+      "color": "#2D4A7C",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     }
+    }
+   },
+   "366": {
+    "contestId": "366",
+    "contestName": "U.S. President",
+    "contestTypeCode": "FED",
+    "contestOrder": 100,
+    "voteFor": 1,
+    "locationType": null,
+    "locationID": null,
+    "message": "",
+    "messageLink": "",
+    "choices": {
+     "788": {
+      "id": "788",
+      "name": "Chase Oliver/Mike ter Maat",
+      "pictureFilename": "",
+      "partyID": "1",
+      "color": "#BFA1D9",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "789": {
+      "id": "789",
+      "name": "Donald J. Trump/JD Vance",
+      "pictureFilename": "",
+      "partyID": "2096",
+      "color": "#A02626",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "790": {
+      "id": "790",
+      "name": "Jill Stein/Rudolph Ware",
+      "pictureFilename": "",
+      "partyID": "2097",
+      "color": "#1C8263",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "791": {
+      "id": "791",
+      "name": "Kamala D. Harris/Tim Walz",
+      "pictureFilename": "",
+      "partyID": "2099",
+      "color": "#2D4A7C",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "792": {
+      "id": "792",
+      "name": "Michael Wood/John G. Pietrowski",
+      "pictureFilename": "",
+      "partyID": "1",
+      "color": "#45888A",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "793": {
+      "id": "793",
+      "name": "Peter Sonski/Lauren Onak",
+      "pictureFilename": "",
+      "partyID": "1",
+      "color": "#14C893",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "794": {
+      "id": "794",
+      "name": "Robert F. Kennedy, Jr./Nicole Shanahan",
+      "pictureFilename": "",
+      "partyID": "1",
+      "color": "#9E4070",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     }
+    }
+   },
+   "645": {
+    "contestId": "645",
+    "contestName": "U.S. Congress District 01",
+    "contestTypeCode": "FED",
+    "contestOrder": 110,
+    "voteFor": 1,
+    "locationType": null,
+    "locationID": null,
+    "message": "",
+    "messageLink": "",
+    "choices": {
+     "1410": {
+      "id": "1410",
+      "name": "Congressman Rick Crawford",
+      "pictureFilename": "",
+      "partyID": "2096",
+      "color": "#A02626",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "1411": {
+      "id": "1411",
+      "name": "Rodney Govens",
+      "pictureFilename": "",
+      "partyID": "2099",
+      "color": "#2D4A7C",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     },
+     "1412": {
+      "id": "1412",
+      "name": "Steve G. Parsons",
+      "pictureFilename": "",
+      "partyID": "1",
+      "color": "#B9D369",
+      "order": 0,
+      "isWriteIn": false,
+      "isWinner": false
+     }
+    }
+   }
+  }
+ },
+ "versionID": "v1-1",
+ "lastUpdated": "2025-12-16T19:41:49.5225815Z",
+ "electionID": "1846"
+}

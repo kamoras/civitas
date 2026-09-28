@@ -232,29 +232,29 @@ class TestCandidateDetail:
 
 
 class TestPviMap:
-    def test_returns_both_state_and_district_maps(self):
-        data = _body(elections.pvi_map())
+    def test_returns_both_state_and_district_maps(self, db_session):
+        data = _body(elections.pvi_map(db_session))
         assert "AK" in data["states"]
         assert "AK-0" in data["districts"]
 
-    def test_includes_provenance_metadata(self):
+    def test_includes_provenance_metadata(self, db_session):
         """The bare numbers over-claim without provenance (2026-07 review
         F7) — the payload must carry per-map source metadata plus the
         lean-is-not-a-forecast note for the frontend to label."""
-        data = _body(elections.pvi_map())
+        data = _body(elections.pvi_map(db_session))
         meta = data["meta"]
         assert "states" in meta
         assert "districts" in meta
         assert "not" in meta["note"]  # the "measures lean, not who will win" caveat
 
-    def test_includes_cycle_year(self):
+    def test_includes_cycle_year(self, db_session):
         """Lets /elections's directory page get its header year from the
         same fetch it already makes for map coloring, instead of a
         second fetch of every race."""
         from app.pipeline.election_pipeline import current_election_cycle
 
-        data = _body(elections.pvi_map())
-        assert data["cycleYear"] == current_election_cycle()
+        data = _body(elections.pvi_map(db_session))
+        assert data["cycleYear"] == current_election_cycle(db_session)
 
 
 class TestUnopposedNomineesAreNotTreatedAsLosers:
@@ -465,3 +465,66 @@ class TestCoverageFeedShowsOnlyVettedSources:
         data = _body(elections.state_ballot("OH", db_session))
         assert data["coverage"] == []
 
+
+
+class TestLiveResults:
+    """GET /elections/results — the count, the updates feed, coverage."""
+
+    @staticmethod
+    def _results_window():
+        from datetime import date
+        from unittest.mock import patch
+
+        return patch("app.election_phase.election_today", return_value=date(2026, 11, 4))
+
+    def _seed(self, db_session):
+        import json as _json
+
+        from app.models import ElectionResultEvent, RaceResult
+
+        _race(db_session, "2026-HOUSE-GA-2", "GA", "H", 2)
+        _race(db_session, "2026-SEN-CO", "CO", "S", None)
+        db_session.add(RaceResult(
+            race_id="2026-HOUSE-GA-2", election_date="2026-11-03", source_name="GA SOS",
+            source_url="https://results.example/ga",
+            tallies=_json.dumps([{"name": "Ray Jones", "party": "REP", "votes": 600, "candidateId": None},
+                                 {"name": "Dana Smith", "party": "DEM", "votes": 400, "candidateId": "H1"}]),
+            votes_counted=1000, reporting_units=70, total_units=100, held_by_party="DEM",
+        ))
+        db_session.add(ElectionResultEvent(race_id="2026-HOUSE-GA-2", election_date="2026-11-03",
+                                           kind="flip", detail="{}"))
+        db_session.flush()
+
+    def test_campaign_phase_is_empty(self, db_session):
+        from datetime import date
+        from unittest.mock import patch
+
+        self._seed(db_session)
+        with patch("app.election_phase.election_today", return_value=date(2026, 10, 1)):
+            data = _body(elections.live_results(None, db_session))
+        assert data["phase"]["phase"] == "campaign"
+        assert data["races"] == [] and data["updates"] == []
+
+    def test_results_phase_returns_the_count(self, db_session):
+        self._seed(db_session)
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+        assert data["phase"]["phase"] == "results"
+        [race] = data["races"]
+        assert race["leaderParty"] == "REP" and race["flip"] is True
+        assert race["candidates"][0] == {"name": "Ray Jones", "party": "REP", "votes": 600, "pct": 60.0, "candidateId": None}
+        assert data["updates"][0]["kind"] == "flip"
+        assert "GA" in data["liveStates"] and "TX" not in data["liveStates"]
+        assert data["senateStates"] == ["CO"]
+        assert data["pollsClose"]["GA"] == "2026-11-04T00:00:00Z"  # 7 PM ET
+
+    def test_filters_by_state(self, db_session):
+        self._seed(db_session)
+        with self._results_window():
+            assert _body(elections.live_results("co", db_session))["races"] == []
+            assert len(_body(elections.live_results("GA", db_session))["races"]) == 1
+
+    def test_short_cache(self, db_session):
+        with self._results_window():
+            response = elections.live_results(None, db_session)
+        assert "max-age=30" in response.headers["Cache-Control"]

@@ -1,0 +1,153 @@
+"""Fetch each state's poll-closing time for a general election.
+
+Regenerates app/data/poll_close_times.json, read by
+app/pipeline/fetch/poll_close.py: the live-results sync stores nothing
+for a state — no count, no "flip", no post — until its LAST polls have
+closed. Florida makes releasing results before a county's polls close a
+felony (Fla. Stat. 104.21) and Nevada a misdemeanor (NRS 293.3606), and
+AP does not call a race before a split-zone state's last close; the page
+follows the strictest reading everywhere.
+
+Source: Ballotpedia's "State Poll Opening and Closing Times ({year})",
+which cites each state's own statute per row. Its hours are LOCAL, and a
+state spanning two time zones closes in each at local time, so the last
+close is taken in the state's westernmost zone unless the row names the
+zone a time belongs to (Nebraska's does). A state whose hours "vary by
+municipality/county" gets null, and the loader holds it until the latest
+close of any state — the error the gate is allowed to make is waiting
+too long, never too short.
+
+STATE_ZONES is geography, not a calculation: which IANA zones each state
+spans, per the U.S. time zone boundaries (49 CFR Part 71), east to west.
+
+Run from the repo (network required):
+    python3 backend/scripts/fetch_poll_close_times.py [year] [output.json]
+
+Exits 1 if any state's row is missing.
+"""
+
+import datetime as dt
+import html
+import json
+import pathlib
+import re
+import sys
+import urllib.request
+
+STATE_NAMES = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut",
+    "DE": "Delaware", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
+    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
+    "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
+    "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan",
+    "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
+    "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
+    "NY": "New York", "NC": "North Carolina", "ND": "North Dakota",
+    "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania",
+    "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
+    "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
+    "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming",
+}
+
+ET, CT, MT, MST, PT = "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles"
+STATE_ZONES = {
+    "AL": [ET, CT], "AK": ["America/Anchorage", "America/Adak"], "AZ": [MST, MT], "AR": [CT],
+    "CA": [PT], "CO": [MT], "CT": [ET], "DE": [ET], "FL": [ET, CT], "GA": [ET], "HI": ["Pacific/Honolulu"],
+    "ID": [MT, PT], "IL": [CT], "IN": [ET, CT], "IA": [CT], "KS": [CT, MT], "KY": [ET, CT], "LA": [CT],
+    "ME": [ET], "MD": [ET], "MA": [ET], "MI": [ET, CT], "MN": [CT], "MS": [CT], "MO": [CT], "MT": [MT],
+    "NE": [CT, MT], "NV": [MT, PT], "NH": [ET], "NJ": [ET], "NM": [MT], "NY": [ET], "NC": [ET],
+    "ND": [CT, MT], "OH": [ET], "OK": [CT], "OR": [MT, PT], "PA": [ET], "RI": [ET], "SC": [ET],
+    "SD": [CT, MT], "TN": [ET, CT], "TX": [CT, MT], "UT": [MT], "VT": [ET], "VA": [ET], "WA": [PT],
+    "WV": [ET], "WI": [CT], "WY": [MT],
+}
+_ZONE_WORDS = {"eastern": ET, "central": CT, "mountain": MT, "pacific": PT}
+
+# Ballotpedia answers a bare non-browser User-Agent with an empty 202;
+# the "compatible;" form still names Civitas and a contact address.
+UA = {"User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0; poll-closing times; +contact@civitas-research.org)"}
+SOURCE_URL = "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_({year})"
+DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "poll_close_times.json"
+
+_PM_RE = re.compile(r"(\d{1,2})(?::(\d{2}))?\s*p\.m\.", re.IGNORECASE)
+
+
+def _rows(page: str) -> dict[str, str]:
+    """{state name: polling-hours cell} from the 'Polling hours by state' table."""
+    start = page.find("Polling hours by state")
+    out = {}
+    for row in re.findall(r"<tr>(.*?)</tr>", page[start:], re.S):
+        cells = [
+            html.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", c))).strip()
+            for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S)
+        ]
+        if len(cells) >= 2 and cells[0]:
+            out[cells[0]] = re.sub(r"\[\d+\]", "", cells[1]).strip()
+    return out
+
+
+def last_close(hours: str, zones: list[str], on: dt.date) -> tuple[str, str] | None:
+    """(HH:MM, IANA zone) of the latest closing time the hours text states,
+    or None when it states none ("Varies by municipality")."""
+    from zoneinfo import ZoneInfo
+
+    best = None
+    for segment in hours.split(";"):
+        times = _PM_RE.findall(segment)
+        if not times:
+            continue
+        hour, minute = times[-1]  # "7 a.m. to 7 p.m.": the closing time is the last p.m.
+        word = next((z for w, z in _ZONE_WORDS.items() if w in segment.lower()), None)
+        zone = word or zones[-1]
+        local = dt.datetime.combine(on, dt.time(int(hour) + 12, int(minute or 0)), ZoneInfo(zone))
+        if best is None or local > best[0]:
+            best = (local, f"{int(hour) + 12:02d}:{int(minute or 0):02d}", zone)
+    return (best[1], best[2]) if best else None
+
+
+def main() -> int:
+    year = int(sys.argv[1]) if len(sys.argv) > 1 else dt.date.today().year
+    output = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_OUTPUT
+    url = SOURCE_URL.format(year=year)
+    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as resp:
+        page = resp.read().decode("utf-8", errors="replace")
+    if not page:
+        print(f"{url} answered with an empty body (status {resp.status})", file=sys.stderr)
+        return 1
+    rows = _rows(page)
+
+    # Any date in November after DST ends reads the zones as they are on
+    # election night.
+    reference = dt.date(year, 11, 10)
+    states, missing = {}, []
+    for code, name in STATE_NAMES.items():
+        hours = rows.get(name)
+        if hours is None:
+            missing.append(name)
+            continue
+        close = last_close(hours, STATE_ZONES[code], reference)
+        states[code] = {
+            "close": close[0] if close else None,
+            "zone": close[1] if close else STATE_ZONES[code][-1],
+            "hours": hours,
+        }
+    if missing:
+        print(f"missing rows: {missing}", file=sys.stderr)
+        return 1
+    output.write_text(json.dumps({
+        "_source": (
+            f"{url} (polling hours per state statute, all times local), fetched {dt.date.today().isoformat()} "
+            "by backend/scripts/fetch_poll_close_times.py. Close is the latest closing time the row states, "
+            "in the zone it names or else the state's westernmost zone (49 CFR Part 71); null = varies."
+        ),
+        "year": year,
+        "states": states,
+    }, indent=2, sort_keys=True) + "\n")
+    print(f"wrote {len(states)} states to {output}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -3,8 +3,9 @@
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
-import type { RaceWithCandidates } from "@/types/election";
+import type { LiveRaceResult, RaceWithCandidates } from "@/types/election";
 import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
+import { partyLetter, partyTextClass, reportingText, resultFill } from "@/lib/results";
 
 /**
  * Point at your neighbourhood; the page narrows to its district.
@@ -31,6 +32,11 @@ import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
  * pale and a safe one saturated. Deliberately not a new "toss-up"
  * category: a second classification on the same page would eventually
  * disagree with the first.
+ *
+ * From election day, given `results`, it shades by who LEADS each
+ * district's count instead (lib/results resultFill — the same fill the
+ * national map uses), and the preview shows the count. Lean says how a
+ * seat usually votes; on the night itself, the count is the news.
  */
 
 const DEM = "#82acff";
@@ -84,11 +90,14 @@ export default function DistrictMap({
   races,
   picked,
   onPick,
+  results,
 }: {
   state: string;
   races: RaceWithCandidates[];
   picked: string | null;
   onPick: (raceId: string) => void;
+  /** Live counts by district; when given, the map shades by the count. */
+  results?: Map<number, LiveRaceResult>;
 }) {
   const [topo, setTopo] = useState<Topo | null>(null);
   const [failed, setFailed] = useState(false);
@@ -133,9 +142,13 @@ export default function DistrictMap({
   return (
     <div className="mb-4 border border-white/15">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/10 px-3 py-2">
-        <p className="font-mono text-xs tracking-[0.1em] text-phos">POINT AT WHERE YOU LIVE</p>
+        <p className="font-mono text-xs tracking-[0.1em] text-phos">
+          {results ? "WHO LEADS EACH DISTRICT" : "POINT AT WHERE YOU LIVE"}
+        </p>
         <p className="font-mono text-[10px] text-ink-min">
-          redder = safer R · bluer = safer D · paler = closer
+          {results
+            ? "red = R leads · blue = D leads · paler = under half in"
+            : "redder = safer R · bluer = safer D · paler = closer"}
         </p>
       </div>
 
@@ -157,7 +170,9 @@ export default function DistrictMap({
             geographies.map((geo) => {
               const district = geo.properties?.district as number;
               const race = byDistrict.get(district);
-              const { fill, opacity } = leanFill(race?.pvi ?? null);
+              const { fill, opacity } = results
+                ? { fill: resultFill(results.get(district), true), opacity: 1 }
+                : leanFill(race?.pvi ?? null);
               const isPicked = district === pickedDistrict;
               const isHovered = district === hovered;
               const label = district === 0 ? `${state} at-large` : `${state}-${district}`;
@@ -198,7 +213,9 @@ export default function DistrictMap({
         aria-live="polite"
         className="min-h-[3.25rem] border-t border-white/10 px-3 py-2 font-mono text-xs"
       >
-        {focusRace ? (
+        {focusRace && results ? (
+          <DistrictResultPreview state={state} district={focusRace.district ?? 0} result={results.get(focusRace.district ?? 0)} />
+        ) : focusRace ? (
           <DistrictPreview state={state} race={focusRace} />
         ) : (
           <span className="text-ink-min">
@@ -232,6 +249,36 @@ function DistrictPreview({ state, race }: { state: string; race: RaceWithCandida
         );
       })}
       <span className="text-phos">click to show this race →</span>
+    </div>
+  );
+}
+
+function DistrictResultPreview({
+  state,
+  district,
+  result,
+}: {
+  state: string;
+  district: number;
+  result: LiveRaceResult | undefined;
+}) {
+  const [first, second] = result?.candidates ?? [];
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className="text-ink-hi">{district === 0 ? `${state} at-large` : `${state}-${district}`}</span>
+      {!result || !result.votesCounted ? (
+        <span className="text-ink-min">no votes counted yet</span>
+      ) : (
+        <>
+          {[first, second].filter(Boolean).map((c) => (
+            <span key={c.name} className={partyTextClass(c.party)}>
+              {c.name} ({partyLetter(c.party) || "other"}) {c.pct?.toFixed(1)}%
+            </span>
+          ))}
+          <span className="text-ink-min">{reportingText(result)}</span>
+          <span className="text-ink-lo">{result.official ? "official" : "leading, not called"}</span>
+        </>
+      )}
     </div>
   );
 }

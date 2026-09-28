@@ -1,0 +1,256 @@
+{
+  "_source": "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_(2026) (polling hours per state statute, all times local), fetched 2026-09-28 by backend/scripts/fetch_poll_close_times.py. Close is the latest closing time the row states, in the zone it names or else the state's westernmost zone (49 CFR Part 71); null = varies.",
+  "states": {
+    "AK": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Adak"
+    },
+    "AL": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Chicago"
+    },
+    "AR": {
+      "close": "19:30",
+      "hours": "7:30 a.m. to 7:30 p.m.",
+      "zone": "America/Chicago"
+    },
+    "AZ": {
+      "close": "19:00",
+      "hours": "6 a.m. to 7 p.m.",
+      "zone": "America/Denver"
+    },
+    "CA": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Los_Angeles"
+    },
+    "CO": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Denver"
+    },
+    "CT": {
+      "close": "20:00",
+      "hours": "6 a.m. to 8 p.m.",
+      "zone": "America/New_York"
+    },
+    "DE": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/New_York"
+    },
+    "FL": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Chicago"
+    },
+    "GA": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/New_York"
+    },
+    "HI": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "Pacific/Honolulu"
+    },
+    "IA": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Chicago"
+    },
+    "ID": {
+      "close": "20:00",
+      "hours": "8 a.m. to 8 p.m.",
+      "zone": "America/Los_Angeles"
+    },
+    "IL": {
+      "close": "19:00",
+      "hours": "6 a.m. to 7 p.m.",
+      "zone": "America/Chicago"
+    },
+    "IN": {
+      "close": "18:00",
+      "hours": "6 a.m. to 6 p.m.",
+      "zone": "America/Chicago"
+    },
+    "KS": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Denver"
+    },
+    "KY": {
+      "close": "18:00",
+      "hours": "6 a.m. to 6 p.m.",
+      "zone": "America/Chicago"
+    },
+    "LA": {
+      "close": "20:00",
+      "hours": "6 a.m. to 8 p.m. (Tuesday elections) 7 a.m. to 8 p.m. (Saturday elections)",
+      "zone": "America/Chicago"
+    },
+    "MA": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/New_York"
+    },
+    "MD": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/New_York"
+    },
+    "ME": {
+      "close": "20:00",
+      "hours": "6 a.m. to 8 p.m.",
+      "zone": "America/New_York"
+    },
+    "MI": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Chicago"
+    },
+    "MN": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Chicago"
+    },
+    "MO": {
+      "close": "19:00",
+      "hours": "6 a.m. to 7 p.m.",
+      "zone": "America/Chicago"
+    },
+    "MS": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Chicago"
+    },
+    "MT": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Denver"
+    },
+    "NC": {
+      "close": "19:30",
+      "hours": "6:30 a.m. to 7:30 p.m.",
+      "zone": "America/New_York"
+    },
+    "ND": {
+      "close": "21:00",
+      "hours": "Open between 7 a.m. to 9 a.m.; close between 7 p.m. to 9 p.m.",
+      "zone": "America/Denver"
+    },
+    "NE": {
+      "close": "20:00",
+      "hours": "8 a.m. to 8 p.m. (Central time zone); 7 a.m. to 7 p.m. (Mountain time zone)",
+      "zone": "America/Chicago"
+    },
+    "NH": {
+      "close": null,
+      "hours": "Varies by municipality",
+      "zone": "America/New_York"
+    },
+    "NJ": {
+      "close": "20:00",
+      "hours": "6 a.m. to 8 p.m.",
+      "zone": "America/New_York"
+    },
+    "NM": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Denver"
+    },
+    "NV": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Los_Angeles"
+    },
+    "NY": {
+      "close": "21:00",
+      "hours": "6 a.m. to 9 p.m.",
+      "zone": "America/New_York"
+    },
+    "OH": {
+      "close": "19:30",
+      "hours": "6:30 a.m. to 7:30 p.m.",
+      "zone": "America/New_York"
+    },
+    "OK": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Chicago"
+    },
+    "OR": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Los_Angeles"
+    },
+    "PA": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/New_York"
+    },
+    "RI": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/New_York"
+    },
+    "SC": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/New_York"
+    },
+    "SD": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Denver"
+    },
+    "TN": {
+      "close": null,
+      "hours": "Varies by county",
+      "zone": "America/Chicago"
+    },
+    "TX": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Denver"
+    },
+    "UT": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Denver"
+    },
+    "VA": {
+      "close": "19:00",
+      "hours": "6 a.m. to 7 p.m.",
+      "zone": "America/New_York"
+    },
+    "VT": {
+      "close": "19:00",
+      "hours": "Open between 5 a.m. to 10 a.m.; close at 7 p.m.",
+      "zone": "America/New_York"
+    },
+    "WA": {
+      "close": "20:00",
+      "hours": "Poll opening hours vary; close at 8 p.m.",
+      "zone": "America/Los_Angeles"
+    },
+    "WI": {
+      "close": "20:00",
+      "hours": "7 a.m. to 8 p.m.",
+      "zone": "America/Chicago"
+    },
+    "WV": {
+      "close": "19:30",
+      "hours": "6:30 a.m. to 7:30 p.m.",
+      "zone": "America/New_York"
+    },
+    "WY": {
+      "close": "19:00",
+      "hours": "7 a.m. to 7 p.m.",
+      "zone": "America/Denver"
+    }
+  },
+  "year": 2026
+}

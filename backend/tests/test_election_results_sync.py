@@ -1,0 +1,327 @@
+"""The live-results sync (pipeline/election_results.py) and the seat-flip
+DEVELOPING issue it opens (analyze/election_signals.py)."""
+
+import asyncio
+import json
+from datetime import date, datetime, timedelta
+from unittest.mock import patch
+
+from app.models import ActionIssue, ActionIssueStatus, Candidate, ElectionResultEvent, Race, RaceResult, Representative, Senator
+from app.live_results import sync as er
+from app.live_results import signals
+from app.pipeline.fetch.election_results import ContestCount, StateCount
+from app.time_utils import utcnow
+
+DAY = date(2026, 11, 3)
+
+
+def _state(**kw):
+    return StateCount(source_name=kw.pop("source_name", "Georgia Secretary of State"),
+                      page_url="https://results.example/ga", official=kw.pop("official", False), **kw)
+
+
+def _contest(d, r, reporting, total=100, office="H", district=2, others=()):
+    return ContestCount(
+        office=office, district=district,
+        candidates=[("Dana Smith", "D", d), ("Ray Jones", "R", r), *others],
+        reporting_units=reporting, total_units=total,
+    )
+
+
+def _setup(db, held_by="D"):
+    race = Race(id="2026-HOUSE-GA-2", cycle_year=2026, office="H", state="GA", district=2)
+    db.add(race)
+    db.add(Candidate(id="H6GA02001", race_id=race.id, name="SMITH, DANA", party="DEM", incumbent_challenge="I"))
+    db.add(Candidate(id="H6GA02002", race_id=race.id, name="JONES, RAY", party="REP"))
+    db.add(Representative(id="S000001", name="Dana Smith", state="GA", district=2, party=held_by))
+    db.flush()
+    return race
+
+
+def _apply(db, race, contest, **state_kw):
+    """As sync_state does it: store, then hand every unheld result on."""
+    applied = er.apply_count(db, race, contest, _state(**state_kw), DAY)
+    db.flush()
+    if not applied.held:
+        signals.update_developing_issues(db, [applied.result])
+        db.flush()
+    return [e.kind for e in applied.events], applied.result
+
+
+def _issues(db):
+    return db.query(ActionIssue).filter(ActionIssue.source_type == signals.SOURCE_TYPE).all()
+
+
+class TestApplyCount:
+    def test_first_returns_match_candidates_and_freeze_the_holder(self, db_session):
+        race = _setup(db_session)
+        kinds, result = _apply(db_session, race, _contest(100, 90, 5))
+        assert kinds == [er.FIRST_RETURNS]
+        tallies = json.loads(result.tallies)
+        assert [(t["candidateId"], t["party"]) for t in tallies] == [("H6GA02001", "DEM"), ("H6GA02002", "REP")]
+        assert result.held_by_party == "DEM"
+        assert result.votes_counted == 190
+
+    def test_nothing_changed_is_no_event_and_no_new_change_time(self, db_session):
+        race = _setup(db_session)
+        _, result = _apply(db_session, race, _contest(100, 90, 5))
+        stamped = result.last_change_at
+        kinds, result = _apply(db_session, race, _contest(100, 90, 5))
+        assert kinds == []
+        assert result.last_change_at == stamped
+
+    def test_a_new_leader_is_a_lead_change(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(100, 90, 5))
+        kinds, _ = _apply(db_session, race, _contest(100, 140, 20))
+        assert kinds == [er.LEAD_CHANGE]
+        detail = json.loads(db_session.query(ElectionResultEvent).filter_by(kind=er.LEAD_CHANGE).one().detail)
+        assert detail["leader"]["name"] == "Ray Jones"
+        assert detail["previousLeader"]["name"] == "Dana Smith"
+
+    def test_every_unit_in_and_the_source_calling_it_official(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(100, 90, 50))
+        kinds, _ = _apply(db_session, race, _contest(200, 150, 100))
+        assert kinds == [er.ALL_REPORTING]
+        kinds, _ = _apply(db_session, race, _contest(200, 150, 100), official=True)
+        assert kinds == [er.OFFICIAL]
+
+    def test_an_exact_tie_has_no_leader(self, db_session):
+        race = _setup(db_session)
+        _, result = _apply(db_session, race, _contest(100, 100, 50))
+        assert er.event_detail(result)["leader"] is None
+
+
+class TestFlip:
+    def test_a_flip_on_a_sliver_of_the_count_is_not_reported(self, db_session):
+        race = _setup(db_session)
+        kinds, _ = _apply(db_session, race, _contest(90, 100, 10))
+        assert er.FLIP not in kinds
+        assert _issues(db_session) == []
+
+    def test_flip_with_most_of_the_count_in_opens_a_templated_developing_issue(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(90, 100, 10))
+        kinds, result = _apply(db_session, race, _contest(900, 1000, 60))
+        assert er.FLIP in kinds
+        [issue] = _issues(db_session)
+        assert issue.status == ActionIssueStatus.DEVELOPING
+        assert issue.is_current and issue.rank == 999
+        assert issue.title == "Republican leads Georgia's 2nd Congressional District count in a seat Democrats hold"
+        facts = json.loads(issue.facts)
+        assert facts[0] == "Ray Jones (R): 1,000 votes, 52.6%"
+        assert "60 of 100 precincts reporting (60%)" in facts
+        assert facts[-1] == "The seat is held by a Democrat going into this election"
+        assert json.loads(issue.actions)[0]["url"] == "/elections/states/GA#race-2026-HOUSE-GA-2"
+        assert issue.confirmation_deadline > utcnow()
+        assert result.developing_issue_id == issue.id
+
+    def test_the_issue_follows_the_count_and_retires_if_the_lead_reverts(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 60))
+        _apply(db_session, race, _contest(1500, 1600, 80))
+        [issue] = _issues(db_session)
+        assert json.loads(issue.facts)[0] == "Ray Jones (R): 1,600 votes, 51.6%"
+        assert json.loads(issue.previous_facts)[0] == "Ray Jones (R): 1,000 votes, 52.6%"
+        kinds, _ = _apply(db_session, race, _contest(1800, 1700, 90))
+        assert er.FLIP_REVERSED in kinds
+        assert issue.is_current is False
+        # The flip coming back brings the same issue back — never a second one.
+        _apply(db_session, race, _contest(1800, 1900, 95))
+        assert _issues(db_session) == [issue] and issue.is_current is True
+
+    def test_an_expired_issue_is_not_resurrected(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 60))
+        _apply(db_session, race, _contest(1800, 1700, 90))
+        [issue] = _issues(db_session)
+        issue.confirmation_deadline = utcnow() - timedelta(hours=1)
+        _apply(db_session, race, _contest(1800, 1900, 95))
+        assert issue.is_current is False
+
+    def test_a_promoted_issue_is_left_to_the_news(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 60))
+        [issue] = _issues(db_session)
+        issue.status = ActionIssueStatus.CONFIRMED
+        issue.title = "From the press"
+        _apply(db_session, race, _contest(1800, 1700, 90))
+        assert issue.title == "From the press" and issue.is_current is True
+
+    def test_official_count_says_wins(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 100), official=True)
+        [issue] = _issues(db_session)
+        assert issue.title.startswith("Republican wins Georgia's 2nd Congressional District in the official count")
+
+    def test_no_known_holder_is_no_flip(self, db_session):
+        race = _setup(db_session)
+        db_session.query(Representative).delete()
+        _apply(db_session, race, _contest(900, 1000, 60))
+        assert _issues(db_session) == []
+
+
+class TestSenateHolder:
+    def test_open_seat_with_split_delegation_is_unknown(self, db_session):
+        race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
+        db_session.add(race)
+        db_session.add(Senator(id="A", name="Ann Alpha", state="GA", party="D"))
+        db_session.add(Senator(id="B", name="Bob Beta", state="GA", party="R"))
+        db_session.flush()
+        assert er.seat_holder_party(db_session, race) is None
+
+    def test_incumbent_candidate_names_the_seat(self, db_session):
+        race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
+        db_session.add(race)
+        db_session.add(Candidate(id="S1", race_id=race.id, name="BETA, BOB", party="REP", incumbent_challenge="I"))
+        db_session.add(Senator(id="A", name="Ann Alpha", state="GA", party="D"))
+        db_session.add(Senator(id="B", name="Bob Beta", state="GA", party="R"))
+        db_session.flush()
+        assert er.seat_holder_party(db_session, race) == "REP"
+
+
+AFTER_CLOSE = datetime(2026, 11, 4, 3, 0)  # 10 PM ET, every covered state closed
+
+
+def _sync(db, count, now=AFTER_CLOSE):
+    async def fake(client, state, day):
+        if isinstance(count, Exception):
+            raise count
+        return count
+
+    with patch.object(er, "fetch_state_count", fake), patch.object(er, "utcnow", return_value=now), \
+            patch.object(er, "send_ops_alert") as alert:
+        out = asyncio.run(er.sync_state(db, None, "GA", DAY))
+    return out, alert
+
+
+class TestSyncState:
+    def test_two_contests_for_one_seat_are_not_guessed_between(self, db_session):
+        _setup(db_session)
+        out, _ = _sync(db_session, _state(contests=[_contest(1, 2, 1), _contest(3, 4, 1)]))
+        assert out["races"] == 0
+        assert db_session.get(RaceResult, "2026-HOUSE-GA-2") is None
+
+    def test_a_contest_with_no_race_on_file_is_ignored(self, db_session):
+        out, _ = _sync(db_session, _state(contests=[_contest(1, 2, 1, district=9)]))
+        assert out == {"status": "ok", "races": 0, "contests": 1, "events": 0, "results": []}
+
+    def test_unreadable_source_is_reported_not_raised(self, db_session):
+        assert _sync(db_session, None)[0] == {"status": "unavailable"}
+
+
+class TestTrustGates:
+    def test_nothing_is_read_before_the_states_polls_close(self, db_session):
+        _setup(db_session)
+        out, _ = _sync(db_session, _state(contests=[_contest(1, 2, 1)]), now=datetime(2026, 11, 3, 23, 30))
+        assert out == {"status": "polls_open", "pollsClose": "2026-11-04T00:00:00Z"}  # 7 PM ET
+        assert db_session.get(RaceResult, "2026-HOUSE-GA-2") is None
+
+    def test_test_data_is_refused_and_alerted(self, db_session):
+        from app.pipeline.fetch.election_results import UntrustedCount
+
+        _setup(db_session)
+        out, alert = _sync(db_session, UntrustedCount("GA is not production data"))
+        assert out["status"] == "untrusted"
+        assert alert.called
+        assert db_session.get(RaceResult, "2026-HOUSE-GA-2") is None
+
+    def test_a_feed_that_goes_backwards_is_not_stored(self, db_session):
+        _setup(db_session)
+        newer = _state(contests=[_contest(100, 90, 20)], source_updated=datetime(2026, 11, 4, 2, 0))
+        older = _state(contests=[_contest(10, 9, 2)], source_updated=datetime(2026, 11, 4, 1, 0))
+        assert _sync(db_session, newer)[0]["status"] == "ok"
+        out, _ = _sync(db_session, older)
+        assert out["status"] == "stale"
+        assert db_session.get(RaceResult, "2026-HOUSE-GA-2").votes_counted == 190
+
+    def test_a_version_that_goes_backwards_is_not_stored(self, db_session):
+        _setup(db_session)
+        stamp = datetime(2026, 11, 4, 2, 0)
+        assert _sync(db_session, _state(contests=[_contest(100, 90, 20)], source_updated=stamp, source_version="316199"))[0]["status"] == "ok"
+        out, _ = _sync(db_session, _state(contests=[_contest(1, 1, 1)], source_updated=stamp, source_version="316100"))
+        assert out["status"] == "stale"
+
+    def test_a_count_from_the_future_is_not_stored(self, db_session):
+        _setup(db_session)
+        out, _ = _sync(db_session, _state(contests=[_contest(1, 2, 1)], source_updated=datetime(2026, 11, 5)))
+        assert out["status"] == "stale"
+
+    def test_an_impossible_count_is_dropped(self, db_session):
+        _setup(db_session)
+        out, _ = _sync(db_session, _state(contests=[_contest(100, 90, 120, total=100)]))
+        assert out["races"] == 0
+
+    def test_a_falling_total_is_stored_but_announces_nothing(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 800, 70))
+        kinds, result = _apply(db_session, race, _contest(700, 790, 70))  # R now leads, but totals fell
+        assert kinds == [] and result.votes_counted == 1490
+        assert _issues(db_session) == []
+        # The next poll, totals rising again, announces what the count holds.
+        kinds, _ = _apply(db_session, race, _contest(750, 850, 75))
+        assert er.FLIP in kinds
+
+    def test_official_does_not_bypass_the_reporting_floor(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(90, 100, 10), official=True)
+        assert _issues(db_session) == []
+
+
+class TestStalledFeeds:
+    def test_alerts_on_a_count_that_stopped_moving_with_units_out(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(100, 90, 50))
+        result = db_session.get(RaceResult, race.id)
+        result.last_change_at = datetime(2026, 11, 4, 1, 0)
+        with patch.object(er, "utcnow", return_value=datetime(2026, 11, 4, 4, 0)), \
+                patch.object(er, "live_results_states", return_value={"GA"}), \
+                patch.object(er, "send_ops_alert") as alert:
+            assert er.check_stalled_feeds(db_session, DAY) == ["GA"]
+        assert alert.called
+
+    def test_a_complete_count_is_not_stalled(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(100, 90, 100))
+        db_session.get(RaceResult, race.id).last_change_at = datetime(2026, 11, 4, 1, 0)
+        with patch.object(er, "utcnow", return_value=datetime(2026, 11, 4, 9, 0)), \
+                patch.object(er, "live_results_states", return_value={"GA"}), \
+                patch.object(er, "send_ops_alert"):
+            assert er.check_stalled_feeds(db_session, DAY) == []
+
+
+def test_a_matched_candidate_shows_their_ballot_name(db_session):
+    race = _setup(db_session)
+    db_session.get(Candidate, "H6GA02002").ballot_name = "Ray Jones"
+    contest = ContestCount(office="H", district=2, candidates=[("Congressman Ray Jones", "R", 10), ("Dana Smith", "D", 5)])
+    tallies = json.loads(er.apply_count(db_session, race, contest, _state(), DAY).result.tallies)
+    assert tallies[0]["name"] == "Ray Jones" and tallies[0]["candidateId"] == "H6GA02002"
+
+
+def test_an_unmatched_candidates_party_is_the_same_vocabulary_as_the_holders(db_session):
+    """A feed name that matches none of the race's candidates keeps the
+    feed's party letter; it must still compare equal to the holder's
+    partyGroup, or a Republican leading a Republican seat reads as a flip."""
+    race = _setup(db_session, held_by="R")
+    contest = ContestCount(office="H", district=2, candidates=[("Unknown Person", "R", 900), ("Other Person", "D", 100)],
+                           reporting_units=90, total_units=100)
+    applied = er.apply_count(db_session, race, contest, _state(), DAY)
+    db_session.flush()
+    assert json.loads(applied.result.tallies)[0]["party"] == "REP"
+    assert er.is_flip(applied.result) is False
+    signals.update_developing_issues(db_session, [applied.result])
+    assert _issues(db_session) == []
+
+
+class TestOneStoryPerPoll:
+    def test_a_flip_is_not_also_a_lead_change(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(100, 90, 10))
+        kinds, _ = _apply(db_session, race, _contest(900, 1000, 60))
+        assert kinds == [er.FLIP]
+
+    def test_complete_first_returns_are_just_all_in(self, db_session):
+        race = _setup(db_session)
+        kinds, _ = _apply(db_session, race, _contest(100, 90, 100))
+        assert kinds == [er.ALL_REPORTING]

@@ -8,6 +8,7 @@ import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
 import { formatUtcDate, isNewFact } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { factsHeading } from "@/lib/developing";
 import { PolicyBadge, MonitorChips, NewFactTag, IssueImage } from "@/components/action/IssueEnrichment";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { articleJsonLd } from "@/lib/seo";
@@ -190,7 +191,9 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           {/* Media coverage: lines quoted from the sources, each with its outlet */}
           {issue.facts?.length > 0 && (
             <section className="mb-10">
-              <h2 className="text-xs text-ink-min mb-4 tracking-widest">MEDIA COVERAGE</h2>
+              <h2 className="text-xs text-ink-min mb-4 tracking-widest uppercase">
+                {factsHeading(issue.sourceType)}
+              </h2>
               <ul className="space-y-3">
                 {issue.facts.map((fact, i) => (
                   <li key={i} className="flex gap-3 text-sm text-ink">

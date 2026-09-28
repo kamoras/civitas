@@ -734,6 +734,11 @@ class ActionIssueSchema(CamelModel):
     # uses this to show a disclosure badge and to exclude these from
     # normal top-story ranking competition.
     status: str = "confirmed"
+    # What a DEVELOPING issue was drafted from ("senate_roll_call_vote",
+    # "federal_register_significant_rule", "election_results", ...); None
+    # for an ordinary news-derived issue. The page names the source in its
+    # disclosure rather than calling every one a vote record.
+    source_type: str | None = None
     # Only ever set from a source article whose feed explicitly granted
     # redistribution rights — see news_feeds._rights_cleared_image. None
     # for the large majority of issues; used for the OG image and the

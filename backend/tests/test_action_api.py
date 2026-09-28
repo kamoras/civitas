@@ -808,3 +808,17 @@ class TestRecentActionIssues:
             "/action/issues/recent", "/action/issues/{issue_id}",
         )]
         assert paths == ["/action/issues/recent", "/action/issues/{issue_id}"]
+
+
+def test_a_developing_issue_names_what_it_was_drafted_from(db_session):
+    """The page's disclosure words the source ("a Federal Register rule",
+    "the state's own election-night count") instead of calling every
+    developing issue a vote record."""
+    from app.api.action import _build_issue_response
+    from app.models import ActionIssue
+
+    issue = ActionIssue(date="2026-11-04", rank=999, title="t", status="developing", source_type="election_results")
+    db_session.add(issue)
+    db_session.flush()
+    resp = _build_issue_response(issue, db_session)
+    assert resp["status"] == "developing" and resp["sourceType"] == "election_results"

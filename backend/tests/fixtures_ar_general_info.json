@@ -1,0 +1,65 @@
+{
+ "response": {
+  "parties": {
+   "2096": {
+    "partyID": "2096",
+    "abbreviation": null,
+    "partyName": "Republican Party"
+   },
+   "2097": {
+    "partyID": "2097",
+    "abbreviation": null,
+    "partyName": "Nevada Green Party"
+   },
+   "2098": {
+    "partyID": "2098",
+    "abbreviation": null,
+    "partyName": "Nonpartisan"
+   },
+   "2099": {
+    "partyID": "2099",
+    "abbreviation": null,
+    "partyName": "Democratic Party"
+   },
+   "2100": {
+    "partyID": "2100",
+    "abbreviation": null,
+    "partyName": "Independent American Party"
+   },
+   "2101": {
+    "partyID": "2101",
+    "abbreviation": null,
+    "partyName": "Libertarian Party of Nevada"
+   },
+   "2102": {
+    "partyID": "2102",
+    "abbreviation": null,
+    "partyName": "Other Party"
+   },
+   "2103": {
+    "partyID": "2103",
+    "abbreviation": null,
+    "partyName": "Nevada Forward Party"
+   },
+   "2104": {
+    "partyID": "2104",
+    "abbreviation": null,
+    "partyName": "No Labels Nevada"
+   },
+   "2105": {
+    "partyID": "2105",
+    "abbreviation": null,
+    "partyName": "Nevada Transhumanist Party"
+   },
+   "2108": {
+    "partyID": "2108",
+    "abbreviation": null,
+    "partyName": "No Political Party"
+   }
+  }
+ },
+ "versionID": "v1-1",
+ "lastUpdated": "2025-12-16T19:41:49.5225815Z",
+ "electionID": "1846",
+ "isOfficial": true
+}

@@ -1,0 +1,199 @@
+{
+ "isOfficial": true,
+ "response": {
+  "contests": {
+   "366": {
+    "contestID": "366",
+    "districtID": "",
+    "precinctsReporting": 2839,
+    "precinctsPartiallyReporting": 0,
+    "totalPrecincts": 2839,
+    "totalVotes": 1182676,
+    "recountType": 0,
+    "hasRecount": false,
+    "hasLocationResults": true,
+    "choices": [
+     {
+      "choiceID": "790",
+      "totalVotes": 4275,
+      "partyID": "2097",
+      "votePercent": 0.36,
+      "isWinner": false
+     },
+     {
+      "choiceID": "791",
+      "totalVotes": 396905,
+      "partyID": "2099",
+      "votePercent": 33.56,
+      "isWinner": false
+     },
+     {
+      "choiceID": "789",
+      "totalVotes": 759241,
+      "partyID": "2096",
+      "votePercent": 64.2,
+      "isWinner": true
+     },
+     {
+      "choiceID": "788",
+      "totalVotes": 5715,
+      "partyID": "1",
+      "votePercent": 0.48,
+      "isWinner": false
+     },
+     {
+      "choiceID": "794",
+      "totalVotes": 13255,
+      "partyID": "1",
+      "votePercent": 1.12,
+      "isWinner": false
+     },
+     {
+      "choiceID": "793",
+      "totalVotes": 2141,
+      "partyID": "1",
+      "votePercent": 0.18,
+      "isWinner": false
+     },
+     {
+      "choiceID": "792",
+      "totalVotes": 1144,
+      "partyID": "1",
+      "votePercent": 0.1,
+      "isWinner": false
+     }
+    ],
+    "writeInChoices": []
+   },
+   "645": {
+    "contestID": "645",
+    "districtID": "",
+    "precinctsReporting": 687,
+    "precinctsPartiallyReporting": 0,
+    "totalPrecincts": 687,
+    "totalVotes": 267177,
+    "recountType": 0,
+    "hasRecount": false,
+    "hasLocationResults": true,
+    "choices": [
+     {
+      "choiceID": "1412",
+      "totalVotes": 8353,
+      "partyID": "1",
+      "votePercent": 3.13,
+      "isWinner": false
+     },
+     {
+      "choiceID": "1411",
+      "totalVotes": 64113,
+      "partyID": "2099",
+      "votePercent": 24,
+      "isWinner": false
+     },
+     {
+      "choiceID": "1410",
+      "totalVotes": 194711,
+      "partyID": "2096",
+      "votePercent": 72.88,
+      "isWinner": true
+     }
+    ],
+    "writeInChoices": []
+   },
+   "237": {
+    "contestID": "237",
+    "districtID": "",
+    "precinctsReporting": 870,
+    "precinctsPartiallyReporting": 0,
+    "totalPrecincts": 870,
+    "totalVotes": 270253,
+    "recountType": 0,
+    "hasRecount": false,
+    "hasLocationResults": true,
+    "choices": [
+     {
+      "choiceID": "513",
+      "totalVotes": 73207,
+      "partyID": "2099",
+      "votePercent": 27.09,
+      "isWinner": false
+     },
+     {
+      "choiceID": "512",
+      "totalVotes": 197046,
+      "partyID": "2096",
+      "votePercent": 72.91,
+      "isWinner": true
+     }
+    ],
+    "writeInChoices": []
+   },
+   "161": {
+    "contestID": "161",
+    "districtID": "",
+    "precinctsReporting": 876,
+    "precinctsPartiallyReporting": 0,
+    "totalPrecincts": 876,
+    "totalVotes": 301084,
+    "recountType": 0,
+    "hasRecount": false,
+    "hasLocationResults": true,
+    "choices": [
+     {
+      "choiceID": "342",
+      "totalVotes": 192101,
+      "partyID": "2096",
+      "votePercent": 63.8,
+      "isWinner": true
+     },
+     {
+      "choiceID": "341",
+      "totalVotes": 95652,
+      "partyID": "2099",
+      "votePercent": 31.77,
+      "isWinner": false
+     },
+     {
+      "choiceID": "340",
+      "totalVotes": 13331,
+      "partyID": "1",
+      "votePercent": 4.43,
+      "isWinner": false
+     }
+    ],
+    "writeInChoices": []
+   },
+   "227": {
+    "contestID": "227",
+    "districtID": "",
+    "precinctsReporting": 407,
+    "precinctsPartiallyReporting": 0,
+    "totalPrecincts": 407,
+    "totalVotes": 306286,
+    "recountType": 0,
+    "hasRecount": false,
+    "hasLocationResults": true,
+    "choices": [
+     {
+      "choiceID": "472",
+      "totalVotes": 125777,
+      "partyID": "2099",
+      "votePercent": 41.07,
+      "isWinner": false
+     },
+     {
+      "choiceID": "471",
+      "totalVotes": 180509,
+      "partyID": "2096",
+      "votePercent": 58.93,
+      "isWinner": true
+     }
+    ],
+    "writeInChoices": []
+   }
+  }
+ },
+ "versionID": "v1-1",
+ "lastUpdated": "2025-12-16T19:41:49.5225815Z",
+ "electionID": "1846"
+}

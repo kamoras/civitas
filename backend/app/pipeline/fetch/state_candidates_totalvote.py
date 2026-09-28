@@ -118,13 +118,15 @@ only NEBRASKA is opted in:
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    NOT_A_PERSON_RE,
     clean_display_name,
     normalize_party,
     parse_office,
@@ -134,6 +136,7 @@ from app.pipeline.fetch.state_candidates_common import (
     surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
+from app.pipeline.fetch.election_results import ContestCount, StateCount, is_special_contest
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -236,24 +239,31 @@ def _contests(
                     continue
                 office, district, seat = parsed_seat
 
-        candidates = []
-        for section in wrapper.xpath(f'.//div[{_xpath_class("section")} and {_xpath_class("group")}]'):
-            name_el = section.xpath(f'.//div[{_xpath_class("display-results-box-d")}]/h1')
-            party_el = section.xpath(f'.//div[{_xpath_class("display-results-box-d")}]/h2')
-            votes_el = section.xpath(f'.//div[{_xpath_class("display-results-box-f")}]/h1')
-            if not (name_el and party_el and votes_el):
-                continue  # the "total votes" row has no display-results-box-d at all
-            raw_name = name_el[0].text_content().strip()
-            if _WRITE_IN_RE.search(raw_name):
-                continue
-            party = normalize_party(party_el[0].text_content().strip())
-            votes_text = votes_el[0].text_content().strip().replace(",", "")
-            if party is None or not raw_name or not votes_text.isdigit():
-                continue
-            candidates.append((raw_name, party, int(votes_text)))
+        candidates = [(n, p, v) for n, p, v in _candidate_rows(wrapper) if p is not None]
         if candidates:
             contests.append((office, district, seat, candidates))
     return contests
+
+
+def _candidate_rows(wrapper) -> list[tuple[str, str | None, int]]:
+    """(raw name, party code or None, votes) for each candidate row in one
+    contest block. A party normalize_party doesn't know comes back None:
+    a primary drops that row, a general-election count keeps its votes."""
+    rows = []
+    for section in wrapper.xpath(f'.//div[{_xpath_class("section")} and {_xpath_class("group")}]'):
+        name_el = section.xpath(f'.//div[{_xpath_class("display-results-box-d")}]/h1')
+        party_el = section.xpath(f'.//div[{_xpath_class("display-results-box-d")}]/h2')
+        votes_el = section.xpath(f'.//div[{_xpath_class("display-results-box-f")}]/h1')
+        if not (name_el and party_el and votes_el):
+            continue  # the "total votes" row has no display-results-box-d at all
+        raw_name = name_el[0].text_content().strip()
+        if _WRITE_IN_RE.search(raw_name):
+            continue
+        votes_text = votes_el[0].text_content().strip().replace(",", "")
+        if not raw_name or not votes_text.isdigit():
+            continue
+        rows.append((raw_name, normalize_party(party_el[0].text_content().strip()), int(votes_text)))
+    return rows
 
 
 async def fetch_confirmed_candidates(
@@ -334,4 +344,127 @@ async def fetch_confirmed_candidates(
         federal, runoff_threshold_pct, name_transform=surname,
     ) + resolve_confirmed_nominees(
         non_federal, runoff_threshold_pct, name_transform=clean_display_name,
+    )
+
+
+# --- Live general-election counts (fetch/election_results.py) -------------
+
+# "General Election - November 5, 2024", the page's own title once the site
+# serves the general (verified on Montana's 2024 archive page).
+_GENERAL_TITLE_RE = re.compile(
+    r"General\s+Election\s*(?:-\s*)?([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+)
+# "Results last updated: 12/19/2024 1:25:20 PM MT" — the page's own stamp,
+# in the state's zone abbreviation.
+_UPDATED_RE = re.compile(
+    r"last\s+updated:?\s*(\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*[AP]M)\s*([A-Z]{1,3}T)\b", re.IGNORECASE,
+)
+_ZONES = {"ET": "America/New_York", "CT": "America/Chicago", "MT": "America/Denver", "PT": "America/Los_Angeles"}
+# "Precincts Fully: 727 / 727", per contest block.
+_PRECINCTS_RE = re.compile(r"Precincts\s+Fully:\s*([\d,]+)\s*/\s*([\d,]+)", re.IGNORECASE)
+
+
+# Every TotalVote page carries its election's type and date as hidden form
+# fields — "General" / "11/3/2026" on New Mexico's staged 2026 general,
+# "Primary" / "6/2/2026 11:59:00 PM" on Montana's primary (all verified
+# 2026-09-28). The visible title is NOT one format: Montana's 2024 archive
+# reads "General Election - November 5, 2024", New Mexico's live 2026
+# page "GENERAL 2026<br />November 3, 2026" — a reader built on the first
+# would have read nothing all election night. The fields come first; the
+# title is only the fallback.
+_HIDDEN_RE = re.compile(r'id="hidElection(Type|Date)"[^>]*value="([^"]*)"', re.IGNORECASE)
+
+
+def _general_held_on(html: str) -> str | None:
+    """ISO date of the general election this page serves, or None when it
+    serves anything else (a primary, a page not rolled over yet)."""
+    fields = {k.lower(): v.strip() for k, v in _HIDDEN_RE.findall(html)}
+    if "type" in fields or "date" in fields:
+        if fields.get("type", "").lower() != "general":
+            return None
+        m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", fields.get("date", ""))
+        if not m:
+            return None
+        month, day, year = (int(g) for g in m.groups())
+        return f"{year:04d}-{month:02d}-{day:02d}"
+    m = _GENERAL_TITLE_RE.search(html)
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%B %d, %Y").date().isoformat()
+    except ValueError:
+        return None
+
+
+def _updated_at(html: str) -> datetime | None:
+    m = _UPDATED_RE.search(html)
+    if not m:
+        return None
+    abbr = m.group(2).upper()
+    zone = _ZONES.get(abbr[0] + "T")
+    if zone is None:
+        return None
+    try:
+        local = datetime.strptime(re.sub(r"\s+", " ", m.group(1)).upper(), "%m/%d/%Y %I:%M:%S %p")
+    except ValueError:
+        return None
+    return local.replace(tzinfo=ZoneInfo(zone)).astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def general_contests(html: str) -> list[ContestCount]:
+    tree = lxml_html.fromstring(html)
+    out = []
+    for wrapper in tree.xpath(f"//div[{_xpath_class('wrapper-inside')}]"):
+        headers = wrapper.xpath(f'.//div[{_xpath_class("display-results-box-a")}]/h1')
+        if not headers:
+            continue
+        label = headers[0].text_content().strip()
+        parsed = parse_office(label)
+        if parsed is None:
+            continue
+        candidates = [
+            (clean_display_name(n), p, v) for n, p, v in _candidate_rows(wrapper) if not NOT_A_PERSON_RE.search(n)
+        ]
+        m = _PRECINCTS_RE.search(wrapper.text_content())
+        reporting = total = None
+        if m:
+            reporting, total = (int(g.replace(",", "")) for g in m.groups())
+        out.append(ContestCount(
+            office=parsed[0], district=parsed[1], candidates=candidates,
+            reporting_units=reporting, total_units=total or None,
+            is_special=is_special_contest(label),
+        ))
+    return out
+
+
+async def fetch_general_results(
+    client: httpx.AsyncClient, election_day, state: str, source: dict,
+) -> StateCount | None:
+    """The same no-eid pages the primary reader uses, which serve the
+    general once the site rolls over to it; a page still showing another
+    election is "not published yet" (None), never read as this one."""
+    base_url, queries = source.get("base_url"), source.get("queries")
+    if not base_url or not queries:
+        return None
+    contests: list[ContestCount] = []
+    urls = []
+    stamps = []
+    for query in queries:
+        url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}"
+        html = await fetch_text_with_retry(client, _rate_limiter, url, f"{state} general results {query['type']}")
+        if html is None or _general_held_on(html) != election_day.isoformat():
+            return None
+        urls.append(url)
+        stamps.append(_updated_at(html))
+        contests.extend(general_contests(html))
+    return StateCount(
+        source_name=source.get("source_name") or f"{state} election results",
+        page_url=urls[0],
+        # Both states' pages say "Unofficial Results" indefinitely (see
+        # the module docstring) — boilerplate, not a status to relay.
+        official=False,
+        contests=contests,
+        # The oldest page's stamp: the count is only as fresh as its
+        # stalest part.
+        source_updated=min(stamps) if stamps and all(stamps) else None,
     )

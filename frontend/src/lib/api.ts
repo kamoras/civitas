@@ -4,7 +4,7 @@ import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
-import type { PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
+import type { LiveResults, PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
 import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
@@ -1618,6 +1618,10 @@ export interface ElectionInfo {
     daysUntil: number;
     isElectionDay: boolean;
     isElectionSeason: boolean;
+    /** "campaign" | "election_day" | "results" (backend election_phase).
+     * While results are on show, daysUntil is zero or negative. Optional
+     * for an older backend mid-rollout. */
+    phase?: string;
   };
   senateSeatsUp: number;
   houseSeatsUp: number;
@@ -1627,7 +1631,9 @@ export interface ElectionInfo {
 export async function fetchElectionInfo(): Promise<ElectionInfo> {
   const url = `${API_BASE}/action/elections`;
   return withShape<ElectionInfo>(
-    await cachedFetch(url, TTL.LONG),
+    // MEDIUM (5 min), matching the route's Cache-Control: it carries the
+    // election phase, which turns over at midnight on election day.
+    await cachedFetch(url, TTL.MEDIUM),
     {
       lists: ["states"],
     },
@@ -1644,6 +1650,18 @@ export async function fetchElectionInfo(): Promise<ElectionInfo> {
 export async function fetchRaces(): Promise<RaceSummary[]> {
   const url = `${API_BASE}/elections/races`;
   return asList(await cachedFetch(url, TTL.SHORT), url);
+}
+
+/** The live count (GET /elections/results), optionally for one state.
+ * VOLATILE, matching the backend's 30s Cache-Control: results pages poll
+ * this, and a longer client cache would hold every poll to a stale copy. */
+export async function fetchLiveResults(state?: string): Promise<LiveResults> {
+  const url = `${API_BASE}/elections/results${state ? `?state=${encodeURIComponent(state)}` : ""}`;
+  return withShape<LiveResults>(
+    await cachedFetch(url, TTL.VOLATILE),
+    { lists: ["liveStates", "senateStates", "races", "updates"], records: ["phase"] },
+    url
+  );
 }
 
 export async function fetchPviMap(): Promise<PviMap> {

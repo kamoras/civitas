@@ -110,6 +110,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    NOT_A_PERSON_RE,
     clean_display_name,
     normalize_party,
     STATEWIDE_OFFICE_LABELS,
@@ -120,6 +121,14 @@ from app.pipeline.fetch.state_candidates_common import (
     surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
+from app.pipeline.fetch.election_results import (
+    ContestCount,
+    StateCount,
+    UntrustedCount,
+    is_special_contest,
+    parse_utc,
+    pick_general,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -302,4 +311,106 @@ async def fetch_confirmed_candidates(
         statewide_by_seat, threshold, name_transform=clean_display_name,
     ) + resolve_confirmed_nominees(
         state_leg_by_seat, threshold, name_transform=clean_display_name,
+    )
+
+
+# --- Live general-election counts (fetch/election_results.py) -------------
+
+def _endpoints(source: dict) -> tuple[str, str, str] | None:
+    """(index url, data url template with {id}, public page template with
+    {id}) for either way a state's entry names this vendor's portal: Rhode
+    Island's base_url + jurisdiction, or the jurisdiction_url/election_url
+    pair GA/WA/VA/UT/ID's tabular entries carry for the same API."""
+    base_url = str(source.get("base_url") or "").rstrip("/")
+    jurisdiction = source.get("jurisdiction")
+    if base_url and jurisdiction:
+        return (
+            f"{base_url}/api/jurisdictions/{jurisdiction}",
+            f"{base_url}/api/elections/{jurisdiction}/{{id}}/data",
+            f"{base_url}/{jurisdiction}/elections/{{id}}",
+        )
+    discovery = source.get("discovery") or {}
+    index_url, election_url = discovery.get("jurisdiction_url"), discovery.get("election_url")
+    if not index_url or not election_url or "/api/jurisdictions/" not in index_url:
+        return None
+    public_base, jurisdiction = index_url.split("/api/jurisdictions/", 1)
+    return (
+        index_url,
+        election_url.replace("{election_id}", "{id}") + "/data",
+        f"{public_base}/{jurisdiction}/elections/{{id}}",
+    )
+
+
+def general_contests(payload: dict) -> list[ContestCount]:
+    out = []
+    for item in payload.get("ballotItems") or []:
+        if not isinstance(item, dict) or item.get("contestType") != "Candidate":
+            continue
+        name = _text(item.get("name"))
+        parsed = parse_office(name)
+        if parsed is None:
+            continue
+        candidates = []
+        for option in (item.get("summaryResults") or {}).get("ballotOptions") or []:
+            if not isinstance(option, dict) or option.get("isWriteIn") or option.get("isQualifiedWriteIn"):
+                continue
+            label, votes = _text(option.get("name")), option.get("voteCount")
+            if not label or NOT_A_PERSON_RE.search(label) or not isinstance(votes, int):
+                continue
+            party = normalize_party(str((option.get("party") or {}).get("abbreviation") or ""))
+            candidates.append((clean_display_name(label), party, votes))
+        status = item.get("reportingStatus") or {}
+        reporting, total = status.get("reportingUnits"), status.get("totalUnits")
+        vote_total = item.get("voteTotal")
+        out.append(ContestCount(
+            office=parsed[0], district=parsed[1], candidates=candidates,
+            total_votes=vote_total if isinstance(vote_total, int) else None,
+            reporting_units=reporting if isinstance(reporting, int) else None,
+            total_units=total if isinstance(total, int) and total > 0 else None,
+            is_special=is_special_contest(name),
+        ))
+    return out
+
+
+async def fetch_general_results(
+    client: httpx.AsyncClient, election_day, state: str, source: dict,
+) -> StateCount | None:
+    endpoints = _endpoints(source)
+    if endpoints is None:
+        return None
+    index_url, data_url, page_url = endpoints
+    envelope = await fetch_json_with_retry(client, _rate_limiter, index_url, f"{state} Enhanced Voting index")
+    elections = envelope.get("elections") if isinstance(envelope, dict) else None
+    if not isinstance(elections, list):
+        return None
+    day = election_day.isoformat()
+    election = pick_general([
+        (_text(e.get("name")), e) for e in elections
+        if isinstance(e, dict) and str(e.get("electionDate") or "").startswith(day) and e.get("publicElectionId")
+    ])
+    if election is None:
+        return None
+    eid = election["publicElectionId"]
+    payload = await fetch_json_with_retry(
+        client, _rate_limiter, data_url.format(id=eid), f"{state} Enhanced Voting general results",
+    )
+    if not isinstance(payload, dict):
+        return None
+    meta = payload.get("election") or {}
+    # The vendor's own page stamps "TEST" across any election whose
+    # isProduction is false (its public bundle, verified 2026-09-28), and a
+    # county's locality election carries its own flag: a count with any
+    # non-production part in it is not the count.
+    if meta.get("isProduction") is not True or any(
+        isinstance(loc, dict) and loc.get("isProduction") is False for loc in payload.get("localityElections") or []
+    ):
+        raise UntrustedCount(f"{state} Enhanced Voting election {eid} is not production data")
+    if not str(meta.get("electionDate") or "").startswith(day):
+        raise UntrustedCount(f"{state} Enhanced Voting answered for {meta.get('electionDate')!r}, not {day}")
+    return StateCount(
+        source_name=source.get("source_name") or f"{state} election results",
+        page_url=page_url.format(id=eid),
+        official=bool(meta.get("isOfficialResults")),
+        contests=general_contests(payload),
+        source_updated=parse_utc(meta.get("lastUpdated")) or parse_utc(meta.get("asOf")),
     )

@@ -8,7 +8,7 @@ import logging
 import pathlib
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,7 +19,6 @@ from app.election_calendar import (
     CLASS_I_STATES,
     CLASS_II_STATES,
     CLASS_III_STATES,
-    next_election_day,
     next_senate_election_year,
     seats_up_for_year,
 )
@@ -28,10 +27,12 @@ from app.models import (
     ApiCache,
     BallotMeasure,
     Candidate,
+    ElectionResultEvent,
     JudicialNominee,
     MeasureCoverage,
     Race,
     RaceCoverageItem,
+    RaceResult,
     Representative,
     Senator,
     StateLegNominee,
@@ -45,7 +46,10 @@ from app.pipeline.analyze.score_calculator import (
     get_state_pvi_map,
 )
 from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
+from app.pipeline.fetch.state_candidates_common import last_name_matches
+from app.election_phase import ActiveElection, active_election
 from app.pipeline.election_pipeline import current_election_cycle
+from app.live_results.sync import is_flip
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
@@ -486,20 +490,6 @@ def _race_summary(race: Race, state_pvi: dict, district_pvi: dict, complete: boo
     }
 
 
-def _last_name_matches(last_name: str, full_name: str) -> bool:
-    """True if `last_name` (FEC's — possibly multi-word, e.g. "van
-    hollen") exactly matches the TRAILING tokens of `full_name`.
-    Deliberately token-exact rather than a raw substring check: a
-    substring match would let "lee" match "leeman" by coincidence,
-    which is exactly the kind of wrong-person attribution
-    _incumbent_link's docstring warns against. Token-trailing (not
-    single-last-token) so multi-word surnames like "Van Hollen" still
-    match against a full name of "Chris Van Hollen"."""
-    cand_tokens = last_name.split()
-    name_tokens = full_name.lower().split()
-    return bool(cand_tokens) and name_tokens[-len(cand_tokens):] == cand_tokens
-
-
 def _incumbent_link(
     cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
     stale_incumbent_ids: frozenset[str] = frozenset(),
@@ -534,12 +524,12 @@ def _incumbent_link(
 
     if race.office == "H":
         rep = reps_by_district.get(race.district or 0)
-        if rep and _last_name_matches(last_name, rep.name):
+        if rep and last_name_matches(last_name, rep.name):
             return {"id": rep.id, "score": compute_overall_score(rep)}
         return None
 
     if race.office == "S":
-        matches = [s for s in senators if _last_name_matches(last_name, s.name)]
+        matches = [s for s in senators if last_name_matches(last_name, s.name)]
         if len(matches) == 1:
             return {"id": matches[0].id, "score": compute_overall_score(matches[0])}
     return None
@@ -997,8 +987,9 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     if state not in BALLOT_STATE_CODES:
         raise HTTPException(status_code=404, detail="Unknown state")
 
-    cycle = current_election_cycle()
-    election_day = next_election_day(utcnow().date()).isoformat()
+    election = active_election(db)
+    cycle = election.cycle
+    election_day = election.election_day.isoformat()
 
     races = (
         db.query(Race)
@@ -1057,6 +1048,9 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # the November ballot is the next one a visitor will see.
         "electionDate": election_day,
         "electionType": "general",
+        # Which stage the election is in (election_phase): from election
+        # day the page leads with the live count (GET /elections/results).
+        "phase": _phase_json(election),
         # Read from this state's own election feed (state_election_dates.py),
         # never a calendar maintained here — null for a state whose source
         # doesn't date itself, which is the honest answer.
@@ -1129,6 +1123,130 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     }, max_age=CACHE_TTL_LIST_S)
 
 
+# The live count moves on a five-minute sync; nginx caches this route for
+# the same 30s (nginx/civitas.conf), so a page polling once a minute sees
+# each sync within about a minute of it landing.
+CACHE_TTL_RESULTS_S = 30
+# The live-updates feed shows this many of the newest events.
+RESULT_UPDATES_LIMIT = 50
+
+
+def _phase_json(election: ActiveElection) -> dict:
+    return {
+        "phase": election.phase,
+        "electionDate": election.election_day.isoformat(),
+        "resultsUntil": election.results_until.isoformat() if election.results_until else None,
+        "lastResultChange": election.last_result_change.isoformat() + "Z" if election.last_result_change else None,
+    }
+
+
+def _result_json(result: RaceResult, race: Race) -> dict:
+    """One race's count, as the source shows it — see RaceResult."""
+    tallies = json.loads(result.tallies or "[]")
+    counted = result.votes_counted or 0
+    leader = tallies[0] if tallies and tallies[0]["votes"] > 0 and (
+        len(tallies) == 1 or tallies[1]["votes"] < tallies[0]["votes"]) else None
+    return {
+        "raceId": race.id,
+        "state": race.state,
+        "office": race.office,
+        "district": race.district,
+        "isSpecial": race.is_special,
+        "heldBy": result.held_by_party,
+        "official": result.official,
+        "votesCounted": counted,
+        "reportingUnits": result.reporting_units,
+        "totalUnits": result.total_units,
+        "unitLabel": result.unit_label,
+        "sourceName": result.source_name,
+        "sourceUrl": result.source_url,
+        "fetchedAt": result.fetched_at.isoformat() + "Z",
+        "lastChangeAt": result.last_change_at.isoformat() + "Z",
+        # Null before any votes and on an exact tie.
+        "leaderParty": leader.get("party") if leader else None,
+        # The same rule the Action Center issue and the Bluesky posts use
+        # (enough of the count in), so the page never marks a flip they
+        # don't, or the reverse.
+        "flip": is_flip(result),
+        "candidates": [
+            {
+                "name": t["name"], "party": t.get("party"), "votes": t["votes"],
+                "pct": round(100 * t["votes"] / counted, 1) if counted else None,
+                "candidateId": t.get("candidateId"),
+            }
+            for t in tallies
+        ],
+    }
+
+
+def _event_json(event: ElectionResultEvent, race: Race) -> dict:
+    return {
+        "id": event.id,
+        "raceId": race.id,
+        "state": race.state,
+        "office": race.office,
+        "district": race.district,
+        "isSpecial": race.is_special,
+        "kind": event.kind,
+        "at": event.created_at.isoformat() + "Z",
+        "detail": json.loads(event.detail or "{}"),
+    }
+
+
+@router.get("/results")
+def live_results(
+    state: str | None = Query(None, min_length=2, max_length=2),
+    db: Session = Depends(get_db),
+):
+    """The live count for the site's election (election_phase): every
+    covered race's numbers, the newest updates, and which states are read
+    live at all — so a state with no feed reads as uncovered, not as a
+    state where nothing has happened. Empty outside the results window."""
+    from app.pipeline.fetch.election_results import live_results_states
+
+    election = active_election(db)
+    st = state.upper() if state else None
+    races: list[dict] = []
+    updates: list[dict] = []
+    if election.shows_results:
+        day = election.election_day.isoformat()
+        q = db.query(RaceResult, Race).join(Race, Race.id == RaceResult.race_id).filter(RaceResult.election_date == day)
+        if st:
+            q = q.filter(Race.state == st)
+        races = [_result_json(r, race) for r, race in q.all()]
+        races.sort(key=lambda r: (r["state"], r["office"] != "S", r["district"] or 0))
+        eq = (
+            db.query(ElectionResultEvent, Race).join(Race, Race.id == ElectionResultEvent.race_id)
+            .filter(ElectionResultEvent.election_date == day)
+        )
+        if st:
+            eq = eq.filter(Race.state == st)
+        updates = [
+            _event_json(e, race) for e, race in
+            eq.order_by(ElectionResultEvent.created_at.desc(), ElectionResultEvent.id.desc())
+            .limit(RESULT_UPDATES_LIMIT).all()
+        ]
+    from app.pipeline.fetch.poll_close import last_poll_close
+
+    live = sorted(live_results_states())
+    senate_states = sorted({
+        s for (s,) in db.query(Race.state).filter(Race.cycle_year == election.cycle, Race.office == "S")
+    })
+    return cached_json({
+        "cycleYear": election.cycle,
+        "phase": _phase_json(election),
+        "liveStates": live,
+        # When each live state's last polls close (UTC). Nothing of its
+        # count is read, stored or shown before then (fetch/poll_close.py).
+        "pollsClose": {st: last_poll_close(st, election.election_day).isoformat() + "Z" for st in live},
+        # Which states elect a senator this cycle, so the Senate map can
+        # tell "no race here" from "a race we have no count for".
+        "senateStates": senate_states,
+        "races": races,
+        "updates": updates,
+    }, max_age=CACHE_TTL_RESULTS_S)
+
+
 @router.get("/races")
 def list_races(db: Session = Depends(get_db)):
     """All races for the current cycle, with PVI and top-2-by-funds
@@ -1137,7 +1255,7 @@ def list_races(db: Session = Depends(get_db)):
         db.query(Race)
         # Filter matches the docstring's contract — harmless while only
         # one cycle exists, load-bearing the day a second cycle syncs.
-        .filter(Race.cycle_year == current_election_cycle())
+        .filter(Race.cycle_year == current_election_cycle(db))
         # ~470 races each lazy-loading .candidates is an N+1 of ~500
         # queries per request on a Pi — batch them.
         .options(selectinload(Race.candidates))
@@ -1145,7 +1263,7 @@ def list_races(db: Session = Depends(get_db)):
     )
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
-    markers = _ballot_basis_markers(db, current_election_cycle())
+    markers = _ballot_basis_markers(db, current_election_cycle(db))
     data = [
         _race_summary(r, state_pvi, district_pvi, _race_complete(markers.get(r.state), r.state, r.id))
         for r in races
@@ -1154,7 +1272,7 @@ def list_races(db: Session = Depends(get_db)):
 
 
 @router.get("/pvi")
-def pvi_map():
+def pvi_map(db: Session = Depends(get_db)):
     """State + district PVI maps (positive = R lean, negative = D lean) —
     already computed for internal scoring (score_calculator.py), exposed
     publicly here with their provenance metadata (source, method, election
@@ -1169,7 +1287,7 @@ def pvi_map():
             # ELECTIONS" from the same fetch it already makes for map
             # coloring, instead of a second fetch of every race just to
             # read one field off the first result.
-            "cycleYear": current_election_cycle(),
+            "cycleYear": current_election_cycle(db),
         },
         max_age=CACHE_TTL_LIST_S,
     )

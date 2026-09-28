@@ -81,11 +81,14 @@ the shared parsers had never seen:
 
 import logging
 import re
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    NOT_A_PERSON_RE,
     normalize_party as _parse_party,
     clean_display_name as _clean_display_name,
     parse_office as _parse_office,
@@ -94,6 +97,7 @@ from app.pipeline.fetch.state_candidates_common import (
     pick_nominee,
     federal_record,
 )
+from app.pipeline.fetch.election_results import ContestCount, StateCount, UntrustedCount, is_special_contest, pick_general
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -112,15 +116,17 @@ _PRESIDENTIAL_RE = re.compile(r"presidential", re.IGNORECASE)
 _PRIMARY_RE = re.compile(r"primary", re.IGNORECASE)
 
 
-async def _election_meta(client: httpx.AsyncClient, state: str, eid: str) -> dict | None:
+async def _election_meta(
+    client: httpx.AsyncClient, state: str, eid: str, base: str = CLARITY_BASE,
+) -> dict | None:
     """An election's own name and date, in elections.json's shape, read
     from its settings file — for a state whose listing gives only ids."""
-    resp = await _get(client, f"{CLARITY_BASE}/{state}/{eid}/current_ver.txt", f"{state} Clarity version {eid}")
+    resp = await _get(client, f"{base}/{state}/{eid}/current_ver.txt", f"{state} Clarity version {eid}")
     version = resp.text.strip() if resp is not None else ""
     if not version.isdigit():
         return None
     resp = await _get(
-        client, f"{CLARITY_BASE}/{state}/{eid}/{version}/json/en/electionsettings.json",
+        client, f"{base}/{state}/{eid}/{version}/json/en/electionsettings.json",
         f"{state} Clarity settings {eid}",
     )
     try:
@@ -329,3 +335,171 @@ async def fetch_confirmed_candidates(
             record["seat"] = seat
         results.append(record)
     return results
+
+
+# --- Live general-election counts (fetch/election_results.py) -------------
+
+def _clarity_date(raw: str) -> str | None:
+    """"11/8/2022 12:00:00 AM" (elections.json) or "11/8/2022"
+    (electionsettings) as an ISO date."""
+    m = re.match(r"\s*(\d{1,2})/(\d{1,2})/(\d{4})", raw or "")
+    if not m:
+        return None
+    month, day, year = (int(g) for g in m.groups())
+    return f"{year:04d}-{month:02d}-{day:02d}"
+
+
+# (host, state, election day) -> EID. An election's id never changes once
+# it is proven to be that day's general, so a landing page's links are
+# walked once per process rather than on every five-minute pass.
+_general_eids: dict[tuple[str, str, str], str] = {}
+
+
+async def _general_election_id(
+    client: httpx.AsyncClient, state: str, election_day: str, discovery: dict, base: str = CLARITY_BASE,
+) -> str | None:
+    """The EID of the election held on `election_day`, found the same two
+    ways _discover_election_id finds a primary — by date, not by name."""
+    key = (base, state, election_day)
+    if key in _general_eids:
+        return _general_eids[key]
+    if discovery.get("mode") == "landing_page":
+        page_url, link_regex = discovery.get("page_url"), discovery.get("link_regex")
+        if not page_url or not link_regex:
+            return None
+        resp = await _get(client, page_url, f"{state} Clarity landing page")
+        if resp is None:
+            return None
+        ids = {m.group(1) for m in re.finditer(link_regex, resp.text)}
+        # A results archive links every election back a decade (South
+        # Carolina's page, ~60): try first the ones whose link text names
+        # the year, and walk the rest only if none of those is the one.
+        year = election_day[:4]
+        named = {
+            m.group(1) for m in re.finditer(link_regex, resp.text)
+            if year in re.sub(r"<[^>]+>", "", resp.text[m.end():resp.text.find("</a>", m.end())])
+        }
+        held = []
+        for batch in (sorted(named), sorted(ids - named)):
+            for eid in batch:
+                meta = await _election_meta(client, state, eid, base)
+                if meta is not None and _clarity_date(meta["Date"]) == election_day:
+                    held.append((meta.get("ElectionName") or "", eid))
+            if held:
+                break
+        found = pick_general(held)
+    else:
+        resp = await _get(client, f"{base}/{state}/elections.json", f"{state} Clarity elections")
+        if resp is None:
+            return None
+        try:
+            elections = resp.json() or []
+        except ValueError:
+            return None
+        held = [
+            (e.get("ElectionName") or "", e.get("EID"))
+            for e in elections
+            if isinstance(e, dict) and _clarity_date(str(e.get("Date") or "")) == election_day and e.get("EID")
+        ]
+        found = pick_general(held)
+    if found:
+        _general_eids[key] = found
+    return found
+
+
+def general_contests(summary: dict) -> list[ContestCount]:
+    """Every federal contest in a Clarity sum.json, counts kept. Parties
+    come per choice (`P`), since a general-election contest's name carries
+    none; `PR`/`TP` are units reporting / total."""
+    out = []
+    for contest in summary.get("Contests") or []:
+        if not isinstance(contest, dict):
+            continue
+        name = contest.get("C") or ""
+        parsed = _parse_office(name)
+        if parsed is None:
+            continue
+        names, votes, parties = contest.get("CH") or [], contest.get("V") or [], contest.get("P") or []
+        if not names or len(votes) != len(names):
+            continue  # an envelope this doesn't understand: pair nothing wrongly
+        candidates = []
+        for i, raw in enumerate(names):
+            if not isinstance(votes[i], int):
+                continue
+            code = str(parties[i]).strip() if i < len(parties) and parties[i] else ""
+            name = str(raw).strip()
+            # South Carolina prints the party code before the name
+            # ("REP Nancy Mace"); it is the choice's own `P`, not a name.
+            if code and name.upper().startswith(code.upper() + " "):
+                name = name[len(code) + 1:]
+            if NOT_A_PERSON_RE.search(name):
+                continue
+            candidates.append((_clean_display_name(name), _parse_party(code) if code else None, votes[i]))
+        tp, pr = contest.get("TP"), contest.get("PR")
+        out.append(ContestCount(
+            office=parsed[0], district=parsed[1], candidates=candidates,
+            reporting_units=pr if isinstance(pr, int) else None,
+            total_units=tp if isinstance(tp, int) and tp > 0 else None,
+            is_special=is_special_contest(name),
+        ))
+    return out
+
+
+async def fetch_general_results(
+    client: httpx.AsyncClient, election_day, state: str, source: dict,
+) -> StateCount | None:
+    day = election_day.isoformat()
+    # A state may host Clarity under its own domain (South Carolina's
+    # enr-scvotes.org); the paths below it are the vendor's own.
+    base = str(source.get("base_url") or CLARITY_BASE).rstrip("/")
+    eid = await _general_election_id(client, state, day, source.get("discovery") or {}, base)
+    if not eid:
+        return None
+    resp = await _get(client, f"{base}/{state}/{eid}/current_ver.txt", f"{state} Clarity version")
+    version = resp.text.strip() if resp is not None else ""
+    if not version.isdigit():
+        return None
+    resp = await _get(client, f"{base}/{state}/{eid}/{version}/json/sum.json", f"{state} Clarity summary")
+    if resp is None:
+        return None
+    try:
+        summary = resp.json() or {}
+    except ValueError:
+        return None
+    # The election's own settings say whether this is a test run and which
+    # day it is for. Clarity publishes dry runs on the real endpoints; a
+    # settings file that can't be read is not taken as "not a test".
+    settings = await _get(
+        client, f"{base}/{state}/{eid}/{version}/json/en/electionsettings.json",
+        f"{state} Clarity settings",
+    )
+    try:
+        details = ((settings.json().get("settings") or {}).get("electiondetails") or {}) if settings else None
+    except ValueError:
+        details = None
+    if details is None:
+        return None
+    if details.get("istestmode") or details.get("showtestdatawatermark"):
+        raise UntrustedCount(f"{state} Clarity election {eid} is in test mode")
+    if _clarity_date(str(details.get("electiondate") or "")) != day:
+        raise UntrustedCount(f"{state} Clarity election {eid} is dated {details.get('electiondate')!r}, not {day}")
+    # A state-level Clarity summary aggregates its counties' own sub-
+    # elections, and `TP` counts those counties, not precincts — Colorado's
+    # Senate contest reads 64 of 64, its county count. Said as what it is.
+    unit_label = "counties" if details.get("participatingcounties") else "precincts"
+    modified = resp.headers.get("Last-Modified") if hasattr(resp, "headers") else None
+    try:
+        updated = parsedate_to_datetime(modified).astimezone(timezone.utc).replace(tzinfo=None) if modified else None
+    except (TypeError, ValueError):
+        updated = None
+    return StateCount(
+        source_name=source.get("source_name") or f"{state} Clarity results",
+        page_url=f"{base}/{state}/{eid}/",
+        # Clarity's payload carries no official/certified flag.
+        official=False,
+        unit_label=unit_label,
+        contests=general_contests(summary),
+        source_updated=updated,
+        # current_ver.txt only ever increases as the state republishes.
+        source_version=version,
+    )

@@ -224,7 +224,7 @@ def test_state_ballot_defaults_to_not_yet_covered(db_session):
 
 def test_state_ballot_distinguishes_confirmed_none(db_session):
     election_pipeline._set_coverage(
-        db_session, "GA", elections.next_election_day(elections.utcnow().date()).isoformat(),
+        db_session, "GA", elections.active_election().election_day.isoformat(),
         MeasureCoverage.CONFIRMED_NONE, 0, source_name="Vote Smart",
     )
     db_session.commit()

@@ -25,12 +25,12 @@ STRATEGIES-dispatch shape as ballot_measures_pdf.py.
 
 Matching a state's reported (office, district, party, last_name) against
 Civitas's own FEC-derived Candidate rows compares surname to surname
-directly — NOT elections.py's _last_name_matches, which matches a surname
+directly — NOT candidate_dedup.last_name_matches, which matches a surname
 against the TRAILING tokens of a "First Last"-formatted name (that's the
 right shape for _incumbent_link's target, Representative/Senator.name, but
 Candidate.name is FEC's own "LAST, FIRST MIDDLE" format, so the surname is
 the LEADING part before the comma — the same extraction _incumbent_link
-itself does to `cand.name` before calling _last_name_matches on someone
+itself does to `cand.name` before calling last_name_matches on someone
 else's name). Exact string equality on the extracted, lowercased surname
 (not substring) for the same "lee" != "leeman" reason. A record that
 matches zero or more than one candidate (after a party-based tiebreak
@@ -82,6 +82,7 @@ from app.pipeline.fetch.state_source_crawler import (
 from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
+    NOT_A_PERSON_RE,
     PARTY_CODE_MAP,
     fec_party,
     ballot_basis_key,
@@ -472,13 +473,6 @@ def _fec_candidates(race: Race) -> list[Candidate]:
     return [c for c in race.candidates if c.fec_filed]
 
 
-# What a results file can print where a candidate's name goes. None of it
-# is a person, and a ballot-only row makes whatever it is visible.
-_NOT_A_PERSON_RE = re.compile(
-    r"write[\s-]*ins?\b|scattering|\b(over|under)\s*votes?\b|\bblank\b|"
-    r"none of (these|the above)|uncommitted|withdrawn",
-    re.IGNORECASE,
-)
 
 
 def _fec_style_name(display_name: str, last_name: str) -> str:
@@ -522,7 +516,7 @@ def _keep_ballot_only(
     results file's non-candidate rows must never become one."""
     display = (record.get("display_name") or "").strip()
     words = [w for w in re.split(r"[\s,]+", display) if any(ch.isalpha() for ch in w)]
-    if len(words) < 2 or _NOT_A_PERSON_RE.search(display):
+    if len(words) < 2 or NOT_A_PERSON_RE.search(display):
         return None
     slug = re.sub(r"[^a-z0-9]+", "-", _fold(display)).strip("-")
     cid = f"{BALLOT_ONLY_ID_PREFIX}{race.id}:{slug}"

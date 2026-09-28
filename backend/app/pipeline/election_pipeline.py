@@ -38,9 +38,9 @@ from app.election_calendar import (
     CLASS_I_STATES,
     CLASS_II_STATES,
     CLASS_III_STATES,
-    next_election_day,
     seats_up_for_year,
 )
+from app.election_phase import active_election
 from app.http_client import make_async_client
 from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
@@ -58,12 +58,15 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-def current_election_cycle() -> int:
-    """The election cycle currently in progress, e.g. 2026 up through
-    election night, then 2028 — computed from the calendar (reusing
-    next_election_day, the same statutory rule the roster's special-
-    election detection relies on) so a new cycle needs no code change."""
-    return next_election_day(utcnow().date()).year
+def current_election_cycle(db: Session | None = None) -> int:
+    """The election cycle the site is about: 2026 up through election
+    night AND while its results are still coming in and on show, then
+    2028 (election_phase.active_election). Computed from the calendar and
+    the count, so a new cycle needs no code change. Keyed to the next
+    election day alone, this flipped to 2028 the morning after — the
+    pipeline would have started building a two-years-off roster while
+    this one's ballots were still being counted."""
+    return active_election(db).cycle
 
 ELECTION_PIPELINE_STEPS = [
     ("roster_sync",          "roster",              "Sync candidate roster"),
@@ -649,7 +652,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
         is_configured,
     )
 
-    election_day = next_election_day(utcnow().date()).isoformat()
+    election_day = active_election(db).election_day.isoformat()
 
     # Every state with a registered direct-PDF source runs on that path
     # regardless of whether Vote Smart is configured — the whole point is
@@ -1026,9 +1029,16 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             race_relevance.calibrate_and_store(db)
 
                             from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
-                            posted = post_race_coverage_updates(db, deadline=coverage_deadline)
-                            logger.info("Posted %d race coverage updates", posted)
-                            progress.complete("bluesky_posting", detail=f"{posted} posted")
+                            from app.live_results.bluesky import counting_is_live
+
+                            if counting_is_live():
+                                # Election night: the live count's own posts
+                                # have the account while totals move.
+                                progress.complete("bluesky_posting", detail="stood down: the live count is posting")
+                            else:
+                                posted = post_race_coverage_updates(db, deadline=coverage_deadline)
+                                logger.info("Posted %d race coverage updates", posted)
+                                progress.complete("bluesky_posting", detail=f"{posted} posted")
                         except lease.CutOff as cut:
                             logger.warning("%s — its items wait for the next run", cut)
                             progress.skip("bluesky_posting", detail="skipped: reached its deadline")

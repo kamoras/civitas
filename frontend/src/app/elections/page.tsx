@@ -9,8 +9,11 @@ import BackToTop from "@/components/BackToTop";
 import Link from "next/link";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
+import ResultsOverview from "@/components/elections/results/ResultsOverview";
 import { formatPvi, pviColor } from "@/lib/elections";
+import { formatEasternTime, showsResults } from "@/lib/results";
 import { fetchPviMap } from "@/lib/api";
+import { useLiveResults } from "@/hooks/useLiveResults";
 import type { PviMap } from "@/types/election";
 
 /*
@@ -55,6 +58,11 @@ export default function ElectionsPage() {
   const router = useRouter();
   const [pvi, setPvi] = useState<PviMap | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // From election day until the results window closes the page leads with
+  // the live count (backend election_phase). One request says which; it
+  // polls only while there are results to show.
+  const { data: results, error: resultsError } = useLiveResults();
+  const resultsMode = !!results && showsResults(results.phase);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,15 +104,43 @@ export default function ElectionsPage() {
       >
         <div className="mx-auto max-w-7xl">
           {/* ── Masthead ── */}
-          <PageMasthead
-            eyebrow="Elections · partisan lean by state"
-            title={pvi?.cycleYear ? `${pvi.cycleYear} midterm ballot` : "Midterm ballot"}
-          >
-            Pick a state for its candidates, their filings, statewide ballot measures, and the
-            coverage we have ingested. Shading is partisan lean, not a forecast.
-          </PageMasthead>
+          {resultsMode && results ? (
+            <PageMasthead
+              eyebrow={`Elections · ${results.phase.phase === "election_day" ? "election day" : "results"} · ${
+                results.phase.electionDate
+              }`}
+              title={`${results.cycleYear} midterm results`}
+              aside={
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="flex items-center gap-2 border border-signal-amber/40 px-3 py-1.5 font-mono text-xs tracking-[0.12em] text-signal-amber"
+                >
+                  <span aria-hidden="true" className="inline-block h-2 w-2 bg-signal-amber" />
+                  {resultsError
+                    ? "REFRESH FAILED · RETRYING"
+                    : results.phase.lastResultChange
+                      ? `LIVE · LAST CHANGE ${formatEasternTime(results.phase.lastResultChange)}`
+                      : "LIVE · WAITING FOR FIRST COUNTS"}
+                </p>
+              }
+            >
+              Counts as each state&apos;s own election office publishes them, refreshed every minute. A race is
+              leading until the state calls its count official; Civitas does not call races.
+            </PageMasthead>
+          ) : (
+            <PageMasthead
+              eyebrow="Elections · partisan lean by state"
+              title={pvi?.cycleYear ? `${pvi.cycleYear} midterm ballot` : "Midterm ballot"}
+            >
+              Pick a state for its candidates, their filings, statewide ballot measures, and the
+              coverage we have ingested. Shading is partisan lean, not a forecast.
+            </PageMasthead>
+          )}
 
-          {error && (
+          {resultsMode && results && <ResultsOverview results={results} states={STATES} />}
+
+          {error && !resultsMode && (
             <div
               role="alert"
               className="mt-6 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
@@ -113,7 +149,7 @@ export default function ElectionsPage() {
             </div>
           )}
 
-          {!error && !pvi && (
+          {!error && !pvi && !resultsMode && (
             <p
               role="status"
               aria-live="polite"
@@ -123,7 +159,7 @@ export default function ElectionsPage() {
             </p>
           )}
 
-          {pvi && (
+          {pvi && !resultsMode && (
             <>
               {/* ── Map ── */}
               <section className="mt-6 border border-phos/20 bg-surface">

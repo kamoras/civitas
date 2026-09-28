@@ -339,15 +339,13 @@ def test_pvi_fallback_matches_race_detail_behavior(db_session):
     assert house["pviLevel"] == "district"
 
 
-def test_election_date_and_cycle_year_agree():
+def test_election_date_and_cycle_year_agree(db_session):
     """electionDate and cycleYear must come from the same source of
-    truth (next_election_day) — a mismatch would mean the header's date
-    and the year label on the page disagree."""
-    from app.pipeline.election_pipeline import current_election_cycle
-
-    assert current_election_cycle() == int(
-        elections.next_election_day(elections.utcnow().date()).year
-    )
+    truth (election_phase.active_election) — a mismatch would mean the
+    header's date and the year label on the page disagree."""
+    _race(db_session, "2026-SEN-GA", "GA")
+    data = _body(elections.state_ballot("GA", db_session))
+    assert int(data["electionDate"][:4]) == data["cycleYear"]
 
 
 def test_state_pvi_is_included_at_top_level(db_session):
@@ -717,7 +715,7 @@ class TestBallotMeasures:
 
     @staticmethod
     def _election_day():
-        return elections.next_election_day(elections.utcnow().date()).isoformat()
+        return elections.active_election().election_day.isoformat()
 
     def test_measures_are_included_verbatim(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA")

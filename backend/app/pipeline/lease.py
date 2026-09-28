@@ -52,6 +52,7 @@ BILL_REFRESH = "bill-refresh-lock"
 BALLOT_SYNC = "ballot-sync-lock"
 COVERAGE_REFRESH = "coverage-refresh-lock"
 CONGRESS_SYNC = "congress-sync-lock"
+RESULTS_SYNC = "results-sync-lock"
 # Every lease, which the data reset's wipe leaves in api_cache — its own, and
 # any other that may be live — with what each one's holder is.
 TIERS = {
@@ -66,6 +67,7 @@ TIERS = {
     BALLOT_SYNC: "Ballot sync",
     COVERAGE_REFRESH: "Election coverage refresh",
     CONGRESS_SYNC: "Congress record sync",
+    RESULTS_SYNC: "Live results sync",
 }
 
 # Ten missed beats ride out a SQLite writer holding the database for
@@ -119,6 +121,9 @@ HUNG_AFTER = {
     BALLOT_SYNC: timedelta(hours=2),
     COVERAGE_REFRESH: timedelta(hours=2),
     CONGRESS_SYNC: timedelta(hours=2),
+    # A pass is a few requests per covered state; one still going after
+    # half an hour has hung, and the next five-minute tick should proceed.
+    RESULTS_SYNC: timedelta(minutes=30),
 }
 
 
