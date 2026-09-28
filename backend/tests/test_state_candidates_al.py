@@ -215,6 +215,13 @@ _STATEWIDE_PRIMARY = {
     ("PROPOSED STATEWIDE AMENDMENT 1", ""): {"Yes": 900000, "No": 100000},
     ("STATE SENATOR, DISTRICT 10 (REP)", "REP"): {"Andrew Jones": 8325, "Amy Dozier Minton": 7141},
     ("UNITED STATES REPRESENTATIVE, 1ST CONGRESSIONAL DISTRICT (REP)", "REP"): {"Jerry Carl": 32714, "Rhett Marques": 25235},
+    ("UNITED STATES REPRESENTATIVE, 6TH CONGRESSIONAL DISTRICT (REP)", "REP"): {"Gary Palmer": 62186, "Case Dixon": 14495},
+    ("UNITED STATES REPRESENTATIVE, 3RD CONGRESSIONAL DISTRICT (REP)", "REP"): {"Mike Rogers": 63144, "Terri LaPoint": 12769},
+    ("UNITED STATES REPRESENTATIVE, 4TH CONGRESSIONAL DISTRICT (DEM)", "DEM"): {"Amanda N. Pusczek": 9648, "Shane Weaver": 5719},
+    ("UNITED STATES REPRESENTATIVE, 4TH CONGRESSIONAL DISTRICT (REP)", "REP"): {"Robert B. Aderholt": 72169, "Tommy Barnes": 20824},
+    ("UNITED STATES REPRESENTATIVE, 5TH CONGRESSIONAL DISTRICT (DEM)", "DEM"): {
+        "Andrew Sneed": 19301, "Candice Dollar Duvieilh": 16388, "Jeremy Devito": 10265,
+    },
     ("UNITED STATES SENATOR (REP)", "REP"): {
         "Barry Moore": 189067, "Jared Hudson": 123672, "Steve Marshall": 118361, "Rodney Walker": 19697,
         "Seth Burton": 15142, "Dale Shelton Deas Jr.": 10118, "Morgan Murphy": 6485,
@@ -224,6 +231,9 @@ _STATEWIDE_PRIMARY = {
     },
 }
 _STATEWIDE_RUNOFF = {
+    ("UNITED STATES REPRESENTATIVE, 5TH CONGRESSIONAL DISTRICT (DEM)", "DEM"): {
+        "Andrew Sneed": 16688, "Candice Dollar Duvieilh": 4607,
+    },
     ("UNITED STATES SENATOR (REP)", "REP"): {"Barry Moore": 173673, "Jared Hudson": 137552},
     ("UNITED STATES SENATOR (DEM)", "DEM"): {"Everett Wess": 50428, "Dakarai Larriett": 41985},
     ("LIEUTENANT GOVERNOR (REP)", "REP"): {"John Wahl": 175911, "Wes Allen": 132890},
@@ -362,3 +372,75 @@ class TestStatewideFetch:
         self._patched(monkeypatch)
         source = {**_SOURCE, "statewide_offices": True, "state_office_results": _STATE_OFFICES}
         assert await al.fetch_confirmed_candidates(None, 2028, "AL", source) is None
+
+
+class TestRegularHouseDistricts:
+    """CD3, CD4 and CD5 were not redistricted, so their regular May primary
+    and June runoff decide them. CD1, CD2, CD6 and CD7 were, and the
+    regular files still hold their voided primaries."""
+
+    def _special_contests(self):
+        parser = al._ContestResultsParser()
+        parser.feed(_FIXTURE)
+        return parser.contests
+
+    def test_the_excluded_set_comes_from_the_real_special_primary_page(self):
+        assert al.special_primary_districts(self._special_contests(), None) == {1, 2, 6, 7}
+
+    def test_a_redrawn_district_with_no_contest_on_the_page_is_still_excluded(self):
+        # Had neither party fielded anyone in CD7, the page would show no
+        # CD7 contest at all; the configured list still names it.
+        contests = {k: v for k, v in self._special_contests().items() if "7TH" not in k}
+        assert al.special_primary_districts(contests, [1, 2, 6, 7]) == {1, 2, 6, 7}
+        assert 7 not in al.special_primary_districts(contests, None)
+
+    def test_real_2026_nominees_for_the_districts_not_redrawn(self):
+        records = al.resolve_statewide(_STATEWIDE_PRIMARY, _STATEWIDE_RUNOFF, 50,
+                                       house_excluded=frozenset({1, 2, 6, 7}))
+        house = sorted(
+            (r["district"], r["party"], r["last_name"], r["display_name"])
+            for r in records if r["office"] == "H"
+        )
+        # Rogers 83.2%, Aderholt 77.6%, Pusczek 62.8%; Sneed was short
+        # (42.0%) and won the runoff 16,688 to 4,607. Dale Strong (CD5 R)
+        # was unopposed and appears in no primary file.
+        assert house == [
+            (3, "R", "Rogers", "Mike Rogers"),
+            (4, "D", "Pusczek", "Amanda N. Pusczek"),
+            (4, "R", "Aderholt", "Robert B. Aderholt"),
+            (5, "D", "Sneed", "Andrew Sneed"),
+        ]
+
+    def test_no_excluded_district_can_ever_be_read(self):
+        for excluded in ({1, 2, 6, 7}, {3}, {1, 3, 4, 5, 6}, set(range(1, 8))):
+            records = al.resolve_statewide(_STATEWIDE_PRIMARY, _STATEWIDE_RUNOFF, 50,
+                                           house_excluded=frozenset(excluded))
+            assert not {r["district"] for r in records if r["office"] == "H"} & excluded
+
+    def test_without_an_excluded_set_no_house_contest_is_read(self):
+        records = al.resolve_statewide(_STATEWIDE_PRIMARY, _STATEWIDE_RUNOFF, 50, senate=True)
+        assert not any(r["office"] == "H" for r in records)
+
+
+@pytest.mark.asyncio
+class TestRegularHouseFetch:
+    def _patched(self, monkeypatch):
+        TestStatewideFetch._patched(self, monkeypatch)
+
+    async def test_special_and_regular_house_districts_never_overlap(self, monkeypatch):
+        self._patched(monkeypatch)
+        spec = {**_STATE_OFFICES, "read_house": True, "special_primary_districts": [1, 2, 6, 7]}
+        result = await al.fetch_confirmed_candidates(None, 2026, "AL", {**_SOURCE, "state_office_results": spec})
+        house = [(r["district"], r["party"], r["last_name"]) for r in result if r["office"] == "H"]
+        special = [(1, "R", "Carl"), (2, "R", "Marques"), (6, "D", "Mercer"), (6, "R", "Palmer"), (7, "R", "Akin")]
+        assert all(h in house for h in special)
+        # Each district's nominees come from one source only.
+        regular = [h for h in house if h not in special]
+        assert not {district for district, _party, _name in regular} & {1, 2, 6, 7}
+        assert len(house) == len(set(house))
+
+    async def test_read_house_without_the_configured_districts_reads_none(self, monkeypatch):
+        self._patched(monkeypatch)
+        spec = {**_STATE_OFFICES, "read_house": True}
+        result = await al.fetch_confirmed_candidates(None, 2026, "AL", {**_SOURCE, "state_office_results": spec})
+        assert sorted(r["district"] for r in result if r["office"] == "H") == [1, 2, 6, 6, 7]
