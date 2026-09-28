@@ -51,7 +51,7 @@ def test_commemorative_bills_weigh_like_resolutions():
     assert _les_significance_weight("hr") == 5.0
     assert _les_significance_weight("hr", commemorative=True) == 1.0
     law = {"billType": "hr", "isLaw": True, "commemorative": True}
-    assert _les_stage_counts([law]) == [1.0, 1.0, 1.0, 1.0]
+    assert _les_stage_counts([law]) == [1.0] * 5
 
 
 def _rep(bills, **extra):

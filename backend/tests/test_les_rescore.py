@@ -44,6 +44,18 @@ def test_old_scale_reference_is_remeasured_and_scores_rescored(db_session, pinne
     assert scores["S014"] > scores["S022"]
 
 
+def test_four_stage_reference_is_remeasured_on_five(db_session, pinned_population_references):
+    """A reference from before v6.17 has four stage totals; the scorer now
+    divides by five, so it is re-measured rather than compared against."""
+    old = dict(LES_REFERENCE.load()["senate"])
+    old["stage_totals"] = old["stage_totals"][:4]
+    LES_REFERENCE.write("senate", old)
+    _seed(db_session)
+
+    assert rescore_stale_legislative_effectiveness(_factory(db_session)) == ["senate"]
+    assert len(LES_REFERENCE.load()["senate"]["stage_totals"]) == 5
+
+
 def test_current_scale_reference_is_left_alone(db_session, pinned_population_references):
     _seed(db_session)
     assert rescore_stale_legislative_effectiveness(_factory(db_session)) == []

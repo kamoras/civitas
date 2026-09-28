@@ -295,7 +295,10 @@ async def sync_digest(client: httpx.AsyncClient, db: Session, day: date) -> str:
     return "ok"
 
 
-def _date_cursor(db: Session) -> date:
+def digest_cursor(db: Session) -> date:
+    """The last day the Digest back-fill has settled: every earlier day
+    either has its Record read or had none published (a failed day stops
+    the cursor before it)."""
     stored = api_cache_get(db, _CACHE_TIER, _DIGEST_CURSOR_KEY, max_age_hours=24 * 365 * 10)
     if stored and stored.get("date"):
         return date.fromisoformat(stored["date"])
@@ -315,7 +318,7 @@ async def sync_digests(client: httpx.AsyncClient, db: Session, today: date) -> d
             continue
         outcomes[day.isoformat()] = await sync_digest(client, db, day)
 
-    cursor = _date_cursor(db)
+    cursor = digest_cursor(db)
     for _ in range(_DIGEST_BACKFILL_BATCH):
         day = cursor + timedelta(days=1)
         if day >= recent_start:

@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.models import CongressDay, CongressEvent, RepSponsoredBill, RollCall, SponsoredBill
-from app.pipeline.congress_activity import eastern_today, last_run
+from app.pipeline.congress_activity import digest_cursor, eastern_today, last_run
 from app.pipeline.fetch.daily_digest import words_to_int
 
 CHAMBERS = ("senate", "house")
@@ -180,6 +180,8 @@ def _chamber_sentence(chamber: str, day: dict) -> str:
         return f"The {name} did not meet."
     if status == "no_record":
         return f"No record of the {name} for this day yet."
+    if status == "no_record_published":
+        return f"The {name} has no Congressional Record for this day."
     c = day["counts"]
     parts = []
     if c["billsPassed"]:
@@ -204,10 +206,30 @@ def _source_outcome(run: dict | None, day_iso: str, chamber: str) -> str | None:
     return ((run.get("floorLogs") or {}).get(day_iso) or {}).get(chamber)
 
 
+# GPO posts a day's Record by the next evening; a Record still missing
+# three days on was not published.
+_RECORD_SETTLED_DAYS = 3
+
+
+def record_not_published(db: Session, day: date, run: dict | None) -> bool:
+    """Whether the Congressional Record for `day` is known not to exist.
+    GPO publishes it for every day either chamber is in session, so this
+    is how a day with no session looks; the page says what is known — no
+    Record — rather than asserting who met (GPO very rarely prints two
+    small consecutive days as one issue). Known two ways: the back-fill
+    cursor is past the day (it stops before any day it could not read),
+    or the last run found no Record for a day at least three days old."""
+    if day <= digest_cursor(db):
+        return True
+    iso = day.isoformat()
+    settled = day <= eastern_today() - timedelta(days=_RECORD_SETTLED_DAYS)
+    return settled and ((run or {}).get("digests") or {}).get(iso) == "absent"
+
+
 def chamber_day(row: CongressDay | None, events: list[CongressEvent], votes: list[RollCall],
-                run: dict | None, day_iso: str, chamber: str) -> dict:
+                run: dict | None, day_iso: str, chamber: str, no_record_published: bool = False) -> dict:
     if row is None:
-        status = "live" if votes else "no_record"
+        status = "live" if votes else ("no_record_published" if no_record_published else "no_record")
     elif not row.in_session:
         status = "not_in_session"
     else:
@@ -266,9 +288,10 @@ def day_report(db: Session, day: date) -> dict:
     events = db.query(CongressEvent).filter(CongressEvent.date == iso).all()
     votes = db.query(RollCall).filter(RollCall.date == iso).all()
     run = last_run(db)
+    unpublished = not rows and not votes and record_not_published(db, day, run)
     chambers = {
         c: chamber_day(rows.get(c), [e for e in events if e.chamber == c],
-                       [v for v in votes if v.chamber == c], run, iso, c)
+                       [v for v in votes if v.chamber == c], run, iso, c, no_record_published=unpublished)
         for c in CHAMBERS
     }
     session_days = _session_days(db)
@@ -276,7 +299,10 @@ def day_report(db: Session, day: date) -> dict:
     later = [d for d in session_days if d > iso]
     return {
         "date": iso,
-        "sentence": " ".join(chambers[c]["sentence"] for c in CHAMBERS),
+        "sentence": (
+            "No Congressional Record was published for this day. It is published for every day either chamber is in session."
+            if unpublished else " ".join(chambers[c]["sentence"] for c in CHAMBERS)
+        ),
         "chambers": chambers,
         "previousDay": earlier[-1] if earlier else None,
         "nextDay": later[0] if later else None,
@@ -361,10 +387,13 @@ def period_report(db: Session, start: date, end: date) -> dict:
     closest = sorted(decided, key=lambda v: (votes_from_threshold(v), v.date, v.number))[:3]
 
     days = []
+    run = last_run(db)
     d = start
     while d <= end:
         iso = d.isoformat()
         entry = {"date": iso}
+        nothing = not any(r.date == iso for r in p["rows"]) and not any(v.date == iso for v in p["votes"])
+        entry["noRecordPublished"] = nothing and record_not_published(db, d, run)
         for c in CHAMBERS:
             row = next((r for r in p["rows"] if r.chamber == c and r.date == iso), None)
             votes = [v for v in p["votes"] if v.chamber == c and v.date == iso]
