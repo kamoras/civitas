@@ -6,6 +6,9 @@ different timescale and different data.
 Withdrawn issues are listed with their reasons in
 `backend/app/data/retractions.json`: removed by a data migration, answered
 with 410 and the reason, and their Bluesky posts deleted by an hourly job.
+An entry can withdraw posts alone: the 2026-09-28 entry lists 189 model-written
+issue posts that `scripts/audit_bluesky_posts.py` found stating things their
+articles do not.
 
 One refresh runs at a time across containers: it holds a lease row in
 `api_cache`, renewed every minute by a heartbeat thread and taken over after ten
@@ -169,6 +172,14 @@ reported the same number as one that found four fresh ones, which is exactly the
 distinction between a quiet news cycle and new topics being dropped on the way in.
 
 `GET /api/admin/action-metrics` returns the window with the three groups totalled.
+
+**Calibrated thresholds.** `cluster_title`, `near_identical`, `monitor_issue` and
+`monitor_merge` (`action_thresholds.py`) are refitted daily from labelled pairs
+these rows carry (`thr_*` counters). The labels are signature overlap for article
+and issue pairs and the LLM gate's verdict for monitor pairs, plus one probe per
+stage per run below the floor. A fit needs 30 pairs per class, otherwise the
+previous value stays. The bundled `app/data/action_thresholds.json` covers the
+time before the first fit.
 
 ## Known limitation, disclosed on the methodology page
 

@@ -56,6 +56,11 @@ rotation decides. Only a complete read (every page) can retract a Senate
 election or mark the calendar read; a read cut short only adds, since a state
 missing from it may sit on the page that failed.
 
+A confirmed Senate record goes to the state's one Senate race this cycle,
+regular or special (`state_candidates._race_id_for`). Keyed to the regular id
+alone, Florida's and Ohio's 2026 specials matched nothing and showed every FEC
+filer. A state with both kinds keeps records on the regular race.
+
 ## Where "confirmed" comes from
 
 Every state has exactly one entry in `state_candidate_sources.json`. What

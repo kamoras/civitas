@@ -1176,7 +1176,9 @@ export default function AboutPage() {
                   one. Before that check, a handful of people who file paperwork for
                   offices in many states at once were enough to invent a Senate
                   &ldquo;special election&rdquo; in New York and Hawaii, neither of which
-                  votes for a senator in 2026.
+                  votes for a senator in 2026. Florida and Ohio do, but only to fill a vacancy,
+                  and their certified candidates were being filed under a regular race that does
+                  not exist; they now reach the special election they are running in.
                 </P>
               </div>
 
@@ -1318,6 +1320,14 @@ export default function AboutPage() {
               unrelated news stories, and four posts about them written by a language model before
               posts were changed to quote their sources word for word.
             </P>
+            <P>
+              The second, on 28 September 2026, withdrew 189 more of those model-written posts. Every
+              one of the 829 was checked against the articles its issue cites
+              (<code>backend/scripts/audit_bluesky_posts.py</code>), and these state a name, number or
+              official the articles never mention, or a sentence with no counterpart in them. 150
+              passed. 490 could not be checked, because at least one of their articles is from AP,
+              Politico or The Hill, which refuse automated reading; they remain up.
+            </P>
           </Section>
 
           <Section title="CONGRESS REPORTS" id="congress">
@@ -1373,6 +1383,15 @@ export default function AboutPage() {
                   what every headline that day has in common, so only the topic counts. A later
                   step used to remove only what one cluster&apos;s headlines had in common, which is
                   the topic itself, and it threw away most of each story&apos;s coverage.
+                </P>
+                <P>
+                  How alike two headlines must be to count as one story, when a new issue is the
+                  same story as an existing one, and when an issue belongs to a long-running topic
+                  are learned from the pipeline&apos;s own record, not set by hand. Every run records
+                  pairs it compared together with an independent verdict on them (whether they
+                  name the same people, places and numbers, or what a separate check decided), and
+                  once a day each cut-off is moved to where those verdicts say it belongs, but only
+                  once there are enough of them to trust.
                 </P>
                 <P>
                   Articles join one story only if every one of them resembles every other. The
