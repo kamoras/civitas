@@ -6,7 +6,7 @@ import { getScoreColor } from "@/lib/representation";
 
 // FEC's party codes ("DEM"/"REP"/"IND"/...) don't match lib/partyStyles.ts's
 // D/R/I keys (those back President/Justice's own party codes), so this
-// mirrors PresidentClient.tsx's local PARTY_META + getPartyMeta fallback
+// mirrors PresidentScorecard.tsx's local PARTY map and its fallback
 // pattern rather than reusing partyStyles.ts directly.
 export const PARTY_META: Record<string, { label: string; color: string; rule: string }> = {
   DEM: { label: "DEMOCRAT", color: "text-dem-blue", rule: "bg-dem-blue" },

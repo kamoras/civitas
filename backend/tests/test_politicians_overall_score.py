@@ -165,6 +165,17 @@ class TestChamberRank:
         # Not serving: the leaderboard doesn't rank them, so neither does the profile.
         assert rank("gone") is None
 
-    def test_no_rank_outside_congress(self, db_session):
+    def test_a_president_ranks_among_completed_terms_and_a_sitting_one_not_at_all(self, db_session):
+        """As the president leaderboard ranks them (get_president_leaderboard)."""
         from app.api.politicians import _chamber_rank
-        assert _chamber_rank("president", object(), db_session) is None
+        from app.models import President
+        for pid, number, score, current in (("a-1", 1, 80.0, False), ("b-2", 2, 60.0, False), ("c-3", 3, 70.0, True)):
+            db_session.add(President(id=pid, name=pid, party="D", number=number, term_start="2001-01-20",
+                                     is_current=current, score_public_mandate=score))
+        db_session.commit()
+        assert _chamber_rank("president", db_session.get(President, "b-2"), db_session) == {"rank": 2, "of": 2}
+        assert _chamber_rank("president", db_session.get(President, "c-3"), db_session) is None
+
+    def test_no_rank_for_a_justice(self, db_session):
+        from app.api.politicians import _chamber_rank
+        assert _chamber_rank("scotus", object(), db_session) is None
