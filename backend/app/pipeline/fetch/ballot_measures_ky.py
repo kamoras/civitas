@@ -16,10 +16,17 @@ Stored verbatim:
   doesn't. 2026's single amendment is headed without a number here,
   while the county ballots print "CONSTITUTIONAL AMENDMENT 1" (checked
   against Adair County's 2026 general ballot) — no number is supplied
-  that the page doesn't print; the record is keyed on its heading.
+  that the page doesn't print.
+- the record's key: the printed number when there is one; otherwise the
+  amendment's position on this page ("CONSTITUTIONAL-AMENDMENT-2"), the
+  same order the county ballots number them in. Never the heading alone:
+  every heading reads "CONSTITUTIONAL AMENDMENT", so two unnumbered
+  amendments keyed on it would share one id and the second would
+  overwrite the first.
 - official_summary: the question paragraph. Kentucky's General Assembly
   writes that question into the enacting bill (2026: SB 10), hence
-  title_authority.
+  title_authority. The heading is a label, not a ballot title, so no
+  official_title is claimed.
 
 The page says in its own words that the Secretary of State "cannot
 interpret, nor give guidance" — no YES/NO explanation or fiscal
@@ -82,12 +89,12 @@ def parse_page(page_html: str, year: int) -> list[dict] | None:
         return None
 
     results = []
-    for item in measures:
+    for position, item in enumerate(measures, start=1):
         if not item["question"]:
             return None
         results.append({
             "number": item["number"],
-            "id_key": item["number"] or item["title"],
+            "id_key": item["number"] or f"CONSTITUTIONAL-AMENDMENT-{position}",
             "title": item["title"],
             "origin": ORIGIN,
             "official_summary": item["question"],

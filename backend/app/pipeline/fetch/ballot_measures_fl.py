@@ -11,7 +11,7 @@ carries the ballot summary and the record's own "Ballot Number" and
 
 - number: the ballot number, cross-checked against the detail page's
   own "Ballot Number" (a disagreement fails the fetch).
-- title: the detail page's heading (the ballot title).
+- title / official_title: the detail page's heading (the ballot title).
 - official_summary: the detail page's Summary, paragraph breaks kept.
 - origin: the Sponsor exactly as listed ("The Florida Legislature/House").
 
@@ -57,7 +57,16 @@ SEARCH_URL = "https://constitutionalinitiatives.dos.fl.gov/"
 LEGISLATURE = "Florida Legislature"
 ATTORNEY_GENERAL = "Florida Attorney General"
 
-_BALLOT_NUMBER_RE = re.compile(r"^\((\d+)\)$")
+# "(1)" for a legislative referral; "22-05 (3)" for a citizen initiative,
+# whose petition serial precedes the ballot number (2024's Amendments 3
+# and 4, 2018's 3 and 4 — verified on the live database).
+_BALLOT_NUMBER_RE = re.compile(r"^(?:\d{2}-\d{2}\s*)?\((\d+)\)$")
+# The Status column's vocabulary on made-ballot rows (every value seen
+# live across 2018-2026): "Active" is on the coming ballot, "Removed" was
+# struck from it (2018's Amendment 8), and "Passed"/"Defeated" are
+# results of an election already held. Anything else is refused.
+_ON_BALLOT_STATUS = "Active"
+_KNOWN_STATUSES = {"Active", "Removed", "Passed", "Defeated"}
 _AG_REWRITE_RE = re.compile(r"Title\s*&\s*Summary rewritten", re.IGNORECASE)
 
 
@@ -74,8 +83,9 @@ def search_form_fields(page_html: str) -> dict[str, str] | None:
 
 def listed_measures(results_html: str, year: int) -> list[dict] | None:
     """[{number, title, detail_url, sponsor}] for every "made ballot" row
-    of `year`'s general election, or None if the results table is missing
-    (the answer page didn't render — not the same as zero rows)."""
+    of `year`'s general election still Active, or None if the results
+    table is missing (the answer page didn't render — not the same as
+    zero rows) or any of `year`'s rows can't be read."""
     tree = lxml_html.fromstring(results_html)
     table = tree.xpath("//table[@id='tableResult']")
     if not table:
@@ -85,10 +95,21 @@ def listed_measures(results_html: str, year: int) -> list[dict] | None:
         cells = tr.xpath("./td")
         if len(cells) < 6 or _text(cells[0]) != f"{year} GEN":
             continue
+        # A row the search answered as made-ballot for this election is a
+        # measure; one this reader can't read refuses the whole answer
+        # rather than dropping out of it (a skipped row would publish the
+        # ballot one amendment short, as "covered").
+        status = _text(cells[1])
         m = _BALLOT_NUMBER_RE.match(_text(cells[4]))
         link = cells[3].xpath(".//a/@href")
-        if m is None or not link:
-            continue
+        if status not in _KNOWN_STATUSES or m is None or not link:
+            logger.warning(
+                "FL %d made-ballot row %r / %r / %r didn't match the verified shape — refusing",
+                year, status, _text(cells[4]), _text(cells[3])[:60],
+            )
+            return None
+        if status != _ON_BALLOT_STATUS:
+            continue  # struck (Removed), or an election already decided
         sponsor_links = cells[5].xpath(".//a")
         rows.append({
             "number": m.group(1),
@@ -153,6 +174,7 @@ def parse_detail(detail_html: str, listed: dict, year: int) -> dict | None:
     return {
         "number": listed["number"],
         "title": title,
+        "official_title": title,
         "origin": sponsor or None,
         "official_summary": summary,
         "fiscal_impact": None,

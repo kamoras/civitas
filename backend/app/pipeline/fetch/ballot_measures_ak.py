@@ -126,6 +126,9 @@ def _parse_block(number: str, lines: list[list[dict]]) -> dict | None:
     return {
         "number": number,
         "title": title,
+        # The bold title is the Lieutenant Governor's ballot title, printed
+        # on the ballot itself.
+        "official_title": title,
         "origin": origin,
         "official_summary": f"{summary} {question}",
         "fiscal_impact": None,
@@ -183,12 +186,24 @@ def parse_page_words(words: list[dict], page_width: float) -> list[dict]:
 
 
 def parse_document(pages) -> list[dict]:
+    """Every measure on the sample ballot, [] for a ballot that carries
+    none — but only a ballot this reader can actually see: the document's
+    own text must say it is the "Official Ballot" for a "General
+    Election". A scan with no text layer, or any other document at the
+    address, has no words to find a measure in, and [] from it would read
+    as a checked "none"; it raises instead (ingest_failed)."""
     results: list[dict] = []
     seen: set[str] = set()
+    header_seen = False
     for page in pages:
         words = page.extract_words(extra_attrs=["fontname", "size"])
+        text = " ".join(w["text"] for w in words)
+        if re.search(r"Official\s+Ballot", text) and re.search(r"General\s+Election", text):
+            header_seen = True
         for parsed in parse_page_words(words, float(page.width)):
             if parsed["number"] not in seen:
                 seen.add(parsed["number"])
                 results.append(parsed)
+    if not header_seen:
+        raise ValueError("AK: document text doesn't identify a general-election official ballot")
     return results

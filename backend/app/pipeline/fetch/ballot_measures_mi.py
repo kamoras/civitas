@@ -43,6 +43,10 @@ stay None. Bold is read from the PDF's own font names, not guessed from
 wording: the boundary between title and question has no textual marker
 on Proposal 2026-1.
 
+No document linked for `year` raises NotYetPublished (not yet covered):
+the Bureau posts it only once a proposal is certified, so its absence is
+"nothing to read yet", not a failure and never "none".
+
 Origin is read only from the title's own words — "initiated law" /
 "initiated amendment" / "initiative" means a citizen petition, a
 "legislat..." word means legislature-referred; the constitutional
@@ -59,7 +63,7 @@ import httpx
 import pdfplumber
 from lxml import html as lxml_html
 
-from app.pipeline.fetch.ballot_measure_text import join_lines
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -80,7 +84,7 @@ _PROPOSAL_RE = re.compile(r"^Proposal\s+(\d{4}-\d+)$")
 _YES_BOX_RE = re.compile(r"^\[\s*\]\s*Yes$")
 
 
-def find_pdf_url(landing_html: str, year: int) -> str | None:
+def _pdf_links(landing_html: str, year: int) -> set[str]:
     tree = lxml_html.fromstring(landing_html)
     matches = set()
     for a in tree.xpath("//a[@href]"):
@@ -88,6 +92,15 @@ def find_pdf_url(landing_html: str, year: int) -> str | None:
         href = a.get("href")
         if str(year) in text and "november" in text and "ballot question" in text and ".pdf" in href.lower():
             matches.add(urljoin(LANDING_URL, href))
+    return matches
+
+
+def _link_count(landing_html: str, year: int) -> int:
+    return len(_pdf_links(landing_html, year))
+
+
+def find_pdf_url(landing_html: str, year: int) -> str | None:
+    matches = _pdf_links(landing_html, year)
     if len(matches) != 1:
         return None
     return matches.pop()
@@ -118,42 +131,66 @@ def _origin(title: str) -> str | None:
     return None
 
 
+def _proposal_start(line: tuple[str, bool]) -> str | None:
+    """The proposal number a line opens, or None. A bold line that starts
+    "Proposal" but isn't in the verified "Proposal <year>-<n>" form raises:
+    it is a proposal heading this reader doesn't know, and skipping it
+    would publish the document one proposal short."""
+    text, bold = line[0].strip(), line[1]
+    m = _PROPOSAL_RE.match(text)
+    if m:
+        return m.group(1)
+    if bold and text.lower().startswith("proposal"):
+        raise ValueError(f"MI: unrecognised proposal heading {text!r}")
+    return None
+
+
 def parse_lines(pages: list[list[tuple[str, bool]]], year: int) -> list[dict] | None:
     """Every `year` proposal in the document, or None when a proposal
-    page doesn't have the verified shape or none is found at all."""
+    doesn't have the verified shape or none is found at all.
+
+    Every "Proposal" heading on a page is read, each up to the next one —
+    not just the first per page: the document is one page per proposal
+    today, but two short proposals sharing a page would otherwise lose
+    the second without a trace."""
     results = []
     for lines in pages:
-        idx = next((i for i, (t, _) in enumerate(lines) if _PROPOSAL_RE.match(t.strip())), None)
-        if idx is None:
-            continue
-        number = _PROPOSAL_RE.match(lines[idx][0].strip()).group(1)
-        if not number.startswith(f"{year}-"):
-            continue
-        rest = lines[idx + 1:]
-        title_lines = []
-        while rest and rest[0][1]:
-            title_lines.append(rest.pop(0)[0])
-        yes_idx = next((i for i, (t, _) in enumerate(rest) if _YES_BOX_RE.match(t.strip())), None)
-        title = join_lines(title_lines)
-        question = join_lines([t for t, _ in rest[:yes_idx]]) if yes_idx else None
-        if question:
-            # Keep the document's own bullet list a list (the card renders
-            # official_summary with pre-line whitespace); no word changes.
-            question = re.sub(r"\s*•\s*", "\n• ", question)
-        if not title or not question:
-            logger.warning("MI Proposal %s didn't match the verified shape — refusing the document", number)
+        try:
+            starts = [(i, n) for i, line in enumerate(lines) if (n := _proposal_start(line))]
+        except ValueError:
+            logger.warning("MI: a proposal heading didn't match the verified shape — refusing the document")
             return None
-        results.append({
-            "number": number,
-            "title": title,
-            "origin": _origin(title),
-            "official_summary": question,
-            "fiscal_impact": None,
-            "yes_means": None,
-            "no_means": None,
-            "title_authority": TITLE_AUTHORITY,
-            "fiscal_authority": None,
-        })
+        for k, (idx, number) in enumerate(starts):
+            if not number.startswith(f"{year}-"):
+                continue
+            end = starts[k + 1][0] if k + 1 < len(starts) else len(lines)
+            rest = lines[idx + 1:end]
+            title_lines = []
+            while rest and rest[0][1]:
+                title_lines.append(rest.pop(0)[0])
+            yes_idx = next((i for i, (t, _) in enumerate(rest) if _YES_BOX_RE.match(t.strip())), None)
+            title = join_lines(title_lines)
+            question = join_lines([t for t, _ in rest[:yes_idx]]) if yes_idx else None
+            if question:
+                # Keep the document's own bullet list a list (the card renders
+                # official_summary with pre-line whitespace); no word changes.
+                question = re.sub(r"\s*•\s*", "\n• ", question)
+            if not title or not question:
+                logger.warning("MI Proposal %s didn't match the verified shape — refusing the document", number)
+                return None
+            results.append({
+                "number": number,
+                "title": title,
+                # The bold lines are the ballot's own title, as printed.
+                "official_title": title,
+                "origin": _origin(title),
+                "official_summary": question,
+                "fiscal_impact": None,
+                "yes_means": None,
+                "no_means": None,
+                "title_authority": TITLE_AUTHORITY,
+                "fiscal_authority": None,
+            })
     # The Bureau publishes this document only once something is certified
     # to the ballot; one with no readable proposal is a shape change, not
     # a statement that there are none.
@@ -168,7 +205,12 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         return None
     pdf_url = find_pdf_url(landing_html, year)
     if pdf_url is None:
-        logger.warning("MI: no single '%d November ballot questions' PDF link on the landing page", year)
+        if _link_count(landing_html, year) == 0:
+            # The Bureau posts this document only once something is
+            # certified to November's ballot; until then there is nothing
+            # to read and nothing broken. Not yet covered, never none.
+            raise NotYetPublished(f"Michigan's '{year} November ballot questions' document")
+        logger.warning("MI: more than one '%d November ballot questions' PDF link on the landing page", year)
         return None
     raw = await fetch_bytes_with_retry(client, _rate_limiter, pdf_url, "MI ballot questions PDF", headers=HEADERS)
     if raw is None:

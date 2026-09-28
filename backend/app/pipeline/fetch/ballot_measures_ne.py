@@ -95,32 +95,56 @@ def _expand_numbers(spec: str) -> set[str]:
     return numbers
 
 
+_MEASURE_WORDS_RE = re.compile(r"\b(?:amendments?|initiatives?|measures?|referend(?:um|a))\b", re.IGNORECASE)
+
+
 def read_elections_page(page_html: str, year: int) -> dict | None:
     """{"initiatives": set of numbers, "pamphlet": url | None,
     "amendments": [bill-page url, ...]} for `year`'s general election,
-    or None when the page names nothing for that election at all."""
+    or None when the page names nothing for that election at all — or
+    names something this reader can't read.
+
+    The two kinds are listed under separate headings and found by
+    separate matches, so each is checked on its own: a heading for either
+    kind that yields nothing readable (an initiative heading with no
+    "Initiative Nos." range, an amendment heading with no LR link), or any
+    other paragraph that speaks of `year`'s general-election measures in
+    words this reader doesn't know, refuses the whole page. Publishing
+    the kind that did match alone would read as the whole ballot."""
     tree = lxml_html.fromstring(page_html)
+    marker = f"{year} General Election"
     initiatives: set[str] = set()
+    amendments: list[str] = []
     for p in tree.xpath("//p"):
         text = _norm(p.text_content())
-        if text.startswith(f"Ballot Measures for {year} General Election"):
+        if marker not in text:
+            continue
+        if text.startswith("General Election: "):
+            continue  # the election's own date line
+        if text.startswith(f"Ballot Measures for {marker}"):
             m = _RANGE_RE.search(text)
-            if m:
-                initiatives |= _expand_numbers(m.group(1))
+            numbers = _expand_numbers(m.group(1)) if m else set()
+            if not numbers:
+                logger.warning("NE %d: initiative heading without a readable number range: %r", year, text[:120])
+                return None
+            initiatives |= numbers
+            continue
+        if "Legislature" in text and f"for the {marker}" in text:
+            links = [a for a in p.xpath(".//a[@href]") if _LR_TEXT_RE.match(_norm(a.text_content()))]
+            if not links:
+                logger.warning("NE %d: legislature amendment heading without an LR link: %r", year, text[:120])
+                return None
+            amendments.extend(urljoin(ELECTIONS_URL, a.get("href")) for a in links)
+            continue
+        if _MEASURE_WORDS_RE.search(text):
+            logger.warning("NE %d: unrecognised ballot-measure paragraph: %r", year, text[:120])
+            return None
 
     pamphlets = {
         urljoin(ELECTIONS_URL, a.get("href"))
         for a in tree.xpath("//a[@href]")
         if _norm(a.text_content()) == "Informational Pamphlet" and f"/{year}/" in a.get("href")
     }
-
-    amendments = []
-    for a in tree.xpath("//a[@href]"):
-        if not _LR_TEXT_RE.match(_norm(a.text_content())):
-            continue
-        parent = a.getparent()
-        if parent is not None and f"for the {year} General Election" in _norm(parent.text_content()):
-            amendments.append(urljoin(ELECTIONS_URL, a.get("href")))
 
     if not initiatives and not amendments:
         return None

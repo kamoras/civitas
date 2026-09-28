@@ -30,16 +30,18 @@ page per amendment):
     Pro – Constitutional Amendment I Con – Constitutional Amendment I
     ... (proponent/opponent statements, two columns — never read)
 
-Title, explanation (-> official_summary) and the two "Vote ..." lines
-(-> yes_means / no_means) are stored verbatim. A "Fiscal Note:" line,
+Title, explanation (-> official_summary) and the two "Vote ..." sentences
+(-> yes_means / no_means) are stored verbatim — each whole, however many
+lines it wraps over, and refused unless it ends in a full stop. A "Fiscal Note:" line,
 which the statute requires "if applicable" (none of 2026's four has
 one), becomes fiscal_impact when present.
 
 The set of questions read from the pamphlet must equal the set the page
 certifies; any difference (a question added after the pamphlet went to
 print, or a pamphlet page this reader can't parse) refuses the whole
-read (None) rather than publishing a short or padded list. A certified
-section that is present and lists nothing reads as [].
+read (None) rather than publishing a short or padded list, and so does a
+certified entry without its assigned letter/number. A certified section
+that is present and lists nothing reads as [].
 """
 
 import io
@@ -104,10 +106,18 @@ def certified_questions(page_html: str, year: int) -> dict[str, str | None] | No
         return None
     questions: dict[str, str | None] = {}
     for el in section:
-        for answer in el.xpath(".//div[contains(@class, 'faq_answer')][not(div)]") or ([el] if el.tag == "p" else []):
+        answers = el.xpath(".//div[contains(@class, 'faq_answer')][not(div)]")
+        for answer in answers or ([el] if el.tag == "p" else []):
             text = " ".join(answer.text_content().split())
             m = _ASSIGNED_RE.search(text)
             if not m:
+                if answers and text or "Sponsor:" in text:
+                    # A certified entry without the letter/number the
+                    # Secretary assigns: skipping it would publish the
+                    # ballot one question short — or, if every entry were
+                    # skipped, as "none".
+                    logger.warning("SD %d: certified entry without an assigned letter/number: %r", year, text[:100])
+                    return None
                 continue
             origin = None
             if re.search(r"Proposed and passed by the \d{4} South Dakota Legislature", text):
@@ -138,9 +148,8 @@ def parse_pamphlet_page(text: str) -> dict | None:
     if head is None:
         return None
     kind, number = _HEADING_RE.match(lines[head]).groups()
-    fields: dict[str, list[str]] = {"title": [], "explanation": [], "fiscal": []}
+    fields: dict[str, list[str]] = {"title": [], "explanation": [], "fiscal": [], "yes": [], "no": []}
     current = None
-    yes_means = no_means = None
     for ln in lines[head + 1:]:
         if _END_RE.match(ln):
             break
@@ -154,14 +163,25 @@ def parse_pamphlet_page(text: str) -> dict | None:
             current = "fiscal"
             fields[current].append(m.group(1))
         elif _YES_RE.match(ln):
-            yes_means, current = ln, None
+            current = "yes"
+            fields[current].append(ln)
         elif _NO_RE.match(ln):
-            no_means, current = ln, None
+            current = "no"
+            fields[current].append(ln)
         elif current:
+            # A wrapped line continues whatever was open — including the
+            # "Vote ..." sentences, which used to keep only their first
+            # line and silently truncate a wrapped recitation.
             fields[current].append(ln)
     title = join_lines(fields["title"])
     explanation = join_lines(fields["explanation"])
+    yes_means = join_lines(fields["yes"]) if fields["yes"] else None
+    no_means = join_lines(fields["no"]) if fields["no"] else None
     if not title or not explanation or not yes_means or not no_means:
+        return None
+    if not (yes_means.endswith(".") and no_means.endswith(".")):
+        # A sentence that doesn't end where the recitation should: refuse
+        # rather than store part of the state's framing.
         return None
     fiscal = join_lines(fields["fiscal"])
     return {

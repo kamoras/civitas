@@ -15,7 +15,9 @@ to the next <h2> (or end of document if there is none — a cycle with
 no measures on the general ballot is a real, legitimate answer, not a
 parse failure).
 
-Each measure's elements (a "Official Ballot TitleAmendment N" heading,
+Each measure's elements (a "Official Ballot TitleAmendment N" or
+"Official Ballot TitleProposition X" heading — both kinds are read, and a
+measure heading in any other shape refuses the page,
 link paragraphs, an "Official Ballot Title:" blockquote with the
 question + fiscal note, and a "Fair Ballot Language:" blockquote with
 real "A 'yes' vote will .../A 'no' vote will ..." framing — richer than
@@ -43,6 +45,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -57,7 +60,21 @@ _GENERAL_HEADING_RE = re.compile(r"general\s+election", re.IGNORECASE)
 # doesn't insert one across a <br>. The colon-bearing "Official Ballot
 # Title:" heading (a different element, later in the same measure) must
 # not match this — the (?!:) lookahead after "Title" rules it out.
-_MEASURE_START_RE = re.compile(r"^Official Ballot Title(?!:)\s*Amendment\s+(\d+)", re.IGNORECASE)
+#
+# Two kinds are printed: "Amendment N" (constitutional) and "Proposition
+# X" (a statutory initiative or a referendum on an act — 2026's
+# Proposition A is the referendum petition on the congressional map,
+# which the Amendment-only pattern this once had skipped without a
+# trace). The kind is kept, so the label is the page's own.
+_MEASURE_START_RE = re.compile(
+    r"^Official Ballot Title(?!:)\s*(Amendment|Proposition)\s+(\d+|[A-Z])\b", re.IGNORECASE,
+)
+# Any measure-start heading at all. One this reader can't number
+# refuses the page.
+_ANY_MEASURE_START_RE = re.compile(r"^Official Ballot Title(?!:)", re.IGNORECASE)
+# The page's own section headings ("The following ballot measures ...
+# <election>"): present means this is the page we know.
+_SECTION_HEADING_RE = re.compile(r"The following ballot measures", re.IGNORECASE)
 _SUMMARY_HEADING_RE = re.compile(r"^Official Ballot Title:\s*$", re.IGNORECASE)
 _FAIR_LANGUAGE_HEADING_RE = re.compile(r"Fair Ballot Language:", re.IGNORECASE)
 _FISCAL_START_RE = re.compile(r"^State\b.*\bestimate", re.IGNORECASE)
@@ -76,6 +93,8 @@ def _origin_for(proposed_by_text: str) -> str | None:
         return "Missouri General Assembly"
     if "initiative petition" in text:
         return "Missouri voters (initiative petition)"
+    if "referendum petition" in text:
+        return "Missouri voters (referendum petition)"
     return None
 
 
@@ -100,17 +119,30 @@ def _general_section_elements(tree) -> list:
 def _split_by_measure(elements: list) -> dict[str, list]:
     """{number: [elements between this measure's start heading and the
     next]} — order-preserving, never re-derives a number that isn't
-    literally printed in a start heading."""
-    measures: dict[str, list] = {}
+    literally printed in a start heading (see split_measures, which
+    also keeps the kind each number was printed with)."""
+    return {number: els for number, (_, els) in split_measures(elements).items()}
+
+
+def split_measures(elements: list) -> dict[str, tuple[str, list]]:
+    """{number: (kind, elements)} — "Amendment"/"Proposition" as printed.
+    Raises on a measure heading it can't number, or a number printed
+    twice (an "Amendment 1" and a "Proposition 1" would be one record)."""
+    measures: dict[str, tuple[str, list]] = {}
     current_number = None
     for el in elements:
-        m = _MEASURE_START_RE.match(el.text_content().strip()) if el.tag == "p" else None
+        text = el.text_content().strip() if el.tag == "p" else ""
+        m = _MEASURE_START_RE.match(text)
+        if not m and _ANY_MEASURE_START_RE.match(text):
+            raise ValueError(f"MO: measure heading this reader can't number: {text[:80]!r}")
         if m:
-            current_number = m.group(1)
-            measures[current_number] = []
+            kind, current_number = m.group(1).capitalize(), m.group(2).upper()
+            if current_number in measures:
+                raise ValueError(f"MO: measure number {current_number} printed twice")
+            measures[current_number] = (kind, [])
             continue
         if current_number is not None:
-            measures[current_number].append(el)
+            measures[current_number][1].append(el)
     return measures
 
 
@@ -132,7 +164,7 @@ def _fiscal_split(blockquote) -> tuple[str | None, str | None]:
     return clean_text(blockquote.text_content()), None
 
 
-def _parse_measure(number: str, elements: list) -> dict | None:
+def _parse_measure(number: str, elements: list, kind: str = "Amendment") -> dict | None:
     proposed_by = next(
         (e.text_content() for e in elements if e.tag == "p" and "proposed by" in e.text_content().lower()),
         "",
@@ -162,7 +194,7 @@ def _parse_measure(number: str, elements: list) -> dict | None:
 
     return {
         "number": number,
-        "title": f"Amendment {number}",
+        "title": f"{kind} {number}",
         "origin": origin,
         "official_summary": official_summary,
         "fiscal_impact": fiscal_impact,
@@ -175,11 +207,11 @@ def _parse_measure(number: str, elements: list) -> dict | None:
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     """[(parsed, source_url), ...] for every measure on `year`'s general-
-    election ballot, or None on a fetch/HTML-parse failure. [] if the
-    page fetches and parses fine but carries no "general election"
-    heading at all this cycle (a real, legitimate answer — nothing is
-    referred to November some cycles) or that heading's section names no
-    measures."""
+    election ballot, or None on a fetch/HTML-parse failure or a measure it
+    can't read. [] only when the general-election section is there and
+    names no measure. A page with only its primary section so far raises
+    NotYetPublished (nothing certified to November yet is not "none"); a
+    page with no section heading this reader knows is None."""
     url = URL_PATTERN.format(year=year)
     page_html = await fetch_text_with_retry(client, _rate_limiter, url, f"MO ballot measures {year}")
     if page_html is None:
@@ -190,15 +222,32 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         logger.exception("MO ballot measures page for %d was not parseable HTML", year)
         return None
 
-    by_number = _split_by_measure(_general_section_elements(tree))
+    has_general = any(_GENERAL_HEADING_RE.search(h.text_content()) for h in tree.xpath("//h2"))
+    if not has_general:
+        if any(_SECTION_HEADING_RE.search(h.text_content()) for h in tree.xpath("//h2")):
+            # The page we know, carrying only the primary's section so far:
+            # nothing is certified to November YET. Not "none".
+            raise NotYetPublished(f"Missouri's {year} general-election ballot measures section")
+        logger.warning("MO ballot measures page for %d has no section heading this reader knows", year)
+        return None
+    try:
+        by_number = split_measures(_general_section_elements(tree))
+    except ValueError:
+        logger.exception("MO ballot measures page for %d", year)
+        return None
     if not by_number:
+        # The general-election section is there and lists nothing.
         return []
 
     results = []
-    for number in sorted(by_number, key=int):
-        parsed = _parse_measure(number, by_number[number])
+    # Amendments by number, then Propositions by letter.
+    for number in sorted(by_number, key=lambda n: (not n.isdigit(), int(n) if n.isdigit() else 0, n)):
+        kind, elements = by_number[number]
+        parsed = _parse_measure(number, elements, kind)
         if parsed is None:
-            logger.warning("MO Amendment %s: didn't match the expected section shape — skipping", number)
-            continue
+            # Skipping it would publish the general-election list one
+            # measure short, as "covered" — refuse the whole page instead.
+            logger.warning("MO Amendment %s: didn't match the expected section shape — refusing the page", number)
+            return None
         results.append((parsed, url))
     return results

@@ -9,7 +9,10 @@ CONSTITUTIONAL AMENDMENTS section to the end, fetched live 2026-09-28.
 import json
 from pathlib import Path
 
+import pytest
+
 from app.pipeline.fetch import ballot_measures_in as ind
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures_in_legislation_summary.json").read_text())
 
@@ -37,8 +40,68 @@ def test_both_real_public_questions_verbatim():
 
 
 def test_questions_dated_to_another_election_are_not_read():
-    assert ind.parse_summary(FIXTURE["summary_text"], 2028) is None
+    # Dated 2026 by their own introductions: nothing for 2028's ballot.
+    assert ind.parse_summary(FIXTURE["summary_text"], 2028) == []
 
 
-def test_no_question_found_is_never_confirmed_none():
-    assert ind.parse_summary("SUMMARY OF 2027 ELECTION LEGISLATION\nNothing here.", 2027) is None
+def test_an_introduction_naming_no_recognisable_election_refuses():
+    """The regression: the date check used to be one exact phrase, so an
+    introduction worded any other way ("... at the 2026 general election")
+    was skipped as if it were another year's — a real question silently
+    dropped from a list published as complete."""
+    reworded = FIXTURE["summary_text"].replace(
+        "ballot at the November 3, 2026, general election.", "ballot this November.", 1,
+    )
+    assert ind.parse_summary(reworded, 2026) is None
+    # Worded differently but still naming the year: read, not skipped.
+    variant = FIXTURE["summary_text"].replace(
+        "ballot at the November 3, 2026, general election.", "ballot at the 2026 general election.", 1,
+    )
+    assert [m["number"] for m in ind.parse_summary(variant, 2026)] == ["1", "2"]
+
+
+def test_a_question_this_reader_cant_quote_refuses():
+    broken = FIXTURE["summary_text"].replace("“Public Question #2", "“Public Question No. 2", 1)
+    assert ind.parse_summary(broken, 2026) is None
+
+
+def test_nothing_to_quote_is_empty_never_a_question():
+    assert ind.parse_summary("SUMMARY OF 2027 ELECTION LEGISLATION\nNothing here.", 2027) == []
+
+
+def _client_serving(index_html, pdf_text):
+    async def get_text(client, limiter, url, label, **kw):
+        return index_html
+
+    async def get_bytes(client, limiter, url, label, **kw):
+        return b"%PDF-"
+
+    return get_text, get_bytes, (lambda raw: pdf_text)
+
+
+async def test_no_question_for_the_year_is_not_yet_published_never_none(monkeypatch):
+    """A legislation summary is not a certified list, so an empty read
+    can't be confirmed_none — and it isn't a failure either: the Division
+    publishes the summary whatever it contains. Not yet covered, no alert
+    (it used to be None, i.e. an ingest-failure page every night of a
+    year with no question)."""
+    get_text, get_bytes, text = _client_serving(FIXTURE["index"], FIXTURE["summary_text"])
+    monkeypatch.setattr(ind, "fetch_text_with_retry", get_text)
+    monkeypatch.setattr(ind, "fetch_bytes_with_retry", get_bytes)
+    monkeypatch.setattr(ind, "pdf_text", text)
+    monkeypatch.setattr(ind, "find_summary_url", lambda html, year: "https://x/summary.pdf")
+    with pytest.raises(NotYetPublished):
+        await ind.fetch_measures(None, 2028)
+    parsed = await ind.fetch_measures(None, 2026)
+    assert [p["number"] for p, _ in parsed] == ["1", "2"]
+
+
+async def test_summary_not_linked_yet_is_not_yet_published(monkeypatch):
+    get_text, get_bytes, text = _client_serving(FIXTURE["index"], FIXTURE["summary_text"])
+    monkeypatch.setattr(ind, "fetch_text_with_retry", get_text)
+    # The index links 2026's summary but not 2027's.
+    with pytest.raises(NotYetPublished):
+        await ind.fetch_measures(None, 2027)
+    # An index page that isn't the one we know (no link for the prior
+    # year either) is a failure, not "not yet".
+    assert await ind.fetch_measures(None, 2031) is None

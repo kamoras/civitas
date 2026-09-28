@@ -179,6 +179,9 @@ def parse_notice(text: str, number: str, year: int) -> dict | None:
     return {
         "number": number,
         "title": title,
+        # The Popular Name (or Ballot Title) the General Assembly wrote,
+        # printed on the ballot.
+        "official_title": title,
         "origin": ORIGIN,
         "official_summary": summary,
         "fiscal_impact": None,

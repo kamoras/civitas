@@ -82,3 +82,34 @@ def test_measure_text_without_a_recognised_heading_is_a_failure_not_none():
     words = [w for w in FIXTURE["2026"]["words"] if w["text"] != "Ballot"]
     with pytest.raises(ValueError):
         ak.parse_page_words(words, FIXTURE["2026"]["width"])
+
+
+class _Page:
+    def __init__(self, words, width):
+        self._words, self.width = words, width
+
+    def extract_words(self, **kw):
+        return self._words
+
+
+_HEADER = [
+    {"text": t, "x0": 10.0 + 40 * i, "x1": 45.0 + 40 * i, "top": 20.0, "bottom": 30.0,
+     "fontname": "Arial", "size": 10.0}
+    for i, t in enumerate("State of Alaska Official Ballot November 3, 2026 General Election".split())
+]
+
+
+def test_document_reads_measures_under_the_ballots_own_header():
+    page = FIXTURE["2026"]
+    measures = ak.parse_document([_Page(_HEADER, page["width"]), _Page(page["words"], page["width"])])
+    assert [m["number"] for m in measures] == ["2", "3"]
+    # The bold title is the Lieutenant Governor's ballot title, printed on
+    # the ballot — it is the official title.
+    assert measures[0]["official_title"] == measures[0]["title"]
+
+
+def test_a_document_with_no_readable_text_is_a_failure_never_none():
+    """The regression: a scanned sample ballot (no text layer) has no
+    words, so no measure heading, so [] — confirmed none."""
+    with pytest.raises(ValueError):
+        ak.parse_document([_Page([], 612.0), _Page([], 612.0)])

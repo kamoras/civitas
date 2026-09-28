@@ -31,7 +31,6 @@ from app.pipeline.fetch import (
     ballot_measures_tx as tx,
     ballot_measures_wv as wv,
 )
-from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
 
 HERE = Path(__file__).parent
 
@@ -59,12 +58,6 @@ def _stub_fetch(monkeypatch, module, pages: dict, *, pdfs: dict | None = None):
         monkeypatch.setattr(module, "get_bytes", get_bytes)
     if hasattr(module, "pdf_text"):
         monkeypatch.setattr(module, "pdf_text", lambda raw: raw)
-
-
-def test_every_new_state_is_registered_with_a_known_strategy():
-    for state in ("AL", "AR", "FL", "KY", "MD", "NC", "SC", "TN", "TX", "WV"):
-        assert pdf.is_configured(state), state
-        assert source_for_state(state)["source_name"]
 
 
 # ── Alabama ──────────────────────────────────────────────────────────
@@ -212,6 +205,39 @@ class TestFlorida:
         seeking = {"number": "0", "sponsor": "x"}
         assert fl.parse_detail(self.fx["seeking_detail_html"], seeking, 2028) is None
 
+    def test_an_initiatives_serial_numbered_row_is_read_not_skipped(self):
+        """The regression: a citizen initiative's row prints its petition
+        serial before the ballot number ("22-05 (3)"), which the number
+        pattern didn't match — so the row was skipped. On the real 2024
+        search that silently dropped Amendments 3 and 4 (the two citizen
+        initiatives) from a list that would have read as complete."""
+        rows = fl.listed_measures(self.fx["results_2024_html"], 2024)
+        # 2024's results are Passed/Defeated — an election already held,
+        # so none is "on the coming ballot"; the point is that every row
+        # was READ (an unreadable one returns None).
+        assert rows == []
+        active = self.fx["results_2024_html"].replace("Defeated", "Active").replace("Passed", "Active")
+        assert [r["number"] for r in fl.listed_measures(active, 2024)] == ["1", "2", "3", "4", "5", "6"]
+
+    def test_a_struck_measure_is_not_listed_and_an_unknown_status_refuses(self):
+        # 2018's Amendment 8 was removed from the ballot by the courts.
+        numbers = [r["number"] for r in fl.listed_measures(
+            self.fx["results_2018_html"].replace("Passed", "Active").replace("Defeated", "Active"), 2018,
+        )]
+        assert "8" not in numbers and len(numbers) == 12
+        odd = self.fx["results_html"].replace("Active", "Pending Review", 1)
+        assert odd != self.fx["results_html"]
+        assert fl.listed_measures(odd, 2026) is None
+
+    def test_an_unreadable_ballot_number_refuses(self):
+        odd = self.fx["results_html"].replace(" (2)\n", " (Two)\n", 1)
+        assert odd != self.fx["results_html"]
+        assert fl.listed_measures(odd, 2026) is None
+
+    def test_the_heading_is_the_official_ballot_title(self):
+        one = fl.parse_detail(self.fx["details"]["108"], self._rows()[0], 2026)
+        assert one["official_title"] == one["title"]
+
 
 # ── Kentucky ─────────────────────────────────────────────────────────
 
@@ -225,7 +251,23 @@ class TestKentucky:
         assert one["official_summary"].startswith("Are you in favor of limiting a Governor's ability to grant pardons")
         assert one["official_summary"].endswith("?")
         measure = pdf._to_measure("KY", one, "2026-11-03", ky.PAGE_URL)
-        assert measure["id"] == "KY-2026-11-03-CONSTITUTIONAL-AMENDMENT"
+        assert measure["id"] == "KY-2026-11-03-CONSTITUTIONAL-AMENDMENT-1"
+        # The heading is a label, not a ballot title.
+        assert measure["official_title"] is None
+
+    def test_two_unnumbered_amendments_get_two_ids(self):
+        """The regression: every unnumbered amendment was keyed on its
+        heading, "CONSTITUTIONAL AMENDMENT", so a second one got the first
+        one's id and overwrote it."""
+        body_end = self.page.index("</div>", self.page.index("ms-rtestate-field"))
+        second = (
+            '<h2>CONSTITUTIONAL AMENDMENT</h2>'
+            '<p>Are you in favor of a second, different amendment?</p>'
+        )
+        page = self.page[:body_end] + second + self.page[body_end:]
+        first, other = ky.parse_page(page, 2026)
+        ids = [pdf._to_measure("KY", m, "2026-11-03", ky.PAGE_URL)["id"] for m in (first, other)]
+        assert ids == ["KY-2026-11-03-CONSTITUTIONAL-AMENDMENT-1", "KY-2026-11-03-CONSTITUTIONAL-AMENDMENT-2"]
 
     def test_a_page_titled_for_another_year_is_not_this_ballot(self):
         assert ky.parse_page(self.page, 2028) is None
@@ -318,6 +360,29 @@ class TestSouthCarolina:
         # Dated for 2024 — never accepted as 2026's.
         assert sc.parse_detail(self.fx["detail_691"], row, 2026) is None
 
+    def test_the_title_is_the_detail_containers_heading_on_the_whole_page(self):
+        """parse_detail was only ever tested on the trimmed <main>; this is
+        the whole live page. The heading is read from the detail container
+        only: an <h2> elsewhere on the page (the listing layout's
+        "Election" heading) must never become the measure's title."""
+        [row] = sc.statewide_rows(self.fx["results_2024"])
+        full = sc.parse_detail(self.fx["detail_691_full"], row, 2024)
+        assert full["title"] == "Constitutional Amendment Question"
+        assert full.get("official_title") is None
+        assert full == sc.parse_detail(self.fx["detail_691"], row, 2024)
+        stray = self.fx["detail_691_full"].replace(
+            '<main class="content">', '<main class="content"><h2 class="h4 pt-3">Election</h2>', 1,
+        )
+        assert stray != self.fx["detail_691_full"]
+        assert sc.parse_detail(stray, row, 2024)["title"] == "Constitutional Amendment Question"
+
+    def test_a_statewide_row_without_a_readable_detail_link_refuses(self):
+        """The regression: such a row was skipped — and a listing whose only
+        statewide row was skipped read as [] (confirmed none)."""
+        html = self.fx["results_2024"].replace("referendumId=691", "referendum=691")
+        assert html != self.fx["results_2024"]
+        assert sc.statewide_rows(html) is None
+
     @pytest.mark.asyncio
     async def test_confirmed_none_needs_the_listing_to_have_rendered(self, monkeypatch):
         async def get_json(client, url, label):
@@ -354,6 +419,37 @@ class TestTennessee:
         # The Question (full amended text) is not folded into the summary.
         assert "Shall Article I" not in one["official_summary"]
         assert one["title_authority"] == "Tennessee Attorney General"
+        # "Constitutional Amendment #1" is a heading, not a ballot title.
+        assert one.get("official_title") is None
+
+    @pytest.mark.asyncio
+    async def test_a_missing_page_is_not_yet_published_and_an_outage_is_a_failure(self, monkeypatch):
+        """The regression: the page 404s in every non-gubernatorial year
+        and before publication, and that read as an ingest failure —
+        paging every night of a year with nothing to post."""
+        from types import SimpleNamespace
+
+        from app.pipeline.fetch import ballot_measures_state_common as common
+
+        async def missing(*a, **kw):
+            assert kw.get("expected_statuses") == (404,)
+            return SimpleNamespace(status_code=404, text="")
+
+        monkeypatch.setattr(common, "fetch_with_retry", missing)
+        with pytest.raises(NotYetPublished):
+            await tn.fetch_measures(None, 2028)
+
+        async def down(*a, **kw):
+            return None
+
+        monkeypatch.setattr(common, "fetch_with_retry", down)
+        assert await tn.fetch_measures(None, 2028) is None
+
+        async def served(*a, **kw):
+            return SimpleNamespace(status_code=200, text=self.page)
+
+        monkeypatch.setattr(common, "fetch_with_retry", served)
+        assert [p["number"] for p, _ in await tn.fetch_measures(None, 2026)] == ["1", "2", "3"]
 
 
 # ── Texas ────────────────────────────────────────────────────────────
@@ -396,12 +492,16 @@ class TestWestVirginia:
         assert notices[0]["date"] == "2026-07-23"
 
     def test_notice_parses_from_the_whole_page(self):
-        one = wv.parse_notice(self.fx["notice_html"], 2026)
+        [one] = wv.parse_notice(self.fx["notice_html"], 2026)
         assert one["number"] == "1"
         assert one["title"] == "Amendment 1: Citizenship Requirement to Vote in West Virginia Elections Amendment"
         assert one["official_summary"].startswith("This amendment provides that in all elections held in West Virginia")
         assert one["title_authority"] == "West Virginia Legislature (Senate Joint Resolution 9)"
         assert wv.parse_notice(self.fx["notice_html"], 2028) is None
+
+    def _older_page(self):
+        # The same rows, dated the previous year: the page where paging stops.
+        return self.fx["listing_html"].replace('datetime="2026-', 'datetime="2025-')
 
     @pytest.mark.asyncio
     async def test_no_notice_is_not_covered_never_none(self, monkeypatch):
@@ -409,44 +509,60 @@ class TestWestVirginia:
         none, and not a failure to alert on either."""
         empty_year_listing = self.fx["listing_html"].replace("Public Notice", "Notice")
         _stub_fetch(monkeypatch, wv, {
-            wv.LISTING_URL.format(page=p): empty_year_listing for p in range(wv.MAX_PAGES)
+            wv.LISTING_URL.format(page=0): empty_year_listing,
+            wv.LISTING_URL.format(page=1): self._older_page(),
         })
         with pytest.raises(NotYetPublished):
             await wv.fetch_measures(None, 2026)
 
+    @pytest.mark.asyncio
+    async def test_running_out_of_pages_inside_the_year_is_a_failure(self, monkeypatch):
+        """The regression: paging stopped at MAX_PAGES still inside `year`
+        and read "no notice found" as not-yet-published (or published a
+        partial list) — the notice could be on a page never read."""
+        empty_year_listing = self.fx["listing_html"].replace("Public Notice", "Notice")
+        _stub_fetch(monkeypatch, wv, {
+            wv.LISTING_URL.format(page=p): empty_year_listing for p in range(wv.MAX_PAGES)
+        })
+        assert await wv.fetch_measures(None, 2026) is None
+
+    @pytest.mark.asyncio
+    async def test_a_listing_with_no_rows_is_a_failure(self, monkeypatch):
+        _stub_fetch(monkeypatch, wv, {wv.LISTING_URL.format(page=0): "<html><body></body></html>"})
+        assert await wv.fetch_measures(None, 2026) is None
+
+    def test_a_plural_headline_is_a_notice(self):
+        """The regression: the headline pattern required the singular
+        "amendment", so a notice of "proposed Amendments" was never opened."""
+        assert wv._NOTICE_HEADLINE_RE.search(
+            "Secretary Warner issues Public Notice of proposed Amendments to the West Virginia Constitution",
+        )
+
+    def test_every_amendment_in_one_notice_is_read(self):
+        """The regression: only the first "Title of Amendment" per article
+        was kept, so a notice of two amendments published one."""
+        second = (
+            '<p style="margin:0 0 14px;"><strong>Title of Amendment:</strong> “Amendment 2: A Second Amendment”</p>'
+            '<p style="margin:0 0 14px;"><strong>Summary of Purpose:</strong> “This amendment does a second thing.”</p>'
+            '<p style="margin:0;"><strong>Full Text of the Amendment:</strong>'
+        )
+        html = self.fx["notice_html"].replace('<p style="margin:0;"><strong>Full Text of the Amendment:</strong>', second, 1)
+        assert html != self.fx["notice_html"]
+        one, two = wv.parse_notice(html, 2026)
+        assert (one["number"], two["number"]) == ("1", "2")
+        assert two["official_summary"] == "This amendment does a second thing."
+        assert two["official_title"] == "Amendment 2: A Second Amendment"
+        # A title with no summary after it is refused, not published bare.
+        orphan = self.fx["notice_html"].replace(
+            '<p style="margin:0;"><strong>Full Text of the Amendment:</strong>',
+            '<p style="margin:0 0 14px;"><strong>Title of Amendment:</strong> “Amendment 2: Orphan”</p>'
+            '<p style="margin:0;"><strong>Full Text of the Amendment:</strong>', 1,
+        )
+        assert wv.parse_notice(orphan, 2026) is None
+
     async def test_an_unreachable_listing_is_a_failure(self, monkeypatch):
         _stub_fetch(monkeypatch, wv, {})
         assert await wv.fetch_measures(None, 2026) is None
-
-
-# ── Shared contract ──────────────────────────────────────────────────
-
-def test_to_measure_carries_the_drafter_and_keeps_numeric_ids():
-    parsed = {
-        "number": "1", "title": "T", "origin": None, "official_summary": "S",
-        "fiscal_impact": "F", "yes_means": None, "no_means": None,
-        "title_authority": "A", "fiscal_authority": "B",
-    }
-    m = pdf._to_measure("AL", parsed, "2026-11-03", "u")
-    assert m["id"] == "AL-2026-11-03-1"
-    assert (m["title_authority"], m["fiscal_authority"]) == ("A", "B")
-
-
-def test_upsert_stores_the_drafter(db_session):
-    from app.models import BallotMeasure
-    from app.pipeline import election_pipeline
-
-    parsed = {
-        "number": "1", "title": "T", "origin": None, "official_summary": "S",
-        "fiscal_impact": "F", "yes_means": None, "no_means": None,
-        "title_authority": "Alabama Legislature", "fiscal_authority": "Alabama Fair Ballot Commission",
-    }
-    item = pdf._to_measure("AL", parsed, "2026-11-03", "u")
-    election_pipeline._upsert_measure(db_session, item, item, "Alabama Secretary of State")
-    db_session.commit()
-    row = db_session.query(BallotMeasure).filter(BallotMeasure.id == "AL-2026-11-03-1").one()
-    assert row.title_authority == "Alabama Legislature"
-    assert row.fiscal_authority == "Alabama Fair Ballot Commission"
 
 
 # ── An unrecognised shape is never "none" ────────────────────────────

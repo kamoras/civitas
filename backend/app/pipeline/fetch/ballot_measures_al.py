@@ -128,6 +128,8 @@ def parse_statement(text: str, number: str, year: int) -> dict | None:
     return {
         "number": number,
         "title": title,
+        # The quoted ballot text itself — what the ballot prints.
+        "official_title": title,
         "origin": ORIGIN,
         "official_summary": summary,
         "fiscal_impact": fiscal,

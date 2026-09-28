@@ -144,3 +144,47 @@ class TestFetchMeasures:
         monkeypatch.setattr(me, "fetch_bytes_with_retry", fake_bytes)
         monkeypatch.setattr(me, "_extract_text", lambda raw: broken)
         assert await me.fetch_measures(None, 2024) is None
+
+
+class TestBallotQuestionText:
+    def test_official_title_is_the_listed_ballot_question_not_a_label(self):
+        """The regression: "Question 1: Citizen's Initiative" — a label
+        this reader composed — was rendered as the OFFICIAL BALLOT TITLE
+        "Drafted by Maine Secretary of State"."""
+        by_number = {p["number"]: p for p in me.parse_guide(GUIDE_2024)}
+        assert by_number["1"]["title"] == "Question 1: Citizen’s Initiative"
+        assert by_number["1"]["official_title"] == (
+            "Do you want to set a $5,000 limit for giving to political action committees that spend money "
+            "independently to support or defeat candidates for office?"
+        )
+        assert by_number["5"]["official_title"].startswith("Do you favor making the former state flag")
+        assert by_number["5"]["official_title"].endswith("the official flag of the State?")
+        for p in by_number.values():
+            assert p["official_title"].endswith("?")
+            assert "Treasurer" not in p["official_title"]
+
+    def test_the_question_names_its_real_drafter(self):
+        by_number = {p["number"]: p for p in me.parse_guide(GUIDE_2024)}
+        assert by_number["1"]["title_authority"] == "Maine Secretary of State"
+        # A bond question is written into the Legislature's own act.
+        assert by_number["2"]["title_authority"] == "Maine Legislature"
+        assert me.parse_guide(GUIDE_2025)[1]["official_title"].startswith("Do you want to allow courts")
+
+
+class TestNotYetPublishedVsOutage:
+    async def test_a_page_that_could_not_be_fetched_is_a_failure_not_unpublished(self, monkeypatch):
+        """The regression: _find_guide returned None both when the guide
+        wasn't linked AND when page fetches failed, so an outage read as
+        "not yet published" — silenced, no alert."""
+        async def fake_text(client, limiter, url, label, **kw):
+            return None if "news" in url else "<a href='/sos/other'>other</a>"
+        monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
+        assert await me.fetch_measures(None, 2026) is None
+
+    async def test_a_release_page_that_could_not_be_fetched_is_a_failure(self, monkeypatch):
+        async def fake_text(client, limiter, url, label, **kw):
+            if "citizens-guide-2026" in url:
+                return None
+            return '<a href="/sos/news/citizens-guide-2026-maine-referendum-election">x</a>'
+        monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
+        assert await me.fetch_measures(None, 2026) is None

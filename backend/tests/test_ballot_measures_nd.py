@@ -55,3 +55,25 @@ class TestBallotLanguage:
     def test_missing_framing_refuses(self):
         text = FIXTURE["ballot_language_1"].replace("No – Means", "No Means")
         assert nd.parse_ballot_language(text) is None
+
+    def test_a_wrapped_yes_or_no_sentence_is_kept_whole(self):
+        """The regression: only each sentence's first line was kept, so a
+        "Means ..." sentence wrapped over two lines was stored truncated."""
+        text = (
+            FIXTURE["ballot_language_1"]
+            .replace("Yes – Means you approve the measure as summarized above.",
+                     "Yes – Means you approve the measure as\nsummarized above.")
+            .replace("No – Means you reject the measure as summarized above.",
+                     "No – Means you reject the measure\nas summarized above.")
+        )
+        m = nd.parse_ballot_language(text)
+        assert m["yes_means"] == "Means you approve the measure as summarized above."
+        assert m["no_means"] == "Means you reject the measure as summarized above."
+
+    def test_a_sentence_that_never_finishes_refuses(self):
+        text = FIXTURE["ballot_language_1"].replace(
+            "No – Means you reject the measure as summarized above.", "No – Means you reject the measure",
+        )
+        assert nd.parse_ballot_language(text) is None
+        trailing = FIXTURE["ballot_language_1"] + "\nSomething after the framing"
+        assert nd.parse_ballot_language(trailing) is None

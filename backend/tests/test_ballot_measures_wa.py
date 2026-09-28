@@ -81,6 +81,15 @@ async def test_fetch_joins_letter_and_fiscal_and_fails_closed(monkeypatch):
     monkeypatch.setattr(wa, "_pdf_text", missing_letter)
     assert await wa.fetch_measures(None, 2026) is None
 
+    async def garbled_fiscal(client, url, label, pages=None):
+        """The regression: a linked fiscal statement that didn't parse was
+        dropped and the measure published as if it had none."""
+        text = await fake_pdf_text(client, url, label, pages)
+        return text.replace("minor costs", "minor (cid:99)osts") if "FIS" in url and "638" in url else text
+
+    monkeypatch.setattr(wa, "_pdf_text", garbled_fiscal)
+    assert await wa.fetch_measures(None, 2026) is None
+
 
 def test_documents_under_an_unrecognised_heading_fail_the_list():
     odd = PAGE.replace("<h3><strong>Initiative No. IL26-638</strong></h3>", "<h3><strong>Mystery measure</strong></h3>")

@@ -159,6 +159,9 @@ export interface BallotMeasure {
   origin: string | null;
   /** certified | removed | withdrawn | under_appeal. */
   status: string;
+  /** The state's own ballot title, only when the source supplies one —
+   * null otherwise. `title` above is a display label and may be one the
+   * reader composed ("Proposition 3"); it is never shown as official. */
   officialTitle: string | null;
   officialSummary: string | null;
   fiscalImpact: string | null;
@@ -168,10 +171,11 @@ export interface BallotMeasure {
    * "approved" retains the law under challenge). */
   yesMeans: string | null;
   noMeans: string | null;
-  /** Who drafted the title / fiscal note (legislature, attorney general,
-   * legislative staff…). Rendered with the quote: ballot titles are
-   * frequently litigated as slanted, so naming the author is more
-   * neutral than the bare quote. */
+  /** Who drafted the quoted text (legislature, attorney general,
+   * legislative staff…): the official title's drafter when there is an
+   * official title, otherwise the official summary's. Rendered with that
+   * quote: ballot titles are frequently litigated as slanted, so naming
+   * the author is more neutral than the bare quote. */
   titleAuthority: string | null;
   fiscalAuthority: string | null;
   sourceName: string;

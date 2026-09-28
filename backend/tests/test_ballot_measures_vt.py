@@ -62,3 +62,10 @@ def test_a_notice_with_no_recognisable_proposal_raises_rather_than_reading_as_no
 def test_registered_as_a_single_pdf_strategy():
     assert ballot_measures_pdf.STRATEGIES["vt_constitutional_amendment_notice"] is vt.parse_document
     assert ballot_measures_pdf.is_configured("VT")
+
+
+def test_a_proposal_named_twice_refuses_the_notice():
+    """The regression: a repeated proposal number kept the first sentence
+    and dropped the second silently."""
+    with pytest.raises(ValueError):
+        vt.parse_document(_pages(FIXTURE + FIXTURE[:1]))

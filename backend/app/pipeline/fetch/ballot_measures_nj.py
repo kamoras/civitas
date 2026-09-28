@@ -35,9 +35,10 @@ is None — "we don't know", never "none". This speaks only to the
 CURRENT cycle's page: the Division edits a year's page after its
 election (the real 2023 page, as served in 2026, hides that year's real
 CCRC question entirely), so this module is never pointed at a past
-year to reconstruct what was on it. Re-checked every run
-(ballot_measures_pdf.CACHE_TTL_HOURS), so a late certification is
-picked up.
+year to reconstruct what was on it. Re-checked every nightly run — an
+empty answer is cached for only cache.EMPTY_RESPONSE_TTL_HOURS (6h), see
+ballot_measures_pdf.CACHE_TTL_HOURS — so a late certification is picked
+up the next night.
 
 Each question PDF is one page: "PUBLIC QUESTION NO. N", an all-caps
 title, the ballot question itself, then "INTERPRETIVE STATEMENT" and
@@ -164,6 +165,8 @@ def parse_document(full_text: str, number: str) -> dict | None:
     return {
         "number": number,
         "title": title,
+        # The all-caps title the question document (and the ballot) prints.
+        "official_title": title,
         "origin": ORIGIN,
         "official_summary": official_summary,
         "fiscal_impact": None,

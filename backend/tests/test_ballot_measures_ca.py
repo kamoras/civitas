@@ -20,6 +20,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.pipeline.fetch import ballot_measures_ca as ca
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures_ca_vig_page4.json").read_text())
@@ -63,3 +65,19 @@ def test_prop3_yes_no_framing_dropped_as_corrupted_not_guessed():
 
 def test_page_with_no_quick_reference_content_returns_empty():
     assert ca.parse_quick_reference_page(_fake_page([])) == []
+
+
+def test_a_proposition_whose_number_isnt_found_refuses_the_document():
+    """The 2026 general guide prints each number as a large glyph beside
+    the title, not on its own row under PROP; the reader then produced
+    unnumbered records (several sharing one id) with titles missing their
+    first line. A proposition it can't number now raises instead."""
+    without_numbers = [w for w in FIXTURE if not (w["text"].isdigit() and w["text"] in ("2", "3"))]
+    assert len(without_numbers) < len(FIXTURE)
+    with pytest.raises(ValueError):
+        ca.parse_quick_reference_page(_fake_page(without_numbers))
+
+
+def test_the_quick_reference_title_is_the_official_ballot_label():
+    prop2 = next(r for r in ca.parse_quick_reference_page(_fake_page(FIXTURE)) if r["number"] == "2")
+    assert prop2["official_title"] == prop2["title"]

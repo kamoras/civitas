@@ -237,13 +237,20 @@ def parse_information_for_voters(pages) -> list[dict]:
         # rule) — a 5+ word repeat that's normal in longer prose, unlike
         # the short yes/no sentences this check was calibrated against.
         if not official_summary:
-            continue
+            # A question header whose summary couldn't be read: dropping it
+            # would publish the guide one question short, as "covered".
+            raise ValueError(f"MA Question {number}: no readable summary")
 
         results.append({
-            "number": number, "title": title, "origin": origin,
+            "number": number, "title": title, "official_title": title, "origin": origin,
             "official_summary": official_summary, "fiscal_impact": fiscal_impact,
             "yes_means": yes_means, "no_means": no_means,
             "title_authority": TITLE_AUTHORITY,
             "fiscal_authority": FISCAL_AUTHORITY,
         })
+    if not results:
+        # The guide is published for questions on the ballot; one this
+        # reader finds none in (no text layer, a new layout) is a
+        # document it can't read — never a checked "none".
+        raise ValueError("MA Information for Voters: no ballot question found")
     return results

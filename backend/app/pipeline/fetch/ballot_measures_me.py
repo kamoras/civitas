@@ -8,6 +8,12 @@ General, the Treasurer and the Office of Fiscal and Program Review
 (21-A M.R.S. § 605-B), and for every question it prints, under named
 drafters:
 
+  "List(ing) of Referendum Questions" -> each question's ballot text,
+      stored as official_title (the words on the ballot; "Question N:
+      <kind>" is only a display label). Its drafter is the Secretary of
+      State for a citizen initiative or people's veto, and the
+      Legislature for a bond issue, amendment or legislative referendum
+      (written into its own act) — title_authority.
   "Intent and Content / Prepared by the Office of the Attorney General"
       -> official_summary, ending in the AG's own two sentences
          'A "YES" vote ...' / 'A "NO" vote ...' -> yes_means / no_means
@@ -44,7 +50,9 @@ initiative that qualified (school sports/facilities) had its petition
 invalidated, affirmed by the Maine Supreme Judicial Court on 2026-07-10
 with a federal challenge pending, and the people's veto of the
 supplemental budget was abandoned before its signature deadline. A
-missing guide is never read as "none".
+missing guide is never read as "none" — and it is "not yet published"
+only when every Secretary of State page was actually read; a page that
+couldn't be fetched is a failure (None), not an absence.
 """
 
 import io
@@ -106,6 +114,19 @@ def _origin(kind: str) -> str | None:
     return None
 
 
+def _question_drafter(origin: str | None) -> str | None:
+    """Who wrote the ballot question itself. For a citizen initiative or
+    a people's veto the Secretary of State drafts it (and publishes the
+    draft wording for comment before it is final);
+    for a bond issue, constitutional amendment or legislative referendum
+    it is written into the Legislature's own act or resolution."""
+    if origin in ("Maine voters (citizen initiative)", "Maine voters (people's veto)"):
+        return TITLE_AUTHORITY
+    if origin == "Maine Legislature":
+        return "Maine Legislature"
+    return None
+
+
 def _authority(prepared_by: str) -> str:
     # "the Office of the Attorney General" -> "Maine Office of the Attorney General"
     return "Maine " + re.sub(r"^the\s+", "", prepared_by.strip())
@@ -121,6 +142,7 @@ def parse_guide(full_text: str) -> list[dict]:
     don't have the verified shape is skipped with a warning (and the
     caller treats a short list as a failure — see fetch_measures)."""
     text = _clean_lines(full_text)
+    questions = listed_questions(full_text)
     headings = list(_HEADING_RE.finditer(text))
     intents = list(_INTENT_RE.finditer(text))
     results: list[dict] = []
@@ -148,37 +170,55 @@ def parse_guide(full_text: str) -> list[dict]:
         authorities = [_authority(m.group(1)) for m in (debt, fis) if m]
         if not summary:
             continue
+        origin = _origin(kind)
         results.append({
             "number": number,
             "title": clean_text(f"Question {number}: {kind}"),
-            "origin": _origin(kind),
+            # The ballot question as the guide's own listing prints it —
+            # the words on the ballot. "Question N: <kind>" above is only a
+            # label; the Intent and Content below is the Attorney
+            # General's explanation, not the ballot's text.
+            "official_title": questions.get(number),
+            "origin": origin,
             "official_summary": summary,
             "fiscal_impact": fiscal,
             "yes_means": clean_text(yes_m.group(1)),
             "no_means": clean_text(no_m.group(1)),
-            "title_authority": TITLE_AUTHORITY,
+            "title_authority": _question_drafter(origin),
             "fiscal_authority": " and ".join(authorities) if fiscal else None,
         })
     return results
 
 
-def listed_numbers(full_text: str) -> list[str]:
-    """Question numbers from the guide's "List(ing) of Referendum
-    Questions" page — the completeness check for parse_guide."""
+def listed_questions(full_text: str) -> dict[str, str | None]:
+    """{number: ballot question} from the guide's "List(ing) of
+    Referendum Questions" page, in listing order. Each question runs from
+    its "Question N: <kind>" heading to the first line ending in "?" (every
+    Maine ballot question is one); a heading with no such line maps to
+    None, which fetch_measures refuses."""
     text = _clean_lines(full_text)
     listing_heading = _LISTING_RE.search(text)
     if listing_heading is None:
-        return []
+        return {}
     start = listing_heading.end()
     first_intent = _INTENT_RE.search(text)
     listing = text[start: first_intent.start() if first_intent else len(text)]
-    numbers: list[str] = []
-    for m in _HEADING_RE.finditer(listing):
-        if m.group(1) not in numbers:
-            numbers.append(m.group(1))
-        elif numbers:
+    heads = list(_HEADING_RE.finditer(listing))
+    questions: dict[str, str | None] = {}
+    for i, m in enumerate(heads):
+        if m.group(1) in questions:
             break  # the listing is over; the first question's own section has begun
-    return numbers
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(listing)
+        lines = listing[m.end():end].strip("\n").splitlines()
+        stop = next((k for k, ln in enumerate(lines) if ln.rstrip().endswith("?")), None)
+        questions[m.group(1)] = clean_text(" ".join(lines[: stop + 1])) if stop is not None else None
+    return questions
+
+
+def listed_numbers(full_text: str) -> list[str]:
+    """Question numbers from the guide's "List(ing) of Referendum
+    Questions" page — the completeness check for parse_guide."""
+    return list(listed_questions(full_text))
 
 
 def guide_links(page_html: str, base_url: str, year: int) -> list[str]:
@@ -207,33 +247,47 @@ def _extract_text(raw: bytes) -> str:
         return "\n".join(page.extract_text() or "" for page in pdf.pages)
 
 
-async def _find_guide(client: httpx.AsyncClient, year: int) -> str | None:
+async def _find_guide(client: httpx.AsyncClient, year: int) -> tuple[str | None, bool]:
+    """(guide url or None, whether every page tried was actually read).
+
+    The two Nones mean different things and must not be merged: every
+    page read and none links the guide is "not published yet"; a page
+    that couldn't be fetched — where the link may well be — is an outage,
+    and reporting it as "not published" would hide it from the alert."""
     pages = [UPCOMING_URL] + [f"{NEWS_URL}?page={n}" for n in range(NEWS_PAGES)]
     releases: list[str] = []
+    complete = True
     for url in pages:
         html = await fetch_text_with_retry(client, _rate_limiter, url, "ME SOS page")
         if html is None:
+            complete = False
             continue
         links = guide_links(html, url, year)
         if links:
-            return links[0]
+            return links[0], True
         releases += [r for r in release_links(html, url, year) if r not in releases]
     for url in releases:
         html = await fetch_text_with_retry(client, _rate_limiter, url, "ME citizen's guide release")
         if html is None:
+            complete = False
             continue
         links = guide_links(html, url, year)
         if links:
-            return links[0]
-    return None
+            return links[0], True
+    return None, complete
 
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
-    """[(parsed, source_url), ...] for every question in `year`'s guide;
-    None when the guide can't be found (including "not published yet"),
-    fetched, or read completely. Never [] — see module docstring."""
-    guide_url = await _find_guide(client, year)
+    """[(parsed, source_url), ...] for every question in `year`'s guide.
+    Raises NotYetPublished when every Secretary of State page was read and
+    none links the guide; None when a page couldn't be fetched, or the
+    guide can't be fetched or read completely. Never [] — see module
+    docstring."""
+    guide_url, complete = await _find_guide(client, year)
     if guide_url is None:
+        if not complete:
+            logger.warning("ME %d: a Secretary of State page couldn't be fetched — not concluding", year)
+            return None
         # The guide is published weeks before November; until then Maine's
         # ballot is simply not known yet.
         raise NotYetPublished(f"Maine Citizen's Guide for {year}")
@@ -256,5 +310,8 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             "ME %d guide: parsed questions %s don't match the guide's own listing %s",
             year, [p["number"] for p in parsed], expected,
         )
+        return None
+    if any(not p["official_title"] for p in parsed):
+        logger.warning("ME %d guide: a listed question's ballot text couldn't be read", year)
         return None
     return [(p, guide_url) for p in parsed]

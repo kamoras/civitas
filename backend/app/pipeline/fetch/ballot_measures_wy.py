@@ -26,6 +26,15 @@ FOR/AGAINST choices than recognised headings (a proposition under a
 heading this module doesn't know). Pages after the propositions carry
 the full text of each law, which is not parsed.
 
+A document with no recognisable heading at all (including a scan with
+no text layer) raises too — never [] — and a year whose landing page
+links no such document reads as not yet published ("absent_until_
+published" in the registry): Wyoming publishes it for a year's
+propositions, so its absence is not a failure, and not "none".
+
+The heading ("PROPOSED INITIATIVE PROPOSITION NUMBER ONE") is a label,
+not a ballot title, so no official_title is claimed.
+
 No "A YES vote means / A NO vote means" framing is published, so
 yes_means/no_means stay null. The document doesn't name the fiscal
 estimate's drafter, so it is attributed to its publisher.
@@ -93,6 +102,11 @@ def parse_document(pages) -> list[dict]:
     for page in pages:
         lines.extend((page.extract_text() or "").splitlines())
     headings = [i for i, ln in enumerate(lines) if _HEADING_RE.match(ln.strip())]
+    if not headings:
+        # The document is published for a year's propositions; one with
+        # none readable — a scanned copy with no text layer reads as zero
+        # lines — is a document this reader can't read, never "none".
+        raise ValueError(f"WY: no recognised proposition heading in {len(lines)} text line(s)")
     results = []
     for n, idx in enumerate(headings):
         end = headings[n + 1] if n + 1 < len(headings) else len(lines)

@@ -117,6 +117,8 @@ def parse_report(text: str, year: int) -> list[dict] | None:
             "number": "",
             "id_key": r["title"],
             "title": r["title"],
+            # The Commission's caption, printed on the ballot.
+            "official_title": r["title"],
             "origin": ORIGIN,
             "official_summary": yes_text,
             "fiscal_impact": None,

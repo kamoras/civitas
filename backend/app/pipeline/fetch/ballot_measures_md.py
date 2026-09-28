@@ -123,6 +123,7 @@ def parse_page(page_html: str, year: int) -> list[dict] | None:
         results.append({
             "number": m.group(1),
             "title": title,
+            "official_title": title,
             "origin": _origin(type_line),
             "official_summary": summary,
             "fiscal_impact": None,

@@ -38,9 +38,21 @@ summaries) links every year's summary with the link text "Summary of
 times (2022-Legislative-Summary.FINAL.pdf, 2026-Indiana-Election-
 Legislation-Summary.FINAL.pdf), the link text has not.
 
-A summary with no public question does NOT establish that the ballot
-has none — it is a summary of legislation, not a certified list — so
-this module never returns []: no question found reads as None.
+Dating is three-way, never two: an introducing paragraph that names
+`year`'s general election is read; one that names a DIFFERENT year's
+general election is skipped (a question summarized ahead of its ballot
+year); one that names no general election this reader can recognise
+refuses the whole summary (None) — treating an unrecognised date as
+"another year" would silently drop a real question.
+
+A summary with no public question for `year` does NOT establish that the
+ballot has none — it is a summary of legislation, not a certified list —
+so this module never returns []. Nor is it a failure: the Election
+Division publishes each year's summary whatever it contains, and a year
+whose summary quotes no question (or whose summary isn't linked yet)
+raises NotYetPublished — not yet covered, no alert — rather than paging
+every night of a year with nothing to find. Text that looks like a
+public question but doesn't parse is None (ingest_failed).
 """
 
 import io
@@ -52,7 +64,7 @@ import httpx
 import pdfplumber
 from lxml import html as lxml_html
 
-from app.pipeline.fetch.ballot_measure_text import join_lines
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -65,17 +77,30 @@ _rate_limiter = RateLimiter(rps=1.0)
 
 _QUESTION_RE = re.compile(r"“Public Question #(\d+)\s*\n(.*?)”", re.DOTALL)
 _INTRO = "The text of the public question will read as follows:"
+_INTRO_RE = re.compile(re.escape(_INTRO))
 _PAGE_NUMBER_RE = re.compile(r"\n\s*\d{1,3}\s*$")
+# "... on the ballot at the November 3, 2026, general election." — the
+# year of every general election the introducing paragraph names.
+_GENERAL_ELECTION_YEAR_RE = re.compile(r"\b(\d{4}),?\s+general\s+election\b", re.IGNORECASE)
+_PUBLIC_QUESTION_MENTION_RE = re.compile(r"Public Question #\s*\d+")
 
 
-def find_summary_url(index_html: str, year: int) -> str | None:
+def _summary_hrefs(index_html: str, year: int) -> set[str]:
     tree = lxml_html.fromstring(index_html)
     wanted = f"summary of {year} election legislation"
-    hrefs = {
+    return {
         urljoin(INDEX_URL, a.get("href"))
         for a in tree.xpath("//a[@href]")
         if " ".join(a.text_content().split()).lower() == wanted
     }
+
+
+def _summary_link_count(index_html: str, year: int) -> int:
+    return len(_summary_hrefs(index_html, year))
+
+
+def find_summary_url(index_html: str, year: int) -> str | None:
+    hrefs = _summary_hrefs(index_html, year)
     return hrefs.pop() if len(hrefs) == 1 else None
 
 
@@ -89,18 +114,34 @@ def pdf_text(raw: bytes) -> str:
 
 
 def parse_summary(text: str, year: int) -> list[dict] | None:
+    """Every public question the summary quotes for `year`'s general
+    election ([] when it quotes none for that election), or None when a
+    question-shaped passage can't be read or dated."""
+    quoted = list(_QUESTION_RE.finditer(text))
+    if len(quoted) != len(_INTRO_RE.findall(text)):
+        # An introduction without a quote this reader recognises (or the
+        # reverse): a public question is there in a shape it doesn't know.
+        logger.warning("IN: %d quoted question(s) but %d introduction(s) — refusing", len(quoted), len(_INTRO_RE.findall(text)))
+        return None
+    if not quoted and _PUBLIC_QUESTION_MENTION_RE.search(text):
+        logger.warning("IN: summary names a public question but quotes none this reader recognises — refusing")
+        return None
     results = []
-    for m in _QUESTION_RE.finditer(text):
+    for m in quoted:
         number, body = m.group(1), m.group(2)
         # The introducing paragraph is what dates the question; it must
-        # directly precede the quote and name this year's general election.
+        # directly precede the quote and name a general election.
         intro_end = text.rfind(_INTRO, 0, m.start())
         if intro_end == -1 or text[intro_end + len(_INTRO):m.start()].strip():
             logger.warning("IN Public Question #%s: not introduced by the expected sentence — refusing", number)
             return None
-        preceding = " ".join(text[max(0, intro_end - 400):intro_end].split()).lower()
-        if f", {year}, general election" not in preceding:
-            continue
+        preceding = " ".join(text[max(0, intro_end - 400):intro_end].split())
+        named_years = set(_GENERAL_ELECTION_YEAR_RE.findall(preceding))
+        if not named_years:
+            logger.warning("IN Public Question #%s: introduction names no general election — refusing", number)
+            return None
+        if str(year) not in named_years:
+            continue  # another year's ballot
         question = join_lines(body)
         if not question:
             return None
@@ -115,7 +156,7 @@ def parse_summary(text: str, year: int) -> list[dict] | None:
             "title_authority": ORIGIN,
             "fiscal_authority": None,
         })
-    return results or None
+    return results
 
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
@@ -124,6 +165,10 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         return None
     url = find_summary_url(index_html, year)
     if url is None:
+        if _summary_link_count(index_html, year) == 0 and _summary_link_count(index_html, year - 1):
+            # The index is the one we know (last year's summary is on it)
+            # and this year's isn't posted yet.
+            raise NotYetPublished(f"Indiana 'Summary of {year} Election Legislation'")
         logger.warning("IN: no single 'Summary of %d Election Legislation' link", year)
         return None
     raw = await fetch_bytes_with_retry(client, _rate_limiter, url, "IN legislation summary PDF")
@@ -136,4 +181,6 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         return None
     if parsed is None:
         return None
+    if not parsed:
+        raise NotYetPublished(f"a public question for {year} in Indiana's legislation summary")
     return [(m, url) for m in parsed]

@@ -205,15 +205,22 @@ def _parse_block(heading: str, block: list[dict]) -> dict | None:
         statement = _prose(sections.get(STATEMENT_HEADING, []))
         if not question or not statement:
             return None
+        # Two drafters, two fields: the ballot question (the Legislature's,
+        # written into the joint resolution — the words on the ballot) is
+        # the official title and carries title_authority; the Legislative
+        # Council's statement is the summary, under the pamphlet's own
+        # heading, which names its drafter as printed. They used to be
+        # joined into one official_summary under a two-drafter label.
         return {
             "number": m.group(1),
             "title": heading,
+            "official_title": question,
             "origin": "Idaho Legislature",
-            "official_summary": f"{question} {STATEMENT_HEADING}: {statement}",
+            "official_summary": f"{STATEMENT_HEADING}: {statement}",
             "fiscal_impact": None,
             "yes_means": yes_means,
             "no_means": no_means,
-            "title_authority": "Idaho Legislature (ballot question); Idaho Legislative Council (statement of meaning)",
+            "title_authority": "Idaho Legislature",
             "fiscal_authority": None,
         }
 

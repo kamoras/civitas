@@ -87,3 +87,20 @@ async def test_one_unreachable_statement_fails_the_whole_state(monkeypatch):
 def test_entry_without_a_recognised_issue_link_fails_the_list():
     odd = PAGE.replace(">CI-133<", ">Constitutional Initiative 133<")
     assert mt.qualified_issues(odd, 2026) is None
+
+
+def test_a_fiscal_statement_is_attributed_only_to_the_drafter_it_names():
+    """The regression: every fiscal statement was credited to "Montana
+    Secretary of State" — the office that files it, not the one that
+    wrote it."""
+    base = LANGUAGE["CI-132"].replace("[] YES", "FISCAL STATEMENT: Costs $1 million a year.\n[] YES", 1)
+    unnamed = mt.parse_ballot_language(base, "CI-132")
+    assert unnamed["fiscal_impact"] == "FISCAL STATEMENT: Costs $1 million a year."
+    assert unnamed["fiscal_authority"] is None
+    named = mt.parse_ballot_language(
+        base.replace("a year.", "a year, as prepared by the Governor's Office of Budget and Program Planning."),
+        "CI-132",
+    )
+    assert named["fiscal_authority"] == "Governor's Office of Budget and Program Planning"
+    # The issue label is not an official ballot title.
+    assert named.get("official_title") is None

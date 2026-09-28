@@ -27,8 +27,11 @@ official_title is None for exactly that reason).
 
 Only the register's first page (the newest questions) is read. A State
 Question set for a general election is filed months ahead of it and so
-sits among the highest numbers; a first page with no row dated `year`'s
-general election reads as None (not established), never [].
+sits among the highest numbers. A first page with no row dated `year`'s
+general election raises NotYetPublished (not yet covered — never [] and
+never a nightly ingest failure): the register isn't a certified list, so
+it can't say "none", but nothing is broken either. A row whose election
+date is printed in any other form refuses the page (None).
 """
 
 import logging
@@ -41,6 +44,7 @@ from lxml import html as lxml_html
 
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -82,11 +86,22 @@ def parse_register(page_html: str, year: int) -> list[tuple[dict, str]] | None:
     table = next(header_row.iterancestors("table"))
     for tr in table.xpath(".//tr[td]"):
         cells = tr.xpath("td")
+        row_text = " ".join(tr.text_content().split())
         if len(cells) != len(headers):
-            continue
+            if "ELECTION DATE" in row_text.upper():
+                # A register row in a shape this reader doesn't know —
+                # skipping it could drop a question set for this ballot.
+                logger.warning("OK register row with %d cells (header has %d) — refusing", len(cells), len(headers))
+                return None
+            continue  # the pager row
         status = " ".join(cells[col["Status"]].text_content().split())
         m = _DATE_RE.search(status)
-        if m is None or m.group(1) != target:
+        if m is None:
+            if "ELECTION DATE" in status.upper():
+                logger.warning("OK register election date %r not in the verified form — refusing", status[:80])
+                return None
+            continue  # no election set for this question
+        if m.group(1) != target:
             continue
         link = cells[col["SQ Num"]].xpath(".//a[@href]")
         number = clean_text(cells[col["SQ Num"]].text_content())
@@ -110,7 +125,7 @@ def parse_register(page_html: str, year: int) -> list[tuple[dict, str]] | None:
             },
             urljoin(URL, link[0].get("href")),
         ))
-    return results or None
+    return results
 
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
@@ -118,7 +133,13 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if page_html is None:
         return None
     try:
-        return parse_register(page_html, year)
+        parsed = parse_register(page_html, year)
     except Exception:
         logger.exception("OK state questions register was not parseable")
         return None
+    if parsed == []:
+        # The register lists no State Question for this election (yet).
+        # It is not a certified ballot list, so that is never "none" —
+        # and nothing failed either: not yet covered, no alert.
+        raise NotYetPublished(f"an Oklahoma State Question dated {_general_election_label(year)}")
+    return parsed

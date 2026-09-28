@@ -74,3 +74,25 @@ async def test_pamphlet_short_of_the_page_range_refuses(monkeypatch):
     monkeypatch.setattr(ne, "fetch_bytes_with_retry", fake_bytes)
     monkeypatch.setattr(ne, "_pdf_pages", lambda raw: short_pages)
     assert await ne.fetch_measures(None, 2026) is None
+
+
+def test_an_unreadable_initiative_heading_refuses_rather_than_publishing_the_amendment_alone():
+    """The regression: the two kinds were found by independent matches,
+    so an initiative heading whose range didn't parse left the LR
+    amendment to be published alone — as the whole ballot."""
+    page = FIXTURE["elections_page"].replace("Initiative Nos. 440-442", "Initiatives 440 through 442")
+    assert page != FIXTURE["elections_page"]
+    assert ne.read_elections_page(page, 2026) is None
+
+
+def test_an_amendment_heading_without_its_lr_link_refuses_rather_than_publishing_initiatives_alone():
+    page = FIXTURE["elections_page"].replace(">LR19CA</a>", ">Legislative Resolution 19CA</a>")
+    assert page != FIXTURE["elections_page"]
+    assert ne.read_elections_page(page, 2026) is None
+
+
+def test_an_unrecognised_measure_paragraph_for_the_year_refuses():
+    page = FIXTURE["elections_page"].replace(
+        "</body>", "<p><strong>Referendum petition certified for the 2026 General Election</strong></p></body>",
+    )
+    assert ne.read_elections_page(page, 2026) is None

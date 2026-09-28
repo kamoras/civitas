@@ -13,9 +13,15 @@ MULTI_DOCUMENT_STRATEGIES).
    text in quotes (the document states that this title "is the only
    language that will appear on the ballot"); each amendment's
    "▸ SUMMARY of Proposed Constitutional Amendment N" section (up to
-   "▸ BACKGROUND AND INFORMATION") is the LCS's own summary. Both are
-   kept verbatim. The arguments for/against are staff-suggested
-   arguments by the document's own disclaimer and are not used.
+   "▸ BACKGROUND AND INFORMATION") is the LCS's own summary. The ballot
+   text is stored verbatim as the official ballot title, drafted by the
+   Legislature. The LCS summary is a DIFFERENT drafter's text and a
+   measure carries one drafter for its quoted text, so it is not stored
+   (joining the two under one attribution credited the LCS's words to
+   the Legislature or the reverse); it is still read, to check that the
+   same amendments appear in both places. The arguments for/against are
+   staff-suggested arguments by the document's own disclaimer and are
+   not used.
 
 2. General obligation bond questions: New Mexico's GO bond acts write
    the ballot question into the statute itself ("The ballots used at
@@ -60,7 +66,7 @@ AMENDMENTS_URL_PATTERN = (
     "https://www.nmlegis.gov/Publications/New_Mexico_State_Government/"
     "Constitutional_Amendment/Constitutional_Amendments_{year}.pdf"
 )
-AMENDMENT_AUTHORITY = "New Mexico Legislature (ballot text); New Mexico Legislative Council Service (summary)"
+AMENDMENT_AUTHORITY = "New Mexico Legislature"
 BOND_AUTHORITY = "New Mexico Legislature (ballot language written into the bond act)"
 
 _rate_limiter = RateLimiter(rps=1.0)
@@ -93,10 +99,30 @@ def _lines(pages_text: list[str]) -> list[str]:
     return out
 
 
+_AMENDMENT_MENTION_RE = re.compile(r"^Constitutional Amendment\b", re.IGNORECASE)
+_SUMMARY_MENTION_RE = re.compile(r"^▸\s*SUMMARY\b", re.IGNORECASE)
+_QUOTED_RE = re.compile(r'^["“].*["”]$', re.DOTALL)
+
+
 def parse_amendments(pages_text: list[str]) -> list[dict]:
-    """Every amendment's ballot text + LCS summary. Raises if an
-    amendment named on the ballot-text page has no summary section, so
-    the caller fails the state rather than publishing a partial list."""
+    """Every amendment's ballot text. Raises — so the caller fails the
+    state rather than publishing a partial or mixed-up list — when:
+    - a line in the ballot-text section opens "Constitutional Amendment"
+      but isn't the exact "Constitutional Amendment N:" item line (it
+      would otherwise be folded into the previous amendment's text);
+    - an item's text isn't one quoted passage (two amendments run
+      together read as one quote that doesn't close where it should);
+    - the amendments are not numbered 1..N;
+    - the set of amendments with ballot text differs from the set with a
+      "▸ SUMMARY" section, in either direction.
+
+    Only the ballot text is stored, as official_title: the document says
+    it "is the only language that will appear on the ballot", and the
+    Legislature wrote it (the joint resolution's title). The Legislative
+    Council Service's summary is a different drafter's text; it is read
+    here only to cross-check the list, never stored under the
+    Legislature's name (see module docstring).
+    """
     lines = _lines(pages_text)
     start = next((i for i, ln in enumerate(lines) if ln == "(ballot text)"), None)
     if start is None:
@@ -110,33 +136,49 @@ def parse_amendments(pages_text: list[str]) -> list[dict]:
         m = _AMENDMENT_ITEM_RE.match(ln)
         if m:
             if current is not None:
+                if current in ballot_text:
+                    raise ValueError(f"NM Constitutional Amendment {current}: listed twice")
                 text = clean_text(_join(buf)) or ""
+                if not _QUOTED_RE.match(text):
+                    raise ValueError(f"NM Constitutional Amendment {current}: ballot text is not one quoted passage")
                 ballot_text[current] = text.strip('"“”')
             current, buf = m.group(1), []
             continue
+        if _AMENDMENT_MENTION_RE.match(ln):
+            raise ValueError(f"NM amendments: unrecognised item line {ln!r}")
+        if current is None:
+            raise ValueError(f"NM amendments: text before the first item: {ln!r}")
         buf.append(ln)
 
     summaries: dict[str, str] = {}
     for i, ln in enumerate(lines):
         m = _SUMMARY_HEADING_RE.match(ln)
         if not m:
+            if _SUMMARY_MENTION_RE.match(ln):
+                raise ValueError(f"NM amendments: unrecognised summary heading {ln!r}")
             continue
         j = next((k for k in range(i + 1, len(lines)) if _SECTION_HEADING_RE.match(lines[k])), len(lines))
         summaries[m.group(1)] = clean_text(_join(lines[i + 1:j])) or ""
 
+    numbers = sorted(ballot_text, key=int)
+    if numbers != [str(n) for n in range(1, len(numbers) + 1)]:
+        raise ValueError(f"NM amendments: ballot-text items numbered {numbers}")
+    if set(ballot_text) != set(summaries):
+        raise ValueError(
+            f"NM amendments: ballot text for {sorted(ballot_text)} but summaries for {sorted(summaries)}",
+        )
+
     results = []
-    for number, text in ballot_text.items():
-        summary = summaries.get(number)
+    for number in numbers:
+        text, summary = ballot_text[number], summaries[number]
         if not text or not summary:
             raise ValueError(f"NM Constitutional Amendment {number}: missing ballot text or summary")
         results.append({
             "number": number,
-            # The ballot text runs to ~700 characters (over the title
-            # column's 500), so it leads the summary instead, followed by
-            # the LCS summary under the document's own heading.
             "title": f"Constitutional Amendment {number}",
+            "official_title": text,
             "origin": "New Mexico Legislature",
-            "official_summary": f"{text} SUMMARY of Proposed Constitutional Amendment {number}: {summary}",
+            "official_summary": None,
             "fiscal_impact": None,
             "yes_means": None,
             "no_means": None,
@@ -172,8 +214,21 @@ def parse_bond_act(pages_text: list[str], bill_label: str) -> list[dict]:
     marker = joined.find("shall contain substantially the following language")
     if marker < 0:
         raise ValueError(f"NM {bill_label}: no ballot-language section")
+    section = joined[marker:]
+    # Every "(n) "..." item the section opens, numbered 1, 2, 3 ... — the
+    # list the questions read below must match exactly. findall alone only
+    # noticed ZERO matches; an item whose wording the question pattern
+    # doesn't fit would have dropped out of an otherwise-published list.
+    listed: list[str] = []
+    for m in re.finditer(r"\((\d+)\)\s*\"", section):
+        if m.group(1) != str(len(listed) + 1):
+            break
+        listed.append(m.group(1))
+    found = _BOND_QUESTION_RE.findall(section)
+    if [n for n, _ in found] != listed:
+        raise ValueError(f"NM {bill_label}: ballot-language items {listed} but questions read for {[n for n, _ in found]}")
     results = []
-    for n, question in _BOND_QUESTION_RE.findall(joined[marker:]):
+    for n, question in found:
         question = clean_text(question)
         title = question.split(". Shall ", 1)[0] + "."
         results.append({

@@ -24,7 +24,8 @@ No PDF parser is registered for the second and third shapes yet — they
 have not recurred on a ballot this module has had to read. A page that
 lists questions this module can't read returns None (ingest_failed),
 never [], so a future cycle with a real question can't be rendered as
-"this state has none". Re-checked every run, so a question certified
+"this state has none". Re-checked every nightly run (an empty answer is
+cached for only 6h — ballot_measures_pdf.CACHE_TTL_HOURS), so a question certified
 late flips the state out of CONFIRMED_NONE on the next run.
 """
 

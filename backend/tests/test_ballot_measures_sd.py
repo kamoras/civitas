@@ -63,3 +63,28 @@ def test_combine_requires_the_same_set():
     assert sd.combine({**certified, "M": None}, pamphlet) is None
     del certified["L"]
     assert sd.combine(certified, pamphlet) is None
+
+
+def test_a_wrapped_vote_sentence_is_kept_whole():
+    """The regression: only a "Vote ..." sentence's first line was kept, so
+    a recitation wrapped over two lines was stored cut off mid-sentence."""
+    pages = [p.replace("Vote “Yes” to adopt the amendment.", "Vote “Yes” to adopt\nthe amendment.", 1) for p in FIXTURE["pamphlet_pages"]]
+    assert pages != FIXTURE["pamphlet_pages"]
+    i = sd.parse_pamphlet(pages)["I"]
+    assert i["yes_means"] == "Vote “Yes” to adopt the amendment."
+    assert i["no_means"] == "Vote “No” to leave the Constitution as it is."
+
+
+def test_a_vote_sentence_that_never_finishes_refuses_the_page():
+    pages = [p.replace("Vote “No” to leave the Constitution as it is.", "Vote “No” to leave the Constitution", 1) for p in FIXTURE["pamphlet_pages"]]
+    assert sd.parse_pamphlet(pages) is None
+
+
+def test_a_certified_entry_without_its_assigned_letter_refuses_the_page():
+    """The regression: an entry missing "Letter Assigned:" was skipped, and
+    with every entry skipped the section read as [] — confirmed none."""
+    page = FIXTURE["page"].replace("Letter Assigned:", "Letter:")
+    assert page != FIXTURE["page"]
+    assert sd.certified_questions(page, 2026) is None
+    one_missing = FIXTURE["page"].replace("Letter Assigned:", "Letter:", 1)
+    assert sd.certified_questions(one_missing, 2026) is None

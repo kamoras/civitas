@@ -21,7 +21,8 @@ year's November general-election date?
   language ("The constitutional amendment to ...") the joint resolution
   prescribes for the ballot — hence title_authority. No YES/NO
   explanation or fiscal statement is part of this record — null.
-- It doesn't: [] — CONFIRMED NONE, and re-checked every run, so an
+- It doesn't: [] — CONFIRMED NONE, and re-checked every nightly run (an
+  empty answer is cached for only 6h), so an
   amendment the Legislature sends to a November ballot later appears
   as soon as the library records it.
 

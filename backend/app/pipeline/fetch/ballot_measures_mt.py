@@ -27,7 +27,13 @@ CONSTITUTIONAL AMENDMENT PROPOSED BY INITIATIVE PETITION"), and the
 statement between that line and the "[] YES on ..." box. The YES/NO
 boxes are option labels ("YES on Constitutional Amendment CI-132"), not
 a description of what each vote does, so yes_means/no_means stay null;
-none of the three 2026 statements carries a fiscal statement.
+none of the three 2026 statements carries a fiscal statement. When one
+does, its drafter is named only if the statement itself names one — the
+Secretary of State files these documents but does not write them.
+
+The "CONSTITUTIONAL INITIATIVE NO. 132" line is a label, not a ballot
+title, so no official_title is claimed; the statement is the quoted
+text, attributed to the Attorney General who approves it.
 
 Any qualified entry whose header has no recognisable issue-id link, or
 whose statement can't be fetched or read, makes the whole state return
@@ -64,6 +70,7 @@ _PROPOSED_BY_RE = re.compile(r"\bPROPOSED BY (?:THE )?(.+)$")
 _ENTRY_MARKER_RE = re.compile(r"^.{0,40}?(?:Ballot Issue #\s*\d+|\(\s*[HS]B\s*\d+\s*\))", re.IGNORECASE)
 _YES_BOX_RE = re.compile(r"^\[\s*\]\s*YES\b")
 _FISCAL_RE = re.compile(r"^FISCAL (?:STATEMENT|NOTE)\b", re.IGNORECASE)
+_PREPARED_BY_RE = re.compile(r"\bprepared by (?:the )?([A-Z][^.,;]*)", re.IGNORECASE)
 
 
 def qualified_issues(page_html: str, year: int) -> list[tuple[str, str]] | None:
@@ -110,6 +117,12 @@ def parse_ballot_language(text: str, issue_id: str) -> dict | None:
     fiscal_idx = next((i for i, ln in enumerate(body) if _FISCAL_RE.match(ln)), None)
     summary = clean_text(" ".join(body if fiscal_idx is None else body[:fiscal_idx]))
     fiscal = None if fiscal_idx is None else clean_text(" ".join(body[fiscal_idx:]))
+    # The fiscal statement's drafter only when the statement names one
+    # ("... prepared by the Governor's Office of Budget and Program
+    # Planning"). The Secretary of State files these statements; it does
+    # not write them, so it is never assumed.
+    prepared = _PREPARED_BY_RE.search(fiscal) if fiscal else None
+    fiscal_authority = clean_text(prepared.group(1)) if prepared else None
     if not summary:
         return None
     proposer = _PROPOSED_BY_RE.search(lines[proposed_idx]).group(1).upper()
@@ -130,7 +143,7 @@ def parse_ballot_language(text: str, issue_id: str) -> dict | None:
         "yes_means": None,
         "no_means": None,
         "title_authority": TITLE_AUTHORITY,
-        "fiscal_authority": "Montana Secretary of State" if fiscal else None,
+        "fiscal_authority": fiscal_authority,
     }
 
 

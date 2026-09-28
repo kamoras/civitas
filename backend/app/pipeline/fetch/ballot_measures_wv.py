@@ -14,19 +14,27 @@ carries, in the resolution's own words:
 The Secretary of State has no standing per-election page listing
 amendments, so the listing is how the notices are found: its rows are
 newest-first and each carries a <time datetime>; rows dated in `year`
-whose headline announces a Public Notice of a proposed Amendment to the
-Constitution are opened, and paging stops at the first row dated
-before `year` (bounded by MAX_PAGES).
+whose headline announces a Public Notice of a proposed Amendment (or
+Amendments) to the Constitution are opened, and paging stops at the
+first row dated before `year` (bounded by MAX_PAGES — the listing holds
+60 rows a page, so the whole of a year fits in two or three; running out
+of pages still inside `year` is a failure, not a search that found
+nothing).
 
-Stored verbatim: number and title from "Title of Amendment" (the number
-is the one the title itself prints — "Amendment 1: ..."), the Summary
+Every "Title of Amendment" in a notice is read, each with the "Summary
+of Purpose" that follows it: one notice may carry several amendments.
+
+Stored verbatim: number and title (the official ballot title) from
+"Title of Amendment" (the number is the one the title itself prints —
+"Amendment 1: ..."), the Summary
 of Purpose as official_summary, the resolution named by the notice in
 title_authority ("West Virginia Legislature (Senate Joint Resolution
 9)"). The notice carries the amendment's full text too, which is not
 stored. No YES/NO explanation or fiscal statement is published — null.
 
 This source cannot establish that there are NO amendments: no notice
-found is None (not yet covered), never []. A notice whose article is
+found after reading every `year` row raises NotYetPublished (not yet
+covered, no alert), never []. A notice whose article is
 not dated in `year`, or that doesn't name the General Election, is not
 read.
 
@@ -53,8 +61,10 @@ LISTING_URL = BASE_URL + "/allnews/all?page={page}"
 MAX_PAGES = 6
 ORIGIN = "West Virginia Legislature"
 
+# "a proposed Amendment" (2026) or "proposed Amendments" — a year with
+# more than one amendment may well be noticed in one article.
 _NOTICE_HEADLINE_RE = re.compile(
-    r"public notice\b.*\bamendment\b.*\bconstitution", re.IGNORECASE,
+    r"public notices?\b.*\bamendments?\b.*\bconstitution", re.IGNORECASE,
 )
 _TITLE_RE = re.compile(r"Title of Amendment:\s*[“\"](.*?)[”\"]\s*$", re.DOTALL)
 _SUMMARY_RE = re.compile(r"Summary of Purpose:\s*[“\"](.*?)[”\"]\s*$", re.DOTALL)
@@ -76,7 +86,12 @@ def listing_rows(listing_html: str) -> list[dict]:
     return rows
 
 
-def parse_notice(article_html: str, year: int) -> dict | None:
+def parse_notice(article_html: str, year: int) -> list[dict] | None:
+    """Every amendment the notice carries — each "Title of Amendment"
+    paired with the "Summary of Purpose" that follows it — or None when
+    the article isn't a `year` general-election notice of the verified
+    shape. Reading only the first title (as this once did) would publish
+    a notice of two amendments as one."""
     tree = lxml_html.fromstring(article_html)
     h1 = clean_text(" ".join(tree.xpath("//h1//text()"))) or ""
     # Scoped to the article node: the full page carries other blocks with
@@ -91,48 +106,84 @@ def parse_notice(article_html: str, year: int) -> dict | None:
     body = node[0].xpath(".//div[contains(@class,'field--name-body')]")
     if not body:
         return None
+    resolution = _RESOLUTION_RE.search(clean_text(body[0].text_content()) or "")
+    if resolution is None:
+        return None
     paragraphs = [clean_text(p.text_content()) or "" for p in body[0].xpath(".//p")]
-    title = summary = None
+
+    pairs: list[list[str | None]] = []
     for p in paragraphs:
         t = _TITLE_RE.search(p)
         s = _SUMMARY_RE.search(p)
-        title = title or (clean_text(t.group(1)) if t else None)
-        summary = summary or (clean_text(s.group(1)) if s else None)
-    number = _NUMBER_RE.match(title or "")
-    resolution = _RESOLUTION_RE.search(clean_text(body[0].text_content()) or "")
-    if not title or not summary or number is None or resolution is None:
+        if t and s:
+            return None  # both in one paragraph: not the verified layout
+        if t:
+            pairs.append([clean_text(t.group(1)), None])
+        elif s:
+            if not pairs or pairs[-1][1] is not None:
+                return None  # a summary with no title before it
+            pairs[-1][1] = clean_text(s.group(1))
+        elif "title of amendment" in p.lower() or "summary of purpose" in p.lower():
+            return None  # a label this reader couldn't read the quote after
+    if not pairs:
         return None
-    return {
-        "number": number.group(1),
-        "title": title,
-        "origin": ORIGIN,
-        "official_summary": summary,
-        "fiscal_impact": None,
-        "yes_means": None,
-        "no_means": None,
-        "title_authority": f"West Virginia Legislature ({resolution.group(1)})",
-        "fiscal_authority": None,
-    }
+
+    results = []
+    for title, summary in pairs:
+        number = _NUMBER_RE.match(title or "")
+        if not title or not summary or number is None:
+            return None
+        results.append({
+            "number": number.group(1),
+            "title": title,
+            # The resolution's own "Title of Amendment", as the ballot
+            # prints it.
+            "official_title": title,
+            "origin": ORIGIN,
+            "official_summary": summary,
+            "fiscal_impact": None,
+            "yes_means": None,
+            "no_means": None,
+            "title_authority": f"West Virginia Legislature ({resolution.group(1)})",
+            "fiscal_authority": None,
+        })
+    return results
 
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     notices: list[str] = []
+    reached_prior_year = False
     for page in range(MAX_PAGES):
         listing = await get_text(client, LISTING_URL.format(page=page), f"WV SOS news page {page}")
         if listing is None:
             return None
         rows = listing_rows(listing)
         if not rows:
+            if page == 0:
+                # A first page with no article rows is a changed layout,
+                # not an empty newsroom.
+                logger.warning("WV SOS news listing has no article rows — layout changed?")
+                return None
+            reached_prior_year = True  # the archive itself ended
             break
         for row in rows:
             if row["date"].startswith(str(year)) and _NOTICE_HEADLINE_RE.search(row["headline"]):
                 notices.append(row["url"])
         if min(r["date"] for r in rows) < f"{year}-01-01":
+            reached_prior_year = True
             break
 
+    if not reached_prior_year:
+        # MAX_PAGES ran out while still inside `year`: the notice could be
+        # on a page never read, so neither "not published" nor a list
+        # built from what was read would be true.
+        logger.warning("WV SOS news listing: %d pages read without reaching %d-01-01", MAX_PAGES, year)
+        return None
+
     if not notices:
-        # West Virginia posts a notice only in a year WITH an amendment, so
-        # its absence can never confirm none — nor is it a failure.
+        # Every `year` article was read and none is a notice. West Virginia
+        # posts one only in a year WITH an amendment, so its absence can
+        # never confirm none — nor is it a failure.
         raise NotYetPublished(f"West Virginia amendment public notice for {year}")
 
     results: dict[str, tuple[dict, str]] = {}
@@ -148,8 +199,9 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         if parsed is None:
             logger.warning("WV amendment notice didn't match the verified shape: %s", url)
             return None
-        if parsed["number"] in results:
-            logger.warning("WV: two notices for Amendment %s — refusing to pick one", parsed["number"])
-            return None
-        results[parsed["number"]] = (parsed, url)
+        for amendment in parsed:
+            if amendment["number"] in results:
+                logger.warning("WV: two notices for Amendment %s — refusing to pick one", amendment["number"])
+                return None
+            results[amendment["number"]] = (amendment, url)
     return [results[n] for n in sorted(results, key=int)]

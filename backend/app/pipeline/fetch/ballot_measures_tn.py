@@ -23,7 +23,6 @@ that proposed it, "Summary:" (the Attorney General's — the page says
 on the ballot"), and "Question:" (the full ballot question with the
 amended text). Stored verbatim:
 
-- number: N; title: the heading as printed.
 - official_summary: the Attorney General's summary. The Question is
   the amendment's full legal text and is not stored (the same scope
   ballot_measures_va.py takes, and for the same reason: joining two
@@ -35,8 +34,12 @@ amended text). Stored verbatim:
 No fiscal statement is published — null.
 
 No page for `year` (the address answers 404 in non-gubernatorial years
-and before publication) is None, not []; a page whose section lists no
-amendment is a checked answer ([]).
+and before publication) raises NotYetPublished — not yet covered, no
+alert — never []; any other fetch failure is None. A page whose section
+lists no amendment is a checked answer ([]).
+
+- number: N; title: the heading as printed — a label ("Constitutional
+  Amendment #1"), not a ballot title, so no official_title is claimed.
 
 Verified live 2026-09-28: Amendments #1-#3 on the November 3, 2026
 ballot (bail, state property tax prohibition, victims' rights).
@@ -49,7 +52,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
-from app.pipeline.fetch.ballot_measures_state_common import get_text
+from app.pipeline.fetch.ballot_measures_state_common import get_text_unless_missing
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +136,14 @@ def parse_page(page_html: str, year: int) -> list[dict] | None:
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     url = URL_PATTERN.format(year=year)
-    page = await get_text(client, url, f"TN proposed constitutional amendments {year}")
+    # The Secretary of State creates this page only for an election that
+    # has amendments, and only once it posts them: a 404 is "not yet"
+    # (every non-gubernatorial year, and a gubernatorial one before
+    # publication), not an outage.
+    page = await get_text_unless_missing(
+        client, url, f"TN proposed constitutional amendments {year}",
+        awaited=f"Tennessee's {year} proposed constitutional amendments page",
+    )
     if page is None:
         return None
     try:

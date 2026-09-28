@@ -71,3 +71,14 @@ async def test_unpaired_question_heading_fails_the_state(monkeypatch):
         return FIXTURE.replace("<blockquote", "<div").replace("</blockquote>", "</div>", 1)
     monkeypatch.setattr(hi, "fetch_text_with_retry", fake_fetch)
     assert await hi.fetch_measures(None, 2026) is None
+
+
+@pytest.mark.asyncio
+async def test_a_page_with_no_question_heading_is_a_failure_never_none(monkeypatch):
+    """The regression: a 200 page whose headings this reader couldn't find
+    (0 headings, 0 parsed) passed the count check and returned [] —
+    confirmed none for a state with amendments."""
+    async def fake_fetch(*a, **k):
+        return FIXTURE.replace("QUESTION", "PROPOSAL")
+    monkeypatch.setattr(hi, "fetch_text_with_retry", fake_fetch)
+    assert await hi.fetch_measures(None, 2026) is None

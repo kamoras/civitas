@@ -108,6 +108,17 @@ async def discover_pdf_url(
     keyword: str | tuple[str, ...] | None = None, exclude: tuple[str, ...] = ("primary",),
     max_pages: int = 8, max_depth: int = 2,
 ) -> str | None:
+    url, _ = await discover_pdf_url_checked(
+        client, start_url, year, keyword, exclude, max_pages=max_pages, max_depth=max_depth,
+    )
+    return url
+
+
+async def discover_pdf_url_checked(
+    client: httpx.AsyncClient, start_url: str, year: int,
+    keyword: str | tuple[str, ...] | None = None, exclude: tuple[str, ...] = ("primary",),
+    max_pages: int = 8, max_depth: int = 2,
+) -> tuple[str | None, bool]:
     """This cycle's ballot-guide PDF, starting from a state's own election
     site — evergreen against BOTH failure modes states show in practice:
     a PDF filename that changes every cycle (verified: Colorado's real
@@ -131,12 +142,20 @@ async def discover_pdf_url(
     article, a different state, Ballotpedia) can't pull this off course.
 
     None if no confident match anywhere in the crawl — never guesses.
+
+    discover_pdf_url_checked also says whether every page the crawl
+    tried to read was actually read: (None, True) means the state's own
+    pages were all there and none links this year's document, which is
+    a different fact from (None, False) — a page that couldn't be
+    fetched, where the document may well be linked. Only the first can
+    ever read as "not published yet"; the second is an outage.
     """
     keywords = (keyword,) if isinstance(keyword, str) else tuple(keyword or ())
     start_domain = urlparse(start_url).netloc
     visited: set[str] = set()
     queue: list[tuple[str, int]] = [(start_url, 0)]
     fetched = 0
+    complete = True
 
     while queue and fetched < max_pages:
         url, depth = queue.pop(0)
@@ -148,13 +167,14 @@ async def discover_pdf_url(
             response.raise_for_status()
             html = response.text
         except Exception:
+            complete = False
             continue
         fetched += 1
 
         for href, text in _PDF_LINK_RE.findall(html):
             haystack = f"{href} {_TAG_RE.sub('', text)}".lower()
             if _matches(haystack, year, keywords, exclude):
-                return urljoin(url, href)
+                return urljoin(url, href), True
 
         if depth >= max_depth:
             continue
@@ -168,7 +188,7 @@ async def discover_pdf_url(
             if urlparse(next_url).netloc == start_domain and next_url not in visited:
                 queue.append((next_url, depth + 1))
 
-    return None
+    return None, complete and fetched > 0
 
 STRATEGIES = {
     "ca_quick_reference": parse_ca_document,
@@ -230,7 +250,11 @@ MULTI_DOCUMENT_STRATEGIES = {
 # own feed can change under us mid-cycle; these are static PDFs a state
 # republishes wholesale on the rare occasion they change, so there is
 # nothing to catch by polling more often. Matches the platform's general
-# 72h API-cache default instead.
+# 72h API-cache default instead. That applies to a non-empty list only:
+# an empty answer ([], a confirmed none) is cached for
+# cache.EMPTY_RESPONSE_TTL_HOURS (6h), so every nightly run re-checks it
+# and a measure certified after a "none" appears the next night. A
+# failure (None) and NotYetPublished are never cached at all.
 CACHE_TTL_HOURS = 72
 
 
@@ -262,38 +286,90 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
         "election_date": election_date,
         "number": parsed["number"],
         "title": parsed["title"] or f"Proposition {parsed['number']}",
-        # A strategy whose `title` is a label rather than the ballot's own
-        # title (Oklahoma's register subject line, South Dakota's "Amendment
-        # I" beside the Attorney General's title) passes official_title
-        # explicitly; the card renders it as "OFFICIAL BALLOT TITLE".
-        "official_title": parsed.get("official_title", parsed["title"]),
+        # Only ever the state's own ballot title, and only when the
+        # strategy says so by supplying it. `title` is a display label and
+        # is often one this codebase's reader composed ("Proposition 3",
+        # "Question 1: Citizen Initiative") or a publisher's heading that
+        # is not on the ballot — rendering that under "OFFICIAL BALLOT
+        # TITLE — Drafted by <office>" would put words in the drafter's
+        # mouth. No default: a strategy that supplies nothing gets None.
+        "official_title": parsed.get("official_title"),
         "official_summary": parsed["official_summary"],
         "fiscal_impact": parsed["fiscal_impact"],
         "yes_means": parsed["yes_means"],
         "no_means": parsed["no_means"],
         "measure_type": None,
         "origin": parsed["origin"],
-        # Who drafted the quoted text — every strategy names it; carried
-        # through so the page can render "Drafted by ..." beside the quote.
+        # Who drafted the quoted text: the official title's drafter when
+        # there is one, otherwise the drafter of official_summary. The card
+        # renders "Drafted by ..." beside whichever of the two it names.
         "title_authority": parsed.get("title_authority"),
         "fiscal_authority": parsed.get("fiscal_authority"),
         "source_url": source_url,
     }
 
 
+def _duplicate_ids(measures: list[dict]) -> list[str]:
+    seen: set[str] = set()
+    dupes: list[str] = []
+    for m in measures:
+        if m["id"] in seen and m["id"] not in dupes:
+            dupes.append(m["id"])
+        seen.add(m["id"])
+    return dupes
+
+
+def _finish(db, state: str, year: int, measures: list[dict]) -> list[dict] | None:
+    """The one exit every successful read goes through: refuse a list in
+    which two measures share an id, then cache it.
+
+    Two measures with one id is never two measures on the ballot — the
+    second upsert would overwrite the first and the page would show one
+    (Kentucky's unnumbered amendments were all keyed "CONSTITUTIONAL
+    AMENDMENT" before this check existed). A reader that can't tell its
+    measures apart hasn't read the ballot, so the state's whole answer is
+    refused (ingest_failed) rather than published one measure short.
+
+    The list itself is cached, not wrapped: api_cache_set gives an EMPTY
+    payload the short EMPTY_RESPONSE_TTL_HOURS (6h), which is what makes a
+    confirmed-none answer re-checked by every nightly run instead of
+    pinned for CACHE_TTL_HOURS — a dict wrapping [] is not empty and got
+    the full 72h.
+    """
+    dupes = _duplicate_ids(measures)
+    if dupes:
+        logger.error(
+            "Ballot measures for %s %d: %d measures share id(s) %s — refusing the state's answer",
+            state, year, len(measures), dupes,
+        )
+        return None
+    api_cache_set(
+        db, "ballot_measure_pdf", f"{state}-{year}", measures,
+        normal_ttl_hours=CACHE_TTL_HOURS,
+    )
+    return measures
+
+
 async def fetch_state_measures_pdf(
     client: httpx.AsyncClient, db, state: str, year: int, election_date: str,
 ) -> list[dict] | None:
     """Every statewide ballot measure for `state`'s `year` general
-    election, parsed directly from that state's own registered PDF
-    source — or None if `state` has no registered source/strategy at all.
+    election, read directly from that state's own registered source — or
+    None if `state` has no registered source/strategy at all.
 
-    None on a fetch/parse failure too (including the document simply not
-    being published yet, which is indistinguishable from a real failure
-    at fetch time — same as ballot_measures.fetch_state_measures for Vote
-    Smart); [] if the document is real and parses but genuinely contains
-    no measure content this cycle (verified real case for CA: a primary
-    guide with zero propositions). Same None-vs-[] discipline throughout.
+    Three outcomes, never collapsed:
+    - a list (possibly [] — a reader returns [] only from the state's own
+      affirmative, year-bound statement that there is nothing; see each
+      module's docstring);
+    - None: a fetch or parse failure, including a document that exists
+      but can't be read completely (ingest_failed);
+    - NotYetPublished raised: the document this state publishes for the
+      election isn't there yet, and nothing failed (not_yet_covered). A
+      single-document source opts into that reading of a 404 / an
+      undiscovered link with "absent_until_published": true in its
+      registry entry — only where the state is known to post the document
+      late (a sample ballot ~50 days out) or only in a year that has a
+      measure.
     """
     source = source_for_state(state)
     if source is None:
@@ -311,7 +387,8 @@ async def fetch_state_measures_pdf(
     cache_key = f"{state}-{year}"
     cached = api_cache_get(db, "ballot_measure_pdf", cache_key, max_age_hours=CACHE_TTL_HOURS)
     if cached is not None:
-        return cached.get("measures")
+        # Older entries wrapped the list as {"measures": [...]}.
+        return cached.get("measures") if isinstance(cached, dict) else cached
 
     if multi_strategy is not None:
         try:
@@ -324,12 +401,9 @@ async def fetch_state_measures_pdf(
         if pairs is None:
             return None
         measures = [_to_measure(state, parsed, election_date, url) for parsed, url in pairs]
-        api_cache_set(
-            db, "ballot_measure_pdf", cache_key, {"measures": measures},
-            normal_ttl_hours=CACHE_TTL_HOURS,
-        )
-        return measures
+        return _finish(db, state, year, measures)
 
+    absent_until_published = bool(source.get("absent_until_published"))
     if "landing_page_url" in source:
         keyword = source.get("keyword")
         discover_kwargs = {}
@@ -337,10 +411,14 @@ async def fetch_state_measures_pdf(
             keyword = tuple(keyword)
         if "exclude" in source:
             discover_kwargs["exclude"] = tuple(source["exclude"])
-        url = await discover_pdf_url(
+        url, complete = await discover_pdf_url_checked(
             client, source["landing_page_url"], year, keyword, **discover_kwargs,
         )
         if url is None:
+            if absent_until_published and complete:
+                raise NotYetPublished(
+                    f"{source['source_name']}: no {year} document linked from {source['landing_page_url']}",
+                )
             logger.warning("Could not discover current ballot measure PDF for %s %d", state, year)
             return None
     else:
@@ -350,6 +428,8 @@ async def fetch_state_measures_pdf(
         response.raise_for_status()
         pdf_bytes = response.content
     except httpx.HTTPStatusError as exc:
+        if absent_until_published and exc.response.status_code == 404:
+            raise NotYetPublished(f"{source['source_name']}: {url} not posted yet (404)") from None
         logger.warning(
             "Ballot measure PDF fetch failed for %s %d: HTTP %d",
             state, year, exc.response.status_code,
@@ -369,8 +449,4 @@ async def fetch_state_measures_pdf(
         logger.exception("Ballot measure PDF parse failed for %s %d", state, year)
         return None
 
-    api_cache_set(
-        db, "ballot_measure_pdf", cache_key, {"measures": measures},
-        normal_ttl_hours=CACHE_TTL_HOURS,
-    )
-    return measures
+    return _finish(db, state, year, measures)

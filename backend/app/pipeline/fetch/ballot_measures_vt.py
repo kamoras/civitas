@@ -32,7 +32,13 @@ before splitting so a proposal spanning the page break can't absorb it.
 No "a yes vote means" framing and no fiscal statement are published for
 Vermont amendments, so yes_means/no_means/fiscal_impact stay null.
 Origin and title_authority are fixed to the General Assembly, the only
-body that can propose an amendment.
+body that can propose an amendment. "Proposal N" is a label, not a
+ballot title, so no official_title is claimed.
+
+A year with no notice linked from the Announcements page (Vermont votes
+on amendments only in a year the Assembly has passed one) reads as not
+yet published ("absent_until_published" in the registry), not as a
+failed ingest — and never as "none".
 """
 
 import logging
@@ -54,7 +60,8 @@ _PROPOSAL_RE = re.compile(r"^Proposal\s+(\d+)\s+(would\b.*?\.)$", re.MULTILINE |
 
 def parse_document(pages) -> list[dict]:
     """Every proposal in the notice, in document order. A proposal whose
-    number repeats is refused rather than guessed at.
+    number repeats raises (the whole notice is refused) rather than one of
+    the two sentences being picked.
 
     Raises ValueError when the notice yields no proposal at all: this
     notice is only ever published BECAUSE proposals are going to the
@@ -75,8 +82,9 @@ def parse_document(pages) -> list[dict]:
     for m in _PROPOSAL_RE.finditer(text):
         number = m.group(1)
         if number in seen:
-            logger.warning("VT notice names Proposal %s twice — skipping the repeat", number)
-            continue
+            # Two sentences for one proposal: which is the notice's? Not
+            # guessed — keeping the first used to drop the second silently.
+            raise ValueError(f"Vermont amendment notice names Proposal {number} twice")
         seen.add(number)
         summary = clean_text(f"Proposal {number} {m.group(2)}")
         results.append({

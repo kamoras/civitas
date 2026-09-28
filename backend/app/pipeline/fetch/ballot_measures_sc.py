@@ -21,8 +21,11 @@ build the ballots:
 3. Each statewide row's ReferendumDetail page gives the Election Date
    (checked) and the Referendum Text, the question exactly as printed.
 
-Stored verbatim: title = the referendum's title, official_summary =
-its Referendum Text. The question is written into the General
+Stored verbatim: title = the referendum's title as the detail page heads
+it (the one <h2> inside its detail container — verified against the
+whole live page, 2026-09-28), official_summary = its Referendum Text. The
+title ("Constitutional Amendment Question") is a heading, not a ballot
+title, so no official_title is claimed. The question is written into the General
 Assembly's joint resolution (S.C. Const. art. XVI §1), hence
 title_authority. The listed Responses ("Yes, In Favor of the
 Question") are ballot choices, not an explanation — yes_means/no_means
@@ -30,7 +33,8 @@ stay null; no fiscal statement is published. South Carolina's
 amendments aren't numbered on this record, so `number` is empty and the
 Commission's own referendum id keys each one.
 
-CONFIRMED NONE for 2026, re-checked every run: the listing for the
+CONFIRMED NONE for 2026, re-checked every nightly run (an empty answer
+is cached for only 6h — ballot_measures_pdf.CACHE_TTL_HOURS): the listing for the
 November 3, 2026 Statewide General Election holds 42 referendums, every
 one a county's local question — none statewide (fetched 2026-09-28).
 The same query against the November 5, 2024 general election returns
@@ -82,15 +86,22 @@ def statewide_rows(results_html: str) -> list[dict] | None:
     rows = []
     for tr in tree.xpath("//table//tr[td]"):
         cells = tr.xpath("./td")
-        link = cells[0].xpath(".//a/@href") if cells else []
-        if len(cells) < 4 or not link:
-            continue
+        if len(cells) < 4:
+            if any(_text(c) for c in cells) and len(cells) > 1:
+                logger.warning("SC referendum row with %d cells — refusing", len(cells))
+                return None
+            continue  # an empty-results / spacer row
         county, party = _text(cells[1]), _text(cells[3])
         if county or party:
             continue
-        m = _REFERENDUM_ID_RE.search(link[0])
+        # A statewide row this reader can't follow to its detail page is
+        # refused, not skipped: skipping it could turn a real statewide
+        # amendment into "none".
+        link = cells[0].xpath(".//a/@href")
+        m = _REFERENDUM_ID_RE.search(link[0]) if link else None
         if m is None:
-            continue
+            logger.warning("SC statewide referendum row without a readable detail link: %r", _text(cells[0])[:80])
+            return None
         rows.append({
             "title": _text(cells[0]),
             "detail_url": urljoin(BASE_URL, link[0]).replace("http://", "https://", 1),
@@ -115,7 +126,13 @@ def parse_detail(detail_html: str, row: dict, year: int) -> dict | None:
     if _field(tree, "Responsible County"):
         return None
     text = _field(tree, "Referendum Text")
-    title = next((_text(h) for h in tree.xpath("//h2")), "") or row["title"]
+    # The referendum's own heading, inside the detail container — never
+    # the first <h2> anywhere on the page (the listing pages' shared
+    # layout carries "Election" / election-name <h2>s ahead of content).
+    headings = tree.xpath("//div[@id='candidateDetailContainer']//h2")
+    if len(headings) != 1:
+        return None
+    title = _text(headings[0])
     if not text or not title:
         return None
     return {

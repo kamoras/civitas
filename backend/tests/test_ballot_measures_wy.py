@@ -39,8 +39,19 @@ def test_heading_without_for_against_close_fails():
         wy.parse_document(_pages(broken))
 
 
-def test_document_with_no_proposition_heading_is_empty():
-    assert wy.parse_document(_pages(["2026 GENERAL ELECTION STATEWIDE BALLOT PROPOSITIONS"])) == []
+def test_document_with_no_proposition_heading_is_a_failure_never_none():
+    """The regression: a document with no heading this reader knows —
+    including a scanned copy, whose text layer is empty — returned [],
+    i.e. confirmed none."""
+    with pytest.raises(ValueError):
+        wy.parse_document(_pages(["2026 GENERAL ELECTION STATEWIDE BALLOT PROPOSITIONS"]))
+    with pytest.raises(ValueError):
+        wy.parse_document(_pages(["", ""]))
+
+
+def test_the_heading_is_a_label_not_an_official_title():
+    [m] = wy.parse_document(_pages(PAGES))
+    assert "official_title" not in m or m["official_title"] is None
 
 
 def test_a_question_under_an_unrecognised_heading_fails():

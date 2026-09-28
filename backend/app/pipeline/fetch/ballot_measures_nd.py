@@ -61,8 +61,8 @@ _rate_limiter = RateLimiter(rps=1.0)
 
 _HEADING_RE = re.compile(r"^((?:Initiated\s+)?(?:Constitutional|Statutory|Referred)?\s*Measure\s+No\.\s*(\d+))\s*$", re.I)
 _FISCAL_RE = re.compile(r"^The estimated fiscal impact of this measure is\b", re.I)
-_YES_RE = re.compile(r"^Yes\s*[–—-]\s*(Means .*)$")
-_NO_RE = re.compile(r"^No\s*[–—-]\s*(Means .*)$")
+_YES_RE = re.compile(r"^Yes\s*[–—-]\s*(Means .*)$", re.DOTALL)
+_NO_RE = re.compile(r"^No\s*[–—-]\s*(Means .*)$", re.DOTALL)
 _LEG_CITATION_RE = re.compile(r"^\((?:House|Senate) Concurrent Resolution No\.", re.I)
 
 
@@ -131,17 +131,41 @@ def parse_ballot_language(text: str) -> dict | None:
     fiscal = join_lines(body[fiscal_idx:yes_idx])
     if not summary or not fiscal:
         return None
+    # Each "Yes – Means ..." / "No – Means ..." sentence is kept whole,
+    # however many lines it wraps over: Yes runs to the No line, No to its
+    # full stop. Anything after No's sentence, or a sentence that never
+    # reaches a full stop, refuses the document rather than store part of
+    # the state's framing (the first line alone used to be kept).
+    yes_means = _sentence(body[yes_idx:no_idx], _YES_RE)
+    no_lines = body[no_idx:]
+    end = next((i for i, ln in enumerate(no_lines) if ln.rstrip().endswith(".")), None)
+    if end is None or no_lines[end + 1:]:
+        return None
+    no_means = _sentence(no_lines[:end + 1], _NO_RE)
+    if yes_means is None or no_means is None:
+        return None
     return {
         "number": number,
         "title": title,
         "origin": origin,
         "official_summary": summary,
         "fiscal_impact": fiscal,
-        "yes_means": _YES_RE.match(body[yes_idx]).group(1),
-        "no_means": _NO_RE.match(body[no_idx]).group(1),
+        "yes_means": yes_means,
+        "no_means": no_means,
         "title_authority": None,
         "fiscal_authority": FISCAL_AUTHORITY,
     }
+
+
+def _sentence(lines: list[str], lead_re: re.Pattern) -> str | None:
+    """A "Yes – Means ..." / "No – Means ..." sentence from its first line
+    and any wrapped continuation lines, or None if it doesn't end in a
+    full stop."""
+    joined = join_lines(lines)
+    m = lead_re.match(joined or "")
+    if m is None or not m.group(1).endswith("."):
+        return None
+    return m.group(1)
 
 
 def _pdf_text(raw: bytes) -> str:

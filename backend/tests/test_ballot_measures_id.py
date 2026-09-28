@@ -37,8 +37,12 @@ def test_all_four_real_questions_are_found():
 
 def test_amendment_keeps_question_statement_and_idahos_own_yes_no():
     hjr4 = _measures()["House Joint Resolution 4"]
-    assert hjr4["official_summary"].startswith("Shall Section 26, Article III of the Constitution")
-    assert idaho.STATEMENT_HEADING + ": This proposed constitutional amendment would give" in hjr4["official_summary"]
+    # Two drafters, two fields — never one summary under a joint label.
+    assert hjr4["official_title"].startswith("Shall Section 26, Article III of the Constitution")
+    assert hjr4["official_title"].endswith("?")
+    assert hjr4["title_authority"] == "Idaho Legislature"
+    assert hjr4["official_summary"].startswith(idaho.STATEMENT_HEADING + ": This proposed constitutional amendment would give")
+    assert "Shall Section 26" not in hjr4["official_summary"]
     assert hjr4["yes_means"] == (
         "A YES vote would give the Legislature exclusive authority to legalize marijuana, "
         "narcotics, or other psychoactive substances in the State of Idaho."
@@ -60,6 +64,9 @@ def test_yes_no_columns_split_where_the_no_label_sits():
 def test_initiative_titles_fiscal_and_drafter_are_read_not_assumed():
     prop = _measures()["Proposition One"]
     assert prop["title"] == "Reproductive Freedom & Privacy Act"
+    # The pamphlet's heading name is not a ballot title; the Attorney
+    # General's short and long ballot titles are the quoted text.
+    assert prop.get("official_title") is None
     assert prop["official_summary"].startswith("Short Ballot Title: Measure creating right to abortion")
     assert "Long Ballot Title: The measure seeks to change Idaho’s laws" in prop["official_summary"]
     assert prop["fiscal_impact"].startswith("The State estimates the initiative would increase state expenditures")

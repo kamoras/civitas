@@ -55,6 +55,19 @@ built and verified against this exact real page's word coordinates:
 
 Verified end to end against Proposition 2 in the real 2024 guide: the
 reconstructed YES/NO text matches the source exactly, word for word.
+
+NOT YET READABLE: the 2026 general guide (checked live 2026-09-28, 200
+pages). Two differences from 2024, both found by running this reader
+against it: the Quick Reference pages print each proposition's number as
+a 22pt glyph BESIDE its title rather than on its own row under "PROP"
+(so half the numbers aren't found and the title's first line, which sits
+above "PROP", is cut off), and its text layer maps the fi/fl/ff ligature
+glyphs to a bare "f" — the extractable text literally reads "infation",
+"fnance", "efect", "ofering". The second can't be fixed by a smarter
+parser: restoring the missing letters would be writing words the text
+layer doesn't contain. So California reads as ingest_failed for 2026 —
+a proposition whose number isn't found raises — rather than publishing
+truncated titles and damaged words.
 """
 
 import logging
@@ -167,6 +180,8 @@ def _parse_side(
     return {
         "number": number,
         "title": clean_text(title),
+        # The Attorney General's ballot label title, as printed.
+        "official_title": clean_text(title),
         "origin": origin,
         "official_summary": official_summary,
         "fiscal_impact": fiscal_impact,
@@ -230,10 +245,17 @@ def parse_quick_reference_page(page) -> list[dict]:
         title_text = " ".join(
             line for line in lines_from_words(title_words) if not line.strip().isdigit()
         )
+        if number is None:
+            # A proposition (PROP ... WHAT YOUR VOTE MEANS) whose number
+            # isn't where this layout prints it: the 2026 guide sets it as
+            # a large glyph beside the title, and without it the record has
+            # no identity and a title missing its first line. Refuse the
+            # document rather than publish it unnumbered.
+            raise ValueError("CA Quick Reference: a proposition whose number this reader can't find")
         vote_means_words = [
             w for w in side_words if what_tops[0] <= w["top"] < vote_means_end
         ]
-        parsed = _parse_side(number or "", title_text, summary_words, vote_means_words)
+        parsed = _parse_side(number, title_text, summary_words, vote_means_words)
         if parsed:
             results.append(parsed)
     return results
@@ -248,4 +270,9 @@ def parse_document(pages) -> list[dict]:
     results = []
     for page in pages:
         results.extend(parse_quick_reference_page(page))
+    if not results:
+        # Only the general-election guide is fetched (url_pattern), and a
+        # guide this reader finds no proposition in — no text layer, a new
+        # layout — can't be read as "none".
+        raise ValueError("CA Voter Information Guide: no proposition found")
     return results

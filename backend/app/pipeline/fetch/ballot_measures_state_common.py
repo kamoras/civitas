@@ -30,6 +30,7 @@ import pdfplumber
 
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 from app.pipeline.fetch.http_utils import (
     BROWSER_HEADERS,
     fetch_bytes_with_retry,
@@ -63,6 +64,23 @@ def names_date(text: str | None, day: date) -> bool:
 
 async def get_text(client: httpx.AsyncClient, url: str, label: str, **kwargs) -> str | None:
     return await fetch_text_with_retry(client, _rate_limiter, url, label, **kwargs)
+
+
+async def get_text_unless_missing(client: httpx.AsyncClient, url: str, label: str, awaited: str) -> str | None:
+    """get_text for a page a state creates only when it has something to
+    post: a 404 there raises NotYetPublished(`awaited`) — not yet covered,
+    no alert — while any other failure is still None (ingest_failed). Use
+    it only where the address is the state's own per-election convention
+    and its absence is known to mean "not posted"."""
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS,
+        expected_statuses=(404,),
+    )
+    if resp is None:
+        return None
+    if resp.status_code == 404:
+        raise NotYetPublished(awaited)
+    return resp.text
 
 
 async def get_bytes(client: httpx.AsyncClient, url: str, label: str) -> bytes | None:

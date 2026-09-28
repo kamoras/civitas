@@ -87,8 +87,9 @@ def parse_page(page_html: str) -> list[dict]:
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     """[(parsed, source_url), ...] for `year`'s general-election
     questions, or None when the page can't be fetched (including a 404
-    because it isn't published yet — indistinguishable from an outage).
-    [] only when the real page fetches and carries no question."""
+    because it isn't published yet — indistinguishable from an outage)
+    or carries no question it can read. Never []: this page states no
+    count and no "none", so an empty read can't be a checked answer."""
     url = URL_PATTERN.format(year=year)
     page_html = await fetch_text_with_retry(client, _rate_limiter, url, f"HI amendments {year}")
     if page_html is None:
@@ -99,6 +100,12 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         logger.exception("HI amendments page for %d was not parseable HTML", year)
         return None
     headings = len(set(re.findall(r"QUESTION\s*#\s*(\d+)\s*:", lxml_html.fromstring(page_html).text_content(), re.IGNORECASE)))
+    if headings == 0:
+        # The Office of Elections publishes this page for a year because
+        # that year has amendments; a page with no question on it is a
+        # changed layout (or a placeholder), never a statement of "none".
+        logger.warning("HI %d: amendments page has no QUESTION heading — failing, not 'none'", year)
+        return None
     if headings != len(parsed):
         # A question heading we couldn't pair with its ballot text: never
         # publish the others as if they were the whole ballot.

@@ -216,8 +216,13 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         if fiscal_href is not None:
             fis = await _pdf_text(client, urljoin(URL, fiscal_href), f"WA {measure_id} fiscal impact", pages=1)
             fiscal = parse_fiscal_summary(fis or "")
-            if fiscal:
-                parsed["fiscal_impact"] = fiscal
-                parsed["fiscal_authority"] = FISCAL_AUTHORITY
+            if not fiscal:
+                # A fiscal statement the Secretary links but this reader
+                # can't read: publishing the measure without it would
+                # present "no fiscal statement" for one that exists.
+                logger.warning("WA %s: linked fiscal impact statement unreadable — failing the state", measure_id)
+                return None
+            parsed["fiscal_impact"] = fiscal
+            parsed["fiscal_authority"] = FISCAL_AUTHORITY
         results.append((parsed, title_url))
     return results

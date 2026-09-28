@@ -18,6 +18,17 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
   // URLs from the news-feed pipeline, for the same reason (reject
   // javascript:/data: before it reaches a real <a>).
   const sourceHref = safeHref(measure.sourceUrl);
+  // `titleAuthority` names the drafter of the official ballot title when
+  // the state publishes one; otherwise of the quoted summary (the ballot
+  // question itself, for most states). It is rendered beside whichever of
+  // the two it names, and never beside the display label `title`, which
+  // can be a label like "Proposition 3" that nobody drafted.
+  const drafter = measure.titleAuthority ? (
+    // Naming the drafter is MORE neutral than the bare quote: ballot
+    // titles are routinely litigated as slanted, and who wrote one is
+    // what tells a reader how to weigh it.
+    <p className="text-[10px] text-ink-min mt-1">Drafted by {measure.titleAuthority}</p>
+  ) : null;
 
   return (
     <article
@@ -60,14 +71,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
           <blockquote className="text-xs text-ink border-l-2 border-white/15 pl-3">
             {measure.officialTitle}
           </blockquote>
-          {measure.titleAuthority && (
-            // Naming the drafter is MORE neutral than the bare quote:
-            // ballot titles are routinely litigated as slanted, and who
-            // wrote one is what tells a reader how to weigh it.
-            <p className="text-[10px] text-ink-min mt-1">
-              Drafted by {measure.titleAuthority}
-            </p>
-          )}
+          {drafter}
         </section>
       )}
 
@@ -77,6 +81,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
             OFFICIAL SUMMARY
           </h4>
           <p className="text-xs text-ink whitespace-pre-line">{measure.officialSummary}</p>
+          {!measure.officialTitle && drafter}
         </section>
       )}
 
