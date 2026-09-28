@@ -848,12 +848,13 @@ class TestLegislativeEffectiveness:
         assert _les_bill_stage({"latestAction": "Introduced", "billType": s}) == 1
         assert _les_bill_stage({"latestAction": "Placed on calendar", "billType": s}) == 1
         assert _les_bill_stage({"latestAction": "Ordered to be reported", "billType": s}) == 2
-        assert _les_bill_stage({"latestAction": "Passed Senate", "billType": s}) == 3
-        assert _les_bill_stage({"latestAction": "Agreed to", "billType": s}) == 3
-        assert _les_bill_stage({"latestAction": "Anything", "billType": s, "isLaw": True}) == 4
+        assert _les_bill_stage({"latestAction": "Passed Senate", "billType": s}) == 4
+        assert _les_bill_stage({"latestAction": "Agreed to", "billType": s}) == 4
+        assert _les_bill_stage({"latestAction": "Anything", "billType": s, "isLaw": True}) == 5
         # Real `stage` classification always wins over the text fallback.
         assert _les_bill_stage({"stage": "IN_COMMITTEE", "latestAction": "Introduced"}) == 2
-        assert _les_bill_stage({"stage": "ENACTED", "latestAction": "Introduced"}) == 4
+        assert _les_bill_stage({"stage": "REPORTED", "latestAction": "Introduced"}) == 3
+        assert _les_bill_stage({"stage": "ENACTED", "latestAction": "Introduced"}) == 5
 
     def test_les_bill_stage_covers_every_stage_string(self):
         """Every BillStage the max-over-history classifier can now store
@@ -870,12 +871,13 @@ class TestLegislativeEffectiveness:
             BillStage.INTRODUCED.value: 1,
             BillStage.REFERRED.value: 1,
             BillStage.IN_COMMITTEE.value: 2,
-            BillStage.ON_FLOOR.value: 2,
-            BillStage.PASSED_CHAMBER.value: 3,
-            BillStage.IN_OTHER_CHAMBER.value: 3,
-            BillStage.TO_PRESIDENT.value: 3,
-            BillStage.ENACTED.value: 4,
-            BillStage.VETOED.value: 3,
+            BillStage.REPORTED.value: 3,
+            BillStage.ON_FLOOR.value: 3,
+            BillStage.PASSED_CHAMBER.value: 4,
+            BillStage.IN_OTHER_CHAMBER.value: 4,
+            BillStage.TO_PRESIDENT.value: 4,
+            BillStage.ENACTED.value: 5,
+            BillStage.VETOED.value: 4,
         }
         # Guard against a stage being added to the enum without a rank here.
         assert {s.value for s in BillStage} == set(expected)
@@ -898,21 +900,21 @@ class TestLegislativeEffectiveness:
 
     def test_stage_counts_are_cumulative_and_significance_weighted(self):
         """A bill counts, by its significance weight, at every stage it
-        reaches — a law at all four — as in V&W's LES."""
+        reaches — a law at all five — as in V&W's LES."""
         introduced = {"latestAction": "Introduced", "billType": "s"}
         became_law = {"latestAction": "Introduced", "billType": "s", "isLaw": True}
         commemorative_law = {"latestAction": "Introduced", "billType": "sres", "isLaw": True}
-        assert _les_stage_counts([introduced]) == [5.0, 0.0, 0.0, 0.0]
-        assert _les_stage_counts([became_law]) == [5.0, 5.0, 5.0, 5.0]
-        assert _les_stage_counts([commemorative_law]) == [1.0, 1.0, 1.0, 1.0]
+        assert _les_stage_counts([introduced]) == [5.0, 0.0, 0.0, 0.0, 0.0]
+        assert _les_stage_counts([became_law]) == [5.0] * 5
+        assert _les_stage_counts([commemorative_law]) == [1.0] * 5
 
     def test_advancing_a_bill_is_worth_far_more_than_introducing_one(self):
         """V&W divide each stage's count by the chamber's total there, so a
         law — one of few — outweighs many introductions. Under v6.13's
         weight x stages it was worth exactly four."""
-        totals = [51325.0, 7055.0, 3250.0, 870.0]  # 118th House, weighted
-        one_law = _les_normalized_credit([5.0, 5.0, 5.0, 5.0], totals, 448)
-        one_intro = _les_normalized_credit([5.0, 0.0, 0.0, 0.0], totals, 448)
+        totals = [51325.0, 7055.0, 6155.0, 3250.0, 870.0]  # 118th House, weighted
+        one_law = _les_normalized_credit([5.0] * 5, totals, 448)
+        one_intro = _les_normalized_credit([5.0, 0.0, 0.0, 0.0, 0.0], totals, 448)
         assert one_law / one_intro > 40
 
     def test_a_chamber_averages_one(self):
@@ -1087,8 +1089,8 @@ class TestLegislativeEffectiveness:
         members = [member(10) for _ in range(40)] + [member(200) for _ in range(5)]
         ref = compute_les_reference(members, congress=119, majority="R")
         # 10 introduced bills (weight 5) of 7,000 weighted introductions,
-        # x N/4 = 45/4.
-        assert ref["median_credit"] == round(50 / 7000 * 45 / 4, 4)
+        # x N/5 = 45/5.
+        assert ref["median_credit"] == round(50 / 7000 * 45 / 5, 4)
         assert ref["median_credit"] < ref["mean_credit"]
         assert ref["n"] == 45
 

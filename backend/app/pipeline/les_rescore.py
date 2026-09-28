@@ -19,11 +19,16 @@ import logging
 
 from sqlalchemy.orm import selectinload
 
+from app.pipeline.analyze.score_calculator import _LES_MAX_STAGE
+
 logger = logging.getLogger(__name__)
 
 
 def _needs_rescore(reference: dict | None) -> bool:
-    return not (reference or {}).get("stage_totals")
+    """Missing stage totals (before v6.14), or a different number of stages
+    than the scorer now uses (v6.17 added V&W's fifth)."""
+    totals = (reference or {}).get("stage_totals")
+    return not totals or len(totals) != _LES_MAX_STAGE
 
 
 def _bills(entity) -> list[dict]:
