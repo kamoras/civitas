@@ -495,6 +495,13 @@ class Unavailable(RuntimeError):
     """The store couldn't answer, for a caller that asked not to fail open."""
 
 
+# Retry-After for a refusal because the store couldn't answer. Unlike a
+# limit's refusal there is no reset time to compute (rate_limit.retry_after):
+# this is how often the store's own maintenance comes round, the soonest a
+# stuck store is likely to have recovered.
+UNAVAILABLE_RETRY_AFTER_S = int(_PURGE_INTERVAL_S)
+
+
 def claim(bucket: str, key: str | None, *, period: float, fail_open: bool = True) -> bool:
     """Claim `key` unless it was claimed less than `period` seconds ago.
     True when this caller got it. When the store can't answer (or `key` is

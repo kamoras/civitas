@@ -542,7 +542,7 @@ async def record_pulse_vote(
         raise HTTPException(
             status_code=503,
             detail="Votes can't be recorded right now; please try again shortly.",
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": str(throttle.UNAVAILABLE_RETRY_AFTER_S)},
         ) from None
     if not claimed:
         raise HTTPException(
@@ -557,24 +557,28 @@ async def record_pulse_vote(
         # the count and writing it back plus one would let two concurrent
         # votes both write the same total. Off the event loop: the commit
         # can wait on the pipeline process's write lock.
-        counted = (
-            db.query(ActionIssue)
-            .filter(ActionIssue.id == body.issue_id)
-            .update({column: func.coalesce(column, 0) + 1}, synchronize_session=False)
-        )
-        db.commit()
+        #
+        # Until the vote commits, a failure means no vote was recorded, so
+        # the claim mustn't hold the visitor off. After it, the claim stands
+        # whatever fails next: releasing it would let a retry count twice.
+        # Decided here, in the thread that commits, not by the awaiting
+        # request: a request cancelled mid-commit (a disconnect) doesn't
+        # stop this thread, which may still count the vote.
+        try:
+            counted = (
+                db.query(ActionIssue)
+                .filter(ActionIssue.id == body.issue_id)
+                .update({column: func.coalesce(column, 0) + 1}, synchronize_session=False)
+            )
+            db.commit()
+        except BaseException:
+            throttle.release(_PULSE_BUCKET, key)
+            raise
+        if not counted:
+            throttle.release(_PULSE_BUCKET, key)
         return bool(counted)
 
-    # Until the vote commits, a failure means no vote was recorded, so the
-    # claim mustn't hold the visitor off. After it, the claim stands
-    # whatever fails next: releasing it would let a retry count twice.
-    try:
-        counted = await asyncio.to_thread(_count)
-    except BaseException:
-        await asyncio.to_thread(throttle.release, _PULSE_BUCKET, key)
-        raise
-    if not counted:
-        await asyncio.to_thread(throttle.release, _PULSE_BUCKET, key)
+    if not await asyncio.to_thread(_count):
         raise HTTPException(status_code=404, detail="Issue not found")
 
     def _totals():
@@ -585,6 +589,10 @@ async def record_pulse_vote(
         )
 
     issue = await asyncio.to_thread(_totals)
+    if issue is None:
+        # Counted, then removed by the pipeline's refresh before the totals
+        # were read: gone now, whatever it held.
+        raise HTTPException(status_code=404, detail="Issue not found")
     return {
         "issueId": issue.id,
         "concernedCount": issue.concerned_count or 0,

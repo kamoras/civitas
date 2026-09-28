@@ -138,3 +138,30 @@ async def test_concurrent_votes_are_all_counted(db_session, monkeypatch):
     await asyncio.gather(*(_vote(db_session, f"203.0.113.{n}", issue_id) for n in range(20, 26)))
     db_session.expire_all()
     assert db_session.get(ActionIssue, issue_id).concerned_count == 6
+
+
+async def test_a_request_cancelled_while_the_vote_commits_keeps_the_claim(db_session):
+    # Cancelling the awaiting request doesn't stop the thread committing the
+    # vote; releasing the claim then would let a retry count a second one.
+    import asyncio
+    import time
+
+    issue_id = _issue(db_session)
+    real_commit = db_session.commit
+
+    def slow_commit():
+        time.sleep(0.2)
+        real_commit()
+
+    with patch.object(db_session, "commit", slow_commit):
+        task = asyncio.create_task(_vote(db_session, "203.0.113.30", issue_id))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0.3)  # the thread finishes the commit
+    with pytest.raises(HTTPException) as again:
+        await _vote(db_session, "203.0.113.30", issue_id)
+    assert again.value.status_code == 429
+    db_session.expire_all()
+    assert db_session.get(ActionIssue, issue_id).concerned_count == 1

@@ -40,7 +40,6 @@ Read weekly rather than nightly (see crawl_for_new_sources): a date moves
 once a cycle, and there is nothing to gain from asking every night.
 """
 
-import json
 import logging
 import re
 from typing import Any
@@ -48,7 +47,7 @@ from typing import Any
 import httpx
 
 from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
-from app.file_cache import Stamp, Uncached, reload_if_moved
+from app.file_cache import Stamp, read_json_preferring, reload_if_moved
 
 logger = logging.getLogger(__name__)
 
@@ -90,20 +89,11 @@ def _path() -> str:
 
 
 def _read(path: str) -> dict[str, Any]:
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except FileNotFoundError:
-        data = {}
-    except ValueError:
-        logger.exception("Election dates file %s is not valid JSON", path)
-        data = {}
-    except OSError:
-        # Not kept: an unreadable file is not an empty one, and the next
-        # read tries again. (Writes re-read the file under their lock, so
-        # this can never be written back as the whole file.)
-        logger.exception("Failed to read election dates file %s", path)
-        raise Uncached({}) from None
+    # file_cache.read_json_preferring: an unreadable file is not an empty
+    # one — returned this once and retried, never kept. (Writes re-read the
+    # file under their lock, so it can never be written back as the whole
+    # file.)
+    data = read_json_preferring(path, default={})
     return data if isinstance(data, dict) else {}
 
 

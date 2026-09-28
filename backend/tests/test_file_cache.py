@@ -8,6 +8,8 @@ the file behind the module's back, as the other process would."""
 import json
 import os
 
+import pytest
+
 from app.file_cache import files_stamp
 
 
@@ -168,3 +170,25 @@ def test_ballot_lookup_does_not_keep_the_bundled_copy_after_a_transient_read_err
     assert "live" not in ballot_lookup._load()  # the bundled copy, this once
     failing[0] = False
     assert ballot_lookup._load() == {"live": True}  # not pinned
+
+
+class TestReadJson:
+    def test_absent_and_invalid_are_none_unreadable_raises(self, tmp_path):
+        from app.file_cache import read_json
+
+        assert read_json(tmp_path / "missing.json") is None
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not json")
+        assert read_json(bad) is None
+        with pytest.raises(OSError):
+            read_json(tmp_path)  # a directory: exists, can't be read
+
+    def test_prefers_the_first_and_flags_a_skipped_unreadable_one(self, tmp_path):
+        from app.file_cache import Uncached, read_json_preferring
+
+        bundled = tmp_path / "bundled.json"
+        bundled.write_text('{"b": 1}')
+        assert read_json_preferring(tmp_path / "missing.json", bundled, default={}) == {"b": 1}
+        with pytest.raises(Uncached) as fell_back:
+            read_json_preferring(tmp_path, bundled, default={})  # the runtime copy unreadable
+        assert fell_back.value.value == {"b": 1}

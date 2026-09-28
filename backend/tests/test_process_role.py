@@ -444,16 +444,29 @@ class TestPipelineServiceLiveness:
         ops_alerts.check_pipeline_service_alive()
         assert sent == [] and ops_alerts._heartbeat_unreadable_since is None
 
-    def test_one_worker_checks_each_round(self, sent, monkeypatch):
-        """Every API worker runs the watch at the same moments; a round goes
-        to one of them, so a stale heartbeat alerts once, not per worker."""
+    def test_a_dedupe_key_sends_once_across_processes(self, tmp_path, monkeypatch):
+        """Every API worker runs the liveness check at the same moments: the
+        dedupe row is inserted as the claim, so only one of them sends."""
         from concurrent.futures import ThreadPoolExecutor
 
-        checks = []
-        monkeypatch.setattr("app.ops_alerts.check_pipeline_service_alive", lambda: checks.append(1))
-        with ThreadPoolExecutor(2) as pool:
-            list(pool.map(lambda _: main_module._check_pipeline_service_once(), range(2)))
-        assert checks == [1]
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from app import ops_alerts
+        from app.database import Base
+
+        engine = create_engine(f"sqlite:///{tmp_path / 'alerts.db'}", connect_args={"timeout": 5})
+        Base.metadata.create_all(engine)
+        monkeypatch.setattr("app.database.SessionLocal", sessionmaker(bind=engine))
+        # Both pass the read check before either records: the race.
+        monkeypatch.setattr(ops_alerts, "_already_sent", lambda key: False)
+        delivered = []
+        monkeypatch.setattr(ops_alerts.settings, "ALERT_NTFY_URL", "https://ntfy.invalid/x")
+        monkeypatch.setattr(ops_alerts, "_send_ntfy", lambda subject, body: delivered.append(subject))
+        with ThreadPoolExecutor(4) as pool:
+            list(pool.map(lambda _: ops_alerts.send_ops_alert("down", "b", dedupe_key="k"), range(4)))
+        assert delivered == ["down"]
+
 
     async def test_only_the_api_process_watches(self, role, started, monkeypatch):
         watched = []

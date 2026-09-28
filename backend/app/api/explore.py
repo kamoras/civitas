@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
 from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
-from app.api.response_helpers import retry_soon_json
+from app.api.response_helpers import FAILURE_RETRY_S, retry_soon_json
 from app.database import get_db
 from app.models import ExploreDocument
 from app.services.explore_search import hybrid_search
@@ -118,7 +118,14 @@ async def search_explore(
             "semanticUnavailable": outcome["semanticUnavailable"],
             "channels": outcome["channels"],
         },
-        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
+        # A partial answer (keyword channel only) is kept only as long as a
+        # failed fetch is (response_helpers.FAILURE_RETRY_S): the index is
+        # back within a rebuild, and a whole answer shouldn't wait out a
+        # success's lifetime behind it.
+        headers={"Cache-Control": (
+            f"public, max-age={FAILURE_RETRY_S}" if outcome["semanticUnavailable"]
+            else "public, max-age=60, stale-while-revalidate=60"
+        )},
     )
 
 
@@ -379,7 +386,7 @@ async def get_explore_document_summary(
         raise HTTPException(
             status_code=503,
             detail="Summaries are unavailable right now; please try again shortly.",
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": str(throttle.UNAVAILABLE_RETRY_AFTER_S)},
         ) from None
     if not claimed:
         raise HTTPException(status_code=429, detail="Please wait before requesting another summary")

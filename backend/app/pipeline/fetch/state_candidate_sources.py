@@ -23,7 +23,7 @@ import os
 from typing import Any
 
 from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
-from app.file_cache import Stamp, Uncached, reload_if_moved
+from app.file_cache import Stamp, read_json_preferring, reload_if_moved
 
 logger = logging.getLogger(__name__)
 
@@ -68,20 +68,10 @@ def _discovered_path() -> str:
 
 
 def _read_discovered(path: str) -> dict[str, Any]:
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except FileNotFoundError:
-        data = {}
-    except ValueError:
-        logger.exception("Discovered sources file %s is not valid JSON", path)
-        data = {}
-    except OSError:
-        # Not kept: unreadable is not empty, and the next read retries.
-        # (Writes re-read the file under their lock, so this can never be
-        # written back as the whole file.)
-        logger.exception("Failed to read discovered sources file %s", path)
-        raise Uncached({}) from None
+    # file_cache.read_json_preferring: unreadable is not empty — returned
+    # this once and retried, never kept. (Writes re-read the file under
+    # their lock, so it can never be written back as the whole file.)
+    data = read_json_preferring(path, default={})
     return data if isinstance(data, dict) else {}
 
 

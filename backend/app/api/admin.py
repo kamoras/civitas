@@ -273,6 +273,9 @@ def _read_system_stats() -> dict:
                     cols = data.split()
                     rx_total += int(cols[0])
                     tx_total += int(cols[8])
+        # This container's own interfaces (its network namespace): under
+        # Swarm the admin API runs in the pipeline service, so these count
+        # the pipeline's traffic, not the API containers' visitors.
         stats["netRxBytes"] = rx_total
         stats["netTxBytes"] = tx_total
     except Exception:

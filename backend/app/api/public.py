@@ -20,6 +20,7 @@ from app.api.response_helpers import (
     CACHE_TTL_LIST_S,
     CACHE_TTL_REFERENCE_S,
     CACHE_TTL_SEARCH_S,
+    FAILURE_RETRY_S,
     PARTY_QUERY_PATTERN,
 )
 from app.config_definitions import SCORE_WEIGHTS
@@ -447,4 +448,7 @@ async def search(
         # The keyword channel marks matched terms with control characters
         # for the site's renderer; a public client gets plain text.
         result["snippet"] = (result.get("snippet") or "").replace(HIGHLIGHT_START, "").replace(HIGHLIGHT_END, "")
-    return _pub_json({"query": q, "results": results, "count": len(results)}, request, max_age=CACHE_TTL_SEARCH_S)
+    # Keyword channel only (the vector index missing or mid-rebuild): a
+    # partial answer, kept no longer than a failed fetch is.
+    max_age = FAILURE_RETRY_S if outcome["semanticUnavailable"] else CACHE_TTL_SEARCH_S
+    return _pub_json({"query": q, "results": results, "count": len(results)}, request, max_age=max_age)

@@ -39,10 +39,10 @@ def send_ops_alert(subject: str, body: str, *, dedupe_key: str | None = None) ->
     try:
         if dedupe_key and _already_sent(dedupe_key):
             return False
+        if not _record(subject, body, dedupe_key):
+            return False  # another process recorded (and sent) it first
 
         logger.error("OPS ALERT: %s — %s", subject, body)
-        _record(subject, body, dedupe_key)
-
         if settings.ALERT_NTFY_URL:
             _send_ntfy(subject, body)
         return True
@@ -92,7 +92,14 @@ def _already_sent(dedupe_key: str) -> bool:
         db.close()
 
 
-def _record(subject: str, body: str, dedupe_key: str | None) -> None:
+def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
+    """Record the alert; False when its dedupe key was already recorded.
+    The insert is the claim: with several processes (the API workers each
+    run the liveness check) a read-then-write check let two both send.
+    True as well when the history can't be written — an alert's delivery
+    must not depend on the database it may be reporting on."""
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
     from app.database import SessionLocal
     from app.models import ApiCache
 
@@ -105,7 +112,16 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> None:
     db = SessionLocal()
     try:
         key = f"dedupe-{dedupe_key}" if dedupe_key else f"alert-{now.isoformat()}"
-        db.add(ApiCache(tier=_HISTORY_TIER, cache_key=key, data_json=payload, cached_at=now))
+        inserted = db.execute(
+            sqlite_insert(ApiCache)
+            .values(tier=_HISTORY_TIER, cache_key=key, data_json=payload, cached_at=now)
+            .on_conflict_do_nothing(index_elements=["tier", "cache_key"])
+        ).rowcount
+        if not inserted:
+            db.rollback()
+            # Only a dedupe key's conflict means "already sent"; two plain
+            # alerts in one timestamp are both sent.
+            return dedupe_key is None
         # Prune old history so the table stays bounded.
         cutoff_rows = (
             db.query(ApiCache)
@@ -121,6 +137,7 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> None:
         logger.exception("Failed to record ops alert")
     finally:
         db.close()
+    return True
 
 
 def _send_ntfy(subject: str, body: str) -> None:

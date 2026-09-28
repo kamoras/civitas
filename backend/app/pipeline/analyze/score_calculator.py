@@ -312,29 +312,18 @@ def _read_pvi_json(filename: str, *, report_unreadable: bool = False) -> dict:
     report_unreadable: a persistent copy that exists but can't be read right
     now raises file_cache.Uncached with the fallback, so a stamped cache
     retries instead of keeping the fallback until the file next changes."""
-    import json
     import pathlib
 
-    from app.file_cache import Uncached
+    from app.file_cache import Uncached, read_json_preferring
 
     bundled_dir = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
-    unreadable = False
-    for directory in (pathlib.Path(_PVI_PERSISTENT_DIR), bundled_dir):
-        try:
-            data = json.loads((directory / filename).read_text())
-        except FileNotFoundError:
-            continue
-        except OSError:
-            unreadable = unreadable or directory != bundled_dir
-            continue
-        except Exception:
-            continue
-        if unreadable and report_unreadable:
-            raise Uncached(data)
-        return data
-    if unreadable and report_unreadable:
-        raise Uncached({})
-    return {}
+    try:
+        data = read_json_preferring(pathlib.Path(_PVI_PERSISTENT_DIR) / filename, bundled_dir / filename, default={})
+    except Uncached as unreadable:
+        if report_unreadable:
+            raise
+        data = unreadable.value
+    return data if isinstance(data, dict) else {}
 
 
 def _state_pvi() -> dict[str, int]:
@@ -402,23 +391,19 @@ def _member_ideal_points(chamber: str) -> dict:
     """
     import pathlib
 
-    from app.file_cache import Uncached, reload_if_moved
+    from app.file_cache import Uncached, read_json, reload_if_moved
 
     global _member_ideal_points_cache, _member_ideal_points_stamp
     path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
 
     def read() -> dict:
-        import json
-
         try:
-            return json.loads(path.read_text())
-        except FileNotFoundError:
-            pass
+            data = read_json(path)
         except OSError:
             logger.warning("member_ideal_points.json unreadable — retrying on next use", exc_info=True)
             raise Uncached({}) from None
-        except Exception:
-            pass
+        if isinstance(data, dict):
+            return data
         logger.warning(
             "member_ideal_points.json unavailable — position-congruence "
             "component will be skipped for every member until the first "

@@ -13,8 +13,12 @@ ballot lookup links, discovered candidate sources and election dates
 what a failed read leaves behind, are decided once.
 """
 
+import json
+import logging
 import os
 from collections.abc import Iterable
+
+logger = logging.getLogger(__name__)
 
 Stamp = tuple[float | None, ...] | None
 
@@ -64,3 +68,39 @@ def reload_if_moved(paths, cached, cached_stamp: Stamp, load):
         return load(), stamp
     except Uncached as uncached:
         return uncached.value, _RELOAD
+
+
+def read_json(path: str | os.PathLike):
+    """A file's JSON, or None when it is absent or not JSON (logged). Raises
+    OSError when it exists but can't be read right now — unreadable is not
+    absent, and callers of reload_if_moved must not keep it as such."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return None
+    except ValueError:
+        logger.exception("%s is not valid JSON", path)
+        return None
+
+
+def read_json_preferring(*paths: str | os.PathLike, default):
+    """The first of `paths` that holds JSON — a runtime copy ahead of its
+    bundled fallback — else `default`. When one ahead of it exists but
+    couldn't be read, the result is raised as Uncached: it stands in for a
+    file that will be readable again, so a stamped cache retries."""
+    unreadable = False
+    for path in paths:
+        try:
+            data = read_json(path)
+        except OSError:
+            logger.warning("Couldn't read %s — retrying on next use", path, exc_info=True)
+            unreadable = True
+            continue
+        if data is not None:
+            if unreadable:
+                raise Uncached(data)
+            return data
+    if unreadable:
+        raise Uncached(default)
+    return default

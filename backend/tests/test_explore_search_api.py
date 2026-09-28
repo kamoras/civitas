@@ -282,3 +282,16 @@ class TestPublicSearch:
     async def test_nothing_answerable_reports_index_empty(self, indexed_db):
         body = _body(await self._public(indexed_db, "wildfire"))
         assert body == {"query": "wildfire", "results": [], "count": 0, "indexEmpty": True}
+
+
+class TestPartialAnswersAreCachedBriefly:
+    async def test_a_keyword_only_answer_is_not_kept_for_a_successs_lifetime(self, db_session, monkeypatch):
+        from app.api import explore
+
+        outcome = {"indexReady": True, "results": [], "count": 0, "semanticUnavailable": True, "channels": {}}
+        monkeypatch.setattr(explore, "hybrid_search", lambda *a, **k: outcome)
+        resp = await _search(db_session)
+        assert resp.headers["cache-control"] == "public, max-age=30"
+        outcome["semanticUnavailable"] = False
+        resp = await _search(db_session)
+        assert resp.headers["cache-control"] == "public, max-age=60, stale-while-revalidate=60"

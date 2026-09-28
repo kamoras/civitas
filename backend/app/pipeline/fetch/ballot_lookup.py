@@ -34,7 +34,7 @@ from typing import Any
 import httpx
 
 from app.atomic_write import write_text_atomic
-from app.file_cache import Stamp, Uncached, reload_if_moved
+from app.file_cache import Stamp, read_json_preferring, reload_if_moved
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -57,29 +57,10 @@ _LINK_CHECK_TIMEOUT_S = 10.0
 
 
 def _read() -> dict[str, Any]:
-    """The volume copy, else the bundled one. A volume copy that exists but
-    can't be read right now falls back without being kept (file_cache.
-    Uncached): kept, the fallback would stand until the file next changed."""
-    unreadable = False
-    for path in (_VOLUME_PATH, _BUNDLED_PATH):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-        except FileNotFoundError:
-            continue
-        except ValueError:
-            logger.exception("Ballot lookup file %s is not valid JSON", path)
-            continue
-        except OSError:
-            logger.exception("Failed to read ballot lookup file %s", path)
-            unreadable = unreadable or path == _VOLUME_PATH
-            continue
-        if unreadable:
-            raise Uncached(data)
-        return data
-    if unreadable:
-        raise Uncached({})
-    return {}
+    """The volume copy, else the bundled one (file_cache.read_json_preferring:
+    a volume copy that exists but can't be read right now falls back without
+    being kept)."""
+    return read_json_preferring(_VOLUME_PATH, _BUNDLED_PATH, default={})
 
 
 def _load() -> dict[str, Any]:
