@@ -31,6 +31,8 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     changes: [
       "Volden & Wiseman count five stages: introduced, action in committee, action beyond committee, passed the chamber, became law. Civitas counted four, with a bill reported out of committee credited the same as one that only had a hearing or markup. Bills now have a \"Reported by Committee\" stage, and it and \"On the Floor\" are credited as action beyond committee.",
       "Checked against Volden & Wiseman's published scores for the 110th to 118th Congresses, rank correlation rose from 0.895 to 0.898 (House) and 0.963 to 0.973 (Senate), and in the worst congress from 0.814 to 0.817 and 0.863 to 0.873. Majority and minority members' typical scores stay level.",
+      "Checked bill by bill against Volden & Wiseman's counts for the 118th Congress, the stage Civitas gives each bill now matches theirs much more closely: for action beyond committee, a rank correlation of 0.94 (House) and 0.98 (Senate), up from 0.81 and 0.78.",
+      "A House committee passing a bill to one of its subcommittees was read as the committee acting on it. That step is as automatic as the first referral, and it put more than three times as many House bills \"in committee\" as Volden & Wiseman count (5,000 against 1,405 in the 118th Congress; now 1,562). It now counts as a referral.",
       "A bill reported out of committee now counts as advancing in a member's sponsored-bills summary.",
     ],
   },

@@ -78,6 +78,8 @@ class TestTypeAndTextFallback:
             pytest.param("IntroReferral", None, "Received in the Senate and Read twice and referred to the Committee on Finance.", "REFERRED", id="senate_receipt_combined_with_referral_has_no_action_code"),
             pytest.param("IntroReferral", None, "Introduced in Senate", "INTRODUCED", id="bare_introduction_with_no_action_code"),
             pytest.param("Committee", None, "Ordered to be reported.", "IN_COMMITTEE", id="committee_type_with_no_action_code"),
+            pytest.param("Committee", None, "Referred to the Subcommittee on Health.", "REFERRED", id="house_subcommittee_referral_is_still_referral"),
+            pytest.param("Committee", None, "Subcommittee Hearings Held", "IN_COMMITTEE", id="subcommittee_hearing_is_committee_action"),
             pytest.param("Calendars", None, "Placed on Senate Legislative Calendar under General Orders.", "REPORTED", id="calendars_type_with_no_action_code"),
             pytest.param("BecameLaw", None, "Became Public Law No: 119-1.", "ENACTED", id="became_law_type_with_no_action_code"),
             pytest.param("President", "Z00000", "Vetoed by the President.", "VETOED", id="president_type_veto_text"),

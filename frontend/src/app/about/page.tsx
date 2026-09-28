@@ -471,6 +471,9 @@ export default function AboutPage() {
                   correlation of 0.71 (House) and 0.76 (Senate) and mostly tracked how many bills a
                   member introduced; the current one ranks them at 0.90 and 0.97 (v6.17, which
                   added action beyond committee as its own stage, raised the Senate from 0.96).
+                  The stage each bill is given was also checked bill by bill against their 118th
+                  Congress counts (<code>backend/scripts/research_les_stage_classifier.py</code>):
+                  a rank correlation of 0.94 or higher at every stage.
                   Commemorative
                   bills (a post-office renaming, a Congressional Gold Medal) count 1x like simple
                   resolutions: they are recognised from the title by an embedding classifier

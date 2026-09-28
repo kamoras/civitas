@@ -150,13 +150,16 @@ def _stage_from_type_and_text(action_type: str | None, text: str) -> BillStage |
         # (which only follows a report). "Ordered to be reported" is the
         # markup vote, still action in committee.
         return BillStage.REPORTED
+    if action_type == "Committee" and text_lower.startswith("referred to"):
+        # A House committee passing the bill to a subcommittee ("Referred
+        # to the Subcommittee on Health."): as automatic as the first
+        # referral, and uncoded. Read as committee action, it put 4,235 of
+        # the 118th Congress's House bills in committee that Volden &
+        # Wiseman count as having had none.
+        return BillStage.REFERRED
     if action_type in ("Committee", "Calendars"):
-        # Unlike IntroReferral above, a bare automatic referral is never
-        # typed "Committee" or "Calendars" in practice (confirmed against
-        # real Senate action data) — every actual occurrence of either is
-        # genuine post-referral action: a committee reporting the bill
-        # out, being discharged, or being placed on a calendar (which can
-        # only happen once committee has already reported it out).
+        # Everything else typed "Committee" is a committee acting on the
+        # bill: hearings, markups, the vote to report it.
         return BillStage.IN_COMMITTEE
     return None
 

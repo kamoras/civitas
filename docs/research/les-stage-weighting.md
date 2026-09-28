@@ -151,9 +151,39 @@ comparison.
   a hearing. `bill_stage.py` now gives it REPORTED: the House's "Placed on
   the Union Calendar" code, a Discharge action, or a Committee or Calendars
   action saying reported, discharged or placed on a calendar ("ordered to be
-  reported", the markup vote, stays IN_COMMITTEE). The measurement above
-  uses V&W's own stage counts; how closely the classifier reproduces their
-  coding of this stage is not separately measured.
+  reported", the markup vote, stays IN_COMMITTEE). How closely this
+  reproduces V&W's coding is measured in the next section.
+
+## Does the stage classifier sort bills the way V&W do?
+
+The comparisons above use V&W's own stage counts. The scorer instead sees
+the stage `bill_stage.py` gives each bill from its Congress.gov actions.
+[`research_les_stage_classifier.py`](../../backend/scripts/research_les_stage_classifier.py)
+classifies every 118th-Congress bill and joint resolution in GovInfo's
+BILLSTATUS bulk data (the same actions, codes and types), counts each
+sponsor's bills at every stage reached, and compares them with V&W's
+published per-member counts, joined on ICPSR number through Voteview.
+
+| 118th Congress | V&W total | Civitas | Spearman | exact per member |
+|---|---|---|---|---|
+| House, action in committee | 1,405 | 1,562 (4,996 before) | 0.944 (0.566) | 78% (4%) |
+| House, action beyond committee | 1,313 | 1,165 (722) | 0.936 (0.806) | 70% (37%) |
+| House, passed | 670 | 687 | 0.995 | 96% |
+| House, law | 180 | 187 | 0.978 | 98% |
+| Senate, action in committee | 723 | 838 (831) | 0.960 (0.965) | 44% (45%) |
+| Senate, action beyond committee | 662 | 693 (294) | 0.979 (0.781) | 85% (21%) |
+| Senate, passed | 282 | 282 | 1.000 | 100% |
+| Senate, law | 90 | 96 | 0.963 | 94% |
+
+Numbers in brackets are the classifier before v6.17, which gave action beyond
+committee only to bills taken up on the floor.
+
+The same measurement found a second error. A House committee passing a bill
+to a subcommittee ("Referred to the Subcommittee on Health.") has no action
+code and is typed "Committee", and every such action was read as committee
+action. It is as automatic as the first referral: 4,235 House bills had it,
+and it more than tripled the House's count of bills with action in committee.
+v6.17 classifies it as REFERRED.
 - **Benchmark.** Each member is compared with the median member of their own
   majority/minority status in their chamber (v6.13). The majority − minority
   gap stays at zero.
