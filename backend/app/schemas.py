@@ -298,6 +298,8 @@ class LobbiedBillSchema(CamelModel):
     label: str = ""
     bill_name: str = ""
     vote: str | None = None
+    # What the vote shown decided ("passage", "cloture", "amendment" ...).
+    motion_type: str | None = None
     filing_year: int | None = None
     filing_url: str | None = None
     registrant: str | None = None

@@ -297,11 +297,17 @@ class TestFetch:
     @pytest.mark.asyncio
     async def test_follows_pages_and_redirects_and_caches(self, db_session):
         page1 = {"next": "https://lda.gov/api/v1/filings/?page=2", "results": [{
+            "client": {"name": "PFIZER INC."},
             "filing_type": "Q1", "income": "20000.00", "filing_year": 2025,
             "filing_document_url": "https://lda.gov/f/1/print/", "registrant": {"name": "ALTRIUS GROUP, LLC"},
             "lobbying_activities": [{"description": "S.1040, Drug Competition Enhancement Act"}],
         }]}
-        page2 = {"next": None, "results": [{"filing_type": "RR", "income": "999"}]}
+        page2 = {"next": None, "results": [
+            {"client": {"name": "PFIZER INC."}, "filing_type": "RR", "income": "999"},
+            # The registry's loose name search returns other clients too.
+            {"client": {"name": "PFIZERVILLE ISD"}, "filing_type": "Q1", "income": "70000",
+             "lobbying_activities": [{"description": "H.R. 5, Parents Bill of Rights Act"}]},
+        ]}
         client = MagicMock()
         client.get = AsyncMock(side_effect=[self._response(200, page1), self._response(200, page2)])
         with patch.object(lda._rate_limiter, "acquire", new=AsyncMock()):
@@ -376,3 +382,49 @@ class TestCacheWindow:
 @pytest.mark.asyncio
 async def test_an_empty_client_name_is_unknown_not_zero(db_session):
     assert await fetch_lobbying_activity(MagicMock(), db_session, " ", 2025) is None
+
+
+class TestClientMatching:
+    def test_the_search_name_drops_a_legal_form(self):
+        assert lda.search_name("JPMorgan Chase & Co.") == "JPMORGAN CHASE"
+        assert lda.search_name("The Boeing Company") == "BOEING"
+        assert lda.search_name("Inc") == "INC"
+
+    @pytest.mark.parametrize("searched,client,same", [
+        ("APPLE", "APPLE INC.", True),
+        ("APPLE", "APPLETON INTERNATIONAL AIRPORT", False),
+        ("APPLE", "US APPLE ASSOCIATION", False),
+        ("APPLE", "WILMERHALE ON BEHALF OF APPLE INC.", True),
+        ("KOCH", "KOCH GOVERNMENT AFFAIRS, LLC", True),
+        ("KOCH", "DR. KOCHO ANGJUSHEV", False),
+        ("VERIZON", "THE LIVINGSTON GROUP, LLC (VERIZON COMMUNICATIONS, INC.)", True),
+        ("CVS", "OAK STREET HEALTH D/B/A CVS HEALTH", True),
+        ("AMERICAN MEDICAL ASSOCIATION", "AMERICAN VETERINARY MEDICAL ASSOCIATION", False),
+        ("NATIONAL EDUCATION ASSOCIATION", "NATIONAL ASSOCIATION FOR MUSIC EDUCATION", False),
+        ("JPMORGAN CHASE", "JPMORGAN CHASE HOLDINGS LLC", True),
+    ])
+    def test_real_client_names_from_2025_filings(self, searched, client, same):
+        assert lda.is_same_client(searched, client) is same
+
+
+@pytest.mark.asyncio
+async def test_the_spend_year_failing_keeps_the_other_years_bills(db_session):
+    text = ", to equalize the negotiation period between small-molecule and biologic candidates"
+    matches = [{"lobbyistOrg": "Pfizer", "description": "", "billsInfluenced": []}]
+    mock = AsyncMock(side_effect=lambda c, d, org, year: None if year == 2025 else _activity(1.0, [_mention("HR.1492", text, year=2026)]))
+    with patch.object(lda, "fetch_lobbying_activity", new=mock):
+        stats = await enrich_lobbying_matches_with_lda(matches, db_session, 2025, votes=VOTES, congress=119)
+    assert matches[0]["lobbyingChecked"] is False and "lobbyingSpend" not in matches[0]
+    assert [b["billId"] for b in matches[0]["lobbiedBills"]] == ["HR.1492"]
+    assert stats["failed"] == 1
+
+
+def test_the_motion_reaches_the_api():
+    from app.schemas import LobbyingMatchSchema
+
+    dumped = LobbyingMatchSchema(
+        lobbyist_org="x", industry="PHARMA", lobbying_spend=0, donation_to_senator=0,
+        bills_influenced=[], description="",
+        lobbied_bills=[{"billId": "HR.1", "motionType": "cloture", "vote": "Nay"}],
+    ).model_dump(by_alias=True)
+    assert dumped["lobbiedBills"][0]["motionType"] == "cloture"

@@ -100,7 +100,7 @@ from app.pipeline.analyze.bill_analyzer import (
     clear_bill_embedding_cache,
     recent_roll_call_key,
 )
-from app.pipeline.analyze.bill_learning import clear_reference_cache
+from app.pipeline.analyze.bill_learning import clear_reference_cache, stamp_motion_type
 from app.pipeline.analyze.party_platform import clear_platform_cache, initialize_platform_embeddings
 from app.pipeline.vector_store import (
     check_model_version,
@@ -1484,6 +1484,7 @@ async def run_senate_pipeline(
             roll_call_data = roll_call_data_map.get(bill["billId"])
             if roll_call_data:
                 stamp_roll_call_outcome(bill, roll_call_data)
+                stamp_motion_type(bill, roll_call_data)
                 split = compute_party_vote_split(roll_call_data)
                 vote_split = split["label"] if split else None
                 bill["partyLeaning"] = refine_with_vote_data(
@@ -1526,6 +1527,7 @@ async def run_senate_pipeline(
             roll_call_data = recent_rc_map.get(rc_id)
             if roll_call_data:
                 stamp_roll_call_outcome(rc, roll_call_data)
+                stamp_motion_type(rc, roll_call_data)
                 split = compute_party_vote_split(roll_call_data)
                 computed_split = split["label"] if split else None
                 if computed_split:

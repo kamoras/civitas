@@ -471,6 +471,8 @@ def normalize_votes(
             ),
             "voteCategory": "recent",
             "rcKey": bill.get("rcKey"),
+            # What the roll call decided (bill_learning.stamp_motion_type).
+            "motionType": bill.get("motionType"),
         })
 
     party_total = voted_with_party + voted_against_party

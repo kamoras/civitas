@@ -59,3 +59,33 @@ def test_a_listing_short_of_its_own_count_is_retried_then_refused(db_session, mo
     monkeypatch.setattr(congress, "_fetch_with_retry", _short)
     assert asyncio.run(congress.fetch_congress_bill_titles(None, db_session, 119)) is None
     assert sum("/hr?" in u for u in calls) == 2
+
+
+def test_an_untitled_bill_counts_as_listed(db_session, monkeypatch):
+    # A bill can be listed before Congress.gov gives it a title; that must
+    # not make every crawl look short and refuse the whole pool.
+    async def _fake(client, url):
+        if "/hr?" in url:
+            return {"bills": [{"number": "1", "title": "a"}, {"number": "2", "title": ""}], "pagination": {"count": 2}}
+        return {"bills": [], "pagination": {"count": 0}}
+
+    monkeypatch.setattr(congress, "_fetch_with_retry", _fake)
+    assert asyncio.run(congress.fetch_congress_bill_titles(None, db_session, 119)) == {"HR.1": "a"}
+
+
+def test_no_such_bill_is_remembered_but_a_failure_is_not(db_session, monkeypatch):
+    from unittest.mock import MagicMock
+
+    responses = [None, MagicMock(status_code=404)]
+    calls = []
+
+    async def _fake(*args, **kwargs):
+        calls.append(1)
+        return responses.pop(0)
+
+    monkeypatch.setattr(congress, "fetch_with_retry", _fake)
+    assert asyncio.run(congress.fetch_bill_titles_or_none(None, db_session, 118, "hr", 99999)) is None
+    assert asyncio.run(congress.fetch_bill_titles_or_none(None, db_session, 118, "hr", 99999)) == []
+    # The 404 is cached: no third request.
+    assert asyncio.run(congress.fetch_bill_titles_or_none(None, db_session, 118, "hr", 99999)) == []
+    assert len(calls) == 2

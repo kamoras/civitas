@@ -23,9 +23,11 @@ lookups fail.
 
 Notes on interpretation:
 - Amounts are order-of-magnitude signals, not audited totals — quarterly
-  amendments can double-count and the client-name search is fuzzy on the
-  LDA side. Good enough to distinguish "this org lobbies Washington with
-  $2M/yr" from "no registered lobbying at all".
+  amendments can double-count. Good enough to distinguish "this org lobbies
+  Washington with $2M/yr" from "no registered lobbying at all".
+- The registry's client-name search is loose ("APPLE" returns Appleton
+  International Airport), so each filing's client is checked against the
+  searched name before its amounts or bills count (is_same_client).
 - The client searched for is a PAC's connected organization when the FEC
   records one ("JPMORGAN CHASE & CO." for its federal PAC): the registry
   lists the company, and the PAC's own name matches no client at all.
@@ -38,6 +40,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -46,7 +49,13 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.http_client import make_async_client
-from app.pipeline.analyze.lobbying_records import TitlePool, bill_mentions, names_bill
+from app.pipeline.analyze.lobbying_records import (
+    BILL_TITLE_MATCH_MIN,
+    TitlePool,
+    bill_mentions,
+    names_bill,
+    title_match_score,
+)
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import congress_first_year, congress_for_year
 from app.pipeline.fetch.floor_logs import bill_id_from_number
@@ -146,12 +155,73 @@ def _year_is_closed(year: int) -> bool:
     return year < now.year - 1 or (year == now.year - 1 and now.month >= 2)
 
 
+# Legal-form words that end a company's name ("JPMORGAN CHASE & CO.",
+# "PFIZER INC."). The FEC lists a PAC's sponsor under one form and the
+# registry the client under another ("JPMORGAN CHASE HOLDINGS LLC"), so the
+# search name drops a trailing one. A naming convention of business
+# entities, not a classification: nothing is decided from these words.
+_LEGAL_FORM_WORDS = frozenset({
+    "INC", "INCORPORATED", "LLC", "LLP", "LP", "CO", "CORP", "CORPORATION",
+    "COMPANY", "LTD", "PLC", "NA",
+})
+
+
+def _name_key(name: str) -> str:
+    """Upper-case words and digits only, a leading "THE" dropped."""
+    words = re.sub(r"[^A-Z0-9]+", " ", (name or "").upper()).split()
+    return " ".join(words[1:] if words[:1] == ["THE"] else words)
+
+
+def search_name(org_name: str) -> str:
+    """The name to search the registry for: the organization's name without
+    trailing legal-form words."""
+    words = _name_key(org_name).split()
+    while len(words) > 1 and words[-1] in _LEGAL_FORM_WORDS:
+        words.pop()
+    return " ".join(words)
+
+
+def is_same_client(searched: str, client_name: str) -> bool:
+    """Whether a filing's client is the organization searched for.
+
+    The registry's client_name filter matches loosely: measured on 2025
+    filings, "APPLE" also returns Appleton International Airport and the US
+    Apple Association, "KOCH" returns Kochava and a Dr. Kocho Angjushev,
+    "NATIONAL EDUCATION ASSOCIATION" returns the National Association for
+    Music Education. Only filings whose client is the organization count
+    toward its spend and bills: the client's name begins with the searched
+    name at a word boundary ("PFIZER INC.", "KOCH GOVERNMENT AFFAIRS,
+    LLC"), or names it after "on behalf of", "OBO", "d/b/a" or an opening
+    parenthesis (a registrant filing for the client: "WILMERHALE ON BEHALF
+    OF APPLE INC."). A similarity ratio was tried and dropped: it accepted
+    the American Veterinary Medical Association for the American Medical
+    Association.
+    """
+    q = searched
+    c = _name_key(client_name)
+    if not q or not c:
+        return False
+    if c == q or c.startswith(q + " "):
+        return True
+    for marker in (" ON BEHALF OF ", " OBO ", " D B A ", " DBA "):
+        i = c.find(marker)
+        if i >= 0:
+            rest = _name_key(c[i + len(marker):])
+            if rest == q or rest.startswith(q + " "):
+                return True
+    for part in re.findall(r"\(([^)]*)", (client_name or "").upper()):
+        rest = _name_key(part)
+        if rest == q or rest.startswith(q + " "):
+            return True
+    return False
+
+
 def _cache_key(org_key: str, year: int) -> str:
     # Include a stable hash of the full org key so two different orgs that
     # share an 80-char prefix (e.g. federal vs. state PAC variants of one
     # sponsor) can't collide onto one cached figure.
     key_hash = hashlib.sha256(org_key.encode()).hexdigest()[:12]
-    return f"lda-activity-v3-{year}-{org_key[:60]}-{key_hash}"
+    return f"lda-activity-v4-{year}-{org_key[:60]}-{key_hash}"
 
 
 async def fetch_lobbying_activity(
@@ -164,7 +234,7 @@ async def fetch_lobbying_activity(
     itself meaningful). A failed lookup returns None and is not cached, so
     it can't be mistaken for, or remembered as, "no lobbying".
     """
-    org_key = (org_name or "").strip().upper()
+    org_key = search_name(org_name)
     if len(org_key) < 2:
         # Nothing to search for: unknown, not a verified zero.
         return None
@@ -204,7 +274,10 @@ async def fetch_lobbying_activity(
                 return None
             resp.raise_for_status()
             data = resp.json()
-            results = data.get("results", [])
+            results = [
+                f for f in data.get("results", [])
+                if is_same_client(org_key, (f.get("client") or {}).get("name", ""))
+            ]
             total += _sum_filing_amounts(results)
             mentions.extend(_filing_mentions(results))
             url = data.get("next")  # absolute URL from the API, or None
@@ -378,13 +451,23 @@ async def lobbied_bills_for(
     for bill_key, mentions in candidates.items():
         vote = voted[bill_key]
         titles = await _bill_titles(client, db, congress, bill_key)
-        previous = await _bill_titles(client, db, congress - 1, bill_key)
-        if titles is None or previous is None:
-            # Without this bill's titles, or the previous congress's
-            # same-numbered bill to rule out, nothing is claimed for it.
+        if titles is None:
             continue
         if vote.get("billName"):
             titles.append(vote["billName"])
+        if not any(
+            max(title_match_score(m.get("before", ""), titles), title_match_score(m.get("after", ""), titles))
+            >= BILL_TITLE_MATCH_MIN
+            for m in mentions
+        ):
+            # No wording fits this bill at all: nothing to rule out, so the
+            # previous congress's titles aren't worth a request.
+            continue
+        previous = await _bill_titles(client, db, congress - 1, bill_key)
+        if previous is None:
+            # Without the previous congress's same-numbered bill to rule
+            # out, nothing is claimed for this one.
+            continue
         matching = []
         for m in mentions:
             # The titles are part of the key: the vote's own billName is
@@ -467,12 +550,10 @@ async def enrich_lobbying_matches_with_lda(
                 # finished year can succeed while every live request fails.
                 failed = any(a is None for a in activities.values())
                 spend_year = activities.get(lda_year)
-                if spend_year is None:
-                    m["lobbyingChecked"] = False
-                    continue
-                m["lobbyingChecked"] = True
-                m["lobbyingSpend"] = round(spend_year.total)
-                if spend_year.total > 0:
+                m["lobbyingChecked"] = spend_year is not None
+                if spend_year is not None:
+                    m["lobbyingSpend"] = round(spend_year.total)
+                if spend_year is not None and spend_year.total > 0:
                     # A total cut off at the page cap is a floor, not a total.
                     amount = f"${spend_year.total:,.0f}" if spend_year.complete else f"at least ${spend_year.total:,.0f}"
                     m["description"] = (

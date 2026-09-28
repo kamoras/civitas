@@ -512,10 +512,13 @@ CONGRESS_BILL_TITLES_CACHE_HOURS = 24 * 7
 
 async def _list_bill_titles(
     client: httpx.AsyncClient, congress: int, bill_type: str,
-) -> tuple[dict[str, str], int | None] | None:
-    """One pass over a bill type's listing: ({site bill id: title}, the
-    listing's own count), or None when a page fails."""
+) -> tuple[dict[str, str], int, int | None] | None:
+    """One pass over a bill type's listing: ({site bill id: title}, how many
+    distinct bills it listed, the listing's own count), or None when a page
+    fails. A newly introduced bill can be listed before it has a title, so
+    completeness is judged on bills listed, not bills titled."""
     found: dict[str, str] = {}
+    listed: set[str] = set()
     expected: int | None = None
     offset = 0
     while True:
@@ -528,10 +531,12 @@ async def _list_bill_titles(
         expected = (data.get("pagination") or {}).get("count", expected)
         page = data.get("bills") or []
         for b in page:
-            if b.get("number") and b.get("title"):
-                found[f"{bill_type.upper()}.{b['number']}"] = b["title"]
+            if b.get("number"):
+                listed.add(b["number"])
+                if b.get("title"):
+                    found[f"{bill_type.upper()}.{b['number']}"] = b["title"]
         if len(page) < 250:
-            return found, expected
+            return found, len(listed), expected
         offset += 250
 
 
@@ -563,13 +568,13 @@ async def fetch_congress_bill_titles(
             listed = await _list_bill_titles(client, congress, bill_type)
             if listed is None:
                 return None
-            found, expected = listed
-            if expected is None or len(found) >= expected:
+            found, count, expected = listed
+            if expected is None or count >= expected:
                 break
         else:
             logger.warning(
                 "Congress %d %s listing came back short twice (%d of %s)",
-                congress, bill_type, len(found), expected,
+                congress, bill_type, count, expected,
             )
             return None
         titles.update(found)
@@ -615,6 +620,11 @@ async def fetch_bill_titles_or_none(
     cached = api_cache_get(db, "congress", cache_key)
     if cached is not None:
         return cached
+    # A 404 is stored as a marker: api_cache_set treats an empty payload as
+    # a likely failure and keeps it only a few hours, and "no such bill"
+    # doesn't expire.
+    if api_cache_get(db, "congress", f"{cache_key}-absent") is not None:
+        return []
 
     url = f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/titles"
     full_url = str(
@@ -627,7 +637,8 @@ async def fetch_bill_titles_or_none(
     if resp is None:
         return None
     if resp.status_code == 404:
-        results: list[dict] = []
+        api_cache_set(db, "congress", f"{cache_key}-absent", {"absent": True})
+        return []
     else:
         try:
             raw = resp.json().get("titles", [])

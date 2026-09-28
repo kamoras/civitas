@@ -60,6 +60,7 @@ from app.pipeline.fetch.fec import (
     reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.floor_logs import bill_id_from_number
+from app.pipeline.analyze.bill_learning import stamp_motion_type
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.transform.normalize_members import normalize_house_members
@@ -317,15 +318,6 @@ async def run_house_pipeline() -> dict:
 
             classified_recent = await classify_all_bills(recent_for_classification, db)
 
-            # What each roll call decided (passage, amendment, a motion to
-            # recommit ...), from the Clerk's vote-question by the Senate's
-            # classifier: a lobbying link shows a member's vote on a bill and
-            # must say when it wasn't the vote on passage.
-            from app.pipeline.analyze.bill_learning import classify_motion_type
-            recent_rc_motion = {
-                bid: (classify_motion_type(rc.get("question") or "") if rc.get("question") else None)
-                for bid, rc in recent_rc_map.items()
-            }
             logger.info("Classified %d recent House votes", len(classified_recent))
 
             # Refine LLM party leanings with actual roll-call splits.
@@ -345,6 +337,7 @@ async def run_house_pipeline() -> dict:
                 rc = house_roll_calls.get(bill_id)
                 if rc:
                     stamp_roll_call_outcome(bill, rc)
+                    stamp_motion_type(bill, rc)
                     vote_split = compute_party_vote_split(rc)
                     split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
@@ -356,6 +349,7 @@ async def run_house_pipeline() -> dict:
                 rc = recent_rc_map.get(bill_id)
                 if rc:
                     stamp_roll_call_outcome(bill, rc)
+                    stamp_motion_type(bill, rc)
                     vote_split = compute_party_vote_split(rc)
                     split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
@@ -732,7 +726,7 @@ async def run_house_pipeline() -> dict:
                             "measureId": bill_id_from_number(
                                 (recent_rc_map.get(rv.get("billId", "")) or {}).get("documentName"),
                             ),
-                            "motionType": recent_rc_motion.get(rv.get("billId", "")),
+                            "motionType": rv.get("motionType"),
                         })
 
                     rep["votingRecord"] = voting_data
