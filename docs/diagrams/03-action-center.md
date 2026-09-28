@@ -3,6 +3,10 @@
 Runs hourly at :15, separate from the nightly pipeline because it operates on a
 different timescale and different data.
 
+Withdrawn issues are listed with their reasons in
+`backend/app/data/retractions.json`: removed by a data migration, answered
+with 410 and the reason, and their Bluesky posts deleted by an hourly job.
+
 One refresh runs at a time across containers: it holds a lease row in
 `api_cache`, renewed every minute by a heartbeat thread and taken over after ten
 minutes without a beat. A refresh killed by a deploy therefore costs at most the

@@ -1329,6 +1329,18 @@ export default function AboutPage() {
           </Section>
 
           {/* ── Action Center ── */}
+          <Section title="CORRECTIONS AND RETRACTIONS" id="retractions">
+            <P>
+              When something Civitas published is wrong and cannot be corrected from its sources,
+              it is withdrawn, not quietly deleted. Each withdrawal is listed with its date and
+              reason in a public retraction log in the source code, the issue&apos;s page says it was
+              withdrawn and why, and any Bluesky posts about it are removed. The first entry, on
+              27 September 2026, withdrew two issues that a since-fixed clustering step had built from
+              unrelated news stories, and four posts about them written by a language model before
+              posts were changed to quote their sources word for word.
+            </P>
+          </Section>
+
           <Section title="CONGRESS REPORTS" id="congress">
             <P>
               The Congress pages answer what the Senate and the House did on a given day, week or
