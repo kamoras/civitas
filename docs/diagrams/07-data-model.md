@@ -298,6 +298,11 @@ erDiagram
     }
 ```
 
+A member's stored vote (`key_votes` / `rep_key_votes`) names its roll call in
+`roll_call` ("house-119-2-221", no FK; NULL before 2026-09-28), which the vote
+API resolves to `roll_calls` for the question, date and per-party tally
+(`bill_record.roll_call_summaries`).
+
 `bill_id` has no foreign key for the same reason `ACTION_ISSUES`' bill ids do
 not: a bill a former member sponsored, or one no tracked member sponsored, is
 still a bill the chambers act on. See [11 — Congress record](11-congress.md).

@@ -24,6 +24,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.18",
+    date: "2026-09-28",
+    title: "A vote counts against the party only when the parties actually split on it",
+    tldr: "A vote now counts as a break with the party only when most of the member's party voted one way, most of the other party the other way, and the member sided with the other party. A vote whose roll call wasn't recorded no longer counts from what the bill says. Every break on a profile now shows the roll call's question, date and how each party voted.",
+    changes: [
+      "Before, a vote with no recorded roll call was judged by the bill's content: a Republican voting for a bill that read as Democratic counted as a break, however Republicans actually voted. Such votes no longer count.",
+      "Checked first: in a sample of 25 representatives and 10 senators, every party label on a recorded roll call already matched the chamber's official party totals, and none came from content, so no score in the sample changes.",
+      "The list of breaks on a profile read only \"key\" votes, so a member whose breaks were all recent roll calls saw a count and then an empty list. It now shows every break, each with the question voted on, the date, each party's tally and a link to the record.",
+    ],
+  },
+  {
     version: "v6.17",
     date: "2026-09-28",
     title: "Legislative Effectiveness credits getting a bill out of committee",
