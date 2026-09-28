@@ -1347,19 +1347,9 @@ export default function AboutPage() {
             <P>
               When something Civitas published is wrong and cannot be corrected from its sources,
               it is withdrawn, not quietly deleted. Each withdrawal is listed with its date and
-              reason in a public retraction log in the source code, the issue&apos;s page says it was
-              withdrawn and why, and any Bluesky posts about it are removed. The first entry, on
-              27 September 2026, withdrew two issues that a since-fixed clustering step had built from
-              unrelated news stories, and four posts about them written by a language model before
-              posts were changed to quote their sources word for word.
-            </P>
-            <P>
-              The second, on 28 September 2026, withdrew 189 more of those model-written posts. Every
-              one of the 829 was checked against the articles its issue cites
-              (<code>backend/scripts/audit_bluesky_posts.py</code>), and these state a name, number or
-              official the articles never mention, or a sentence with no counterpart in them. 150
-              passed. 490 could not be checked, because at least one of their articles is from AP,
-              Politico or The Hill, which refuse automated reading; they remain up.
+              reason in a public retraction log in the source code, and the issue&apos;s page says it
+              was withdrawn and why. The first entry, on 27 September 2026, withdrew two issues that
+              a since-fixed clustering step had built from unrelated news stories.
             </P>
           </Section>
 
