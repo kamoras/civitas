@@ -537,3 +537,17 @@ def test_upsert_stores_title_and_fiscal_drafters(db_session):
     m = db_session.query(BallotMeasure).one()
     assert m.title_authority == "South Dakota Attorney General"
     assert m.fiscal_authority == "North Dakota Legislative Council"
+def test_upsert_stores_the_named_drafters(db_session):
+    election_pipeline._upsert_measure(
+        db_session,
+        {"id": "ID-2026-11-03-Proposition One", "state": "ID", "number": "Proposition One",
+         "title": "T", "election_date": "2026-11-03"},
+        {"official_summary": "S", "fiscal_impact": "F",
+         "title_authority": "Idaho Attorney General (ballot titles)",
+         "fiscal_authority": "Idaho Division of Fiscal Management"},
+        "Idaho Secretary of State",
+    )
+    db_session.commit()
+    m = db_session.query(BallotMeasure).one()
+    assert m.title_authority == "Idaho Attorney General (ballot titles)"
+    assert m.fiscal_authority == "Idaho Division of Fiscal Management"

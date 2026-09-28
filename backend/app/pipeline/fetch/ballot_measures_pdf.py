@@ -47,6 +47,9 @@ from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_doc
 from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
 from app.pipeline.fetch.ballot_measures_fl import fetch_measures as fl_fetch_measures
 from app.pipeline.fetch.ballot_measures_ky import fetch_measures as ky_fetch_measures
+from app.pipeline.fetch.ballot_measures_ak import parse_document as parse_ak_document
+from app.pipeline.fetch.ballot_measures_hi import fetch_measures as hi_fetch_measures
+from app.pipeline.fetch.ballot_measures_id import parse_document as parse_id_document
 from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_document
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
 from app.pipeline.fetch.ballot_measures_md import fetch_measures as md_fetch_measures
@@ -70,6 +73,10 @@ from app.pipeline.fetch.ballot_measures_nd import fetch_measures as nd_fetch_mea
 from app.pipeline.fetch.ballot_measures_ne import fetch_measures as ne_fetch_measures
 from app.pipeline.fetch.ballot_measures_ok import fetch_measures as ok_fetch_measures
 from app.pipeline.fetch.ballot_measures_sd import fetch_measures as sd_fetch_measures
+from app.pipeline.fetch.ballot_measures_mt import fetch_measures as mt_fetch_measures
+from app.pipeline.fetch.ballot_measures_nm import fetch_measures as nm_fetch_measures
+from app.pipeline.fetch.ballot_measures_wa import fetch_measures as wa_fetch_measures
+from app.pipeline.fetch.ballot_measures_wy import parse_document as parse_wy_document
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +175,9 @@ STRATEGIES = {
     "co_quick_ballot_reference": parse_co_document,
     "la_proposed_amendments": parse_la_document,
     "vt_constitutional_amendment_notice": parse_vt_document,
+    "ak_sample_ballot": parse_ak_document,
+    "id_voter_pamphlet": parse_id_document,
+    "wy_statewide_ballot_propositions": parse_wy_document,
 }
 
 # A strategy here doesn't fit STRATEGIES' `pdf.pages -> list[dict]`
@@ -208,6 +218,10 @@ MULTI_DOCUMENT_STRATEGIES = {
     "ne_ballot_measures": ne_fetch_measures,
     "ok_state_questions": ok_fetch_measures,
     "sd_ballot_questions": sd_fetch_measures,
+    "hi_proposed_amendments": hi_fetch_measures,
+    "mt_qualified_ballot_issues": mt_fetch_measures,
+    "nm_amendments_and_bonds": nm_fetch_measures,
+    "wa_certified_measures": wa_fetch_measures,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in

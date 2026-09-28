@@ -435,3 +435,18 @@ def test_every_registered_state_resolves_to_a_strategy():
     assert {"IL", "IN", "KS", "MI", "MN", "ND", "NE", "OK", "SD"} <= states
     for state in states:
         assert pdf.is_configured(state), state
+def test_to_measure_carries_the_drafters_through_to_the_row():
+    parsed = {
+        "number": "1", "title": "T", "origin": None, "official_summary": "S",
+        "fiscal_impact": "F", "yes_means": None, "no_means": None,
+        "title_authority": "Idaho Attorney General (ballot titles)",
+        "fiscal_authority": "Idaho Division of Fiscal Management",
+    }
+    measure = pdf._to_measure("ID", parsed, "2026-11-03", "https://example.com/p.pdf")
+    assert measure["title_authority"] == "Idaho Attorney General (ballot titles)"
+    assert measure["fiscal_authority"] == "Idaho Division of Fiscal Management"
+
+
+@pytest.mark.parametrize("state", ["AK", "HI", "ID", "MT", "NM", "WA", "WY"])
+def test_western_states_are_registered_with_a_real_strategy(state):
+    assert pdf.is_configured(state) is True
