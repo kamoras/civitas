@@ -647,6 +647,27 @@ describe("ballot measures", () => {
     expect(notice).toHaveTextContent("last successful read, 2026-09-20");
   });
 
+  it("credits the measures to their own source, not the coverage row's", async () => {
+    // Round 4: during a switch from Vote Smart the coverage row named the
+    // state office while every card was Vote Smart's, and the footer
+    // credited the office — with Vote Smart's read date.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, sourceName: "Vote Smart" }],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/on record from Vote Smart/)).toBeInTheDocument();
+    expect(drawer.queryByText(/Ohio SoS/)).not.toBeInTheDocument();
+    expect(drawer.queryByText(/2026-09-20/)).not.toBeInTheDocument();
+  });
+
   it("shows no stale notice when the latest read worked", async () => {
     render(
       <StateBallotClient

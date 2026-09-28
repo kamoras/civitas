@@ -72,7 +72,13 @@ def _general_election_label(year: int) -> str:
     return f"{day.strftime('%B')} {day.day}, {day.year}"
 
 
-def parse_register(page_html: str, year: int) -> list[tuple[dict, str]] | None:
+def parse_register(
+    page_html: str, year: int, removed: list[dict] | None = None,
+) -> list[tuple[dict, str]] | None:
+    """The State Questions this register page dates for `year`'s general,
+    or None when a row can't be read. Every other numbered question on the
+    page is appended to `removed` (when given) as a removed marker — see
+    fetch_measures."""
     tree = lxml_html.fromstring(page_html)
     target = _general_election_label(year)
     header_row = next(
@@ -110,15 +116,24 @@ def parse_register(page_html: str, year: int) -> list[tuple[dict, str]] | None:
             # form: refuse rather than drop it.
             logger.warning("OK register row dated %s by its Election Date column only — refusing", column_date)
             return None
-        if m is None:
-            if "ELECTION DATE" in status.upper():
-                logger.warning("OK register election date %r not in the verified form — refusing", status[:80])
-                return None
-            continue  # no election set for this question
-        if m.group(1) != target:
+        if m is None and "ELECTION DATE" in status.upper():
+            logger.warning("OK register election date %r not in the verified form — refusing", status[:80])
+            return None
+        number = clean_text(cells[col["SQ Num"]].text_content())
+        if m is None or m.group(1) != target:
+            # On the register but not dated for this election. For a State
+            # Question we listed before, that is the state saying it is no
+            # longer on this ballot (struck, or moved to another election):
+            # reported as removed — the pipeline marks only rows it has on
+            # file, so the rest of the register's questions change nothing.
+            if number and number.isdigit() and removed is not None:
+                removed.append({
+                    "number": number, "title": clean_text(cells[col["Summary"]].text_content()) or "",
+                    "origin": None, "official_summary": None, "fiscal_impact": None,
+                    "yes_means": None, "no_means": None, "removed": True,
+                })
             continue
         link = cells[col["SQ Num"]].xpath(".//a[@href]")
-        number = clean_text(cells[col["SQ Num"]].text_content())
         subject = clean_text(cells[col["Summary"]].text_content())
         if not link or not number or not number.isdigit() or not subject:
             logger.warning("OK register row for %s didn't match the verified shape — refusing", target)
@@ -225,9 +240,10 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if page_html is None:
         return None
     results: list[tuple[dict, str]] = []
+    others: list[dict] = []
     for page in range(1, MAX_PAGES + 1):
         try:
-            parsed = parse_register(page_html, year)
+            parsed = parse_register(page_html, year, others)
             done = reaches_before(page_html, year)
         except Exception:
             logger.exception("OK state questions register page %d was not parseable", page)
@@ -251,11 +267,16 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     else:
         logger.warning("OK register: %d pages read without reaching an earlier election", MAX_PAGES)
         return None
+    listed = {p["number"] for p, _ in results}
+    others = list({o["number"]: o for o in others if o["number"] not in listed}.values())
     if not results:
         # The register lists no State Question for this election (yet).
         # It is not a certified ballot list, so that is never "none" —
-        # and nothing failed either: not yet covered, no alert.
+        # and nothing failed either: not yet covered, no alert. The
+        # questions it dates otherwise travel with it, so one we listed
+        # before is marked removed rather than read as a lost document.
         raise NotYetPublished(
             f"an Oklahoma State Question dated {_general_election_label(year)}", deadline_applies=False,
+            removed=others,
         )
-    return results
+    return results + [(o, URL) for o in others]

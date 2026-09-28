@@ -1115,3 +1115,107 @@ def test_election_dates_are_stored_as_iso_or_not_at_all(db_session):
         )
     db_session.commit()
     assert [(m.id, m.election_date) for m in db_session.query(BallotMeasure).all()] == [("vs-us", "2026-11-03")]
+
+
+# ── round 4 ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_the_ingest_alert_fires_every_night_a_state_fails(monkeypatch, db_session):
+    """The regression: dedupe_key was the constant "ballot-measure-ingest",
+    and send_ops_alert dedupes for as long as it remembers a key — so the
+    first failure ever was the last one anyone heard about."""
+    import app.ops_alerts as ops_alerts
+
+    keys = []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None: keys.append(dedupe_key))
+    election_pipeline._alert_ingest_failures(["CA"], "2026-11-03")
+    election_pipeline._alert_ingest_failures(["CA", "MI"], "2026-11-03")
+    assert len(set(keys)) == 2
+    assert all(k.startswith(f"ballot-measure-ingest-2026-11-03-{utcnow().date().isoformat()}-") for k in keys)
+    from datetime import datetime as dt
+
+    monkeypatch.setattr(election_pipeline, "utcnow", lambda: dt(2026, 10, 30))
+    election_pipeline._alert_ingest_failures(["CA"], "2026-11-03")
+    assert keys[-1] != keys[0]  # the next night, the same failure alerts again
+    election_pipeline._alert_ingest_failures([], "2026-11-03")
+    assert len(keys) == 3
+
+
+@pytest.mark.asyncio
+async def test_a_measure_the_source_reports_gone_is_removed_not_a_lost_document(monkeypatch, db_session):
+    """Oklahoma: the only listed State Question is no longer dated for this
+    election. The reader reports it removed with its NotYetPublished; the
+    row is marked removed and the state reads not yet covered — not the
+    nightly lost-document alarm, with the struck question still shown."""
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    gone = NotYetPublished("a State Question", deadline_applies=False, removed=[
+        {"number": "1", "title": "T", "origin": None, "official_summary": None, "fiscal_impact": None,
+         "yes_means": None, "no_means": None, "removed": True},
+    ])
+    _direct_source(monkeypatch, [["1"], gone, gone])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    for _ in range(2):
+        _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+        assert failed == 0
+        assert db_session.query(BallotMeasure).one().status == "removed"
+        assert _coverage(db_session).status == MeasureCoverage.NOT_YET_COVERED
+
+
+@pytest.mark.asyncio
+async def test_an_operator_can_accept_a_states_absence(monkeypatch, db_session):
+    """Michigan's document disappears when its only proposal is struck, and
+    the reader can only say "not published": the operator path marks the
+    rows removed, records confirmed none with the note, and the nightly
+    sync leaves that standing — until the reader answers again."""
+    from app.api.admin import admin_accept_measure_absence
+    from app.pipeline.fetch import ballot_measure_pdf_sources
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    _direct_source(monkeypatch, [["1"], NotYetPublished("doc", deadline_applies=False),
+                                  NotYetPublished("doc", deadline_applies=False), ["2"]])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert failed == 1  # the honest nightly alarm, before anyone checks
+
+    with pytest.raises(HTTPException):
+        admin_accept_measure_absence("ZZ", "2026-11-03", note="checked the SOS release", db=db_session)
+    with pytest.raises(HTTPException):
+        admin_accept_measure_absence("CA", "11/03/2026", note="checked the SOS release", db=db_session)
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda st: _fake_pdf_source())
+    result = admin_accept_measure_absence(
+        "CA", "2026-11-03", note="SOS release 2026-10-02: measure 1 struck by court order", db=db_session,
+    )
+    assert result["markedRemoved"] == 1
+    row = _coverage(db_session)
+    assert row.status == MeasureCoverage.CONFIRMED_NONE
+    assert "struck by court order" in row.error_detail
+    assert db_session.query(BallotMeasure).one().status == "removed"
+
+    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert failed == 0
+    assert _coverage(db_session).status == MeasureCoverage.CONFIRMED_NONE
+
+    # The reader answers again: its answer replaces the operator's.
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    row = _coverage(db_session)
+    assert row.status == MeasureCoverage.COVERED and row.operator_note is None
+
+
+@pytest.mark.asyncio
+async def test_the_previous_sources_coverage_keeps_its_name_until_this_one_answers(monkeypatch, db_session):
+    """Round 4: on a state just moved from Vote Smart, "not yet published"
+    re-labelled the coverage row with the state office while the cards on
+    the page — and the "last successful read" date — were still Vote
+    Smart's."""
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    _measure(db_session, "vs-1", state="CA", source_name="Vote Smart")
+    election_pipeline._set_coverage(db_session, "CA", "2026-11-03", MeasureCoverage.COVERED, 1, source_name="Vote Smart")
+    db_session.commit()
+    _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    row = _coverage(db_session)
+    assert row.status == MeasureCoverage.NOT_YET_COVERED
+    assert row.source_name == "Vote Smart"

@@ -1614,6 +1614,10 @@ class MeasureCoverage(Base):
     # ids of that list (JSON) and how many consecutive runs returned it.
     pending_shrink: Mapped[str | None] = mapped_column(Text, nullable=True)
     shrink_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Set when an operator accepted this state's absence for the election
+    # (admin accept-absence): who/why, verbatim. A reader answering again
+    # clears it.
+    operator_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class PipelinePhaseTiming(Base):

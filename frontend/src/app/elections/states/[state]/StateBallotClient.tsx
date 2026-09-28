@@ -338,6 +338,15 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     // Any status but covered / confirmed_none means the latest read did
     // not confirm this list — failed, or found the document missing.
     const stale = measureCoverage.status !== "covered" && measureCoverage.status !== "confirmed_none";
+    // Credit the measures to the source they came from, not to whichever
+    // source the coverage row names: while a state moves from Vote Smart to
+    // its own office, the cards are still Vote Smart's. A read date is only
+    // shown when it is that same source's.
+    const sources = [...new Set(measures.map((m) => m.sourceName).filter(Boolean))];
+    const readDate =
+      sources.length === 1 && sources[0] === measureCoverage.sourceName && measureCoverage.checkedAt
+        ? measureCoverage.checkedAt.slice(0, 10)
+        : null;
     return (
       <div className="space-y-3">
         {stale && (
@@ -348,7 +357,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
                 : `Our latest check could not find ${state}'s published list`}
               {measureCoverage.lastAttemptAt ? ` (${measureCoverage.lastAttemptAt.slice(0, 10)})` : ""}. The list
               below is from the last successful read
-              {measureCoverage.checkedAt ? `, ${measureCoverage.checkedAt.slice(0, 10)}` : ""}, and may be out of
+              {readDate ? `, ${readDate}` : ""}, and may be out of
               date — check the{" "}
               <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
                 official lookup ↗
@@ -362,10 +371,8 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         ))}
         <p className="text-[10px] text-ink-min">
           {measures.length} statewide {measures.length === 1 ? "measure" : "measures"} on
-          record from {measureCoverage.sourceName || "the source"}
-          {measureCoverage.checkedAt
-            ? ` · last read successfully ${measureCoverage.checkedAt.slice(0, 10)}`
-            : ""}
+          record from {sources.length ? sources.join(" and ") : "the source"}
+          {readDate ? ` · last read successfully ${readDate}` : ""}
           . Local measures on your ballot are not shown here.
         </p>
       </div>

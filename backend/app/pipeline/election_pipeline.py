@@ -747,6 +747,60 @@ def _live_ids(db: Session, state: str, source_name: str, election_dates: set[str
     }
 
 
+def _struck_ids(state: str, election_day: str, removed: list[dict]) -> set[str]:
+    from app.pipeline.fetch.ballot_measures_pdf import _to_measure
+
+    return {_to_measure(state, parsed, election_day, "")["id"] for parsed in removed or []}
+
+
+def _mark_removed(db: Session, state: str, election_day: str, source_name: str, ids: set[str]) -> int:
+    """Mark these of `source_name`'s rows for the election removed (they
+    render as removed through the grace window). Returns rows marked."""
+    from app.models import BallotMeasure
+
+    marked = 0
+    for row in db.query(BallotMeasure).filter(
+        BallotMeasure.state == state,
+        BallotMeasure.election_date == election_day,
+        BallotMeasure.source_name == source_name,
+        BallotMeasure.id.in_(ids),
+        BallotMeasure.status != "removed",
+    ):
+        row.status = "removed"
+        row.as_of = utcnow()
+        marked += 1
+    return marked
+
+
+def accept_state_absence(db: Session, state: str, election_day: str, source_name: str, note: str) -> int:
+    """The operator's path for a measure gone from a source that can only
+    report its document missing (Michigan's November document disappears
+    when its only proposal is struck): mark `source_name`'s rows for the
+    election removed and record confirmed none with the operator's note.
+    The nightly sync leaves that standing while the reader keeps reporting
+    the document missing, and a real answer from the reader replaces it.
+    Returns rows marked removed."""
+    from app.models import BallotMeasure, MeasureCoverage
+
+    ids = {
+        mid for (mid,) in db.query(BallotMeasure.id).filter(
+            BallotMeasure.state == state,
+            BallotMeasure.election_date == election_day,
+            BallotMeasure.source_name == source_name,
+        )
+    }
+    marked = _mark_removed(db, state, election_day, source_name, ids)
+    _set_coverage(
+        db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+        count=0, source_name=source_name, error=f"operator accepted absence: {note}",
+    )
+    row = _coverage_row(db, state, election_day)
+    row.operator_note = note
+    row.pending_shrink, row.shrink_streak = None, 0
+    db.commit()
+    return marked
+
+
 def _has_read_this_election(db: Session, prior, state: str, election_day: str, source_name: str) -> bool:
     """Whether THIS source has already given a real answer for this
     election — the durable facts, not last night's status: measures of its
@@ -793,7 +847,7 @@ def _past_expected_by(source: dict, election_day: str) -> bool:
 
 
 async def _sync_pdf_measures(
-    db: Session, client: httpx.AsyncClient, election_day: str,
+    db: Session, client: httpx.AsyncClient, election_day: str, failing: list[str] | None = None,
 ) -> tuple[int, int, int]:
     """Every state with a registered direct source
     (ballot_measure_pdf_sources.json; see ballot_measures_pdf.py). Runs
@@ -831,6 +885,8 @@ async def _sync_pdf_measures(
 
     year = int(election_day[:4])
     synced = failed = marked_removed = 0
+    if failing is None:
+        failing = []
     for state in sorted(configured_states()):
         source = source_for_state(state)
         source_name = source["source_name"]
@@ -839,7 +895,23 @@ async def _sync_pdf_measures(
             listed = await fetch_state_measures_pdf(client, db, state, year, election_day)
         except NotYetPublished as awaited:
             prior = _coverage_row(db, state, election_day)
-            if _has_read_this_election(db, prior, state, election_day, source_name):
+            # Measures the source itself reports as no longer on this
+            # ballot (Oklahoma: a State Question now dated otherwise) are
+            # marked removed first. That is the source saying "measure
+            # gone", not "document gone", so it is never the lost-document
+            # alarm below.
+            struck = _struck_ids(state, election_day, awaited.removed)
+            if struck:
+                marked_removed += _mark_removed(db, state, election_day, source_name, struck)
+                db.commit()
+            if prior is not None and prior.operator_note:
+                # An operator accepted this absence (admin accept-absence);
+                # the reader still finding nothing is that answer standing.
+                prior.checked_at = utcnow()
+                db.commit()
+                continue
+            explained_all = bool(struck) and not _live_ids(db, state, source_name, {election_day})
+            if not explained_all and _has_read_this_election(db, prior, state, election_day, source_name):
                 reason = (
                     f"{source_name} was read successfully for this election before "
                     f"({prior.status if prior else 'rows on file'}), now reads as not published: {awaited}"
@@ -852,9 +924,15 @@ async def _sync_pdf_measures(
                 logger.info("Ballot measures for %s not published yet: %s", state, awaited)
                 if not awaited.deadline_applies and _past_expected_by({}, election_day):
                     _late_cycle_notice(state, election_day, source_name, awaited)
+                # Until this source answers, the measures on the page (if
+                # any) are still the previous source's — Vote Smart's, on a
+                # state that has just moved to its own office — so the
+                # coverage row keeps naming that source rather than
+                # crediting its cards to this one.
+                keep_source = prior.source_name if prior is not None and prior.source_name else source_name
                 _set_coverage(
                     db, state, election_day, MeasureCoverage.NOT_YET_COVERED,
-                    source_name=source_name, error=f"not yet published: {awaited}",
+                    source_name=keep_source, error=f"not yet published: {awaited}",
                 )
                 db.commit()
                 continue
@@ -864,6 +942,7 @@ async def _sync_pdf_measures(
                 count=prior.measure_count if prior else 0, source_name=source_name, error=reason,
             )
             failed += 1
+            failing.append(state)
             db.commit()
             continue
         except Exception:
@@ -876,6 +955,7 @@ async def _sync_pdf_measures(
                 source_name=source_name, error="fetch failed",
             )
             failed += 1
+            failing.append(state)
             db.commit()
             continue
 
@@ -904,6 +984,7 @@ async def _sync_pdf_measures(
                 error=f"implausible shrink: {len(active)} vs {existing}",
             )
             failed += 1
+            failing.append(state)
             db.commit()
             continue
 
@@ -917,6 +998,7 @@ async def _sync_pdf_measures(
                 source_name=source_name, error="write failed",
             )
             failed += 1
+            failing.append(state)
             db.commit()
             continue
         synced += written
@@ -947,13 +1029,25 @@ def _write_direct_answer(
         MeasureCoverage.COVERED if active else MeasureCoverage.CONFIRMED_NONE,
         count=len(seen_ids), source_name=source_name,
     )
+    # The reader answered: an operator's accepted absence is superseded.
+    _coverage_row(db, state, election_day).operator_note = None
     db.commit()
     return len(seen_ids), marked
 
 
-def _alert_ingest_failures(failed: int, election_day: str) -> None:
-    if not failed:
+def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
+    """One ops alert per night per set of failing states. The dedupe key
+    carries the date and a digest of the states: send_ops_alert dedupes
+    for as long as the key is remembered, so a constant key would make the
+    first failure ever the last one anyone hears about — every later lost
+    document, missed cutoff, held-back shrink or write failure silent.
+    Same shape as state_candidates' recurring alerts."""
+    import hashlib
+
+    if not failing:
         return
+    states = sorted(set(failing))
+    digest = hashlib.sha1("|".join(states).encode()).hexdigest()[:12]
     # Fail loud: a silently-broken adapter and a quiet week look identical
     # from the outside, and this is the one dataset where that ambiguity
     # costs a vote.
@@ -961,10 +1055,10 @@ def _alert_ingest_failures(failed: int, election_day: str) -> None:
         from app.ops_alerts import send_ops_alert
         send_ops_alert(
             "Ballot measure ingest failed",
-            f"{failed} state(s) failed to ingest statewide ballot measures "
-            f"for {election_day}. Those states render as 'not yet covered' "
+            f"{len(states)} state(s) failed to ingest statewide ballot measures "
+            f"for {election_day}: {', '.join(states)}. Those states render as 'not yet covered' "
             f"rather than 'no measures' until this clears.",
-            dedupe_key="ballot-measure-ingest",
+            dedupe_key=f"ballot-measure-ingest-{election_day}-{utcnow().date().isoformat()}-{digest}",
         )
     except Exception:
         logger.exception("Could not send ballot-measure ops alert")
@@ -1017,7 +1111,8 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     # state's source of record, so a failure there should read as
     # ingest_failed, not silently serve a stale Vote Smart snapshot.
     pdf_states = configured_states()
-    synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day)
+    failing: list[str] = []
+    synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day, failing)
 
     if not is_configured():
         # Leave every OTHER state NOT_YET_COVERED rather than writing
@@ -1027,7 +1122,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
         logger.info("Ballot measure sync for other states skipped — VOTESMART_API_KEY not set")
         # The direct-source failures above still page: they have nothing
         # to do with the key.
-        _alert_ingest_failures(failed, election_day)
+        _alert_ingest_failures(failing, election_day)
         return {
             "synced": synced, "failed_states": failed, "marked_removed": marked_removed,
             "skipped_other_states": True,
@@ -1047,6 +1142,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
                 source_name=source_name, error="fetch failed",
             )
             failed += 1
+            failing.append(state)
             db.commit()
             continue
 
@@ -1065,6 +1161,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
                 error=f"implausible shrink: {len(listed)} vs {existing}",
             )
             failed += 1
+            failing.append(state)
             db.commit()
             continue
 
@@ -1107,7 +1204,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
         )
         db.commit()
 
-    _alert_ingest_failures(failed, election_day)
+    _alert_ingest_failures(failing, election_day)
 
     return {
         "synced": synced,

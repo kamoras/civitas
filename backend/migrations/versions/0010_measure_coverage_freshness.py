@@ -1,6 +1,6 @@
 """measure coverage: last successful check, and the shrink streak
 
-Three nullable/defaulted columns on measure_coverage, so the previous
+Four nullable/defaulted columns on measure_coverage, so the previous
 image runs unchanged against the migrated schema (expand only):
 
 - last_success_at: when the status shown was last established by a read
@@ -11,6 +11,10 @@ image runs unchanged against the migrated schema (expand only):
   than are on file is held back (MEASURE_SHRINK_FLOOR) until the same
   shorter list has come back on MEASURE_SHRINK_CONFIRM_RUNS consecutive
   runs; these remember which list and how many runs.
+- operator_note: set when an operator accepted a state's absence for an
+  election (POST /api/admin/ballot-measures/{state}/{date}/accept-absence);
+  while set, a reader reporting the document as not published leaves that
+  accepted answer standing instead of alarming every night.
 
 Revision ID: 0010
 Revises: 0009
@@ -31,16 +35,21 @@ def upgrade() -> None:
         batch.add_column(sa.Column("last_success_at", sa.DateTime(), nullable=True))
         batch.add_column(sa.Column("pending_shrink", sa.Text(), nullable=True))
         batch.add_column(sa.Column("shrink_streak", sa.Integer(), nullable=False, server_default="0"))
-    # Every existing row's status was written by a read that worked or by
-    # a failure; the old checked_at is the best available record of the
-    # former, and a failed row gets none.
+        batch.add_column(sa.Column("operator_note", sa.Text(), nullable=True))
+    # last_success_at means "an answer was established" — covered or
+    # confirmed none, the only statuses a successful read writes. For
+    # those rows the old checked_at is the best record of when; a
+    # not_yet_covered or ingest_failed row established nothing and gets
+    # none.
     op.execute(
-        "UPDATE measure_coverage SET last_success_at = checked_at WHERE status != 'ingest_failed'"
+        "UPDATE measure_coverage SET last_success_at = checked_at "
+        "WHERE status IN ('covered', 'confirmed_none')"
     )
 
 
 def downgrade() -> None:
     with op.batch_alter_table("measure_coverage") as batch:
+        batch.drop_column("operator_note")
         batch.drop_column("shrink_streak")
         batch.drop_column("pending_shrink")
         batch.drop_column("last_success_at")
