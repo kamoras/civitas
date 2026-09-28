@@ -238,3 +238,145 @@ class TestFetchConfirmedCandidates:
         result = await ct.fetch_confirmed_candidates(None, future_year, "CT", {"settle_days": 21})
         assert result == []
         assert all(u.endswith("Elections.json") for u in requested)
+
+
+# ── Statewide offices: primary results + convention endorsements ─────
+#
+# fixtures_ct_endorsements_dem_2026.pdf and fixtures_ct_endorsements_rep_
+# 2026.pdf are REAL pages, cut (pypdf, pages copied unchanged) from the
+# Secretary of the State's own combined 2026 statewide certificates of
+# party endorsement, fetched live 2026-09-28 from portal.ct.gov
+# (democratic-statewide-combined-ada.pdf, statewide-republicans-
+# combined.pdf). Democratic: Ned Lamont's Governor endorsement, Josh
+# Elliott's Governor certificate with "15% Eligibility" checked rather
+# than "Endorsed", and Erick Russell's Treasurer endorsement, whose
+# typed office prints over the form's tab stops and reads "Tre asurer"
+# as a plain line of text. Republican: Ryan Fazio (Governor) and Fred
+# Wilms (Treasurer, "Treasu rer" as a plain line).
+
+DEM_ENDORSEMENTS = (FIXTURES / "fixtures_ct_endorsements_dem_2026.pdf").read_bytes()
+REP_ENDORSEMENTS = (FIXTURES / "fixtures_ct_endorsements_rep_2026.pdf").read_bytes()
+
+ENDORSEMENTS = {
+    "index_url": "https://portal.ct.gov/sots/election-services/certificate-of-endorsement/certificates-of-endorsement",
+    "year_page_regex": 'href="([^"]*/certificate-of-endorsement/{year}-certificates?-of-endorsements?(?:\\?[^"]*)?)"',
+    "statewide_link_regex": 'href="([^"]*/certificates_of_party_endorsement/{year}/statewide-congressional/[^"]+?\\.pdf[^"]*)"',
+}
+
+# The real index's year links (2024's slug is spelled differently from
+# 2026's, and older years carry ?archived=true), and the real 2026 page's
+# statewide links, with a congressional certificate beside them that the
+# statewide pattern must not pick up.
+INDEX_HTML = """
+<a href="https://portal.ct.gov/sots/election-services/certificate-of-endorsement/2026-certificate-of-endorsements">2026</a>
+<a href="https://portal.ct.gov/sots/election-services/certificate-of-endorsement/2024-certificates-of-endorsement">2024</a>
+<a href="https://portal.ct.gov/sots/election-services/certificate-of-endorsement/2022-certificate-of-endorsements?archived=true">2022</a>
+"""
+YEAR_HTML = """
+<a href="https://portal.ct.gov/-/media/sots/electionservices/certificates_of_party_endorsement/2026/statewide-congressional/democratic-statewide-combined-ada.pdf?rev=15b8&amp;hash=1E94">D</a>
+<a href="https://portal.ct.gov/-/media/sots/electionservices/certificates_of_party_endorsement/2026/statewide-congressional/statewide-republicans-combined.pdf?rev=0951&amp;hash=8D02">R</a>
+<a href="https://portal.ct.gov/-/media/sots/electionservices/certificates_of_party_endorsement/2026/us-congress/1st-cd-dem--rep-ada.pdf?rev=c08a">CD 1</a>
+"""
+
+
+def _text_resp(body):
+    return SimpleNamespace(text=body, content=body.encode() if isinstance(body, str) else body)
+
+
+class TestParseEndorsements:
+    def test_real_democratic_certificates(self):
+        # Elliott's certificate is 15% eligibility -- the right to force
+        # a primary, not a nomination -- and is not read as one.
+        assert ct.parse_endorsements(DEM_ENDORSEMENTS) == [
+            {"office": "governor", "district": None, "party": "D", "last_name": "Ned Lamont"},
+            {"office": "treasurer", "district": None, "party": "D", "last_name": "Erick Russell"},
+        ]
+
+    def test_real_republican_certificates(self):
+        assert ct.parse_endorsements(REP_ENDORSEMENTS) == [
+            {"office": "governor", "district": None, "party": "R", "last_name": "Ryan Fazio"},
+            {"office": "treasurer", "district": None, "party": "R", "last_name": "Fred Wilms"},
+        ]
+
+
+class TestMergeStatewide:
+    ENDORSED = [
+        {"office": "governor", "district": None, "party": "D", "last_name": "Ned Lamont"},
+        {"office": "treasurer", "district": None, "party": "D", "last_name": "Erick Russell"},
+        {"office": "governor", "district": None, "party": "R", "last_name": "Ryan Fazio"},
+    ]
+
+    def test_a_primaried_office_is_decided_by_its_primary_even_with_no_winner(self):
+        # A tie leaves no primary record, but the endorsement is still not
+        # the nominee: the primary decides that office, not the convention.
+        merged = ct._merge_statewide({"D": {"governor"}, "R": set()}, set(), [], self.ENDORSED)
+        assert {(r["office"], r["party"], r["last_name"]) for r in merged} == {
+            ("treasurer", "D", "Erick Russell"), ("governor", "R", "Ryan Fazio"),
+        }
+
+    def test_a_party_whose_primary_has_not_settled_publishes_no_endorsement(self):
+        merged = ct._merge_statewide({"D": set()}, {"R"}, [], self.ENDORSED)
+        assert {r["party"] for r in merged} == {"D"}
+
+    def test_two_endorsements_for_one_nomination_publish_neither(self):
+        doubled = [*self.ENDORSED, {"office": "treasurer", "district": None, "party": "D", "last_name": "Someone Else"}]
+        merged = ct._merge_statewide({"D": set(), "R": set()}, set(), [], doubled)
+        assert ("treasurer", "D") not in {(r["office"], r["party"]) for r in merged}
+
+
+@pytest.mark.asyncio
+class TestStatewideFetch:
+    def _patched(self, monkeypatch, *, endorsement_pages=True):
+        async def fake(client, rl, method, url, **kw):
+            if url.endswith("Elections.json"):
+                return _resp(ELECTIONS)
+            if f"/election/{DEM_ID}/Version.json" in url:
+                return _resp({"Version": 10138})
+            if f"/election/{DEM_ID}/10138/Lookupdata.json" in url:
+                return _resp(DEM_LOOKUP)
+            if f"/election/{DEM_ID}/10138/stateVotes_Electiondata.json" in url:
+                return _resp(DEM_VOTES)
+            if f"/election/{REP_ID}/Version.json" in url:
+                return _resp({"Version": 10237})
+            if f"/election/{REP_ID}/10237/Lookupdata.json" in url:
+                return _resp(REP_LOOKUP)
+            if f"/election/{REP_ID}/10237/stateVotes_Electiondata.json" in url:
+                return _resp(REP_VOTES)
+            if url == ENDORSEMENTS["index_url"]:
+                return _text_resp(INDEX_HTML) if endorsement_pages else None
+            if url.endswith("2026-certificate-of-endorsements"):
+                return _text_resp(YEAR_HTML)
+            if "democratic-statewide-combined-ada.pdf" in url:
+                return _text_resp(DEM_ENDORSEMENTS)
+            if "statewide-republicans-combined.pdf" in url:
+                return _text_resp(REP_ENDORSEMENTS)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+
+    async def test_real_2026_statewide_ballot(self, monkeypatch):
+        # Governor was the only statewide office either party primaried
+        # (the real Democratic primary; Lamont 67.83%), so it comes from
+        # the primary and Lamont's endorsement is not read twice. The rest
+        # come from the endorsements. The House nominees are unchanged.
+        self._patched(monkeypatch)
+        source = {"settle_days": 21, "statewide_offices": True, "endorsements": ENDORSEMENTS}
+        result = await ct.fetch_confirmed_candidates(None, 2026, "CT", source)
+        assert sorted((r["office"], r["party"], r["last_name"]) for r in result) == [
+            ("H", "D", "Bronin"), ("H", "R", "Goldstein"), ("H", "R", "Shea"),
+            ("governor", "D", "Ned Lamont"), ("governor", "R", "Ryan Fazio"),
+            ("treasurer", "D", "Erick Russell"), ("treasurer", "R", "Fred Wilms"),
+        ]
+
+    async def test_without_the_opt_in_no_statewide_office_is_read(self, monkeypatch):
+        self._patched(monkeypatch)
+        result = await ct.fetch_confirmed_candidates(None, 2026, "CT", {"settle_days": 21, "endorsements": ENDORSEMENTS})
+        assert {r["office"] for r in result} == {"H"}
+
+    async def test_unreadable_endorsements_fail_the_run_rather_than_list_only_primaries(self, monkeypatch):
+        # Publishing Governor alone would tell a reader Connecticut elects
+        # no Treasurer this year.
+        self._patched(monkeypatch, endorsement_pages=False)
+        source = {"settle_days": 21, "statewide_offices": True, "endorsements": ENDORSEMENTS}
+        assert await ct.fetch_confirmed_candidates(None, 2026, "CT", source) is None

@@ -174,7 +174,8 @@ def parse_office(contest_name: str) -> tuple[str, int | None] | None:
 _STATEWIDE_OFFICES = [
     ("governor", re.compile(r"\bgovernor\b", re.IGNORECASE)),
     ("attorney_general", re.compile(r"\battorney\s+general\b", re.IGNORECASE)),
-    ("secretary_of_state", re.compile(r"\bsecretary\s+of\s+state\b", re.IGNORECASE)),
+    # Connecticut's officer is the Secretary "of the State".
+    ("secretary_of_state", re.compile(r"\bsecretary\s+of\s+(?:the\s+)?state\b", re.IGNORECASE)),
     # Bare "Treasurer" is a county/city office in most states; only the
     # qualified statewide forms count.
     ("treasurer", re.compile(r"\b(?:general|state)\s+treasurer\b", re.IGNORECASE)),
@@ -333,6 +334,12 @@ _STATEWIDE_DISTRICT_SEATS = {
 _STATEWIDE_SEAT_RE = re.compile(
     r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)\b|\b0*(\d+)(?:st|nd|rd|th)\s+District\b", re.IGNORECASE)
 
+# Alabama numbers its two associate Public Service Commission seats as
+# PLACES ("PUBLIC SERVICE COMMISSION, PLACE 1"), not districts: both are
+# elected statewide with no residency district at all. The seat is kept
+# with its own word ("Place 1") so the page never labels it a district.
+_STATEWIDE_PLACE_RE = re.compile(r"\bPlace\s+(?:No\.?\s*)?0*(\d+)\b", re.IGNORECASE)
+
 # Ballot-question vocabulary in a contest label: New Mexico's
 # "Constitutional Amendment 1" and Louisiana's "CA No. 4" both mention the
 # governor.
@@ -479,7 +486,10 @@ def _statewide_seat(code: str, name: str) -> tuple[str, str | None]:
     if code not in _STATEWIDE_DISTRICT_SEATS:
         return code, None
     match = _STATEWIDE_SEAT_RE.search(name)
-    return code, (next(g for g in match.groups() if g) if match else None)
+    if match:
+        return code, next(g for g in match.groups() if g)
+    place = _STATEWIDE_PLACE_RE.search(name)
+    return code, (f"Place {place.group(1)}" if place else None)
 
 
 def parse_statewide_office(contest_name: str) -> tuple[str, str | None] | None:

@@ -117,4 +117,5 @@ watchfiles==1.2.0
 websocket-client==1.9.0
 websockets==17.1
 wrapt==1.17.3
+xlrd==2.0.2
 zipp==4.1.0

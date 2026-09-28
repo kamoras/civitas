@@ -2,6 +2,11 @@
 single-state deployment covering ONLY the 2026-08-11 special primary — not
 Alabama's whole federal slate, and not by choice.
 
+(A state that opts in with `statewide_offices` ALSO gets its statewide
+executive nominees, read from a different Secretary of State publication:
+the official primary and runoff precinct results. See "State offices"
+below; nothing about the federal reading changes.)
+
 WHY JUST THE SPECIAL PRIMARY: following Louisiana v. Callais (2026-04-29)
 and a Alabama Legislature special session, Governor Ivey ordered four of
 Alabama's seven US House districts (1, 2, 6, 7) redrawn and re-run under a
@@ -58,16 +63,25 @@ Mercer (CD6 D, 64.17%), Gary Palmer (CD6 R, 86.98%), Ammie Akin (CD7 R,
 meaning Democrats fielded no candidate in those three redrawn districts.
 """
 
+import asyncio
+import html
+import io
 import logging
+import re
+import zipfile
 from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 import httpx
+import xlrd
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    clean_display_name,
     federal_record,
     normalize_party,
     parse_office,
+    parse_statewide_office,
     pick_nominee,
     surname,
 )
@@ -160,15 +174,188 @@ class _ContestResultsParser(HTMLParser):
         self._capture = None
 
 
+# ── State offices: the official precinct results ─────────────────────
+#
+# The special primary above only ever carried four congressional
+# districts. Alabama's statewide executive offices were decided in the
+# ORDINARY May primary and June runoff, and the Secretary of State
+# publishes both as official precinct results on its election-data page:
+# one zip per election ("2026_Primary_Election.zip",
+# "2026_PRIMARY_RUNOFF_ELECTION.zip"), holding one legacy .xls workbook
+# per county. Each sheet has three label columns -- Contest Title, Party,
+# Candidate -- and then one column per precinct (plus ABSENTEE and
+# PROVISIONAL), so a candidate's statewide total is the sum of every
+# numeric cell in their row across all 67 counties. Summed that way the
+# 2026 Republican primary gives Thomas (Tommy) Tuberville 422,255 votes for
+# Governor and Jim Zeigler 194,062 for PSC Place 2, both exactly the
+# Alabama Republican Party's own certified workbook's figures.
+#
+# Alabama nominates by MAJORITY (runoff_threshold_pct 50 in the config):
+# a primary leader below it is withheld and the runoff decides. A runoff
+# that has not been published yet decides nothing, so that office is
+# withheld rather than handed to the primary leader.
+#
+# Only STATEWIDE offices are read from these files. Their federal
+# contests are the pre-redistricting ones for four districts (voided by
+# the special primary above), and their legislative contests include
+# State Senate districts 25 and 26, also redrawn and re-run; reading
+# either would publish a nominee for a contest that no longer exists.
+
+_LABEL_COLUMNS = ("Contest Title", "Party", "Candidate")
+
+
+def _workbook_rows(payload: bytes) -> list[tuple[str, str, str, int]]:
+    """(contest, party, candidate, votes) for every row of one county's
+    precinct workbook, votes summed across its precinct columns. Empty
+    for a workbook without the three label columns."""
+    book = xlrd.open_workbook(file_contents=payload)
+    sheet = book.sheet_by_index(0)
+    if sheet.nrows == 0:
+        return []
+    header = [str(v).strip() for v in sheet.row_values(0)]
+    try:
+        cols = [header.index(name) for name in _LABEL_COLUMNS]
+    except ValueError:
+        return []
+    rows = []
+    for r in range(1, sheet.nrows):
+        values = sheet.row_values(r)
+        contest, party, candidate = (" ".join(str(values[c]).split()) for c in cols)
+        votes = sum(
+            v for i, v in enumerate(values)
+            if i not in cols and isinstance(v, float)
+        )
+        rows.append((contest, party, candidate, int(votes)))
+    return rows
+
+
+def contest_totals(archive: bytes, exclude: set[str]) -> dict[tuple[str, str], dict[str, int]]:
+    """{(contest, party): {candidate: statewide votes}} over every county
+    workbook in one election's zip."""
+    totals: dict[tuple[str, str], dict[str, int]] = {}
+    with zipfile.ZipFile(io.BytesIO(archive)) as zf:
+        for member in zf.namelist():
+            if not member.lower().endswith(".xls"):
+                continue
+            for contest, party, candidate, votes in _workbook_rows(zf.read(member)):
+                if not contest or not candidate or candidate in exclude:
+                    continue
+                seat = totals.setdefault((contest, party), {})
+                seat[candidate] = seat.get(candidate, 0) + votes
+    return totals
+
+
+def resolve_statewide(
+    primary: dict[tuple[str, str], dict[str, int]],
+    runoff: dict[tuple[str, str], dict[str, int]] | None,
+    runoff_threshold_pct: float | None,
+) -> list[dict]:
+    """One record per party per statewide contest: the primary's majority
+    winner, or else the runoff's winner -- who must have been on that
+    primary's ballot. Nothing for a contest whose runoff is not
+    published, or that no one can be named for safely (a tie)."""
+    records = []
+    for (contest, party_text), choices in primary.items():
+        statewide = parse_statewide_office(contest)
+        party = normalize_party(party_text)
+        if statewide is None or party is None:
+            continue
+        won = pick_nominee(list(choices.items()), runoff_threshold_pct=runoff_threshold_pct)
+        if won is None and runoff is not None:
+            second = runoff.get((contest, party_text)) or {}
+            won = pick_nominee(list(second.items()), runoff_threshold_pct=None)
+            if won is not None and won[0] not in choices:
+                won = None
+        name = clean_display_name(won[0]) if won else ""
+        if name:
+            records.append({"office": statewide[0], "district": statewide[1], "party": party, "last_name": name})
+    return records
+
+
+def _runoff_owed(primary: dict[tuple[str, str], dict[str, int]], runoff_threshold_pct: float | None) -> bool:
+    """Whether any statewide primary contest's leader fell short of the
+    majority, so that its nominee is decided by a runoff."""
+    return any(
+        parse_statewide_office(contest) is not None and normalize_party(party) is not None
+        and pick_nominee(list(choices.items()), runoff_threshold_pct=runoff_threshold_pct) is None
+        for (contest, party), choices in primary.items()
+    )
+
+
+def _one_link(page: str, pattern: str | None, year: int) -> str | None:
+    if not pattern:
+        return None
+    found = {html.unescape(m.group(1)) for m in re.finditer(pattern.replace("{year}", str(year)), page)}
+    return found.pop() if len(found) == 1 else None
+
+
+async def _statewide_nominees(client: httpx.AsyncClient, year: int, spec: dict) -> list[dict] | None:
+    """Every statewide nominee the official primary and runoff precinct
+    results name, or None when they cannot be read in full.
+
+    None, never [], for results not posted yet: the caller records the
+    state as checked, so an empty list would publish "no statewide
+    offices on this ballot" for a state that simply has not counted.
+    The same holds while a runoff is owed but not posted -- the list
+    would silently lack every office still being decided."""
+    page_url = spec.get("page_url")
+    if not page_url:
+        return None
+    page = await fetch_text_with_retry(client, _rate_limiter, page_url, f"AL election data {year}")
+    if page is None:
+        return None
+    primary_link = _one_link(page, spec.get("primary_link_regex"), year)
+    if primary_link is None:
+        logger.info("AL: no single %d primary precinct-results file linked yet", year)
+        return None
+    runoff_link = _one_link(page, spec.get("runoff_link_regex"), year)
+    exclude = set(spec.get("exclude_choices") or [])
+
+    async def _totals(link: str, label: str) -> dict | None:
+        resp = await fetch_with_retry(
+            client, _rate_limiter, "GET", urljoin(page_url, link), timeout=120.0,
+            log_label=f"AL {label} precinct results {year}", headers=_HEADERS,
+        )
+        if resp is None:
+            return None
+        try:
+            return await asyncio.to_thread(contest_totals, resp.content, exclude)
+        except Exception:  # noqa: BLE001 - a corrupt zip or workbook is a skip, not a crash
+            logger.warning("AL %s precinct results for %d were not a readable zip of workbooks", label, year)
+            return None
+
+    primary = await _totals(primary_link, "primary")
+    if primary is None:
+        return None
+    threshold = spec.get("runoff_threshold_pct")
+    runoff = None
+    if runoff_link is not None:
+        runoff = await _totals(runoff_link, "runoff")
+        if runoff is None:
+            return None
+    elif _runoff_owed(primary, threshold):
+        logger.info("AL: %d statewide runoff results are owed but not posted yet", year)
+        return None
+    return resolve_statewide(primary, runoff, threshold)
+
+
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is AL-only by construction
 ) -> list[dict] | None:
+    statewide: list[dict] = []
+    if source.get("statewide_offices"):
+        found = await _statewide_nominees(client, year, source.get("state_office_results") or {})
+        if found is None:
+            # The statewide section must not claim a partial reading.
+            return None
+        statewide = found
+
     if year != YEAR:
         # See module docstring — ecode=1001300 names one specific 2026
         # election with no date of its own; reusing it for any other
         # cycle would confirm that cycle's candidates off a stale surname
         # match rather than that cycle's real result.
-        return []
+        return statewide
 
     results_url = (
         "https://www2.alabamavotes.gov/electionNight/statewideResultsByContest.aspx"
@@ -218,4 +405,4 @@ async def fetch_confirmed_candidates(
     if not results:
         logger.warning("AL special primary results yielded no confirmed nominees")
         return None
-    return results
+    return results + statewide

@@ -788,7 +788,13 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
     races = [
         {
             "office": code if district is None else f"{code}-{district}",
-            "label": label if district is None else f"{label}, District {district}",
+            # A seat that names its own kind ("Place 1", Alabama's PSC)
+            # is printed as-is; a bare number is a district.
+            "label": (
+                label if district is None
+                else f"{label}, District {district}" if district[:1].isdigit()
+                else f"{label}, {district}"
+            ),
             "nominees": sorted(by_office[(code, district)], key=lambda n: n["party"]),
             # Null when data/office_terms.json does not list this office.
             "termYears": term_years("statewide", state, code),
