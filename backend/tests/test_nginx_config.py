@@ -42,7 +42,8 @@ def _parse(text: str) -> Block:
 
     Tokenised on `;`, `{` and `}` rather than on lines, so a block written
     on one line is seen the same as one spread over several. Comments are
-    dropped and quoted strings kept whole.
+    dropped and quoted strings kept whole; like nginx, a `#` or a quote
+    counts only at the start of a token.
     """
     root = Block("<root>")
     stack = [root]
@@ -51,6 +52,7 @@ def _parse(text: str) -> Block:
     i = 0
     while i < len(text):
         c = text[i]
+        at_token_start = not buf or buf[-1].isspace()
         if quote:
             buf.append(c)
             if c == "\\" and i + 1 < len(text):
@@ -58,10 +60,12 @@ def _parse(text: str) -> Block:
                 i += 1
             elif c == quote:
                 quote = None
-        elif c in "\"'":
+        # As in nginx, a quote or a comment only starts a token: the `#` in
+        # `return 301 https://x/a#frag;` is part of the value.
+        elif c in "\"'" and at_token_start:
             quote = c
             buf.append(c)
-        elif c == "#":
+        elif c == "#" and at_token_start:
             while i < len(text) and text[i] != "\n":
                 i += 1
             continue
@@ -182,5 +186,10 @@ def test_the_check_catches_an_if_block_inside_a_covered_location():
 
 
 def test_the_parser_keeps_quoted_values_and_drops_comments():
-    root = _parse('server { add_header P "a=(); b={}" always; # x; {\n }')
-    assert root.children[0].directives == ['add_header P "a=(); b={}" always']
+    root = _parse('server { add_header P "a#b; c={}" always; # x; {\n }')
+    assert root.children[0].directives == ['add_header P "a#b; c={}" always']
+
+
+def test_the_parser_treats_a_mid_token_hash_as_part_of_the_value():
+    root = _parse("server { location /a { return 301 https://x/a#frag; } }")
+    assert root.children[0].children[0].directives == ["return 301 https://x/a#frag"]
