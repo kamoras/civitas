@@ -814,6 +814,21 @@ async def resolve_committee_meta(
     return metas
 
 
+# Schedule A entity types whose contributor is itself a committee: "COM"
+# (committee), "PAC", "PTY" (party organization) and "CCM" (candidate
+# committee). Only "COM" used to be looked up, and live Senate top-donor
+# lists showed the cost: 36 of 2,136 PAC donors carried a committee type.
+COMMITTEE_ENTITY_TYPES = frozenset({"COM", "PAC", "PTY", "CCM"})
+
+
+def committee_id_of(receipt: dict) -> str | None:
+    """The contributing committee's FEC id, when the row's contributor is a
+    committee."""
+    if receipt.get("entity_type") in COMMITTEE_ENTITY_TYPES and receipt.get("contributor_id"):
+        return receipt["contributor_id"]
+    return None
+
+
 def is_political_committee(meta: dict | None) -> bool:
     """Whether the FEC's own registration says this committee is a party,
     candidate, joint-fundraising or leadership committee — money from it is

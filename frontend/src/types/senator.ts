@@ -184,6 +184,9 @@ export interface LobbiedBill {
   /** What the vote shown decided: absent or "passage" for the bill itself,
    * else the motion ("cloture", "amendment", "procedural"). */
   motionType?: string | null;
+  /** How to say which vote is shown ("on a cloture motion"); "" when it
+   * was the vote on passage. Worded by the backend (lda.vote_context). */
+  voteContext: string;
   filingYear: number | null;
   filingUrl: string | null;
   registrant: string | null;

@@ -59,6 +59,7 @@ from app.pipeline.fetch.fec import (
     fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
+    committee_id_of,
     committee_master_cycles,
     fetch_committee_master,
     fetch_committee_receipts,
@@ -1418,7 +1419,7 @@ async def run_senate_pipeline(
             pac_committee_ids: set[str] = set()
             for fec in fec_data.values():
                 for r in fec.get("pacReceipts") or []:
-                    if r.get("entity_type") == "COM" and r.get("contributor_id"):
+                    if committee_id_of(r):
                         pac_committee_ids.add(r["contributor_id"])
             logger.info("Resolving committee type for %d unique contributing PACs...", len(pac_committee_ids))
             # The FEC's bulk committee master answers type, designation and

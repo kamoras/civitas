@@ -7,6 +7,7 @@ const bill = (billId: string) => ({
   label: billId,
   billName: "",
   vote: "Yea",
+  voteContext: "",
   filingYear: 2025,
   filingUrl: null,
   registrant: null,

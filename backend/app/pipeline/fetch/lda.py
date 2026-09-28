@@ -240,6 +240,9 @@ _DBA_RE = re.compile(r"(?<!\S)(?:D B A|DBA)(?!\S)")
 # "Its client ..." / "their clients ...": the pronoun introduces the firm's
 # client. Only when CLIENT(S) is the next word: "ITSELF AND ITS CLIENTS"
 # still points back at the filer first.
+# "Itself"/"themselves" anywhere in the phrase: the filer is a party, in
+# either order ("ITSELF AND ITS CLIENTS", "ITS CLIENTS AND ITSELF").
+_REFLEXIVE_RE = re.compile(r"(?<!\S)(?:ITSELF|THEMSELVES)(?!\S)")
 _CLIENT_OF_FIRM_RE = re.compile(r"^\s*\(?\s*(?:ITS|THEIR)\s+CLIENTS?(?!\S)")
 _PRONOUN_RE = re.compile(r"^\s*\(?\s*(?:ITSELF|ITS|THEMSELVES|THEIR)(?!\S)")
 _PAREN_RE = re.compile(r"\(([^()]*)\)")
@@ -291,7 +294,7 @@ def _split_client(client_name: str) -> tuple[str, list[str]]:
     # One reading this can't separate: a client whose own name begins with
     # the pronoun, filed by a firm ("SMITH LLP ON BEHALF OF ITS AMERICA"),
     # also offers the firm; the page shows the full client field beside it.
-    own = not _CLIENT_OF_FIRM_RE.match(party)
+    own = bool(_REFLEXIVE_RE.search(party)) or not _CLIENT_OF_FIRM_RE.match(party)
     return firm, ([before] if own else []) + runs
 
 
@@ -483,6 +486,29 @@ def _activity_from(org_key: str, filings: list[dict], complete: bool) -> Lobbyin
     )
 
 
+# What the vote shown decided, when it wasn't the vote on the bill itself,
+# for each motion type bill_learning.classify_motion_type returns. Neutral
+# on purpose: "veto" also covers motions to refer or table a veto message,
+# where a Yea is not an override. Kept beside the classifier's types (the
+# test holds them in step) so the page never guesses a label.
+_VOTE_CONTEXT = {
+    "passage": "",
+    "amendment": "on an amendment to it",
+    "cloture": "on a cloture motion",
+    "procedural": "on a procedural motion",
+    "veto": "on a motion about the President's veto",
+    "nomination": "on a nomination",
+}
+
+
+def vote_context(motion_type: str | None) -> str:
+    """"" for the vote on the bill itself; otherwise which vote it was. An
+    unrecognized or unrecorded motion must not read as passage."""
+    if motion_type in _VOTE_CONTEXT:
+        return _VOTE_CONTEXT[motion_type]
+    return "on a motion, not necessarily passage"
+
+
 def _voted_bills(votes: list[dict] | None) -> dict[str, dict]:
     """The member's Yea/Nay vote on each bill, keyed the way bill_mentions
     names bills ("HR.1492"): the latest vote on passage when there is one,
@@ -668,6 +694,8 @@ async def lobbied_bills_for(
                 # None or "passage" when the vote shown is on the bill
                 # itself; otherwise which motion it was ("cloture" ...).
                 "motionType": vote.get("motionType"),
+                # How the page says which vote this is ("" for passage).
+                "voteContext": vote_context(vote.get("motionType")),
                 "filingYear": year or None,
                 "filingUrl": newest.get("url"),
                 "registrant": newest.get("registrant"),

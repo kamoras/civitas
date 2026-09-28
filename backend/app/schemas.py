@@ -302,6 +302,9 @@ class LobbiedBillSchema(CamelModel):
     vote: str | None = None
     # What the vote shown decided ("passage", "cloture", "amendment" ...).
     motion_type: str | None = None
+    # How the page says which vote is shown; "" for the vote on passage
+    # (lda.vote_context). A row without one must not read as passage.
+    vote_context: str = "on a motion, not necessarily passage"
     filing_year: int | None = None
     filing_url: str | None = None
     registrant: str | None = None

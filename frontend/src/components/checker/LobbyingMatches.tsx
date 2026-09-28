@@ -6,23 +6,6 @@ interface LobbyingMatchesProps {
   matches: LobbyingMatch[];
 }
 
-// What the vote shown decided, when it wasn't the vote on the bill itself
-// (bill_learning.MOTION_PROTOTYPES). Neutral on purpose: "veto" also covers
-// motions to refer or table a veto message, where a Yea is not an override.
-const MOTION_LABELS: Record<string, string> = {
-  amendment: " (on an amendment to it)",
-  cloture: " (on a cloture motion)",
-  procedural: " (on a procedural motion)",
-  veto: " (on a motion about the President's veto)",
-  nomination: " (on a nomination)",
-};
-
-function motionLabel(motionType: string | null | undefined): string {
-  if (motionType === "passage") return "";
-  // Unrecognized, or no question recorded: don't let it read as passage.
-  return (motionType && MOTION_LABELS[motionType]) || " (on a motion, not necessarily passage)";
-}
-
 export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
   if (!matches || matches.length === 0) return null;
 
@@ -99,7 +82,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                               <>
                                 {" "}
                                 · voted {b.vote}
-                                {motionLabel(b.motionType)}
+                                {b.voteContext ? ` (${b.voteContext})` : ""}
                               </>
                             )}
                             {filing && (

@@ -445,6 +445,7 @@ class TestClientMatching:
         # filer's own (review round 16).
         ("ACME CONSULTING", "ACME CONSULTING ON BEHALF OF ITSELF AND ITS CLIENTS", True),
         ("X ASSOCIATION", "X ASSOCIATION ON BEHALF OF ITS MEMBERS AND THEIR CLIENTS", True),
+        ("ACME ASSOCIATION", "ACME ASSOCIATION ON BEHALF OF ITS CLIENTS AND ITSELF", True),
         # A client whose name begins with the pronoun's word.
         ("ITS AMERICA", "SMITH LLP ON BEHALF OF ITS AMERICA", True),
     ])
@@ -671,3 +672,11 @@ async def test_a_rewritten_or_cleared_entry_is_read_afresh(db_session):
     with patch.object(lda._rate_limiter, "acquire", new=AsyncMock()):
         third = await fetch_lobbying_activity(client, db_session, "Pfizer", 2024)
     assert third.total == 0.0 and client.get.await_count == 1
+
+
+def test_every_motion_type_the_classifier_returns_has_a_vote_context():
+    from app.pipeline.analyze.bill_learning import MOTION_PROTOTYPES
+
+    assert set(MOTION_PROTOTYPES) == set(lda._VOTE_CONTEXT)
+    assert lda.vote_context("passage") == ""
+    assert lda.vote_context("unknown") == lda.vote_context(None) == "on a motion, not necessarily passage"

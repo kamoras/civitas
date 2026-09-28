@@ -51,6 +51,7 @@ from app.pipeline.fetch.fec import (
     fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
+    committee_id_of,
     committee_master_cycles,
     fetch_committee_master,
     fetch_committee_receipts,
@@ -769,8 +770,7 @@ async def run_house_pipeline() -> dict:
                                 client, db, committee_master_cycles(),
                             )
                         pac_committee_ids = {
-                            r["contributor_id"] for r in raw_pac_receipts
-                            if r.get("entity_type") == "COM" and r.get("contributor_id")
+                            cid for r in raw_pac_receipts if (cid := committee_id_of(r))
                         }
                         committee_meta_map = await resolve_committee_meta(
                             client, db, pac_committee_ids, committee_master,

@@ -13,7 +13,7 @@ industry classifier.
 
 import logging
 
-from app.pipeline.fetch.fec import is_political_committee, select_recent_elections
+from app.pipeline.fetch.fec import committee_id_of, is_political_committee, select_recent_elections
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
 from app.pipeline.transform.industry_classifier import classify_with_learning
 from app.pipeline.analyze.donor_classifier_ai import (
@@ -288,14 +288,19 @@ def build_top_donors(
             "name": name, "total": 0, "type": donor_type, "industry": industry,
         })
         existing["total"] += r.get("contribution_receipt_amount", 0) or 0
-        # entity_type == "COM" means this row's contributor is itself a
-        # committee (a real PAC, not an individual/org) — only trust the
-        # committee-type lookup for those, matching the same entity_type
-        # gate used to decide which contributor_ids get looked up upstream
-        # (see senate_pipeline.py / house_pipeline.py).
-        if r.get("entity_type") == "COM" and r.get("contributor_id"):
-            meta = committee_meta_map.get(r["contributor_id"])
-            if meta and meta.get("type") is not None:
+        # The contributor is itself a committee (fec.committee_id_of: any of
+        # the FEC's committee entity types, not only "COM").
+        cid = committee_id_of(r)
+        if cid:
+            meta = committee_meta_map.get(cid)
+            # The PAC-cap signal in _funding_independence_core still reads
+            # the type only for "COM" rows, as before. Given every committee
+            # row's type, that signal's formula moves Funding Independence
+            # by up to 18 points (Sanders and Warren, whose few PACs give
+            # the maximum, measured on the September 2026 Senate): a flaw in
+            # the formula, reworked with this gate in the PAC-dependency
+            # change that follows, not switched on here.
+            if meta and meta.get("type") is not None and r.get("entity_type") == "COM":
                 existing["committeeType"] = meta["type"]
             if meta and meta.get("connectedOrg"):
                 existing["connectedOrg"] = meta["connectedOrg"]
@@ -465,7 +470,7 @@ def _build_industry_breakdown(
         amount = r.get("contribution_receipt_amount", 0) or 0
         meta = (
             (committee_meta_map or {}).get(r.get("contributor_id") or "")
-            if r.get("entity_type") == "COM" else None
+            if committee_id_of(r) else None
         )
         # Same tier-1 rule as build_top_donors: the FEC's registration, not
         # the name, decides that a party/candidate/leadership committee's
