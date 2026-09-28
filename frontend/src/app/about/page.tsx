@@ -302,7 +302,11 @@ export default function AboutPage() {
                 </Gist>
                 <P>
                   Measures how far a member&apos;s voting sits from what their seat asks of it — not
-                  raw defection from party. Each member&apos;s break rate on party-labeled votes is
+                  raw defection from party. A vote is party-labeled only when the parties split on
+                  its roll call (at least 65% of one party voting Yea and at most 35% of the other),
+                  and a member breaks when they vote with the other side; a vote with no recorded
+                  roll call doesn&apos;t count. Every break on a profile shows the roll call&apos;s own
+                  party tallies. Each member&apos;s break rate on party-labeled votes is
                   compared with the break rate that members of the same party and chamber show in
                   seats with the same partisan lean (Cook PVI). That expectation is measured from
                   the chamber itself every time the pipeline runs, not set by hand: a separate line
