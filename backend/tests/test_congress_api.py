@@ -159,3 +159,28 @@ def test_closest_votes_are_measured_from_what_each_vote_needed():
     assert round(cs.votes_from_threshold(suspension_clear_by_three), 2) == 3.33
     assert cs.votes_from_threshold(unstated) == 5
 
+
+
+class TestNoRecordPublished:
+    def test_a_day_behind_the_backfill_with_nothing_had_no_record(self, week_of_sept_21, monkeypatch):
+        monkeypatch.setattr(cs, "digest_cursor", lambda db: date(2026, 9, 20))
+        r = cs.day_report(week_of_sept_21, date(2026, 9, 19))
+        assert {c["status"] for c in r["chambers"].values()} == {"no_record_published"}
+        assert r["sentence"].startswith("No Congressional Record was published for this day.")
+
+    def test_a_recent_day_the_last_run_found_absent(self, week_of_sept_21, monkeypatch):
+        monkeypatch.setattr(cs, "digest_cursor", lambda db: date(2025, 1, 2))
+        monkeypatch.setattr(cs, "eastern_today", lambda: date(2026, 9, 29))
+        monkeypatch.setattr(cs, "last_run", lambda db: {"digests": {"2026-09-26": "absent", "2026-09-28": "absent"}})
+        assert cs.day_report(week_of_sept_21, date(2026, 9, 26))["chambers"]["senate"]["status"] == "no_record_published"
+        # Two days old: GPO may not have posted it yet.
+        assert cs.day_report(week_of_sept_21, date(2026, 9, 28))["chambers"]["senate"]["status"] == "no_record"
+
+    def test_a_day_with_a_record_is_unaffected(self, week_of_sept_21, monkeypatch):
+        monkeypatch.setattr(cs, "digest_cursor", lambda db: date(2026, 9, 30))
+        assert cs.day_report(week_of_sept_21, date(2026, 9, 24))["chambers"]["senate"]["status"] == "final"
+
+    def test_the_week_strip_says_so_too(self, week_of_sept_21, monkeypatch):
+        monkeypatch.setattr(cs, "digest_cursor", lambda db: date(2026, 9, 26))
+        days = {d["date"]: d["noRecordPublished"] for d in cs.week_report(week_of_sept_21, date(2026, 9, 24))["days"]}
+        assert days["2026-09-25"] is True and days["2026-09-24"] is False and days["2026-09-27"] is False

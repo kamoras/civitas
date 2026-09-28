@@ -39,6 +39,11 @@ opening and no proceedings it is a day not in session (on 2026-09-27 two
 such files read as "The Senate met"). Every day of the last week still on
 its floor log is read again each run, so a wrong row corrects itself.
 
+**No Record.** A past day with no Congressional Record (behind the back-fill
+cursor, or found absent three or more days on) is reported as that — no Record
+published — not as "no record yet", and not as "neither chamber met" (GPO very
+rarely combines two small days into one issue).
+
 **Live, then final.** A chamber's floor log fills its day while it meets;
 the Digest replaces the row (`is_final`) the next day. The floor log's timed
 entries stay beside the Digest's, since only the House log has times.
