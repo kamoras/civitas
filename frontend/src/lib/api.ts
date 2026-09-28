@@ -466,6 +466,8 @@ export interface AppConfig {
   billStages: Record<string, BillStageInfo>;
   /** Each dimension's share of the Representation Score (config_definitions.SCORE_WEIGHTS). */
   scoreWeights?: Record<string, number>;
+  /** Each dimension's share of the Presidential Score (PRESIDENT_SCORE_WEIGHTS). */
+  presidentScoreWeights?: Record<string, number>;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
