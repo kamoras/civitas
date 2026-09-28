@@ -110,6 +110,21 @@ updates:
       # tree, then a real install + fast-test run) that transformers
       # 5.16.1 + tokenizers 0.23.1 + the rest of the pinned tree resolves
       # and behaves correctly together.
+      #
+      # huggingface_hub 2.x (2026-09-28): the first grouped PR to offer it
+      # (#682, huggingface_hub 1.32.0 -> 2.0.0 + sentence-transformers
+      # 6.1.0) failed every backend job at `pip install` with
+      # ResolutionImpossible — sentence-transformers 6.1.0 requires
+      # `huggingface-hub>=1.3.0,<2.0.0`, and transformers 5.17.0 carries
+      # the same `<2.0` cap. Grouping can't fix this: no published release
+      # of either parent accepts 2.x yet, so every weekly group PR would
+      # re-propose the same unresolvable major. Minor/patch bumps within
+      # 1.x still flow through the group. Remove this entry once both
+      # sentence-transformers and transformers lift the `<2.0` cap.
+      - dependency-name: "huggingface_hub"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "huggingface-hub"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /frontend
