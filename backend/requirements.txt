@@ -81,7 +81,7 @@ pytest==9.1.1
 pytest-cov==7.1.0
 pytest-asyncio==1.4.0
 python-dateutil==2.9.0.post0
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 PyYAML==6.0.3
 regex==2026.9.10
 requests==2.34.2
