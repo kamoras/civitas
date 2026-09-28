@@ -24,6 +24,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.19",
+    date: "2026-09-28",
+    title: "Housekeeping votes no longer count as breaks with the party",
+    tldr: "Votes on running the chamber, such as quorum calls, adjourning, motions to table or to recommit, and the House's previous question, no longer count for or against a member's party loyalty. They split on party lines as a matter of course, so they say little about the member. Rule votes, cloture and nominations still count.",
+    changes: [
+      "In the 119th Congress these were 31% of the House's party-line roll calls (mostly motions to recommit and previous-question votes) and 3% of the Senate's.",
+      "A motion to recommit is the minority party's messaging vote and the previous question is the majority's hold on the floor; both split on party lines nearly every time.",
+      "Rule votes stay: voting down the party's rule keeps a bill off the floor. Cloture stays: it is often the real decision on a bill. Nominations stay: confirming judges and officials is a core Senate power.",
+    ],
+  },
+  {
     version: "v6.18",
     date: "2026-09-28",
     title: "A vote counts against the party only when the parties actually split on it",

@@ -11,6 +11,9 @@ import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const HOLDINGS_PER_PAGE = 15;
+// The scorecard's panel sets the list beside the pie: a page about as tall
+// as the pie and its legend, not a column running far below them.
+const PANEL_HOLDINGS_PER_PAGE = 5;
 
 const FETCHER = {
   senate: fetchSenatorHoldings,
@@ -267,9 +270,13 @@ export default function Holdings({
   const load = useCallback(
     (page: number, cat: string | null) =>
       request(cat, () =>
-        FETCHER[chamber](memberId, { page, perPage: HOLDINGS_PER_PAGE, category: cat })
+        FETCHER[chamber](memberId, {
+          page,
+          perPage: variant === "panel" ? PANEL_HOLDINGS_PER_PAGE : HOLDINGS_PER_PAGE,
+          category: cat,
+        })
       ),
-    [request, memberId, chamber]
+    [request, memberId, chamber, variant]
   );
 
   useEffect(() => {
