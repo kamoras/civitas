@@ -5,7 +5,7 @@
 FROM nginx:1.31.3-alpine
 
 RUN rm -f /etc/nginx/conf.d/default.conf \
-    && mkdir -p /var/cache/nginx/civitas \
+    && mkdir -p /var/cache/nginx/civitas /etc/nginx/cache-epoch \
     && chown -R nginx:nginx /var/cache/nginx/civitas
 
 COPY civitas.conf /etc/nginx/conf.d/civitas.conf

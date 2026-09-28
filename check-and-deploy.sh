@@ -314,14 +314,18 @@ fi
 # nginx caches every public API read (nginx/civitas.conf), and during a
 # rollout the new nginx task can cache the old backend's responses — a
 # response shape the new frontend may not read (and, if a service rolled
-# back, the reverse). Once the rollout has settled, drop what was cached: an entry whose file is gone is simply a
-# miss (checked live), so this never serves an error. The cache lives in the
-# nginx container's own filesystem, so there is nothing else to clear.
+# back, the reverse). Once the rollout has settled, start a new cache epoch:
+# the epoch is part of every cache key, so nothing cached before is matched
+# again, and the old entries age out through nginx's own cache manager. A
+# graceful reload, not a restart: requests in flight finish. (Deleting the
+# cache files instead left nginx's index pointing at files that were gone.)
 purge_nginx_cache() {
-  local container
+  local container epoch
+  epoch=$(date +%s)
   for container in $(docker ps -q --filter "label=com.docker.swarm.service.name=civitas_nginx"); do
-    docker exec "$container" sh -c 'find /var/cache/nginx/civitas -type f -delete' \
-      || log "couldn't purge nginx cache in $container — entries expire within their max-age"
+    docker exec "$container" sh -c \
+      "printf '\"~.\" \"%s\";\n' '$epoch' > /etc/nginx/cache-epoch/epoch.conf && nginx -s reload" \
+      || log "couldn't start a new nginx cache epoch in $container — entries expire within their max-age"
   done
 }
 

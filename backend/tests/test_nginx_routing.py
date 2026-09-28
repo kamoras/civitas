@@ -30,14 +30,27 @@ SERVED_BY_API = {
 }
 
 
+_LOCATION = re.compile(r"^\s*location\s+(=|~|\^~)?\s*(\S+)\s*\{(.*?)^\s*\}", re.M | re.S)
+# The internal server the catch-all /api/ hands its cache misses to.
+_MISSES_HOP = "127.0.0.1:8090"
+
+
 def _locations() -> list[tuple[str, str, str]]:
-    """(modifier, pattern, upstream variable) for every location block."""
+    """(modifier, pattern, upstream variable) for every location block of
+    the public server — a hop through the internal cache-miss server
+    resolved to the upstream that server proxies to."""
     text = CONF.read_text()
+    public = text[text.index("listen 8081"):]
+    internal = text[text.index("listen 127.0.0.1:8090"):text.index("listen 8081")]
+    misses_upstream = re.search(r"proxy_pass\s+http://\$(\w+)", internal).group(1)
     found = []
-    for match in re.finditer(r"^\s*location\s+(=|~|\^~)?\s*(\S+)\s*\{(.*?)^\s*\}", text, re.M | re.S):
+    for match in _LOCATION.finditer(public):
         modifier, pattern, body = match.group(1) or "", match.group(2), match.group(3)
-        upstream = re.search(r"proxy_pass\s+http://\$(\w+)", body)
-        found.append((modifier, pattern, upstream.group(1) if upstream else ""))
+        upstream = re.search(r"proxy_pass\s+http://(?:\$(\w+)|" + re.escape(_MISSES_HOP) + ")", body)
+        if upstream is None:
+            found.append((modifier, pattern, ""))
+        else:
+            found.append((modifier, pattern, upstream.group(1) or misses_upstream))
     return found
 
 
@@ -121,3 +134,17 @@ def test_an_admin_path_the_trigger_regex_also_matches_keeps_the_admin_rules():
 ])
 def test_reads_go_to_the_api(path):
     assert route(path) == "backend_upstream"
+
+
+def test_cache_misses_of_the_catch_all_are_rate_limited_and_hits_are_not():
+    """limit_req before the cache would refuse cache hits: the catch-all
+    has none, and the internal server its misses go through does."""
+    text = CONF.read_text()
+    public = text[text.index("listen 8081"):]
+    internal = text[text.index("listen 127.0.0.1:8090"):text.index("listen 8081")]
+    catch_all = next(m.group(3) for m in _LOCATION.finditer(public) if m.group(2) == "/api/" and not m.group(1))
+    assert "limit_req" not in catch_all and _MISSES_HOP in catch_all
+    assert "limit_req zone=api_miss_limit" in internal
+    # The hop mustn't append itself to X-Forwarded-For: its last entry is
+    # how the backend identifies clients.
+    assert "$proxy_add_x_forwarded_for" not in internal
