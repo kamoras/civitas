@@ -911,6 +911,10 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         ("Mary Smith", "SMITH, J ROBERT", False),
         ("J. Smith", "SMITH, MARY", False),
         ("Mary Smith", "SMITH, J", False),
+        ("John Lee Smith", "SMITH, MARY LEE", False),
+        ("Robert James Smith", "SMITH, MICHAEL JAMES", False),
+        ("Maria Luisa Smith", "SMITH, JOSE LUIS", False),
+        ("Mary Jo Smith", "SMITH, JOHN", False),
     ])
     def test_every_given_name_counts_on_both_sides(self, db_session, display, fec, matches):
         _race(db_session, "2026-HOUSE-CA-12", "CA", office="H", district=12)

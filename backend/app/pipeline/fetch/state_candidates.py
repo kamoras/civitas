@@ -370,10 +370,18 @@ def _contradicts(
             return False
         tokens = _given_names(cand.name or "")
         if tokens:
-            # Any of the record's given names against any of theirs, both
-            # ways: "Maria Elvira Salazar" is FEC's "SALAZAR, ELVIRA", and
-            # "Mary Anne Smith" is "SMITH, ANNE".
-            return not any(t == w or t.startswith(w) or w.startswith(t) for t in tokens for w in wanted)
+            # The record's first given name against any of theirs (a short
+            # form either way), or FEC's first given name EXACTLY among the
+            # record's later ones: "Maria Elvira Salazar" is FEC's
+            # "SALAZAR, ELVIRA" and "Mary Anne Smith" is "SMITH, ANNE". Not
+            # any name against any: a shared middle name ("John Lee" and
+            # "MARY LEE") or a later prefix ("Mary Jo" and "JOHN") is not
+            # the same person.
+            first = wanted[0]
+            return not (
+                any(t == first or t.startswith(first) or first.startswith(t) for t in tokens)
+                or tokens[0] in wanted[1:]
+            )
         return bool(theirs_initial) and theirs_initial != wanted[0][0]
     if initial:  # an initial alone ("J. Smith") against theirs
         return bool(theirs_initial) and theirs_initial != initial
