@@ -925,6 +925,7 @@ the pending list).
 | Per-client rate limits + once-per-period rules shared by every API worker | `backend/app/api/throttle.py` |
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
+| Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/`, `frontend/src/app/photo/bioguide/[id]/route.ts` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
@@ -1022,6 +1023,21 @@ the pending list).
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from
   client-side TTL caching.
+- **Sharing a section as an image** is opt-in per section: mark the section
+  element `data-share-section="<anchor-id>"`, put a `ShareSectionButton`
+  inside it, and wrap the page in a `ShareSubjectProvider` naming what it is
+  about (the image's title strip and link come from there). Mark controls
+  that mean nothing in a picture (toggles, "open" buttons, votes) with
+  `data-share-exclude`. The capture is client-side, from the live DOM, and
+  never requests a third-party host from the visitor's browser (§8): images
+  that aren't same-origin are left blank unfetched, so mark them excluded.
+  The guard covers images only (`<img>`, SVG `<image>`, CSS image urls) —
+  fonts, stylesheets and an external `<use href>` inside a captured section
+  are fetched as-is, which is fine only while they stay self-hosted.
+  Member photos are the exception, read through the same-origin
+  `/photo/bioguide/[id]` route (cached and rate-limited in nginx) — add a
+  route like it (taking an id, never a URL) rather than proxying arbitrary
+  URLs.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving

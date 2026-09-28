@@ -7,6 +7,8 @@ import { currentCongressLabel } from "@/lib/sources";
 import { PARTY_BORDER, PARTY_COLORS, PARTY_LABELS } from "@/lib/partyStyles";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -50,7 +52,9 @@ export default function ScorecardHeader({
 
   return (
     <header
-      className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${PARTY_BORDER[member.party]}`}
+      id="overview"
+      {...{ [SHARE_SECTION_ATTR]: "overview" }}
+      className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then
           how to reach them; on a desktop the score takes the right column
@@ -123,12 +127,17 @@ export default function ScorecardHeader({
           </div>
         </div>
         <ScoreTrendSection entityId={member.id} entityType={chamber} />
-        <p className="font-mono text-xs text-ink-min">
-          Reflects the {currentCongressLabel()} ·{" "}
-          <Link href="/changelog" className="underline underline-offset-2 hover:text-phos">
-            scoring changelog
-          </Link>
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="font-mono text-xs text-ink-min">
+            Reflects the {currentCongressLabel()} ·{" "}
+            <Link href="/changelog" className="underline underline-offset-2 hover:text-phos">
+              scoring changelog
+            </Link>
+          </p>
+          {/* The header names the member itself, so its image needs no
+              title strip above it. */}
+          <ShareSectionButton label="Scorecard summary" withStrip={false} />
+        </div>
       </div>
 
       <div className="flex min-w-0 flex-col gap-2 lg:col-start-1 lg:row-start-2 lg:pl-[calc(6rem+1.25rem)]">
@@ -146,7 +155,9 @@ export default function ScorecardHeader({
             ))}
           </p>
         )}
-        <p className="flex flex-wrap gap-x-4 gap-y-1">
+        {/* Phone, message and source links are only useful clicked; a
+            picture of them is noise. */}
+        <p className="flex flex-wrap gap-x-4 gap-y-1" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
           {phone && (
             <a href={`tel:${phone.replace(/[^0-9+]/g, "")}`} className={LINK}>
               {phone}

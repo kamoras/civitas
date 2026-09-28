@@ -115,6 +115,27 @@ describe("PresidentScorecard", () => {
     expect(screen.getByText("285 signed")).toBeInTheDocument();
   });
 
+  it("never calls a scored dimension unrated when the breakdown is missing", async () => {
+    // A breakdown that failed to load, or one cached from before the API
+    // served facts, must not put "not rated" beside a score (2026-09-28:
+    // the 45th-president term read "Not rated" over its historians' 12).
+    const former = {
+      ...president,
+      id: "trump-45",
+      number: 45,
+      termEnd: "2021-01-20",
+      isCurrent: false,
+      score: { ...president.score, historicalLegacy: 12, dimensionsAvailable: 4 },
+    } as President;
+    render(
+      <main>
+        <PresidentScorecard president={former} breakdown={null} rank={null} />
+      </main>
+    );
+    expect(screen.queryByText(/not rated|not scored|No GDP figure/i)).not.toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
+  });
+
   it("has no structural accessibility violations", async () => {
     render(
       <main>
@@ -122,6 +143,9 @@ describe("PresidentScorecard", () => {
       </main>
     );
     await screen.findByText("21,285 disclosed this term");
+    // The share buttons are part of what axe checks here: the summary and
+    // the four score columns.
+    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(5);
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });

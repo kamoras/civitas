@@ -68,6 +68,7 @@ export default function EffectivenessColumn({
   return (
     <ScoreColumn
       title="Legislative Effectiveness"
+      shareId="legislative-effectiveness"
       weight={weight}
       score={score}
       more={{ label: `All ${total} sponsored bills`, onClick: onMore }}

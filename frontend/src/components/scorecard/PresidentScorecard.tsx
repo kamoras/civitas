@@ -22,6 +22,10 @@ import ComparisonScale from "./ComparisonScale";
 import ComponentBars from "./ComponentBars";
 import ScoreColumn from "./ScoreColumn";
 import ScorecardDrawer from "./ScorecardDrawer";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, type ShareSubject } from "@/lib/shareImage";
+import { absoluteUrl } from "@/lib/site";
 import { ordinal } from "./format";
 
 const PARTY: Record<string, { label: string; text: string; border: string }> = {
@@ -77,7 +81,7 @@ function MandateColumn({
 }) {
   const f = dim?.facts as PublicMandateFacts | undefined;
   return (
-    <ScoreColumn title="Public Mandate" weight={weight} score={score}>
+    <ScoreColumn title="Public Mandate" shareId="public-mandate" weight={weight} score={score}>
       {f?.approval != null && f.approvalMean != null ? (
         <>
           <Lede>
@@ -104,9 +108,11 @@ function MandateColumn({
           presidents average {one(f.marginMean)}.
         </Lede>
       ) : (
-        <Lede>
-          {dim?.note ?? "Never won a presidential election in their own right, so not scored."}
-        </Lede>
+        score == null && (
+          <Lede>
+            {dim?.note ?? "Never won a presidential election in their own right, so not scored."}
+          </Lede>
+        )
       )}
       {dim && <ComponentBars components={dim.components} />}
       <Facts
@@ -134,17 +140,19 @@ function EffectivenessColumn({
   const f = dim?.facts as PresidentEffectivenessFacts | undefined;
   const jobs = f?.jobsPerYear != null && f.jobsMean != null && f.jobsMillions != null;
   return (
-    <ScoreColumn title="Effectiveness" weight={weight} score={score}>
-      <Lede>
-        {jobs &&
-          `${signed(f!.jobsMillions!)} million jobs, ${f!.jobsPerYear!.toFixed(2)} million a year once the first year is set aside. Presidencies since 1939 average ${f!.jobsMean!.toFixed(2)} million. `}
-        {f?.gdpGrowth != null && f.gdpMean != null
-          ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
-          : isCurrent
-            ? "GDP growth is measured from the second full year of a term."
-            : "No GDP figure for this term."}
-        {!jobs && f?.gdpGrowth == null && !isCurrent && " Payroll jobs are counted from 1939."}
-      </Lede>
+    <ScoreColumn title="Effectiveness" shareId="effectiveness" weight={weight} score={score}>
+      {(f || score == null) && (
+        <Lede>
+          {jobs &&
+            `${signed(f!.jobsMillions!)} million jobs, ${f!.jobsPerYear!.toFixed(2)} million a year once the first year is set aside. Presidencies since 1939 average ${f!.jobsMean!.toFixed(2)} million. `}
+          {f?.gdpGrowth != null && f.gdpMean != null
+            ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
+            : isCurrent
+              ? "GDP growth is measured from the second full year of a term."
+              : "No GDP figure for this term."}
+          {!jobs && f?.gdpGrowth == null && !isCurrent && " Payroll jobs are counted from 1939."}
+        </Lede>
+      )}
       {jobs && (
         <ComparisonScale
           value={f!.jobsPerYear!}
@@ -176,7 +184,7 @@ function AgencyColumn({
 }) {
   const f = dim?.facts as AgencyAlignmentFacts | undefined;
   return (
-    <ScoreColumn title="Agency Alignment" weight={weight} score={score}>
+    <ScoreColumn title="Agency Alignment" shareId="agency-alignment" weight={weight} score={score}>
       {f?.finalizedPct != null ? (
         <>
           <Lede>
@@ -200,7 +208,9 @@ function AgencyColumn({
           )}
         </>
       ) : (
-        <Lede>The Federal Register&apos;s rulemaking records begin in 1994, so not scored.</Lede>
+        score == null && (
+          <Lede>The Federal Register&apos;s rulemaking records begin in 1994, so not scored.</Lede>
+        )
       )}
       {dim && <ComponentBars components={dim.components} />}
     </ScoreColumn>
@@ -218,17 +228,24 @@ function LegacyColumn({
 }) {
   const f = dim?.facts as HistoricalLegacyFacts | undefined;
   return (
-    <ScoreColumn title="Historical Legacy" weight={weight} score={score}>
+    <ScoreColumn
+      title="Historical Legacy"
+      shareId="historical-legacy"
+      weight={weight}
+      score={score}
+    >
       {f?.points != null && f.pointsMean != null ? (
         <Lede>
           {f.points} points in C-SPAN&apos;s 2021 survey of historians; presidents average{" "}
           {Math.round(f.pointsMean)}.
         </Lede>
       ) : (
-        <Lede>
-          Not rated. C-SPAN&apos;s Presidential Historians Survey rates completed terms, and its
-          2025 survey was postponed.
-        </Lede>
+        score == null && (
+          <Lede>
+            Not rated. C-SPAN&apos;s Presidential Historians Survey rates completed terms, and its
+            2025 survey was postponed.
+          </Lede>
+        )
       )}
       {f?.otherTerms?.map((t) => (
         <p key={t.id} className="text-sm text-ink-lo">
@@ -273,6 +290,21 @@ export default function PresidentScorecard({
   const party = PARTY[president.party] ?? NO_PARTY;
   const overall = displayScore(s.overall);
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "present";
+  // What every section's share image says it is from, as on the member
+  // scorecard: the president, and the headline score beside them.
+  const shareSubject: ShareSubject = {
+    title: president.name,
+    subtitle: `${ordinal(president.number)} President · ${party.label} · ${president.termStart.slice(0, 4)} to ${termEnd}`,
+    badge:
+      s.dimensionsAvailable === 0
+        ? undefined
+        : {
+            label: "Presidential score",
+            value: String(overall),
+            colorClass: getScoreColor(overall),
+          },
+    url: absoluteUrl(`/politicians/${encodeURIComponent(president.id)}`),
+  };
 
   useEffect(() => {
     if (!president.isCurrent) return;
@@ -287,159 +319,171 @@ export default function PresidentScorecard({
 
   return (
     <SectionHeadingLevelProvider value="h3">
-      <div className="flex flex-col gap-6">
-        <header
-          className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
-        >
-          <div className="flex min-w-0 gap-5">
-            <div
-              className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center border-2 sm:h-28 sm:w-24 ${party.border} ${party.text}`}
-              aria-hidden="true"
-            >
-              <span className="font-display text-4xl font-extrabold leading-none">
-                {president.number}
-              </span>
-              <span className="mt-1 font-mono text-[10px] tracking-[0.12em]">PRESIDENT</span>
-            </div>
-            <div className="flex min-w-0 flex-col gap-2">
-              <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
-                {president.name}
-              </Title>
-              <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
-                {ordinal(president.number)} President · {party.label} ·{" "}
-                {president.termStart.slice(0, 4)} to {termEnd}
-              </p>
-              <p className="flex flex-wrap gap-x-4 gap-y-1">
-                <a
-                  href="https://www.presidency.ucsb.edu/statistics/data/presidential-job-approval"
-                  className={LINK}
-                >
-                  Approval polls
-                </a>
-                <a href="https://data.bls.gov/timeseries/CES0000000001" className={LINK}>
-                  BLS jobs
-                </a>
-                <a href="https://www.federalregister.gov" className={LINK}>
-                  Federal Register
-                </a>
-                <a href="https://www.c-span.org/presidentsurvey2021/" className={LINK}>
-                  C-SPAN survey
-                </a>
-                <Link href="/compare" className={LINK}>
-                  Compare with another president
-                </Link>
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-            <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-              Presidential Score
-            </p>
-            {s.dimensionsAvailable === 0 ? (
-              <p className="font-display text-2xl font-extrabold text-ink-min">
-                Not yet calculated
-              </p>
-            ) : (
-              <div className="flex items-baseline gap-4">
-                <span
-                  className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
-                >
-                  {overall}
-                </span>
-                <div className="flex flex-col gap-1">
-                  <span className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}>
-                    {getPresidentLabel(overall)}
-                  </span>
-                  {rank ? (
-                    <Link href="/leaderboard?branch=president" className={LINK}>
-                      #{rank.rank} of {rank.of} presidents
-                    </Link>
-                  ) : (
-                    president.isCurrent && (
-                      <span className="font-mono text-[13px] text-ink-lo">
-                        Ranked once the term ends
-                      </span>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
-            {s.dimensionsAvailable > 0 && s.dimensionsAvailable < 4 && (
-              <p className="text-sm leading-relaxed text-ink-lo">
-                Built from {s.dimensionsAvailable} of 4 scores; a score with no data shares its
-                weight among the others rather than counting as zero.
-              </p>
-            )}
-            <ScoreTrendSection entityId={president.id} entityType="president" />
-          </div>
-        </header>
-
-        <div className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <MandateColumn
-            dim={breakdown?.publicMandate}
-            score={s.publicMandate}
-            weight={weights?.publicMandate}
-          />
-          <EffectivenessColumn
-            dim={breakdown?.effectiveness}
-            score={s.effectiveness}
-            weight={weights?.effectiveness}
-            isCurrent={president.isCurrent}
-          />
-          <AgencyColumn
-            dim={breakdown?.agencyAlignment}
-            score={s.agencyAlignment}
-            weight={weights?.agencyAlignment}
-          />
-          <LegacyColumn
-            dim={breakdown?.historicalLegacy}
-            score={s.historicalLegacy}
-            weight={weights?.historicalLegacy}
-          />
-        </div>
-
-        <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
-          <h2
-            id="also-on-record"
-            className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
+      <ShareSubjectProvider subject={shareSubject}>
+        <div className="flex flex-col gap-6">
+          <header
+            id="overview"
+            {...{ [SHARE_SECTION_ATTR]: "overview" }}
+            className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
           >
-            Also on record, not part of the score
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {president.isCurrent && (
-              <button
-                type="button"
-                onClick={() => setOpen(true)}
-                disabled={!trades?.total}
-                className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4 text-left disabled:cursor-default"
+            <div className="flex min-w-0 gap-5">
+              <div
+                className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center border-2 sm:h-28 sm:w-24 ${party.border} ${party.text}`}
+                aria-hidden="true"
               >
-                <span className="text-base font-bold text-ink-hi">Stock trades</span>
-                <span className="text-sm text-ink-lo">
-                  {trades === undefined
-                    ? "Loading…"
-                    : trades === null
-                      ? "Could not load the trades."
-                      : trades.total === 0
-                        ? "None disclosed this term"
-                        : `${trades.total.toLocaleString()} disclosed this term`}
+                <span className="font-display text-4xl font-extrabold leading-none">
+                  {president.number}
                 </span>
-                <span className="font-mono text-xs text-ink-min">
-                  OGE annual report and periodic transaction reports
-                </span>
-              </button>
-            )}
-            {president.eoCount != null && (
-              <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
-                <span className="text-base font-bold text-ink-hi">Executive orders</span>
-                <span className="text-sm text-ink-lo">
-                  {president.eoCount.toLocaleString()} signed
-                </span>
-                <span className="font-mono text-xs text-ink-min">Federal Register</span>
+                <span className="mt-1 font-mono text-[10px] tracking-[0.12em]">PRESIDENT</span>
               </div>
-            )}
+              <div className="flex min-w-0 flex-col gap-2">
+                <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+                  {president.name}
+                </Title>
+                <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+                  {ordinal(president.number)} President · {party.label} ·{" "}
+                  {president.termStart.slice(0, 4)} to {termEnd}
+                </p>
+                {/* Source links are only useful clicked; a picture of them is
+                  noise. */}
+                <p className="flex flex-wrap gap-x-4 gap-y-1" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+                  <a
+                    href="https://www.presidency.ucsb.edu/statistics/data/presidential-job-approval"
+                    className={LINK}
+                  >
+                    Approval polls
+                  </a>
+                  <a href="https://data.bls.gov/timeseries/CES0000000001" className={LINK}>
+                    BLS jobs
+                  </a>
+                  <a href="https://www.federalregister.gov" className={LINK}>
+                    Federal Register
+                  </a>
+                  <a href="https://www.c-span.org/presidentsurvey2021/" className={LINK}>
+                    C-SPAN survey
+                  </a>
+                  <Link href="/compare" className={LINK}>
+                    Compare with another president
+                  </Link>
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+              <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                Presidential Score
+              </p>
+              {s.dimensionsAvailable === 0 ? (
+                <p className="font-display text-2xl font-extrabold text-ink-min">
+                  Not yet calculated
+                </p>
+              ) : (
+                <div className="flex items-baseline gap-4">
+                  <span
+                    className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
+                  >
+                    {overall}
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span
+                      className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}
+                    >
+                      {getPresidentLabel(overall)}
+                    </span>
+                    {rank ? (
+                      <Link href="/leaderboard?branch=president" className={LINK}>
+                        #{rank.rank} of {rank.of} presidents
+                      </Link>
+                    ) : (
+                      president.isCurrent && (
+                        <span className="font-mono text-[13px] text-ink-lo">
+                          Ranked once the term ends
+                        </span>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+              {s.dimensionsAvailable > 0 && s.dimensionsAvailable < 4 && (
+                <p className="text-sm leading-relaxed text-ink-lo">
+                  Built from {s.dimensionsAvailable} of 4 scores; a score with no data shares its
+                  weight among the others rather than counting as zero.
+                </p>
+              )}
+              <ScoreTrendSection entityId={president.id} entityType="president" />
+              {/* The header names the president itself: no title strip. */}
+              <div className="flex justify-end">
+                <ShareSectionButton label="Scorecard summary" withStrip={false} />
+              </div>
+            </div>
+          </header>
+
+          <div className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <MandateColumn
+              dim={breakdown?.publicMandate}
+              score={s.publicMandate}
+              weight={weights?.publicMandate}
+            />
+            <EffectivenessColumn
+              dim={breakdown?.effectiveness}
+              score={s.effectiveness}
+              weight={weights?.effectiveness}
+              isCurrent={president.isCurrent}
+            />
+            <AgencyColumn
+              dim={breakdown?.agencyAlignment}
+              score={s.agencyAlignment}
+              weight={weights?.agencyAlignment}
+            />
+            <LegacyColumn
+              dim={breakdown?.historicalLegacy}
+              score={s.historicalLegacy}
+              weight={weights?.historicalLegacy}
+            />
           </div>
-        </section>
-      </div>
+
+          <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
+            <h2
+              id="also-on-record"
+              className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
+            >
+              Also on record, not part of the score
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {president.isCurrent && (
+                <button
+                  type="button"
+                  onClick={() => setOpen(true)}
+                  disabled={!trades?.total}
+                  className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4 text-left disabled:cursor-default"
+                >
+                  <span className="text-base font-bold text-ink-hi">Stock trades</span>
+                  <span className="text-sm text-ink-lo">
+                    {trades === undefined
+                      ? "Loading…"
+                      : trades === null
+                        ? "Could not load the trades."
+                        : trades.total === 0
+                          ? "None disclosed this term"
+                          : `${trades.total.toLocaleString()} disclosed this term`}
+                  </span>
+                  <span className="font-mono text-xs text-ink-min">
+                    OGE annual report and periodic transaction reports
+                  </span>
+                </button>
+              )}
+              {president.eoCount != null && (
+                <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
+                  <span className="text-base font-bold text-ink-hi">Executive orders</span>
+                  <span className="text-sm text-ink-lo">
+                    {president.eoCount.toLocaleString()} signed
+                  </span>
+                  <span className="font-mono text-xs text-ink-min">Federal Register</span>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </ShareSubjectProvider>
 
       {open && (
         <ScorecardDrawer title="Stock trades" subtitle={president.name} onClose={close}>
