@@ -74,6 +74,27 @@ class TestEstimator:
                             "by_party": {"I": {"rate": hits / n, "n": n, "n_eff": n}}})
         assert ces.priors(members)["house/D/I"]["k"] is not None
 
+    def test_the_prior_strength_is_recovered_without_bias(self):
+        """Draw true approval from Beta(mu, k), sample each member at a
+        varying size, and estimate: 1/(k+1) (tau^2 over mu(1-mu)) must come
+        back right on average. The first two estimators came back 5-30% off."""
+        import random
+
+        rng = random.Random(11)
+        mu, k = 0.85, 20.0
+        estimates = []
+        for _ in range(150):
+            members = []
+            for i in range(200):
+                n = 5 + (i % 40)
+                p = rng.betavariate(mu * k, (1 - mu) * k)
+                hits = sum(rng.random() < p for _ in range(n))
+                members.append({"chamber": "house", "member_party": "R",
+                                "by_party": {"R": {"rate": hits / n, "n": n, "n_eff": n}}})
+            est = ces.priors(members)["house/R/R"]["k"]
+            estimates.append(1 / (est + 1))
+        assert sum(estimates) / len(estimates) == pytest.approx(1 / (k + 1), rel=0.05)
+
     def test_the_figure_records_how_much_of_it_is_the_members_own(self):
         rows = []
         for i in range(12):
