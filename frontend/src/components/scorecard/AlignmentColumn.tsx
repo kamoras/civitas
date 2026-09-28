@@ -3,15 +3,25 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchRepVotes, fetchSenatorVotes } from "@/lib/api";
-import type { KeyVote } from "@/types/senator";
-import type { AlignmentFacts, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
+import type { AlignmentFacts, BreakVote, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import ComponentBars from "./ComponentBars";
 import ScoreColumn, { Block } from "./ScoreColumn";
 import { count, partyMembers, percentOneDecimal, shortDate, voteTitle } from "./format";
 
 const PARTY_SHORT: Record<string, string> = { R: "Republicans", D: "Democrats" };
+const FLANK: Record<string, string> = { R: "right", D: "left" };
+const OTHER_PARTY: Record<string, string> = { R: "Democrats", D: "Republicans" };
 // Breaks shown in the column; the drawer lists every vote.
 const BREAKS_SHOWN = 6;
+const FLANK_SHOWN = 3;
+
+/** A break as the list shows it: the breakdown's (BreakVote) or, before the
+ *  member's whole-Congress record is measured, a stored vote. */
+type ListedBreak = Omit<BreakVote, "rollCall"> & {
+  rollCall?: BreakVote["rollCall"];
+  billName?: string;
+  date?: string;
+};
 
 function Lede({ facts, seat }: { facts: AlignmentFacts; seat: string }) {
   const members = partyMembers(facts.party);
@@ -81,8 +91,9 @@ function tally(p: { yea: number; nay: number }): string {
  *  on (linked to the bill's page), the member's vote, and how each party
  *  split (the Congress record's counts, served with the vote). A vote
  *  stored before its roll call was recorded shows its bill and date alone. */
-function BreakRow({ vote }: { vote: KeyVote }) {
+function BreakRow({ vote }: { vote: ListedBreak }) {
   const rc = vote.rollCall;
+  const fallback = vote.billName ?? "";
   const parties = rc?.parties.filter((p) => PARTY_SHORT[p.party] && p.yea + p.nay > 0) ?? [];
   return (
     <li className="flex flex-col gap-1 border-b border-white/[0.06] pb-2.5">
@@ -93,14 +104,14 @@ function BreakRow({ vote }: { vote: KeyVote }) {
             <Link
               href={`/congress/bills/${encodeURIComponent(rc.billId)}`}
               className="line-clamp-2 underline decoration-white/20 underline-offset-2 hover:text-phos"
-              title={rc.title || vote.billName}
+              title={rc.title || fallback}
             >
-              {voteTitle(rc.title, rc.billLabel, vote.billName)}
+              {voteTitle(rc.title, rc.billLabel, fallback)}
             </Link>
           ) : (
             // A nomination or a procedural question: no bill to open.
-            <span className="line-clamp-2" title={rc?.title || vote.billName}>
-              {voteTitle(rc?.title, rc?.billLabel, vote.billName)}
+            <span className="line-clamp-2" title={rc?.title || fallback}>
+              {voteTitle(rc?.title, rc?.billLabel, fallback)}
             </span>
           )}
           {rc?.question && <span className="block text-[13px] text-ink-lo">{rc.question}</span>}
@@ -143,7 +154,8 @@ export default function AlignmentColumn({
   name: string;
   /** Where the norm comes from: "seats that lean like TN-2", "states that lean like Tennessee". */
   seat: string;
-  /** Stored count of votes against the party (the voting record's). */
+  /** Stored count of votes against the party (the voting record's): the
+   *  list's count until the whole-Congress record is measured. */
   breaks: number;
   dimension: ScoreBreakdownDimension | undefined;
   score: number;
@@ -151,20 +163,26 @@ export default function AlignmentColumn({
   onMore: () => void;
 }) {
   const facts = dimension?.facts as AlignmentFacts | undefined;
-  const [votes, setVotes] = useState<KeyVote[] | null>(null);
+  // The breaks the score counts, served with it. Until the member's
+  // whole-Congress record is measured, the stored votes against the party.
+  const counted = facts?.breakVotes;
+  const [stored, setStored] = useState<ListedBreak[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const votes: ListedBreak[] | null = counted ?? stored;
+  const total = counted ? counted.length : breaks;
+  const flank = facts?.flankBreakVotes ?? [];
 
   useEffect(() => {
-    if (breaks === 0) return;
+    if (!dimension || counted || breaks === 0) return;
     let live = true;
     const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
     fetcher(memberId, { category: "all", filter: "against-party", perPage: 100 })
-      .then((r) => live && setVotes(r.votes))
+      .then((r) => live && setStored(r.votes))
       .catch(() => live && setFailed(true));
     return () => {
       live = false;
     };
-  }, [memberId, chamber, breaks]);
+  }, [memberId, chamber, breaks, dimension, counted]);
 
   return (
     <ScoreColumn
@@ -182,17 +200,17 @@ export default function AlignmentColumn({
         <RateScale rate={facts.breakRate} expected={facts.expectedBreakRate} name={name} />
       )}
 
-      <Block label={`Votes against party (${breaks})`}>
-        {breaks === 0 && <p className="text-sm text-ink-lo">None on record this Congress.</p>}
-        {breaks > 0 && failed && <p className="text-sm text-ink-lo">Could not load the votes.</p>}
-        {breaks > 0 && !failed && votes === null && (
+      <Block label={`Votes against party (${total})`}>
+        {total === 0 && <p className="text-sm text-ink-lo">None on record this Congress.</p>}
+        {total > 0 && failed && <p className="text-sm text-ink-lo">Could not load the votes.</p>}
+        {total > 0 && !failed && votes === null && (
           <p className="animate-pulse font-mono text-xs text-ink-min">LOADING VOTES...</p>
         )}
         {votes && votes.length > 0 && (
           <>
             <ul className="flex flex-col gap-2.5">
               {votes.slice(0, BREAKS_SHOWN).map((v, i) => (
-                <BreakRow key={`${v.billId}-${v.rollCall?.number ?? i}`} vote={v} />
+                <BreakRow key={`${v.rollCall?.number ?? v.billName}-${i}`} vote={v} />
               ))}
             </ul>
             {votes.length > BREAKS_SHOWN && (
@@ -204,9 +222,31 @@ export default function AlignmentColumn({
         )}
         <p className="text-xs leading-relaxed text-ink-min">
           A break: most of the member&apos;s party voted one way, most of the other party the other
-          way, and the member sided with the other party.
+          way, and the member sided with the other party. Housekeeping votes (quorum calls,
+          adjourning, motions to table or to recommit) don&apos;t count.
+          {counted && " Each bill or nomination counts once, however many times it came to a vote."}
         </p>
       </Block>
+
+      {facts && flank.length > 0 && (
+        <Block
+          label={`From the ${FLANK[facts.party] ?? "party's"} flank, not counted (${flank.length})`}
+        >
+          <p className="text-xs leading-relaxed text-ink-min">
+            On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
+            the {OTHER_PARTY[facts.party] ?? "other party"} than the party does. How far toward the
+            flank the member sits is scored as position congruence below.
+          </p>
+          <ul className="flex flex-col gap-2.5">
+            {flank.slice(0, FLANK_SHOWN).map((v, i) => (
+              <BreakRow key={`${v.rollCall?.number}-${i}`} vote={v} />
+            ))}
+          </ul>
+          {flank.length > FLANK_SHOWN && (
+            <p className="font-mono text-xs text-ink-min">and {flank.length - FLANK_SHOWN} more</p>
+          )}
+        </Block>
+      )}
 
       {dimension && <ComponentBars components={dimension.components} />}
     </ScoreColumn>

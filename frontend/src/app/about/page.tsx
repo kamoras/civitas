@@ -311,7 +311,9 @@ export default function AboutPage() {
                   raw defection from party. A vote is party-labeled only when the parties split on
                   its roll call (at least 65% of one party voting Yea and at most 35% of the other),
                   and a member breaks when they vote with the other side; a vote with no recorded
-                  roll call doesn&apos;t count. Every break on a profile shows the roll call&apos;s own
+                  roll call doesn&apos;t count, and neither does housekeeping (quorum calls,
+                  adjourning, the House&apos;s previous question, motions to table or to recommit),
+                  which splits on party lines as a matter of course. Every break on a profile shows the roll call&apos;s own
                   party tallies. Each member&apos;s break rate on party-labeled votes is
                   compared with the break rate that members of the same party and chamber show in
                   seats with the same partisan lean (Cook PVI). That expectation is measured from
@@ -387,6 +389,17 @@ export default function AboutPage() {
                   docs/research/constituent-alignment.md. Confirmation votes on
                   nominations make up a large share of recent Senate roll calls and count at full
                   weight — they are genuine, whipped party-line tests.
+                </P>
+                <P>
+                  Since v6.20 the break rate covers every roll call of the current Congress, and
+                  a break counts only when it goes toward the other party: on that vote, the
+                  party&apos;s members who broke sit nearer the other party than the party does. A
+                  vote against the party from its own flank, such as hardliners voting down their
+                  party&apos;s bill, is listed on the scorecard but not counted, because how far
+                  toward the flank a member sits is already scored as position congruence. Each
+                  bill or nomination counts once, however many times it came to a vote: cloture
+                  and then confirmation on one nominee is one decision. Both rules predict the
+                  same election results at least as well as counting every vote.
                 </P>
                 <P>
                   Before v4.2 this dimension was called Independent Voting and rewarded raw
