@@ -295,6 +295,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         forget_own_record()
     if bootstrap_task is not None:
         bootstrap_task.cancel()
+    from app.api.explore import stop_generations
+
+    await stop_generations()
     stop_scheduler()
     if role_lock is not None:
         os.close(role_lock)

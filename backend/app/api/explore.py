@@ -318,14 +318,32 @@ async def post_document_comment(
     return JSONResponse(content=result, status_code=status_code)
 
 
-# One generation per document per cooldown, across every API worker process
+# One generation per document at a time, across every API worker process
 # (api/throttle.py) — a per-process record let each worker start its own.
+# The claim is held for the whole generation and given back when it ends
+# (generate below); its period only bounds how long a claim outlives a
+# process that died mid-generation, and holds off a document whose output
+# couldn't be used.
 _SUMMARY_BUCKET = "explore-summary"
-_SUMMARY_COOLDOWN = 30.0
+_SUMMARY_GENERATION_LIMIT_S = 300.0
 _SUMMARY_CACHE_KEY_VERSION = 4  # bump alongside explore_document_summary_prompt's promptVersion
-# Generations under way, held so the event loop doesn't collect a task
-# whose reader has gone.
+# Generations under way in this process, held so the event loop doesn't
+# collect a task whose reader has gone. A generation finishes whether or not
+# its reader stays, so their number is capped: the device has one LLM, and
+# a client starting and abandoning generations across documents must not
+# queue up work it will never read.
 _generations: set[asyncio.Task] = set()
+_MAX_GENERATIONS = 2
+_BUSY_RETRY_AFTER_S = 30
+
+
+async def stop_generations() -> None:
+    """Cancel the generations under way (lifespan shutdown): each gives
+    its claim back as it stops, so the document isn't held off."""
+    tasks = list(_generations)
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # A stream is read as it is written: nginx buffers proxied responses by
@@ -385,13 +403,13 @@ async def get_explore_document_summary(
 
         return StreamingResponse(cached_stream(), media_type="text/event-stream", headers=_STREAM_HEADERS)
 
-    # The cooldown guards a fresh generation only, and fails closed: it is
+    # The claim guards a fresh generation only, and fails closed: it is
     # what stands between a repeated POST and a new generation on the
     # device's one LLM, so a store that can't answer refuses the request
     # rather than letting every one through.
     try:
         claimed = await throttle.run(
-            throttle.claim, _SUMMARY_BUCKET, str(doc_id), period=_SUMMARY_COOLDOWN, fail_open=False,
+            throttle.claim, _SUMMARY_BUCKET, str(doc_id), period=_SUMMARY_GENERATION_LIMIT_S, fail_open=False,
         )
     except throttle.Unavailable:
         raise HTTPException(
@@ -401,43 +419,74 @@ async def get_explore_document_summary(
         ) from None
     if not claimed:
         raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
+    # Counted after the claim's await, with none between here and the task
+    # starting below, so concurrent requests can't all pass it at once.
+    if len(_generations) >= _MAX_GENERATIONS:
+        await throttle.run(throttle.release, _SUMMARY_BUCKET, str(doc_id))
+        raise HTTPException(
+            status_code=503,
+            detail="Summaries are busy right now; please try again shortly.",
+            headers={"Retry-After": str(_BUSY_RETRY_AFTER_S)},
+        )
 
     # The generation runs as a task of its own, feeding the reader through a
     # queue: a reader who leaves mid-stream doesn't stop it, and it finishes
     # and is cached. Stopped with the reader, the claim bought nothing — a
-    # client could start and abandon a document's generation every cooldown
-    # and hold it off for every other reader indefinitely; finished, the
-    # next reader gets the summary free. (The claim is kept either way: the
-    # prompt was already sent, and processing it is most of a generation's
-    # cost on this hardware.)
+    # client could start and abandon a document's generation over and over
+    # and hold it off for every other reader; finished, the next reader
+    # gets the summary free.
     events: asyncio.Queue[str | None] = asyncio.Queue()
 
     async def generate():
         full_text = ""
+        unusable = False
+        # The last event, sent only after the claim is settled: a reader
+        # who asks again the moment it arrives must find it given back.
+        last = _sse({"done": True, "summary": "", "keyPoints": [], "impact": ""})
         try:
             try:
-                async for delta in stream_llm(
-                    system_prompt=prompt["systemPrompt"],
-                    user_prompt=prompt["userPrompt"],
-                    max_tokens=512,
-                ):
-                    full_text += delta
-                    events.put_nowait(_sse({"delta": delta}))
+                async with asyncio.timeout(_SUMMARY_GENERATION_LIMIT_S):
+                    async for delta in stream_llm(
+                        system_prompt=prompt["systemPrompt"],
+                        user_prompt=prompt["userPrompt"],
+                        max_tokens=512,
+                    ):
+                        full_text += delta
+                        events.put_nowait(_sse({"delta": delta}))
             except Exception:
                 logger.exception("Explore doc summary streaming failed for doc_id=%s", doc_id)
                 if not full_text:
-                    # Nothing was generated: the next reader may try at once.
-                    await throttle.run(throttle.release, _SUMMARY_BUCKET, str(doc_id))
-                    events.put_nowait(_sse({"done": True, "summary": "", "keyPoints": [], "impact": ""}))
                     return
 
             parsed = parse_explore_document_summary(full_text)
-            events.put_nowait(_sse({"done": True, **parsed}))
+            # Cached before the reader hears it is done: a reader asking
+            # again at once is then served the summary, not refused.
             if parsed["summary"]:
-                await asyncio.to_thread(set_cached_llm_result, prompt["promptVersion"], cache_key, parsed)
+                try:
+                    await asyncio.to_thread(set_cached_llm_result, prompt["promptVersion"], cache_key, parsed)
+                except Exception:
+                    logger.exception("Explore doc summary not cached for doc_id=%s", doc_id)
+            else:
+                unusable = True
+            last = _sse({"done": True, **parsed})
         except Exception:
             logger.exception("Explore doc summary failed for doc_id=%s", doc_id)
+        except asyncio.CancelledError:
+            last = None  # stopped (shutdown): the stream just ends
+            raise
         finally:
+            # Given back once the generation is over — cached (the next
+            # reader is served from it), or failed or stopped before it
+            # produced anything (the next may try at once). An output that
+            # couldn't be used keeps it for its period: asked again at once,
+            # the same document would most likely come out the same way.
+            if not unusable:
+                try:
+                    await throttle.run(throttle.release, _SUMMARY_BUCKET, str(doc_id))
+                except Exception:
+                    logger.warning("Explore summary claim for doc_id=%s not given back", doc_id, exc_info=True)
+            if last is not None:
+                events.put_nowait(last)
             events.put_nowait(None)
 
     task = asyncio.create_task(generate())

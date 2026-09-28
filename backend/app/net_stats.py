@@ -154,6 +154,8 @@ async def run_recorder() -> None:
 
     from app.api import throttle
 
+    global _forgotten
+    _forgotten = False  # a new run of the app in this process records again
     while True:
         try:
             if await throttle.run(throttle.claim, "net-record", "api", period=RECORD_EVERY_S * 0.9):

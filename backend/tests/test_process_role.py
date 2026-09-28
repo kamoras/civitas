@@ -190,6 +190,22 @@ class TestNextRunTime:
         assert not scheduler.scheduler.running
         assert scheduler.get_next_run_time() == "2026-09-29T03:00:00+00:00"
 
+    def test_a_beat_in_the_same_moment_as_the_run_records_the_next_one(self, monkeypatch):
+        # The scheduler advances next_run_time only after submitting the
+        # run; a beat in between saw the time that had just fired.
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+
+        from apscheduler.triggers.cron import CronTrigger
+
+        from app import scheduler
+
+        just_fired = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=1)
+        job = SimpleNamespace(next_run_time=just_fired,
+                              trigger=CronTrigger(hour=just_fired.hour, minute=just_fired.minute, timezone="UTC"))
+        monkeypatch.setattr(scheduler.scheduler, "get_job", lambda job_id: job)
+        assert datetime.fromisoformat(scheduler._live_next_run()) == just_fired.replace(second=0) + timedelta(days=1)
+
     def test_none_once_the_heartbeat_is_stale(self, monkeypatch):
         from app import scheduler
 

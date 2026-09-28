@@ -996,13 +996,14 @@ the pending list).
     the `init_db` lock and the `IF NOT EXISTS` DDL guard against
   - Nginx caches every response the backend marks cacheable, for as long
     as its `Cache-Control` says (`api/cache_headers.py`) — no per-route
-    cache block needed — and rate-limits the API's cache *misses* only: the
-    catch-all `/api/` hands misses to an internal loopback server
-    ("api-misses") that applies `limit_req` before the backend, because a
-    limit on `/api/` itself runs before the cache and would refuse cache
-    hits. Explore search's misses get a tighter limit of their own;
-    `/api/config`, `/api/og` and `/api/admin/` have none. Only `/api/config`
-    and `/api/og` (a frontend route) set their own lifetime there, and
+    cache block needed — and rate-limits the API's cache *misses* only:
+    every cached `/api` location hands misses to an internal loopback
+    server ("api-misses") that applies `limit_req` before the backend (or,
+    for `/api/og`, the frontend's image renderer), because a limit on the
+    public location runs before the cache and would refuse cache hits.
+    Explore search and OG images have limits of their own there
+    (`tests/test_nginx_routing.py` checks every cached location goes
+    through it). Only `/api/config` and `/api/og` set their own lifetime, and
     `/api/public/` is deliberately uncached (its responses carry the
     caller's own rate-limit counts)
 

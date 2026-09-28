@@ -15,6 +15,14 @@ export interface HostSample {
 
 const POLL_MS = 5000;
 
+/** The host's network rate: this container's own, plus the API
+ *  containers' recorded rate (none recorded counts as nothing). None
+ *  without this container's own rate — plotted alone, the API's part would
+ *  draw a step down and back up. */
+export function combinedRate(own: number | null, api: number | null): number | null {
+  return own == null ? null : own + (api ?? 0);
+}
+
 /**
  * CPU utilisation (%) between two cumulative /proc/stat readings: the share
  * of ticks in the interval that were not idle. Null when either reading is
@@ -66,8 +74,9 @@ export function useHostHistory(token: string, initial?: HostStats) {
       const now = Date.now();
       // This container's rate from its counters, plus the rate the API
       // containers recorded (a container sees only its own interfaces; a
-      // missing part counts as nothing, never a jump). Either alone is
-      // still a reading; neither is none.
+      // missing API record counts as nothing). No point without this
+      // container's own rate — the first poll, or a failed counter read:
+      // plotted alone, the API's part would draw a step down and back up.
       let ownRx: number | null = null;
       let ownTx: number | null = null;
       if (s.netRxBytes != null && s.netTxBytes != null) {
@@ -81,8 +90,8 @@ export function useHostHistory(token: string, initial?: HostStats) {
       }
       const apiRx = s.apiNetRxRate ?? null;
       const apiTx = s.apiNetTxRate ?? null;
-      const rxRate = ownRx == null && apiRx == null ? null : (ownRx ?? 0) + (apiRx ?? 0);
-      const txRate = ownTx == null && apiTx == null ? null : (ownTx ?? 0) + (apiTx ?? 0);
+      const rxRate = combinedRate(ownRx, apiRx);
+      const txRate = combinedRate(ownTx, apiTx);
       const cpuNow =
         s.cpuBusyTicks != null && s.cpuTotalTicks != null
           ? { busy: s.cpuBusyTicks, total: s.cpuTotalTicks }

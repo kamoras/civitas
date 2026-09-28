@@ -119,19 +119,108 @@ class TestSummaryEndpointGuards:
             await get_explore_document_summary(999999, None, db=db_session)
         assert exc_info.value.status_code == 404
 
-    async def test_cooldown_blocks_repeat_generation_for_same_doc(self, db_session):
+    async def test_a_generation_under_way_holds_off_another_for_the_same_doc(self, db_session):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from app.api import explore
+
+        doc = _make_doc(db_session)
+        finish = asyncio.Event()
+
+        async def _held_stream(*_args, **_kwargs):
+            yield "SUMMARY: A test summary.\n"
+            await finish.wait()
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _held_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            first = await get_explore_document_summary(doc.id, None, db=db_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await get_explore_document_summary(doc.id, None, db=db_session)
+            assert exc_info.value.status_code == 429
+            finish.set()
+            await _collect_sse_events(first)
+            await asyncio.gather(*list(explore._generations))
+            # Over and cached: the claim is given back.
+            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+
+    async def test_an_unusable_output_holds_the_document_off(self, db_session):
+        # Asked again at once, it would most likely come out the same way.
         from fastapi import HTTPException
 
         doc = _make_doc(db_session)
+
+        async def _garbled(*_args, **_kwargs):
+            yield ""
+
         with (
             patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
-            patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _garbled),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
             await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
             with pytest.raises(HTTPException) as exc_info:
                 await get_explore_document_summary(doc.id, None, db=db_session)
         assert exc_info.value.status_code == 429
+
+    async def test_generations_in_flight_are_capped(self, db_session):
+        # Each finishes whether or not its reader stays: uncapped, a client
+        # abandoning streams across documents would queue up LLM work.
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from app.api import explore, throttle
+
+        docs = [_make_doc(db_session) for _ in range(explore._MAX_GENERATIONS + 1)]
+        finish = asyncio.Event()
+
+        async def _held_stream(*_args, **_kwargs):
+            await finish.wait()
+            yield "SUMMARY: s\n"
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _held_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            for doc in docs[:-1]:
+                await get_explore_document_summary(doc.id, None, db=db_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await get_explore_document_summary(docs[-1].id, None, db=db_session)
+            assert exc_info.value.status_code == 503
+            # Refused before it started: its claim was given back.
+            assert throttle.claim("explore-summary", str(docs[-1].id), period=30)
+            finish.set()
+            await asyncio.gather(*list(explore._generations))
+
+    async def test_shutdown_stops_generations_and_gives_their_claims_back(self, db_session):
+        import asyncio
+
+        from app.api import explore, throttle
+
+        doc = _make_doc(db_session)
+
+        async def _endless(*_args, **_kwargs):
+            yield "SUMMARY: partial"
+            await asyncio.Event().wait()
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _endless),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
+        ):
+            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            await asyncio.sleep(0)
+            await explore.stop_generations()
+            events = await _collect_sse_events(response)
+        assert not explore._generations and not mock_set_cache.called
+        assert events == [{"delta": "SUMMARY: partial"}]  # the stream ends
+        assert throttle.claim("explore-summary", str(doc.id), period=30)
 
     async def test_a_summary_already_made_is_never_held_off(self, db_session):
         doc = _make_doc(db_session)

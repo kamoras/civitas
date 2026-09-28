@@ -111,8 +111,8 @@ def test_an_unknown_document_is_asked_about_again_after_a_few_hours(api, db_sess
 
 
 @pytest.mark.parametrize("status,retryable,remembered", [
-    (400, False, False), (401, True, False), (403, True, False), (410, False, True), (500, True, False),
-    (503, True, False),
+    (400, False, False), (401, True, False), (403, True, False), (408, True, False), (410, False, True),
+    (425, True, False), (500, True, False), (503, True, False),
 ])
 def test_a_failed_lookup_is_classified_by_what_asking_again_could_do(monkeypatch, db_session, status, retryable,
                                                                     remembered):

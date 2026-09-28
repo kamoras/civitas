@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -698,9 +698,15 @@ def read_heartbeat():
 
 def _live_next_run() -> str | None:
     job = scheduler.get_job("pipeline_run")
-    if job and job.next_run_time:
-        return job.next_run_time.isoformat()
-    return None
+    if job is None or job.next_run_time is None:
+        return None  # not scheduled, or paused
+    # The trigger's next fire from now, not next_run_time alone: the
+    # scheduler advances that only after submitting the run, so a beat
+    # landing in the same moment as the run (both fire on the hour) would
+    # record the time that has just passed — and the API process would
+    # report it until the next beat.
+    upcoming = job.trigger.get_next_fire_time(None, datetime.now(job.next_run_time.tzinfo))
+    return max(job.next_run_time, upcoming).isoformat() if upcoming else job.next_run_time.isoformat()
 
 
 def _record_next_run() -> None:

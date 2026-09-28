@@ -100,3 +100,28 @@ def test_a_recording_in_flight_as_the_container_stops_doesnt_write_it_back(tmp_p
     net_stats.forget_own_record()
     assert not net_stats.record_api_rate()
     assert net_stats.api_rates() is None
+
+
+def test_a_new_run_of_the_app_records_again(monkeypatch):
+    # forget_own_record ends recording for the run that is stopping, not
+    # for every later lifespan in the same process.
+    import asyncio
+
+    import pytest
+
+    from app.api import throttle
+
+    monkeypatch.setattr(net_stats, "_forgotten", True)
+
+    async def not_this_round(*_args, **_kwargs):
+        return False
+
+    async def stop(_s):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(throttle, "run", not_this_round)
+    monkeypatch.setattr(net_stats, "own_totals", lambda: None)
+    monkeypatch.setattr(asyncio, "sleep", stop)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(net_stats.run_recorder())
+    assert net_stats._forgotten is False
