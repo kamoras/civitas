@@ -170,6 +170,9 @@ _GENERAL_RE = re.compile(r"General\s+Election", re.IGNORECASE)
 # a defensive guard against an untested-but-plausible shape, not a
 # fixture-driven fix.
 _WRITE_IN_RE = re.compile(r"write.?in", re.IGNORECASE)
+# The marker on a named write-in's row ("Write-in: Jane Doe", "Jane Doe
+# (Write-in)"), a printing convention, not part of the name.
+_WRITE_IN_MARK_RE = re.compile(r"^\s*write[\s-]?in\s*:\s*|\s*\(\s*write[\s-]?in\s*\)\s*$", re.IGNORECASE)
 
 
 def _xpath_class(name: str) -> str:
@@ -245,10 +248,15 @@ def _contests(
     return contests
 
 
-def _candidate_rows(wrapper) -> list[tuple[str, str | None, int]]:
+def _candidate_rows(wrapper, keep_write_ins: bool = False) -> list[tuple[str, str | None, int]]:
     """(raw name, party code or None, votes) for each candidate row in one
     contest block. A party normalize_party doesn't know comes back None:
-    a primary drops that row, a general-election count keeps its votes."""
+    a primary drops that row, a general-election count keeps its votes.
+
+    A write-in is never a nominee, so a primary drops every row that says
+    write-in. A general-election count keeps a NAMED write-in's votes
+    (`keep_write_ins`), with the marker taken off the name; the caller
+    still drops the aggregate "Write-ins" line (is_not_a_person)."""
     rows = []
     for section in wrapper.xpath(f'.//div[{_xpath_class("section")} and {_xpath_class("group")}]'):
         name_el = section.xpath(f'.//div[{_xpath_class("display-results-box-d")}]/h1')
@@ -258,7 +266,9 @@ def _candidate_rows(wrapper) -> list[tuple[str, str | None, int]]:
             continue  # the "total votes" row has no display-results-box-d at all
         raw_name = name_el[0].text_content().strip()
         if _WRITE_IN_RE.search(raw_name):
-            continue
+            if not keep_write_ins:
+                continue
+            raw_name = _WRITE_IN_MARK_RE.sub("", raw_name).strip() or raw_name
         votes_text = votes_el[0].text_content().strip().replace(",", "")
         if not raw_name or not votes_text.isdigit():
             continue
@@ -432,7 +442,7 @@ def general_contests(html: str) -> list[ContestCount]:
         if parsed is None:
             continue
         candidates = [
-            (clean_display_name(n), p, v) for n, p, v in _candidate_rows(wrapper) if not is_not_a_person(n)
+            (clean_display_name(n), p, v) for n, p, v in _candidate_rows(wrapper, keep_write_ins=True) if not is_not_a_person(n)
         ]
         m = _PRECINCTS_RE.search(wrapper.text_content())
         reporting = total = None

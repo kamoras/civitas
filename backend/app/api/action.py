@@ -1394,7 +1394,10 @@ async def get_timeline(
         for m in monitors
     ]
 
-    civic_events = _upcoming_civic_events(year, today)
+    # The civic calendar's day is the Eastern one: from 7 PM ET on
+    # election day the UTC date is already tomorrow, which dropped the
+    # election from the calendar for the whole of election night.
+    civic_events = _upcoming_civic_events(year, election_today())
 
     return {
         "year": year,

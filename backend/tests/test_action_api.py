@@ -366,6 +366,20 @@ class TestElectionsAndTimelineRoutesUseCanonicalClock:
             result = await get_timeline(Response(), year=None, db=db_session)
         assert result["year"] == 2026
 
+    async def test_election_night_keeps_election_day_on_the_calendar(self, db_session):
+        """9 PM ET on election day is already the 4th in UTC."""
+        from datetime import date, datetime
+        from unittest.mock import patch
+
+        from fastapi import Response
+
+        from app.api.action import get_timeline
+
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 11, 4, 2)), \
+                patch("app.api.action.election_today", return_value=date(2026, 11, 3)):
+            result = await get_timeline(Response(), year=2026, db=db_session)
+        assert any(e["date"] == "2026-11-03" for e in result["upcomingEvents"])
+
 
 class TestElectionInfoSpecialSenateRaces:
     """get_election_info merges data-derived special Senate races (Race

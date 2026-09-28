@@ -413,7 +413,7 @@ class TestCountyUnits:
         with patch.object(er, "utcnow", return_value=at):
             return _apply(db, race, contest, unit_label="counties")
 
-    def test_every_county_in_is_not_enough_on_the_first_night(self, db_session):
+    def test_every_county_in_is_not_enough_on_the_first_dumps(self, db_session):
         race = self._race(db_session)
         first = datetime(2026, 11, 4, 2)
         self._apply_at(db_session, race, _contest(0, 0, 0, total=3, district=8), first - timedelta(hours=1))
@@ -474,3 +474,40 @@ class TestRoundTwo:
         db_session.flush()
         problem = er.freshness_problem(db_session, "GA", DAY, _state(source_version="11"))
         assert problem == "source version went back from 12 to 11"
+
+
+class TestRoundThree:
+    def test_a_house_special_on_the_same_ballot_leaves_the_regular_count(self, db_session):
+        _setup(db_session)
+        special = _contest(5, 6, 1)
+        special.is_special = True
+        out, _ = _sync(db_session, _state(contests=[_contest(100, 90, 60), special]))
+        assert out["races"] == 1
+        assert db_session.get(RaceResult, "2026-HOUSE-GA-2").votes_counted == 190
+
+    def test_a_senate_special_with_no_special_race_is_not_the_regular_race(self, db_session):
+        db_session.add(Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA"))
+        db_session.flush()
+        special = _contest(5, 6, 1, office="S", district=None)
+        special.is_special = True
+        assert er._contest_race(db_session, 2026, "GA", special) is None
+        regular = _contest(5, 6, 1, office="S", district=None)
+        assert er._contest_race(db_session, 2026, "GA", regular).id == "2026-SEN-GA"
+
+    def test_a_ballot_name_matched_mid_count_is_not_a_lead_change(self, db_session):
+        """The display name becomes the Candidate's ballot_name once matched;
+        comparing by it read "Ray Jones moves ahead of Congressman Ray
+        Jones"."""
+        race = Race(id="2026-HOUSE-GA-2", cycle_year=2026, office="H", state="GA", district=2)
+        db_session.add(race)
+        db_session.flush()
+        contest = ContestCount(office="H", district=2, reporting_units=5, total_units=100,
+                               candidates=[("Congressman Ray Jones", "R", 100), ("Dana Smith", "D", 90)])
+        _apply(db_session, race, contest)
+        db_session.add(Candidate(id="H6GA02002", race_id=race.id, name="JONES, RAY", party="REP", ballot_name="Ray Jones"))
+        db_session.flush()
+        db_session.expire(race)  # its candidates, as the next pass loads them
+        with patch.object(er, "utcnow", return_value=utcnow() + timedelta(minutes=5)):
+            kinds, result = _apply(db_session, race, contest)
+        assert kinds == []
+        assert json.loads(result.tallies)[0]["name"] == "Ray Jones"

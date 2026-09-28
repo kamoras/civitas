@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import ElectionResultEvent, Race, RaceResult
 from app.live_results import sync as er
-from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags
+from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, publish_post, strip_hashtags
 from app.live_results.signals import holders_word, party_letter, race_label
 from app.time_utils import utcnow
 
@@ -85,7 +85,7 @@ def _shares(d: dict) -> str:
     return ", ".join(x for x in (_share(d.get("leader")), _share(d.get("runnerUp"))) if x)
 
 
-def _fit(*variants: list[str]) -> str | None:
+def _fit(*variants: list[str], budget: int = MAX_POST_CHARS) -> str | None:
     """The first variant that fits a post, sentences joined. Variants run
     richest first and drop figures, never the qualifier: cutting a post to
     length took its LAST sentence first — "Not final." — and could cut a
@@ -94,13 +94,15 @@ def _fit(*variants: list[str]) -> str | None:
     for parts in variants:
         text = " ".join(p if p.endswith(".") else f"{p}." for p in parts if p)
         text = strip_hashtags(text)
-        if len(text) <= MAX_POST_CHARS:
+        if len(text) <= budget:
             return text
     return None
 
 
-def compose(kind: str, race: Race, d: dict) -> str | None:
-    """The post for one event, or None when it has nothing true to say."""
+def compose(kind: str, race: Race, d: dict, budget: int = MAX_POST_CHARS) -> str | None:
+    """The post for one event, or None when it has nothing true to say.
+    `budget` is the room left once the link is added: publish_post cuts
+    anything longer at a sentence boundary, which is the qualifier."""
     label = race_label(race)
     leader = d.get("leader")
     reporting, shares = _reporting(d), _shares(d)
@@ -113,29 +115,32 @@ def compose(kind: str, race: Race, d: dict) -> str | None:
             head = f"Update on {label}: the count is now tied, so the seat no longer shows a change of party"
         else:
             head = f"Update on {label}: the count no longer shows the seat changing party"
-        return _fit([head, reporting], [head])
+        return _fit([head, reporting], [head], budget=budget)
     if not leader:
         return None
     holders = holders_word(d.get("heldBy"))
     if kind == er.FLIP and d.get("official"):
         head = f"{label}: {_who(leader)} wins in the official count, taking a seat {holders} held"
-        return _fit([head, shares], [head])
+        return _fit([head, shares], [head], budget=budget)
     if kind == er.FLIP:
         head = f"{label}: {_who(leader)} leads in a seat {holders} hold"
-        return _fit([head, shares, reporting, "Not final"], [head, reporting, "Not final"], [head, "Not final"])
+        return _fit([head, shares, reporting, "Not final"], [head, reporting, "Not final"], [head, "Not final"],
+                    budget=budget)
     if kind == er.OFFICIAL:
         head = f"{label}: the state lists its count as official"
-        return _fit([head, shares], [head])
+        return _fit([head, shares], [head], budget=budget)
     if kind == er.LEAD_CHANGE:
         previous = d.get("previousLeader")
         head = f"{label}: {_who(leader)} moves ahead"
         against = f"{head} of {_who(previous)}" if previous else head
         return _fit([against, shares, reporting, "Not final"], [against, reporting, "Not final"],
-                    [against, "Not final"], [head, "Not final"])
+                    [against, "Not final"], [head, "Not final"], budget=budget)
     if kind == er.ALL_REPORTING:
+        if not d.get("totalUnits"):
+            return None  # the count no longer states its units; nothing to say "all" of
         head = f"{label}: all {d['totalUnits']:,} {d['unitLabel']} have reported"
         tail = "Counting can continue after every unit reports"
-        return _fit([head, shares, tail], [head, tail])
+        return _fit([head, shares, tail], [head, tail], budget=budget)
     return None
 
 
@@ -214,12 +219,19 @@ def post_result_updates(db: Session, election_date: str) -> int:
     if not pending:
         return 0
 
-    posted_flip_races = {
-        rid for (rid,) in db.query(ElectionResultEvent.race_id).filter(
-            ElectionResultEvent.kind == er.FLIP, ElectionResultEvent.bsky_posted.is_(True),
-            ElectionResultEvent.election_date == election_date,
-        )
-    }
+    # A correction is owed where the account's latest flip-or-correction
+    # post on a race is a flip. Owing one wherever a flip was ever posted
+    # sent a second "no longer shows a change of party" after the first,
+    # in a race swinging around the line.
+    last_claim: dict[str, str] = {}
+    for rid, kind in (
+        db.query(ElectionResultEvent.race_id, ElectionResultEvent.kind)
+        .filter(ElectionResultEvent.bsky_posted.is_(True), ElectionResultEvent.election_date == election_date,
+                ElectionResultEvent.kind.in_((er.FLIP, er.FLIP_REVERSED)))
+        .order_by(ElectionResultEvent.bsky_posted_at, ElectionResultEvent.id)
+    ):
+        last_claim[rid] = kind
+    posted_flip_races = {rid for rid, kind in last_claim.items() if kind == er.FLIP}
     recent_races = {
         rid for (rid,) in db.query(ElectionResultEvent.race_id).filter(
             ElectionResultEvent.bsky_posted.is_(True),
@@ -256,12 +268,13 @@ def post_result_updates(db: Session, election_date: str) -> int:
         correction = kind == CORRECTION
         if not correction and (hour_left <= 0 or election_left <= 0 or race.id in recent_races):
             continue  # held for a later pass
-        text = compose(kind, race, _as_of_now(db.get(RaceResult, race.id), detail))
+        url = f"{SITE}/elections/states/{race.state}#race-{race.id}"
+        room = min(MAX_POST_CHARS, BSKY_MAX_CHARS - len(url) - 1)  # 1 for the space before the link
+        text = compose(kind, race, _as_of_now(db.get(RaceResult, race.id), detail), budget=room)
         if not text:
             event.bsky_posted_at = now
             db.commit()
             continue
-        url = f"{SITE}/elections/states/{race.state}#race-{race.id}"
         if not publish_post(text, url, success_msg=f"Posted result update: {race.id} {kind}",
                             error_context=f"result event {event.id}"):
             # Posting is down or refusing us: stop the pass. Every attempt

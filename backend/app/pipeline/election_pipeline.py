@@ -834,7 +834,11 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     ingest race coverage, post grounded Bluesky updates, and snapshot
     fundraising. Returns a summary dict with counts."""
     db = SessionLocal()
-    cycle = cycle if cycle is not None else current_election_cycle(db)
+    try:
+        cycle = cycle if cycle is not None else current_election_cycle(db)
+    except Exception:
+        db.close()
+        raise
     _run_token = None  # no run of ours for the finally to stop until start() below
 
     run, _run_token, refused = acquire_tracked_run(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)

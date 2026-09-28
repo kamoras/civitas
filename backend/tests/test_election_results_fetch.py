@@ -851,3 +851,26 @@ class TestPollCloseScript:
     def test_varies_is_none(self):
         script = _poll_script()
         assert script.last_close("Varies by municipality", ["America/New_York"], date(2026, 11, 10)) is None
+
+
+def test_totalvote_keeps_a_named_write_ins_votes_in_a_general_count():
+    """A primary drops every write-in (never a nominee); a general count
+    keeps a named write-in's votes and drops only the aggregate line."""
+    from lxml import html as lxml_html
+
+    def row(name, party, votes):
+        return (f'<div class="section group"><div class="display-results-box-d"><h1>{name}</h1><h2>{party}</h2></div>'
+                f'<div class="display-results-box-f"><h1>{votes}</h1></div></div>')
+
+    wrapper = lxml_html.fromstring("<div>" + row("Jane Doe", "Democratic", "1,000")
+                                   + row("Write-in: Sam Roe", "", "40") + row("Write-ins", "", "12") + "</div>")
+    assert [n for n, _, _ in totalvote._candidate_rows(wrapper)] == ["Jane Doe"]
+    kept = totalvote._candidate_rows(wrapper, keep_write_ins=True)
+    assert [(n, v) for n, _, v in kept] == [("Jane Doe", 1000), ("Sam Roe", 40), ("Write-ins", 12)]
+
+
+def test_issue_text_names_the_office_not_its_vendor_system():
+    from app.live_results.signals import publisher
+
+    assert publisher("Arkansas Secretary of State (Tally ENR election-night results)") == "Arkansas Secretary of State"
+    assert publisher("Georgia Secretary of State") == "Georgia Secretary of State"

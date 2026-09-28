@@ -77,8 +77,10 @@ FLIP_MIN_REPORTING_SHARE = 0.5
 # CO-8's 3 counties reporting within minutes of the first dump, and its
 # counties keep counting for days. Half the places says nothing there, so
 # such a flip needs every place in AND this long since the race's first
-# votes — past the election-night dump and the batches after it — or the
-# source's official flag. Editorial, like the share above.
+# votes, or the source's official flag. Editorial, like the share above:
+# it keeps a flip off the first dumps of the evening (a Colorado race with
+# first votes at 7:30 PM MT qualifies at 1:30 AM at the earliest), not off
+# election night — the wording everywhere is "leads", "not final".
 COUNTY_FLIP_SETTLE = timedelta(hours=6)
 
 _MEMBER_PARTY = {"D": "DEM", "R": "REP", "I": "IND"}
@@ -155,6 +157,11 @@ def _tallies(race: Race, contest: ContestCount) -> list[dict]:
         if last:
             match = _match_candidate(list(race.candidates), last, party or "", name)
         rows.append({
+            # Who the feed says this is, as it prints them: what a row is
+            # compared by between polls (_key), since the display name and
+            # party below change when a Candidate row is matched mid-count.
+            "sourceName": name,
+            "sourceParty": party,
             # The matched candidate's name as the state's ballot prints it
             # where there is one: a results feed can carry an honorific
             # (Arkansas: "Congressman Steve Womack") the ballot doesn't.
@@ -183,7 +190,11 @@ def _key(row: dict | None):
     as "Dana Smith moves ahead of Dana Smith"."""
     if not row:
         return None
-    return (" ".join(str(row.get("name") or "").split()).casefold(), row.get("party"))
+    if row.get("sourceName"):
+        name, party = row["sourceName"], row.get("sourceParty")
+    else:
+        name, party = row.get("name"), row.get("party")
+    return (" ".join(str(name or "").split()).casefold(), party)
 
 
 def flip_qualifies(result: RaceResult, now: datetime | None = None) -> bool:
@@ -238,6 +249,8 @@ def event_detail(result: RaceResult, **extra) -> dict:
             "name": row["name"], "party": row.get("party"), "votes": row["votes"],
             "pct": round(100 * row["votes"] / counted, 1) if counted else None,
             "candidateId": row.get("candidateId"),
+            "sourceName": row.get("sourceName"),
+            "sourceParty": row.get("sourceParty"),
         }
 
     return {
@@ -414,10 +427,15 @@ def apply_count(
 
 
 def _contest_race(db: Session, cycle: int, state: str, contest: ContestCount) -> Race | None:
-    if contest.office == "S" and contest.is_special:
-        race = db.get(Race, f"{cycle}-SEN-{state}-SPECIAL")
-        if race is not None:
-            return race
+    """The race a contest's count belongs to. A special election (the rest
+    of a term) goes only to a race kept for it: House seats have none, and
+    a Senate special with no "-SPECIAL" race on file has none either.
+    Sending it to the regular race put two contests on one seat, and the
+    sync, refusing to guess between them, dropped the regular count too."""
+    if contest.is_special:
+        if contest.office != "S":
+            return None
+        return db.get(Race, f"{cycle}-SEN-{state}-SPECIAL")
     return db.get(Race, _race_id_for(db, cycle, state, contest.office, contest.district))
 
 

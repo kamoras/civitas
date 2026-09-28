@@ -19,6 +19,7 @@ until its confirmation deadline has passed.
 """
 
 import json
+import re
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -56,6 +57,14 @@ def holders_word(group: str | None) -> str:
     return _PARTY_WORDS.get(group or "", (group, group))[1] or "another party"
 
 
+def publisher(source_name: str) -> str:
+    """"Arkansas Secretary of State", from the config's label "Arkansas
+    Secretary of State (Tally ENR election-night results)": the trailing
+    parenthetical names the vendor system, which a sentence meant for the
+    public doesn't need."""
+    return re.sub(r"\s*\([^()]*\)\s*$", "", source_name or "").strip() or source_name
+
+
 def race_label(race) -> str:
     state = STATE_NAMES.get(race.state, race.state)
     if race.office == "S":
@@ -78,13 +87,13 @@ def _content(result: RaceResult) -> dict:
     label = race_label(result.race)
     if result.official:
         title = f"{noun[:1].upper()}{noun[1:]} wins {label} in the official count, taking a seat {holders} held"
-        lede = f"{result.source_name} lists its count as official."
+        lede = f"{publisher(result.source_name)} lists its count as official."
     else:
         title = f"{noun[:1].upper()}{noun[1:]} leads {label} count in a seat {holders} hold"
         lede = ("The count is not final and the lead can change. "
                 "Press coverage has not yet confirmed it.")
     against = f" ahead of {_person(runner)}" if runner else ""
-    summary = f"{result.source_name}'s count shows {_person(leader)}{against}. {lede}"
+    summary = f"{publisher(result.source_name)}'s count shows {_person(leader)}{against}. {lede}"
     facts = [f"{_person(leader)}: {leader['votes']:,} votes, {leader['pct']}%"]
     if runner:
         facts.append(f"{_person(runner)}: {runner['votes']:,} votes, {runner['pct']}%")
@@ -121,10 +130,10 @@ def _fill(issue: ActionIssue, result: RaceResult) -> None:
     issue.title = content["title"]
     issue.summary = content["summary"]
     issue.facts = facts
-    issue.fact_sources = json.dumps([result.source_name] * len(content["facts"]))
+    issue.fact_sources = json.dumps([publisher(result.source_name)] * len(content["facts"]))
     issue.actions = json.dumps(content["actions"])
     issue.source_urls = json.dumps([result.source_url] if result.source_url else [])
-    issue.source_names = json.dumps([result.source_name])
+    issue.source_names = json.dumps([publisher(result.source_name)])
     issue.primary_source_url = result.source_url
 
 

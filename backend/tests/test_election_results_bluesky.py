@@ -301,3 +301,43 @@ class TestRoundTwo:
         _event(db_session, "2026-SEN-GA", er.FLIP, _detail(reporting=60))
         [(text, _)] = _run(db_session)
         assert "wins in the official count" in text and "60.0%" in text and "Not final" not in text
+
+
+class TestRoundThree:
+    def test_the_link_never_costs_the_qualifier(self, db_session):
+        """publish_post appends the link and cuts anything over 300 at a
+        sentence boundary — which is "Not final."."""
+        from app.pipeline.analyze import bluesky_utils
+
+        _race(db_session, "2026-HOUSE-GA-14", office="H", district=14)
+        e = _event(db_session, "2026-HOUSE-GA-14", er.FLIP)
+        import json
+
+        result = db_session.get(RaceResult, "2026-HOUSE-GA-14")
+        tallies = json.loads(result.tallies)
+        tallies[0]["name"] = "Bartholomew Featherstonehaugh-Smythe"
+        tallies[1]["name"] = "Alexandra Montgomery-Richardson"
+        result.tallies = json.dumps(tallies)
+        result.reporting_units, result.total_units = 1850, 2600
+        db_session.flush()
+        [(text, url)] = _run(db_session)
+        assert len(text) + 1 + len(url) <= bluesky_utils.BSKY_MAX_CHARS
+        assert text.endswith("Not final.")
+        assert e.bsky_posted
+
+    def test_no_second_correction_while_the_last_word_is_one(self, db_session):
+        _race(db_session, "2026-SEN-GA", flip=False)
+        t = utcnow()
+        _event(db_session, "2026-SEN-GA", er.FLIP, bsky_posted=True, bsky_posted_at=t - timedelta(minutes=30))
+        _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"),
+               bsky_posted=True, bsky_posted_at=t - timedelta(minutes=20))
+        _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
+        assert _run(db_session) == []
+
+    def test_all_reporting_without_units_says_nothing(self):
+        import json
+
+        race = Race(id="2026-SEN-GA", office="S", state="GA", cycle_year=2026)
+        d = json.loads(_detail())
+        d["totalUnits"] = None
+        assert rb.compose(er.ALL_REPORTING, race, d) is None
