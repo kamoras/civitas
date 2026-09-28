@@ -80,7 +80,8 @@
       "governor": 4, "lt_governor": 4, "attorney_general": 4, "comptroller": 4,
       "land_office_commissioner": 4, "agriculture_commissioner": 4,
       "railroad_commissioner": 6, "state_board_of_education": 4
-    }
+    },
+    "PA": {"governor": 4, "lt_governor": 4}
   },
   "legislature": {
     "AK": {"upper": 4, "lower": 2},
@@ -106,7 +107,8 @@
     "KS": {"upper": 4, "lower": 2},
     "MO": {"upper": 4, "lower": 2},
     "SC": {"lower": 2},
-    "TX": {"upper": 4, "lower": 2}
+    "TX": {"upper": 4, "lower": 2},
+    "PA": {"upper": 4, "lower": 2}
   },
   "judicial": {
     "FL": {"circuit": 6},

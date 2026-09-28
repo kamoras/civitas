@@ -189,6 +189,9 @@ _STATEWIDE_OFFICES = [
     ("auditor", re.compile(
         r"\b(?:state|general)\s+auditor\b|\bAuditor\s+of\s+(?:Public\s+Accounts|State)\b",
         re.IGNORECASE)),
+    # Pennsylvania's title, word order reversed ("Auditor General"); on
+    # its 2028 ballot, not 2026's, but its adapter reads every office.
+    ("auditor", re.compile(r"\bAuditor\s+General\b", re.IGNORECASE)),
     # Idaho's own constitutional officer. Qualified like the two above,
     # because a county can have a controller too.
     ("controller", re.compile(r"\bstate\s+controller\b", re.IGNORECASE)),
@@ -528,8 +531,11 @@ _NON_LEGISLATIVE_RE = re.compile(
 #   District 5" stays refused, because in a state that prints its federal
 #   seats that way it would be a congressional race.
 _STATE_LEG_CHAMBERS = [
-    ("upper", re.compile(r"\bSenator\s+in\s+General\s+Assembly\b", re.IGNORECASE)),
-    ("lower", re.compile(r"\bRepresentative\s+in\s+General\s+Assembly\b", re.IGNORECASE)),
+    #   Pennsylvania writes the same chambers with an article: "Senator in
+    #   the General Assembly 2nd Senatorial District", "Representative in
+    #   the General Assembly 4th Legislative District" (its 2026 primary).
+    ("upper", re.compile(r"\bSenator\s+in\s+(?:the\s+)?General\s+Assembly\b", re.IGNORECASE)),
+    ("lower", re.compile(r"\bRepresentative\s+in\s+(?:the\s+)?General\s+Assembly\b", re.IGNORECASE)),
     ("upper", re.compile(r"\bState\s+Senat(?:e|or)\b", re.IGNORECASE)),
     ("lower", re.compile(r"\bState\s+(?:House|Representative)\b", re.IGNORECASE)),
     #   North Carolina: "NC HOUSE OF REPRESENTATIVES DISTRICT 1", with no
