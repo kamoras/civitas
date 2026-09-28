@@ -12,9 +12,11 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
   DEM: { label: "DEMOCRAT", color: "text-dem-blue", rule: "bg-dem-blue" },
   REP: { label: "REPUBLICAN", color: "text-signal-red", rule: "bg-signal-red" },
   IND: { label: "INDEPENDENT", color: "text-ind-purple", rule: "bg-ind-purple" },
-  // State affiliates of the Democratic Party — styled as Democrats. Codes
-  // come from lib/elections.ts's DEM_AFFILIATE_PARTIES, the same list
-  // majorPartyOf reads, so the two can't silently drift apart.
+  // State affiliates of the Democratic Party, labelled with their own name
+  // ("DEMOCRAT (DFL)") from lib/elections.ts's DEM_AFFILIATE_PARTIES. That
+  // list is labels only: which codes are the same party is the backend's
+  // (FEC_PARTY_ALIASES), sent as each candidate's `partyGroup` — which
+  // getPartyMeta falls back to for any code without a label here.
   ...Object.fromEntries(
     Object.entries(DEM_AFFILIATE_PARTIES).map(([code, suffix]) => [
       code,
@@ -27,13 +29,21 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
   NON: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
   NPA: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
   NNE: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
+  UN: { label: "UNAFFILIATED", color: "text-ink-lo", rule: "bg-ink-min" },
+  NOP: { label: "NO PARTY PREFERENCE", color: "text-ink-lo", rule: "bg-ink-min" },
   UNK: { label: "UNAFFILIATED/UNKNOWN", color: "text-ink-lo", rule: "bg-ink-min" },
   // FEC's code for a declared write-in: on the state's list, not printed on the ballot.
   W: { label: "WRITE-IN", color: "text-ink-lo", rule: "bg-ink-min" },
 };
 
-export function getPartyMeta(party: string) {
-  return PARTY_META[party] ?? { label: party, color: "text-ink-lo", rule: "bg-ink-min" };
+/** A candidate's party label and colours: their own FEC code's where
+ * there is one, else their party group's (a U.S. Taxpayers filer reads as
+ * CONSTITUTION), else the bare code. */
+export function getPartyMeta(c: { party: string; partyGroup?: string | null }) {
+  return (
+    PARTY_META[c.party] ??
+    PARTY_META[c.partyGroup ?? ""] ?? { label: c.party, color: "text-ink-lo", rule: "bg-ink-min" }
+  );
 }
 
 const INCUMBENT_LABELS: Record<string, string> = {
@@ -54,7 +64,7 @@ export default function CandidateCard({
   candidate: BallotCandidate;
   showUnconfirmed?: boolean;
 }) {
-  const pm = getPartyMeta(candidate.party);
+  const pm = getPartyMeta(candidate);
   const cash = cashOnHandDisplay(candidate.cashOnHand);
   // UTC date only, sliced from the ISO string — deterministic across
   // server and client renders, so no locale/hydration hazard.

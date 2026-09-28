@@ -451,6 +451,11 @@ _COORDINATION_PATHS = {
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",
     "pipeline/filer_matching.py",
+    # The election run's orchestration: candidate rosters, ballots, measures
+    # and coverage, none of it classified or scored. Its matching and
+    # posting logic lives in analyze/ and fetch/, and is hashed (or not)
+    # there.
+    "pipeline/election_pipeline.py",
     *_COORDINATION_PATHS,
 }
 

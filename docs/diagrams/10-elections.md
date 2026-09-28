@@ -37,9 +37,7 @@ flowchart TB
     FIN --> CONF
     subgraph CONF["<b>3. Confirmed candidates</b> (state_candidates.py)"]
         direction TB
-        CRAWL{"Sunday?"} -->|yes| CRAWLER["crawl_for_new_sources<br/>adopt only with positive proof"]
-        CRAWL -->|no| SYNC
-        CRAWLER --> SYNC["sync_confirmed_candidates<br/>one strategy per state →<br/>records (office, district, party, surname)"]
+        CRAWL["crawl_for_new_sources<br/>states due: a week since their last<br/>completed crawl (a failure retries<br/>next night)<br/>adopt only with positive proof"] --> SYNC["sync_confirmed_candidates<br/>one strategy per state →<br/>records (office, district, party, surname)"]
         SYNC --> MATCH["_match_candidate<br/>against that race's FEC rows<br/>→ Candidate.confirmed_general"]
         MATCH --> FILINGS["sync_ballot_filings<br/>→ Candidate.on_primary_ballot"]
     end
@@ -53,8 +51,10 @@ A Senate race is created only where the FEC election-dates calendar lists a
 Senate general for the state (`state_election_dates.senate_election_known`).
 Filers anywhere else are skipped and races already on file are removed —
 New York and Hawaii had phantom "special elections" in 2026 built from
-serial filers. Until the calendar has been read once, the class rotation
-decides.
+serial filers. Until the calendar has been read in full once, the class
+rotation decides. Only a complete read (every page) can retract a Senate
+election or mark the calendar read; a read cut short only adds, since a state
+missing from it may sit on the page that failed.
 
 ## Where "confirmed" comes from
 

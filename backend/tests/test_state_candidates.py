@@ -50,7 +50,7 @@ class TestCrawlAdoption:
             return None
 
         async def no_calendar(client, cycle):
-            return {}
+            return {}, False
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", fake_discover)
@@ -146,6 +146,28 @@ class TestCrawlAdoption:
         assert "MI" in saved
 
     @pytest.mark.asyncio
+    async def test_a_google_civic_states_filing_list_is_looked_for_once(self, db_session, monkeypatch):
+        """Its crawl goes on to discovery; finding nothing there must not
+        look for the same filing list a second time."""
+        async def nothing_found(client, state, cycle, rules=None):
+            return None
+
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        self._patch(monkeypatch, [])
+        sc.STRATEGIES["google_civic"] = _ok
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"MI": ["michigan.gov"]})
+        monkeypatch.setattr(sc, "_refresh_dates", _ok)
+        monkeypatch.setattr(sc, "discover_source", nothing_found)
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert looked == ["MI"]
+
+    @pytest.mark.asyncio
     async def test_a_BROKEN_hand_verified_state_is_crawled_for_a_replacement(
         self, db_session, monkeypatch,
     ):
@@ -167,11 +189,11 @@ class TestCrawlAdoption:
             return None
 
         async def no_calendar(client, cycle):
-            return {}
+            return {}, False
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         async def no_calendar(client, cycle):
-            return {}
+            return {}, False
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", fake_discover)
@@ -187,37 +209,69 @@ class TestCrawlAdoption:
 
 class TestForgetsBrokenDiscoveries:
     """The other half of self-healing: finding a state's new location only
-    helps if the dead one goes away."""
+    helps if the dead one goes away — but a failed fetch is as likely an
+    outage as a move."""
 
-    @pytest.mark.asyncio
-    async def test_a_discovered_source_that_stopped_fetching_is_forgotten(
-        self, db_session, monkeypatch,
-    ):
-        saved = {"ZZ": {"strategy": "tabular"}}
-
+    @staticmethod
+    def _patch(monkeypatch, saved, fetch):
         async def nothing_found(client, state, cycle, rules=None):
-            return None
-
-        async def broken(client, cycle, state, source):
             return None
 
         async def no_filings(client, state, cycle):
             return None
 
-        async def no_calendar(client, cycle):
-            return {}
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        forgotten = []
         monkeypatch.setattr(sc, "discover_source", nothing_found)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
-        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": fetch})
         monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
-        monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st))
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["ZZ"] == "forgotten"
-        assert saved == {}
+        monkeypatch.setattr(sc, "_discovered_source", lambda st: saved.get(st))
+        monkeypatch.setattr(sc, "forget_results_source", lambda st: forgotten.append(st))
+        return forgotten
+
+    @staticmethod
+    async def _crawl_at(db, monkeypatch, when):
+        from datetime import datetime
+
+        monkeypatch.setattr(sc, "utcnow", lambda: datetime.fromisoformat(when))
+        return await sc.crawl_for_new_sources(db, None, 2026)
+
+    @pytest.mark.asyncio
+    async def test_a_source_is_forgotten_only_after_failing_for_two_weeks(
+        self, db_session, monkeypatch,
+    ):
+        """It used to go on the first failed fetch — an hour's outage on
+        crawl night left the state dark until a later crawl re-proved it."""
+        saved = {"ZZ": {"strategy": "tabular", "filings": {"url": "x"}}}
+
+        async def broken(client, cycle, state, source):
+            return None
+
+        forgotten = self._patch(monkeypatch, saved, broken)
+        first = await self._crawl_at(db_session, monkeypatch, "2026-09-01T03:00:00")
+        assert first["ZZ"] == "failing since 2026-09-01" and forgotten == []
+        assert await self._crawl_at(db_session, monkeypatch, "2026-09-05T03:00:00") == {}  # not due
+        second = await self._crawl_at(db_session, monkeypatch, "2026-09-08T03:00:00")
+        assert second["ZZ"] == "failing since 2026-09-01" and forgotten == []
+        third = await self._crawl_at(db_session, monkeypatch, "2026-09-15T03:00:00")
+        assert third["ZZ"] == "forgotten" and forgotten == ["ZZ"]
+
+    @pytest.mark.asyncio
+    async def test_a_source_that_fetches_again_starts_its_clock_over(self, db_session, monkeypatch):
+        saved = {"ZZ": {"strategy": "tabular"}}
+        works = {"now": False}
+
+        async def flaky(client, cycle, state, source):
+            return [] if works["now"] else None
+
+        forgotten = self._patch(monkeypatch, saved, flaky)
+        await self._crawl_at(db_session, monkeypatch, "2026-09-01T03:00:00")
+        works["now"] = True
+        assert (await self._crawl_at(db_session, monkeypatch, "2026-09-08T03:00:00"))["ZZ"] == "kept"
+        works["now"] = False
+        later = await self._crawl_at(db_session, monkeypatch, "2026-09-15T03:00:00")
+        assert later["ZZ"] == "failing since 2026-09-15" and forgotten == []
 
     @pytest.mark.asyncio
     async def test_one_that_still_fetches_survives_a_crawl_that_missed_it(
@@ -227,29 +281,973 @@ class TestForgetsBrokenDiscoveries:
         working source."""
         saved = {"ZZ": {"strategy": "tabular"}}
 
-        async def nothing_found(client, state, cycle, rules=None):
-            return None
-
         async def working(client, cycle, state, source):
             return []
+
+        forgotten = self._patch(monkeypatch, saved, working)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "kept" and forgotten == []
+
+    @pytest.mark.asyncio
+    async def test_a_filing_list_alone_is_not_a_broken_results_source(self, db_session, monkeypatch):
+        """An entry with a filing list and no results source was forgotten
+        on every crawl, because it had nothing to fetch. It is kept — and
+        its filing list is still looked for each week, so one that moves
+        is followed."""
+        saved = {"ZZ": {"filings": {"url": "x"}, "source_name": "filings"}}
+
+        async def never_called(client, cycle, state, source):
+            raise AssertionError("no results source to test")
+
+        forgotten = self._patch(monkeypatch, saved, never_called)
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "filings only" and forgotten == [] and looked == ["ZZ"]
+
+
+class TestForgettingKeepsTheFilingList:
+    def test_only_the_results_source_goes(self, tmp_path, monkeypatch):
+        import json
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        path = tmp_path / "discovered.json"
+        path.write_text(json.dumps({
+            "ZZ": {"strategy": "tabular", "source_name": "a file", "filings": {"url": "x"}},
+            "YY": {"strategy": "tabular"},
+        }))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        sources.forget_results_source("ZZ")
+        sources.forget_results_source("YY")
+        assert json.loads(path.read_text()) == {"ZZ": {"filings": {"url": "x"}}}
+
+
+class TestCrawlFailuresAreContained:
+    """One state's crawl raising used to end the whole sweep — and, since
+    it ran unguarded inside the confirmed-candidate phase, that night's
+    sync too. And being weekly with no memory, the states after it were
+    starved every week."""
+
+    @staticmethod
+    def _patch(monkeypatch, discover):
+        async def no_filings(client, state, cycle):
+            return None
+
+        monkeypatch.setattr(sc, "discover_source", discover)
+        monkeypatch.setattr(sc, "discover_filings", no_filings)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"AA": ["a.gov"], "BB": ["b.gov"]})
+        monkeypatch.setattr(sc, "discovered_states", lambda: set())
+        alerts = []
+        monkeypatch.setattr(sc, "report_file_problems",
+                            lambda subject, lead, problems, key: alerts.extend(problems))
+        return alerts
+
+    @pytest.mark.asyncio
+    async def test_a_state_whose_crawl_raises_is_alone_in_failing_and_is_retried_next_night(
+        self, db_session, monkeypatch,
+    ):
+        from datetime import datetime
+
+        calls = []
+
+        async def discover(client, state, cycle, rules=None):
+            return None
+
+        real = sc._crawl_results_source
+
+        async def results(db, client, cycle, state, *args):
+            calls.append(state)
+            if state == "AA":
+                raise RuntimeError("a bug past every guard")
+            return await real(db, client, cycle, state, *args)
+
+        alerts = self._patch(monkeypatch, discover)
+        monkeypatch.setattr(sc, "_crawl_results_source", results)
+        monkeypatch.setattr(sc, "utcnow", lambda: datetime(2026, 9, 1, 3))
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes == {"AA": "error", "BB": "none"}
+        assert len(alerts) == 1 and alerts[0].startswith("AA")
+        monkeypatch.setattr(sc, "utcnow", lambda: datetime(2026, 9, 2, 3))
+        calls.clear()
+        await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert calls == ["AA"]  # BB completed and isn't due for a week; AA is retried
+
+    @pytest.mark.asyncio
+    async def test_a_raise_inside_a_step_is_contained_and_still_alerted(self, db_session, monkeypatch):
+        """Discovery raising (a portal's JSON in a shape nobody checked) is
+        treated as finding nothing, so the state still gets its forget check
+        and filing-list search — but it is reported, since a bug in an
+        adapter otherwise looks exactly like an outage."""
+        async def discover(client, state, cycle, rules=None):
+            if state == "AA":
+                raise AttributeError("'list' object has no attribute 'get'")
+            return None
+
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        alerts = self._patch(monkeypatch, discover)
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes == {"AA": "none", "BB": "none"} and looked == ["AA", "BB"]
+        assert alerts == ["AA: Source discovery raised AttributeError: 'list' object has no attribute 'get'"]
+
+    @pytest.mark.asyncio
+    async def test_a_find_that_cannot_be_saved_is_not_reported_as_adopted(
+        self, db_session, monkeypatch,
+    ):
+        from app.atomic_write import NotSaved
+
+        _race(db_session, "2026-HOUSE-AA-3", "AA", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-AA-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+
+        async def discover(client, state, cycle, rules=None):
+            return {"strategy": "tabular", "_evidence": "a file"} if state == "AA" else None
+
+        async def fetch(client, cycle, state, source):
+            return [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}]
+
+        def cannot_save(state, source):
+            raise NotSaved("disk full")
+
+        alerts = self._patch(monkeypatch, discover)
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": fetch})
+        monkeypatch.setattr(sc, "save_discovered", cannot_save)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["AA"] == "save failed" and alerts == ["AA: disk full"]
+
+
+class TestARaisingSourceIsNotFetching:
+    """A source that breaks by raising, rather than returning nothing, got
+    none of the handling a non-fetching one gets — and in the sync ended
+    the pass over every state after it."""
+
+    @pytest.mark.asyncio
+    async def test_a_spare_that_raises_does_not_end_the_sync(self, db_session, monkeypatch, tmp_path):
+        import json
+        from unittest.mock import AsyncMock
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        async def no_calendar(client, cycle):
+            return {}, False
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX", "WY"})
+        path = tmp_path / "d.json"
+        path.write_text(json.dumps({"TX": {"strategy": "tabular", "source_name": "x"}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(side_effect=ValueError("not a spreadsheet")))
+        wy = sources.source_for_state("WY")
+        monkeypatch.setitem(sc.STRATEGIES, wy["strategy"], AsyncMock(return_value=[]))
+        if wy.get("general_list"):
+            monkeypatch.setitem(sc.STRATEGIES, wy["general_list"]["strategy"], AsyncMock(return_value=[]))
+        results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert results["TX"]["status"] == "fetch_failed" and results["WY"]["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_in_the_crawl_it_takes_the_not_fetching_paths(self, db_session, monkeypatch):
+        """A discovered source that raises enters the failing/forget clock,
+        and the state is still searched for a filing list."""
+        async def raises(client, cycle, state, source):
+            raise ValueError("html where a spreadsheet was")
+
+        saved = {"ZZ": {"strategy": "tabular"}}
+        forgotten = TestForgetsBrokenDiscoveries._patch(monkeypatch, saved, raises)
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"].startswith("failing since") and looked == ["ZZ"] and forgotten == []
+
+    @pytest.mark.asyncio
+    async def test_a_hand_verified_source_that_raises_is_crawled_for_a_replacement(
+        self, db_session, monkeypatch,
+    ):
+        searched = []
+
+        async def discover(client, state, cycle, rules=None):
+            searched.append(state)
+            return None
+
+        async def raises(client, cycle, state, source):
+            raise ValueError("html where a spreadsheet was")
 
         async def no_filings(client, state, cycle):
             return None
 
+        monkeypatch.setattr(sc, "discover_source", discover)
+        monkeypatch.setattr(sc, "discover_filings", no_filings)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"TX": ["sos.texas.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tx_civix": raises})
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert searched == ["TX"] and outcomes["TX"] != "error"
+
+
+class TestAdoptingAFilingListThatWontParse:
+    @pytest.mark.asyncio
+    async def test_a_read_that_raises_adopts_nothing_and_is_reported(self, db_session, monkeypatch):
+        import csv
+
+        async def filings(client, state, cycle):
+            return {"url": "x", "_evidence": "a list"}
+
+        async def unreadable(client, year, state, source):
+            raise csv.Error("field larger than field limit")
+
+        raised = []
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", unreadable)
+        token = sc._RAISED.set(raised)
+        try:
+            assert await sc._adopt_filings(db_session, None, 2026, "ZZ", {}) == "none"
+        finally:
+            sc._RAISED.reset(token)
+        assert raised == ["ZZ: Filing-list read raised Error: field larger than field limit"]
+
+    @pytest.mark.asyncio
+    async def test_the_list_already_on_file_is_left_to_the_syncs_report(self, db_session, monkeypatch):
+        """The nightly sync reads the same list and reports it; the crawl
+        reporting it too was two alerts for one fault."""
+        async def filings(client, state, cycle):
+            return {"url": "x", "_evidence": "a list"}
+
+        async def unreadable(client, year, state, source):
+            raise ValueError("unreadable")
+
+        raised = []
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", unreadable)
+        monkeypatch.setattr(sc, "filings_for_state", lambda st: {"url": "x"})
+        token = sc._RAISED.set(raised)
+        try:
+            assert await sc._adopt_filings(db_session, None, 2026, "ZZ", {}) == "none"
+        finally:
+            sc._RAISED.reset(token)
+        assert raised == []
+
+
+class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
+    """A state's certified ballot lists third-party and independent
+    candidates no FEC row covers (ballot-only rows). A primary-results file
+    answering while it is down cannot list them — its silence must not
+    delete them."""
+
+    @staticmethod
+    def _setup(monkeypatch, tmp_path, state, discovered=None):
+        import json
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
         async def no_calendar(client, cycle):
-            return {}
+            return {}, True
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-        monkeypatch.setattr(sc, "discover_source", nothing_found)
-        monkeypatch.setattr(sc, "discover_filings", no_filings)
-        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
-        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": working})
-        monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
-        monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st))
+        monkeypatch.setattr(sc, "report_file_problems", lambda *a, **k: None)
+        monkeypatch.setattr(sc, "configured_states", lambda: {state})
+        path = tmp_path / "d.json"
+        path.write_text(json.dumps(discovered or {}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        return sources.source_for_state(state)
+
+    @staticmethod
+    def _ids(db):
+        return sorted(c.id for c in db.query(Candidate).all())
+
+    @pytest.mark.asyncio
+    async def test_the_crawlers_spare_answering_for_tx(self, db_session, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock
+
+        self._setup(monkeypatch, tmp_path, "TX", {"TX": {
+            "strategy": "tabular", "source_name": "a results file",
+            "description": "Found automatically on 2026-10-01: x"}})
+        _race(db_session, "2026-SEN-TX", "TX", office="S")
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        db_session.commit()
+        paxton = {"office": "S", "district": None, "party": "R", "last_name": "PAXTON", "display_name": "Ken Paxton"}
+        green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[paxton, green]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        night1 = self._ids(db_session)
+        assert any(i.startswith("ballot:") for i in night1)
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[paxton]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert self._ids(db_session) == night1
+
+    @pytest.mark.asyncio
+    async def test_primary_results_beside_a_general_list_that_is_down(self, db_session, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock
+
+        src = self._setup(monkeypatch, tmp_path, "CO")
+        _race(db_session, "2026-SEN-CO", "CO", office="S")
+        _candidate(db_session, "A", "2026-SEN-CO", "HICK, JOHN", party="DEM")
+        db_session.commit()
+        rec = [{"office": "S", "district": None, "party": "D", "last_name": "HICK", "display_name": "John Hick"}]
+        green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
+        monkeypatch.setitem(sc.STRATEGIES, src["strategy"], AsyncMock(return_value=rec))
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=rec + [green]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        night1 = self._ids(db_session)
+        assert len(night1) == 2
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=None))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert self._ids(db_session) == night1
+
+    @pytest.mark.asyncio
+    async def test_a_certified_list_that_answers_empty_or_partial(self, db_session, monkeypatch, tmp_path):
+        """A general list returning [] (Google dropping the election) or
+        missing a race leaves those races to primary results, which must
+        not prune the certified rows there."""
+        from unittest.mock import AsyncMock
+
+        src = self._setup(monkeypatch, tmp_path, "CO")
+        _race(db_session, "2026-SEN-CO", "CO", office="S")
+        _candidate(db_session, "A", "2026-SEN-CO", "HICK, JOHN", party="DEM")
+        db_session.commit()
+        rec = [{"office": "S", "district": None, "party": "D", "last_name": "HICK", "display_name": "John Hick"}]
+        green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
+        monkeypatch.setitem(sc.STRATEGIES, src["strategy"], AsyncMock(return_value=rec))
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=rec + [green]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        night1 = self._ids(db_session)
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=[]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert self._ids(db_session) == night1
+
+    @pytest.mark.asyncio
+    async def test_a_placeholder_an_fec_row_replaced_goes_whoever_answers(
+        self, db_session, monkeypatch, tmp_path,
+    ):
+        """Not pruning must not show one person twice: a certified
+        candidate who has since filed with the FEC is matched by the weaker
+        source, and their placeholder goes — a same-surname candidate of
+        another party stays."""
+        from unittest.mock import AsyncMock
+
+        self._setup(monkeypatch, tmp_path, "TX", {"TX": {
+            "strategy": "tabular", "source_name": "a results file",
+            "description": "Found automatically on 2026-10-01: x"}})
+        _race(db_session, "2026-SEN-TX", "TX", office="S")
+        db_session.commit()
+        allred = {"office": "S", "district": None, "party": "D", "last_name": "ALLRED", "display_name": "Colin Allred"}
+        green = {"office": "S", "district": None, "party": "G", "last_name": "ALLRED", "display_name": "Gail Allred"}
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[allred, green]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 2
+        _candidate(db_session, "S0TX", "2026-SEN-TX", "ALLRED, COLIN", party="DEM")
+        db_session.commit()
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[allred]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert self._ids(db_session) == ["S0TX", "ballot:2026-SEN-TX:gail-allred"]
+
+    @pytest.mark.parametrize("order", ["mary_first", "john_first"])
+    def test_a_same_surname_same_party_candidate_is_not_taken_for_another(self, db_session, order):
+        """A top-four race can list Mary Smith (no FEC row) beside John
+        Smith (FEC-filed): John's match must never drop Mary's row."""
+        _race(db_session, "2026-SEN-AK", "AK", office="S")
+        _candidate(db_session, "S1", "2026-SEN-AK", "SMITH, JOHN", party="REP")
+        _candidate(db_session, "S2", "2026-SEN-AK", "SMITH, ROBERT", party="REP")
+        db_session.commit()
+        mary = {"office": "S", "district": None, "party": "R", "last_name": "SMITH", "display_name": "Mary Smith"}
+        john = {"office": "S", "district": None, "party": "R", "last_name": "SMITH", "display_name": "John Smith"}
+        records = [mary, john] if order == "mary_first" else [john, mary]
+        sc._apply_ballot(db_session, 2026, "AK", records, keep_unlisted=True, authoritative=True)
+        assert "ballot:2026-SEN-AK:mary-smith" in self._ids(db_session)
+        sc._apply_ballot(db_session, 2026, "AK", [john], keep_unlisted=True, authoritative=False, prune=False)
+        assert "ballot:2026-SEN-AK:mary-smith" in self._ids(db_session)
+
+    @pytest.mark.parametrize("certified, tonight, fec", [
+        ("T.J. Cox", "T.J. Cox", "COX, TERRANCE JOHN"),  # initials only
+        ("Daniel Cox", "Dan Cox", "COX, DANIEL"),  # another source's short form
+    ])
+    def test_an_fec_match_replaces_its_placeholder_however_it_was_spelled(
+        self, db_session, certified, tonight, fec,
+    ):
+        _race(db_session, "2026-HOUSE-CA-21", "CA", office="H", district=21)
+        db_session.commit()
+        rec = {"office": "H", "district": 21, "party": "D", "last_name": "COX"}
+        sc._apply_ballot(db_session, 2026, "CA", [rec | {"display_name": certified}],
+                         keep_unlisted=True, authoritative=True)
+        assert any(i.startswith("ballot:") for i in self._ids(db_session))
+        _candidate(db_session, "H1", "2026-HOUSE-CA-21", fec, party="DEM")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "CA", [rec | {"display_name": tonight}],
+                         keep_unlisted=True, authoritative=False, prune=False)
+        assert self._ids(db_session) == ["H1"]
+
+    def test_two_people_on_one_list_never_share_a_row(self, db_session):
+        """Chris and Christine Smith, both certified and neither FEC-filed:
+        "chris" is a short form of "christine", but a row this pass kept
+        for one is never reused for the other."""
+        _race(db_session, "2026-HOUSE-CA-3", "CA", office="H", district=3)
+        db_session.commit()
+        rec = {"office": "H", "district": 3, "party": "D", "last_name": "SMITH"}
+        sc._apply_ballot(db_session, 2026, "CA", [rec | {"display_name": "Chris Smith"},
+                                                   rec | {"display_name": "Christine Smith"}],
+                         keep_unlisted=True, authoritative=True)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 2
+
+    def test_an_ambiguous_placeholder_is_left_alone(self, db_session):
+        """John's FEC row filed as "SMITH, J" fits Jane's row by initial as
+        well as John's: with two candidates, neither is guessed — John's is
+        taken by his exact given name, Jane's stays."""
+        _race(db_session, "2026-HOUSE-CA-4", "CA", office="H", district=4)
+        db_session.commit()
+        rec = {"office": "H", "district": 4, "party": "D", "last_name": "SMITH"}
+        jane, john = rec | {"display_name": "Jane Smith"}, rec | {"display_name": "John Smith"}
+        sc._apply_ballot(db_session, 2026, "CA", [jane, john], keep_unlisted=True, authoritative=True)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-4", "SMITH, J", party="DEM")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "CA", [john], keep_unlisted=True, authoritative=False, prune=False)
+        assert "ballot:2026-HOUSE-CA-4:jane-smith" in self._ids(db_session)
+
+    def test_a_different_partys_different_person_is_not_matched_to_the_one_fec_row(self, db_session):
+        """Mary Smith (Libertarian, never FEC-filed) beside John Smith (DEM,
+        filed): the lone same-surname FEC row is not hers."""
+        _race(db_session, "2026-HOUSE-CA-5", "CA", office="H", district=5)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-5", "SMITH, JOHN", party="DEM")
+        db_session.commit()
+        mary = {"office": "H", "district": 5, "party": "L", "last_name": "SMITH", "display_name": "Mary Smith"}
+        sc._apply_ballot(db_session, 2026, "CA", [mary], keep_unlisted=True, authoritative=False)
+        assert "ballot:2026-HOUSE-CA-5:mary-smith" in self._ids(db_session)
+        assert db_session.get(Candidate, "H1").confirmed_general is not True
+
+    def test_nor_to_an_fec_filer_who_refiled(self, db_session):
+        """Every path of the matcher is checked — including the one that
+        takes the better-funded of one person's two FEC ids, which a
+        Libertarian Mary Smith reached through John's refiling."""
+        _race(db_session, "2026-HOUSE-CA-8", "CA", office="H", district=8)
+        db_session.commit()
+        mary = {"office": "H", "district": 8, "party": "L", "last_name": "SMITH", "display_name": "Mary Smith"}
+        sc._apply_ballot(db_session, 2026, "CA", [mary], keep_unlisted=True, authoritative=False)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-8", "SMITH, JOHN", party="DEM", has_raised_funds=True)
+        _candidate(db_session, "H2", "2026-HOUSE-CA-8", "SMITH, JOHN R", party="DEM")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "CA", [mary], keep_unlisted=True, authoritative=False)
+        assert "ballot:2026-HOUSE-CA-8:mary-smith" in self._ids(db_session)
+        assert db_session.get(Candidate, "H1").confirmed_general is not True
+
+    def test_a_refused_exact_surname_does_not_hide_a_fallback_match(self, db_session):
+        """Iowa: FEC files Ashley Hinson under her married name ("ARENHOLZ,
+        ASHLEY HINSON"), found by a fallback rule; a Libertarian John Hinson
+        on the exact surname is plainly not her, and must not end the
+        search."""
+        _race(db_session, "2026-SEN-IA", "IA", office="S")
+        _candidate(db_session, "S1", "2026-SEN-IA", "HINSON, JOHN", party="LIB")
+        _candidate(db_session, "S2", "2026-SEN-IA", "ARENHOLZ, ASHLEY HINSON", party="REP", has_raised_funds=True)
+        db_session.commit()
+        ashley = {"office": "S", "district": None, "party": "R", "last_name": "HINSON",
+                  "display_name": "Ashley Hinson"}
+        sc._apply_ballot(db_session, 2026, "IA", [ashley], keep_unlisted=True, authoritative=True)
+        assert db_session.get(Candidate, "S2").confirmed_general is True
+        assert not any(i.startswith("ballot:") for i in self._ids(db_session))
+
+    def test_a_surname_alone_has_no_given_name_to_contradict(self, db_session):
+        _race(db_session, "2026-HOUSE-OR-1", "OR", office="H", district=1)
+        _candidate(db_session, "H1", "2026-HOUSE-OR-1", "SMITH, JOHN", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-OR-1").candidates
+        assert sc._match_candidate(rows, "Smith", "I", "Smith").id == "H1"
+
+    @pytest.mark.parametrize("robert, alice", [
+        ("SMITH JONES, ROBERT", "BROWN JONES, ALICE"),  # the last-word rule
+        ("SMITH, ROBERT JONES", "BROWN, ALICE JONES"),  # the given-name rule
+    ])
+    def test_a_fallback_rule_is_judged_whole_too(self, db_session, robert, alice):
+        """Dropping Alice (plainly not Mary) from a fallback rule's pair would
+        leave Robert, a Conservative, as a false unique match for the
+        Constitution nominee Mary Jones."""
+        _race(db_session, "2026-HOUSE-NY-2", "NY", office="H", district=2)
+        _candidate(db_session, "H1", "2026-HOUSE-NY-2", robert, party="CRV")
+        _candidate(db_session, "H2", "2026-HOUSE-NY-2", alice, party="REP")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-NY-2").candidates
+        assert sc._match_candidate(rows, "JONES", "C", "Mary Jones") is None
+
+    @pytest.mark.parametrize("display, matches", [
+        ("J. Smith", True), ("Smith Jr.", True), ("Dr. Smith", True), ("Smith", True),
+        ("M. Smith", False),  # an initial that isn't his
+    ])
+    def test_only_a_stated_given_name_can_contradict(self, db_session, display, matches):
+        _race(db_session, "2026-HOUSE-OR-2", "OR", office="H", district=2)
+        _candidate(db_session, "H1", "2026-HOUSE-OR-2", "SMITH, JOHN", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-OR-2").candidates
+        found = sc._match_candidate(rows, "Smith", "I", display)
+        assert (found is not None and found.id == "H1") is matches
+
+    def test_a_first_last_comma_jr_printing_keeps_its_given_name(self, db_session):
+        """Tennessee and Maryland print "John A. Olszewski, Jr." — that comma
+        is not "Last, First", and read as one the name had no given name:
+        the different-person check never fired, and the namesake tie-break
+        lost the only thing that tells two Floreses apart."""
+        _race(db_session, "2026-HOUSE-TX-34", "TX", office="H", district=34)
+        _candidate(db_session, "E", "2026-HOUSE-TX-34", "FLORES, ERIC", party="DEM")
+        _candidate(db_session, "M", "2026-HOUSE-TX-34", "FLORES, MAYRA", party="DEM")
+        _race(db_session, "2026-HOUSE-MD-2", "MD", office="H", district=2)
+        _candidate(db_session, "O", "2026-HOUSE-MD-2", "OLSZEWSKI, MARY", party="DEM")
+        db_session.commit()
+        tx = db_session.get(Race, "2026-HOUSE-TX-34").candidates
+        md = db_session.get(Race, "2026-HOUSE-MD-2").candidates
+        assert sc._match_candidate(tx, "FLORES", "D", "Eric Flores, Jr.").id == "E"
+        assert sc._match_candidate(md, "OLSZEWSKI", "L", "John A. Olszewski, Jr.") is None
+
+    def test_a_leading_initial_is_the_records_own(self, db_session):
+        """"J. Robert Smith" fits JAMES (or J) by his first initial, whatever
+        the middle name — not a different person."""
+        _race(db_session, "2026-HOUSE-CA-9", "CA", office="H", district=9)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-9", "SMITH, JAMES", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-CA-9").candidates
+        assert sc._match_candidate(rows, "SMITH", "L", "J. Robert Smith").id == "H1"
+        assert sc._match_candidate(rows, "SMITH", "L", "M. Robert Smith") is None
+
+    @pytest.mark.parametrize("record_party, display, fec", [
+        ("L", "John Smith", "SMITH, JANE"),
+        ("R", "Mary Smith", "SMITH, MARK"),
+    ])
+    def test_a_shared_first_letter_is_not_a_shared_name(self, db_session, record_party, display, fec):
+        _race(db_session, "2026-HOUSE-CA-10", "CA", office="H", district=10)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-10", fec, party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-CA-10").candidates
+        assert sc._match_candidate(rows, "SMITH", record_party, display) is None
+
+    def test_a_surname_and_suffix_alone_has_no_given_name(self, db_session):
+        """"Lee Jr." (no FEC row) is not Leeann Lee: a later FEC match for
+        her must not take his placeholder."""
+        _race(db_session, "2026-HOUSE-CA-11", "CA", office="H", district=11)
+        db_session.commit()
+        lee = {"office": "H", "district": 11, "party": "R", "last_name": "LEE", "display_name": "Lee Jr."}
+        sc._apply_ballot(db_session, 2026, "CA", [lee], keep_unlisted=True, authoritative=True)
+        placeholder = [i for i in self._ids(db_session) if i.startswith("ballot:")]
+        assert placeholder
+        _candidate(db_session, "H1", "2026-HOUSE-CA-11", "LEE, LEEANN", party="REP")
+        db_session.commit()
+        leeann = {"office": "H", "district": 11, "party": "R", "last_name": "LEE", "display_name": "Leeann Lee"}
+        sc._apply_ballot(db_session, 2026, "CA", [leeann], keep_unlisted=True, authoritative=False, prune=False)
+        assert placeholder[0] in self._ids(db_session)
+        assert sc._given_names("SMITH, JR") == []
+
+    def test_a_nickname_or_a_recoded_party_alone_still_matches(self, db_session):
+        _race(db_session, "2026-HOUSE-CA-6", "CA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-6", "JONES, JAMES", party="DEM")
+        db_session.commit()
+        jim = {"office": "H", "district": 6, "party": "D", "last_name": "JONES", "display_name": "Jim Jones"}
+        sc._apply_ballot(db_session, 2026, "CA", [jim], keep_unlisted=True, authoritative=False)
+        assert db_session.get(Candidate, "H1").confirmed_general is True
+
+    @pytest.mark.parametrize("fec_party, record_party", [("DFL", "D"), ("DNL", "D"), ("NPA", "I"), ("UN", "I")])
+    def test_fecs_state_party_codes_are_the_same_party(self, db_session, fec_party, record_party):
+        """FEC files some Minnesota and North Dakota Democrats under the
+        state party's code (Ilhan Omar as DFL) and independents as NPA/UN:
+        a nominee listed by nickname must still be matched."""
+        _race(db_session, "2026-HOUSE-MN-2", "MN", office="H", district=2)
+        _candidate(db_session, "H1", "2026-HOUSE-MN-2", "SMITH, WILLIAM", party=fec_party)
+        db_session.commit()
+        bill = {"office": "H", "district": 2, "party": record_party, "last_name": "SMITH",
+                "display_name": "Bill Smith"}
+        sc._apply_ballot(db_session, 2026, "MN", [bill], keep_unlisted=True, authoritative=True)
+        assert self._ids(db_session) == ["H1"]
+        assert db_session.get(Candidate, "H1").confirmed_general is True
+
+    def test_a_nickname_placeholder_goes_when_its_fec_row_matches(self, db_session):
+        _race(db_session, "2026-HOUSE-CA-7", "CA", office="H", district=7)
+        db_session.commit()
+        bill = {"office": "H", "district": 7, "party": "D", "last_name": "SMITH", "display_name": "Bill Smith"}
+        sc._apply_ballot(db_session, 2026, "CA", [bill], keep_unlisted=True, authoritative=True)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-7", "SMITH, WILLIAM", party="DEM")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "CA", [bill], keep_unlisted=True, authoritative=False, prune=False)
+        assert self._ids(db_session) == ["H1"]
+
+    def test_names_without_a_given_half_match_nothing(self):
+        assert sc._same_given_name("SMITH", "SMITH") is False
+        assert sc._given_initial("SMITH, MR. J") == "j"
+        assert sc._same_given_name("SMITH, DR. JOHN", "SMITH, J") is True
+        assert sc._same_given_name("SMITH, MR. J", "SMITH, MARY") is False
+
+    def test_one_person_spelled_two_ways_keeps_one_row(self, db_session):
+        _race(db_session, "2026-HOUSE-CO-1", "CO", office="H", district=1)
+        db_session.commit()
+        for name in ("Jane Q. Doe", "Jane Doe", "Jane Q. Doe"):
+            sc._apply_ballot(db_session, 2026, "CO", [
+                {"office": "H", "district": 1, "party": "G", "last_name": "DOE", "display_name": name},
+            ], keep_unlisted=True, authoritative=False, prune=False)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 1
+
+    def test_a_state_with_no_certified_source_still_prunes(self):
+        assert sc._may_prune({"strategy": "clarity"}, {"strategy": "clarity"}) is True
+        assert sc._may_prune({"general_ballot_complete": True}, {"strategy": "tabular"}) is False
+        assert sc._may_prune({"general_ballot_complete": True}, {"general_ballot_complete": True}) is True
+
+    @pytest.mark.parametrize("display, fec, matches", [
+        # Either side's given names, any of them, and FEC's own leading
+        # initial, fit — the other party's code alone is no contradiction.
+        ("John Smith", "SMITH, J ROBERT", True),
+        ("Mary Anne Smith", "SMITH, ANNE", True),
+        ("Maria Elvira Smith", "SMITH, ELVIRA", True),
+        ("Mary Smith", "SMITH, JOHN", False),
+        ("Mary Smith", "SMITH, J ROBERT", False),
+        ("J. Smith", "SMITH, MARY", False),
+        ("Mary Smith", "SMITH, J", False),
+        ("John Lee Smith", "SMITH, MARY LEE", False),
+        ("Robert James Smith", "SMITH, MICHAEL JAMES", False),
+        ("Maria Luisa Smith", "SMITH, JOSE LUIS", False),
+        ("Mary Jo Smith", "SMITH, JOHN", False),
+    ])
+    def test_every_given_name_counts_on_both_sides(self, db_session, display, fec, matches):
+        _race(db_session, "2026-HOUSE-CA-12", "CA", office="H", district=12)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-12", fec, party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-CA-12").candidates
+        found = sc._match_candidate(rows, "SMITH", "L", display)
+        assert (found is not None and found.id == "H1") is matches
+
+    @pytest.mark.parametrize("party, label", [("", "Unaffiliated"), (None, "Working Families"), ("", "")])
+    def test_a_partyless_or_unmapped_placeholder_is_still_found(self, db_session, party, label):
+        """The row is stored under the state's own label (or UNK); looking
+        it up by PARTY_CODE_MAP alone found nothing, so the person was shown
+        twice once they filed, or twice under two spellings."""
+        _race(db_session, "2026-HOUSE-NC-1", "NC", office="H", district=1)
+        db_session.commit()
+
+        def rec(name):
+            return {"office": "H", "district": 1, "party": party, "party_label": label,
+                    "last_name": "DOE", "display_name": name}
+
+        sc._apply_ballot(db_session, 2026, "NC", [rec("Jane Doe")], keep_unlisted=True, authoritative=True)
+        sc._apply_ballot(db_session, 2026, "NC", [rec("Jane Q. Doe")], keep_unlisted=True,
+                         authoritative=False, prune=False)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 1
+        _candidate(db_session, "H1", "2026-HOUSE-NC-1", "DOE, JANE", party="IND")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "NC", [rec("Jane Doe")], keep_unlisted=True,
+                         authoritative=False, prune=False)
+        assert self._ids(db_session) == ["H1"]
+
+    def test_a_multi_word_surname_placeholder_is_one_person(self, db_session):
+        """One source prints "Leger Fernandez, Teresa", another "Teresa
+        Leger Fernandez" and reads the surname as "Fernandez"."""
+        _race(db_session, "2026-HOUSE-NM-3", "NM", office="H", district=3)
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "NM", [
+            {"office": "H", "district": 3, "party": "G", "last_name": "LEGER FERNANDEZ",
+             "display_name": "Leger Fernandez, Teresa"},
+        ], keep_unlisted=True, authoritative=True)
+        sc._apply_ballot(db_session, 2026, "NM", [
+            {"office": "H", "district": 3, "party": "G", "last_name": "FERNANDEZ",
+             "display_name": "Teresa Leger Fernandez"},
+        ], keep_unlisted=True, authoritative=False, prune=False)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 1
+        assert sc._surnames_agree("fernandez", "leger fernandez")
+        assert not sc._surnames_agree("fernandez", "hernandez")
+
+
+class TestAlertsAndCadence:
+    def test_a_new_failure_later_in_the_day_is_not_silenced(self, monkeypatch):
+        keys = []
+        monkeypatch.setattr("app.ops_alerts.send_ops_alert",
+                            lambda subject, body, dedupe_key=None: keys.append(dedupe_key))
+        sc.report_file_problems("s", "l", ["WV: raised X"], "k")
+        sc.report_file_problems("s", "l", ["WV: raised X again"], "k")
+        sc.report_file_problems("s", "l", ["WV: raised X", "TX: raised Y"], "k")
+        assert keys[0] == keys[1] and keys[2] != keys[0]
+
+    def test_a_weekly_crawl_does_not_slip_to_the_eighth_night(self):
+        from datetime import datetime
+
+        record = {"lastOk": datetime(2026, 9, 1, 5).isoformat()}
+        assert sc._crawl_due(record, datetime(2026, 9, 8, 2)) is True  # the run started earlier tonight
+        assert sc._crawl_due(record, datetime(2026, 9, 7, 5)) is False
+
+
+class TestTheCrawlAlwaysReports:
+    @pytest.mark.asyncio
+    async def test_what_was_found_before_the_loop_raised_is_still_alerted(self, db_session, monkeypatch):
+        async def loop(db, client, cycle, hand_verified, outcomes, problems):
+            problems.append("AA: disk full")
+            try:
+                raise ValueError("inner")
+            except ValueError:
+                sc._note_raise("BB", "Source discovery")
+            raise RuntimeError("database is locked")
+
+        alerts = []
+        monkeypatch.setattr(sc, "_crawl_due_states", loop)
+        monkeypatch.setattr(sc, "report_file_problems",
+                            lambda subject, lead, problems, key: alerts.extend(problems))
+        with pytest.raises(RuntimeError):
+            await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert alerts == ["AA: disk full", "BB: Source discovery raised ValueError: inner"]
+
+
+class TestSyncRaisesAreReported:
+    @pytest.mark.asyncio
+    async def test_a_raising_source_in_the_sync_is_alerted(self, db_session, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        async def no_calendar(client, cycle):
+            return {}, True
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(side_effect=TypeError("refactor slip")))
+        monkeypatch.setattr(sc, "_discovered_source", lambda st: None)
+        alerts = []
+        monkeypatch.setattr(sc, "report_file_problems",
+                            lambda subject, lead, problems, key: alerts.extend(problems))
+        results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert results["TX"]["status"] == "fetch_failed"
+        assert alerts == ["TX: Confirmed-candidate fetch raised TypeError: refactor slip"]
+
+
+class TestAPrimarySeasonListSaysTheBallotIsNotYetWhole:
+    @pytest.mark.asyncio
+    async def test_a_failed_read_before_any_basis_is_not_taken_as_complete(self, db_session, monkeypatch):
+        """A fresh deploy or a new cycle, and NC's list fails to fetch: with
+        no basis recorded the page fell back to the entry's
+        general_ballot_complete. A basis already recorded is left alone."""
+        recorded = []
+
+        async def fails(client, year, state, source):
+            return None
+
+        monkeypatch.setattr(sc, "states_with_filings", lambda: {"NC"})
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", fails)
+        real = sc._record_ballot_basis
+
+        def record(db, c, st, src, **k):
+            recorded.append(src.get("general_ballot_complete"))
+            real(db, c, st, src, **k)
+
+        monkeypatch.setattr(sc, "_record_ballot_basis", record)
+        await sc.sync_ballot_filings(db_session, None, 2026)
+        await sc.sync_ballot_filings(db_session, None, 2026)
+        assert recorded == [False]  # once: the second night finds a basis on record
+
+    @pytest.mark.asyncio
+    async def test_nc_records_an_incomplete_basis_until_its_list_names_november(
+        self, db_session, monkeypatch,
+    ):
+        """NC's list speaks for its November ballot, so nothing else records
+        its basis — and without one the page fell back to the entry's
+        general_ballot_complete and called primary nominees the whole ballot."""
+        recorded = []
+
+        async def primary_only(client, year, state, source):
+            return {"primary": [], "general": [], "primary_date": None}
+
+        monkeypatch.setattr(sc, "states_with_filings", lambda: {"NC"})
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", primary_only)
+        monkeypatch.setattr(sc, "_record_ballot_basis",
+                            lambda db, c, st, src, **k: recorded.append((st, src.get("general_ballot_complete"))))
+        await sc.sync_ballot_filings(db_session, None, 2026)
+        assert recorded == [("NC", False)]
+
+
+class TestEveryCrawlLooksForAFilingList:
+    @pytest.mark.asyncio
+    async def test_a_state_whose_results_source_was_found_is_searched_too(self, db_session, monkeypatch):
+        """A filing list's general rows are the only way to see a third-party
+        candidate; a state the crawler found results for was never searched
+        for one."""
+        _race(db_session, "2026-HOUSE-ZZ-3", "ZZ", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-ZZ-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+        TestCrawlAdoption._patch(
+            monkeypatch, [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
+        )
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["ZZ"] == "kept"
-        assert "ZZ" in saved
+        assert outcomes["ZZ"].startswith("adopted") and looked == ["ZZ"]
+
+
+class TestFilingsForHandVerifiedStates:
+    def test_a_crawler_found_list_never_takes_a_verified_states_november_authority(
+        self, tmp_path, monkeypatch,
+    ):
+        """For a hand-verified state only a list in its own entry speaks for
+        November (NC's); one the crawler found is unverified and must not
+        strip a certified ballot's authority. Elsewhere a found list does."""
+        import json
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        path = tmp_path / "discovered.json"
+        path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}, "ZZ": {"filings": {"url": "y"}}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        assert sc._has_general_filings("TX") is False
+        assert sc._has_general_filings("ZZ") is True
+        assert sc._has_general_filings("NC") is True  # its own list
+
+    @pytest.mark.asyncio
+    async def test_a_verified_ballot_keeps_unconfirming_with_a_found_list_on_file(
+        self, db_session, monkeypatch, tmp_path,
+    ):
+        """TX's certified ballot drops a withdrawn nominee and records its
+        basis whether or not the crawler has found TX a (primary-only)
+        filing list; that list's general rows are not applied."""
+        import json
+        from unittest.mock import AsyncMock
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        async def no_calendar(client, cycle):
+            return {}, False
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
+        path = tmp_path / "d.json"
+        path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        _race(db_session, "2026-SEN-TX", "TX", office="S")
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        _candidate(db_session, "B", "2026-SEN-TX", "WITHDRAWN, BOB", party="REP", confirmed_general=True)
+        db_session.commit()
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[
+            {"office": "S", "district": None, "party": "R", "last_name": "PAXTON"}]))
+        recorded = []
+        monkeypatch.setattr(sc, "_record_ballot_basis", lambda db, c, st, src, **k: recorded.append(st))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert db_session.get(Candidate, "B").confirmed_general is False
+        assert recorded == ["TX"]
+
+        async def a_list_naming_bob(client, year, state, source):
+            return {"primary": [], "primary_date": None, "general": [
+                {"office": "S", "district": None, "party": "R", "last_name": "WITHDRAWN"}]}
+
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", a_list_naming_bob)
+        await sc.sync_ballot_filings(db_session, None, 2026)
+        assert db_session.get(Candidate, "B").confirmed_general is False  # its general rows not applied
+
+    @pytest.mark.asyncio
+    async def test_a_spare_source_answers_with_its_own_authority(self, db_session, monkeypatch, tmp_path):
+        """When TX's certified ballot is down and a discovered results file
+        answers, that file isn't the certified ballot: it must not un-confirm
+        a third-party nominee the ballot confirmed, nor be recorded as it."""
+        import json
+        from unittest.mock import AsyncMock
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        async def no_calendar(client, cycle):
+            return {}, False
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
+        path = tmp_path / "d.json"
+        path.write_text(json.dumps({"TX": {"strategy": "tabular", "source_name": "a results file",
+                                           "description": "Found automatically on 2026-10-01: x"}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        _race(db_session, "2026-SEN-TX", "TX", office="S")
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        _candidate(db_session, "L", "2026-SEN-TX", "LIBBY, LARRY", party="LIB", confirmed_general=True)
+        db_session.commit()
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[
+            {"office": "S", "district": None, "party": "R", "last_name": "PAXTON"}]))
+        recorded = []
+        monkeypatch.setattr(sc, "_record_ballot_basis",
+                            lambda db, c, st, src, **k: recorded.append(src.get("source_name")))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert db_session.get(Candidate, "L").confirmed_general is True
+        assert "Texas Secretary of State" not in " ".join(filter(None, recorded))
+
+    def test_a_filing_list_found_for_a_hand_verified_state_is_read(self, tmp_path, monkeypatch):
+        """The hand-verified entry won whole, so a filing list the crawler
+        proved for such a state was stored and never used."""
+        import json
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        path = tmp_path / "discovered.json"
+        path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        assert (sources.source_for_state("TX") or {}).get("filings") is None  # hand entry wins whole
+        assert sources.filings_for_state("TX") == {"url": "x"}
+        assert "TX" in sources.states_with_filings()
+
+    @pytest.mark.asyncio
+    async def test_adopting_one_stores_only_the_filing_list(self, db_session, monkeypatch):
+        """Not a copy of the hand-verified entry, which would shadow later
+        edits to it and serve as a stale spare source."""
+        _race(db_session, "2026-HOUSE-TX-3", "TX", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-TX-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+        hand = sc._sources_file()["states"]["TX"]
+        saved = {}
+
+        async def filings(client, state, cycle):
+            return {"url": "x", "_evidence": "TX filings"}
+
+        async def ballot(client, cycle, state, source):
+            return {"primary": [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
+                    "general": [], "primary_date": None}
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", ballot)
+        monkeypatch.setattr(sc, "_discovered_source", lambda st: dict(hand) | {"filings": {"url": "old"}})
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}))
+        outcome = await sc._adopt_filings(db_session, None, 2026, "TX", hand)
+        assert outcome.startswith("filings adopted")
+        assert saved["TX"] == {"filings": {"url": "x"}, "source_name": "TX filings"}
+
+    @pytest.mark.asyncio
+    async def test_a_replacement_the_crawler_found_is_kept_whole(self, db_session, monkeypatch):
+        """A results source adopted for a broken hand-verified state carries
+        that state's rules — it is not a copy to strip."""
+        _race(db_session, "2026-HOUSE-TX-3", "TX", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-TX-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+        hand = sc._sources_file()["states"]["TX"]
+        found = {"strategy": hand["strategy"], "runoff_threshold_pct": 50.0,
+                 "source_name": "a new host", "description": "Found automatically on 2026-09-01: x"}
+        saved = {}
+
+        async def filings(client, state, cycle):
+            return {"url": "x", "_evidence": "TX filings"}
+
+        async def ballot(client, cycle, state, source):
+            return {"primary": [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
+                    "general": [], "primary_date": None}
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", ballot)
+        monkeypatch.setattr(sc, "_discovered_source", lambda st: dict(found))
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}))
+        await sc._adopt_filings(db_session, None, 2026, "TX", hand)
+        assert saved["TX"] == found | {"filings": {"url": "x"}}
 
 
 class TestIsConfigured:
@@ -378,7 +1376,7 @@ class TestSyncConfirmedCandidates:
         """The nightly sync refreshes the national calendar first; these
         tests are about matching, not about the FEC."""
         async def none(client, cycle):
-            return {}
+            return {}, False
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", none)
 
@@ -456,3 +1454,52 @@ class TestSyncConfirmedCandidates:
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
 
         assert results["TX"]["status"] == "fetch_failed"
+
+
+class TestFecPartyCodes:
+    """FEC's published party codes, translated only where they name the
+    same party — never a different one."""
+
+    def test_translations(self):
+        from app.pipeline.fetch.state_candidates_common import fec_party
+
+        assert fec_party("DFL") == fec_party("DNL") == "DEM"
+        assert {fec_party(c) for c in ("NPA", "UN", "NNE", "NOP", "NON")} == {"IND"}
+        assert fec_party("UST") == "CON"
+        assert fec_party("CRV") == "CRV"  # the Conservative Party is not the Constitution Party
+        assert fec_party("REP") == "REP" and fec_party(None) is None
+
+    def test_a_conservative_party_filer_is_not_the_constitution_nominee(self, db_session):
+        _race(db_session, "2026-HOUSE-NY-1", "NY", office="H", district=1)
+        _candidate(db_session, "H1", "2026-HOUSE-NY-1", "JONES, ROBERT", party="CRV")
+        _candidate(db_session, "H2", "2026-HOUSE-NY-1", "JONES, ALICE", party="REP")
+        db_session.commit()
+        mary = [c for c in db_session.get(Race, "2026-HOUSE-NY-1").candidates]
+        assert sc._match_candidate(mary, "JONES", "C", "Mary Jones") is None
+
+    def test_one_person_refiled_under_the_state_code_is_still_one_person(self, db_session):
+        _race(db_session, "2026-SEN-MN", "MN", office="S")
+        _candidate(db_session, "S1", "2026-SEN-MN", "KLOBUCHAR, AMY", party="DFL", has_raised_funds=True)
+        _candidate(db_session, "S2", "2026-SEN-MN", "KLOBUCHAR, AMY J", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-SEN-MN").candidates
+        assert sc._match_candidate(rows, "KLOBUCHAR", "D", "Amy Klobuchar").id == "S1"
+
+    def test_the_page_does_not_bring_back_a_dfl_nominees_primary_loser(self, db_session):
+        from app.api.elections import _unopposed_nominees
+
+        _race(db_session, "2026-HOUSE-MN-3", "MN", office="H", district=3)
+        nominee = _candidate(db_session, "H1", "2026-HOUSE-MN-3", "DOE, JANE", party="DFL", confirmed_general=True)
+        rep = _candidate(db_session, "H2", "2026-HOUSE-MN-3", "ROE, RICK", party="REP", confirmed_general=True)
+        loser = _candidate(db_session, "H3", "2026-HOUSE-MN-3", "LOSS, LEE", party="DEM")
+        db_session.commit()
+        assert _unopposed_nominees([nominee, rep, loser], [nominee, rep], "MN", False) == []
+
+    def test_the_api_names_each_candidates_party_group(self, db_session):
+        from app.api.elections import _candidate_summary
+
+        _race(db_session, "2026-HOUSE-MN-5", "MN", office="H", district=5)
+        omar = _candidate(db_session, "H1", "2026-HOUSE-MN-5", "OMAR, ILHAN", party="DFL")
+        db_session.commit()
+        summary = _candidate_summary(omar)
+        assert summary["party"] == "DFL" and summary["partyGroup"] == "DEM"

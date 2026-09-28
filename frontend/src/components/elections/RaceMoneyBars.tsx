@@ -40,7 +40,7 @@ export default function RaceMoneyBars({
   return (
     <ul className="divide-y divide-ink-min/15">
       {ranked.map((c) => {
-        const pm = getPartyMeta(c.party);
+        const pm = getPartyMeta(c);
         const raised = c.contributions ?? 0;
         // Width is share-of-leader. A zero leader (nobody has reported)
         // must not divide — every bar is simply empty, which is the

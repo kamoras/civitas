@@ -35,7 +35,7 @@ export default function BallotRaceRows({ race }: { race: RaceWithCandidates }) {
   return (
     <ul>
       {rows.map((c) => {
-        const party = getPartyMeta(c.party);
+        const party = getPartyMeta(c);
         const pct = leader > 0 ? Math.round(((c.contributions ?? 0) / leader) * 100) : 0;
         return (
           <li key={c.id} className="border-b border-white/[0.09] px-4 py-2.5">
