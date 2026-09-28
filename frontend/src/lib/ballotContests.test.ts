@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildBallotContests, countBallotContests } from "./ballotContests";
+import {
+  buildBallotContests,
+  contestForHash,
+  contestHash,
+  countBallotContests,
+} from "./ballotContests";
 import type { StateBallot } from "@/types/election";
 
 function race(id: string, district: number | null) {
@@ -42,5 +47,27 @@ describe("countBallotContests", () => {
       measures: [{}, {}],
     } as unknown as Partial<StateBallot>);
     expect(countBallotContests(buildBallotContests(b, true), b)).toBe(2 + 3 + 2 + 1 + 2);
+  });
+});
+
+// A shared image of a contest links to the fragment that reopens it; the
+// page reads the same fragment back. The two must agree for every contest.
+describe("contestHash", () => {
+  it("round-trips through contestForHash for every contest", () => {
+    const b = ballot();
+    const contests = buildBallotContests(b, false);
+    for (const c of contests) {
+      const back = contestForHash(contestHash(c), contests, b);
+      expect(back?.key).toBe(c.key);
+    }
+  });
+
+  it("names the picked House district", () => {
+    const b = ballot();
+    const contests = buildBallotContests(b, false);
+    const house = contests.find((c) => c.key === "house")!;
+    const hash = contestHash(house, "2026-H-CT-03");
+    expect(hash).toBe("#race-2026-H-CT-03");
+    expect(contestForHash(hash, contests, b)).toEqual({ key: "house", houseRaceId: "2026-H-CT-03" });
   });
 });

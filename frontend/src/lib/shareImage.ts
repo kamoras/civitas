@@ -199,17 +199,14 @@ function captureDate(now: Date): string {
 /**
  * Renders `section` to a PNG framed with `subject`.
  *
+ * `link` is the URL printed in the footer (the section's own link).
  * `withStrip` is false for a section that already names its subject (the
  * scorecard header), where the strip would repeat it.
  */
 export async function captureSection(
   section: HTMLElement,
   subject: ShareSubject,
-  {
-    sectionId,
-    withStrip = true,
-    anchored = true,
-  }: { sectionId: string; withStrip?: boolean; anchored?: boolean }
+  { link, withStrip = true }: { link: string; withStrip?: boolean }
 ): Promise<Blob> {
   const { domToCanvas } = await import("modern-screenshot");
   await document.fonts.ready;
@@ -235,6 +232,10 @@ export async function captureSection(
     scale = captureScale(box.width, box.height, window.devicePixelRatio || 1);
     shot = await domToCanvas(section, {
       scale,
+      // modern-screenshot waits for every <img> in the section to load —
+      // excluded ones too — for up to 30s by default; a publisher's photo
+      // still hanging on a card shouldn't hold up a picture it isn't in.
+      timeout: 8000,
       backgroundColor: surfaceBase,
       onCloneNode: release,
       filter: (node) => !(node instanceof Element && node.hasAttribute(SHARE_EXCLUDE_ATTR)),
@@ -280,13 +281,13 @@ export async function captureSection(
   // one line, the date drops below it. Measured before sizing the
   // canvas (resizing a canvas resets its context).
   const footFont = `${12 * scale}px ${mono}`;
-  const link = displayUrl(anchored ? sectionUrl(subject.url, sectionId) : subject.url);
+  const linkText = displayUrl(link);
   const date = `Captured ${captureDate(new Date())}`;
   ctx.font = footFont;
-  const linkLines = wrapLink(ctx, link, innerW);
+  const linkLines = wrapLink(ctx, linkText, innerW);
   const oneLine =
     linkLines.length === 1 &&
-    ctx.measureText(link).width + ctx.measureText(date).width + 24 * scale <= innerW;
+    ctx.measureText(linkText).width + ctx.measureText(date).width + 24 * scale <= innerW;
   const lineH = 20 * scale;
   const footH = 44 * scale + (oneLine ? 0 : linkLines.length * lineH);
 

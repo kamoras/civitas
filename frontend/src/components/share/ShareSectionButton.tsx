@@ -34,7 +34,7 @@ const ACTION =
 export default function ShareSectionButton({
   label,
   withStrip = true,
-  anchored = true,
+  anchor,
   children = "Share",
   className = `inline-flex min-h-6 items-center border px-2 font-mono text-xs uppercase tracking-[0.12em] transition-colors ${BOXED_CONTROL.unselected}`,
 }: {
@@ -42,9 +42,10 @@ export default function ShareSectionButton({
   label: string;
   /** False when the section already names the page's subject itself. */
   withStrip?: boolean;
-  /** False when the page has no element to scroll to for this section: the
-   *  link is then the page's own, with no `#section`. */
-  anchored?: boolean;
+  /** The fragment (no "#") the section's link ends in. Defaults to the
+   *  section's own id; null when the page has nothing to scroll to for it,
+   *  so the link is the page itself. */
+  anchor?: string | null;
   /** The button's visible text. */
   children?: string;
   /** Replaces the button's default classes. */
@@ -82,6 +83,11 @@ export default function ShareSectionButton({
 
   if (!subject || !hasSection) return null;
 
+  function linkFor(id: string): string {
+    if (!subject || anchor === null) return subject?.url ?? "";
+    return sectionUrl(subject.url, anchor ?? id);
+  }
+
   function start() {
     const section = buttonRef.current?.closest<HTMLElement>(`[${SHARE_SECTION_ATTR}]`);
     if (!section || !subject) return;
@@ -89,9 +95,9 @@ export default function ShareSectionButton({
     const mine = ++generation.current;
     setSectionId(id);
     setCapture({ state: "working" });
-    setStatus("");
+    setStatus("Making the image…");
     setOpen(true);
-    captureSection(section, subject, { sectionId: id, withStrip, anchored })
+    captureSection(section, subject, { link: linkFor(id), withStrip })
       .then((blob) => {
         if (generation.current !== mine) return;
         setCapture({ state: "ready", blob, previewUrl: URL.createObjectURL(blob) });
@@ -104,7 +110,7 @@ export default function ShareSectionButton({
       });
   }
 
-  const link = anchored ? sectionUrl(subject.url, sectionId || "section") : subject.url;
+  const link = linkFor(sectionId || "section");
   const fileName = shareFileName(subject.url, sectionId || "section");
 
   async function copyImage() {
@@ -159,7 +165,10 @@ export default function ShareSectionButton({
         <div className="flex flex-col gap-4">
           <div className="flex min-h-40 items-center justify-center border border-white/[0.07] bg-surface">
             {capture.state === "working" && (
-              <p className="font-mono text-xs text-ink-min">Making the image…</p>
+              // Announced through the status line below.
+              <p aria-hidden="true" className="font-mono text-xs text-ink-min">
+                Making the image…
+              </p>
             )}
             {capture.state === "failed" && (
               // Announced through the status line below; hidden here so a
@@ -210,9 +219,15 @@ export default function ShareSectionButton({
             <button
               type="button"
               onClick={() =>
-                copyLink(link).then((ok) =>
-                  setStatus(ok ? "Link copied." : "This browser wouldn't copy the link.")
-                )
+                copyLink(link).then((ok) => {
+                  // Cleared first, so a second copy is announced again
+                  // rather than being the same text the live region has.
+                  setStatus("");
+                  setTimeout(
+                    () => setStatus(ok ? "Link copied." : "This browser wouldn't copy the link."),
+                    100
+                  );
+                })
               }
               className={`${ACTION} ${linkCopied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected}`}
             >

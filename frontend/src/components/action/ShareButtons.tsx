@@ -148,7 +148,7 @@ export default function ShareButtons({
             <ShareSectionButton
               label={issue.title}
               withStrip={false}
-              anchored={false}
+              anchor={null}
               className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors"
             >
               [ IMAGE ]

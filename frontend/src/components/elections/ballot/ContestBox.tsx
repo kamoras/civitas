@@ -13,11 +13,15 @@ export default function ContestBox({
   instruction,
   headingLevel = 3,
   shareId,
+  shareAnchor,
   children,
 }: {
   title: string;
-  /** When set, the box offers itself as a shared image, named by this id. */
+  /** When set, the box offers itself as a shared image, named by this id,
+   *  linking to the page with `shareAnchor` (the fragment that opens this
+   *  contest; see `contestHash`). */
   shareId?: string;
+  shareAnchor?: string;
   subtitle?: string;
   instruction?: string | null;
   headingLevel?: 2 | 3;
@@ -39,9 +43,7 @@ export default function ContestBox({
         {(instruction || shareId) && (
           <span className="flex shrink-0 items-center gap-3">
             {instruction && <span className="font-mono text-xs text-ink-lo">{instruction}</span>}
-            {/* The page has no anchor per contest box: the link is the
-                state's ballot page. */}
-            {shareId && <ShareSectionButton label={title} anchored={false} />}
+            {shareId && <ShareSectionButton label={title} anchor={shareAnchor ?? null} />}
           </span>
         )}
       </header>

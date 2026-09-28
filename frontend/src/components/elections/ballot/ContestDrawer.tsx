@@ -28,6 +28,7 @@ export default function ContestDrawer({
   next,
   onNavigate,
   onClose,
+  shareAnchor,
   children,
 }: {
   contest: BallotContest;
@@ -37,6 +38,8 @@ export default function ContestDrawer({
   next: BallotContest | null;
   onNavigate: (key: string) => void;
   onClose: () => void;
+  /** The fragment (no "#") that reopens this contest, for its share link. */
+  shareAnchor: string;
   children: ReactNode;
 }) {
   const panel = useModalDialog(onClose);
@@ -101,7 +104,7 @@ export default function ContestDrawer({
                 {contest.instruction && (
                   <span className="font-mono text-xs text-ink-lo">{contest.instruction}</span>
                 )}
-                <ShareSectionButton label={contest.title} anchored={false} />
+                <ShareSectionButton label={contest.title} anchor={shareAnchor} />
               </span>
             </div>
             {children}

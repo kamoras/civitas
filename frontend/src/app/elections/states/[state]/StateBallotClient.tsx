@@ -16,7 +16,7 @@ import ContestBox from "@/components/elections/ballot/ContestBox";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
-import { buildBallotContests, contestForHash, countBallotContests, type BallotContest } from "@/lib/ballotContests";
+import { buildBallotContests, contestForHash, countBallotContests, type BallotContest, contestHash } from "@/lib/ballotContests";
 import {
   candidateName,
   districtAreaLabel,
@@ -727,12 +727,15 @@ function ContestOverview({
   ballot: StateBallot;
   onOpen: (key: string, houseRaceId?: string | null) => void;
 }) {
-  const box = (children: ReactNode) => (
+  // Shared as an image unless the box is only controls (the House district
+  // picker), linking to the fragment that opens this contest.
+  const box = (children: ReactNode, share: { houseRaceId?: string | null } | false = {}) => (
     <ContestBox
       title={contest.title}
       subtitle={contest.subtitle}
       instruction={contest.instruction}
-      shareId={`contest-${contest.key}`}
+      shareId={share ? `contest-${contest.key}` : undefined}
+      shareAnchor={share ? contestHash(contest, share.houseRaceId ?? null).slice(1) : undefined}
     >
       {children}
     </ContestBox>
@@ -759,6 +762,7 @@ function ContestOverview({
             <BallotRaceRows race={ballot.houseRaces[0]} />
             <OpenButton label="RESEARCH THIS RACE" onClick={() => onOpen("house", ballot.houseRaces[0].id)} />
           </>,
+          { houseRaceId: ballot.houseRaces[0].id },
         );
       }
       return box(
@@ -785,6 +789,7 @@ function ContestOverview({
             DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
           </button>
         </div>,
+        false,
       );
     }
     case "statewide":
@@ -964,8 +969,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const openContest = useCallback(
     (key: string, houseRaceId: string | null = null) => {
       setChosen({ key, houseRaceId });
-      const race = contests.find((c) => c.key === key)?.race;
-      const hash = houseRaceId ? `#race-${houseRaceId}` : race ? `#race-${race.id}` : `#ballot-${key}`;
+      const contest = contests.find((c) => c.key === key);
+      const hash = contest ? contestHash(contest, houseRaceId) : `#ballot-${key}`;
       window.history.replaceState(null, "", hash);
     },
     [contests],
@@ -1190,6 +1195,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       {openContestEntry && (
         <ContestDrawer
           contest={openContestEntry}
+          shareAnchor={contestHash(openContestEntry, open?.houseRaceId ?? null).slice(1)}
           index={openIndex}
           total={contests.length}
           prev={openIndex > 0 ? contests[openIndex - 1] : null}

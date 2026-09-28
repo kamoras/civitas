@@ -94,7 +94,10 @@ describe("ShareSectionButton", () => {
     const [section, passedSubject, opts] = captureSection.mock.calls[0];
     expect((section as HTMLElement).dataset.shareSection).toBe("funding-independence");
     expect(passedSubject).toBe(subject);
-    expect(opts).toMatchObject({ sectionId: "funding-independence", withStrip: true });
+    expect(opts).toMatchObject({
+      link: "https://civitas-research.org/politicians/tim-burchett#funding-independence",
+      withStrip: true,
+    });
 
     expect(await screen.findByAltText(/The image to be shared/)).toHaveAttribute(
       "src",
@@ -114,14 +117,16 @@ describe("ShareSectionButton", () => {
     const user = setup();
     render(
       <Section>
-        <ShareSectionButton label="Senate" anchored={false} />
+        <ShareSectionButton label="Senate" anchor={null} />
       </Section>
     );
     await user.click(screen.getByRole("button", { name: "Share Senate as an image" }));
     expect(
       screen.getByText("https://civitas-research.org/politicians/tim-burchett")
     ).toBeInTheDocument();
-    expect(captureSection.mock.calls[0][2]).toMatchObject({ anchored: false });
+    expect(captureSection.mock.calls[0][2]).toMatchObject({
+      link: "https://civitas-research.org/politicians/tim-burchett",
+    });
   });
 
   it("says so, and keeps the link, when the image can't be made", async () => {
