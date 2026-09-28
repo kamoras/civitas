@@ -1158,6 +1158,20 @@ def _funding_independence_core(
     )
     return {
         "score": score,
+        # The numbers the scorecard's sentence states, as numbers: the page
+        # writes "11% of $1.21M in contributions came from PACs" from these,
+        # never re-deriving a share itself.
+        "facts": {
+            "contributions": round(total_raised),
+            "pacShare": round(pac_ratio, 4),
+            "smallDonorShare": round(small_pct / 100, 4),
+            "smallDonorExpectedShare": (
+                round(small_expected_pct / 100, 4) if small_expected_pct is not None else None
+            ),
+            # The House compares with the chamber median; a senator with what
+            # a state of that size is expected to raise in small gifts.
+            "smallDonorComparison": "house-median" if district is not None else "state-size",
+        },
         "components": [
             {
                 "label": "PAC dependency",
@@ -2016,7 +2030,21 @@ def _constituent_alignment_core(
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
         })
-    return {"score": score, "components": components, "vote_part_status": vote_part_status}
+    return {
+        "score": score,
+        "components": components,
+        "vote_part_status": vote_part_status,
+        # The scorecard's sentence and scale, as numbers: how many
+        # party-labeled votes, how many were breaks, and the rate same-party
+        # members of seats like this one break at (None where not measured).
+        "facts": {
+            "party": eval_party,
+            "partyVotes": n_party,
+            "breaks": round(break_rate * n_party) if break_rate is not None else None,
+            "breakRate": round(break_rate, 4) if break_rate is not None else None,
+            "expectedBreakRate": round(expected, 4) if expected is not None else None,
+        },
+    }
 
 
 def _calc_funding_diversity(funding: dict) -> int:
@@ -2884,6 +2912,17 @@ def _calc_legislative_effectiveness(
     )["score"]
 
 
+def _bills_by_stage(sponsored_bills: list[dict] | None) -> list[int]:
+    """How many of a member's sponsored bills got furthest to each of the
+    five V&W stages (introduced, action in committee, action beyond
+    committee, passed a chamber, became law), by the same stage mapping
+    the score uses (_les_bill_stage)."""
+    counts = [0] * _LES_MAX_STAGE
+    for bill in sponsored_bills or []:
+        counts[_les_bill_stage(bill) - 1] += 1
+    return counts
+
+
 def _legislative_effectiveness_core(
     sponsored_bills: list[dict],
     leadership_score: float | None = None,
@@ -2984,4 +3023,4 @@ def _legislative_effectiveness_core(
                 "(median attractor = 50)"
             ),
         })
-    return {"score": score, "components": components}
+    return {"score": score, "components": components, "facts": {"billsByStage": _bills_by_stage(sponsored_bills)}}

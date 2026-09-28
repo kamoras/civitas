@@ -85,6 +85,8 @@ export interface PoliticianProfile {
   hasScorecard: boolean;
   overallScore?: number | null;
   scorecard?: Record<string, unknown> | null;
+  /** A serving member's place on their chamber's leaderboard. */
+  chamberRank?: { rank: number; of: number } | null;
   activeIssues: PoliticianActiveIssue[];
   governmentRecord: GovernmentRecord;
 }

@@ -78,7 +78,9 @@ function HoldingsDonut({
   // Hovering a legend row that has no slice falls back to the selection,
   // rather than clearing the selected slice's highlight.
   const focus =
-    slices.find((c) => c.category === active) ?? slices.find((c) => c.category === selected) ?? null;
+    slices.find((c) => c.category === active) ??
+    slices.find((c) => c.category === selected) ??
+    null;
   const label = slices.map((c) => `${c.label} ${formatShare(c.share)}`).join(", ");
 
   let cursor = 0;
@@ -160,7 +162,11 @@ function HoldingsDonut({
  * ("Undetermined"). The two are different disclosures and are named apart. */
 function legendDetail(c: HoldingCategory, when: string): string {
   const parts = [`${c.count} asset${c.count !== 1 ? "s" : ""}`];
-  parts.push(c.weight > 0 ? formatBracket(c.valueLow, c.valueHigh, c.openEnded, formatCurrency) : "not charted");
+  parts.push(
+    c.weight > 0
+      ? formatBracket(c.valueLow, c.valueHigh, c.openEnded, formatCurrency)
+      : "not charted"
+  );
   if (c.zeroValueCount > 0) parts.push(`${c.zeroValueCount} none ${when}`);
   if (c.unvaluedCount > 0) parts.push(`${c.unvaluedCount} no value stated`);
   return parts.join(" · ");
@@ -180,7 +186,10 @@ function CategoryLegend({
   onSelect: (key: string) => void;
 }) {
   return (
-    <ul className="flex-1 min-w-0 space-y-1" aria-label="Holdings by asset type — select one to list only those assets">
+    <ul
+      className="flex-1 min-w-0 space-y-1"
+      aria-label="Holdings by asset type — select one to list only those assets"
+    >
       {categories.map((c) => {
         const isSelected = selected === c.category;
         return (
@@ -194,7 +203,9 @@ function CategoryLegend({
               onFocus={() => onHover(c.category)}
               onBlur={() => onHover(null)}
               className={`w-full grid grid-cols-[12px_1fr_auto] items-center gap-x-2 px-2 py-1 text-left border transition-colors ${
-                isSelected ? "border-white/25 bg-white/[0.05]" : "border-transparent hover:bg-white/[0.03]"
+                isSelected
+                  ? "border-white/25 bg-white/[0.05]"
+                  : "border-transparent hover:bg-white/[0.03]"
               }`}
             >
               <span className="w-3 h-3" style={{ backgroundColor: c.color }} aria-hidden="true" />
@@ -204,7 +215,9 @@ function CategoryLegend({
                     figure to quote, the share is only how the chart is drawn. */}
                 <span className="block text-ink-min text-xs">{legendDetail(c, when)}</span>
               </span>
-              <span className="text-ink-hi text-sm font-mono">{c.weight > 0 ? formatShare(c.share) : "—"}</span>
+              <span className="text-ink-hi text-sm font-mono">
+                {c.weight > 0 ? formatShare(c.share) : "—"}
+              </span>
             </button>
           </li>
         );
@@ -216,9 +229,7 @@ function CategoryLegend({
 function HoldingRow({ holding, when }: { holding: Holding; when: string }) {
   return (
     <div className="panel p-3">
-      <div className="text-ink text-sm break-words">
-        {holding.assetName}
-      </div>
+      <div className="text-ink text-sm break-words">{holding.assetName}</div>
       <div className="flex items-center gap-2 flex-wrap text-xs text-ink-min mt-1">
         <span className="text-ink-lo font-mono">{formatHoldingValue(holding, when)}</span>
         <span>{holding.categoryLabel}</span>
@@ -232,21 +243,32 @@ function HoldingRow({ holding, when }: { holding: Holding; when: string }) {
 interface HoldingsProps {
   memberId: string;
   chamber?: "senate" | "house";
+  /** "panel": its own titled box with the chart and the list side by side
+   *  and always open — how the member scorecard features it. "section"
+   *  (default): a collapsible section like the others. */
+  variant?: "section" | "panel";
 }
 
-export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps) {
+export default function Holdings({
+  memberId,
+  chamber = "senate",
+  variant = "section",
+}: HoldingsProps) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   // `requested` is the category most recently asked for — what a click
   // toggles against, so a second click on a row whose request is still in
   // flight clears it rather than asking for it again.
-  const { data, loading, error, requested, request } = useLatestRequest<HoldingsData, string | null>(
-    null, "Failed to load holdings",
-  );
+  const { data, loading, error, requested, request } = useLatestRequest<
+    HoldingsData,
+    string | null
+  >(null, "Failed to load holdings");
 
   const load = useCallback(
     (page: number, cat: string | null) =>
-      request(cat, () => FETCHER[chamber](memberId, { page, perPage: HOLDINGS_PER_PAGE, category: cat })),
+      request(cat, () =>
+        FETCHER[chamber](memberId, { page, perPage: HOLDINGS_PER_PAGE, category: cat })
+      ),
     [request, memberId, chamber]
   );
 
@@ -301,11 +323,13 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   );
 
   const about = <MetricTooltip text={ABOUT_TEXT}>ABOUT THIS DATA</MetricTooltip>;
+  // Inside the panel the panel is the box; a section draws its own.
+  const box = variant === "panel" ? "" : "panel p-4";
   const hasSlices = data.categories.some((c) => c.weight > 0);
   let chart: ReactNode;
   if (!data.parsed) {
     chart = (
-      <p className="panel p-4 text-sm text-ink-lo">
+      <p className={`${box} text-sm text-ink-lo`}>
         {data.unreadableReason === "scanned"
           ? `The ${reportLabel} is a scanned paper filing, so its assets can't be read reliably enough to chart.`
           : `The ${reportLabel} isn't in a layout that can be read automatically, so its assets aren't charted here.`}{" "}
@@ -314,7 +338,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
     );
   } else if (!hasSlices) {
     chart = (
-      <p className="panel p-4 text-sm text-ink-lo">
+      <p className={`${box} text-sm text-ink-lo`}>
         {data.holdingsCount === 0
           ? `The ${reportLabel} lists no assets.`
           : `The ${reportLabel} lists ${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}, ${
@@ -329,7 +353,10 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
     );
   } else {
     chart = (
-      <div className={`panel p-4 ${loading ? "opacity-60 transition-opacity" : ""}`} aria-busy={loading}>
+      <div
+        className={`${box} ${loading ? "opacity-60 transition-opacity" : ""}`}
+        aria-busy={loading}
+      >
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
           <HoldingsDonut
             categories={data.categories}
@@ -348,13 +375,13 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           />
         </div>
         <p className="text-xs text-ink-min mt-3">
-          Disclosed value {formatBracket(data.totalLow, data.totalHigh, data.totalOpenEnded, formatCurrency)} across{" "}
+          Disclosed value{" "}
+          {formatBracket(data.totalLow, data.totalHigh, data.totalOpenEnded, formatCurrency)} across{" "}
           {data.holdingsCount} asset{data.holdingsCount !== 1 ? "s" : ""}
-          {data.unvaluedCount > 0 && ` (${data.unvaluedCount} with no stated value, not charted)`} ·{" "}
-          {reportLabel}
+          {data.unvaluedCount > 0 &&
+            ` (${data.unvaluedCount} with no stated value, not charted)`} · {reportLabel}
           {/* An undated report's label already names its filing date. */}
-          {data.filedDate && data.asOfDate && `, filed ${data.filedDate}`} ·{" "}
-          {about} · {sourceLink}
+          {data.filedDate && data.asOfDate && `, filed ${data.filedDate}`} · {about} · {sourceLink}
         </p>
       </div>
     );
@@ -363,53 +390,36 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   const selectedLabel = data.categories.find((c) => c.category === category)?.label;
   const hasList = data.parsed && data.holdingsCount > 0;
 
-  return (
-    <CollapsibleSection
-      title="INVESTMENTS & ASSETS"
-      titleColor="text-signal-amber"
-      summary={
-        data.parsed
-          ? `${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}`
-          : data.unreadableReason === "scanned"
-            ? "paper filing"
-            : "not machine-readable"
-      }
-      source={SOURCE_LABEL[chamber]}
-      alwaysVisible={
-        <>
-          {chart}
-          {data.laterFilingUrl && (
-            <p className="text-xs text-ink-lo mt-2">
-              Also filed, on or after this report&apos;s filing date: the{" "}
-              {data.laterFilingLabel ?? "later filing"}. It states no
-              date its holdings describe that can be read here, so it can&apos;t be placed against this
-              one, and this section stays with the {reportLabel}.{" "}
-              <a
-                href={data.laterFilingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-phos transition-colors"
-              >
-                VIEW THAT FILING ↗
-              </a>
-            </p>
-          )}
-          {/* Here, not in the list body: a failed filter or page change
+  const notes = (
+    <>
+      {data.laterFilingUrl && (
+        <p className="text-xs text-ink-lo mt-2">
+          Also filed, on or after this report&apos;s filing date: the{" "}
+          {data.laterFilingLabel ?? "later filing"}. It states no date its holdings describe that
+          can be read here, so it can&apos;t be placed against this one, and this section stays with
+          the {reportLabel}.{" "}
+          <a
+            href={data.laterFilingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-phos transition-colors"
+          >
+            VIEW THAT FILING ↗
+          </a>
+        </p>
+      )}
+      {/* Here, not in the list body: a failed filter or page change
               must show even with the list collapsed. The data shown is
               still the last that loaded. */}
-          {error && (
-            <p className="text-signal-red text-sm mt-2" role="alert">
-              {error}
-            </p>
-          )}
-        </>
-      }
-      // Nothing to list for an unreadable or empty report — a toggle there
-      // would open onto nothing.
-      expandable={hasList}
-      open={listOpen}
-      onOpenChange={setListOpen}
-    >
+      {error && (
+        <p className="text-signal-red text-sm mt-2" role="alert">
+          {error}
+        </p>
+      )}
+    </>
+  );
+  const list = (
+    <>
       {hasList && (
         <div className="space-y-3 mt-4">
           <p className="text-xs text-ink-min" aria-live="polite">
@@ -442,6 +452,59 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           />
         </div>
       )}
+    </>
+  );
+
+  if (variant === "panel") {
+    return (
+      <section className="border border-white/25 bg-surface font-sans">
+        <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="text-[19px] font-bold leading-tight text-ink-hi">Holdings</h2>
+            <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+              {reportLabel}
+              {data.filedDate && data.asOfDate && ` · filed ${data.filedDate}`} · not part of the
+              score
+            </p>
+          </div>
+          <span className="font-mono text-[13px]">{sourceLink}</span>
+        </header>
+        <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          <div>
+            {chart}
+            {notes}
+          </div>
+          {hasList && <div className="lg:-mt-4">{list}</div>}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <CollapsibleSection
+      title="INVESTMENTS & ASSETS"
+      titleColor="text-signal-amber"
+      summary={
+        data.parsed
+          ? `${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}`
+          : data.unreadableReason === "scanned"
+            ? "paper filing"
+            : "not machine-readable"
+      }
+      source={SOURCE_LABEL[chamber]}
+      alwaysVisible={
+        <>
+          {chart}
+          {notes}
+        </>
+      }
+      // Nothing to list for an unreadable or empty report — a toggle there
+      // would open onto nothing.
+      expandable={hasList}
+      open={listOpen}
+      onOpenChange={setListOpen}
+    >
+      {list}
     </CollapsibleSection>
   );
 }

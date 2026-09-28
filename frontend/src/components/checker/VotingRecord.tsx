@@ -401,7 +401,7 @@ export default function VotingRecord({
           {totalVotes.toLocaleString()}
         </div>
         <div className="text-ink-min text-xs">
-          <MetricTooltip text="Total roll-call votes tracked from Congress.gov and Senate.gov for this senator across recent and key votes.">
+          <MetricTooltip text="Total roll-call votes tracked from Congress.gov and Senate.gov for this member across recent and key votes.">
             TOTAL TRACKED
           </MetricTooltip>
         </div>
@@ -411,7 +411,7 @@ export default function VotingRecord({
           {Math.round(partyLoyaltyPct)}%
         </div>
         <div className="text-ink-min text-xs">
-          <MetricTooltip text="How often this senator votes with the majority of their party. 100% = perfect party-line voter. Calculated from all scoreable roll-call votes.">
+          <MetricTooltip text="How often this member votes with the majority of the member's party. 100% = perfect party-line voter. Calculated from all scoreable roll-call votes.">
             PARTY LOYALTY
           </MetricTooltip>
         </div>
@@ -422,7 +422,7 @@ export default function VotingRecord({
           {partyIndependencePct}%
         </div>
         <div className="text-ink-min text-xs">
-          <MetricTooltip text="How often this senator votes against their own party. Higher = more willingness to break from party leadership on roll-call votes.">
+          <MetricTooltip text="How often this member votes against the member's own party. Higher = more willingness to break from party leadership on roll-call votes.">
             INDEPENDENT
           </MetricTooltip>
         </div>
