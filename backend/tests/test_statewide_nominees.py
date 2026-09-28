@@ -580,7 +580,8 @@ class TestSourcesFileOptIns:
     contests at all — unless the state's calendar says there are none."""
 
     # Adapters that pass contest labels through parse_statewide_office.
-    READS_STATEWIDE = {"clarity", "enhanced_voting", "sd_vip", "tabular", "tally_enr", "totalvote_enr"}
+    READS_STATEWIDE = {"clarity", "enhanced_voting", "sd_vip", "tabular", "tally_enr", "totalvote_enr",
+                       "tx_civix", "vrems"}
 
     def _states(self):
         import json

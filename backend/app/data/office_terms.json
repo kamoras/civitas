@@ -13,7 +13,12 @@
     "WA judicial": "Supreme Court justices six years (Wash. Const. art. IV §3).",
     "SD public_utilities_commission": "Three commissioners elected statewide to six-year staggered terms (Ballotpedia, South Dakota Public Utilities Commission).",
     "SD school_public_lands_commissioner": "Four-year term (Ballotpedia, South Dakota Commissioner of School and Public Lands).",
-    "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade."
+    "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade.",
+    "TX railroad_commissioner": "Three commissioners elected statewide to six-year staggered terms (Tex. Const. art. XVI §30(b); Ballotpedia, Texas Railroad Commission).",
+    "TX land_office_commissioner": "Four-year term (Tex. Const. art. IV §23).",
+    "TX state_board_of_education": "Fifteen members elected by district to four-year staggered terms, with a 2-4-4 cycle only in the election after redistricting (Tex. Educ. Code §7.103); 2026 elects four-year terms.",
+    "TX legislature": "Senate four years with a 2-4-4 cycle after redistricting (Tex. Const. art. III §3); the 16 districts up in 2026 are the ones that drew four-year terms in 2022, so 2026 elects four-year terms. House two years.",
+    "SC statewide": "Governor (jointly with the Lieutenant Governor since 2018), Secretary of State, Treasurer, Attorney General, Comptroller General, Superintendent of Education and Commissioner of Agriculture all four years (S.C. Const. art. IV §3, art. VI §7). The Adjutant General has been appointed since 2019 and is not on the ballot."
   },
   "statewide": {
     "AK": {"governor": 4},
@@ -59,6 +64,15 @@
     "SD": {
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4,
       "treasurer": 4, "school_public_lands_commissioner": 4, "public_utilities_commission": 6
+    },
+    "SC": {
+      "governor": 4, "secretary_of_state": 4, "treasurer": 4, "attorney_general": 4,
+      "comptroller": 4, "school_superintendent": 4, "agriculture_commissioner": 4
+    },
+    "TX": {
+      "governor": 4, "lt_governor": 4, "attorney_general": 4, "comptroller": 4,
+      "land_office_commissioner": 4, "agriculture_commissioner": 4,
+      "railroad_commissioner": 6, "state_board_of_education": 4
     }
   },
   "legislature": {
@@ -81,7 +95,9 @@
     "WV": {"upper": 4, "lower": 2},
     "HI": {"lower": 2},
     "IL": {"lower": 2},
-    "SD": {"upper": 2, "lower": 2}
+    "SD": {"upper": 2, "lower": 2},
+    "SC": {"lower": 2},
+    "TX": {"upper": 4, "lower": 2}
   },
   "judicial": {
     "FL": {"circuit": 6},

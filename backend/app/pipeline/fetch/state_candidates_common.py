@@ -103,6 +103,10 @@ _PARTY_PATTERNS = [
     (re.compile(r"\b(?:libertarian|lib|lbt|lbr)\b", re.IGNORECASE), "L"),
     (re.compile(r"\b(?:green|gre|grn)\b", re.IGNORECASE), "G"),
     (re.compile(r"\b(?:constitution|con|cst)\b", re.IGNORECASE), "C"),
+    # South Carolina's United Citizens Party, which fields statewide and
+    # legislative nominees on its 2026 general ballot. Spelled out only:
+    # no abbreviation of it is safe inside a longer label.
+    (re.compile(r"\bunited\s+citizens?\b", re.IGNORECASE), "U"),
 ]
 
 # Codes read only as a party column's WHOLE value (see normalize_party).
@@ -257,6 +261,17 @@ _STATEWIDE_PHRASES = [
         r"\bCommissioner\s+of\s+School\s+and\s+Public\s+Lands\b", re.IGNORECASE)),
     ("public_utilities_commission", re.compile(
         r"\bPublic\s+Utilities\s+Commission(?:er)?\b", re.IGNORECASE)),
+    # South Carolina's name for its schools chief, off its 2026 VREMS
+    # candidate list. A separate entry rather than a third arm on the one
+    # above, so the two states' wordings stay independently legible.
+    ("school_superintendent", re.compile(
+        r"\bState\s+Superintendent\s+of\s+Education\b", re.IGNORECASE)),
+    # Texas's two, off its 2026 Civix general-election list. Both are
+    # refused by the locality gate on "commissioner" otherwise.
+    ("railroad_commissioner", re.compile(
+        r"\bRailroad\s+Commission(?:er)?\b", re.IGNORECASE)),
+    ("land_office_commissioner", re.compile(
+        r"\bCommissioner\s+of\s+the\s+General\s+Land\s+Office\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
@@ -293,8 +308,13 @@ _BALLOT_QUESTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "Public Service District" is a special-purpose LOCAL district (South
+# Carolina, West Virginia) — and South Carolina's 2026 list names one
+# "Public Service District, Fripp Island Public Service Commission", which
+# the statewide PSC phrase would otherwise read as Georgia's PSC.
 _STRICT_LOCAL_RE = re.compile(
-    r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|municipal)\b|:",
+    r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|municipal)\b"
+    r"|\bpublic\s+service\s+district\b|:",
     re.IGNORECASE,
 )
 
@@ -313,6 +333,8 @@ _LOCAL_QUALIFIER_RE = re.compile(
 # majorPartyOf() the frontend already applies to every federal candidate.
 PARTY_CODE_MAP = {
     "R": "REP", "D": "DEM", "L": "LIB", "G": "GRE", "I": "IND", "C": "CON",
+    # FEC's own code for the United Citizen party (party-code table).
+    "U": "UC",
 }
 
 # FEC's own party codes that name one of PARTY_CODE_MAP's parties under
@@ -407,6 +429,8 @@ STATEWIDE_OFFICE_LABELS = {
     "state_lands_commissioner": "Commissioner of State Lands",
     "school_public_lands_commissioner": "Commissioner of School and Public Lands",
     "public_utilities_commission": "Public Utilities Commission",
+    "railroad_commissioner": "Railroad Commissioner",
+    "land_office_commissioner": "Commissioner of the General Land Office",
 }
 
 
