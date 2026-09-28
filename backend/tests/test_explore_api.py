@@ -284,6 +284,104 @@ class TestSummaryEndpointGuards:
         mock_set_cache.assert_called_once()
         assert mock_set_cache.call_args.args[2]["summary"].startswith("A test summary.")
 
+    @pytest.mark.parametrize("ending", ["fails", "times out"])
+    async def test_a_generation_cut_off_is_shown_but_never_cached(self, db_session, monkeypatch, ending):
+        import asyncio
+
+        from app.api import explore
+
+        doc = _make_doc(db_session)
+        monkeypatch.setattr(explore, "_SUMMARY_GENERATION_LIMIT_S", 0.05)
+
+        async def _cut_off(*_args, **_kwargs):
+            yield "SUMMARY: The rule would"
+            if ending == "fails":
+                raise ConnectionError("dropped")
+            await asyncio.sleep(10)
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _cut_off),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
+        ):
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            assert events[-1]["done"] and events[-1]["summary"].startswith("The rule would")
+            assert not mock_set_cache.called
+            # And the next reader may make it afresh at once.
+            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+
+    async def test_a_lapsed_claim_is_not_given_back(self, db_session, monkeypatch):
+        # By then it may be another generation's.
+        from app.api import explore, throttle
+
+        doc = _make_doc(db_session)
+        clock = iter([0.0])
+        monkeypatch.setattr(explore, "_clock", lambda: next(clock, explore._SUMMARY_CLAIM_S))
+        released = []
+        monkeypatch.setattr(throttle, "release", lambda *a: released.append(a))
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+        assert released == []
+
+    async def test_a_summary_made_while_claiming_is_served_not_made_again(self, db_session):
+        doc = _make_doc(db_session)
+        made = {"summary": "s", "keyPoints": [], "impact": ""}
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", side_effect=[None, made]),
+            patch("app.pipeline.analyze.ollama_client.stream_llm") as stream,
+        ):
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+        assert events == [{"done": True, **made}]
+        stream.assert_not_called()
+
+    async def test_a_request_cancelled_while_claiming_leaves_no_claim_behind(self, db_session):
+        # The claim is the generation's to give back, not the request's.
+        import asyncio
+
+        from app.api import explore, throttle
+
+        doc = _make_doc(db_session)
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
+        ):
+            request = asyncio.create_task(get_explore_document_summary(doc.id, None, db=db_session))
+            await asyncio.sleep(0)
+            request.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await request
+            await asyncio.gather(*list(explore._generations))
+        mock_set_cache.assert_called_once()  # finished without its reader
+        assert throttle.claim("explore-summary", str(doc.id), period=30)
+        assert throttle.claim("explore-summary-slot", "0", period=30)
+
+    async def test_a_stream_waiting_on_the_llm_keeps_the_connection_alive(self, db_session, monkeypatch):
+        # nginx drops a response silent for proxy_read_timeout.
+        import asyncio
+
+        from app.api import explore
+
+        doc = _make_doc(db_session)
+        monkeypatch.setattr(explore, "_KEEPALIVE_S", 0.01)
+
+        async def _slow_first_token(*_args, **_kwargs):
+            await asyncio.sleep(0.05)
+            yield "SUMMARY: s\n"
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _slow_first_token),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            chunks = [chunk async for chunk in response.body_iterator]
+        assert chunks[0].startswith(":") and chunks[-1].startswith("data:")
+
     async def test_an_unavailable_cooldown_refuses_rather_than_generates(self, db_session, tmp_path):
         """The cooldown fails closed: without it every POST is a fresh
         generation on the device's one LLM."""
