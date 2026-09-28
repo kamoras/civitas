@@ -29,7 +29,7 @@ export default function SignalOverlapReading({ pair }: { pair: SignalOverlapPair
     const chamber = data.chambers[key];
     const p = chamber?.pairs[pair];
     if (!p) return [];
-    const r = p.r === null ? "no reading" : `r = ${p.r >= 0 ? "+" : "−"}${Math.abs(p.r).toFixed(2)}`;
+    const r = p.r === null ? "no reading" : `r = ${p.r >= 0 ? "+" : "−"}${Math.abs(p.r).toFixed(3)}`;
     const when = chamber?.computedAt ? `, run of ${chamber.computedAt.slice(0, 10)}` : "";
     return [`${name} ${r} across ${p.n} members (${BAND_TEXT[p.band]}${when})`];
   });

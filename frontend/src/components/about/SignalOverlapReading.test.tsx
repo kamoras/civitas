@@ -33,8 +33,8 @@ describe("SignalOverlapReading", () => {
     );
     render(<SignalOverlapReading pair="effectiveness" />);
     const text = (await screen.findByText(/^Latest:/)).textContent;
-    expect(text).toContain("Senate r = +0.08 across 98 members (distinct, run of 2026-09-28)");
-    expect(text).toContain("House r = −0.15 across 404 members (distinct, run of 2026-09-27)");
+    expect(text).toContain("Senate r = +0.083 across 98 members (distinct, run of 2026-09-28)");
+    expect(text).toContain("House r = −0.149 across 404 members (distinct, run of 2026-09-27)");
     expect(text).toContain("|r| ≥ 0.60");
   });
 
@@ -57,5 +57,20 @@ describe("SignalOverlapReading", () => {
     fetchSignalOverlap.mockRejectedValueOnce(new Error("down"));
     render(<SignalOverlapReading pair="effectiveness" />);
     expect(await screen.findByText(/could not be loaded/)).toBeTruthy();
+  });
+});
+
+describe("SignalOverlapReading precision", () => {
+  it("never shows a value that reads as the alert threshold when it is below it", async () => {
+    fetchSignalOverlap.mockResolvedValue({
+      actionR: 0.6, watchR: 0.4,
+      chambers: {
+        senate: { pairs: { effectiveness: { r: 0.597, n: 98, band: "watch", labels } }, computedAt: null },
+        house: null,
+      },
+    });
+    render(<SignalOverlapReading pair="effectiveness" />);
+    const text = (await screen.findByText(/^Latest:/)).textContent;
+    expect(text).toContain("r = +0.597");
   });
 });
