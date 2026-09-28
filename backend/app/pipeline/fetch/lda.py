@@ -235,6 +235,19 @@ def is_same_client(searched: str, client_name: str) -> bool:
     return False
 
 
+def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
+    """The registrant to name beside a filing's client, or None when it
+    would repeat what the client name already says."""
+    if not registrant:
+        return None
+    client = _name_key(client_name or "")
+    if client == _name_key(registrant) or search_name(client_name or "") == search_name(registrant):
+        return None
+    if any(marker in f" {client} " for marker in (" ON BEHALF OF ", " OBO ", " O B O ")):
+        return None
+    return registrant
+
+
 def _client_name(filing: dict) -> str:
     return (filing.get("client") or {}).get("name", "")
 
@@ -527,10 +540,24 @@ async def lobbied_bills_for(
                 "filingUrl": newest.get("url"),
                 "registrant": newest.get("registrant"),
                 "client": client_name or None,
+                # Who filed it, when that isn't already said: None when the
+                # registrant is the client (in-house, any spelling) or the
+                # client name names the registrant ("X ON BEHALF OF Y").
+                "filedBy": _filed_by(client_name, newest.get("registrant")),
                 "filingCount": len(filings),
             })
-    found.sort(key=lambda b: (-(b.get("filingYear") or 0), b.get("billId") or "", b.get("client") or ""))
-    return found[:MAX_LOBBIED_BILLS]
+    return _cap_bills(found)
+
+
+def _cap_bills(rows: list[dict]) -> list[dict]:
+    """Newest filings first, capped at MAX_LOBBIED_BILLS *bills*: several
+    clients can name one bill, and each is its own row."""
+    rows = sorted(rows, key=lambda b: (-(b.get("filingYear") or 0), b.get("billId") or "", b.get("client") or ""))
+    kept: list[str] = []
+    for b in rows:
+        if b["billId"] not in kept and len(kept) < MAX_LOBBIED_BILLS:
+            kept.append(b["billId"])
+    return [b for b in rows if b["billId"] in kept]
 
 
 async def enrich_lobbying_matches_with_lda(
@@ -603,8 +630,8 @@ async def enrich_lobbying_matches_with_lda(
                     # whose name begins with it may be a separate company.
                     m["description"] = (
                         m.get("description", "")
-                        + f" Registered federal lobbying (LDA {lda_year}) by clients whose names"
-                        f" begin with \"{search_name(org)}\": {amount} ({filed_as})"
+                        + f" Registered federal lobbying (LDA {lda_year}) by clients matched to a"
+                        f" registry search for \"{search_name(org)}\": {amount} ({filed_as})."
                     )
                 lobbied = await lobbied_bills_for(
                     lda_client, db, [a for a in activities.values() if a is not None], voted, congress,

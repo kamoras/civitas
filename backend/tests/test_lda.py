@@ -462,8 +462,8 @@ class TestClientsShown:
         d = matches[0]["description"]
         # The name matched, not the donor's full name, and registry names
         # verbatim.
-        assert 'by clients whose names begin with "COCA COLA": $970,000' in d
-        assert "$900,000 as THE COCA-COLA COMPANY; $70,000 as COCA-COLA BOTTLING COMPANY UNITED, INC.)" in d
+        assert 'by clients matched to a registry search for "COCA COLA": $970,000' in d
+        assert d.endswith("$900,000 as THE COCA-COLA COMPANY; $70,000 as COCA-COLA BOTTLING COMPANY UNITED, INC.).")
         assert matches[0]["lobbyingClients"] == [
             {"client": "THE COCA-COLA COMPANY", "amount": 900_000},
             {"client": "COCA-COLA BOTTLING COMPANY UNITED, INC.", "amount": 70_000},
@@ -513,3 +513,23 @@ class TestClientsShown:
             await enrich_lobbying_matches_with_lda(second, db_session, 2025, votes=VOTES, congress=119)
         # The first wording's verdict was cached; the new one stays unjudged.
         assert [b["filingUrl"] for b in second[0]["lobbiedBills"]] == [first[0]["lobbiedBills"][0]["filingUrl"]]
+
+
+class TestFiledBy:
+    @pytest.mark.parametrize("client,registrant,shown", [
+        ("PFIZER INC.", "PFIZER INC", None),
+        ("COCA-COLA COMPANY", "THE COCA-COLA COMPANY", None),
+        ("SMITH LLP O/B/O APPLE", "SMITH LLP", None),
+        ("WILMERHALE ON BEHALF OF APPLE INC.", "WILMERHALE", None),
+        ("PFIZER INC.", "ALTRIUS GROUP, LLC", "ALTRIUS GROUP, LLC"),
+        ("PFIZER INC.", None, None),
+    ])
+    def test_the_registrant_is_named_only_when_it_adds_something(self, client, registrant, shown):
+        assert lda._filed_by(client, registrant) == shown
+
+
+def test_the_cap_counts_bills_not_client_rows():
+    rows = [{"billId": f"HR.{n}", "filingYear": 2025, "client": c} for n in range(1, 13) for c in ("A", "B")]
+    capped = lda._cap_bills(rows)
+    assert len({b["billId"] for b in capped}) == lda.MAX_LOBBIED_BILLS
+    assert len(capped) == 2 * lda.MAX_LOBBIED_BILLS

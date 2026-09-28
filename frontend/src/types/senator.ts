@@ -190,6 +190,8 @@ export interface LobbiedBill {
   /** The registry's name for the filing's client, which may be an entity
    * sharing the donor's name rather than the donor itself. */
   client?: string | null;
+  /** The registrant, when it isn't the client or already named in it. */
+  filedBy?: string | null;
   filingCount: number;
 }
 
