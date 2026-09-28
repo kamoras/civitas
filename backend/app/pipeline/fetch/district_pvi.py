@@ -25,6 +25,7 @@ import httpx
 
 from app.atomic_write import write_text_atomic
 from app.http_client import make_async_client
+from app.ordinals import ordinal
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -72,14 +73,6 @@ _rate_limiter = RateLimiter(rps=2.0)
 
 _PVI_RE = re.compile(r"(?i)\|\s*(?:cpvi|cook[_ ]?pvi)\s*=\s*([^\n|}]+)")
 _VALUE_RE = re.compile(r"(?i)\b(EVEN|[DR]\s*\+\s*\d+)\b")
-
-
-def ordinal(n: int) -> str:
-    if 10 <= n % 100 <= 20:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
 
 
 def district_title(state: str, district: int) -> str:

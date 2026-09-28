@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.response_helpers import cached_json
 from app.database import get_db
 from app.models import RollCall
+from app.pipeline.congress_activity import eastern_today
 from app.services import congress_service
 from app.services.bill_record import vote_detail
 
@@ -17,12 +18,24 @@ router = APIRouter(prefix="/congress")
 # Short: a session day's floor logs change every half hour.
 _TTL_S = 300
 
+# The 1st Congress convened in 1789; nothing before it can have a record,
+# and the week and month arithmetic runs off the calendar at year 1 and
+# 9999 (a 500, not an answer). Next year is the latest worth asking about.
+_FIRST_YEAR = 1789
+
+
+def _check_year(year: int) -> None:
+    if not _FIRST_YEAR <= year <= eastern_today().year + 1:
+        raise HTTPException(status_code=422, detail="Outside the years Congress has met")
+
 
 def _parse_date(value: str) -> date:
     try:
-        return date.fromisoformat(value)
+        parsed = date.fromisoformat(value)
     except ValueError:
-        raise HTTPException(status_code=422, detail="Expected a date as YYYY-MM-DD")
+        raise HTTPException(status_code=422, detail="Expected a date as YYYY-MM-DD") from None
+    _check_year(parsed.year)
+    return parsed
 
 
 @router.get("/latest")
@@ -51,6 +64,7 @@ def month(month: str = Path(pattern=r"^\d{4}-\d{2}$"), db: Session = Depends(get
     year, mon = (int(x) for x in month.split("-"))
     if not 1 <= mon <= 12:
         raise HTTPException(status_code=422, detail="Expected a month as YYYY-MM")
+    _check_year(year)
     return cached_json(congress_service.month_report(db, year, mon), max_age=_TTL_S)
 
 

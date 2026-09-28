@@ -70,6 +70,12 @@ _ROLL_CALL_BATCH = 250
 # How many numbers past a missing roll call to probe before deciding the
 # chamber has no more votes (a file can be late while the next is up).
 _ROLL_CALL_LOOKAHEAD = 3
+# A number passed over that way is asked for again on each run while the
+# vote after it is this recent: long enough for a late file to be posted,
+# short enough that a number the chamber really skipped stops costing a
+# request. At most _GAP_RETRIES of them per chamber per run.
+_GAP_RETRY_DAYS = 14
+_GAP_RETRIES = 10
 
 _DIGEST_CURSOR_KEY = "congress-digest-backfill-cursor"
 _LAST_RUN_KEY = "congress-sync-last-run"
@@ -138,6 +144,19 @@ def _day_row(db: Session, chamber: str, day: str) -> CongressDay:
 
 # ── Floor logs ────────────────────────────────────────────────────
 
+def _floor_log_days(db: Session, today: date) -> list[date]:
+    """Today, yesterday, and any day of the last week still on its floor
+    log (not made final by a Digest), so a row the log got wrong is read
+    again rather than kept."""
+    start = (today - timedelta(days=_RECENT_DAYS)).isoformat()
+    pending = {
+        date.fromisoformat(d) for (d,) in db.query(CongressDay.date).filter(
+            CongressDay.date >= start, CongressDay.is_final.is_(False),
+        )
+    }
+    return sorted(pending | {today - timedelta(days=1), today})
+
+
 def _next_meeting_from_iso(iso: str | None) -> str | None:
     """"20260928T12:00" -> "12 noon, Monday, September 28", the Digest's
     own wording for a next meeting, so the live and final rows read alike."""
@@ -179,7 +198,7 @@ async def sync_floor_logs(client: httpx.AsyncClient, db: Session, day: date) -> 
             continue
         row = _day_row(db, chamber, iso)
         if not row.is_final:
-            row.in_session = True
+            row.in_session = parsed.get("in_session", True)
             row.source = "floor_log"
             row.source_url = url
             row.convened_at = parsed.get("convened_at")
@@ -187,6 +206,8 @@ async def sync_floor_logs(client: httpx.AsyncClient, db: Session, day: date) -> 
             row.adjournment_text = parsed.get("adjournment_text") or ""
             if parsed.get("next_meeting_iso"):
                 row.next_meeting = _next_meeting_from_iso(parsed["next_meeting_iso"])
+            elif parsed.get("next_meeting"):
+                row.next_meeting = parsed["next_meeting"][:120]
             row.fetched_at = utcnow()
         _replace_events(db, chamber, iso, "floor_log", parsed["events"])
         db.commit()
@@ -255,6 +276,21 @@ async def sync_digest(client: httpx.AsyncClient, db: Session, day: date) -> str:
         row.is_final = True
         row.fetched_at = utcnow()
         _replace_events(db, chamber, iso, "digest", action["events"] + committees)
+    for chamber in ("senate", "house"):
+        if (chamber, "floor") in texts:
+            continue
+        # A Record issue has a floor section for each chamber that met,
+        # pro forma sessions included, so a chamber with none did not meet
+        # (2026-09-21: the Senate's section only). Recorded as final, or the
+        # day would read "no record yet" and be fetched again every run
+        # for a week. A floor log that says the chamber met is left alone.
+        row = _day_row(db, chamber, iso)
+        if row.in_session:
+            continue
+        row.source = "digest"
+        row.source_url = f"https://www.govinfo.gov/app/details/{package}"
+        row.is_final = True
+        row.fetched_at = utcnow()
     db.commit()
     return "ok"
 
@@ -344,21 +380,71 @@ def _store_roll_call(db: Session, chamber: str, congress: int, session: int, num
     db.commit()
 
 
+def _gaps_to_retry(db: Session, chamber: str, congress: int, session: int, today: date) -> list[int]:
+    """Numbers below the highest stored that have no row, while the vote
+    after each is recent (_GAP_RETRY_DAYS), newest first."""
+    rows = db.query(RollCall.number, RollCall.date).filter_by(
+        chamber=chamber, congress=congress, session=session,
+    ).order_by(RollCall.number.desc()).all()
+    cutoff = (today - timedelta(days=_GAP_RETRY_DAYS)).isoformat()
+    gaps: list[int] = []
+    for (above, above_date), (below, _) in zip(rows, rows[1:] + [(0, "")]):
+        if (above_date or "") < cutoff:
+            break
+        gaps += range(above - 1, below, -1)
+        if len(gaps) >= _GAP_RETRIES:
+            break
+    return gaps[:_GAP_RETRIES]
+
+
+def _roll_call_url(chamber: str, congress: int, session: int, number: int) -> str:
+    if chamber == "senate":
+        return floor_logs.senate_roll_call_url(congress, session, number)
+    return floor_logs.house_roll_call_url(congress_first_year(congress) + session - 1, number)
+
+
+def _parse_roll_call(chamber: str, text: str, congress: int, session: int, number: int) -> dict | None:
+    if chamber == "senate":
+        return parse_senate_vote_xml(text, congress, session, number)
+    return parse_house_vote_xml(text, congress_first_year(congress) + session - 1, number)
+
+
+async def _retry_gaps(client: httpx.AsyncClient, db: Session, chamber: str,
+                      congress: int, session: int) -> tuple[int, str]:
+    """Ask again for the numbers the forward scan passed over."""
+    stored = 0
+    for number in _gaps_to_retry(db, chamber, congress, session, eastern_today()):
+        url = _roll_call_url(chamber, congress, session, number)
+        body = await _get(client, url, label=f"{chamber} roll call")
+        if body is None:
+            return stored, "failed"
+        if body is _ABSENT:
+            continue
+        text = body.decode("utf-8", errors="replace")
+        parsed = _parse_roll_call(chamber, text, congress, session, number)
+        if parsed is None:
+            return stored, "failed"
+        amended = _senate_amended_bill(text) if chamber == "senate" else None
+        _store_roll_call(db, chamber, congress, session, number, parsed, url, bill_id=amended)
+        stored += 1
+    return stored, "ok"
+
+
 async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
                           congress: int, session: int, limit: int = _ROLL_CALL_BATCH) -> tuple[int, str]:
-    """New roll calls for one chamber's session -> (stored, outcome)."""
+    """New roll calls for one chamber's session -> (stored, outcome):
+    first the numbers an earlier scan passed over, then onward from the
+    highest stored."""
+    stored, outcome = await _retry_gaps(client, db, chamber, congress, session)
+    if outcome != "ok":
+        return stored, outcome
     highest = db.query(func.max(RollCall.number)).filter_by(
         chamber=chamber, congress=congress, session=session,
     ).scalar() or 0
-    year = congress_first_year(congress) + session - 1
-    stored = 0
     number = highest + 1
     misses = 0
     while stored < limit:
-        if chamber == "senate":
-            url = floor_logs.senate_roll_call_url(congress, session, number)
-        else:
-            url = floor_logs.house_roll_call_url(year, number)
+        url = _roll_call_url(chamber, congress, session, number)
         body = await _get(client, url, label=f"{chamber} roll call")
         if body is None:
             return stored, "failed"
@@ -369,13 +455,13 @@ async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
             number += 1
             continue
         text = body.decode("utf-8", errors="replace")
-        parsed = (parse_senate_vote_xml(text, congress, session, number) if chamber == "senate"
-                  else parse_house_vote_xml(text, year, number))
+        parsed = _parse_roll_call(chamber, text, congress, session, number)
         if parsed is None:
             return stored, "failed"
         if misses:
-            # A number with no file between two that have one: the chamber
-            # skipped it. Logged, not retried, so it cannot stall the run.
+            # A number with no file between two that have one: late, or
+            # skipped by the chamber. Passed over so it cannot stall the
+            # run; the next runs ask for it again (_retry_gaps).
             logger.warning("%s roll call(s) %d-%d missing before %d (%d-%d)", chamber,
                            number - misses, number - 1, number, congress, session)
             misses = 0
@@ -384,6 +470,35 @@ async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
         stored += 1
         number += 1
     return stored, "ok"
+
+
+# House roll calls stored before the House parser read <vote-type> have no
+# majority requirement ("2/3" on a suspension). Re-read this many per run
+# until none is left; each costs one request, once.
+_REQUIREMENT_REPAIR_BATCH = 60
+
+
+async def repair_house_requirements(client: httpx.AsyncClient, db: Session,
+                                    limit: int = _REQUIREMENT_REPAIR_BATCH) -> tuple[int, str]:
+    """-> (repaired, outcome). Reads only <vote-type>; the stored tally and
+    positions are left as they are."""
+    rows = db.query(RollCall).filter(
+        RollCall.chamber == "house", RollCall.majority_requirement == "",
+    ).order_by(RollCall.id.desc()).limit(limit).all()
+    repaired = 0
+    for rc in rows:
+        body = await _get(client, rc.source_url, label="house roll call")
+        if body is None:
+            return repaired, "failed"
+        if body is _ABSENT:
+            continue
+        parsed = parse_house_vote_xml(body.decode("utf-8", errors="replace"), 0, rc.number)
+        if parsed is None:
+            continue
+        rc.majority_requirement = parsed["majorityRequirement"][:10]
+        db.commit()
+        repaired += 1
+    return repaired, "ok"
 
 
 # ── The run ───────────────────────────────────────────────────────
@@ -397,18 +512,25 @@ async def run_congress_sync() -> dict:
     try:
         today = eastern_today()
         congress = expected_current_congress()
+        # Newest first: a fresh database (first deploy, a data reset) shows
+        # this week before the back-fill of the Congress's first months.
+        # The first run on 2026-09-27 fetched 1,000 roll calls from January
+        # 2025 before any recent day, and /congress read February 2025 as
+        # the latest day for twenty minutes.
         async with make_async_client() as client:
+            result["floorLogs"] = {
+                d.isoformat(): await sync_floor_logs(client, db, d)
+                for d in _floor_log_days(db, today)
+            }
+            result["digests"] = await sync_digests(client, db, today)
             votes: dict[str, dict] = {}
-            for chamber in ("senate", "house"):
-                for session in (1, 2):
+            for session in (2, 1):
+                for chamber in ("senate", "house"):
                     n, status = await sync_roll_calls(client, db, chamber, congress, session)
                     votes[f"{chamber}-{session}"] = {"stored": n, "status": status}
             result["rollCalls"] = votes
-            result["floorLogs"] = {
-                d.isoformat(): await sync_floor_logs(client, db, d)
-                for d in (today - timedelta(days=1), today)
-            }
-            result["digests"] = await sync_digests(client, db, today)
+            fixed, status = await repair_house_requirements(client, db)
+            result["requirementsRepaired"] = {"repaired": fixed, "status": status}
         result["finishedAt"] = utcnow().isoformat()
         api_cache_set(db, _CACHE_TIER, _LAST_RUN_KEY, result, normal_ttl_hours=24 * 30)
         return result

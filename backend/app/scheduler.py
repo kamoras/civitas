@@ -6,6 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
+from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
@@ -20,7 +21,8 @@ from app.pipeline.election_pipeline import (
     run_ballot_sync, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
-from app.pipeline.congress_activity import congress_sync_age, is_congress_sync_running, run_congress_sync
+from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_congress_sync_running, run_congress_sync
+from app.pipeline.analyze.congress_bluesky import post_daily_congress
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
 from app.pipeline import lease
@@ -65,8 +67,9 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
 
 def _nightly_pipeline() -> None:
     """Run the nightly sequence: Senate, then explore docs/SCOTUS/
-    presidents, then House, then stock trades — four independent
-    pipelines run one after another, not one combined pipeline.
+    presidents, then House, then stock trades, then elections — five
+    independent pipelines run one after another, not one combined
+    pipeline. A skip or a crash anywhere ends the chain there.
 
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.
@@ -507,6 +510,17 @@ def _congress_activity_sync() -> None:
                 logger.exception("Congress sync failed")
             finally:
                 loop.close()
+            # The day's Bluesky post, once its Digest has made it final.
+            # After the sync, so a day finalized this run posts this run.
+            db = SessionLocal()
+            try:
+                posted = post_daily_congress(db, eastern_today())
+                if posted:
+                    logger.info("Posted the Congress day %s to Bluesky", posted)
+            except Exception:
+                logger.exception("Congress Bluesky post failed")
+            finally:
+                db.close()
 
     _start_job(_run, name="congress-activity-sync")
 

@@ -10,12 +10,15 @@ const nextConfig = {
   // Lighthouse audit caught. The cost is the first byte waiting for the
   // metadata fetch the page makes anyway (cached, revalidate 3600).
   htmlLimitedBots: /.*/,
-  // /bills moved under /congress (2026-09): old links — search results,
-  // Bluesky posts, Action Center issues — keep working.
+  // Old paths that still have links out in the world — search results,
+  // Bluesky posts, Action Center issues — keep working. Query strings are
+  // carried over. /bills moved under /congress (2026-09); /scorecard became
+  // /politicians (same ?branch= and ?state=).
   async redirects() {
     return [
       { source: "/bills", destination: "/congress/bills", permanent: true },
       { source: "/bills/:id", destination: "/congress/bills/:id", permanent: true },
+      { source: "/scorecard", destination: "/politicians", permanent: true },
     ];
   },
   async rewrites() {

@@ -2,12 +2,11 @@
 
 import asyncio
 import logging
-import secrets
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.api.auth import check_pipeline_token
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.database import SessionLocal, get_db
 from app.api.response_helpers import (
@@ -48,11 +47,7 @@ def weights():
 @router.post("/pipeline/trigger")
 async def trigger_pipeline(authorization: str | None = Header(default=None)):
     """Trigger a justice data pipeline run (fetches from Oyez API)."""
-    if not settings.PIPELINE_TRIGGER_TOKEN:
-        raise HTTPException(status_code=503, detail="Pipeline trigger token not configured")
-    expected = f"Bearer {settings.PIPELINE_TRIGGER_TOKEN}"
-    if not authorization or not secrets.compare_digest(authorization, expected):
-        raise HTTPException(status_code=403, detail="Invalid token")
+    check_pipeline_token(authorization)
 
     from app.background import start_writer
 

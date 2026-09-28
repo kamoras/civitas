@@ -1,7 +1,9 @@
 """Privacy-respecting unique-visitor tracking.
 
 No raw IP or User-Agent is ever stored. `POST /api/track-visit` is fired by
-the frontend's middleware on real page views and records only an HMAC of
+the frontend's middleware on a page load, and by the browser (through nginx,
+frontend NavigationBeacon) on a navigation inside the app — never on a
+prefetch (frontend lib/pageLoad.ts) — and records only an HMAC of
 the IP under a random salt that exists for the current UTC day and is then
 deleted — see SiteVisit in models.py for why that makes past hashes
 unrecoverable and why this table can't grow per-request.

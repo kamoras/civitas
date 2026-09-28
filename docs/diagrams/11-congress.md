@@ -20,6 +20,10 @@ flowchart TB
     DAY[("congress_days (one per chamber per day)<br/>congress_events (passed · failed · reported ·<br/>confirmed · committee · floor)")]
 ```
 
+**Newest first.** Each run reads the floor logs, then the recent Digests, then
+the current session's roll calls, and only then the back-fill, so a fresh
+database shows this week before the Congress's first months.
+
 **The Digest's own words.** Every event keeps the record's wording. Parsing
 only decides which heading an entry sits under ("Measures Passed:",
 "Nominations Confirmed:", a House measure's own heading, "Suspensions:") and
@@ -28,6 +32,12 @@ column-0 heading lines after a finished sentence; a two-space indent always
 opens a sub-item, because continuation lines are at column 0
 (`app/pipeline/fetch/daily_digest.py`, tested against real issues in
 `backend/tests/fixtures/daily_digest`).
+
+**A file is not a session.** On a day the Senate does not meet, senate.gov
+still publishes its floor file, holding only when it reconvenes; with no
+opening and no proceedings it is a day not in session (on 2026-09-27 two
+such files read as "The Senate met"). Every day of the last week still on
+its floor log is read again each run, so a wrong row corrects itself.
 
 **Live, then final.** A chamber's floor log fills its day while it meets;
 the Digest replaces the row (`is_final`) the next day. The floor log's timed
@@ -44,7 +54,9 @@ run's per-source outcome is stored (`api_cache`, tier `congress`, key
 **Reports.** `app/services/congress_service.py` builds the day, week and
 month reports from these rows: counts, "passed both chambers" (a measure
 passed by the chamber it did not start in; simple resolutions never count),
-the three closest votes, and a one-line summary filled from counts by
+the three closest votes (by how far the yeas were from what the vote
+needed: a simple majority, two-thirds of those voting, or cloture's 60), and
+a one-line summary filled from counts by
 template. Served at `/api/congress/{latest, day/…, week/…, month/…}`; one roll
 call with every member's position at `/api/congress/votes/…`. A bill's full
 record for its page, any bill, at `/api/bills/{id}/record`
@@ -55,6 +67,11 @@ record for its page, any bill, at `/api/bills/{id}/record`
 (`frontend/src/components/congress/`); `/congress/bills` is the in-motion list
 and `/congress/bills/{id}` any bill's page, whose vote panel loads one roll
 call's members at a time. `/bills` and `/bills/:id` redirect permanently.
+
+**Bluesky.** After each sync run, `analyze/congress_bluesky.py` posts the most
+recent session day whose record the Digest has made final, if it is from the
+last three days and not already posted: the day report's sentence and the
+passed bills' numbers (never titles), linking to `/congress/{date}`.
 
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's
