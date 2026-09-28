@@ -46,3 +46,11 @@ export function voteTitle(
   if (title && !/^[A-Z][A-Z .]*\d+$/.test(title.trim())) return title;
   return billLabel || title || fallback;
 }
+
+/** "47th", "1st", "22nd", "113th". */
+export function ordinal(n: number): string {
+  const mod100 = n % 100;
+  const suffix =
+    mod100 >= 11 && mod100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th");
+  return `${n}${suffix}`;
+}

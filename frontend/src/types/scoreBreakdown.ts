@@ -63,16 +63,14 @@ export interface EffectivenessFacts {
   billsByStage: number[];
 }
 
-/** President dimensions that are pure editorial estimates, not a live formula. */
-export interface SeedOnlyDimension {
-  score: number;
-  seedOnly: true;
-}
-
+/** President: the four dimensions, each with `facts` (the figures below).
+ *  A dimension that doesn't apply to a president has no components and a
+ *  null score. */
 export interface PresidentScoreBreakdown {
-  publicMandate: SeedOnlyDimension;
-  effectiveness: ScoreBreakdownDimension | SeedOnlyDimension;
-  agencyAlignment: ScoreBreakdownDimension | SeedOnlyDimension;
+  publicMandate: ScoreBreakdownDimension;
+  effectiveness: ScoreBreakdownDimension;
+  agencyAlignment: ScoreBreakdownDimension;
+  historicalLegacy: ScoreBreakdownDimension;
 }
 
 export interface JusticeDimensionBreakdown {
@@ -86,4 +84,44 @@ export interface JusticeScoreBreakdown {
     independence: JusticeDimensionBreakdown;
   };
   [key: string]: unknown;
+}
+
+/** President: publicMandate.facts. Approval where polling exists (Truman
+ *  onward), else the average election margin; means are all presidents'. */
+export interface PublicMandateFacts {
+  approval: number | null;
+  approvalMean: number | null;
+  approvalTrend: number | null;
+  trendMean: number | null;
+  electionMargin: number | null;
+  marginMean: number | null;
+  /** Average approval over the last 90 days (not scored). */
+  recentApproval: number | null;
+}
+
+/** President: effectiveness.facts. Jobs per attributed year (the first year
+ *  set aside) against presidencies since 1939; GDP growth against those in
+ *  the same data regime (gdpSince: since 1947, else before). */
+export interface PresidentEffectivenessFacts {
+  jobsMillions: number | null;
+  jobsPerYear: number | null;
+  jobsMean: number | null;
+  gdpGrowth: number | null;
+  gdpMean: number | null;
+  gdpSince: boolean | null;
+}
+
+/** President: agencyAlignment.facts. */
+export interface AgencyAlignmentFacts {
+  finalizedPct: number | null;
+  finalizedMean: number | null;
+  rulemakings: number | null;
+}
+
+/** President: historicalLegacy.facts. C-SPAN 2021 survey points; otherTerms
+ *  are the same person's other presidencies the survey rated. */
+export interface HistoricalLegacyFacts {
+  points: number | null;
+  pointsMean: number | null;
+  otherTerms: { id: string; number: number; points: number; score: number | null }[];
 }
