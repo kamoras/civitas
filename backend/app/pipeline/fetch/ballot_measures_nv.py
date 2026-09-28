@@ -115,7 +115,11 @@ def looks_like_statewide_booklet(pages: list[str], year: int) -> bool:
     or a lost text layer) — either could be the statewide booklet, so a
     candidate like this that fails is_statewide_booklet refuses the state
     rather than being passed over. A Spanish edition ("Preguntas ...
-    Estatales") or a county/city summary names none of those."""
+    Estatales") or a county/city summary names none of those. It errs
+    closed: another same-year statewide-question document on the page
+    (arguments and rebuttals published separately, say) would also match
+    and refuse the state until the reader is taught it — the page itself
+    could not be seen from the development environment."""
     first = " ".join((pages[0] if pages else "").split())
     if not "".join(pages).strip():
         return True

@@ -34,12 +34,13 @@ question ("SHALL THE AMENDMENT BE APPROVED?") is official_summary, one
 line per bullet or numbered item as printed; the ballot's own
 'A “YES” vote means ...' / 'A “NO” vote means ...' sentences, where it
 prints them (2026 does, 2022 and 2024 did not), are yes_means /
-no_means — each running to the period that really ends it (followed by the
-end or a capital; a period ending an abbreviation such as "R.C." or
-"U.S." does not count, a lone capital like "Plan B." does), the YES
-sentence never running past the start of the NO one nor the NO past
-its paragraph or the question, and one printed without the other, twice, or
-with no clear end refuses the issue. The answer ovals are not text.
+no_means — each read within its own bounds (the YES sentence up to the
+start of the NO one or its paragraph's end, the NO sentence up to its
+paragraph's end or the question), the whole bounded text being the
+sentence: it must end in a period, and a period inside it followed by a
+capitalised word is allowed only after a known abbreviation ("R.C.",
+"Gov.", "St.") — otherwise it is a second sentence and the issue is
+refused, as is one sentence printed without the other, or twice. The answer ovals are not text.
 
 [] (confirmed none) only when every page of the sample ballot is one of
 the three kinds above and none is a state-issue page: the Secretary's
@@ -83,13 +84,14 @@ _PAGE_RE = re.compile(r"^Page \d+ of \d+$")
 _ITEM_RE = re.compile(r"^(•|\d+\.\s)")
 _YES_START = "A “YES” vote means "
 _NO_START = "A “NO” vote means "
-# A period that ends a word like these is an abbreviation, not the end of
-# the sentence ("R.C. 3505.062", "the U.S. Constitution", "Sec. 5"). A
-# lone capital ("Plan B.", "Article V.") is NOT one: it ends a sentence
-# like any other word, and _SENTENCE_BREAK_RE already requires the next
-# word to start with a capital, so "B. 12" or "V. of" never breaks.
-_ABBREVIATION_RE = re.compile(r"(?:^|\s)(?:(?:[A-Z]\.)+[A-Z]|No|Nos|Sec|Secs|Art|Ch|Const|Stat|Rev|Div|Dist|vs?)$")
-_SENTENCE_BREAK_RE = re.compile(r"\.(?=\s*$|\s+[A-Z“\"(•])")
+# Periods that don't end a sentence even with a capitalised word after
+# them: multi-letter dotted forms ("R.C.", "U.S.") and titles/labels
+# ("Gov. DeWine", "St. Clairsville", "Dr. Smith", "Sec. 5").
+_ABBREVIATION_RE = re.compile(
+    r"(?:^|\s)(?:(?:[A-Z]\.)+[A-Z]|No|Nos|Sec|Secs|Art|Ch|Const|Stat|Rev|Div|Dist|vs?"
+    r"|Gov|Lt|St|Ste|Dr|Mr|Mrs|Ms|Jr|Sr|Rep|Sen|Gen|Hon|Mt|Ft|Co|Corp|Inc|Twp)$"
+)
+_SENTENCE_BREAK_RE = re.compile(r"\.(?=\s+[A-Z“\"(•])")
 
 
 class AmbiguousSentence(ValueError):
@@ -97,15 +99,19 @@ class AmbiguousSentence(ValueError):
 
 
 def _sentence_in(segment: str) -> str:
-    """The first sentence of `segment`: through the first period followed
-    by the segment's end or by whitespace and a capital (or a quotation
-    mark, bullet or parenthesis), skipping periods that end an
-    abbreviation. No such period is ambiguous."""
-    for m in _SENTENCE_BREAK_RE.finditer(segment):
-        if _ABBREVIATION_RE.search(segment[:m.start()]):
-            continue
-        return segment[:m.end()]
-    raise AmbiguousSentence(segment[:60])
+    """The sentence a bounded segment holds. The segment already stops
+    at the other sentence, the paragraph's end or the question, so its
+    end is the sentence's end: the segment, trimmed, must end in a
+    period. A period inside it followed by a capitalised word is allowed
+    only after a known abbreviation ("Gov.", "R.C."); any other is a
+    second sentence in the segment, which is ambiguous and refused."""
+    sentence = segment.strip()
+    if not sentence.endswith("."):
+        raise AmbiguousSentence(sentence[:60])
+    for m in _SENTENCE_BREAK_RE.finditer(sentence):
+        if not _ABBREVIATION_RE.search(sentence[:m.start()]):
+            raise AmbiguousSentence(sentence[:60])
+    return sentence
 
 
 def yes_no_sentences(body: str) -> tuple[str | None, str | None]:

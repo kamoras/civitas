@@ -672,9 +672,23 @@ class TestMississippiReissuedBallot:
         assert await ms.fetch_measures(None, 2026) == []
 
     @pytest.mark.asyncio
-    async def test_a_dead_extra_link_does_not_fail_a_found_general(self, monkeypatch):
-        self._stub(monkeypatch, [self.stale, self.general], {self.general: self.fx["sample_ballot_pages"]})
+    async def test_a_dead_older_link_does_not_fail_a_found_general(self, monkeypatch):
+        older = "https://www.sos.ms.gov/content/documents/Elections/2026/Sample Ballot 3-1-26.pdf"
+        self._stub(monkeypatch, [older, self.general], {self.general: self.fx["sample_ballot_pages"]})
         assert await ms.fetch_measures(None, 2026) == []
+
+    @pytest.mark.asyncio
+    async def test_a_dead_newer_ballot_is_a_failure_not_the_older_ones_none(self, monkeypatch):
+        # A corrected ballot (which could add a measure) that fails to
+        # fetch must not let the older ballot's "none" stand that night.
+        self._stub(monkeypatch, [self.general, self.corrected], {self.general: self.fx["sample_ballot_pages"]})
+        assert await ms.fetch_measures(None, 2026) is None
+
+    @pytest.mark.asyncio
+    async def test_a_dead_undated_link_is_a_failure(self, monkeypatch):
+        # Nothing proves it older than the ballot that was read.
+        self._stub(monkeypatch, [self.stale, self.general], {self.general: self.fx["sample_ballot_pages"]})
+        assert await ms.fetch_measures(None, 2026) is None
 
     @pytest.mark.asyncio
     async def test_a_dead_link_and_no_general_is_a_failure_not_a_wait(self, monkeypatch):
@@ -688,3 +702,34 @@ def test_ga_registry_description_names_what_the_reader_cannot_see():
     sources.invalidate_cache()
     desc = sources.source_for_state("GA")["description"]
     assert "county sample ballots" in desc and "Augusta-Richmond" in desc and "by hand" in desc
+
+
+# ── Review round 3 (PR #715) ─────────────────────────────────────────
+
+class TestOhioTitleAbbreviations:
+    @pytest.mark.parametrize("name", ["Gov. DeWine", "St. Clairsville", "Dr. Smith"])
+    def test_a_title_abbreviation_does_not_cut_the_sentence(self, name):
+        yes = f"A “YES” vote means the plan proposed by {name} takes effect."
+        body = f"{yes}\nA “NO” vote means it does not.\nSHALL THE AMENDMENT BE APPROVED?"
+        assert oh.yes_no_sentences(body) == (yes, "A “NO” vote means it does not.")
+
+    def test_two_sentences_in_one_segment_refuse(self):
+        body = (
+            "A “YES” vote means approval of the amendment. If approved, it takes effect at once.\n"
+            "A “NO” vote means disapproval of the amendment.\nSHALL THE AMENDMENT BE APPROVED?"
+        )
+        with pytest.raises(oh.AmbiguousSentence):
+            oh.yes_no_sentences(body)
+
+    def test_a_segment_not_ending_in_a_period_refuses(self):
+        body = "A “YES” vote means approval of the\nA “NO” vote means disapproval.\nSHALL THE AMENDMENT BE APPROVED?"
+        with pytest.raises(oh.AmbiguousSentence):
+            oh.yes_no_sentences(body)
+
+
+def test_nv_registry_description_names_the_other_documents_risk():
+    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
+
+    sources.invalidate_cache()
+    desc = sources.source_for_state("NV")["description"]
+    assert "arguments" in desc and "errs closed" in desc

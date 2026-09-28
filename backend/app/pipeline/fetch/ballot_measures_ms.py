@@ -35,13 +35,17 @@ link names neither ("Sample Ballot 9-9-26.pdf"), so a primary's ballot
 beside it is told apart by its content. No such ballot among them (none
 linked, or only a primary's) is NotYetPublished — unless a link couldn't
 be read, when it is a failure, since that one may have been the general.
-A link that fails beside a general ballot that was read changes nothing.
+A link that fails beside a general ballot that was read is set aside only
+when its filename's date is older than the newest read ballot's (a
+corrected ballot that adds a measure must never let the older ballot's
+"none" stand for a night); an undated or newer failed link is a failure.
 Two general ballots (a reissued or corrected one beside the original)
 are accepted only when each on its own confirms none.
 """
 
 import logging
 import re
+from datetime import date
 from urllib.parse import unquote, urljoin
 
 import httpx
@@ -90,6 +94,22 @@ def sample_ballot_urls(page_html: str, year: int) -> list[str] | None:
     return urls
 
 
+_FILENAME_DATE_RE = re.compile(r"(?<!\d)(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})(?!\d)")
+
+
+def _filename_date(url: str) -> date | None:
+    """The date a sample ballot's filename carries ("Sample Ballot
+    9-9-26.pdf" -> 2026-09-09), or None."""
+    m = _FILENAME_DATE_RE.search(unquote(url.rsplit("/", 1)[-1]))
+    if m is None:
+        return None
+    year = int(m.group(3))
+    try:
+        return date(year + 2000 if year < 100 else year, int(m.group(1)), int(m.group(2)))
+    except ValueError:
+        return None
+
+
 def is_general_ballot(pages: list[str], year: int) -> bool:
     """Whether this sample ballot is the statewide one for `year`'s
     general election: its first page names the state and the date."""
@@ -131,8 +151,8 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if urls is None:
         logger.warning("MS elections page is not the page this reader knows")
         return None
-    generals = []
-    failed = []
+    generals: list[tuple[str, list[str]]] = []
+    failed: list[str] = []
     for url in urls:
         raw = await get_bytes(client, url, "MS sample ballot")
         pages = None
@@ -142,24 +162,33 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             except Exception:
                 logger.exception("MS sample ballot %s was not parseable", url)
         if pages is None:
-            # A stale link (a primary's ballot taken down) needn't sink a
-            # general ballot found beside it; it only matters when no
-            # general ballot was read (below).
             failed.append(url)
             continue
         if is_general_ballot(pages, year):
-            generals.append(pages)
-    if not generals:
-        if failed:
-            # The general's ballot may be the one that couldn't be read.
-            logger.warning("MS: no general sample ballot read and %d link(s) failed: %s", len(failed), failed)
+            generals.append((url, pages))
+    if failed:
+        # A link that couldn't be read may be the newest general ballot —
+        # a corrected one that adds a measure — so an older ballot's
+        # "none" can't stand in for it. It is set aside only when it is
+        # provably older than a general ballot that was read, by the
+        # dates the filenames themselves carry ("Sample Ballot
+        # 9-9-26.pdf"); an undated link can't be shown older.
+        read_dates = [d for d in (_filename_date(u) for u, _ in generals) if d is not None]
+        newest_read = max(read_dates) if read_dates else None
+        unproven = [
+            u for u in failed
+            if newest_read is None or (d := _filename_date(u)) is None or d >= newest_read
+        ]
+        if unproven:
+            logger.warning("MS: sample ballot link(s) %s failed and aren't provably older than one read", unproven)
             return None
+    if not generals:
         # Every linked sample ballot was read and none is this general's
         # (only a primary's, or none posted yet): not yet, nothing broken.
         raise NotYetPublished(f"the Mississippi Secretary of State's {year} general-election sample ballot")
     # A reissued or corrected ballot can sit beside the original; it is
     # accepted only when every general ballot gives the same answer.
-    answers = {confirms_none(pages, year) for pages in generals}
+    answers = {confirms_none(pages, year) for _, pages in generals}
     if answers != {True}:
         return None
     return []
