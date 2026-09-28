@@ -186,6 +186,7 @@ import html
 import io
 import logging
 import re
+from datetime import date
 from urllib.parse import urljoin
 
 import httpx
@@ -205,6 +206,7 @@ from app.pipeline.fetch.state_candidates_common import (
     discover_certification_link,
     NONPARTISAN,
     federal_only,
+    in_ballot_window,
     not_yet,
     normalize_party,
     parse_office,
@@ -799,7 +801,26 @@ def _records(
     )
     missing = _slate_gaps(records, fmt) if state_offices else []
     if missing:
-        logger.info("%s certified list's state offices wait for %s", state, "; ".join(missing))
+        if year is not None and in_ballot_window(year):
+            # The ballot is mailed and a party's slate is still short: not a
+            # convention yet to come any more, but something to look at --
+            # the state offices stay held (never published half-filled),
+            # and someone is told, once a day.
+            logger.warning("%s certified list's state offices still wait for %s", state, "; ".join(missing))
+            try:
+                from app.ops_alerts import send_ops_alert
+
+                send_ops_alert(
+                    f"{state} state offices held: party slate incomplete on the certified list",
+                    f"{state}'s {year} certified list still lacks: {'; '.join(missing)}. Ballots are final, "
+                    "so the statewide and legislative sections stay unpublished until the list is complete "
+                    "or format.slate_complete is revisited.",
+                    dedupe_key=f"slate-incomplete-{state}-{year}-{date.today().isoformat()}",
+                )
+            except Exception:
+                logger.exception("Could not send the %s slate-incomplete ops alert", state)
+        else:
+            logger.info("%s certified list's state offices wait for %s", state, "; ".join(missing))
         return federal_only(records)
     return records
 

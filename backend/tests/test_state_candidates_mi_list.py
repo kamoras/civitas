@@ -195,6 +195,29 @@ async def test_the_listing_is_fetched_by_year_and_another_years_is_not_yet():
     assert later == []   # the page names November 3, 2026: not published for 2028 yet
 
 
+def _short_slate():
+    # The Democrats list a Governor ticket and an Attorney General but no
+    # Secretary of State.
+    return [r for r in _grid() if not (r["heading"].startswith("Secretary of State")
+                                       and r.get("Party / Incumbent") == "Democratic Party")]
+
+
+@pytest.mark.parametrize("window, alerts", [(False, 0), (True, 1)])
+def test_a_short_slate_alarms_once_ballots_are_final(monkeypatch, window, alerts):
+    """The hold is right before the convention; inside the ballot window a
+    slate still short is something to look at. The state offices stay held
+    either way, and the alert is deduped per state, election and day."""
+    import app.ops_alerts as ops
+    sent = []
+    monkeypatch.setattr(ct, "in_ballot_window", lambda year, today=None: window)
+    monkeypatch.setattr(ops, "send_ops_alert", lambda subject, body, dedupe_key=None: sent.append(dedupe_key))
+    records = ct._records("MI", _short_slate(), SOURCE["format"], True, 2026)
+    assert records.state_offices_incomplete is True
+    assert len(sent) == alerts
+    if alerts:
+        assert sent[0].startswith("slate-incomplete-MI-2026-")
+
+
 def test_an_independent_governor_ticket_never_holds_the_state_offices():
     """A petition independent (or a minor party fielding only a governor)
     has no convention slate; waiting for its Secretary of State would hold

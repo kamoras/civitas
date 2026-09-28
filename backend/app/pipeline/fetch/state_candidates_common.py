@@ -622,20 +622,31 @@ def ballot_final(held: str, today: date | None = None) -> bool:
     return today >= election_day - timedelta(days=BALLOT_FINAL_DAYS_BEFORE)
 
 
+def in_ballot_window(year: int, today: date | None = None) -> bool:
+    """True from the day `year`'s general-election ballot must be final
+    (BALLOT_FINAL_DAYS_BEFORE out) THROUGH election day itself. After the
+    election a state's list pages move on to the next cycle, which says
+    nothing about this one being broken."""
+    election_day = general_election_day(year)
+    today = today or datetime.now(UTC).date()
+    return ballot_final(election_day.isoformat(), today) and today <= election_day
+
+
 def not_yet(year: int, state: str, why: str, today: date | None = None) -> list | None:
     """The answer for a certified list that is not the November ballot yet
     (its page names another election, it still holds primary filers): []
-    -- healthy, "not published yet" -- until the ballot must be final, and
-    None from then on. By then every state has mailed its ballot, so a list
-    still not answering is broken (a moved page, a changed layout), and
-    None is what reports fetch_failed and raises the alarm; [] all cycle
-    long would be indistinguishable from "not yet" forever."""
-    held = general_election_day(year).isoformat()
-    if ballot_final(held, today):
+    -- healthy, "not published yet" -- except inside the ballot window
+    (in_ballot_window), when every state has mailed its ballot and a list
+    still not answering is broken (a moved page, a changed layout): None
+    there is what reports fetch_failed and raises the alarm, where [] all
+    cycle long would be indistinguishable from "not yet" forever. After
+    election day the pages move to the next cycle, and that is not a
+    failure either."""
+    if in_ballot_window(year, today):
         logger.warning("%s %d certified list is still not the ballot %d days before the election: %s",
                        state, year, BALLOT_FINAL_DAYS_BEFORE, why)
         return None
-    logger.info("%s %d certified list is not the ballot yet: %s", state, year, why)
+    logger.info("%s %d certified list is not the ballot (yet, or any more): %s", state, year, why)
     return []
 
 

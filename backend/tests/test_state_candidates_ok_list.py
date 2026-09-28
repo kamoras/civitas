@@ -156,7 +156,12 @@ async def test_a_list_still_not_published_once_ballots_are_mailed_is_a_failure(m
         assert await fetch_confirmed_candidates(client, 2026, "OK", SOURCE) is None
 
 
-def test_not_yet_turns_into_a_failure_45_days_before_the_general():
+def test_not_yet_is_a_failure_only_from_45_days_out_through_election_day():
     from datetime import date
     assert common.not_yet(2026, "OK", "test", today=date(2026, 9, 18)) == []
     assert common.not_yet(2026, "OK", "test", today=date(2026, 9, 19)) is None   # Nov 3 - 45 days
+    assert common.not_yet(2026, "OK", "test", today=date(2026, 11, 3)) is None   # election day
+    # After it, the fixed address and the portals move to the next
+    # cycle's election: not a failure, and no nightly fetch_failed.
+    assert common.not_yet(2026, "OK", "test", today=date(2026, 11, 4)) == []
+    assert common.not_yet(2026, "OK", "test", today=date(2027, 3, 1)) == []
