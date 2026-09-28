@@ -24,7 +24,7 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
-    version: "v6.19",
+    version: "v6.21",
     date: "2026-09-29",
     title: "Funding: party, candidate and leadership committees are political money, not an industry",
     tldr: "Money from a party committee, a candidate's campaign, a joint-fundraising committee or a leadership PAC no longer counts toward any industry. The FEC's own registration of each committee decides it, not the committee's name. Funding Independence moves by under two points for anyone; donor-vote connections built on such money are gone.",
@@ -33,6 +33,29 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "Now: every contributing committee is looked up in the FEC's committee master file. Committee types H, S and P (candidate campaigns) and X, Y and Z (party committees), and designations A, P and J (authorized by a candidate, principal campaign committee, joint fundraiser) and D (leadership PAC), are political money. That is the FEC's classification, read from the filing; no name is interpreted.",
       "Effect on the September 2026 Senate, recomputed from the live breakdowns: Funding Independence falls by up to 1.7 points (Bill Hagerty, Mike Lee, Chuck Grassley) where political money had made industry funding look more spread out, and moves by under 0.2 points for everyone else.",
       "Unscored, same release: donor-vote connections now show the organization's registered lobbying again (the registry moved to lda.gov, and every lookup since had failed and read as $0), look a PAC's sponsor up under the company's own name, and link any bill the member voted on that a lobbying filing under the donor's name names, showing the client each filing was for (a name can be shared by a separate company).",
+    ],
+  },
+  {
+    version: "v6.20",
+    date: "2026-09-29",
+    title: "Breaks with the party: the whole Congress, toward the other party, each measure once",
+    tldr: "How often a member breaks with their party is now counted over every roll call of the current Congress, not the latest 120. A vote against the party counts only when it goes toward the other party; a vote from the party's own flank is listed but not counted, because how far toward the flank a member sits is already scored. A nomination or bill voted on several times, such as cloture and then confirmation, counts once.",
+    changes: [
+      "A break counts when, on that roll call, the party's members who broke sit on average nearer the other party (DW-NOMINATE) than the party does.",
+      "Tim Burchett (R-TN-2) had 6 breaks in 76 sampled votes (7.9%). Over the whole Congress, counting only breaks toward Democrats and each measure once, it is 2 of 298 (0.7%), the House Republican median; 14 more votes came from the party's right flank.",
+      "Tested against Senate general elections and House primaries (research note, sections 11 and 12): at least as predictive as counting every break, and counting each measure once changes nothing measurable.",
+      "In the 119th Senate 37% of roll calls repeat a measure already voted on, nearly all of them cloture on nominations.",
+    ],
+  },
+  {
+    version: "v6.19",
+    date: "2026-09-28",
+    title: "Housekeeping votes no longer count as breaks with the party",
+    tldr: "Votes on running the chamber, such as quorum calls, adjourning, motions to table or to recommit, and the House's previous question, no longer count for or against a member's party loyalty. They split on party lines as a matter of course, so they say little about the member. Rule votes, cloture and nominations still count.",
+    changes: [
+      "In the 119th Congress these were 31% of the House's party-line roll calls (mostly motions to recommit and previous-question votes) and 3% of the Senate's.",
+      "A motion to recommit is the minority party's messaging vote and the previous question is the majority's hold on the floor; both split on party lines nearly every time.",
+      "Rule votes stay: voting down the party's rule keeps a bill off the floor. Cloture stays: it is often the real decision on a bill. Nominations stay: confirming judges and officials is a core Senate power.",
     ],
   },
   {

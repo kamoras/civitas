@@ -107,3 +107,29 @@ class TestGetPresidentScoreBreakdown:
         }
         assert breakdown["effectiveness"]["score"] is not None
         assert breakdown["publicMandate"]["score"] is None
+
+    def test_facts_carry_each_figure_and_the_average_it_is_scored_against(self, db_session):
+        """The scorecard states these; it computes none of them."""
+        db_session.add(_make_president(
+            "trump-47", name="Donald J. Trump", number=47, term_start="2025-01-20",
+            avg_approval=37.3, approval_trend=-5.6, recent_avg_approval=35.4,
+            rulemaking_finalized_pct=62.0, rulemaking_count=1400, jobs_created_millions=0.5,
+        ))
+        db_session.add(_make_president(
+            "trump-45", name="Donald J. Trump", number=45, term_start="2017-01-20", term_end="2021-01-20",
+            is_current=False, historical_legacy_score=312, score_historical_legacy=12.0,
+        ))
+        db_session.commit()
+
+        b = get_president_score_breakdown(db_session, "trump-47")
+        mandate = b["publicMandate"]["facts"]
+        assert (mandate["approval"], mandate["approvalTrend"], mandate["recentApproval"]) == (37.3, -5.6, 35.4)
+        assert mandate["approvalMean"] is not None  # the all-president average it's scored against
+        assert b["agencyAlignment"]["facts"]["rulemakings"] == 1400
+        assert b["effectiveness"]["facts"]["jobsMillions"] == 0.5
+        # A sitting president's term is unrated; the same person's other
+        # presidency's rating is named.
+        assert b["historicalLegacy"]["facts"]["points"] is None
+        assert b["historicalLegacy"]["facts"]["otherTerms"] == [
+            {"id": "trump-45", "number": 45, "points": 312, "score": 12.0},
+        ]

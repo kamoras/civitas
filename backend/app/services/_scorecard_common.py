@@ -10,7 +10,12 @@ helpers).
 
 from typing import Any
 
+from sqlalchemy.orm import Session
+
+from app.pipeline.analyze.party_line_record import load_record
+from app.pipeline.analyze.score_calculator import explain_scores
 from app.pipeline.transform.normalize_votes import stored_vote
+from app.services.bill_record import roll_call_summaries
 
 
 def _vote_dict(v: Any) -> dict:
@@ -32,6 +37,7 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
         "effectiveParty": getattr(entity, "caucus_party", None),
         "keyVotes": [_vote_dict(v) for v in entity.key_votes if v.vote_category == "key"],
         "recentVotes": [_vote_dict(v) for v in entity.key_votes if v.vote_category == "recent"],
+        "partyLineRecord": load_record(entity.party_line_record),
     }
 
     funding = {
@@ -88,3 +94,24 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
         "ideologyScore": entity.ideology_score,
         "bioguideId": entity.bioguide_id,
     }
+
+
+def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) -> dict:
+    """explain_scores for a loaded Senator or Representative, with the
+    breaks its Constituent Alignment counts (and the flank breaks it
+    doesn't) as the chamber recorded each roll call: the member's vote and
+    how each party split. Served with the score so the list and the number
+    can't disagree."""
+    entity_dict = build_score_breakdown_entity(entity, lobbying_donation_attr=lobbying_donation_attr)
+    breakdown = explain_scores(entity_dict)
+    record = entity_dict["votingRecord"]["partyLineRecord"]
+    facts = (breakdown.get("constituentAlignment") or {}).get("facts")
+    if record and facts is not None:
+        listed = (record.get("breaks") or []) + (record.get("flankBreaks") or [])
+        summaries = roll_call_summaries(db, [b.get("rollCall") for b in listed])
+        for key, served_as in (("breaks", "breakVotes"), ("flankBreaks", "flankBreakVotes")):
+            facts[served_as] = [
+                {"vote": b.get("vote"), "rollCall": summaries.get(b.get("rollCall"))}
+                for b in record.get(key) or []
+            ]
+    return breakdown

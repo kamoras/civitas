@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { LobbyingMatch } from "@/types/senator";
 import { formatCurrency, safeHref } from "@/lib/formatting";
-import { billUrl } from "@/lib/sources";
+import { billPageHref } from "@/lib/congress";
 
 interface LobbyingMatchesProps {
   matches: LobbyingMatch[];
@@ -63,19 +64,17 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                     <div>NAMED IN LOBBYING FILINGS FOR CLIENTS OF THIS NAME:</div>
                     <ul className="mt-1 space-y-1 pl-3">
                       {lobbied.map((b) => {
-                        const bill = billUrl(b.billId);
+                        const bill = billPageHref(b.billId);
                         const filing = b.filingUrl ? safeHref(b.filingUrl) : null;
                         return (
                           <li key={`${b.billId}|${b.client ?? ""}`}>
                             {bill ? (
-                              <a
-                                href={safeHref(bill) || "#"}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <Link
+                                href={bill}
                                 className="text-ink hover:text-phos underline underline-offset-2 transition-colors"
                               >
                                 {b.label || b.billId}
-                              </a>
+                              </Link>
                             ) : (
                               <span className="text-ink">{b.label || b.billId}</span>
                             )}
@@ -112,17 +111,15 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                   <div className="flex items-center gap-1 flex-wrap">
                     <span>TOPICALLY RELATED BILLS:</span>
                     {topical.map((b, j) => {
-                      const url = billUrl(b);
-                      return url ? (
-                        <a
+                      const href = billPageHref(b);
+                      return href ? (
+                        <Link
                           key={j}
-                          href={safeHref(url) || "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          href={href}
                           className="text-ink-lo hover:text-phos underline underline-offset-2 transition-colors"
                         >
                           {b}
-                        </a>
+                        </Link>
                       ) : (
                         <span key={j}>{b}</span>
                       );

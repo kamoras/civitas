@@ -134,6 +134,12 @@ class Senator(Base):
     # Independent the party they caucus with (normalize_votes). Read back by
     # the score-breakdown API so it scores Independents as the pipeline did.
     caucus_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    # The member's party-line record over the whole current Congress, as
+    # JSON (party_line_record.party_line_records): what Constituent
+    # Alignment's break rate is measured on and the breaks the scorecard
+    # lists. NULL until a pipeline run measures it; readers then fall back
+    # to the stored votes.
+    party_line_record: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
 
@@ -380,6 +386,12 @@ class Representative(Base):
     # Independent the party they caucus with (normalize_votes). Read back by
     # the score-breakdown API so it scores Independents as the pipeline did.
     caucus_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    # The member's party-line record over the whole current Congress, as
+    # JSON (party_line_record.party_line_records): what Constituent
+    # Alignment's break rate is measured on and the breaks the scorecard
+    # lists. NULL until a pipeline run measures it; readers then fall back
+    # to the stored votes.
+    party_line_record: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
 
