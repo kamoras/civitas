@@ -175,9 +175,12 @@ export default function ScoresChapter() {
             <Step n={1} title="Pick the party-line votes">
               A roll call counts when the parties split on it: at least 65% of one party voting yes
               and at most 35% of the other. A member breaks when they vote with the other side.
-              Votes with no recorded roll call don&apos;t count, and every break on a profile shows
-              that roll call&apos;s party tallies. Confirmation votes count in full — they are
-              whipped party-line tests.
+              Votes with no recorded roll call don&apos;t count, and neither does housekeeping —
+              quorum calls, adjourning, the House&apos;s previous question, motions to table or to
+              recommit — which splits on party lines as a matter of course. Rule votes, cloture and
+              confirmations count in full: they decide whether a bill reaches the floor, whether it
+              gets a vote, and who serves. Every break on a profile shows that roll call&apos;s
+              party tallies.
             </Step>
             <Step n={2} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
