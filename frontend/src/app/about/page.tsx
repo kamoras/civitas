@@ -251,9 +251,7 @@ export default function AboutPage() {
                   2026, a senator&apos;s PAC dollars barely grow with campaign size, and scored
                   against one chamber-wide median the share tracked size (a correlation of 0.58
                   between this score and campaign size in the Senate; 0.05 with the adjustment).
-                  Each member is compared only with their own chamber, whose members&apos; funding
-                  covers the same span of time (six years of fundraising for a senator&apos;s
-                  election, two for a House member&apos;s); (2) the share of funding from small (&lt;$200,
+                  The PAC share is compared only within the member&apos;s own chamber; (2) the share of funding from small (&lt;$200,
                   unitemized) donors — the broadest possible funding base. Both shares are of
                   contributions (money given by individuals, PACs, party committees, or the
                   candidate), not total receipts: receipts also count transfers in from joint
@@ -575,6 +573,22 @@ export default function AboutPage() {
               disclosure. Where it isn&apos;t — no dataset exists, or fixing it would require an
               editorial judgment call the platform&apos;s no-hardcoded-conclusions rule resists — we
               name the specific reason why, so it can be revisited if that changes.
+            </P>
+            <Gist>
+              a senator&apos;s funding score covers six years of fundraising and a House
+              member&apos;s two, so comparing a senator&apos;s funding score with a
+              representative&apos;s compares different spans of time.
+            </Gist>
+            <P>
+              <em className="text-ink">Funding windows differ by chamber.</em> Funding metrics cover
+              a member&apos;s most recent completed election: six years of fundraising for a senator,
+              two for a House member. The PAC share and top-donor concentration are each scored
+              against the member&apos;s own chamber, but industry concentration is not, and no
+              adjustment makes six years and two years the same span. Within a chamber every member
+              is measured over the same length of time; across chambers the scores are best read
+              side by side, not ranked, which is why the compare page names no winner when a senator
+              and a representative are compared. The window itself is deliberate: a strict two-year
+              window would leave most senators with little or no fundraising to measure.
             </P>
             <Gist>
               we estimate what a senator&apos;s state &quot;expects&quot; from how the state votes
