@@ -256,11 +256,13 @@ async def _writes_elsewhere(_request, refused: WritesElsewhere) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": str(refused)})
 
 
-app.add_middleware(GZipMiddleware, minimum_size=500)
-# Added after GZip, so it runs *outside* it: a 304 short-circuit should
-# never reach the compressor, and the ETag is a weak validator precisely
-# because the body below it may or may not have been compressed.
+# Added before GZip, so it runs *inside* it and hashes the uncompressed
+# body. Outside it, the ETag hashed gzip output, whose header carries the
+# time it was written: the same body got a new ETag every second, so a
+# conditional request almost never matched. A 304 has no body, so the
+# compressor passes it through untouched.
 app.add_middleware(ETagCacheMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 _cors_origins = [
     o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()
 ] if settings.CORS_ORIGINS else [

@@ -193,7 +193,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.16"
+ALGORITHM_VERSION = "v6.17"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -2385,28 +2385,31 @@ _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS = 0.5
 # not blended into the V&W-based one (60%, or 70%).
 
 _LES_STAGE_ORDER: dict[str, int] = {
+    # Volden & Wiseman's five stages (v6.17): introduced, action in
+    # committee, action beyond committee, passed the chamber, became law.
     "INTRODUCED": 1,
     # 2026-07 fix: REFERRED (bill_stage.py) is the automatic, universal
-    # first step every bill gets within days of introduction — same
-    # credit as bare introduction, not stage 2. The old scheme gave every
-    # bill that had merely been referred (virtually all of them) the same
-    # V&W "received action in committee" credit as one that actually got
-    # a hearing, markup, or was reported out — see bill_stage.py's module
-    # docstring for the live audit that found this (one senator's
-    # sponsored-bills summary reading "135 bills, 123 advancing").
+    # first step every bill gets within days of introduction — same credit
+    # as bare introduction. The old scheme gave every bill that had merely
+    # been referred the same credit as one that actually got a hearing,
+    # markup, or was reported out (one senator's sponsored-bills summary
+    # read "135 bills, 123 advancing").
     "REFERRED": 1,
-    "IN_COMMITTEE": 2,
-    # V&W's "action beyond committee" is a stage of its own; crediting it
-    # here would move every sponsor's score, so ON_FLOOR (2026-09, a display
-    # stage) scores as committee action until that is decided separately.
-    "ON_FLOOR": 2,
-    "PASSED_CHAMBER": 3,
-    "IN_OTHER_CHAMBER": 3,  # already passed its own chamber; no separate V&W stage for this
-    "TO_PRESIDENT": 3,      # same — passed both chambers, not yet a new milestone
-    "ENACTED": 4,
-    "VETOED": 3,            # passed Congress, never became law
+    "IN_COMMITTEE": 2,  # a hearing or markup: action in committee
+    # Action beyond committee: reported out, discharged, on a calendar, or
+    # taken up on the floor. Its own stage from v6.17; it folded into
+    # committee action before, and crediting it separately raised rank
+    # agreement with V&W's published LES from 0.981 to 0.985 (House) and
+    # 0.984 to 0.992 (Senate), docs/research/les-stage-weighting.md.
+    "REPORTED": 3,
+    "ON_FLOOR": 3,
+    "PASSED_CHAMBER": 4,
+    "IN_OTHER_CHAMBER": 4,  # already passed its own chamber; no separate V&W stage for this
+    "TO_PRESIDENT": 4,      # same — passed both chambers, not yet a new milestone
+    "ENACTED": 5,
+    "VETOED": 4,            # passed Congress, never became law
 }
-_LES_MAX_STAGE = 4
+_LES_MAX_STAGE = 5
 
 
 def _les_bill_stage(bill: dict) -> int:
@@ -2431,9 +2434,9 @@ def _les_bill_stage(bill: dict) -> int:
         return _LES_MAX_STAGE
     action = (bill.get("latestAction") or "").lower()
     if "passed" in action or "agreed to" in action:
-        return 3
+        return _LES_STAGE_ORDER["PASSED_CHAMBER"]
     if "ordered to be reported" in action:
-        return 2
+        return _LES_STAGE_ORDER["IN_COMMITTEE"]
     return 1
 
 
@@ -2723,7 +2726,8 @@ def _les_component_score(
     ref = (reference or load_les_reference()).get(chamber)
     if not ref:
         return 50.0, "no population reference available for this chamber — neutral 50"
-    if not ref.get("stage_totals") or not ref.get("n_members"):
+    if (not ref.get("stage_totals") or not ref.get("n_members")
+            or len(ref["stage_totals"]) != _LES_MAX_STAGE):
         # A reference measured before v6.14 is on the old weight x stages
         # scale; comparing a stage-normalized credit with it would be
         # meaningless. The next pipeline run replaces it.

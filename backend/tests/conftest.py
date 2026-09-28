@@ -110,8 +110,8 @@ def fixed_ranking():
 # a bundled fallback in app/data/). Tests must not inherit whichever of
 # those happens to be on disk — a dev machine's /data, or the next
 # regeneration of the bundled file, would silently change what they assert.
-# Test scaffolding, not a proposal for production values: the v6.14
-# stage-normalized scale (a chamber averages 1.0), measured by
+# Test scaffolding, not a proposal for production values: the v6.17
+# five-stage, stage-normalized scale (a chamber averages 1.0), measured by
 # compute_les_reference over the 118th Congress's per-member stage counts in
 # Volden & Wiseman's published data (scripts/research_les_stage_weighting.py,
 # members_from_counts), majority members labelled R and relabelled congress
@@ -119,18 +119,18 @@ def fixed_ranking():
 # the 2026-07-23 production audit figures.
 TEST_LES_REFERENCE = {
     "senate": {
-        "congress": 119, "majority": "R", "n": 102, "median_credit": 0.7119,
-        "mean_credit": 1.0, "stdev_credit": 1.2231, "avg_baseline": 0.0305,
+        "congress": 119, "majority": "R", "n": 102, "median_credit": 0.7484,
+        "mean_credit": 1.0, "stdev_credit": 1.2481, "avg_baseline": 0.0305,
         "advancement_rates": {"majority": 0.036, "minority": 0.024, "pooled": 0.030},
-        "stage_totals": [28855.0, 3695.0, 1415.0, 455.0], "n_members": 102,
-        "status_median": {"majority": 0.8159, "minority": 0.6108},
+        "stage_totals": [28855.0, 3695.0, 3215.0, 1415.0, 455.0], "n_members": 102,
+        "status_median": {"majority": 0.8114, "minority": 0.5562},
     },
     "house": {
-        "congress": 119, "majority": "R", "n": 446, "median_credit": 0.7261,
-        "mean_credit": 1.0045, "stdev_credit": 0.8982, "avg_baseline": 0.0444,
+        "congress": 119, "majority": "R", "n": 446, "median_credit": 0.7974,
+        "mean_credit": 1.0045, "stdev_credit": 0.892, "avg_baseline": 0.0444,
         "advancement_rates": {"majority": 0.064, "minority": 0.024, "pooled": 0.030},
-        "stage_totals": [51325.0, 7055.0, 3250.0, 870.0], "n_members": 448,
-        "status_median": {"majority": 1.1886, "minority": 0.4086},
+        "stage_totals": [51325.0, 7055.0, 6155.0, 3250.0, 870.0], "n_members": 448,
+        "status_median": {"majority": 1.2324, "minority": 0.3715},
     },
 }
 

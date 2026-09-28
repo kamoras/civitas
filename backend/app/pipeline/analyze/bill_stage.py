@@ -49,8 +49,13 @@ under the old single IN_COMMITTEE bucket, to one whose bills are
 genuinely getting worked. REFERRED now captures the former (no credit
 beyond bare introduction — see score_calculator.py's _LES_STAGE_ORDER);
 IN_COMMITTEE is reserved for confirmed real committee action: a hearing,
-a markup, being ordered reported, discharged, or placed on a calendar
-(which only happens once committee has already reported the bill out).
+a markup, being ordered reported. A House committee's referral to one of
+its subcommittees is still REFERRED.
+
+REPORTED (v6.17) is Volden & Wiseman's "action beyond committee": reported
+out, discharged, or placed on a calendar (which only follows a report).
+scripts/research_les_stage_classifier.py checks these stages bill by bill
+against V&W's per-member counts.
 """
 
 import re
@@ -58,6 +63,10 @@ import re
 from app.config_definitions import BillStage
 
 _FALLBACK_STAGE = BillStage.INTRODUCED
+
+# What a Committee or Calendars action says when the bill has left
+# committee: reported out, discharged, or placed on a calendar.
+_REPORTED_RE = re.compile(r"\b(reported|placed on|discharged)\b", re.IGNORECASE)
 
 # What a "Floor" action says when the bill itself is being taken up on the
 # floor rather than passed, received or presented (those carry mapped
@@ -84,7 +93,7 @@ _ACTION_CODE_STAGE: dict[str, BillStage] = {
     "H11100": BillStage.REFERRED,       # Referred to committee
     "H11000": BillStage.REFERRED,       # Referred to subcommittee
     # Genuine committee action
-    "H12410": BillStage.IN_COMMITTEE,   # Placed on the Union Calendar
+    "H12410": BillStage.REPORTED,       # Placed on the Union Calendar (only after being reported)
     "H19000": BillStage.IN_COMMITTEE,   # Ordered to be reported (by yeas/nays)
     "H21000": BillStage.IN_COMMITTEE,   # Subcommittee hearings held
     "H15001": BillStage.IN_COMMITTEE,   # Committee consideration / mark-up held
@@ -139,13 +148,23 @@ def _stage_from_type_and_text(action_type: str | None, text: str) -> BillStage |
         return BillStage.REFERRED if "referred" in text_lower else BillStage.INTRODUCED
     if action_type == "Floor" and _FLOOR_CONSIDERATION_RE.search(text):
         return BillStage.ON_FLOOR
+    if action_type == "Discharge":
+        return BillStage.REPORTED
+    if action_type in ("Committee", "Calendars") and _REPORTED_RE.search(text) and "ordered to be reported" not in text_lower:
+        # Out of committee: reported, discharged, or placed on a calendar
+        # (which only follows a report). "Ordered to be reported" is the
+        # markup vote, still action in committee.
+        return BillStage.REPORTED
+    if action_type == "Committee" and text_lower.startswith("referred to"):
+        # A House committee passing the bill to a subcommittee ("Referred
+        # to the Subcommittee on Health."): as automatic as the first
+        # referral, and uncoded. Read as committee action, it put 4,235 of
+        # the 118th Congress's House bills in committee that Volden &
+        # Wiseman count as having had none.
+        return BillStage.REFERRED
     if action_type in ("Committee", "Calendars"):
-        # Unlike IntroReferral above, a bare automatic referral is never
-        # typed "Committee" or "Calendars" in practice (confirmed against
-        # real Senate action data) — every actual occurrence of either is
-        # genuine post-referral action: a committee reporting the bill
-        # out, being discharged, or being placed on a calendar (which can
-        # only happen once committee has already reported it out).
+        # Everything else typed "Committee" is a committee acting on the
+        # bill: hearings, markups, the vote to report it.
         return BillStage.IN_COMMITTEE
     return None
 
@@ -159,12 +178,13 @@ _STAGE_RANK: dict[BillStage, int] = {
     BillStage.INTRODUCED: 1,
     BillStage.REFERRED: 2,
     BillStage.IN_COMMITTEE: 3,
-    BillStage.ON_FLOOR: 4,
-    BillStage.PASSED_CHAMBER: 5,
-    BillStage.IN_OTHER_CHAMBER: 6,
-    BillStage.TO_PRESIDENT: 7,
-    BillStage.VETOED: 8,
-    BillStage.ENACTED: 9,
+    BillStage.REPORTED: 4,
+    BillStage.ON_FLOOR: 5,
+    BillStage.PASSED_CHAMBER: 6,
+    BillStage.IN_OTHER_CHAMBER: 7,
+    BillStage.TO_PRESIDENT: 8,
+    BillStage.VETOED: 9,
+    BillStage.ENACTED: 10,
 }
 
 
@@ -237,7 +257,8 @@ def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) 
         if stage == BillStage.PASSED_CHAMBER:
             passed_seen = True
         elif passed_seen and stage in (
-            BillStage.INTRODUCED, BillStage.REFERRED, BillStage.IN_COMMITTEE, BillStage.ON_FLOOR,
+            BillStage.INTRODUCED, BillStage.REFERRED, BillStage.IN_COMMITTEE, BillStage.REPORTED,
+            BillStage.ON_FLOOR,
         ):
             stage = BillStage.IN_OTHER_CHAMBER
         if best is None or _STAGE_RANK[stage] > _STAGE_RANK[best]:
