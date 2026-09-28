@@ -127,6 +127,17 @@ class TestKnownRoutesStayInSync:
         )
 
 
+    def test_every_about_chapter_is_tracked_by_name(self):
+        """/about is split into chapters (frontend/src/lib/aboutPages.ts);
+        each must be its own row, not drained into "/other"."""
+        about_dir = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "app" / "about"
+        if not about_dir.is_dir():
+            return  # frontend checkout not present in this environment
+        chapters = sorted(f"/about/{p.parent.name}" for p in about_dir.glob("*/page.tsx"))
+        assert chapters, "expected About chapter pages under frontend/src/app/about/"
+        assert [c for c in chapters if _normalize_path(c) != c] == []
+
+
 class TestTrackVisitPageViews:
     async def test_repeat_views_accumulate_not_dedupe(self, db_session):
         await track_visit(_make_request(), path="/politicians/chuck-grassley")

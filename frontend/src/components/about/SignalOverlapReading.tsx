@@ -18,7 +18,7 @@ const BAND_TEXT = {
 
 /** The last pipeline run's correlation between two related score
  * components, per chamber (GET /api/signal-overlap). The only live element
- * on the About page: the rest of it is prerendered. */
+ * in the About chapters (/about/scores): the rest is prerendered. */
 export default function SignalOverlapReading({ pair }: { pair: SignalOverlapPairKey }) {
   const { data, error } = useAsyncData("signal-overlap", fetchSignalOverlap);
 
@@ -29,7 +29,8 @@ export default function SignalOverlapReading({ pair }: { pair: SignalOverlapPair
     const chamber = data.chambers[key];
     const p = chamber?.pairs[pair];
     if (!p) return [];
-    const r = p.r === null ? "no reading" : `r = ${p.r >= 0 ? "+" : "−"}${Math.abs(p.r).toFixed(3)}`;
+    const r =
+      p.r === null ? "no reading" : `r = ${p.r >= 0 ? "+" : "−"}${Math.abs(p.r).toFixed(3)}`;
     const when = chamber?.computedAt ? `, run of ${chamber.computedAt.slice(0, 10)}` : "";
     return [`${name} ${r} across ${p.n} members (${BAND_TEXT[p.band]}${when})`];
   });

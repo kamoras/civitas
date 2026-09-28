@@ -449,21 +449,6 @@ export async function fetchBillsInFlight(options?: {
   );
 }
 
-async function fetchHighlights(chamber: Chamber, entityId: string): Promise<string[]> {
-  const res = await fetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/highlights`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return Array.isArray(data.highlights) ? data.highlights : [];
-}
-
-export async function fetchSenatorHighlights(senatorId: string): Promise<string[]> {
-  return fetchHighlights(Chamber.Senate, senatorId);
-}
-
-export async function fetchRepHighlights(repId: string): Promise<string[]> {
-  return fetchHighlights(Chamber.House, repId);
-}
-
 export interface IndustryInfo {
   name: string;
   color: string;
@@ -480,6 +465,10 @@ export interface AppConfig {
   platformCategories: Record<string, string>;
   policyAreas: string[];
   billStages: Record<string, BillStageInfo>;
+  /** Each dimension's share of the Representation Score (config_definitions.SCORE_WEIGHTS). */
+  scoreWeights?: Record<string, number>;
+  /** Each dimension's share of the Presidential Score (PRESIDENT_SCORE_WEIGHTS). */
+  presidentScoreWeights?: Record<string, number>;
 }
 
 const DEFAULT_CONFIG: AppConfig = {

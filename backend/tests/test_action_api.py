@@ -165,8 +165,9 @@ class TestRenumberForDisplay:
 
 
 class TestRelatedBillInternalLinks:
-    """The issues API should point related bills at our own /bills/{id} page
-    when we host the bill, keeping congress.gov as the fallback only."""
+    """The issues API points related bills at the site's own bill page
+    whenever that page can show them: any current-Congress bill, and an
+    earlier one we hold from that Congress. Congress.gov is the fallback."""
 
     def _make_issue_with_bill(self, db, bill_entry):
         import json
@@ -252,28 +253,23 @@ class TestRelatedBillInternalLinks:
 
         assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22"
 
-    def test_non_current_sponsor_blocks_internal_link(self, db_session):
-        """get_bill_detail only resolves bills sponsored by current members —
-        the internal link must apply the same filter or it would 404."""
+    def test_any_current_congress_bill_links_to_the_sites_bill_page(self, db_session):
+        """The bill page shows any bill of the current Congress (its record
+        comes from Congress.gov on demand), sponsored by a current member or
+        not."""
         from app.api.action import _build_issue_response
-        from app.models import Senator, SponsoredBill
+        from app.pipeline.fetch.congress import expected_current_congress
 
-        senator = Senator(id="s2", name="Sen. Gone", state="TX", party="R", is_current=False)
-        db_session.add(senator)
-        db_session.flush()
-        db_session.add(SponsoredBill(
-            senator_id=senator.id, bill_id="S.55", title="A bill", congress=119,
-        ))
-        db_session.commit()
+        current = expected_current_congress()
         issue = self._make_issue_with_bill(db_session, {
             "name": "A bill", "id": "S.55",
-            "url": "https://www.congress.gov/bill/119th-congress/senate-bill/55",
-            "congress": 119,
+            "url": f"https://www.congress.gov/bill/{current}th-congress/senate-bill/55",
+            "congress": current,
         })
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] is None
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/S.55"
 
 
 class TestElectionsAndTimelineRoutesUseCanonicalClock:

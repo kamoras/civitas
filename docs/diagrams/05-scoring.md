@@ -136,4 +136,5 @@ previously three independent copies that could silently drift.
 | President formulas | `analyze/president_scorer.py` |
 | Justice formulas | `services/justice_service.py` |
 | Public weights endpoint | `GET /api/config` |
+| A member's breakdown and the scorecard's figures | `explain_scores` → `GET /api/{senators|representatives}/{id}/score-breakdown` (components + `facts`); rendered by `frontend/src/components/scorecard/` |
 | Human-readable version history | `frontend/src/lib/scoreVersions.ts` → `/changelog` |

@@ -29,7 +29,10 @@ describe("SignalOverlapReading", () => {
 
   it("reads each measured chamber with its own run date and the alert threshold", async () => {
     fetchSignalOverlap.mockResolvedValue(
-      overlap({ pairs: { effectiveness: { r: -0.149, n: 404, band: "ok", labels } }, computedAt: "2026-09-27T06:00:00" }),
+      overlap({
+        pairs: { effectiveness: { r: -0.149, n: 404, band: "ok", labels } },
+        computedAt: "2026-09-27T06:00:00",
+      })
     );
     render(<SignalOverlapReading pair="effectiveness" />);
     const text = (await screen.findByText(/^Latest:/)).textContent;
@@ -63,9 +66,13 @@ describe("SignalOverlapReading", () => {
 describe("SignalOverlapReading precision", () => {
   it("never shows a value that reads as the alert threshold when it is below it", async () => {
     fetchSignalOverlap.mockResolvedValue({
-      actionR: 0.6, watchR: 0.4,
+      actionR: 0.6,
+      watchR: 0.4,
       chambers: {
-        senate: { pairs: { effectiveness: { r: 0.597, n: 98, band: "watch", labels } }, computedAt: null },
+        senate: {
+          pairs: { effectiveness: { r: 0.597, n: 98, band: "watch", labels } },
+          computedAt: null,
+        },
         house: null,
       },
     });

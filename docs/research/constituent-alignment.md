@@ -466,6 +466,87 @@ the sign following whichever party was more unified. That is why the scale
 is per party. Averages sit around 73–80: most members are close to their
 seat's norm.
 
+### 11. Only breaks toward the other party (v6.20)
+
+**The problem.** Tim Burchett (R-TN-2), known as a reliable party-line
+vote, scored 8 on Constituent Alignment in September 2026. His vote part
+was 0. Two things produced that:
+
+- **The window.** The rate was read off his stored votes, a sample of the
+  chamber's latest 120 roll calls plus key bills: 6 breaks in 76 party-line
+  votes, 7.9%. Over every roll call of the 119th Congress it was 15 of 304,
+  4.9%.
+- **The direction.** 14 of those 15 came from the Republican right flank:
+  he voted with Democrats against a bill most Republicans backed, alongside
+  the members furthest from Democrats. That is not independence toward his
+  seat, and how far toward the flank a member sits is already scored, by
+  position congruence. Counting it as a break charged it twice. Chip Roy
+  showed the same pattern (14 of 15 from the flank).
+
+**Changed (v6.20).** A break counts only when, on that roll call, the
+party's members who broke sit on average nearer the other party (mean
+DW-NOMINATE first dimension) than the party does
+(`party_line_record._toward_other_party`). Other breaks are listed on the
+scorecard as from the flank, and not counted. The rate is measured over
+every roll call the chamber recorded this Congress, not a sample.
+
+**What the evidence says.** The same tests as section 10, recomputed with
+only centerward breaks counted (the denominator is still every party-unity
+vote):
+
+| Outcome | All breaks (v6.16) | Centerward only |
+|---|---|---|
+| Senate generals 1990–2024, vote share (N = 461) | −0.039 (−2.6), ΔR² 0.0102 | −0.042 (−3.0), 0.0115 |
+| House primaries 1990–2010, contested, primary share | +0.053 (2.4), 0.0081 | +0.057 (2.6), 0.0093 |
+| drew a primary challenger | −0.001 (−1.7) | −0.001 (−1.6) |
+| lost the primary | −0.000 (−0.8) | −0.000 (−1.0) |
+
+Centerward breaks predict both audiences at least as well as all breaks,
+slightly better on the two outcomes that were significant. Party balance
+holds: the parties' average vote scores differ by 2.1 points across Senates
+(1.8 counting all breaks).
+
+### 12. Each measure once (v6.20)
+
+**The problem.** A nominee usually gets two roll calls, cloture then
+confirmation; a bill can get a motion to proceed, cloture and passage. A
+member who opposes the nominee votes the same way on both, so one
+position counted twice. This has grown: 5% of the 101st Senate's roll calls
+repeated a measure already voted on, 13% of the 110th's, 30% of the 115th's
+and 37% of the 119th's, nearly all of it cloture on nominations. In the
+House it is about 4% throughout.
+
+**Changed (v6.20).** Each measure counts once
+(`party_line_record.measure_key`): a member broke on it if they broke on any
+of its party-line roll calls. The stages of one measure are cloture,
+nomination, motion to proceed, passage, adoption of a resolution,
+conference report, ratification, veto override and concurring in the other
+chamber's amendment. An amendment, a motion to commit or to waive, and a
+point of order are each their own question, though they name the bill.
+
+**What the evidence says.** On top of section 11:
+
+| Outcome | Centerward | Centerward, each measure once |
+|---|---|---|
+| Senate generals, vote share | −0.042 (−3.0), 0.0115 | −0.042 (−3.0), 0.0114 |
+| House primaries, primary share | +0.057 (2.6), 0.0093 | +0.056 (2.5), 0.0091 |
+| drew a primary challenger | −0.001 (−1.6) | −0.001 (−1.6) |
+| lost the primary | −0.000 (−1.0) | −0.000 (−1.0) |
+
+Neutral: most of the tested Senates predate the cloture era, and a
+member's position rarely differs between stages of one measure (55 of
+17,628 member-measures with repeats in the 119th Senate). It is adopted
+because it is the right unit, a member's decision on a measure, and the
+evidence shows it costs nothing.
+
+**On the live 119th Congress** (roll calls through September 2026): the
+House Republican median is 0.7% of measures and the 90th percentile 3.6%;
+Senate Republicans 0.0% and 3.6%, Democrats 1.3% and 6.8%. Burchett breaks
+toward Democrats on 2 of 298 measures (0.7%, the party median), with 14
+more from the flank. Collins (103 of 414), Murkowski (77 of 407),
+Fitzpatrick (91 of 298) and Fetterman (60 of 406) remain the heaviest
+breakers, as before; Thune's reconsider switches still don't count.
+
 ## What the evidence does not settle
 
 - **The association fades over time.** Per election, the position coefficient
