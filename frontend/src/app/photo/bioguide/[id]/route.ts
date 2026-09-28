@@ -23,12 +23,26 @@ export function parseBioguideId(raw: string): string | null {
   return BIOGUIDE_ID.test(raw) ? raw : null;
 }
 
+// Raster formats only: an SVG served from this origin would run script if
+// opened directly, and a portrait is never one.
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = parseBioguideId((await params).id);
-  if (!id) return new Response("Not found", { status: 404 });
+  if (!id) return notFound();
 
-  const photo = await fetchRemoteImage(bioguidePhotoUrl(id));
-  if (!photo) return new Response("Not found", { status: 404 });
+  const photo = await fetchRemoteImage(bioguidePhotoUrl(id), { types: PHOTO_TYPES });
+  // bioguide has no photo for this id: remembered (nginx caches it 10m).
+  if (photo.status === "missing") return notFound();
+  // Anything transient (timeout, Cloudflare challenge, 5xx) must not be
+  // remembered as "no photo": a 502 nginx won't cache, and for which it
+  // serves the last good copy it has (proxy_cache_use_stale).
+  if (photo.status === "failed") {
+    return new Response("Photo unavailable", {
+      status: 502,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
 
   return new Response(new Uint8Array(photo.bytes), {
     headers: {
@@ -36,5 +50,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       // Official portraits change about once a term.
       "Cache-Control": "public, max-age=86400",
     },
+  });
+}
+
+function notFound(): Response {
+  return new Response("Not found", {
+    status: 404,
+    headers: { "Cache-Control": "public, max-age=600" },
   });
 }

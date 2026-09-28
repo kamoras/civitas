@@ -14,7 +14,9 @@
  * Nothing leaves the browser, and a capture requests nothing from any host
  * but this site: a member photo comes through the site's own
  * `/photo/bioguide/…` route, and any other third-party image is left out
- * (see `captureImageData`).
+ * (see `captureImageData`). That guard sees images only: modern-screenshot
+ * fetches fonts, stylesheets and external `<use href>` targets directly,
+ * which is safe while those stay self-hosted (next/font, compiled CSS).
  */
 
 import { bioguideIdFromPhotoUrl } from "./bioguide";

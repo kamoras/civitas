@@ -68,7 +68,9 @@ async function fetchIssue(id: string) {
 // bioguide's bot-mitigation (see lib/remoteImage.ts).
 async function fetchPhotoAsDataUri(url: string): Promise<string | null> {
   const photo = await fetchRemoteImage(url);
-  return photo ? `data:${photo.contentType};base64,${photo.bytes.toString("base64")}` : null;
+  return photo.status === "ok"
+    ? `data:${photo.contentType};base64,${photo.bytes.toString("base64")}`
+    : null;
 }
 
 async function fetchPolitician(id: string) {

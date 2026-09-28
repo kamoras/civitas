@@ -988,6 +988,9 @@ the pending list).
   `data-share-exclude`. The capture is client-side, from the live DOM, and
   never requests a third-party host from the visitor's browser (§8): images
   that aren't same-origin are left blank unfetched, so mark them excluded.
+  The guard covers images only (`<img>`, SVG `<image>`, CSS image urls) —
+  fonts, stylesheets and an external `<use href>` inside a captured section
+  are fetched as-is, which is fine only while they stay self-hosted.
   Member photos are the exception, read through the same-origin
   `/photo/bioguide/[id]` route (cached and rate-limited in nginx) — add a
   route like it (taking an id, never a URL) rather than proxying arbitrary
