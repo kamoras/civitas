@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from datetime import date, timedelta
 
+from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
@@ -402,12 +403,7 @@ async def get_action_issues(
 
 
 _RECENT_ISSUES_DEFAULT_LIMIT = 10
-_RECENT_ISSUES_MAX_LIMIT = 30
-# Raw rows fetched per requested slot before deduping — a near-identical-
-# title cluster can be 3-4 rows deep (the beef-tariff incident), so
-# asking for exactly `limit` raw rows risks deduping away entries the
-# caller actually wanted.
-_RECENT_ISSUES_RAW_POOL_MULTIPLIER = 3
+_RECENT_ISSUES_MAX_LIMIT = RECENT_FEED_MAX_LIMIT
 
 
 @router.get("/issues/recent")
@@ -435,22 +431,23 @@ async def get_recent_action_issues(
     path routes in declaration order, and {issue_id} would otherwise
     swallow "recent" as a path parameter.
 
-    Deduped via dedupe_near_identical_issues before truncating to
-    `limit`: retiring a row for BEING a duplicate only flips is_current,
-    which this query ignores by design — without this, a duplicate
-    retired off the Action Center resurfaced right back here (2026-08-22
-    report: "I see 3 copies of the beef import issue on the homepage").
+    Near-identical duplicates are left out: retiring a row for BEING a
+    duplicate only flips is_current, which this query ignores by design —
+    without this, a duplicate retired off the Action Center resurfaced
+    right back here (2026-08-22 report: "I see 3 copies of the beef import
+    issue on the homepage"). Which rows are duplicates is decided by the
+    hourly refresh (action_center.mark_recent_duplicates), over the same
+    pool this reads from: it was decided here, per request, which ran the
+    embedding model on a public GET inside the event loop.
     """
-    from app.pipeline.analyze.action_center import dedupe_near_identical_issues
-
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
-    raw = (
+    pool = (
         db.query(ActionIssue)
         .order_by(ActionIssue.date.desc(), ActionIssue.rank.asc())
-        .limit(limit * _RECENT_ISSUES_RAW_POOL_MULTIPLIER)
+        .limit(RECENT_FEED_MAX_LIMIT * RECENT_FEED_POOL_MULTIPLIER)
         .all()
     )
-    issues = dedupe_near_identical_issues(raw)[:limit]
+    issues = [i for i in pool if i.duplicate_of_id is None][:limit]
     return {"issues": [_build_issue_response(i, db) for i in issues]}
 
 

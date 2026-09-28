@@ -256,3 +256,14 @@ SATURATION_QUANTILE = 0.9
 CONSTITUENT_REFERENCE_STATISTIC = (
     f"congress-centerward-per-measure-break-rate/logit/party-residual/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
 )
+
+
+# ── The homepage's recent-issues feed ─────────────────────────────
+# Its largest page, and how many rows per slot it reads before duplicates
+# are set aside (a near-identical cluster can run 3-4 rows deep: the
+# beef-tariff incident). The hourly refresh marks duplicates over exactly
+# this pool (action_center.mark_recent_duplicates) and the API reads it
+# (app/api/action.py), so the two share these numbers.
+RECENT_FEED_MAX_LIMIT = 30
+RECENT_FEED_POOL_MULTIPLIER = 3
+
