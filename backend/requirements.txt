@@ -71,7 +71,7 @@ pluggy==1.6.0
 protobuf==7.35.1
 py-serializable==2.1.0
 pydantic==2.13.4
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
 pydantic_core==2.46.4
 Pygments==2.21.0
 pyparsing==3.3.2
