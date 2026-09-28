@@ -6,6 +6,10 @@ the newest nightly run's identity, and every hourly or on-demand write
 between runs was then answered 304 with the old body.
 """
 
+import gzip
+import time
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
@@ -233,9 +237,9 @@ def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client)
     schema in this environment, and a 500 from a missing table would tell
     us nothing about middleware ordering, which is the thing under test.
     The body is padded past GZipMiddleware's 500-byte floor so compression
-    genuinely engages — the cache middleware must sit outside it, so a 304
-    short-circuits before the compressor and the weak ETag stays valid
-    whether or not the body below was compressed.
+    genuinely engages — the cache middleware must sit inside it, hashing
+    the uncompressed body, because gzip output carries a timestamp and
+    changes every second.
     """
     app = real_client.app
 
@@ -261,6 +265,11 @@ def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client)
         etag = resp.headers.get("ETag")
         assert etag and etag.startswith('W/"')
 
+        # gzip writes the current time into its header. A second later the
+        # compressed bytes differ, and an ETag hashed from them would too:
+        # move gzip's clock forward so the revalidation always crosses one.
+        later = time.time() + 60
+        monkeypatch.setattr(gzip, "time", SimpleNamespace(time=lambda: later))
         conditional = real_client.get(
             "/api/explore/__cache_probe",
             headers={"If-None-Match": etag, "Accept-Encoding": "gzip"},

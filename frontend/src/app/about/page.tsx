@@ -1350,7 +1350,9 @@ export default function AboutPage() {
               by the chamber it did not start in, which it can only reach by passing the first.
               A chamber that did not meet is shown as not in session, including on days the
               Senate publishes only the time it reconvenes. A source that could not be
-              read is shown as unavailable, never as a day with nothing in it.
+              read is shown as unavailable, never as a day with nothing in it. A day with no
+              Congressional Record, which is published for every day either chamber meets, says
+              that no Record was published.
             </P>
             <P>
               Every bill named in a report links to its page, including bills sponsored by
@@ -2005,7 +2007,7 @@ export default function AboutPage() {
               />
               <Row
                 label="GovInfo API"
-                value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis — both chambers"
+                value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis — both chambers. Each day's Record is read in full; until September 2026 only its first 100 sections were, which on the busiest days left out the Senate's floor remarks entirely"
               />
               <Row
                 label="Congressional Record Daily Digest"
@@ -2276,6 +2278,7 @@ export default function AboutPage() {
                 value="Nightly at 3:00 AM via APScheduler; in the 60 days before an election, ballot lists every 6 hours and race coverage every 15 minutes"
               />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
+              <Row label="HTTP Caching" value="ETag hashed from the uncompressed response body; a matching revalidation gets a 304" />
               <Row
                 label="Learning Store"
                 value="SQLite table for persistent classification memory, version-aware invalidation on code change"
