@@ -456,6 +456,9 @@ _NOT_ANALYSIS_PATHS = {
     # posting logic lives in analyze/ and fetch/, and is hashed (or not)
     # there.
     "pipeline/election_pipeline.py",
+    # Reads finished scores after a run to check two components still
+    # measure different things; nothing it computes feeds a score.
+    "pipeline/analyze/signal_overlap.py",
     *_COORDINATION_PATHS,
 }
 
@@ -2173,6 +2176,12 @@ async def run_senate_pipeline(
             )
         except Exception:
             logger.exception("Ground truth check failed (non-fatal)")
+
+        # Two components measured from related data must stay distinct
+        # (analyze/signal_overlap.py); non-fatal, like the gate above.
+        from app.pipeline.analyze.signal_overlap import record_signal_overlap
+
+        record_signal_overlap(db, "senate")
 
         logger.info("--- Phase 7: FINALIZE ---")
         progress.begin("finalize")

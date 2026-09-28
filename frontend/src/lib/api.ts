@@ -9,6 +9,7 @@ import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
   RepresentationScoreBreakdown,
+  SignalOverlap,
 } from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -1463,6 +1464,12 @@ export async function setPoliticianVacancy(
     throw new Error(body.detail || `Vacancy update failed: ${res.status}`);
   }
   return res.json();
+}
+
+/** The post-run check that related score components still measure
+ * different things. Refreshed by each pipeline run. */
+export async function fetchSignalOverlap(): Promise<SignalOverlap> {
+  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.LONG);
 }
 
 export async function fetchConfig(): Promise<AppConfig> {

@@ -190,6 +190,11 @@ EOF
 
 High correlation between two dimensions means they're measuring the same thing (a design flaw):
 
+(Within a dimension, the two component pairs built from related data are
+checked by the pipeline itself after every chamber run —
+`analyze/signal_overlap.py`, `GET /api/signal-overlap` — and alert at
+|r| >= 0.60. This step is for pairs of whole dimensions.)
+
 ```bash
 docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 import sqlite3, statistics, math

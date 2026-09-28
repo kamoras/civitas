@@ -52,6 +52,27 @@ def get_config() -> JSONResponse:
     }, max_age=CACHE_TTL_CONFIG_S)
 
 
+@router.get("/signal-overlap")
+def get_signal_overlap() -> JSONResponse:
+    """How closely each pair of related score components moved together over
+    the last run's members (analyze/signal_overlap.py), per chamber. A
+    chamber not yet measured is null."""
+    from app.pipeline.analyze.signal_overlap import ACTION_R, SIGNAL_OVERLAP, WATCH_R
+
+    stored = SIGNAL_OVERLAP.load()
+    return _cached_json({
+        "actionR": ACTION_R,
+        "watchR": WATCH_R,
+        "chambers": {
+            chamber: (
+                {"pairs": stored[chamber].get("pairs", {}), "computedAt": stored[chamber].get("computed_at")}
+                if chamber in stored else None
+            )
+            for chamber in ("senate", "house")
+        },
+    }, max_age=CACHE_TTL_LIST_S)
+
+
 @router.get("/senators/states")
 def list_states(db: Session = Depends(get_db)) -> JSONResponse:
     """Return all states that have senator data, with counts."""

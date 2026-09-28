@@ -45,3 +45,22 @@ export interface JusticeScoreBreakdown {
   };
   [key: string]: unknown;
 }
+
+/** GET /api/signal-overlap: how closely two related score components moved
+ * together over the last run's members (analyze/signal_overlap.py). */
+export interface SignalOverlapPair {
+  /** Pearson r, or null when there was nothing to measure. */
+  r: number | null;
+  n: number;
+  band: "ok" | "watch" | "action" | "none";
+  labels: [string, string];
+}
+
+export type SignalOverlapPairKey = "constituent" | "effectiveness";
+
+export interface SignalOverlap {
+  actionR: number;
+  watchR: number;
+  /** null for a chamber not yet measured. */
+  chambers: Record<"senate" | "house", { pairs: Partial<Record<SignalOverlapPairKey, SignalOverlapPair>>; computedAt: string | null } | null>;
+}

@@ -2,6 +2,7 @@ import { pageMetadata } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
+import SignalOverlapReading from "@/components/about/SignalOverlapReading";
 
 export const metadata = pageMetadata({
   title: "About: How Civitas Scores Congress",
@@ -402,7 +403,10 @@ export default function AboutPage() {
                   amount either way — our test found the two directions matter equally. The 70/30
                   split is a design choice, not a fitted one: the vote component showed the larger
                   association in the one election where both could be tested, so it keeps the
-                  larger share. Coalition breadth (20%
+                  larger share. Both parts come from roll calls (a crossing rate and a position),
+                  so every pipeline run checks that they still measure different things by how
+                  closely they move together across each chamber.{" "}
+                  <SignalOverlapReading pair="constituent" /> Coalition breadth (20%
                   here from v5 through v6.10) has moved to Legislative Effectiveness: bipartisan
                   coalition-building is a legislative-effectiveness signal, not a
                   constituent-alignment one — demand for bipartisanship varies with the seat&apos;s
@@ -461,7 +465,17 @@ export default function AboutPage() {
                   evidence is a strong association rather than a clean causal proof, and the measure
                   is an input to effectiveness rather than realized output — both disclosed reasons
                   its weight stays modest. When cosponsorship data is missing, the split reverts to
-                  exactly the prior 70/30.
+                  exactly the prior 70/30. Leadership and coalition attraction are both measured
+                  from the cosponsorship network (how central a member is, and how many cosponsors
+                  cross party lines to join them), so their combined weight is capped at 40%, and
+                  every pipeline run checks that they still carry separate information by how
+                  closely they move together across each chamber. Two earlier pairs that shipped as
+                  distinct signals turned out to move together at |r| of 0.72 and 0.76 and were
+                  restructured (see the{" "}
+                  <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
+                    scoring changelog
+                  </a>
+                  ). <SignalOverlapReading pair="effectiveness" />
                 </P>
                 <P>
                   Until v6.14 (September 2026) this part skipped the division by each stage&apos;s
@@ -525,7 +539,7 @@ export default function AboutPage() {
             <P className="text-ink-lo text-xs">
               Every item below is an open engineering problem, not a settled tradeoff we&apos;ve
               made peace with — several started as disclosures here and were later fixed outright
-              (see the v6.8 entry below, and the{" "}
+              (see the{" "}
               <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
                 scoring changelog
               </a>{" "}
@@ -679,37 +693,6 @@ export default function AboutPage() {
               members from ones whose breaks cost them their base. Telling them apart would take
               opinion data split by party, such as approval of each member among Democrats and
               Republicans in their state, which is the same survey data named above.
-            </P>
-            <Gist>
-              two of the checks that used to lower Constituent Alignment were computed from the same
-              underlying data, so they were catching the same problem twice. v6.8 cut that overlap;
-              v6.11 removes it structurally — the two signals no longer live in the same dimension,
-              and the position check now uses an independent data source where available. A smaller
-              cousin of the same caveat now applies inside Legislative Effectiveness.
-            </Gist>
-            <P>
-              <em className="text-ink">
-                Cosponsorship-derived signal overlap — mostly resolved, one residual.
-              </em>{" "}
-              A 2026-07-21 audit found Constituent Alignment&apos;s position-mismatch discount and
-              coalition breadth correlate at r=-0.76 (58% shared variance, n=99) — both were
-              projections of the same cosponsorship network. v6.8 reduced the double-count; v6.11
-              removes its structural basis: coalition breadth has left Constituent Alignment
-              entirely (it now scores legislative effectiveness, where the evidence supports it),
-              and the position signal is measured from roll-call ideal points (Voteview, ingested
-              automatically every pipeline run behind ingestion gates) — the genuinely independent
-              second signal this disclosure previously said wasn&apos;t available. The
-              cosponsorship-based discount it replaced was removed entirely in v6.13. The residual: within Legislative
-              Effectiveness, the leadership component (cosponsorship PageRank) and the new
-              bipartisan-coalition-attraction component are both computed from the cosponsorship
-              network (network centrality vs. cross-party share — related data, different measures).
-              Their combined weight is capped at 40% for that reason, and their live correlation is
-              a standing post-run check. See the{" "}
-              <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
-                {" "}
-                scoring changelog
-              </a>{" "}
-              for the full account.
             </P>
 
             <Gist>
