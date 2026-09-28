@@ -24,6 +24,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.17",
+    date: "2026-09-28",
+    title: "Legislative Effectiveness credits getting a bill out of committee",
+    tldr: "A bill reported out of committee now counts as a step of its own, between committee action and passing the chamber, as in the Volden & Wiseman effectiveness score. It used to count the same as a bill that only had a hearing. The score now ranks members closer to their published scores, most of all in the Senate.",
+    changes: [
+      "Volden & Wiseman count five stages: introduced, action in committee, action beyond committee, passed the chamber, became law. Civitas counted four, with a bill reported out of committee credited the same as one that only had a hearing or markup. Bills now have a \"Reported by Committee\" stage, and it and \"On the Floor\" are credited as action beyond committee.",
+      "Checked against Volden & Wiseman's published scores for the 110th to 118th Congresses, rank correlation rose from 0.895 to 0.898 (House) and 0.963 to 0.973 (Senate), and in the worst congress from 0.814 to 0.817 and 0.863 to 0.873. Majority and minority members' typical scores stay level.",
+      "A bill reported out of committee now counts as advancing in a member's sponsored-bills summary.",
+    ],
+  },
+  {
     version: "v6.16",
     date: "2026-09-27",
     title: "Constituent Alignment: highest when a member breaks with their party about as often as their seat's norm",

@@ -159,12 +159,16 @@ BILL_STAGES: dict[str, dict] = {
     # its own, so it read "In Committee" through a week of floor votes
     # (S. 4668, 119th Congress). Volden & Wiseman call this step "action
     # beyond committee".
-    "ON_FLOOR":         {"name": "On the Floor",       "color": "#ff8a3d", "order": 4},
-    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 5},
-    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 6},
-    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 7},
-    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 8},
-    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 9},
+    # v6.17: reported out of committee (or discharged, or placed on a
+    # calendar) is V&W's "action beyond committee", apart from the hearings
+    # and markups IN_COMMITTEE now means ("action in committee").
+    "REPORTED":         {"name": "Reported by Committee", "color": "#e5e7eb", "order": 4},
+    "ON_FLOOR":         {"name": "On the Floor",       "color": "#ff8a3d", "order": 5},
+    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 6},
+    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 7},
+    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 8},
+    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 9},
+    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 10},
 }
 
 # Derived from BILL_STAGES's keys rather than listed separately, so a code

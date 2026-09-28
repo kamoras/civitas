@@ -4,7 +4,7 @@ Legislative Effectiveness's main component (60% of the dimension) has always
 been described as following Volden & Wiseman's Legislative Effectiveness Score
 (LES; Volden & Wiseman 2014, *Legislative Effectiveness in the United States
 Congress*). This note records a test of that claim against their own published
-scores, what it found, and what v6.14 changed as a result.
+scores, what it found, and what v6.14 and v6.17 changed as a result.
 
 Every number here is printed by
 [`backend/scripts/research_les_stage_weighting.py`](../../backend/scripts/research_les_stage_weighting.py).
@@ -49,6 +49,8 @@ tracks: its rank correlation with bills introduced and with laws.
 | Civitas credit before v6.14 | 0.764 | 0.680 | **0.954** | 0.328 |
 | Stage-normalized, four Civitas stages | 0.933 | 0.895 | 0.598 | 0.747 |
 | + content-based commemorative weight | 0.981 | 0.962 | 0.606 | 0.634 |
+| Stage-normalized, five stages (v6.17) | 0.942 | 0.895 | 0.564 | 0.704 |
+| + content-based commemorative weight | 0.985 | 0.973 | 0.567 | 0.601 |
 | *(the published LES itself)* | | | 0.591 | 0.589 |
 
 | Senate | ρ with LES (median) | min | ρ with bills introduced | ρ with laws |
@@ -56,6 +58,8 @@ tracks: its rank correlation with bills introduced and with laws.
 | Civitas credit before v6.14 | 0.785 | 0.554 | **0.976** | 0.493 |
 | Stage-normalized, four Civitas stages | 0.967 | 0.921 | 0.693 | 0.845 |
 | + content-based commemorative weight | 0.984 | 0.966 | 0.686 | 0.838 |
+| Stage-normalized, five stages (v6.17) | 0.977 | 0.932 | 0.686 | 0.824 |
+| + content-based commemorative weight | 0.992 | 0.974 | 0.690 | 0.817 |
 | *(the published LES itself)* | | | 0.673 | 0.813 |
 
 The old credit was almost exactly a count of bills introduced (ρ 0.95–0.98). The
@@ -68,10 +72,10 @@ and 67 in the Senate, against 4 before.
 rebuilt from their stage counts. The v6.13 scorer was reproduced exactly for
 comparison.
 
-| | v6.13 ρ with LES | v6.14 ρ with LES | majority − minority median score |
-|---|---|---|---|
-| House | 0.710 | 0.895 | 0.0 (both) |
-| Senate | 0.763 | 0.963 | 0.0 (both) |
+| | v6.13 ρ with LES | v6.14 ρ with LES | v6.17 ρ with LES | majority − minority median score |
+|---|---|---|---|---|
+| House | 0.710 | 0.895 (min 0.814) | 0.898 (min 0.817) | 0.0 (all three) |
+| Senate | 0.763 | 0.963 (min 0.863) | 0.973 (min 0.873) | 0.0 (all three) |
 
 ## Decisions
 
@@ -104,6 +108,14 @@ comparison.
    an empty list when Congress.gov failed, and that run scored the member as
    "confirmed inactivity". It now falls back to the last cached list, or
    reports the list as unknown, and the component stays neutral.
+5. **Five stages, adopted in v6.17.** Action beyond committee is its own
+   stage: a bill reported out of committee, discharged, placed on a
+   calendar or taken up on the floor (the REPORTED and ON_FLOOR bill
+   stages) is credited at stage 3; passage moves to 4 and law to 5. With
+   the commemorative weight it raised rank agreement from 0.981 to 0.985 (House) and 0.984 to 0.992 (Senate), the
+   worst congress from 0.962 to 0.973 and 0.966 to 0.974, and the whole
+   scorer from 0.895 to 0.898 and 0.963 to 0.973. The majority − minority
+   gap stays zero.
 
 ## What is still different, and why
 
@@ -134,13 +146,14 @@ comparison.
 - **Substantive and significant (10x).** V&W assign this tier from CQ Almanac
   coverage, which has no source here. Its effect is inside the gap between the
   last row and 1.0.
-- **Four stages, not five.** Congress.gov's action codes give committee action
-  and reporting as one stage (IN_COMMITTEE). Floor action short of passage is
-  now its own display stage, ON_FLOOR (2026-09: S. 4668 read "In Committee"
-  through a week of Senate floor votes), which is V&W's "action beyond
-  committee". The scorer still credits it as committee action, so no score
-  moved; giving it a fifth stage of credit is open and needs the same
-  measurement against the published LES as the rows above.
+- **Five stages, from Congress.gov's actions.** Until v6.17 a bill reported
+  out of committee was classified IN_COMMITTEE, the same as one that had only
+  a hearing. `bill_stage.py` now gives it REPORTED: the House's "Placed on
+  the Union Calendar" code, a Discharge action, or a Committee or Calendars
+  action saying reported, discharged or placed on a calendar ("ordered to be
+  reported", the markup vote, stays IN_COMMITTEE). The measurement above
+  uses V&W's own stage counts; how closely the classifier reproduces their
+  coding of this stage is not separately measured.
 - **Benchmark.** Each member is compared with the median member of their own
   majority/minority status in their chamber (v6.13). The majority − minority
   gap stays at zero.

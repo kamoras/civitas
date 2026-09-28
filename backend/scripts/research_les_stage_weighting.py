@@ -26,9 +26,11 @@ per-member counts from the Center for Effective Lawmaking (thelawmakers.org):
   3. Report what each variant rewards: its correlation with sheer bill
      introductions versus with laws.
 
-Stage mapping. Civitas has four stages: introduced/referred (1), committee
-action or reported (2), passed the chamber (3), enacted (4). V&W's AIC count
-stands in for Civitas stage 2; ABC has no separate Civitas stage.
+Stage mapping. Civitas has five stages since v6.17, V&W's own:
+introduced/referred (1), a hearing or markup (2), reported out, discharged
+or taken up on the floor (3, V&W's "action beyond committee"), passed the
+chamber (4), enacted (5). Before v6.17 action beyond committee folded into
+stage 2; the "stage_normalized" variants below are that four-stage scheme.
 
 Usage:
     python backend/scripts/research_les_stage_weighting.py [--first 110] [--last 118] [--cache DIR]
@@ -136,6 +138,12 @@ VARIANTS = {
     # commemorative detector would add. S&S stays at S weight: Civitas has
     # no source for CQ Almanac coverage.
     "stage_normalized_commem": lambda g: vw_les(g, {"C": 1.0, "S": 5.0, "SS": 5.0}, CIVITAS_STAGES),
+    # V&W's fifth stage, "action beyond committee" (reported out,
+    # discharged, or taken up on the floor), credited on its own — what
+    # Civitas can observe once a reported or floor-debated bill is its own
+    # stage instead of folding into committee action.
+    "five_stages": lambda g: vw_les(g, {"C": 1.0, "S": 1.0, "SS": 1.0}, STAGES),
+    "five_stages_commem": lambda g: vw_les(g, {"C": 1.0, "S": 5.0, "SS": 5.0}, STAGES),
 }
 
 
@@ -149,11 +157,13 @@ def members_from_counts(g: pd.DataFrame, bill_type: str) -> list[tuple[list[dict
     for _, row in g.iterrows():
         bill = sum(row[f"{t}_BILL"] for t in TIERS)
         aic = min(sum(row[f"{t}_AIC"] for t in TIERS), bill)
-        pas = min(sum(row[f"{t}_PASS"] for t in TIERS), aic)
+        abc = min(sum(row[f"{t}_ABC"] for t in TIERS), aic)
+        pas = min(sum(row[f"{t}_PASS"] for t in TIERS), abc)
         law = min(sum(row[f"{t}_LAW"] for t in TIERS), pas)
         bills = []
-        for stage, n in (("ENACTED", law), ("PASSED_CHAMBER", pas - law),
-                         ("IN_COMMITTEE", aic - pas), ("INTRODUCED", bill - aic)):
+        # REPORTED stands for V&W's action beyond committee (v6.17).
+        for stage, n in (("ENACTED", law), ("PASSED_CHAMBER", pas - law), ("REPORTED", abc - pas),
+                         ("IN_COMMITTEE", aic - abc), ("INTRODUCED", bill - aic)):
             bills += [{"billType": bill_type, "congress": int(row["congress"]), "stage": stage}] * int(n)
         members.append((bills, "R" if row["majority"] == 1 else "D"))
     return members
@@ -167,7 +177,8 @@ def shipped_scorer(df: pd.DataFrame, chamber: str) -> None:
     from app.pipeline.analyze.score_calculator import _les_component_score, compute_les_reference
 
     bill_type = "hr" if chamber == "house" else "s"
-    stage_of = {"INTRODUCED": 1, "IN_COMMITTEE": 2, "PASSED_CHAMBER": 3, "ENACTED": 4}
+    # v6.13's four stages: action beyond committee folded into committee.
+    stage_of = {"INTRODUCED": 1, "IN_COMMITTEE": 2, "REPORTED": 2, "PASSED_CHAMBER": 3, "ENACTED": 4}
 
     def v613_scores(members) -> list[float]:
         # v6.13, reproduced: credit = 5 x stages reached per bill; each
@@ -192,7 +203,7 @@ def shipped_scorer(df: pd.DataFrame, chamber: str) -> None:
         ref = compute_les_reference(members, int(congress), "R")
         return [_les_component_score(b, p, 4.0, {chamber: ref})[0] for b, p in members]
 
-    for label, fn in (("v6.13", lambda m, c: v613_scores(m)), ("v6.14", v614_scores)):
+    for label, fn in (("v6.13", lambda m, c: v613_scores(m)), ("v6.17", v614_scores)):
         rhos, gaps = [], []
         for congress, g in df.groupby("congress"):
             members = members_from_counts(g, bill_type)

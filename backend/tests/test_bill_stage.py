@@ -43,7 +43,7 @@ class TestActionCodeLookup:
             pytest.param("IntroReferral", "1000", "Introduced in House", "INTRODUCED", id="introduced"),
             pytest.param("IntroReferral", "H11100", "Referred to the House Committee on Ways and Means.", "REFERRED", id="referred_to_committee"),
             pytest.param("Committee", "H15001", "Committee Consideration and Mark-up Session Held", "IN_COMMITTEE", id="committee_markup_held"),
-            pytest.param("Calendars", "H12410", "Placed on the Union Calendar, Calendar No. 508.", "IN_COMMITTEE", id="placed_on_union_calendar"),
+            pytest.param("Calendars", "H12410", "Placed on the Union Calendar, Calendar No. 508.", "REPORTED", id="placed_on_union_calendar"),
             pytest.param("Floor", "17000", "Passed/agreed to in Senate.", "PASSED_CHAMBER", id="passed_senate"),
             pytest.param("Floor", "8000", "Passed/agreed to in House.", "PASSED_CHAMBER", id="passed_house"),
             pytest.param("Floor", "H14000", "Received in the House.", "IN_OTHER_CHAMBER", id="received_in_house"),
@@ -78,7 +78,7 @@ class TestTypeAndTextFallback:
             pytest.param("IntroReferral", None, "Received in the Senate and Read twice and referred to the Committee on Finance.", "REFERRED", id="senate_receipt_combined_with_referral_has_no_action_code"),
             pytest.param("IntroReferral", None, "Introduced in Senate", "INTRODUCED", id="bare_introduction_with_no_action_code"),
             pytest.param("Committee", None, "Ordered to be reported.", "IN_COMMITTEE", id="committee_type_with_no_action_code"),
-            pytest.param("Calendars", None, "Placed on Senate Legislative Calendar under General Orders.", "IN_COMMITTEE", id="calendars_type_with_no_action_code"),
+            pytest.param("Calendars", None, "Placed on Senate Legislative Calendar under General Orders.", "REPORTED", id="calendars_type_with_no_action_code"),
             pytest.param("BecameLaw", None, "Became Public Law No: 119-1.", "ENACTED", id="became_law_type_with_no_action_code"),
             pytest.param("President", "Z00000", "Vetoed by the President.", "VETOED", id="president_type_veto_text"),
             pytest.param("President", "Z00000", "Cleared for White House.", "TO_PRESIDENT", id="president_type_unrecognized_code_defaults_to_to_president"),
@@ -169,7 +169,7 @@ class TestReferredVsInCommitteeRealData:
              "text": "Read twice and referred to the Committee on the Judiciary."},
             {"actionCode": "10000", "type": "IntroReferral", "text": "Introduced in Senate"},
         ]
-        assert classify_bill_stage_from_actions(actions) == BillStage.IN_COMMITTEE
+        assert classify_bill_stage_from_actions(actions) == BillStage.REPORTED
 
     def test_real_senate_bill_discharged_by_unanimous_consent(self):
         actions = [
@@ -179,7 +179,7 @@ class TestReferredVsInCommitteeRealData:
              "text": "Read twice and referred to the Committee on Energy and Natural Resources."},
             {"actionCode": "10000", "type": "IntroReferral", "text": "Introduced in Senate"},
         ]
-        assert classify_bill_stage_from_actions(actions) == BillStage.IN_COMMITTEE
+        assert classify_bill_stage_from_actions(actions) == BillStage.REPORTED
 
 
 class TestOnTheFloor:
