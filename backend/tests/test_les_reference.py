@@ -89,10 +89,10 @@ class TestComputeReference:
         ref = compute_les_reference(members, congress=119, majority="R")
         assert ref["congress"] == 119 and ref["majority"] == "R" and ref["n"] == 40
         # Introduced-only bills: stage 1 is the only nonzero total (5 x
-        # sum(10..49) = 5,900), so credit is 5n / 5,900 x 40/4; the median
+        # sum(10..49) = 5,900), so credit is 5n / 5,900 x 40/5; the median
         # member sponsors 29.5.
-        assert ref["median_credit"] == round(5 * 29.5 / 5900 * 40 / 4, 4)
-        assert ref["stage_totals"] == [5900.0, 0.0, 0.0, 0.0] and ref["n_members"] == 40
+        assert ref["median_credit"] == round(5 * 29.5 / 5900 * 40 / 5, 4)
+        assert ref["stage_totals"] == [5900.0, 0.0, 0.0, 0.0, 0.0] and ref["n_members"] == 40
         assert ref["stdev_credit"] > 0 and 0 < ref["avg_baseline"] < 1
 
     def test_members_without_substantive_bills_are_not_in_the_distribution(self):
@@ -125,8 +125,8 @@ class TestChamberSpecificSaturation:
         # A majority member whose credit sits one House saturation (1.5 x
         # the House's own stdev) above the majority median is saturated.
         target = house["status_median"]["majority"] + 1.5 * house["stdev_credit"]
-        n = int(target * 4 / house["n_members"] * house["stage_totals"][0] / 5) + 1
-        bills = _bills(n, "hr")  # introduced-only: credit = 5n / T1 x N/4
+        n = int(target * 5 / house["n_members"] * house["stage_totals"][0] / 5) + 1
+        bills = _bills(n, "hr")  # introduced-only: credit = 5n / T1 x N/5
         score, _ = _les_component_score(bills, "R", None, ref)
         assert score > 99
         # Measured against a spread twice as wide, the same gap is half.

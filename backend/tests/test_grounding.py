@@ -886,7 +886,6 @@ class TestEveryPublishingPathIsChecked:
     MODULES = [
         "app/pipeline/analyze/action_center.py",
         "app/pipeline/analyze/bluesky_poster.py",
-        "app/pipeline/analyze/bluesky_spotlight.py",
         "app/pipeline/analyze/early_signal.py",
         "app/pipeline/analyze/election_bluesky.py",
         "app/pipeline/justice_pipeline.py",
@@ -896,7 +895,7 @@ class TestEveryPublishingPathIsChecked:
     PUBLISHES_PROSE = {
         "_generate_period_summary",
         "_generate_monitor_metadata", "_run_refresh",
-        "_generate_spotlight_post", "_generate_weekly_post", "_draft_developing_issue",
+        "_draft_developing_issue",
         "_draft_developing_rule_issue", "_generate_post_text", "_generate_summary",
     }
     # Functions whose LLM output is a located SPAN, verified verbatim by
