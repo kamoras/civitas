@@ -48,10 +48,13 @@ export function UptimeTracker({
       </TerminalTitlebar>
       <div className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* App Uptime — large ticking counter */}
+          {/* Pipeline process uptime — large ticking counter. The admin API
+              is served by the pipeline process (nginx routes /api/admin/
+              there), so this is its start: the process whose restart ends a
+              running pipeline, not the API workers serving pages. */}
           <div className="sm:col-span-2">
             <div className="text-xs font-mono text-ink-lo tracking-wider mb-2">
-              APPLICATION UPTIME
+              PIPELINE PROCESS UPTIME
             </div>
             <div className="font-mono text-2xl sm:text-3xl text-signal-cyan tabular-nums tracking-wider">
               {appUptimeSec != null ? tickingUptime(appUptimeSec) : "—"}

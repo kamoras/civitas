@@ -4,6 +4,7 @@ Retrieval-first by design: see services/qa.py for why nothing here
 generates a figure.
 """
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, Query
@@ -32,5 +33,9 @@ async def ask(
     three are not debug output — they are how we find out whether this
     path is servable on the current hardware and whether the intent gate
     is set correctly against real questions rather than invented ones.
+
+    On a worker thread, like Explore search: the first question a worker
+    answers loads the primary embedding model (only the search model is
+    preloaded — main._preload_search_model), and every question encodes.
     """
-    return answer_question(db, q, limit=limit)
+    return await asyncio.to_thread(answer_question, db, q, limit=limit)

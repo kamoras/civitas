@@ -384,6 +384,17 @@ class TestPipelineServiceLiveness:
         check_pipeline_service_alive()
         assert sent == []
 
+    def test_one_worker_checks_each_round(self, sent, monkeypatch):
+        """Every API worker runs the watch at the same moments; a round goes
+        to one of them, so a stale heartbeat alerts once, not per worker."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        checks = []
+        monkeypatch.setattr("app.ops_alerts.check_pipeline_service_alive", lambda: checks.append(1))
+        with ThreadPoolExecutor(2) as pool:
+            list(pool.map(lambda _: main_module._check_pipeline_service_once(), range(2)))
+        assert checks == [1]
+
     async def test_only_the_api_process_watches(self, role, started, monkeypatch):
         watched = []
 

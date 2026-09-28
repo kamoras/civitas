@@ -48,8 +48,9 @@ because a stale threshold gates better than none.
 """
 
 import json
-import time
 import logging
+
+from app.shared_state import PolledRow, decode_json_dict
 
 logger = logging.getLogger(__name__)
 
@@ -66,19 +67,16 @@ BOOTSTRAP_THRESHOLD = 0.276
 # noise rather than topic, and the encoder truncates anyway.
 _TEXT_CHARS = 600
 
-_cached: dict | None = None
 # The calibration is re-derived in the pipeline process, whose reset_cache()
 # reaches only itself; the elections API (PROCESS_ROLE=api) reads it. So a
 # process holding a calibration checks, at most this often, whether the
-# stored row was replaced, and reloads when it was.
+# stored row was replaced, and reloads when it was (shared_state.PolledRow).
 _CHECK_STORED_EVERY_SECONDS = 30
-_cached_stored_at = None
-_checked_at = 0.0
+_calibration = PolledRow(_CACHE_NAMESPACE, _CACHE_KEY, every_s=_CHECK_STORED_EVERY_SECONDS, decode=decode_json_dict)
 
 
 def reset_cache() -> None:
-    global _cached, _cached_stored_at, _checked_at
-    _cached, _cached_stored_at, _checked_at = None, None, 0.0
+    _calibration.reset()
 
 
 def race_descriptor(race) -> str:
@@ -138,30 +136,11 @@ def otsu_threshold(values: list[float], bins: int = 256) -> float | None:
 def threshold(db=None) -> float:
     """The calibrated threshold, read from its stored row whatever its age
     (shared_state.read_row: it stands until the election pipeline replaces
-    it), or the measured bootstrap before the first calibration."""
-    global _cached, _cached_stored_at, _checked_at
-    from app.shared_state import UNREADABLE, read_row
-
-    if db is not None:
-        now = time.monotonic()
-        if _cached is None or now - _checked_at >= _CHECK_STORED_EVERY_SECONDS:
-            _checked_at = now
-            row = read_row(_CACHE_NAMESPACE, _CACHE_KEY, db)
-            # UNREADABLE (a moment's lock) and an unchanged row both keep
-            # what we have.
-            if isinstance(row, tuple) and (_cached is None or row[0] != _cached_stored_at):
-                try:
-                    value = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-                except ValueError:
-                    value = None
-                if isinstance(value, dict):
-                    _cached, _cached_stored_at = value, row[0]
-                else:
-                    logger.warning("Race-relevance calibration unreadable — keeping the previous one")
-            elif row is not UNREADABLE and row is None:
-                _cached, _cached_stored_at = None, None
-    if _cached:
-        return float(_cached.get("threshold", BOOTSTRAP_THRESHOLD))
+    it), or the measured bootstrap before the first calibration. Without a
+    session, the one in hand."""
+    calibration = _calibration.get(db) if db is not None else _calibration.current()
+    if calibration:
+        return float(calibration.get("threshold", BOOTSTRAP_THRESHOLD))
     return BOOTSTRAP_THRESHOLD
 
 

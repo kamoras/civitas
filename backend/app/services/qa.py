@@ -107,7 +107,9 @@ def _get_prototype_embeddings():
     """Embed the intent prototypes once per process.
 
     Six short strings — the cost is one model call at first use, not per
-    request. The embedding model is already resident for explore search.
+    request. The first call also loads the primary embedding model, which
+    startup doesn't preload (main._preload_search_model): api/qa.py runs
+    this off the event loop for that reason.
     """
     global _prototype_cache
     if _prototype_cache is not None:

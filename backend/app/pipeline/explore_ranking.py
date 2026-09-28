@@ -31,7 +31,8 @@ import json
 import logging
 import pathlib
 import threading
-import time
+
+from app.shared_state import PolledRow, decode_json_dict
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +40,6 @@ _BUNDLED = pathlib.Path(__file__).resolve().parent.parent / "data" / "explore_ra
 
 _CACHE_NAMESPACE = "explore"
 _CACHE_KEY = "ranking_calibration"
-
-# How long a loaded calibration is reused before the database is consulted
-# again. Not a tuning value: the calibration changes at most once per
-# nightly pipeline run, and this only bounds how long a running process
-# keeps serving the previous one.
-_RELOAD_AFTER_SECONDS = 3600
 
 # The keys every consumer needs present for a calibration to be usable.
 _REQUIRED_KEYS = frozenset({
@@ -55,37 +50,32 @@ _REQUIRED_KEYS = frozenset({
 # How often a process checks whether the stored calibration was replaced.
 # The explore pipeline recalibrates in the pipeline process, and its
 # reset_cache() reaches only that process; Explore search runs in the API
-# processes (settings.PROCESS_ROLE), which notice the new row's timestamp.
+# processes (settings.PROCESS_ROLE), which notice the new row's timestamp
+# (shared_state.PolledRow).
 _CHECK_STORED_EVERY_SECONDS = 30
 
 _lock = threading.Lock()
-_cached: dict | None = None
-_cached_at: float = 0.0
-_cached_stored_at = None  # the api_cache row's cached_at the cache was loaded from
-_checked_at: float = 0.0
+_bundled: dict | None = None
 
 
 class RankingCalibrationMissing(RuntimeError):
     """Neither the database nor the bundled file has a calibration."""
 
 
-def _stored():
+def _stored(db=None):
     """The stored calibration row: (written at, value), None, or UNREADABLE
     (shared_state.read_row — read whatever its age: a calibration stands
     until the explore pipeline replaces it)."""
     from app.shared_state import read_row
 
-    return read_row(_CACHE_NAMESPACE, _CACHE_KEY)
+    return read_row(_CACHE_NAMESPACE, _CACHE_KEY, db)
 
 
-def _decode(value) -> dict | None:
-    """The stored value as a calibration (it is stored JSON-encoded)."""
-    if isinstance(value, str):
-        try:
-            value = json.loads(value)
-        except ValueError:
-            return None
-    return value if isinstance(value, dict) else None
+# Read through _stored at call time, so a test can stand in for the row.
+_calibration = PolledRow(
+    _CACHE_NAMESPACE, _CACHE_KEY, every_s=_CHECK_STORED_EVERY_SECONDS,
+    decode=decode_json_dict, reader=lambda db: _stored(db),
+)
 
 
 def _load_bundled() -> dict | None:
@@ -97,7 +87,7 @@ def _load_bundled() -> dict | None:
 
 def ranking(*, force_reload: bool = False) -> dict:
     """The calibration in force, database first, bundled file second."""
-    global _cached, _cached_at, _cached_stored_at, _checked_at
+    global _bundled
 
     # A complete override stands alone — that is what lets the very first
     # calibration run on a corpus that has never been calibrated, with
@@ -105,58 +95,24 @@ def ranking(*, force_reload: bool = False) -> dict:
     if _override is not None and set(_override) >= _REQUIRED_KEYS:
         return _override
 
-    # The one database read here happens outside _lock, which every search
-    # thread takes: under it, one slow read would hold all searches up.
-    from app.shared_state import UNREADABLE
-
-    now = time.monotonic()
+    stored = _calibration.get(force=force_reload)
+    if stored is not None:
+        return _with_override(stored)
+    # No stored calibration (or none readable yet): the bundled one, read
+    # once per process — it changes only with a deploy.
     with _lock:
-        cached, cached_at, cached_stored = _cached, _cached_at, _cached_stored_at
-        expired = cached is None or now - cached_at >= _RELOAD_AFTER_SECONDS or force_reload
-        due = expired or now - _checked_at >= _CHECK_STORED_EVERY_SECONDS
-        if due:
-            _checked_at = now  # one thread checks; the rest keep serving
-    if not due:
-        return _with_override(cached)
-
-    row = _stored()
-    stored_at = row[0] if isinstance(row, tuple) else None
-    if cached is not None:
-        unchanged = row is not UNREADABLE and stored_at == cached_stored
-        # UNREADABLE: the database can't be read right now — keep what we
-        # have (forced or not) rather than fall back to the bundled one.
-        if row is UNREADABLE or (unchanged and not force_reload):
-            return _keep(cached, now)
-
-    payload = _decode(row[1]) if isinstance(row, tuple) else None
-    if payload is None and isinstance(row, tuple) and cached is not None:
-        # A stored calibration exists but couldn't be decoded: the one in
-        # hand is better than the bundled one.
-        return _keep(cached, now)
-    loaded = payload or _load_bundled()
-    if not loaded:
+        bundled = _bundled
+    if bundled is None or force_reload:
+        bundled = _load_bundled()
+        with _lock:
+            _bundled = bundled
+    if not bundled:
         raise RankingCalibrationMissing(
             "No explore ranking calibration available. Run "
             "backend/scripts/calibrate_explore_ranking.py --write, or run "
             "the explore pipeline, which calibrates as its last step."
         )
-    with _lock:
-        _cached, _cached_at = loaded, time.monotonic()
-        # Stamped with the row only when it came from the row: a bundled
-        # stand-in stays "not the stored one", so the next check reloads.
-        _cached_stored_at = stored_at if payload is not None else None
-    return _with_override(loaded)
-
-
-def _keep(cached: dict, now: float) -> dict:
-    """Serve the calibration in hand, and count it as fresh: kept after a
-    failed read, it must not be re-read on every call until one succeeds —
-    the 30-second check still picks up a replacement."""
-    global _cached_at
-    with _lock:
-        if _cached is cached:
-            _cached_at = now
-    return _with_override(cached)
+    return _with_override(bundled)
 
 
 def _with_override(calibration: dict) -> dict:
@@ -195,9 +151,10 @@ def override(values: dict):
 
 def reset_cache() -> None:
     """Drop the in-process cache (used after a pipeline recalibration)."""
-    global _cached, _cached_at
+    global _bundled
+    _calibration.reset()
     with _lock:
-        _cached, _cached_at = None, 0.0
+        _bundled = None
 
 
 # ── typed accessors ──────────────────────────────────────────────

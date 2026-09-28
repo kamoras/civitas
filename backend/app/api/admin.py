@@ -743,6 +743,9 @@ async def admin_dashboard(db: Session = Depends(get_db)):
     )
 
     uptime_info: dict = {
+        # This process's start. /api/admin/ is served by the pipeline
+        # process (nginx/civitas.conf), so it is that one's — which is what
+        # the pipeline timeline needs (a restart ends a running pipeline).
         "processStartedAt": PROCESS_STARTED_AT,
         "firstPipelineRun": first_run.isoformat() if first_run else None,
         "totalRestarts": total_runs,

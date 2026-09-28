@@ -342,7 +342,20 @@ async def get_explore_document_summary(
     """
     from app.api import throttle
 
-    if not await asyncio.to_thread(throttle.claim, _SUMMARY_BUCKET, str(doc_id), period=_SUMMARY_COOLDOWN):
+    # Fail closed: this cooldown is what stands between a repeated POST and
+    # a fresh generation on the device's one LLM, so a store that can't
+    # answer refuses the request rather than letting every one through.
+    try:
+        claimed = await asyncio.to_thread(
+            throttle.claim, _SUMMARY_BUCKET, str(doc_id), period=_SUMMARY_COOLDOWN, fail_open=False,
+        )
+    except throttle.Unavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Summaries are unavailable right now; please try again shortly.",
+            headers={"Retry-After": "60"},
+        ) from None
+    if not claimed:
         raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
 
     from app.pipeline.analyze.ollama_client import get_cached_llm_result, set_cached_llm_result, stream_llm

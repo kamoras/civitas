@@ -497,14 +497,14 @@ class PulseVoteRequest(BaseModel):
 
 
 # Keyed on an HMAC of the IP and the issue under the throttle store's own
-# salt for the day (throttle.client_key), never the IP itself: a raw address
-# held for a day is exactly the per-visitor identifier §8 of AGENTS.md rules
-# out, and the salt is replaced when the UTC day ends, so yesterday's keys
-# cannot be turned back into addresses. A new salt also means a new key,
-# which makes the dedup "one stance per issue per UTC day" — what the 429
-# says. Held in the store every API worker process shares, in RAM
-# (api/throttle.py): a per-process record let a second vote through on the
-# other worker.
+# daily salt (throttle.client_key), never the IP itself: a raw address held
+# for a day is exactly the per-visitor identifier §8 of AGENTS.md rules out,
+# and each salt is deleted once the day after its own ends, so older keys
+# cannot be turned back into addresses. The claim is checked under the
+# client's previous-day key too, so the dedup is a rolling 24 hours, not
+# reset at midnight. Held in the store every API worker process shares, in
+# RAM (api/throttle.py): a per-process record let a second vote through on
+# the other worker.
 _PULSE_BUCKET = "pulse"
 _PULSE_DEDUP_WINDOW = 60.0 * 60 * 24
 
@@ -547,7 +547,7 @@ async def record_pulse_vote(
     if not claimed:
         raise HTTPException(
             status_code=429,
-            detail="You've already registered a stance on this issue today.",
+            detail="You've already registered a stance on this issue in the last 24 hours.",
         )
 
     # Until the vote commits, a failure means no vote was recorded, so the

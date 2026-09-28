@@ -194,14 +194,22 @@ if [[ -z "${FORCE_DEPLOY:-}" ]] && command -v gh >/dev/null 2>&1; then
   esac
 fi
 
-# Whether every replica `service` wants is running. With a HEALTHCHECK,
-# Swarm holds a task in "starting" until it passes, so "Running" here means
-# healthy.
+# Whether every replica `service` wants is running the service's current
+# image. With a HEALTHCHECK, Swarm holds a task in "starting" until it
+# passes, so "Running" here means healthy. The image comparison is what
+# makes this about the new release: during a start-first update the old
+# task is Running too, and wait_for_rollout's state check alone relies on
+# Swarm having flipped UpdateStatus to "updating" before its first read.
+# `docker service ps` prints images without their @digest, so the spec's
+# is stripped to match.
 service_is_up() {
-  local service="$1" desired running
+  local service="$1" desired image running
   desired=$(docker service inspect "$service" --format '{{.Spec.Mode.Replicated.Replicas}}' 2>/dev/null) || return 1
-  running=$(docker service ps "$service" --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | grep -c '^Running' || true)
-  [[ "$desired" =~ ^[0-9]+$ && "$desired" -gt 0 && "$running" -ge "$desired" ]]
+  image=$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null) || return 1
+  image="${image%%@*}"
+  running=$(docker service ps "$service" --filter desired-state=running --format '{{.Image}}|{{.CurrentState}}' 2>/dev/null \
+    | awk -F'|' -v img="$image" '$1 == img && $2 ~ /^Running/ { n++ } END { print n + 0 }')
+  [[ -n "$image" && "$desired" =~ ^[0-9]+$ && "$desired" -gt 0 && "$running" -ge "$desired" ]]
 }
 
 wait_for_rollout() {

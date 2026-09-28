@@ -129,6 +129,21 @@ class TestSummaryEndpointGuards:
                 await get_explore_document_summary(doc.id, None, db=db_session)
         assert exc_info.value.status_code == 429
 
+    async def test_an_unavailable_cooldown_refuses_rather_than_generates(self, db_session, tmp_path):
+        """The cooldown fails closed: without it every POST is a fresh
+        generation on the device's one LLM."""
+        from fastapi import HTTPException
+
+        from app.api import throttle
+
+        doc = _make_doc(db_session)
+        throttle.use_path(str(tmp_path / "missing-dir" / "throttle.db"))
+        with patch("app.pipeline.analyze.ollama_client.stream_llm") as stream:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_explore_document_summary(doc.id, None, db=db_session)
+        assert exc_info.value.status_code == 503
+        stream.assert_not_called()
+
 
 class TestCommentsCaching:
     """Comments are fetched live from regulations.gov: an error is this

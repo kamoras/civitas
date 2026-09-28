@@ -106,14 +106,27 @@ _LIVENESS_EVERY_S = 300
 _LIVENESS_GRACE_S = 1800
 
 
-async def _watch_pipeline_service() -> None:
-    """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive)."""
+def _check_pipeline_service_once() -> None:
+    """One worker's turn at the check. Every API worker runs the watch, in
+    near lockstep (they start together), and the alert's once-a-day dedupe
+    is a read then a write — two workers checking at once could both send.
+    So each round goes to whichever worker claims it first. Half the
+    interval, so the claim has lapsed by the next round whichever worker
+    ran this one. A store that can't answer lets both check: a duplicate
+    alert beats a missed one."""
+    from app.api import throttle
     from app.ops_alerts import check_pipeline_service_alive
 
+    if throttle.claim("pipeline-liveness", "check", period=_LIVENESS_EVERY_S / 2):
+        check_pipeline_service_alive()
+
+
+async def _watch_pipeline_service() -> None:
+    """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive)."""
     await asyncio.sleep(_LIVENESS_GRACE_S)
     while True:
         try:
-            await asyncio.to_thread(check_pipeline_service_alive)
+            await asyncio.to_thread(_check_pipeline_service_once)
         except Exception:
             logging.getLogger("app.main").warning("Pipeline liveness check failed", exc_info=True)
         await asyncio.sleep(_LIVENESS_EVERY_S)

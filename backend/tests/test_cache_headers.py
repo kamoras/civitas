@@ -125,6 +125,30 @@ def test_matching_conditional_request_gets_304_with_no_body(client):
     assert resp.headers["ETag"] == etag
 
 
+def test_a_304_keeps_the_headers_the_200_carried(client):
+    """A client refreshes its stored copy's headers from a 304: CORS and
+    the public API's X-RateLimit counts must come through, and nothing
+    describing a body may."""
+    app = client.app
+
+    @app.get("/api/public/thing")
+    def thing():
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"ok": True}, headers={
+            "Access-Control-Allow-Origin": "*", "X-RateLimit-Remaining": "7",
+            "Cache-Control": "private, max-age=60",
+        })
+
+    etag = client.get("/api/public/thing").headers["ETag"]
+    r = client.get("/api/public/thing", headers={"If-None-Match": etag})
+    assert r.status_code == 304 and r.content == b""
+    assert r.headers["Access-Control-Allow-Origin"] == "*"
+    assert r.headers["X-RateLimit-Remaining"] == "7"
+    assert r.headers["Cache-Control"] == "private, max-age=60"
+    assert "content-type" not in r.headers and r.headers.get("content-length") in (None, "0")
+
+
 def test_stale_conditional_request_gets_a_fresh_body(client):
     resp = client.get("/api/senators", headers={"If-None-Match": 'W/"stale"'})
     assert resp.status_code == 200

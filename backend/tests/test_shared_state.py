@@ -38,3 +38,62 @@ def test_an_unreadable_database_is_unreadable_not_missing(monkeypatch):
 
     monkeypatch.setattr("app.database.SessionLocal", broken)
     assert read_row("t", "k") is UNREADABLE
+
+
+class TestPolledRow:
+    """The one rule for a value another process writes: every consumer
+    (explore_ranking, race_relevance) gets it from here."""
+
+    @staticmethod
+    def _polled(rows):
+        from app.shared_state import PolledRow, decode_json_dict
+
+        reads = []
+
+        def reader(_db):
+            reads.append(1)
+            return rows[0]
+
+        return PolledRow("t", "k", every_s=30, decode=decode_json_dict, reader=reader), reads
+
+    def test_reads_once_per_interval(self):
+        polled, reads = self._polled([(datetime(2026, 1, 1), {"a": 1})])
+        for _ in range(5):
+            assert polled.get() == {"a": 1}
+        assert reads == [1]
+
+    def test_a_replaced_row_is_picked_up_at_the_next_check(self):
+        rows = [(datetime(2026, 1, 1), {"a": 1})]
+        polled, _ = self._polled(rows)
+        polled.get()
+        rows[0] = (datetime(2026, 1, 2), '{"a": 2}')  # encoded twice, as api_cache_set writes
+        assert polled.get() == {"a": 1}
+        polled.expire()
+        assert polled.get() == {"a": 2}
+
+    def test_unreadable_keeps_the_value(self):
+        rows = [(datetime(2026, 1, 1), {"a": 1})]
+        polled, _ = self._polled(rows)
+        polled.get()
+        rows[0] = UNREADABLE
+        polled.expire()
+        assert polled.get() == {"a": 1}
+
+    def test_an_undecodable_replacement_keeps_the_value_and_is_retried(self):
+        rows = [(datetime(2026, 1, 1), {"a": 1})]
+        polled, _ = self._polled(rows)
+        polled.get()
+        rows[0] = (datetime(2026, 1, 2), "not json")
+        polled.expire()
+        assert polled.get() == {"a": 1}
+        rows[0] = (datetime(2026, 1, 2), {"a": 3})  # same stamp, readable now
+        polled.expire()
+        assert polled.get() == {"a": 3}
+
+    def test_a_removed_row_is_none(self):
+        rows = [(datetime(2026, 1, 1), {"a": 1})]
+        polled, _ = self._polled(rows)
+        polled.get()
+        rows[0] = None
+        polled.expire()
+        assert polled.get() is None

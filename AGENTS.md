@@ -980,8 +980,10 @@ the pending list).
     (`/dev/shm`), shared by the container's workers and never on disk —
     the same lifetime and exposure the per-process dicts had. Keys come
     from `throttle.client_key`: an HMAC of the IP under the store's own
-    salt for the current day — never an IP, and never the visitor hash
-    `SiteVisit` stores. Every row expires. The hourly upstream-lookup
+    daily salt — never an IP, and never the visitor hash `SiteVisit`
+    stores. A salt is deleted once the day after its own ends, and rules
+    count a client's previous-day key too, so nothing resets at midnight.
+    Every row expires. The hourly upstream-lookup
     budget (`rate_limit.spend_upstream`) is one shared count the same way.
     Caches of data every client sees alike (`bill_service`'s collection
     cache) are fine per process.

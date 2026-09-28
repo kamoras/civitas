@@ -116,5 +116,5 @@ def test_a_recalibration_by_another_process_is_picked_up(db_session, monkeypatch
     row.cached_at = utcnow() + timedelta(seconds=1)
     db_session.commit()  # written elsewhere: no reset_cache() here
     assert rr.threshold(db_session) == 0.42  # within the check interval
-    monkeypatch.setattr(rr, "_checked_at", 0.0)
+    rr._calibration.expire()
     assert rr.threshold(db_session) == 0.55

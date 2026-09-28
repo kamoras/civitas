@@ -16,10 +16,16 @@ container restarts — and the same exposure: what it records about visitors
 container's memory, as the dicts could, never from the data volume.
 
 Keys. Per-client keys are an HMAC of the client IP (with a purpose and a
-scope) under a random salt this store keeps for the current UTC day only
-(client_key). The IP itself is never stored, a key can't be joined to
-SiteVisit's visitor hash (a different salt), and once the day's salt is
-replaced no key can be recomputed from an address.
+scope) under a random salt this store makes for each UTC day (client_key).
+The IP itself is never stored, a key can't be joined to SiteVisit's visitor
+hash (a different salt), and once a day's salt is deleted no key made with
+it can be recomputed from an address. A day's salt is kept through the
+next day, not deleted at midnight: a client's limits and claims are
+counted under both its keys, so a rule doesn't restart at 00:00 UTC — a
+pulse vote at 23:59 must still hold off a second one a minute later, as
+the per-process dicts' rolling 24 hours did (and a rate window straddling
+midnight must still count both halves). No rule here is longer than a day,
+so that is as long as an old key can matter.
 
 Tables:
 
@@ -61,7 +67,7 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -243,32 +249,43 @@ def _purge_expired(conn: sqlite3.Connection, now: float) -> None:
     conn.execute("DELETE FROM claims WHERE expires_at < ?", (now,))
 
 
-# (date, salt) as last read from the store, per process. Only a new day
-# costs a write transaction; every other key is made without one.
-_salt_cache: tuple[str, bytes] | None = None
+# (date, that day's salt, the previous day's or None) as last read from the
+# store, per process. Only a new day costs a write transaction; every other
+# key is made without one.
+_salt_cache: tuple[str, bytes, bytes | None] | None = None
 _salt_lock = threading.Lock()
 _last_forget = -_PURGE_INTERVAL_S  # the first call always checks
 
 
-def _salt_for(today: str) -> bytes:
+def _yesterday(today: str) -> str:
+    return (date.fromisoformat(today) - timedelta(days=1)).isoformat()
+
+
+def _salts_for(today: str) -> tuple[bytes, bytes | None]:
+    """Today's salt (made if missing) and yesterday's, if the store has it.
+    Never makes yesterday's: a key under a salt nobody counted with would
+    only find nothing."""
     global _salt_cache
     with _salt_lock:
         if _salt_cache is not None and _salt_cache[0] == today:
-            return _salt_cache[1]
+            return _salt_cache[1], _salt_cache[2]
+    yesterday = _yesterday(today)
     with _Txn() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO salts (date, salt) VALUES (?, ?)", (today, secrets.token_bytes(32)),
         )
-        dropped = conn.execute("DELETE FROM salts WHERE date < ?", (today,)).rowcount
+        dropped = conn.execute("DELETE FROM salts WHERE date < ?", (yesterday,)).rowcount
         salt = conn.execute("SELECT salt FROM salts WHERE date = ?", (today,)).fetchone()[0]
+        row = conn.execute("SELECT salt FROM salts WHERE date = ?", (yesterday,)).fetchone()
+        previous = row[0] if row else None
     if dropped:
         # Truncating can wait on another worker's read, so it never runs on
         # a request: the minute tick (forget_stale_salt) does it.
         global _truncate_pending
         _truncate_pending = True
     with _salt_lock:
-        _salt_cache = (today, salt)
-    return salt
+        _salt_cache = (today, salt, previous)
+    return salt, previous
 
 
 _truncate_pending = False
@@ -291,11 +308,12 @@ def _truncate_wal() -> None:
 
 
 def forget_stale_salt() -> None:
-    """Drop a salt for a day that has ended — from this process's memory,
-    and from the store — without waiting for the new day's first key.
-    Called about once a minute (visits.run_visit_consumer's idle tick): with
-    the old salt gone, no key from that day can be recomputed from an
-    address. Creates nothing where the store doesn't exist yet."""
+    """Drop the salts no rule needs any more (a day's, once the day after it
+    has ended) — from this process's memory, and from the store — without
+    waiting for a new day's first key. Called about once a minute
+    (visits.run_visit_consumer's idle tick): with the salt gone, no key
+    made with it can be recomputed from an address. Creates nothing where
+    the store doesn't exist yet."""
     global _salt_cache, _last_forget
     today = datetime.now(timezone.utc).date().isoformat()
     with _salt_lock:
@@ -309,7 +327,7 @@ def forget_stale_salt() -> None:
         return
     try:
         with _Txn() as conn:
-            dropped = conn.execute("DELETE FROM salts WHERE date < ?", (today,)).rowcount
+            dropped = conn.execute("DELETE FROM salts WHERE date < ?", (_yesterday(today),)).rowcount
         if dropped or _truncate_pending:
             _truncate_wal()
     except sqlite3.Error:
@@ -323,30 +341,50 @@ def derived_salt(purpose: str) -> bytes | None:
     can't be read either."""
     today = datetime.now(timezone.utc).date().isoformat()
     try:
-        salt = _salt_for(today)
+        salt, _previous = _salts_for(today)
     except sqlite3.Error:
         return None
     return hmac.new(salt, f"derived\x00{purpose}".encode(), hashlib.sha256).digest()
 
 
-def client_key(ip: str, purpose: str, scope: str = "") -> str | None:
+class ClientKey(str):
+    """A client's key under today's salt, carrying its key under
+    yesterday's (`previous`, None when the store has no salt for
+    yesterday): hit and claim count both, so a rule holds across midnight."""
+
+    previous: str | None = None
+
+
+def _hmac_key(salt: bytes, message: bytes) -> str:
+    return hmac.new(salt, message, hashlib.sha256).hexdigest()[:32]
+
+
+def client_key(ip: str, purpose: str, scope: str = "") -> ClientKey | None:
     """The key a per-client limit counts `ip` under, for `purpose` (and
-    `scope` within it: the issue a pulse vote is on). Keyed by a salt that
-    exists for the current UTC day only; the previous day's is deleted when
-    the first key of a new day is made. Only earlier days are deleted, never
-    "any other": a worker that read the clock just before midnight must not
-    delete the new day's salt another worker already made (and cached).
+    `scope` within it: the issue a pulse vote is on), with its key under
+    yesterday's salt. A day's salt is deleted once the day after it ends
+    (the first key of the day after that, or the minute tick). Only
+    earlier days are deleted, never "any other": a worker that read the
+    clock just before midnight must not delete the new day's salt another
+    worker already made (and cached).
 
     None when the store can't be read: hit and claim then let the request
     through, as they would on their own failure — never one shared key,
     which would count every affected client as one."""
     today = datetime.now(timezone.utc).date().isoformat()
     try:
-        salt = _salt_for(today)
+        salt, previous = _salts_for(today)
     except sqlite3.Error:
         logger.warning("Throttle salt unavailable — not limiting this request", exc_info=True)
         return None
-    return hmac.new(salt, f"{purpose}\x00{ip}\x00{scope}".encode(), hashlib.sha256).hexdigest()[:32]
+    message = f"{purpose}\x00{ip}\x00{scope}".encode()
+    key = ClientKey(_hmac_key(salt, message))
+    key.previous = _hmac_key(previous, message) if previous is not None else None
+    return key
+
+
+def _previous_key(key: str) -> str | None:
+    return getattr(key, "previous", None)
 
 
 def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 1) -> Decision:
@@ -364,26 +402,28 @@ def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 
     reset_at = int((window + 2) * period)
     if key is None:
         return Decision(True, limit, int((window + 1) * period))
+    # Counted under today's key; read under yesterday's too (ClientKey).
+    keys = (str(key), _previous_key(key) or str(key))
     try:
         with _Txn() as conn:
-            current = conn.execute(
+            conn.execute(
                 "INSERT INTO windows (bucket, key, window, count, expires_at) VALUES (?, ?, ?, ?, ?) "
-                "ON CONFLICT (bucket, key, window) DO UPDATE SET count = count + excluded.count "
-                "RETURNING count",
-                (bucket, key, window, cost, (window + 2) * period),
-            ).fetchone()[0]
-            row = conn.execute(
-                "SELECT count FROM windows WHERE bucket = ? AND key = ? AND window = ?",
-                (bucket, key, window - 1),
+                "ON CONFLICT (bucket, key, window) DO UPDATE SET count = count + excluded.count",
+                (bucket, str(key), window, cost, (window + 2) * period),
+            )
+            current, previous = conn.execute(
+                "SELECT COALESCE(SUM(CASE WHEN window = ? THEN count END), 0), "
+                "COALESCE(SUM(CASE WHEN window = ? THEN count END), 0) "
+                "FROM windows WHERE bucket = ? AND key IN (?, ?) AND window IN (?, ?)",
+                (window, window - 1, bucket, *keys, window, window - 1),
             ).fetchone()
-            previous = row[0] if row else 0
             estimate = previous * (1 - elapsed) + current
             allowed = estimate <= limit
             if not allowed:
                 reset_at = _retry_at(window, period, current - cost, previous, limit, cost)
                 conn.execute(
                     "UPDATE windows SET count = count - ? WHERE bucket = ? AND key = ? AND window = ?",
-                    (cost, bucket, key, window),
+                    (cost, bucket, str(key), window),
                 )
             _purge_expired(conn, now)
     except sqlite3.Error:
@@ -407,14 +447,20 @@ def claim(bucket: str, key: str | None, *, period: float, fail_open: bool = True
             raise Unavailable(bucket)
         return True
     now = time.time()
+    previous = _previous_key(key)
     try:
         with _Txn() as conn:
-            won = conn.execute(
+            # A claim made under yesterday's key (ClientKey) still holds.
+            held = previous is not None and conn.execute(
+                "SELECT 1 FROM claims WHERE bucket = ? AND key = ? AND claimed_at > ?",
+                (bucket, previous, now - period),
+            ).fetchone() is not None
+            won = not held and conn.execute(
                 "INSERT INTO claims (bucket, key, claimed_at, expires_at) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT (bucket, key) DO UPDATE SET claimed_at = excluded.claimed_at, "
                 "expires_at = excluded.expires_at WHERE claims.claimed_at <= ? "
                 "RETURNING claimed_at",
-                (bucket, key, now, now + period, now - period),
+                (bucket, str(key), now, now + period, now - period),
             ).fetchone() is not None
             _purge_expired(conn, now)
     except sqlite3.Error as error:
@@ -432,7 +478,7 @@ def release(bucket: str, key: str | None) -> None:
         return
     try:
         with _Txn() as conn:
-            conn.execute("DELETE FROM claims WHERE bucket = ? AND key = ?", (bucket, key))
+            conn.execute("DELETE FROM claims WHERE bucket = ? AND key = ?", (bucket, str(key)))
     except sqlite3.Error:
         logger.warning("Throttle %r release failed", bucket, exc_info=True)
 

@@ -77,10 +77,13 @@ def _rl_headers(request: Request) -> dict:
 
 
 def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
+    # private: the caller's browser may reuse it, a shared cache (nginx, a
+    # CDN) may not — the X-RateLimit headers are this caller's own counts,
+    # and a cached copy would hand them to everyone else.
     return JSONResponse(
         content=data,
         headers={
-            "Cache-Control": f"public, max-age={max_age}",
+            "Cache-Control": f"private, max-age={max_age}",
             **_CORS_HEADERS,
             **_rl_headers(request),
         },

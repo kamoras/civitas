@@ -73,6 +73,10 @@ def _etag_for(body: bytes) -> str:
     return f'W/"{digest}"'
 
 
+# Headers that describe a body, which a 304 has none of.
+_BODY_HEADERS = {b"content-length", b"content-type", b"content-encoding", b"transfer-encoding"}
+
+
 def _is_cacheable_path(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in CACHEABLE_PREFIXES)
 
@@ -107,10 +111,19 @@ class ETagCacheMiddleware(BaseHTTPMiddleware):
             vary = f"{vary}, Accept-Encoding"
 
         if _if_none_match_matches(request.headers.get("if-none-match"), etag):
-            return Response(
-                status_code=304,
-                headers={"ETag": etag, "Cache-Control": cache_control, "Vary": vary},
-            )
+            # Everything the 200 would have carried but the body's own
+            # description: a client updates its stored copy's headers from
+            # a 304, so dropping CORS or the public API's X-RateLimit
+            # headers here would leave it holding stale ones.
+            not_modified = Response(status_code=304)
+            not_modified.raw_headers = [
+                (name, value) for name, value in response.raw_headers
+                if name.lower() not in _BODY_HEADERS
+            ]
+            not_modified.headers["ETag"] = etag
+            not_modified.headers["Cache-Control"] = cache_control
+            not_modified.headers["Vary"] = vary
+            return not_modified
 
         fresh = Response(content=body, status_code=200)
         fresh.raw_headers = list(response.raw_headers)

@@ -461,3 +461,50 @@ def test_a_worker_behind_midnight_keeps_the_new_days_salt(throttle_store, monkey
     throttle.use_path(throttle_store)
     monkeypatch.setattr(throttle, "datetime", on(2))
     assert throttle.client_key("203.0.113.1", "write") == tomorrow
+
+
+class TestAcrossMidnight:
+    """A day's salt outlives its day by one, so nothing restarts at 00:00 UTC."""
+
+    @staticmethod
+    def _at(monkeypatch, day, hour, minute=0, second=0):
+        moment = datetime(2099, 1, day, hour, minute, second, tzinfo=timezone.utc)
+
+        class _At(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return moment
+
+        monkeypatch.setattr(throttle, "datetime", _At)
+        monkeypatch.setattr(throttle.time, "time", lambda: moment.timestamp())
+
+    def test_a_claim_before_midnight_still_holds_after_it(self, throttle_store, monkeypatch):
+        self._at(monkeypatch, 1, 23, 59)
+        assert throttle.claim("pulse", throttle.client_key("203.0.113.1", "pulse", "7"), period=86400)
+        self._at(monkeypatch, 2, 0, 1)
+        assert not throttle.claim("pulse", throttle.client_key("203.0.113.1", "pulse", "7"), period=86400)
+        self._at(monkeypatch, 2, 23, 59, 30)  # a full day on
+        assert throttle.claim("pulse", throttle.client_key("203.0.113.1", "pulse", "7"), period=86400)
+
+    def test_a_window_straddling_midnight_counts_both_halves(self, throttle_store, monkeypatch):
+        self._at(monkeypatch, 1, 23, 59, 50)
+        for _ in range(5):
+            assert throttle.hit("write", throttle.client_key("203.0.113.1", "write"), limit=5, period=60).allowed
+        self._at(monkeypatch, 2, 0, 0, 5)
+        assert not throttle.hit("write", throttle.client_key("203.0.113.1", "write"), limit=5, period=60).allowed
+
+    def test_yesterdays_salt_is_kept_and_the_day_befores_dropped(self, throttle_store, monkeypatch):
+        self._at(monkeypatch, 1, 12)
+        throttle.client_key("203.0.113.1", "write")
+        self._at(monkeypatch, 2, 12)
+        key = throttle.client_key("203.0.113.1", "write")
+        assert key.previous is not None
+        assert _rows(throttle_store, "SELECT date FROM salts ORDER BY date") == [("2099-01-01",), ("2099-01-02",)]
+        self._at(monkeypatch, 3, 0, 0, 30)
+        monkeypatch.setattr(throttle, "_last_forget", -1e9)
+        throttle.forget_stale_salt()
+        assert _rows(throttle_store, "SELECT date FROM salts") == [("2099-01-02",)]
+        assert throttle.client_key("203.0.113.1", "write").previous == key
+
+    def test_a_first_day_has_no_previous_key(self):
+        assert throttle.client_key("203.0.113.1", "write").previous is None
