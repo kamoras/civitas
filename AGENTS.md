@@ -1000,8 +1000,9 @@ the pending list).
     catch-all `/api/` hands misses to an internal loopback server
     ("api-misses") that applies `limit_req` before the backend, because a
     limit on `/api/` itself runs before the cache and would refuse cache
-    hits. Explore search keeps its own limit; `/api/config`, `/api/og` and
-    `/api/admin/` have none. Only `/api/config` sets its own lifetime there, and
+    hits. Explore search's misses get a tighter limit of their own;
+    `/api/config`, `/api/og` and `/api/admin/` have none. Only `/api/config`
+    and `/api/og` (a frontend route) set their own lifetime there, and
     `/api/public/` is deliberately uncached (its responses carry the
     caller's own rate-limit counts)
 

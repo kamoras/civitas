@@ -325,6 +325,13 @@ _SUMMARY_COOLDOWN = 30.0
 _SUMMARY_CACHE_KEY_VERSION = 4  # bump alongside explore_document_summary_prompt's promptVersion
 
 
+# A stream is read as it is written: nginx buffers proxied responses by
+# default (and the /api/ catch-all turns buffering on for its cache), which
+# would hold every delta until the generation ended. X-Accel-Buffering is
+# nginx's per-response off switch; no-cache keeps any cache out of it.
+_STREAM_HEADERS = {"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
+
+
 def _sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
@@ -373,7 +380,7 @@ async def get_explore_document_summary(
         async def cached_stream():
             yield _sse({"done": True, **cached})
 
-        return StreamingResponse(cached_stream(), media_type="text/event-stream")
+        return StreamingResponse(cached_stream(), media_type="text/event-stream", headers=_STREAM_HEADERS)
 
     # The cooldown guards a fresh generation only, and fails closed: it is
     # what stands between a repeated POST and a new generation on the
@@ -420,7 +427,7 @@ async def get_explore_document_summary(
             await asyncio.to_thread(set_cached_llm_result, prompt["promptVersion"], cache_key, parsed)
         yield _sse({"done": True, **parsed})
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=_STREAM_HEADERS)
 
 
 @router.post("/pipeline/trigger")

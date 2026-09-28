@@ -53,12 +53,10 @@ def client_ip(request: Request) -> str:
     sending a different fake value per request; taking the LAST hop (set
     by nginx from its own view of the peer) is the unspoofable choice.
 
-    Caveat: nginx has no `real_ip` module, so its $remote_addr — hence the
-    last XFF hop — is whatever connects to nginx. With an IP-preserving
-    external port-forward (DNAT) that is the true client; behind a
-    userspace/NAT forwarder it is that forwarder's address. Either way this
-    is strictly better than bucketing every request under nginx's overlay
-    IP, and never worse from a spoofing standpoint.
+    nginx sets that last hop from its $remote_addr, which its realip
+    configuration (nginx/civitas.conf: set_real_ip_from the host-level
+    nginx, real_ip_header X-Real-IP) resolves to the visitor; the internal
+    cache-miss hop passes the header on unchanged rather than adding itself.
     """
     peer = request.client.host if request.client else None
     if _is_trusted_proxy_peer(peer):

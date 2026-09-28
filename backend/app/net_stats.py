@@ -121,6 +121,19 @@ def _record_path() -> str:
     return record_path(f"{_RECORD_PREFIX}{socket.gethostname()}.json")
 
 
+def forget_own_record() -> None:
+    """Remove this container's record as its API process stops (a rolling
+    update replacing it), so the dashboard doesn't count it for the minutes
+    until it would have gone stale. The container's other worker, if it
+    keeps running, writes it again within a round."""
+    import os
+
+    try:
+        os.unlink(_record_path())
+    except OSError:
+        pass
+
+
 async def run_recorder() -> None:
     """The API process's recording loop (main.lifespan, PROCESS_ROLE=api).
     Every worker in the container runs it; each round goes to one of them

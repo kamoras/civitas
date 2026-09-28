@@ -317,14 +317,15 @@ fi
 # back, the reverse). Once the rollout has settled, start a new cache epoch:
 # the epoch is part of every cache key, so nothing cached before is matched
 # again, and the old entries age out through nginx's own cache manager. A
-# graceful reload, not a restart: requests in flight finish. (Deleting the
+# graceful reload, not a restart: requests in flight finish; checked first
+# (nginx -t), since a reload that fails only logs and exits 0. (Deleting the
 # cache files instead left nginx's index pointing at files that were gone.)
 purge_nginx_cache() {
   local container epoch
   epoch=$(date +%s)
   for container in $(docker ps -q --filter "label=com.docker.swarm.service.name=civitas_nginx"); do
     docker exec "$container" sh -c \
-      "printf '\"~.\" \"%s\";\n' '$epoch' > /etc/nginx/cache-epoch/epoch.conf && nginx -s reload" \
+      "printf '\"~.\" \"%s\";\n' '$epoch' > /etc/nginx/cache-epoch/epoch.conf && nginx -t -q && nginx -s reload" \
       || log "couldn't start a new nginx cache epoch in $container — entries expire within their max-age"
   done
 }

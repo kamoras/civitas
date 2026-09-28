@@ -290,6 +290,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         liveness_task.cancel()
     if net_task is not None:
         net_task.cancel()
+        from app.net_stats import forget_own_record
+
+        forget_own_record()
     if bootstrap_task is not None:
         bootstrap_task.cancel()
     stop_scheduler()

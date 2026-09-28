@@ -31,8 +31,9 @@ SERVED_BY_API = {
 
 
 _LOCATION = re.compile(r"^\s*location\s+(=|~|\^~)?\s*(\S+)\s*\{(.*?)^\s*\}", re.M | re.S)
-# The internal server the catch-all /api/ hands its cache misses to.
-_MISSES_HOP = "127.0.0.1:8090"
+# The upstream (the internal api-misses server) the catch-all /api/ hands
+# its cache misses to.
+_MISSES_HOP = "api_misses"
 
 
 def _locations() -> list[tuple[str, str, str]]:
@@ -145,6 +146,9 @@ def test_cache_misses_of_the_catch_all_are_rate_limited_and_hits_are_not():
     catch_all = next(m.group(3) for m in _LOCATION.finditer(public) if m.group(2) == "/api/" and not m.group(1))
     assert "limit_req" not in catch_all and _MISSES_HOP in catch_all
     assert "limit_req zone=api_miss_limit" in internal
+    explore = next(m.group(3) for m in _LOCATION.finditer(public) if m.group(2) == "/api/explore")
+    assert "limit_req" not in explore and _MISSES_HOP in explore
+    assert "limit_req zone=search_miss_limit" in internal
     # The hop mustn't append itself to X-Forwarded-For: its last entry is
     # how the backend identifies clients.
     assert "$proxy_add_x_forwarded_for" not in internal

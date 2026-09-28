@@ -79,3 +79,10 @@ def test_a_long_gone_containers_record_is_deleted(tmp_path, monkeypatch):
     past = time.time() - 3 * 86400
     os.utime(old, (past, past))
     assert net_stats.api_rates() is None and not old.exists()
+
+
+def test_a_stopping_container_forgets_its_record(tmp_path, monkeypatch):
+    _at(monkeypatch, tmp_path, host="leaving")
+    write_record(str(tmp_path / "api_network-leaving.json"), {"rxRate": 9.0, "txRate": 9.0})
+    net_stats.forget_own_record()
+    assert net_stats.api_rates() is None
