@@ -796,6 +796,32 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         found = sc._match_candidate(rows, "Smith", "I", display)
         assert (found is not None and found.id == "H1") is matches
 
+    def test_a_first_last_comma_jr_printing_keeps_its_given_name(self, db_session):
+        """Tennessee and Maryland print "John A. Olszewski, Jr." — that comma
+        is not "Last, First", and read as one the name had no given name:
+        the different-person check never fired, and the namesake tie-break
+        lost the only thing that tells two Floreses apart."""
+        _race(db_session, "2026-HOUSE-TX-34", "TX", office="H", district=34)
+        _candidate(db_session, "E", "2026-HOUSE-TX-34", "FLORES, ERIC", party="DEM")
+        _candidate(db_session, "M", "2026-HOUSE-TX-34", "FLORES, MAYRA", party="DEM")
+        _race(db_session, "2026-HOUSE-MD-2", "MD", office="H", district=2)
+        _candidate(db_session, "O", "2026-HOUSE-MD-2", "OLSZEWSKI, MARY", party="DEM")
+        db_session.commit()
+        tx = db_session.get(Race, "2026-HOUSE-TX-34").candidates
+        md = db_session.get(Race, "2026-HOUSE-MD-2").candidates
+        assert sc._match_candidate(tx, "FLORES", "D", "Eric Flores, Jr.").id == "E"
+        assert sc._match_candidate(md, "OLSZEWSKI", "L", "John A. Olszewski, Jr.") is None
+
+    def test_a_leading_initial_is_the_records_own(self, db_session):
+        """"J. Robert Smith" fits JAMES (or J) by his first initial, whatever
+        the middle name — not a different person."""
+        _race(db_session, "2026-HOUSE-CA-9", "CA", office="H", district=9)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-9", "SMITH, JAMES", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-CA-9").candidates
+        assert sc._match_candidate(rows, "SMITH", "L", "J. Robert Smith").id == "H1"
+        assert sc._match_candidate(rows, "SMITH", "L", "M. Robert Smith") is None
+
     def test_a_nickname_or_a_recoded_party_alone_still_matches(self, db_session):
         _race(db_session, "2026-HOUSE-CA-6", "CA", office="H", district=6)
         _candidate(db_session, "H1", "2026-HOUSE-CA-6", "JONES, JAMES", party="DEM")
