@@ -322,6 +322,9 @@ export interface ConstituentApprovalParty {
   /** Share approving (0-1), pulled toward the typical member for small
    * groups; null when the survey can't tell members apart for this group. */
   approve: number | null;
+  /** How much of `approve` comes from this member's own respondents (0-1);
+   * the rest is what a typical member of their party gets. */
+  ownWeight?: number | null;
   respondents: number;
 }
 

@@ -4,7 +4,7 @@ import MetricTooltip from "./MetricTooltip";
 const GROUP_LABELS = { D: "Democrats", R: "Republicans", I: "Independents & others" } as const;
 
 const TOOLTIP =
-  "From the Cooperative Election Study, a national survey that asks each respondent whether they approve of the job their own House member and senators are doing. Split by the respondent's own party, as a share of those who gave an opinion. Not part of any score. Where a group is small, the figure is pulled toward what a typical member of the same party gets from that group; where the survey has too few of a group in each district to tell one member from another, no figure is shown.";
+  "From the Cooperative Election Study, a national survey that asks each respondent whether they approve of the job their own House member and senators are doing. Split by the respondent's own party, as a share of those who gave an opinion. Not part of any score. Where a group is small, the figure is pulled toward what a typical member of the same party gets from that group, by an amount measured from how much members really differ; a figure that comes mostly from that typical level rather than this member's own respondents is marked \"mostly based on similar members\".";
 
 /** Survey approval of the member among their own constituents, by the
  * constituent's party (backend services/constituent_survey.py). */
@@ -23,7 +23,13 @@ export default function ConstituentApproval({ approval }: { approval: Approval |
               {g.approve === null
                 ? "too few respondents to measure"
                 : `${Math.round(g.approve * 100)}% approve`}
-              <span className="text-ink-min"> · {g.respondents} with an opinion</span>
+              <span className="text-ink-min">
+                {" "}
+                · {g.respondents} with an opinion
+                {g.approve !== null && g.ownWeight != null && g.ownWeight < 0.5
+                  ? " · mostly based on similar members"
+                  : ""}
+              </span>
             </span>
           </li>
         ))}

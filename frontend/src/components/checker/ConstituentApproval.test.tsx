@@ -7,8 +7,8 @@ const approval = {
   fielded: "2024-10/2024-11",
   surveyedAs: "Susan Collins",
   byParty: [
-    { party: "D" as const, approve: 0.2283, respondents: 88 },
-    { party: "R" as const, approve: 0.5675, respondents: 72 },
+    { party: "D" as const, approve: 0.2283, ownWeight: 0.72, respondents: 88 },
+    { party: "R" as const, approve: 0.5675, ownWeight: 0.31, respondents: 72 },
     { party: "I" as const, approve: null, respondents: 12 },
   ],
 };
@@ -19,6 +19,13 @@ describe("ConstituentApproval", () => {
     const items = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
     expect(items[0]).toMatch(/Democrats.*23% approve.*88 with an opinion/);
     expect(items[1]).toMatch(/Republicans.*57% approve/);
+  });
+
+  it("marks a figure that comes mostly from similar members", () => {
+    render(<ConstituentApproval approval={approval} />);
+    const items = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    expect(items[0]).not.toMatch(/similar members/);
+    expect(items[1]).toMatch(/mostly based on similar members/);
   });
 
   it("says a group can't be measured rather than showing a pooled number", () => {

@@ -396,6 +396,8 @@ class ConstituentApprovalPartySchema(CamelModel):
     # survey can't tell members apart for this group (see
     # scripts/fetch_ces_approval.py).
     approve: float | None = None
+    # How much of `approve` is the member's own respondents (0-1).
+    own_weight: float | None = None
     respondents: int
 
 

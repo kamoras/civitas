@@ -24,7 +24,10 @@ Estimates:
     from the method of moments, k = mu(1-mu)/tau^2 - 1, where tau^2 is the
     spread of true approval between members: the observed spread less the
     average sampling variance. The shrunk value is
-    (rate*n_eff + mu*k) / (n_eff + k). Both the raw rate and the shrunk one
+    (rate*n_eff + mu*k) / (n_eff + k), and n_eff / (n_eff + k) is written
+    as own_weight: how much of the figure is the member's own respondents.
+    The sampling noise subtracted from the observed spread is weighted the
+    same way that spread is (by n_eff). Both the raw rate and the shrunk one
     are written, with mu and k, so any figure can be re-derived.
 
 Members are matched to the survey by the respondent's state, district
@@ -45,7 +48,6 @@ import argparse
 import csv
 import json
 import pathlib
-import statistics
 import sys
 import tempfile
 import urllib.request
@@ -135,7 +137,7 @@ def priors(members: list[dict]) -> dict:
             groups[(m["chamber"], m["member_party"], rparty)].append(est)
             # Chamber-wide, whatever the member's party: the prior for a
             # member whose own party has too few members for one (the
-            # Senate's independents). Wide, so it shrinks little.
+            # Senate's independents).
             groups[(m["chamber"], "*", rparty)].append(est)
     out = {}
     for (chamber, mparty, rparty), ests in groups.items():
@@ -143,15 +145,19 @@ def priors(members: list[dict]) -> dict:
             continue
         total = sum(e["n_eff"] for e in ests)
         mu = sum(e["rate"] * e["n_eff"] for e in ests) / total
+        # The n_eff-weighted spread of observed rates around mu is, in
+        # expectation, tau^2 plus sampling noise of sum(n_i * mu(1-mu)/n_i)
+        # / sum(n_i) = mu(1-mu) * members / sum(n_eff). The noise term has to
+        # be weighted the same way as the spread it is taken from: an
+        # unweighted mean of mu(1-mu)/n_eff is larger whenever n_eff varies,
+        # and drove tau^2 below zero on genuinely varying cells.
         observed = sum(e["n_eff"] * (e["rate"] - mu) ** 2 for e in ests) / total
-        sampling = statistics.mean(mu * (1 - mu) / e["n_eff"] for e in ests)
+        sampling = mu * (1 - mu) * len(ests) / total
         tau2 = observed - sampling
         # No spread between members beyond sampling noise: the survey can't
         # tell one member's approval in this cell from another's, so the
-        # cell is not measurable per member (k None). In the 2024 data that
-        # is every House member's approval among independents and among
-        # the other party's voters: a district's hundred-odd respondents
-        # hold too few of them.
+        # cell is not measurable per member (k None). No cell of the 2024
+        # data is like that, but a thinner survey could be.
         k = max(mu * (1 - mu) / tau2 - 1, 0.0) if tau2 > 0 else None
         out[f"{chamber}/{mparty}/{rparty}"] = {
             "mu": round(mu, 4), "k": None if k is None else round(k, 1), "members": len(ests),
@@ -178,6 +184,9 @@ def build(cells: dict) -> dict:
                 est["shrunk"] = None
             else:
                 est["shrunk"] = round((est["rate"] * est["n_eff"] + p["mu"] * p["k"]) / (est["n_eff"] + p["k"]), 4)
+                # How much of the figure is this member's own respondents
+                # rather than the typical member's (the rest).
+                est["own_weight"] = round(est["n_eff"] / (est["n_eff"] + p["k"]), 3)
             est["rate"] = round(est["rate"], 4)
             est["n_eff"] = round(est["n_eff"], 1)
     members.sort(key=lambda m: (m["chamber"], m["state"], m["district"] or "", m["name"]))

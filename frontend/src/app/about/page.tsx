@@ -684,11 +684,12 @@ export default function AboutPage() {
               the seat when it was asked. Small groups are pulled toward what a typical member of
               the same party gets from that group, by an amount estimated from how much members
               actually differ. It is shown, not scored, until a second survey wave shows it is
-              stable. One part can&apos;t be measured this way: a House district has about a hundred
-              respondents, too few to tell one member&apos;s approval among the other party&apos;s
-              voters or independents from another&apos;s, so for Democratic House members those
-              figures (and for Republicans, independents&apos; approval) are marked as not
-              measurable rather than shown.
+              stable. The survey&apos;s size sets how sharp the House figures can be: a district has
+              about a hundred respondents, so most House figures come mostly from what similar
+              members get (all but about half of Democrats&apos; ratings of Democratic members and a
+              third of their ratings of Republicans), and the profile marks every figure that does.
+              Senators&apos; figures mostly rest on their own state&apos;s respondents (a median of
+              672).
             </P>
             <Gist>
               two of the checks that used to lower Constituent Alignment were computed from the same

@@ -57,6 +57,37 @@ class TestEstimator:
         assert p["mu"] == pytest.approx(0.7, abs=1e-6)
         assert p["k"] is not None and p["k"] > 0
 
+    def test_members_that_differ_are_measurable_even_when_sample_sizes_vary(self):
+        # Rates spread 0.4-0.6 over samples of 2 to 30: the noise term must be
+        # weighted like the spread, or tau^2 goes negative and the cell reads
+        # as unmeasurable (the first version did, on every House cross-party
+        # cell of the real survey).
+        import random
+
+        rng = random.Random(7)
+        members = []
+        for i in range(220):
+            n = 2 + (i % 29)
+            true = 0.5 + rng.uniform(-0.1, 0.1)
+            hits = sum(rng.random() < true for _ in range(n))
+            members.append({"chamber": "house", "member_party": "D",
+                            "by_party": {"I": {"rate": hits / n, "n": n, "n_eff": n}}})
+        assert ces.priors(members)["house/D/I"]["k"] is not None
+
+    def test_the_figure_records_how_much_of_it_is_the_members_own(self):
+        rows = []
+        for i in range(12):
+            name, cd = f"Member {chr(65 + i)}", str(i + 1)
+            approve = 2 + i  # members differ
+            rows += [_row(house=(name, "Democratic", "1"), pid3="1", cd=cd) for _ in range(approve)]
+            rows += [_row(house=(name, "Democratic", "3"), pid3="1", cd=cd) for _ in range(14 - approve)]
+        built = ces.build(ces.tally(rows))
+        for m in built["members"]:
+            est = m["by_party"]["D"]
+            assert 0 < est["own_weight"] < 1
+            k = built["priors"]["house/D/D"]["k"]
+            assert est["own_weight"] == pytest.approx(est["n_eff"] / (est["n_eff"] + k), abs=1e-3)
+
     def test_a_cell_whose_members_cant_be_told_apart_is_not_measurable(self):
         # Every member at the same true rate: the spread is all sampling noise.
         prior = ces.priors(self._members([0.5] * 15))
@@ -123,6 +154,18 @@ class TestJoin:
     def test_a_namesake_successor_does_not_inherit_the_reading(self, survey):
         # Adelita Grijalva took the seat after the survey was fielded.
         assert constituent_survey.constituent_approval("house", "AZ", "Adelita S. Grijalva", "D", 1, 7) is None
+
+    def test_a_redistricted_member_is_not_given_another_districts_rating(self, survey):
+        # Surveyed as TX-9; now representing TX-18: other people rated them.
+        assert constituent_survey.constituent_approval("house", "TX", "Al Green", "D", 20, 18) is None
+
+    def test_an_at_large_seat_matches_the_surveys_district_one(self, survey):
+        survey["members"].append({
+            "state": "WY", "chamber": "house", "district": "1", "name": "Harriet Hageman",
+            "member_party": "R", "by_party": {"R": {"n": 40, "rate": 0.8, "shrunk": 0.8, "n_eff": 30.0}},
+        })
+        got = constituent_survey.constituent_approval("house", "WY", "Harriet M. Hageman", "R", 4, 0)
+        assert got["surveyed_as"] == "Harriet Hageman"
 
     def test_same_surname_in_the_state_is_told_apart_by_party_and_district(self, survey):
         assert constituent_survey.constituent_approval("house", "TX", "Al Green", "D", 20, 9)["surveyed_as"] == "Al Green"

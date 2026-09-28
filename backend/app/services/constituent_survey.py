@@ -76,8 +76,12 @@ def _entry_for(chamber: str, state: str, name: str, district: int | None, party:
         and (_name_parts(m["name"]) or ("", ""))[1] == parts[1]
         and (party is None or m.get("member_party") in (party, "I") or party == "I")
     ]
-    if len(candidates) > 1 and district is not None:
-        candidates = [m for m in candidates if m.get("district") == str(district)] or candidates
+    if chamber == "house":
+        # Only the district the member represents now: a member redistricted
+        # into another seat (Barry Moore, AL-2 to AL-1) was rated by other
+        # people. An at-large seat is district 0 here and "1" in the survey.
+        seat = "1" if district == 0 else str(district)
+        candidates = [m for m in candidates if m.get("district") == seat]
     initials = _initials(name)
     by_initial = [m for m in candidates if (_name_parts(m["name"]) or ("",))[0] in initials]
     if len(by_initial) == 1:
@@ -110,6 +114,9 @@ def constituent_approval(
             # None: the survey can't tell members apart in this cell (see
             # fetch_ces_approval.priors), so no per-member figure is shown.
             "approve": est.get("shrunk"),
+            # Share of the figure that is this member's own respondents; the
+            # rest is the typical member's (the shrinkage).
+            "own_weight": est.get("own_weight"),
             "respondents": est["n"],
         })
     data = _survey()
