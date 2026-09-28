@@ -197,6 +197,10 @@ export interface MeasureCoverage {
   /** Whose determination the status is: the state's own source, or our
    * operator's (a "none" accepted after the source stopped publishing). */
   basis?: "source" | "operator";
+  /** Why Civitas does not read this state's measures at all — its official
+   * site blocks automated access, or it publishes no list — written for a
+   * voter. Null for a state that is read. */
+  unreadReason?: string | null;
 }
 
 /** One statewide executive contest (Governor, Attorney General, ...) and

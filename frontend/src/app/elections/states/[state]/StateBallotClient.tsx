@@ -347,9 +347,9 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     // not confirm this list — failed, or found the document missing.
     const stale = measureCoverage.status !== "covered" && measureCoverage.status !== "confirmed_none";
     // Credit the measures to the source they came from, not to whichever
-    // source the coverage row names: while a state moves from Vote Smart to
-    // its own office, the cards are still Vote Smart's. A read date is only
-    // shown when it is that same source's.
+    // source the coverage row names: while a state's registered source is
+    // renamed or re-pointed, the cards are still the previous source's. A
+    // read date is only shown when it is that same source's.
     const sources = [...new Set(measures.map((m) => m.sourceName).filter(Boolean))];
     // Every card is a measure no longer on the ballot (the source dropped
     // it, or an operator accepted its absence) — the notices below then
@@ -452,18 +452,25 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     );
   }
 
-  // not_yet_covered / ingest_failed — say so plainly. Never imply zero.
+  // not_yet_covered / ingest_failed — say so plainly, with the actual
+  // reason. Never imply zero.
+  const failed = measureCoverage.status === "ingest_failed";
+  const why = failed
+    ? "our last attempt to load them failed."
+    : measureCoverage.unreadReason
+      ? measureCoverage.unreadReason
+      : measureCoverage.lastAttemptAt
+        ? "the state has not published its list for this election yet."
+        : "we have not checked this state yet.";
   return (
     <div className="border border-signal-amber/40 bg-signal-amber/10 p-4">
       <p className="text-sm text-signal-amber">
-        Civitas does not have {state}&apos;s statewide ballot measures yet.
+        {failed
+          ? `Civitas does not have ${state}'s statewide ballot measures yet.`
+          : `${state}'s statewide ballot measures are not yet covered.`}
       </p>
       <p className="text-xs text-ink-lo mt-2">
-        This does <strong>not</strong> mean there are none —{" "}
-        {measureCoverage.status === "ingest_failed"
-          ? "our last attempt to load them failed"
-          : "we have not ingested this state yet"}
-        . Use the{" "}
+        This does <strong>not</strong> mean there are none — {why} Use the{" "}
         <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
           official lookup ↗
         </a>{" "}

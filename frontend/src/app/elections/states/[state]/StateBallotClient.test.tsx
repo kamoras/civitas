@@ -593,8 +593,43 @@ describe("ballot measures", () => {
   it("never implies zero measures for a state not loaded yet", async () => {
     render(<StateBallotClient ballot={ballot()} />);
     const drawer = await openContest(/Statewide ballot measures/);
-    expect(drawer.getByText(/does not have OH's statewide ballot measures yet/)).toBeInTheDocument();
+    expect(drawer.getByText(/OH's statewide ballot measures are not yet covered/)).toBeInTheDocument();
     expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
+    expect(drawer.getByText(/we have not checked this state yet/)).toBeInTheDocument();
+  });
+
+  it("gives an unread state's own reason, with the official lookup", async () => {
+    const reason = "The Ohio Secretary of State's website blocks our server, so its list of measures can't be read automatically.";
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: null, checkedAt: null,
+            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: reason,
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/OH's statewide ballot measures are not yet covered/)).toBeInTheDocument();
+    expect(drawer.getByText(/blocks our server/)).toBeInTheDocument();
+    expect(drawer.queryByText(/no measures|none on the ballot/i)).not.toBeInTheDocument();
+    expect(drawer.getByRole("link", { name: /official lookup/ })).toHaveAttribute("href", expect.stringMatching(/^https:/));
+  });
+
+  it("says a registered state's list is not published yet, not that it was never read", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Maine SoS", checkedAt: null,
+            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: null,
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/has not published its list for this election yet/)).toBeInTheDocument();
   });
 
   const measure = {
@@ -648,13 +683,13 @@ describe("ballot measures", () => {
   });
 
   it("credits the measures to their own source, not the coverage row's", async () => {
-    // Round 4: during a switch from Vote Smart the coverage row named the
-    // state office while every card was Vote Smart's, and the footer
-    // credited the office — with Vote Smart's read date.
+    // Round 4: during a switch of source the coverage row named the new
+    // office while every card was the previous source's, and the footer
+    // credited the new office — with the previous source's read date.
     render(
       <StateBallotClient
         ballot={ballot({
-          measures: [{ ...measure, sourceName: "Vote Smart" }],
+          measures: [{ ...measure, sourceName: "Ohio Legislative Service Commission" }],
           measureCoverage: {
             status: "not_yet_covered", sourceName: "Ohio SoS",
             checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
@@ -663,7 +698,7 @@ describe("ballot measures", () => {
       />,
     );
     const drawer = await openContest(/Statewide ballot measures/);
-    expect(drawer.getByText(/on record from Vote Smart/)).toBeInTheDocument();
+    expect(drawer.getByText(/on record from Ohio Legislative Service Commission/)).toBeInTheDocument();
     expect(drawer.queryByText(/Ohio SoS/)).not.toBeInTheDocument();
     expect(drawer.queryByText(/2026-09-20/)).not.toBeInTheDocument();
   });

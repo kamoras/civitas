@@ -735,20 +735,22 @@ export default function AboutPage() {
               <a href="#state-ballots" className="underline underline-offset-2 hover:text-phos">State Ballots &amp; Ballot Measures</a>.
             </P>
             <Gist>
-              Ballot measures are read from each state&apos;s own official list where we can
-              reach one; a handful of states still come from a third-party source.
+              Ballot measures are read directly from each state. A state whose official site
+              can&apos;t be read automatically, or which publishes no list, shows as not yet
+              covered, with its official lookup link.
             </Gist>
             <P>
-              Most states&apos; measures are now read directly from the state itself — its
+              Every measure on these pages is read directly from the state itself — its
               Secretary of State, elections board or legislature — with the title, summary,
               fiscal statement and yes/no wording quoted exactly as the state published them
-              and the drafter named. A state whose official site blocks automated access, or
-              publishes no list of what it has certified, still comes from Vote Smart&apos;s
-              public API, and each measure says which source it came from. A state is only
-              shown as having no measures when an official source establishes that; a guide
-              that has not been published yet reads as not yet covered, never as
-              &ldquo;none&rdquo;. The official lookup link on every state page remains the
-              complete answer.
+              and the drafter named. We use no third-party source for measures. Some states
+              can&apos;t be read that way: their official sites block automated access, or
+              they publish no list of what they have certified. Those pages say the state is
+              not yet covered, give that reason, and link the state&apos;s own official ballot
+              lookup — they never read as having no measures. A state is only shown as having
+              none when its official source establishes that; a guide that has not been
+              published yet also reads as not yet covered. The official lookup link on every
+              state page remains the complete answer.
             </P>
           </Section>
 
@@ -2114,11 +2116,7 @@ export default function AboutPage() {
               />
               <Row
                 label="State election offices"
-                value="Statewide ballot measures, read directly from each state's own certified list, voter guide or ballot notice — official title, summary, fiscal statement and the state's own yes/no wording, stored and displayed verbatim with the drafter named, and linked from every measure"
-              />
-              <Row
-                label="Vote Smart (votesmart.org)"
-                value="Statewide ballot measures for the states whose own sites cannot be read automatically, stored and displayed verbatim. Free API from a nonpartisan nonprofit; optional, and the feature reports which states it lacks rather than implying they have no measures"
+                value="Statewide ballot measures, read directly from each state's own certified list, voter guide or ballot notice — official title, summary, fiscal statement and the state's own yes/no wording, stored and displayed verbatim with the drafter named, and linked from every measure. The only source for measures: a state whose site can't be read automatically, or which publishes no list, is shown as not yet covered with its official lookup link"
               />
               <Row
                 label="Google Civic Information API"

@@ -619,8 +619,10 @@ def admin_accept_measure_absence(
     confirmed none with `note` recorded verbatim, and the nightly sync
     leaves that standing while the reader keeps finding nothing. A real
     answer from the reader later replaces it. Every row for the election
-    is marked removed, whatever its source: a Vote Smart row still on file
-    must not render as current under an operator's "none".
+    is marked removed, whatever its source: no row may render as current
+    under an operator's "none". Only a state with a registered direct
+    source can be accepted (400 otherwise): every other state reads "not
+    yet covered", which the nightly sync would restore anyway.
 
     Refused (409) while the latest read of this state's source COVERED the
     election — a freshly read list — unless `force=true`. Every action is
@@ -644,7 +646,9 @@ def admin_accept_measure_absence(
     except ValueError:
         raise HTTPException(status_code=400, detail="election_date must be YYYY-MM-DD") from None
     source = source_for_state(state)
-    source_name = source["source_name"] if source else "Vote Smart"
+    if source is None:
+        raise HTTPException(status_code=400, detail=f"{state} has no registered direct source")
+    source_name = source["source_name"]
     try:
         marked = accept_state_absence(db, state, election_date, source_name, note.strip(), force=force)
     except AbsenceRefused as refused:

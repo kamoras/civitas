@@ -16,7 +16,6 @@ from fastapi import HTTPException
 from app.api import elections
 from app.models import BallotMeasure, MeasureCoverage, Race
 from app.pipeline import election_pipeline
-from app.pipeline.fetch import ballot_measures
 from app.time_utils import utcnow
 
 
@@ -30,49 +29,6 @@ def _measure(db, mid, state="GA", date="2026-11-03", number="Amendment 1", **kw)
     return m
 
 
-# ── fetch layer: the None-vs-[] contract ──────────────────────────────
-
-
-def test_parse_measure_list_returns_none_on_unexpected_shape():
-    """A shape we don't recognize is a FAILURE, not an empty ballot."""
-    assert ballot_measures._parse_measure_list({}, "GA") is None
-    assert ballot_measures._parse_measure_list({"measures": {}}, "GA") is None
-
-
-def test_parse_measure_list_handles_single_object():
-    """Vote Smart collapses one-element lists to a bare object."""
-    payload = {"measures": {"measure": {"measureId": "1234", "title": "T", "measureCode": "A1"}}}
-    parsed = ballot_measures._parse_measure_list(payload, "ga")
-    assert len(parsed) == 1
-    assert parsed[0]["id"] == "vs-1234"
-    assert parsed[0]["state"] == "GA"
-
-
-def test_parse_measure_list_skips_rows_without_an_id():
-    payload = {"measures": {"measure": [{"title": "no id"}, {"measureId": "9", "title": "ok"}]}}
-    parsed = ballot_measures._parse_measure_list(payload, "GA")
-    assert [m["id"] for m in parsed] == ["vs-9"]
-
-
-def test_text_treats_non_string_values_as_absent():
-    """A nested object must not be coerced to the literal "{}" and rendered."""
-    assert ballot_measures._text({"a": {}}, "a") is None
-    assert ballot_measures._text({"a": "", "b": " x "}, "a", "b") == "x"
-
-
-def test_is_configured_false_without_key(monkeypatch):
-    monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "")
-    assert ballot_measures.is_configured() is False
-
-
-@pytest.mark.asyncio
-async def test_fetch_returns_none_when_unconfigured(monkeypatch, db_session):
-    """No key must yield "unknown", never "no measures"."""
-    monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "")
-    result = await ballot_measures.fetch_state_measures(None, db_session, "GA", 2026)
-    assert result is None
-
-
 # ── upsert + reconciliation ───────────────────────────────────────────
 
 
@@ -80,25 +36,25 @@ def test_upsert_skips_measure_without_an_election_date(db_session):
     """A measure we can't date is a measure we can't say is on WHICH ballot."""
     election_pipeline._upsert_measure(
         db_session,
-        {"id": "vs-1", "state": "GA", "number": "A1", "title": "t"},
+        {"id": "old-1", "state": "GA", "number": "A1", "title": "t"},
         {"official_title": "x"},
-        "Vote Smart",
+        "Earlier Source",
     )
     db_session.commit()
     assert db_session.query(BallotMeasure).count() == 0
 
 
 def test_upsert_stores_verbatim_fields_and_clears_removed_status(db_session):
-    _measure(db_session, "vs-1", status="removed")
+    _measure(db_session, "old-1", status="removed")
     db_session.commit()
 
     election_pipeline._upsert_measure(
         db_session,
-        {"id": "vs-1", "state": "GA", "number": "Amendment 1", "title": "T",
+        {"id": "old-1", "state": "GA", "number": "Amendment 1", "title": "T",
          "election_date": "2026-11-03"},
         {"official_title": "Official", "yes_means": "keeps the law",
          "no_means": "repeals it", "fiscal_impact": "$1"},
-        "Vote Smart",
+        "Earlier Source",
     )
     db_session.commit()
 
@@ -122,16 +78,16 @@ def test_two_unnumbered_measures_same_state_and_date_both_persist(db_session):
     can't afford to lose rows from."""
     election_pipeline._upsert_measure(
         db_session,
-        {"id": "vs-1", "state": "GA", "number": "", "title": "First",
+        {"id": "old-1", "state": "GA", "number": "", "title": "First",
          "election_date": "2026-11-03"},
-        {}, "Vote Smart",
+        {}, "Earlier Source",
     )
     db_session.commit()
     election_pipeline._upsert_measure(
         db_session,
-        {"id": "vs-2", "state": "GA", "number": "", "title": "Second",
+        {"id": "old-2", "state": "GA", "number": "", "title": "Second",
          "election_date": "2026-11-03"},
-        {}, "Vote Smart",
+        {}, "Earlier Source",
     )
     db_session.commit()
 
@@ -145,10 +101,10 @@ def test_missing_yes_no_framing_stays_null(db_session):
     referendum, where "approved" RETAINS the law under challenge."""
     election_pipeline._upsert_measure(
         db_session,
-        {"id": "vs-2", "state": "WA", "number": "R-101", "title": "Referendum",
+        {"id": "old-2", "state": "WA", "number": "R-101", "title": "Referendum",
          "election_date": "2026-11-03"},
         {"official_title": "Approved retains the law; rejected repeals it"},
-        "Vote Smart",
+        "Earlier Source",
     )
     db_session.commit()
     m = db_session.query(BallotMeasure).one()
@@ -157,29 +113,29 @@ def test_missing_yes_no_framing_stays_null(db_session):
 
 
 def test_reconcile_marks_unseen_measures_removed_not_deleted(db_session):
-    _measure(db_session, "vs-1")
-    _measure(db_session, "vs-2", number="Amendment 2")
+    _measure(db_session, "old-1")
+    _measure(db_session, "old-2", number="Amendment 2")
     db_session.commit()
 
     marked = election_pipeline._reconcile_state_measures(
-        db_session, "GA", {"2026-11-03"}, {"vs-1"},
+        db_session, "GA", {"2026-11-03"}, {"old-1"},
     )
     db_session.commit()
 
     assert marked == 1
     assert db_session.query(BallotMeasure).count() == 2
-    gone = db_session.query(BallotMeasure).filter(BallotMeasure.id == "vs-2").one()
+    gone = db_session.query(BallotMeasure).filter(BallotMeasure.id == "old-2").one()
     assert gone.status == "removed"
 
 
 def test_reconcile_deletes_only_after_the_grace_window(db_session):
-    stale = _measure(db_session, "vs-old", number="Amendment 9")
+    stale = _measure(db_session, "old-old", number="Amendment 9")
     stale.last_seen_at = utcnow() - timedelta(
         days=election_pipeline.MEASURE_REMOVAL_GRACE_DAYS + 1,
     )
     db_session.commit()
 
-    election_pipeline._reconcile_state_measures(db_session, "GA", {"2026-11-03"}, {"vs-1"})
+    election_pipeline._reconcile_state_measures(db_session, "GA", {"2026-11-03"}, {"old-1"})
     db_session.commit()
     assert db_session.query(BallotMeasure).count() == 0
 
@@ -225,14 +181,14 @@ def test_state_ballot_defaults_to_not_yet_covered(db_session):
 def test_state_ballot_distinguishes_confirmed_none(db_session):
     election_pipeline._set_coverage(
         db_session, "GA", elections.next_election_day(elections.utcnow().date()).isoformat(),
-        MeasureCoverage.CONFIRMED_NONE, 0, source_name="Vote Smart",
+        MeasureCoverage.CONFIRMED_NONE, 0, source_name="Earlier Source",
     )
     db_session.commit()
 
     data = _body(elections.state_ballot("GA", db=db_session))
     assert data["measures"] == []
     assert data["measureCoverage"]["status"] == MeasureCoverage.CONFIRMED_NONE
-    assert data["measureCoverage"]["sourceName"] == "Vote Smart"
+    assert data["measureCoverage"]["sourceName"] == "Earlier Source"
 
 
 def test_state_ballot_returns_measures_and_races(db_session):
@@ -244,8 +200,8 @@ def test_state_ballot_returns_measures_and_races(db_session):
         id="2026-HOUSE-GA-7", cycle_year=election_pipeline.current_election_cycle(),
         office="H", state="GA", district=7,
     ))
-    _measure(db_session, "vs-1", official_title="Official title",
-             yes_means="yes does this", source_name="Vote Smart")
+    _measure(db_session, "old-1", official_title="Official title",
+             yes_means="yes does this", source_name="Earlier Source")
     db_session.commit()
 
     data = _body(elections.state_ballot("GA", db=db_session))
@@ -370,7 +326,7 @@ def test_state_ballot_lookup_falls_back_when_no_verified_link(db_session):
 
 def test_removed_measures_are_still_returned(db_session):
     """Rendered as removed, never silently dropped."""
-    _measure(db_session, "vs-1", status="removed")
+    _measure(db_session, "old-1", status="removed")
     db_session.commit()
     data = _body(elections.state_ballot("GA", db=db_session))
     assert [m["status"] for m in data["measures"]] == ["removed"]
@@ -428,7 +384,7 @@ async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch,
     assert saved["states"]["GA"]["verified_at"] is None
 
 
-# ── generic direct-PDF path (replaces Vote Smart per registered state) ─
+# ── direct path: each registered state read from its own office ────
 
 
 def _fake_pdf_source(state="CA", source_name="Example Elections Office"):
@@ -439,8 +395,7 @@ def _fake_pdf_source(state="CA", source_name="Example Elections Office"):
 @pytest.mark.asyncio
 async def test_sync_pdf_measures_upserts_directly_from_one_pdf_pass(monkeypatch, db_session):
     """A registered state's fetch already returns the full raw+detail
-    shape in one PDF pass (unlike Vote Smart's list-then-per-item-detail
-    calls) — confirm _sync_pdf_measures upserts straight from it and
+    shape in one pass — confirm _sync_pdf_measures upserts straight from it and
     marks coverage."""
     from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
 
@@ -524,12 +479,11 @@ async def test_sync_pdf_measures_marks_ingest_failed_on_fetch_failure(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_sync_ballot_measures_runs_pdf_states_even_without_a_votesmart_key(monkeypatch, db_session):
-    """The whole point: a state with a registered PDF source must not
-    depend on VOTESMART_API_KEY at all."""
-    from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures, ballot_measures_pdf
+async def test_sync_ballot_measures_reads_registered_states_directly(monkeypatch, db_session):
+    """The state's own office is the only source: a registered state is
+    read and written with no other key or service involved."""
+    from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
 
-    monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "")
     monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: {"CA"})
     monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda state: _fake_pdf_source())
 
@@ -543,7 +497,6 @@ async def test_sync_ballot_measures_runs_pdf_states_even_without_a_votesmart_key
 
     monkeypatch.setattr(ballot_measures_pdf, "fetch_state_measures_pdf", fake_fetch)
     result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
-    assert result["skipped_other_states"] is True
     assert result["synced"] == 1
     assert db_session.query(BallotMeasure).filter(BallotMeasure.state == "CA").count() == 1
 
@@ -606,8 +559,8 @@ def _coverage(db, state="CA"):
 
 @pytest.mark.asyncio
 async def test_direct_sync_refuses_an_implausible_shrink(monkeypatch, db_session):
-    """The regression: the Vote Smart path had the MEASURE_SHRINK_FLOOR
-    guard and the direct path didn't — a read that returned 1 of 6 known
+    """The regression: the direct path had no MEASURE_SHRINK_FLOOR
+    guard — a read that returned 1 of 6 known
     measures marked the other five "no longer on the ballot"."""
     _direct_source(monkeypatch, [["1", "2", "3", "4", "5", "6"], ["1"]])
     await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
@@ -649,35 +602,35 @@ async def test_a_confirmed_none_reconciles_earlier_rows(monkeypatch, db_session)
 
 
 @pytest.mark.asyncio
-async def test_switching_a_state_to_direct_sourcing_retires_its_vote_smart_rows(monkeypatch, db_session):
-    """The regression: a state moved from Vote Smart to its own office kept
-    its vs-... rows — reconciled to "no longer on the ballot" for 45 days
+async def test_switching_a_state_to_direct_sourcing_retires_the_old_sources_rows(monkeypatch, db_session):
+    """The regression: a state moved from another source to its own office
+    kept the old source's rows — reconciled to "no longer on the ballot" for 45 days
     beside the same measure's new card, or (dated differently) left as a
     certified duplicate. They are superseded, so they are deleted — and
     only by a successful read."""
-    _measure(db_session, "vs-100", state="CA", number="Prop 1", source_name="Vote Smart")
-    _measure(db_session, "vs-101", state="CA", number="Prop 2", source_name="Vote Smart")
+    _measure(db_session, "old-100", state="CA", number="Prop 1", source_name="Earlier Source")
+    _measure(db_session, "old-101", state="CA", number="Prop 2", source_name="Earlier Source")
     # Another election in the same year (a primary) and an earlier
     # cycle's record are left alone: only the election read is replaced.
-    _measure(db_session, "vs-090", state="CA", date="2026-06-02", number="Prop 1", source_name="Vote Smart")
-    _measure(db_session, "vs-050", state="CA", date="2024-11-05", number="Prop 9", source_name="Vote Smart")
+    _measure(db_session, "old-090", state="CA", date="2026-06-02", number="Prop 1", source_name="Earlier Source")
+    _measure(db_session, "old-050", state="CA", date="2024-11-05", number="Prop 9", source_name="Earlier Source")
     db_session.commit()
 
     _direct_source(monkeypatch, [None, ["1", "2"]])
     await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     # A failed read retires nothing.
-    assert db_session.query(BallotMeasure).filter(BallotMeasure.id.like("vs-%")).count() == 4
+    assert db_session.query(BallotMeasure).filter(BallotMeasure.id.like("old-%")).count() == 4
 
     _, failed, marked = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     assert (failed, marked) == (0, 0)
     ids = sorted(m.id for m in db_session.query(BallotMeasure).all())
-    assert ids == ["CA-2026-11-03-1", "CA-2026-11-03-2", "vs-050", "vs-090"]
+    assert ids == ["CA-2026-11-03-1", "CA-2026-11-03-2", "old-050", "old-090"]
     assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}
 
 
 @pytest.mark.asyncio
 async def test_a_confirmed_none_also_retires_the_superseded_source(monkeypatch, db_session):
-    _measure(db_session, "vs-100", state="CA", number="Prop 1", source_name="Vote Smart")
+    _measure(db_session, "old-100", state="CA", number="Prop 1", source_name="Earlier Source")
     db_session.commit()
     _direct_source(monkeypatch, [[]])
     await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
@@ -686,35 +639,11 @@ async def test_a_confirmed_none_also_retires_the_superseded_source(monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_vote_smart_confirmed_none_reconciles_earlier_rows(monkeypatch, db_session):
-    """Same rule on the Vote Smart path: CONFIRMED_NONE never sits beside a
-    "certified" row for the same election."""
-    from app.pipeline.fetch import ballot_measure_pdf_sources
-
-    monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "k")
-    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: set())
-    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"GA"})
-    monkeypatch.setattr(election_pipeline, "next_election_day", lambda d: __import__("datetime").date(2026, 11, 3))
-    monkeypatch.setattr(election_pipeline, "MEASURE_SHRINK_CONFIRM_RUNS", 1)
-    _measure(db_session, "vs-1", source_name="Vote Smart")
-    db_session.commit()
-
-    async def none_listed(client, db, state, cycle):
-        return []
-
-    monkeypatch.setattr(ballot_measures, "fetch_state_measures", none_listed)
-    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
-    assert result["marked_removed"] == 1
-    assert db_session.query(BallotMeasure).one().status == "removed"
-
-
-@pytest.mark.asyncio
-async def test_direct_source_failures_alert_without_a_votesmart_key(monkeypatch, db_session):
-    """The regression: with VOTESMART_API_KEY unset, _sync_ballot_measures
-    returned before its alert, so a broken direct reader never paged."""
+async def test_direct_source_failures_alert(monkeypatch, db_session):
+    """A broken direct reader pages: _sync_ballot_measures must reach its
+    alert whatever else the run found."""
     import app.ops_alerts as ops_alerts
 
-    monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "")
     _direct_source(monkeypatch, [None])
     sent = []
     monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **kw: sent.append(a))
@@ -727,12 +656,12 @@ async def test_direct_source_failures_alert_without_a_votesmart_key(monkeypatch,
 
 
 @pytest.mark.asyncio
-async def test_a_direct_row_sharing_a_vote_smart_number_replaces_it(monkeypatch, db_session):
-    """The regression: the direct row with Vote Smart's number tripped
+async def test_a_direct_row_sharing_another_sources_number_replaces_it(monkeypatch, db_session):
+    """The regression: the direct row with the old source's number tripped
     uq_ballot_measure_state_date_number and rolled back, but was still
-    counted as seen, so the Vote Smart row was then deleted — an empty
+    counted as seen, so the old source's row was then deleted — an empty
     table under coverage "covered, 1"."""
-    _measure(db_session, "vs-100", state="CA", number="1", source_name="Vote Smart")
+    _measure(db_session, "old-100", state="CA", number="1", source_name="Earlier Source")
     db_session.commit()
     _direct_source(monkeypatch, [["1"]])
     synced, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
@@ -744,7 +673,7 @@ async def test_a_direct_row_sharing_a_vote_smart_number_replaces_it(monkeypatch,
 
 @pytest.mark.asyncio
 async def test_a_failed_write_keeps_the_old_rows_and_counts_nothing(monkeypatch, db_session):
-    _measure(db_session, "vs-100", state="CA", number="Prop 1", source_name="Vote Smart")
+    _measure(db_session, "old-100", state="CA", number="Prop 1", source_name="Earlier Source")
     db_session.commit()
     _direct_source(monkeypatch, [["1", "2"]])
     real_upsert = election_pipeline._upsert_measure
@@ -759,7 +688,7 @@ async def test_a_failed_write_keeps_the_old_rows_and_counts_nothing(monkeypatch,
     assert (synced, failed, marked) == (0, 1, 0)
     # The whole write rolled back: the superseded row is still there, and
     # nothing half-written is.
-    assert [m.id for m in db_session.query(BallotMeasure).all()] == ["vs-100"]
+    assert [m.id for m in db_session.query(BallotMeasure).all()] == ["old-100"]
     assert _coverage(db_session).status == MeasureCoverage.INGEST_FAILED
 
 
@@ -803,31 +732,17 @@ async def test_a_different_shorter_list_restarts_the_streak(monkeypatch, db_sess
 
 @pytest.mark.asyncio
 async def test_earlier_cycles_do_not_inflate_the_shrink_baseline(monkeypatch, db_session):
-    """The regression: the Vote Smart path counted every row the state had
-    ever had, so 2024's measures held a real, shorter 2026 list back."""
-    from app.pipeline.fetch import ballot_measure_pdf_sources
-
-    monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "k")
-    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: set())
-    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"GA"})
-    monkeypatch.setattr(election_pipeline, "next_election_day", lambda d: __import__("datetime").date(2026, 11, 3))
+    """The shrink guard compares against this election's rows only: four
+    2024 measures on file must not hold back a real one-measure 2026 list."""
     monkeypatch.setattr(election_pipeline, "_prune_past_measures", lambda db: 0)
     for i in range(4):
-        _measure(db_session, f"vs-old{i}", date="2024-11-05", number=f"Amendment {i}", source_name="Vote Smart")
+        _measure(db_session, f"CA-2024-11-05-{i}", state="CA", date="2024-11-05", number=str(i),
+                 source_name="Example Elections Office")
     db_session.commit()
-
-    async def one_listed(client, db, state, cycle):
-        return [{"id": "vs-new", "source_measure_id": "new", "state": "GA", "number": "Amendment 1",
-                 "title": "T", "election_date": "2026-11-03"}]
-
-    async def detail(client, db, mid):
-        return {"election_date": "2026-11-03"}
-
-    monkeypatch.setattr(ballot_measures, "fetch_state_measures", one_listed)
-    monkeypatch.setattr(ballot_measures, "fetch_measure_detail", detail)
-    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
-    assert result["failed_states"] == 0
-    assert _coverage(db_session, "GA").status == MeasureCoverage.COVERED
+    _direct_source(monkeypatch, [["1"]])
+    _, failed, marked = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert (failed, marked) == (0, 0)
+    assert _coverage(db_session).status == MeasureCoverage.COVERED
 
 
 @pytest.mark.asyncio
@@ -920,20 +835,20 @@ def test_state_ballot_shows_only_the_pages_own_election(db_session):
     ever had was listed, so an earlier cycle's measures — or a primary's —
     rendered under this election's heading."""
     current = _page_election()
-    _measure(db_session, "vs-now", date=current, number="Amendment 1", source_name="Vote Smart")
-    _measure(db_session, "vs-old", date="2024-11-05", number="Amendment 1", source_name="Vote Smart")
-    _measure(db_session, "vs-primary", date=f"{current[:4]}-05-19", number="Amendment 9", source_name="Vote Smart")
+    _measure(db_session, "old-now", date=current, number="Amendment 1", source_name="Earlier Source")
+    _measure(db_session, "old-old", date="2024-11-05", number="Amendment 1", source_name="Earlier Source")
+    _measure(db_session, "old-primary", date=f"{current[:4]}-05-19", number="Amendment 9", source_name="Earlier Source")
     db_session.commit()
     data = _body(elections.state_ballot("GA", db=db_session))
-    assert [m["id"] for m in data["measures"]] == ["vs-now"]
+    assert [m["id"] for m in data["measures"]] == ["old-now"]
 
 
 def test_a_removed_measure_of_this_election_still_renders_as_removed(db_session):
-    _measure(db_session, "vs-struck", date=_page_election(), status="removed", source_name="Vote Smart")
-    _measure(db_session, "vs-old-struck", date="2024-11-05", status="removed", source_name="Vote Smart")
+    _measure(db_session, "old-struck", date=_page_election(), status="removed", source_name="Earlier Source")
+    _measure(db_session, "old-old-struck", date="2024-11-05", status="removed", source_name="Earlier Source")
     db_session.commit()
     data = _body(elections.state_ballot("GA", db=db_session))
-    assert [(m["id"], m["status"]) for m in data["measures"]] == [("vs-struck", "removed")]
+    assert [(m["id"], m["status"]) for m in data["measures"]] == [("old-struck", "removed")]
 
 
 def test_checked_at_is_the_last_successful_check(db_session):
@@ -955,11 +870,11 @@ def test_checked_at_is_the_last_successful_check(db_session):
 
 
 def test_past_elections_measures_are_pruned(db_session):
-    _measure(db_session, "vs-old", date="2024-11-05", number="Amendment 1")
-    _measure(db_session, "vs-now", date=_page_election(), number="Amendment 1")
+    _measure(db_session, "old-old", date="2024-11-05", number="Amendment 1")
+    _measure(db_session, "old-now", date=_page_election(), number="Amendment 1")
     db_session.commit()
     assert election_pipeline._prune_past_measures(db_session) == 1
-    assert [m.id for m in db_session.query(BallotMeasure).all()] == ["vs-now"]
+    assert [m.id for m in db_session.query(BallotMeasure).all()] == ["old-now"]
 
 
 # ── round 3 ──────────────────────────────────────────────────────────
@@ -1025,11 +940,11 @@ def test_a_cached_list_does_not_advance_the_streak(db_session):
 async def test_coverage_another_source_left_is_not_this_sources_success(monkeypatch, db_session):
     """The regression: Maine's first night on its own office read "was
     confirmed_none, now reads as not published" — the confirmed none was
-    Vote Smart's."""
+    the previous source's."""
     from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
     election_pipeline._set_coverage(
-        db_session, "CA", "2026-11-03", MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart",
+        db_session, "CA", "2026-11-03", MeasureCoverage.CONFIRMED_NONE, source_name="Earlier Source",
     )
     db_session.commit()
     _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
@@ -1099,22 +1014,21 @@ async def test_a_late_cycle_notice_for_documents_that_may_never_come(monkeypatch
 
 def test_election_dates_are_stored_as_iso_or_not_at_all(db_session):
     """The state page, reconciliation and pruning all compare
-    election_date as an ISO string. Vote Smart's format isn't verified
-    against a real payload (its API answers "Authorization failed" with no
-    key, and none is on file), so both plausible shapes are normalised and
-    anything else is skipped, never stored under a date no query matches."""
+    election_date as an ISO string, so both plausible shapes a source
+    might give are normalised and anything else is skipped, never stored
+    under a date no query matches."""
     assert election_pipeline._iso_election_date("2026-11-03") == "2026-11-03"
     assert election_pipeline._iso_election_date("2026-11-03T00:00:00") == "2026-11-03"
     assert election_pipeline._iso_election_date("11/03/2026") == "2026-11-03"
     assert election_pipeline._iso_election_date("11/3/2026") == "2026-11-03"
     assert election_pipeline._iso_election_date("Nov 3") is None
-    for mid, given in (("vs-us", "11/03/2026"), ("vs-bad", "November 2026")):
+    for mid, given in (("old-us", "11/03/2026"), ("old-bad", "November 2026")):
         election_pipeline._upsert_measure(
             db_session, {"id": mid, "state": "GA", "number": mid, "title": "t", "election_date": given},
-            {}, "Vote Smart",
+            {}, "Earlier Source",
         )
     db_session.commit()
-    assert [(m.id, m.election_date) for m in db_session.query(BallotMeasure).all()] == [("vs-us", "2026-11-03")]
+    assert [(m.id, m.election_date) for m in db_session.query(BallotMeasure).all()] == [("old-us", "2026-11-03")]
 
 
 # ── round 4 ──────────────────────────────────────────────────────────
@@ -1206,20 +1120,20 @@ async def test_an_operator_can_accept_a_states_absence(monkeypatch, db_session):
 
 @pytest.mark.asyncio
 async def test_the_previous_sources_coverage_keeps_its_name_until_this_one_answers(monkeypatch, db_session):
-    """Round 4: on a state just moved from Vote Smart, "not yet published"
-    re-labelled the coverage row with the state office while the cards on
-    the page — and the "last successful read" date — were still Vote
-    Smart's."""
+    """Round 4: on a state just moved to its own office, "not yet
+    published" re-labelled the coverage row with the state office while
+    the cards on the page — and the "last successful read" date — were
+    still the previous source's."""
     from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
-    _measure(db_session, "vs-1", state="CA", source_name="Vote Smart")
-    election_pipeline._set_coverage(db_session, "CA", "2026-11-03", MeasureCoverage.COVERED, 1, source_name="Vote Smart")
+    _measure(db_session, "old-1", state="CA", source_name="Earlier Source")
+    election_pipeline._set_coverage(db_session, "CA", "2026-11-03", MeasureCoverage.COVERED, 1, source_name="Earlier Source")
     db_session.commit()
     _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
     await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     row = _coverage(db_session)
     assert row.status == MeasureCoverage.NOT_YET_COVERED
-    assert row.source_name == "Vote Smart"
+    assert row.source_name == "Earlier Source"
 
 
 
@@ -1300,16 +1214,16 @@ async def test_the_audit_trail_survives_the_readers_next_answer(monkeypatch, db_
 
 def test_accept_absence_marks_every_sources_rows(db_session):
     """The regression: only the registry source's rows were marked, so a
-    Vote Smart row still on file rendered as current under "none"."""
-    _measure(db_session, "vs-1", state="CA", source_name="Vote Smart")
-    _measure(db_session, "vs-other-election", state="CA", date="2026-06-02", source_name="Vote Smart")
+    row another source left on file rendered as current under "none"."""
+    _measure(db_session, "old-1", state="CA", source_name="Earlier Source")
+    _measure(db_session, "old-other-election", state="CA", date="2026-06-02", source_name="Earlier Source")
     db_session.commit()
     marked = election_pipeline.accept_state_absence(
         db_session, "CA", "2026-11-03", "Example Elections Office", "checked the release",
     )
     assert marked == 1
     status = {m.id: m.status for m in db_session.query(BallotMeasure).all()}
-    assert status == {"vs-1": "removed", "vs-other-election": "certified"}
+    assert status == {"old-1": "removed", "old-other-election": "certified"}
 
 
 def test_the_api_says_whose_determination_a_none_is(db_session):
@@ -1321,3 +1235,177 @@ def test_the_api_says_whose_determination_a_none_is(db_session):
     cov = _body(elections.state_ballot("GA", db=db_session))["measureCoverage"]
     assert cov["basis"] == "operator"
     assert "private operator note" not in json.dumps(cov)
+
+
+# ── the retired Vote Smart source ────────────────────────────────────
+
+
+def test_the_retired_sources_rows_are_purged_once_and_idempotently(db_session):
+    """Rows the Vote Smart integration left behind were never re-checked
+    against the state: they are deleted outright — never left current,
+    and never marked "removed" (which would claim the state struck them)."""
+    _measure(db_session, "vs-1", source_name="Vote Smart")
+    _measure(db_session, "vs-2", number="Amendment 2", status="removed", source_name="Vote Smart")
+    _measure(db_session, "vs-3", number="Amendment 3", source_name=None)
+    _measure(db_session, "GA-2026-11-03-9", number="9", source_name="Georgia Secretary of State")
+    db_session.commit()
+
+    assert election_pipeline._purge_retired_source(db_session) == 3
+    assert [m.id for m in db_session.query(BallotMeasure).all()] == ["GA-2026-11-03-9"]
+    assert election_pipeline._purge_retired_source(db_session) == 0
+    assert db_session.query(BallotMeasure).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_the_nightly_sync_purges_the_retired_sources_rows(monkeypatch, db_session):
+    _direct_source(monkeypatch, [["1"]])
+    _measure(db_session, "vs-1", state="GA", date=_page_election(), source_name="Vote Smart")
+    db_session.commit()
+    await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    assert db_session.query(BallotMeasure).filter(BallotMeasure.state == "GA").count() == 0
+
+
+@pytest.mark.asyncio
+async def test_a_state_with_no_direct_source_is_not_yet_covered(monkeypatch, db_session):
+    """No registered reader means nothing was checked: NOT_YET_COVERED,
+    never CONFIRMED_NONE — including over a none some earlier source
+    recorded — and no alert, since nothing broke. DC is included."""
+    import app.ops_alerts as ops_alerts
+
+    election = _page_election()
+    _direct_source(monkeypatch, [["1"]])
+    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "GA", "OR"})
+    election_pipeline._set_coverage(
+        db_session, "GA", election, MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart",
+    )
+    db_session.commit()
+    sent = []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **kw: sent.append(a))
+
+    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+
+    assert result["not_read_states"] == 3 and result["failed_states"] == 0
+    assert sent == []
+    for state in ("GA", "OR", "DC"):
+        row = db_session.query(MeasureCoverage).filter(
+            MeasureCoverage.state == state, MeasureCoverage.election_date == election,
+        ).one()
+        assert row.status == MeasureCoverage.NOT_YET_COVERED
+        assert "no direct source" in row.error_detail
+        assert row.last_success_at is None
+    page = _body(elections.state_ballot("GA", db=db_session))
+    assert page["measureCoverage"]["status"] == MeasureCoverage.NOT_YET_COVERED
+    assert page["officialLookup"]["url"]
+
+
+def test_the_admin_endpoint_refuses_a_state_with_no_direct_source(monkeypatch, db_session):
+    """Accepting an absence needs a source whose answer it stands in for;
+    an unread state would have "none" reverted to not-yet-covered nightly."""
+    from app.api.admin import admin_accept_measure_absence
+    from app.pipeline.fetch import ballot_measure_pdf_sources
+
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda st: None)
+    with pytest.raises(HTTPException) as exc:
+        admin_accept_measure_absence("GA", "2026-11-03", note="checked the SOS release", force=True, db=db_session)
+    assert exc.value.status_code == 400
+    assert db_session.query(MeasureCoverage).count() == 0
+
+
+def test_a_leftover_votesmart_key_in_env_does_not_break_startup(tmp_path, monkeypatch):
+    """Production .env files still set VOTESMART_API_KEY; Settings forbids
+    unknown keys, so the retired one is dropped rather than fatal. Any
+    other unknown key still fails loudly."""
+    from pydantic import ValidationError
+
+    from app.config import Settings
+
+    monkeypatch.setenv("VOTESMART_API_KEY", "from-the-environment")
+    env = tmp_path / ".env"
+    env.write_text("VOTESMART_API_KEY=abc123\n")
+    settings = Settings(_env_file=env)
+    assert not hasattr(settings, "VOTESMART_API_KEY")
+
+    env.write_text("VOTESMART_API_KEY=abc123\nNOT_A_REAL_SETTING=1\n")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=env)
+
+
+def test_the_purge_resets_coverage_the_retired_source_recorded(db_session):
+    """A Vote Smart "none" (or "covered") with a last-read date would
+    otherwise date a check this site no longer makes, above an empty page."""
+    election = _page_election()
+    election_pipeline._set_coverage(db_session, "GA", election, MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart")
+    election_pipeline._set_coverage(db_session, "FL", election, MeasureCoverage.COVERED, 2, source_name="Florida DOS")
+    db_session.commit()
+    election_pipeline._purge_retired_source(db_session)
+    ga = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "GA").one()
+    assert ga.status == MeasureCoverage.NOT_YET_COVERED
+    assert ga.source_name is None and ga.last_success_at is None
+    fl = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "FL").one()
+    assert fl.status == MeasureCoverage.COVERED and fl.last_success_at is not None
+
+
+@pytest.mark.asyncio
+async def test_the_previous_sources_name_is_kept_only_while_its_rows_are_on_file(monkeypatch, db_session):
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    election_pipeline._set_coverage(
+        db_session, "CA", "2026-11-03", MeasureCoverage.CONFIRMED_NONE, source_name="Earlier Source",
+    )
+    db_session.commit()
+    _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert _coverage(db_session).source_name == "Example Elections Office"
+
+
+@pytest.mark.asyncio
+async def test_an_unregistered_state_keeps_the_date_of_measures_still_on_file(monkeypatch, db_session):
+    """A state taken out of the registry keeps its last read's measures
+    until the election passes; the date that read happened still dates them."""
+    election = _page_election()
+    _direct_source(monkeypatch, [["1"]])
+    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "OR"})
+    _measure(db_session, f"OR-{election}-1", state="OR", date=election, number="1", source_name="Oregon SoS")
+    election_pipeline._set_coverage(db_session, "OR", election, MeasureCoverage.COVERED, 1, source_name="Oregon SoS")
+    db_session.commit()
+    await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    row = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "OR").one()
+    assert row.status == MeasureCoverage.NOT_YET_COVERED
+    assert row.last_success_at is not None
+
+
+def test_every_unread_state_has_a_reason_and_no_read_state_claims_one():
+    """Every state the sync leaves unread gets its honest reason on its
+    page; a state that becomes registered must leave 'unread' (a stale
+    reason would contradict the measures shown)."""
+    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
+
+    sources.invalidate_cache()
+    registry = sources._load()
+    unread = set(registry["unread"])
+    expected = (election_pipeline.STATES_WITH_FEDERAL_RACES | {"DC"}) - sources.configured_states()
+    assert unread == expected
+    assert not unread & sources.configured_states()
+    assert all(len(reason) > 20 for reason in registry["unread"].values())
+
+
+def test_the_page_gives_an_unread_states_reason(db_session):
+    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
+
+    sources.invalidate_cache()
+    ga = _body(elections.state_ballot("GA", db=db_session))["measureCoverage"]
+    assert ga["status"] == MeasureCoverage.NOT_YET_COVERED
+    assert "blocks automated access" in ga["unreadReason"]
+    assert _body(elections.state_ballot("CA", db=db_session))["measureCoverage"]["unreadReason"] is None
+
+
+@pytest.mark.asyncio
+async def test_an_unread_states_coverage_records_its_reason(monkeypatch, db_session):
+    _direct_source(monkeypatch, [["1"]])
+    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "MS"})
+    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
+
+    monkeypatch.setattr(sources, "unread_reason", lambda st: "Mississippi publishes no list." if st == "MS" else None)
+    await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    row = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "MS").one()
+    assert row.error_detail == "no direct source: Mississippi publishes no list."
