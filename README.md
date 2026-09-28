@@ -489,9 +489,9 @@ Every hour at :15
  10. BLUESKY ─── Post new/updated issues: the verified lede, verbatim (or the
        │         real headline if it doesn't fit), opening "Yesterday:" / "On
        │         <date>:" if the event predates today. Nothing model-written.
-       │         Daily senator score spotlight.
-       │         Weekly civic summary.  (spotlight + weekly also run on the
-       │         early-abort paths above — neither depends on the news)
+       │         Daily member score spotlight, a fixed template of the
+       │         scores.  (Also runs on the early-abort paths above — it
+       │         doesn't depend on the news)
        │         Repost + like outlet posts that match active issues.
 ```
 
@@ -811,14 +811,14 @@ The Civitas Bluesky account (`@civitas-research.org`) is updated automatically b
 | Post type | Trigger | Content |
 |-----------|---------|---------|
 | **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | The issue's lede — a claim the model located and `post_composer` verified verbatim; on a repost, the first fact the last post didn't carry (the new information that released it) — or the top article's real headline when the lede is too long to post whole (a claim is never cut: truncation can drop the qualifier that makes it true). No word is model-written. If the event predates today, code prefixes "Yesterday: …" or "On [Month day]: …" (`bluesky_poster._compose_new_post`) |
-| **Senator spotlight** | Once per day (random pick from those not yet spotlighted, cycling through all before repeating) | LLM-written score highlight with data from Civitas scorecard |
+| **Member spotlight** | Once per day (random pick of a senator or representative not yet spotlighted, cycling through all before repeating) | A fixed template of the member's Representation Score, rank in their chamber and three dimension scores (`bluesky_spotlight.compose_spotlight`). No word is model-written |
 | **Congress day** | Once per session day, when the Daily Digest has made its record final (usually the next evening); only days from the last three, so the Digest back-fill never posts history; at most once per day (`congress_bluesky.py`) | The day report's own sentence ("The Senate passed 3 bills, agreed to 4 resolutions and took 3 record votes. …") and the passed bills' numbers, never their titles (an official short title can read as advocacy), linking to that day's `/congress` page. No word is model-written |
-| **Weekly summary** | Once per week (6-day cooldown) | LLM-written condensed week-in-review from the timeline pipeline |
+| **Congress week** | Once per week, for the week (Monday to Sunday) just ended, once every day either chamber met is final; only that week, so nothing older is ever posted (`congress_bluesky.post_weekly_congress`) | The week report's own sentence ("The Senate met 3 days and took 12 record votes. …") and the numbers of bills that became law, linking to `/congress/week/{monday}`. No word is model-written; it replaced a weekly recap the model wrote from the timeline |
 | **Repost + like** | Outlet post matches an active issue (cosine sim ≥ 0.78) | Reposts + likes posts from AP News, NPR, and PBS NewsHour (`NEWS_OUTLET_HANDLES` — a narrower list than the RSS feed set, since it needs a Bluesky presence); posts under 24h old; max 3 per hourly run |
 
-The spotlight pick is deliberately *not* the highest or lowest scorer. Always picking an extreme, combined with framing it as praise or criticism, produced a real incident: a "praise" post about a senator's score read as badly out of touch after negative news broke about him the same day. A random pick with unevaluative framing can't fail that way.
+The spotlight pick is deliberately *not* the highest or lowest scorer. Always picking an extreme, combined with framing it as praise or criticism, produced a real incident: a "praise" post about a senator's score read as badly out of touch after negative news broke about him the same day. A random pick stated as plain numbers can't fail that way. The text was model-written until 2026-09 and still judged the numbers under a list of banned words ("placing him in the average range", "All individual metrics fall within typical expectations"); it is now a template.
 
-The spotlight and the weekly summary read senator scores and the timeline, not the news, so they run on every refresh — including the two paths that abort early because no articles arrived or none were policy-relevant. That makes a missing spotlight a usable signal in its own right: if it hasn't posted, the pipeline isn't completing, and the quiet isn't a slow news day.
+The spotlight reads member scores, not the news, so it runs on every refresh — including the two paths that abort early because no articles arrived or none were policy-relevant. That makes a missing spotlight a usable signal in its own right: if it hasn't posted, the pipeline isn't completing, and the quiet isn't a slow news day.
 
 Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The permalink is stable — issue IDs never change even as content is updated, and any issue that has ever been published is retained indefinitely. The 14-day cleanup of old issues keys on `bsky_last_post_text` (only ever written on a successful publish) rather than `bsky_posted_at`, which the repost path clears and so does not mean "never published".
 
@@ -1312,7 +1312,7 @@ civitas/
 │   │   │   │   ├── score_calculator.py       # Deterministic scoring formulas
 │   │   │   │   ├── ollama_client.py          # LLM backend abstraction
 │   │   │   │   ├── bluesky_poster.py         # Post new/updated action issues
-│   │   │   │   ├── bluesky_spotlight.py      # Daily senator spotlight + weekly summary
+│   │   │   │   ├── bluesky_spotlight.py      # Daily member spotlight (templated)
 │   │   │   │   ├── bluesky_engagement.py     # Repost/like matching outlet posts
 │   │   │   │   └── bluesky_utils.py          # Shared link-card builder
 │   │   │   ├── assemble/     # Senator scorecard builder + validator

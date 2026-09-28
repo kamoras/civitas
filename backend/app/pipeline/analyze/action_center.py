@@ -46,6 +46,7 @@ from app.models import (
     Senator,
 )
 from app.pipeline.analyze import action_metrics
+from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
 from app.pipeline.analyze.early_signal import (
     CONFIRMATION_WINDOW_HOURS,
     check_federal_register_signals,
@@ -3816,11 +3817,10 @@ def _find_matching_issue(
 
 
 def _run_periodic_bluesky_posts(db: Session) -> None:
-    """Daily senator spotlight + weekly civic summary.
+    """The daily member spotlight.
 
-    Neither depends on the news at all — the spotlight reads senator
-    scores and the weekly reads the timeline's own WeekSummary rows — but
-    both ran only as stage 6 of the refresh, downstream of the two early
+    It doesn't depend on the news at all — it reads member scores — but it
+    ran only as stage 6 of the refresh, downstream of the two early
     aborts. So an hour where the feeds returned nothing, or nothing
     policy-relevant, silently took the daily spotlight with it, and a run
     of such hours spanning a UTC day boundary skipped that day's
@@ -3833,11 +3833,9 @@ def _run_periodic_bluesky_posts(db: Session) -> None:
     completing — it is no longer just evidence that the news was quiet.
     """
     try:
-        from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight, post_weekly_summary
         post_daily_spotlight(db)
-        post_weekly_summary(db)
     except Exception:
-        logger.exception("Bluesky spotlight/weekly post failed (non-fatal)")
+        logger.exception("Bluesky spotlight post failed (non-fatal)")
 
 
 def _persist_metrics(db: Session) -> dict[str, int]:

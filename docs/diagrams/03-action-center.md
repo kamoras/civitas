@@ -57,17 +57,16 @@ flowchart TB
     TIMELINE["<b>9. TIMELINE</b><br/>record daily TimelineEntry<br/>at week/month/year boundaries,<br/>LLM writes the period summary"]
     TIMELINE --> POST
 
-    POST["<b>10. BLUESKY</b><br/>new/updated issue posts: the verified lede, verbatim<br/>daily senator spotlight<br/>weekly civic summary<br/>repost + like matching posts from AP, NPR, PBS<br/>(≥ 0.78, under 24h old, max 3/run)"]
+    POST["<b>10. BLUESKY</b><br/>new/updated issue posts: the verified lede, verbatim<br/>daily member spotlight (a template of the scores)<br/>repost + like matching posts from AP, NPR, PBS<br/>(≥ 0.78, under 24h old, max 3/run)"]
 ```
 
-The daily spotlight and the weekly summary also run on the two early-abort
-paths (no articles fetched, none policy-relevant). Neither reads the news —
-the spotlight reads senator scores, the weekly reads the timeline's own
-WeekSummary rows — but both used to sit downstream of those aborts, so a bad
-hour of feeds silenced them too, and a run of such hours spanning a UTC day
+The daily spotlight also runs on the two early-abort paths (no articles
+fetched, none policy-relevant). It reads member scores, not the news, but it
+used to sit downstream of those aborts, so a bad hour of feeds silenced it
+too, and a run of such hours spanning a UTC day
 boundary dropped that day's spotlight for good (`post_daily_spotlight` asks
 whether one went out *today*, not whether the last one is overdue). Running
-them unconditionally also makes the spotlight a free liveness check: if it is
+it unconditionally also makes the spotlight a free liveness check: if it is
 missing from the feed, the refresh is not completing.
 
 ## Why the thresholds are what they are
