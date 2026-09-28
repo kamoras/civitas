@@ -17,7 +17,7 @@ differ.
 ```mermaid
 flowchart LR
     subgraph FI["Funding Independence — 33%"]
-        FI1["PAC dependency — 20/53<br/>share vs chamber median<br/>× closeness to legal cap"]
+        FI1["PAC dependency — 20/53<br/>share vs campaigns of the same size<br/>(chamber fit, each run)"]
         FI2["Small-donor share — 10/53<br/>&lt;$200 unitemized, state-relative"]
         FI3["Top-donor concentration — 10/53<br/>top 10 of external pool<br/>vs chamber median"]
         FI5["Industry concentration — 13/53<br/>inverse HHI"]

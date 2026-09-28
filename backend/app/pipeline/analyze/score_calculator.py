@@ -42,10 +42,11 @@ ideological positioning, not donor-concentration statistics by rank
 ratio or top-N-donor-concentration table). The specific calibration
 targets below are this platform's own live empirical audits, not
 numbers reproduced from either paper — see _calc_funding_independence's
-own "Academic rationale" note for the fuller account, including why the
-PAC multiplier is chamber-specific (0.5 / that chamber's median PAC
-share, measured every run — compute_funding_reference) rather than one
-shared value. Top-donor
+own "Academic rationale" note for the fuller account. The PAC share is
+scored per chamber against the share campaigns of the same size typically
+take there (v6.19, _pac_size_fit, measured every run —
+compute_funding_reference), with the chamber median as the fallback
+before a chamber has a fit. Top-donor
 concentration is scored against the chamber's measured median, saturating
 at one p10-p90 spread (v6.13; the fixed 15%/40% anchors it replaced were
 pooled across chambers). The 2026-07-23 audit measured that median at
@@ -861,10 +862,10 @@ def _calc_funding_independence(
          not, so a larger campaign dilutes the same PAC dollars to a smaller
          share: scored against one chamber median, FI tracked campaign size
          (r=+0.58 Senate, +0.15 House, 2026-09-28), and the PAC-cap
-         utilization factor meant to correct that (v6.4-v6.18) measured how
+         utilization factor meant to correct that (before v6.19) measured how
          close each contributing PAC came to a one-election cap, over
          totals spanning a primary and a general, rather than how much the
-         campaign depended on PACs. With the size fit, r=+0.06 / -0.07.
+         campaign depended on PACs. With the size fit, r=+0.11 / -0.06.
       2. Small-donor share (10/53): unitemized (<$200) contributions,
          against what the state's size predicts for senators
          (small_donor_baseline.json) and against the House median for

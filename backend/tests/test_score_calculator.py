@@ -74,14 +74,12 @@ class TestFundingIndependence:
         assert _calc_funding_independence(funding) < 20
 
     def test_balanced_funding(self):
-        # No district given -> Senate multiplier (x3.2, 2026-07 re-audit:
-        # live Senate median PAC ratio is 15.7%, not the old ~28%
-        # assumption). 30% PAC is now well above that real median, so the
-        # PAC component scores low (~4 raw, ~3.9 after the no-committee-
-        # type utilization fallback), not near-neutral: 17% small donors
-        # (~46.6, just under the ~18.5% national mean), concentration pool
-        # below the $250K floor (-> neutral 50):
-        # FI = 0.5*3.9 + 0.25*46.6 + 0.25*50 ~= 26.
+        # No district given -> Senate. The pinned test reference has no
+        # size fit, so the share is scored against the Senate median
+        # (15.7%): 30% is nearly twice it, PAC component ~4.5. 17% small
+        # donors ~46; concentration pool below the $250K floor and no
+        # industry data -> neutral 50 each:
+        # FI = 20/53*4.5 + 10/53*46 + 10/53*50 + 13/53*50 ~= 32.
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 300_000,
