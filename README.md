@@ -450,7 +450,8 @@ Every hour at :15
        │         missed the two-claim bar and nothing published for days.
        │         Title = the top article's real headline. Summary = the
        │         single best claim. Facts = the supporting claims, each
-       │         carrying the outlet it came from.
+       │         carrying the outlet it came from, shown on the issue as
+       │         "Media coverage".
        │         A cluster with no attributable assertion produces NO issue:
        │         MAX_ISSUES is a ceiling, not a quota. Publishing anyway is
        │         what produced "This coverage tracks the race and related

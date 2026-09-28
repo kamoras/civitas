@@ -1882,7 +1882,7 @@ export default function AboutPage() {
                 <div className="space-y-2 mt-2">
                   <Row
                     label="Action Center issues"
-                    value="Synthesizes clustered news coverage into a structured issue: title, summary, and grounded facts"
+                    value="Locates claims in clustered news coverage; the issue's summary and its media coverage lines are quoted from the sources, each with its outlet, and the title is the top article's headline"
                   />
                   <Row
                     label="Justice profile summary"
