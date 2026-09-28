@@ -77,7 +77,7 @@ class TestEstimator:
     def test_the_prior_strength_is_recovered_without_bias(self):
         """Draw true approval from Beta(mu, k), sample each member at a
         varying size, and estimate: 1/(k+1) (tau^2 over mu(1-mu)) must come
-        back right on average. The first two estimators came back 5-30% off."""
+        back right on average. The first two estimators came back about 6% and 40% off."""
         import random
 
         rng = random.Random(11)
