@@ -260,7 +260,11 @@ describe("MemberScorecard", () => {
       expect.objectContaining({ category: "all", filter: "against-party" })
     );
     // The Clerk's bare "H R 8800" shows as the site's own label.
-    expect(await screen.findByText("H.R. 8800")).toBeInTheDocument();
+    // Each break opens its bill's page.
+    expect(await screen.findByRole("link", { name: "H.R. 8800" })).toHaveAttribute(
+      "href",
+      "/congress/bills/HR.8800"
+    );
     expect(screen.getByText("VOTED YEA")).toBeInTheDocument();
     expect(
       screen.getByText(/Republicans 2 yea, 215 nay · Democrats 211 yea, 0 nay/)
