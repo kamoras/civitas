@@ -58,7 +58,14 @@ export default function PresidentsAndJusticesChapter() {
           Every figure — and each president&apos;s name, party and term dates — comes from live,
           historical or expert-survey data. The ranked list compares past presidents; the sitting
           president is shown on their own, since comparison with predecessors is the only meaningful
-          ranking for that office.
+          ranking for that office. The leaderboard shows the sitting president&apos;s full scorecard
+          above the ranked list.
+        </P>
+        <P>
+          A president&apos;s page shows each score beside the figures it is scored on and the
+          average of every president with a figure: approval against all presidents&apos; approval,
+          jobs a year against every presidency since 1939, and so on. The sitting president&apos;s
+          page is not ranked until the term ends.
         </P>
         <Sub title="Public Mandate (21.67%)">
           <P>

@@ -6,12 +6,12 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MemberScorecard from "@/components/scorecard/MemberScorecard";
-import { PresidentCard } from "@/components/president/PresidentClient";
+import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
 import { JusticeCard } from "@/components/justice/JusticeClient";
 import { formerOfficeNotice } from "@/lib/officeStatus";
 import { issueDateLabel } from "@/lib/formatting";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
-import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
+import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
@@ -75,12 +75,15 @@ export default function PoliticianProfileClient({
   breakdown = null,
 }: {
   profile: PoliticianProfile;
-  /** The member's score breakdown, fetched with the profile (senators and
-   *  representatives only). */
+  /** The score breakdown, fetched with the profile (senators,
+   *  representatives and presidents). */
   breakdown?: RepresentationScoreBreakdown | null;
 }) {
   const { identity, branch, activeIssues, governmentRecord, scorecard } = profile;
   const isMember = branch === "senate" || branch === "house";
+  // Members' and presidents' scorecards set their score columns side by
+  // side, so their pages are wider than a justice's.
+  const wide = isMember || branch === "president";
 
   // Justices carry `isActive`; every other branch carries `isCurrent`.
   const hasLeftOffice =
@@ -91,9 +94,7 @@ export default function PoliticianProfileClient({
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
-        {/* A member's scorecard sets three score columns side by side, so
-            their page is wider than a president's or justice's. */}
-        <div className={`${isMember ? "max-w-7xl" : "max-w-4xl"} mx-auto`}>
+        <div className={`${wide ? "max-w-7xl" : "max-w-4xl"} mx-auto`}>
           {/* Breadcrumb */}
           <div className="mb-6 font-mono text-xs text-ink-min">
             <Link href="/politicians" className="hover:text-phos transition-colors">
@@ -155,9 +156,11 @@ export default function PoliticianProfileClient({
                 />
               )}
               {branch === "president" && (
-                <PresidentCard
+                <PresidentScorecard
                   key={(scorecard as unknown as President).id}
                   president={scorecard as unknown as President}
+                  breakdown={breakdown as unknown as PresidentScoreBreakdown | null}
+                  rank={profile.chamberRank}
                   titleAs="h1"
                 />
               )}

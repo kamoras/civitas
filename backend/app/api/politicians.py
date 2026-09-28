@@ -363,21 +363,26 @@ def _build_scorecard(branch: str, pid: str, db: Session) -> dict | None:
 
 
 def _chamber_rank(branch: str, entity, db: Session) -> dict | None:
-    """Where a serving member stands in their chamber: {"rank", "of"}. The
+    """Where the profile stands on its leaderboard: {"rank", "of"}. The
     leaderboard's order — the overall score as displayed (a whole number,
     rounded half up), ties sharing a standard competition rank — so the
-    profile states the rank the leaderboard shows. None for a member no
-    longer serving (the leaderboard ranks only current members) or not
-    scored."""
-    if branch not in ("senate", "house") or not getattr(entity, "is_current", False):
-        return None
-    model = Senator if branch == "senate" else Representative
+    profile states the rank the leaderboard shows. None for whom the
+    leaderboard doesn't rank: a member no longer serving, a sitting
+    president (only completed terms are ranked: get_president_leaderboard),
+    or anyone not scored."""
     shown = {}
-    for m in db.query(model).filter(model.is_current == True).all():  # noqa: E712
-        overall = compute_overall_score(m)
-        if overall is not None:
-            shown[m.id] = math.floor(overall + 0.5)
-    if entity.id not in shown:
+    if branch == "president":
+        if entity.is_current:
+            return None
+        for p in db.query(President).filter(President.is_current == False).all():  # noqa: E712
+            shown[p.id] = math.floor(compute_president_overall_score(p) + 0.5)
+    elif branch in ("senate", "house") and getattr(entity, "is_current", False):
+        model = Senator if branch == "senate" else Representative
+        for m in db.query(model).filter(model.is_current == True).all():  # noqa: E712
+            overall = compute_overall_score(m)
+            if overall is not None:
+                shown[m.id] = math.floor(overall + 0.5)
+    if not shown or entity.id not in shown:
         return None
     mine = shown[entity.id]
     return {"rank": 1 + sum(1 for v in shown.values() if v > mine), "of": len(shown)}
