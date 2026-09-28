@@ -1201,7 +1201,9 @@ export default function AboutPage() {
                   one. Before that check, a handful of people who file paperwork for
                   offices in many states at once were enough to invent a Senate
                   &ldquo;special election&rdquo; in New York and Hawaii, neither of which
-                  votes for a senator in 2026.
+                  votes for a senator in 2026. Florida and Ohio do, but only to fill a vacancy,
+                  and their certified candidates were being filed under a regular race that does
+                  not exist; they now reach the special election they are running in.
                 </P>
               </div>
 
