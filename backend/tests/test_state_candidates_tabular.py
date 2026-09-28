@@ -398,6 +398,45 @@ class TestRunoffOverride:
         result = await tb.fetch_confirmed_candidates(None, 2026, "NC", no_stage)
         assert not getattr(result, "state_offices_incomplete", False)
 
+    async def _run_ga_judicial(self, monkeypatch, justice_votes):
+        rows = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "US Senate - Rep\tMike Collins\tREP\t600000\n"
+            "US Senate - Rep\tDerek Dooley\tREP\t300000\n"
+            "Lieutenant Governor - Rep\tBurt Jones\tREP\t900\n"
+            "Lieutenant Governor - Rep\tSomeone Else\tREP\t100\n"
+            f"Justice of the Supreme Court - Bethel\tCharlie Bethel\t\t{justice_votes[0]}\n"
+            f"Justice of the Supreme Court - Bethel\tA Challenger\t\t{justice_votes[1]}\n"
+        ).encode()
+
+        async def fake_discover(client, state, year, discovery):
+            return [{"url": "https://example.gov/p", "runoff": False}]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=rows)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        return await tb.fetch_confirmed_candidates(None, 2026, "GA", {
+            "runoff_threshold_pct": 50.0, "format": self._FMT, "statewide_offices": True,
+            "judicial_offices": True, "judicial_resolution": "decided_before_general",
+            "discovery": {"runoff_name_regex": "General Primary Runoff"},
+        })
+
+    @pytest.mark.asyncio
+    async def test_a_judgeship_decided_outright_is_not_owed_a_runoff(self, monkeypatch):
+        """Georgia publishes no judgeship (decided_before_general), so its
+        rule names nobody for every one. That is not a runoff owed: with a
+        majority winner (87.5%), the state offices are the whole read."""
+        result = await self._run_ga_judicial(monkeypatch, (875, 125))
+        assert not getattr(result, "state_offices_incomplete", False)
+        assert {(r["office"], r["last_name"]) for r in result} == {("S", "Collins"), ("lt_governor", "Burt Jones")}
+
+    @pytest.mark.asyncio
+    async def test_a_judgeship_with_no_majority_is_owed_its_runoff(self, monkeypatch):
+        result = await self._run_ga_judicial(monkeypatch, (500, 500))
+        assert result.state_offices_incomplete is True
+
     @pytest.mark.asyncio
     async def test_one_stage_pending_publishes_no_state_offices(self, monkeypatch):
         """Read alone, the settled party's election would be taken for

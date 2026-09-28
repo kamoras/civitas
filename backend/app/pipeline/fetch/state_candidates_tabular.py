@@ -141,6 +141,8 @@ import httpx
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    JUDICIAL_RESOLUTION_DECIDED_EARLY,
+    JUDICIAL_RESOLUTION_ELECTS,
     clean_display_name,
     federal_only,
     normalize_party,
@@ -953,6 +955,25 @@ async def fetch_confirmed_candidates(
     return records
 
 
+def _owed_a_runoff(votes: list[tuple[str, int]], majority_rule: str | None, advance: int) -> bool:
+    """Whether a contest that named nobody is still owed a runoff, rather
+    than refused for another reason. A party-primary contest (no majority
+    rule) is owed one when only the threshold stopped a leader from being
+    named. A judicial contest is judged by its OWN rule, never the party
+    primary's: under "decided_before_general" (Georgia) or "elects" it is
+    owed a runoff only when no candidate reached a majority -- Georgia
+    publishes no judgeship by design, and re-asking without the rule
+    found a leader in every one, holding the state's offices open forever
+    whenever no runoff stage was listed. Any other rule has no runoff."""
+    if majority_rule is None:
+        return bool(pick_nominees(votes, None, advance))
+    if majority_rule in (JUDICIAL_RESOLUTION_DECIDED_EARLY, JUDICIAL_RESOLUTION_ELECTS):
+        counts = [v for _n, v in votes if isinstance(v, (int, float))]
+        total = sum(counts)
+        return total > 0 and max(counts) * 2 <= total
+    return False
+
+
 def _collect(
     rows: list[dict],
     fmt: dict,
@@ -1040,8 +1061,9 @@ def _collect(
             judicial_resolution=majority_rule,
         )
         if not won:
-            if (short is not None and threshold is not None and not federal
-                    and pick_nominees(list(entry["votes"].items()), None, seats_filled or effective_advance)):
+            if short is not None and threshold is not None and not federal and _owed_a_runoff(
+                list(entry["votes"].items()), majority_rule, seats_filled or effective_advance,
+            ):
                 short.add((office, district, seat, contest_party))
             continue
 
