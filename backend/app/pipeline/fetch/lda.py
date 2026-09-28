@@ -58,7 +58,7 @@ from app.pipeline.analyze.lobbying_records import (
     names_bill,
     title_match_score,
 )
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.cache import api_cache_get, api_cache_set, api_cache_stamp
 from app.pipeline.fetch.congress import congress_first_year, congress_for_year
 from app.pipeline.fetch.floor_logs import bill_id_from_number
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
@@ -258,11 +258,12 @@ def _split_client(client_name: str) -> tuple[str, list[str]]:
     ("GIBSON, DUNN & CRUTCHER LLP (O/B/O PEPSICO, INC.)"). With no marker
     there is no firm part and the field is the party.
 
-    When the party begins with a pronoun ("ITSELF", "ITS MEMBERS", "THEIR
-    CLIENT ASLRRA"), the name before the marker is a party, and so is any
-    name ending the phrase: every run of its last words is offered ("CLIENT
-    ASLRRA", "ASLRRA"), since where a descriptor ends and a name starts
-    can't be read from the field.
+    When the party begins with a pronoun, any name ending the phrase is a
+    party: every run of its last words is offered ("THEIR CLIENT ASLRRA",
+    "CLIENT ASLRRA", "ASLRRA"), since where a descriptor ends and a name
+    starts can't be read from the field. After "its"/"itself" the name
+    before the marker is a party too ("ON BEHALF OF ITSELF AND ITS
+    SUBSIDIARIES"); after "their" it is the firm filing for its client.
     """
     tokens = _client_tokens(client_name)
     markers = list(_MARKER_RE.finditer(tokens))
@@ -270,12 +271,20 @@ def _split_client(client_name: str) -> tuple[str, list[str]]:
         return "", [tokens]
     firm = tokens[:markers[0].start()]
     party = tokens[markers[-1].end():]
-    if not _PRONOUN_RE.match(party):
+    pronoun = _PRONOUN_RE.match(party)
+    if not pronoun:
         return firm, [party]
     start = markers[-2].end() if len(markers) > 1 else 0
     before = tokens[start:markers[-1].start()]
-    words = party.replace("(", " ").replace(")", " ").split()[1:]
-    return firm, [before] + [" ".join(words[i:]) for i in range(len(words))]
+    words = party.replace("(", " ").replace(")", " ").split()
+    # Every trailing run, the pronoun's own word included: a client can be
+    # named "ITS AMERICA".
+    runs = [" ".join(words[i:]) for i in range(len(words))]
+    # "Its"/"itself" point back at the name before the marker; "their" is a
+    # firm speaking of its client ("THEIR CLIENT BOEING"), whose filing it
+    # is not.
+    own = not pronoun.group(0).strip(" (").startswith("THEIR")
+    return firm, ([before] if own else []) + runs
 
 
 def _names_of(part: str) -> list[str]:
@@ -343,14 +352,16 @@ async def fetch_lobbying_activity(
 
     ttl = _FINISHED_YEAR_CACHE_HOURS if _year_is_closed(year) else _CURRENT_YEAR_CACHE_HOURS
     cache_key = _cache_key(org_key, year)
-    held = _activities.get(cache_key)
-    if held and held[1] == utcnow().date():
-        return held[0]
-    cached = api_cache_get(db, "lda", cache_key, max_age_hours=ttl)
-    if cached is not None:
-        return _remember(cache_key, _activity_from(
-            org_key, cached.get("filings") or [], bool(cached.get("complete", True)),
-        ))
+    stamp = api_cache_stamp(db, "lda", cache_key, max_age_hours=ttl)
+    if stamp is not None:
+        held = _activities.get(cache_key)
+        if held and held[0] == stamp:
+            return held[1]
+        cached = api_cache_get(db, "lda", cache_key, max_age_hours=ttl)
+        if cached is not None:
+            return _remember(cache_key, stamp, _activity_from(
+                org_key, cached.get("filings") or [], bool(cached.get("complete", True)),
+            ))
 
     # Follow pagination: a heavy-lobbying client can file dozens to
     # low-hundreds of filings a year (multiple outside firms × quarterly
@@ -396,18 +407,26 @@ async def fetch_lobbying_activity(
     # expires.
     compact = [_compact_filing(f) for f in filings]
     api_cache_set(db, "lda", cache_key, {"filings": compact, "complete": complete}, normal_ttl_hours=ttl)
-    return _remember(cache_key, _activity_from(org_key, compact, complete))
+    return _remember(cache_key, api_cache_stamp(db, "lda", cache_key, max_age_hours=ttl),
+                     _activity_from(org_key, compact, complete))
 
 
-# Derived activity for the day, by cache key: one trade group can head a
-# hundred members' matches, and re-reading and re-matching its search
-# results for each would repeat the same work. A new day re-derives, so a
-# rule change or a refreshed cache entry shows up by the next run.
-_activities: dict[str, tuple[LobbyingActivity, date]] = {}
+# Derived activity by cache key, valid while the cache entry it came from is
+# unchanged (same write time): one trade group can head a hundred members'
+# matches, and re-matching its search results for each would repeat the
+# same work. An expired, rewritten or cleared entry is read afresh. Held for
+# one day at most, so the process doesn't accumulate years of searches.
+_activities: dict[str, tuple[datetime | None, LobbyingActivity]] = {}
+_activities_day: list[date] = []
 
 
-def _remember(cache_key: str, activity: LobbyingActivity) -> LobbyingActivity:
-    _activities[cache_key] = (activity, utcnow().date())
+def _remember(cache_key: str, stamp: datetime | None, activity: LobbyingActivity) -> LobbyingActivity:
+    today = utcnow().date()
+    if _activities_day != [today]:
+        _activities.clear()
+        _activities_day[:] = [today]
+    if stamp is not None:
+        _activities[cache_key] = (stamp, activity)
     return activity
 
 

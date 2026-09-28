@@ -435,6 +435,10 @@ class TestClientMatching:
         ("BOEING", "CAPITOL COUNSEL LLC ON BEHALF OF THEIR CLIENT BOEING", True),
         ("HOSPIRA", "PFIZER ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA", True),
         ("PFIZER", "PFIZER ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA", True),
+        # "Their client": the firm is not the party (review round 14).
+        ("CAPITOL COUNSEL", "CAPITOL COUNSEL LLC ON BEHALF OF THEIR CLIENT BOEING", False),
+        # A client whose name begins with the pronoun's word.
+        ("ITS AMERICA", "SMITH LLP ON BEHALF OF ITS AMERICA", True),
     ])
     def test_real_client_names_from_2025_filings(self, searched, client, same):
         assert lda.is_same_client(searched, client) is same
@@ -631,3 +635,31 @@ async def test_a_days_reads_of_one_search_are_derived_once(db_session):
         first = await fetch_lobbying_activity(MagicMock(), db_session, "Pfizer", 2024)
         second = await fetch_lobbying_activity(MagicMock(), db_session, "Pfizer", 2024)
     assert first is second and derive.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_rewritten_or_cleared_entry_is_read_afresh(db_session):
+    from datetime import timedelta
+
+    from app.models import ApiCache
+    from app.pipeline.cache import api_cache_set
+
+    key = lda._cache_key("PFIZER", 2024)
+    api_cache_set(db_session, "lda", key,
+                  {"filings": [{"client": {"name": "PFIZER INC."}, "filing_type": "Q1", "income": "5"}], "complete": True})
+    first = await fetch_lobbying_activity(MagicMock(), db_session, "Pfizer", 2024)
+    row = db_session.query(ApiCache).filter(ApiCache.cache_key == key).one()
+    row.data_json = '{"filings": [{"client": {"name": "PFIZER INC."}, "filing_type": "Q1", "income": "9"}], "complete": true}'
+    row.cached_at = row.cached_at + timedelta(seconds=1)
+    db_session.commit()
+    second = await fetch_lobbying_activity(MagicMock(), db_session, "Pfizer", 2024)
+    assert (first.total, second.total) == (5.0, 9.0)
+    db_session.delete(row)
+    db_session.commit()
+    client = MagicMock()
+    resp = MagicMock(status_code=200)
+    resp.json.return_value = {"next": None, "results": []}
+    client.get = AsyncMock(return_value=resp)
+    with patch.object(lda._rate_limiter, "acquire", new=AsyncMock()):
+        third = await fetch_lobbying_activity(client, db_session, "Pfizer", 2024)
+    assert third.total == 0.0 and client.get.await_count == 1
