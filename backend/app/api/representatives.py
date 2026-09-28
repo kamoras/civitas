@@ -74,7 +74,7 @@ def get_rep_highlights(rep_id: str, db: Session = Depends(get_db)) -> JSONRespon
 @router.get("/representatives/{rep_id}/votes")
 def get_votes(
     rep_id: str,
-    category: str = Query("recent", pattern="^(recent|key)$"),
+    category: str = Query("recent", pattern="^(recent|key|all)$"),
     page: int = Query(1, ge=1),
     per_page: int = Query(15, ge=1, le=100),
     filter: str = Query("all", pattern="^(all|yea|nay|against-party)$"),

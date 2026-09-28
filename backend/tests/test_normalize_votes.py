@@ -145,7 +145,7 @@ class TestNormalizeVotes:
     def test_party_loyalty_calculation(self):
         bills = [
             {"billId": f"hr{i}", "billName": f"Bill {i}", "policyArea": "DEFENSE",
-             "stance": "x", "partyLeaning": "R", "description": ""}
+             "stance": "x", "partyLeaning": "R", "partySplit": "R", "description": ""}
             for i in range(10)
         ]
         votes = {f"hr{i}": "Yea" if i < 8 else "Nay" for i in range(10)}
@@ -154,6 +154,17 @@ class TestNormalizeVotes:
         assert result["votedWithPartyCount"] == 8
         assert result["votedAgainstPartyCount"] == 2
         assert result["partyLoyaltyPct"] == 80.0
+
+    def test_a_bills_content_lean_never_makes_a_vote_a_break(self):
+        """With or against the party is how the parties actually voted on
+        the roll call (partySplit). A vote whose split is unknown has no
+        party label, whatever the bill's content lean: voting for a bill
+        that reads Democratic is not a break for a Republican."""
+        bills = [{"billId": "hr1", "billName": "Bill 1", "policyArea": "HEALTHCARE",
+                  "stance": "x", "partyLeaning": "D", "description": ""}]
+        result = normalize_votes("B001", bills, {"hr1": "Yea"}, "R")
+        assert result["keyVotes"][0]["votedWithParty"] is None
+        assert result["votedAgainstPartyCount"] == 0
 
     def test_no_votes_on_bills(self):
         bills = [
@@ -169,11 +180,11 @@ class TestNormalizeVotes:
         """Independents who vote mostly with D should get effective party D."""
         bills = [
             {"billId": f"d{i}", "billName": f"D Bill {i}", "policyArea": "HEALTHCARE",
-             "stance": "reform", "partyLeaning": "D", "description": ""}
+             "stance": "reform", "partyLeaning": "D", "partySplit": "D", "description": ""}
             for i in range(8)
         ] + [
             {"billId": f"r{i}", "billName": f"R Bill {i}", "policyArea": "DEFENSE",
-             "stance": "increase", "partyLeaning": "R", "description": ""}
+             "stance": "increase", "partyLeaning": "R", "partySplit": "R", "description": ""}
             for i in range(3)
         ]
         # Senator votes Yea on D bills, Nay on R bills
@@ -364,6 +375,7 @@ class TestMajorityLeaderReconsiderSwitch:
         bill = {"billId": bill_id, "billName": "Continuing appropriations",
                 "policyArea": "BUDGET", "partyLeaning": leaning, "description": ""}
         stamp_roll_call_outcome(bill, {"rejected": rejected, "voteDate": date})
+        bill["partySplit"] = leaning  # the split a real roll call's members would give
         return bill
 
     def _alignment(self, bill, vote, party="R", title="Senate Majority Leader", tenures=None):

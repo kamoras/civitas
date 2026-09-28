@@ -281,6 +281,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 party_leaning=vote_data.get("partyLeaning"),
                 voted_with_party=vote_data.get("votedWithParty"),
                 vote_category=vote_data.get("voteCategory") or category,
+                roll_call=vote_data.get("rollCall"),
             )
         )
 
