@@ -188,16 +188,13 @@ _STATEWIDE_OFFICES = [
     # since no county calls its auditor that. Vermont's is the "Auditor of
     # Accounts" (its 2026 primary and general reports), on the same terms:
     # a Vermont town's auditors are "Town Auditor", and the locality gate
-    # refuses those first.
-    ("auditor", re.compile(
-        r"\b(?:state|general)\s+auditor\b|\bAuditor\s+of\s+(?:(?:Public\s+)?Accounts|State)\b",
-    # since no county calls its auditor that.
-    # Massachusetts's results archive prints a bare "Auditor" and states
-    # its scope in its own District column, "Statewide" -- the qualifier
-    # the adapter carries into the label (state_candidates_ma).
+    # refuses those first. Massachusetts's results archive prints a bare
+    # "Auditor" and states its scope in its own District column,
+    # "Statewide" -- the qualifier the adapter carries into the label
+    # (state_candidates_ma).
     ("auditor", re.compile(
         r"\b(?:state|statewide|general)\s+auditor\b"
-        r"|\bAuditor\s+of\s+(?:Public\s+Accounts|State|the\s+Commonwealth)\b",
+        r"|\bAuditor\s+of\s+(?:(?:Public\s+)?Accounts|State|the\s+Commonwealth)\b",
         re.IGNORECASE)),
     # Pennsylvania's title, word order reversed ("Auditor General"); on
     # its 2028 ballot, not 2026's, but its adapter reads every office.

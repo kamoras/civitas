@@ -581,20 +581,11 @@ class TestSourcesFileOptIns:
 
     # Adapters that pass contest labels through parse_statewide_office.
     READS_STATEWIDE = {
-        "al_special_primary", "canvass_summary_pdf", "certified_pdf", "certified_table",
-        "clarity", "ct_enr", "enhanced_voting", "in_enr",
-        "ks_official_totals", "ma_pd43", "me_results", "nh_results",
-        "or_abstract_pdf", "pa_returns", "sd_vip", "tabular",
-        "tally_enr", "totalvote_enr", "tx_civix", "vrems",
-        "vt_enr",
-        "clarity", "enhanced_voting", "pa_returns", "sd_vip", "tabular", "tally_enr", "totalvote_enr",
-        "clarity", "enhanced_voting", "me_results", "or_abstract_pdf", "sd_vip", "tabular",
-        "tally_enr", "totalvote_enr",
-        "clarity", "enhanced_voting", "nh_results", "sd_vip", "tabular", "tally_enr",
-        "totalvote_enr", "vt_enr",
-        "certified_table", "clarity", "enhanced_voting", "sd_vip", "tabular", "tally_enr", "totalvote_enr",
-        "canvass_summary_pdf", "clarity", "enhanced_voting", "ma_pd43", "sd_vip", "tabular",
-        "tally_enr", "totalvote_enr",
+        "canvass_summary_pdf", "certified_pdf", "certified_table", "clarity",
+        "enhanced_voting", "ks_official_totals", "ma_pd43", "me_results",
+        "nh_results", "or_abstract_pdf", "pa_returns", "sd_vip",
+        "tabular", "tally_enr", "totalvote_enr", "tx_civix",
+        "vrems", "vt_enr",
     }
 
     def _states(self):
