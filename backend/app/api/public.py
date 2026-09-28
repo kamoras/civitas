@@ -6,13 +6,13 @@ Rate limit: 60 requests / minute per IP (headers: X-RateLimit-*).
 Docs: /docs
 """
 
-import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
+from app.api import throttle
 from app.api.rate_limit import client_ip, limit_client, retry_after
 from app.api.response_helpers import (
     CACHE_TTL_CONFIG_S,
@@ -41,7 +41,7 @@ _RATE_PERIOD = 60.0
 
 
 async def _rate_limit_dep(request: Request) -> None:
-    decision = await asyncio.to_thread(
+    decision = await throttle.run(
         limit_client, client_ip(request), "public-api", limit=_RATE_LIMIT, period=_RATE_PERIOD,
     )
     request.state.rl_remaining = decision.remaining

@@ -8,7 +8,6 @@ counted in the throttle store every API worker process shares
 and the hourly upstream budget holds for the whole backend.
 """
 
-import asyncio
 import ipaddress
 import math
 import time
@@ -87,7 +86,7 @@ class _PerClientLimit:
         self.bucket, self.limit, self.period, self.what = bucket, limit, period, what
 
     async def check(self, request: Request) -> None:
-        decision = await asyncio.to_thread(
+        decision = await throttle.run(
             limit_client, client_ip(request), self.bucket, limit=self.limit, period=self.period,
         )
         if not decision.allowed:

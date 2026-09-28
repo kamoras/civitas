@@ -183,6 +183,11 @@ def _build_rows(db: Session) -> list[_Row]:
     return rows
 
 
+# A failed background rebuild waits this long before the next attempt.
+_REFRESH_RETRY_AFTER_FAILURE_S = 30.0
+_refresh_failed_at = float("-inf")
+
+
 def _refresh_cache_in_background() -> None:
     """Rebuild the collection on a daemon thread (own DB session) and swap
     it into the cache atomically. At most one rebuild runs at a time; extra
@@ -191,10 +196,16 @@ def _refresh_cache_in_background() -> None:
     with _refresh_state_lock:
         if _refresh_in_progress:
             return
+        # After a failed rebuild, wait before the next: the stale snapshot
+        # stays stale, so every request would otherwise start another full
+        # rebuild the moment the last one failed — against a database that
+        # is failing it (a long pipeline transaction, say).
+        if time.monotonic() - _refresh_failed_at < _REFRESH_RETRY_AFTER_FAILURE_S:
+            return
         _refresh_in_progress = True
 
     def _run() -> None:
-        global _collect_cache, _refresh_in_progress
+        global _collect_cache, _refresh_in_progress, _refresh_failed_at
         try:
             from app.database import session_scope
             started = utcnow()
@@ -203,6 +214,7 @@ def _refresh_cache_in_background() -> None:
             _collect_cache = (time.monotonic(), started, rows)
         except Exception:
             logger.exception("Background bill-collection rebuild failed — serving the previous snapshot")
+            _refresh_failed_at = time.monotonic()
         finally:
             with _refresh_state_lock:
                 _refresh_in_progress = False

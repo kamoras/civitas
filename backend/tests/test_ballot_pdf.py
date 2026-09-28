@@ -296,3 +296,21 @@ async def test_a_moments_failure_is_not_remembered(db_session, monkeypatch):
         await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
         await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
     assert len(fetched) == 2
+
+
+async def test_a_refusal_is_not_remembered_as_gone(db_session, monkeypatch):
+    import httpx
+
+    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
+        "url": "https://example.com/ballot.pdf", "column_bounds": [[0, 1]],
+    })
+    fetched = []
+
+    def handler(request):
+        fetched.append(request.url)
+        return httpx.Response(403)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
+    assert len(fetched) == 2

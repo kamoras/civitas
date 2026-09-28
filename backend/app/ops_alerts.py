@@ -40,7 +40,7 @@ def send_ops_alert(subject: str, body: str, *, dedupe_key: str | None = None) ->
         # A read first, though _record's insert is what decides: a watchdog
         # re-raises a persisting condition every tick, and the read lets it
         # stop there without taking the database's write lock each time.
-        if dedupe_key and _already_sent(dedupe_key):
+        if dedupe_key and (dedupe_key in _sent_unrecorded or _already_sent(dedupe_key)):
             return False
         if not _record(subject, body, dedupe_key):
             return False  # another process recorded (and sent) it first
@@ -102,6 +102,12 @@ def _already_sent(dedupe_key: str) -> bool:
             db.close()
 
 
+# Dedupe keys this process sent while the history couldn't be written: the
+# database can't stop the next tick from sending again, so memory does —
+# once per process rather than once per watchdog tick.
+_sent_unrecorded: set[str] = set()
+
+
 def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
     """Record the alert; False when its dedupe key was already recorded.
     The insert is the claim: with several processes (the API workers each
@@ -146,6 +152,8 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
         db.commit()
     except Exception:
         logger.exception("Failed to record ops alert")
+        if dedupe_key:
+            _sent_unrecorded.add(dedupe_key)
     finally:
         if db is not None:
             db.close()

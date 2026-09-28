@@ -11,7 +11,6 @@ than shown empty, and only a successful answer is cached, so an outage
 never reads as a bill with no actions or no cosponsors.
 """
 
-import asyncio
 import html as html_lib
 import re
 import unicodedata
@@ -20,6 +19,7 @@ from collections.abc import Callable
 import httpx
 from sqlalchemy.orm import Session
 
+from app.api import throttle
 from app.models import RollCall, RollCallPosition, Representative, Senator
 from app.config import settings
 from app.database import off_loop
@@ -101,7 +101,7 @@ async def fetch_bill_record(
     missing = sum(1 for part in _PARTS if cached[part] is None)
     if spend is not None and missing:
         # A write to the shared budget (api/throttle.py): off the event loop.
-        await asyncio.to_thread(spend, missing)
+        await throttle.run(spend, missing)
     fetched: dict = {}  # written in one transaction at the end
     for part, suffix in _PARTS.items():
         key = keys[part]

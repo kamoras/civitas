@@ -491,6 +491,28 @@ def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 
     return Decision(allowed, remaining, reset_at)
 
 
+# The store's calls run on threads of their own: each is microseconds, but
+# on the default executor they would queue behind whatever holds it —
+# searches, PDF parses, model encodes, seconds each — and every limited
+# request would wait on those just to learn whether it may proceed.
+_executor = None
+_executor_lock = threading.Lock()
+
+
+async def run(fn, *args, **kwargs):
+    """fn(*args, **kwargs) off the event loop, on the store's own threads."""
+    import asyncio
+    import functools
+    from concurrent.futures import ThreadPoolExecutor
+
+    global _executor
+    if _executor is None:
+        with _executor_lock:
+            if _executor is None:
+                _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="throttle")
+    return await asyncio.get_running_loop().run_in_executor(_executor, functools.partial(fn, *args, **kwargs))
+
+
 class Unavailable(RuntimeError):
     """The store couldn't answer, for a caller that asked not to fail open."""
 

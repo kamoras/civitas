@@ -560,3 +560,20 @@ async def test_maintenance_drops_stale_salts_without_any_traffic(throttle_store,
             break
     task.cancel()
     assert _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'day'") == [(0,)]
+
+
+async def test_store_calls_do_not_queue_behind_the_default_executor():
+    """Every limited request asks the store; on the default executor it
+    would wait behind searches and PDF parses holding every thread."""
+    import asyncio
+    import threading
+    import time
+
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    busy = [loop.run_in_executor(None, release.wait) for _ in range(64)]  # fill the default pool
+    start = time.monotonic()
+    name = await throttle.run(lambda: threading.current_thread().name)
+    assert name.startswith("throttle") and time.monotonic() - start < 1
+    release.set()
+    await asyncio.gather(*busy)

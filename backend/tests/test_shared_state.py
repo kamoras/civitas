@@ -162,3 +162,28 @@ async def test_a_request_path_cache_write_that_fails_is_only_logged(db_session, 
     monkeypatch.setattr(cache, "api_cache_set", locked)
     await cache.api_cache_set_async(db_session, "t", "k", {"a": 1})
     await cache.api_cache_set_many_async(db_session, "t", {"k": {"a": 1}})
+
+
+def test_callers_during_the_first_read_wait_for_it(monkeypatch):
+    """Before the first read answers there is no value to serve: concurrent
+    callers wait for it instead of each falling back to the bundled value."""
+    import threading
+    import time
+
+    from app.shared_state import PolledRow, decode_json_dict
+
+    started = threading.Event()
+
+    def slow_reader(_db):
+        started.set()
+        time.sleep(0.2)
+        return (datetime(2026, 1, 1), {"a": 1})
+
+    polled = PolledRow("t", "k", every_s=30, decode=decode_json_dict, reader=slow_reader)
+    results = []
+    first = threading.Thread(target=lambda: results.append(polled.get()))
+    first.start()
+    started.wait()
+    results.append(polled.get())  # arrives mid-read
+    first.join()
+    assert results == [{"a": 1}, {"a": 1}]

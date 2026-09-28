@@ -275,8 +275,11 @@ async def fetch_town_ballot_pdf(
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
         logger.warning("Ballot PDF fetch failed for %s: HTTP %d", town, status)
-        if 400 <= status < 500 and status not in (408, 429):
-            await remember_failure(f"HTTP {status}")  # gone or refused: not a moment's error
+        if status in (404, 410):
+            # Gone: not a moment's error. A 401/403 is not remembered — a
+            # clerk's site or its bot challenge refuses for a while and then
+            # doesn't, like a 5xx (regulations_gov._retryable, the same rule).
+            await remember_failure(f"HTTP {status}")
         return None
     except Exception:
         logger.exception("Ballot PDF fetch failed for %s", town)

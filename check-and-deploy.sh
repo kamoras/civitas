@@ -282,7 +282,22 @@ if [[ "$deploy_ok" == "1" ]]; then
   done
 fi
 
+# nginx caches every public API read (nginx/civitas.conf), and during a
+# rollout the new nginx task can cache the old backend's responses — a
+# response shape the new frontend may not read. Once every service runs the
+# new release, drop what was cached: an entry whose file is gone is simply a
+# miss (checked live), so this never serves an error. The cache lives in the
+# nginx container's own filesystem, so there is nothing else to clear.
+purge_nginx_cache() {
+  local container
+  for container in $(docker ps -q --filter "label=com.docker.swarm.service.name=civitas_nginx"); do
+    docker exec "$container" sh -c 'find /var/cache/nginx/civitas -type f -delete' \
+      || log "couldn't purge nginx cache in $container — entries expire within their max-age"
+  done
+}
+
 if [[ "$deploy_ok" == "1" ]]; then
+  purge_nginx_cache
   log "deploy OK"
   echo "$REMOTE" > "$DEPLOYED_MARKER"
 

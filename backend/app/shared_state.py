@@ -76,6 +76,10 @@ def write_row(db, tier: str, key: str, value: Any, *, at: datetime) -> None:
 
 # How soon a PolledRow holding nothing retries a read that met a lock.
 _RETRY_EMPTY_S = 1.0
+# How long a caller waits for another thread's first read of a PolledRow
+# before serving the fallback: a read is milliseconds; this only bounds a
+# database that doesn't answer.
+_FIRST_READ_WAIT_S = 2.0
 
 
 class PolledRow:
@@ -95,7 +99,9 @@ class PolledRow:
     can't. `reader(db)` reads the row; it defaults to read_row, and exists so
     a module can route the read through a function of its own. The database
     read happens outside the lock: a slow one must not hold up every thread
-    serving from the value.
+    serving from the value — except before the first read has answered,
+    when there is no value to serve: callers then wait for it (a moment at
+    most), rather than each fall back while one reads.
     """
 
     def __init__(self, tier: str, key: str, *, every_s: float, decode, reader=None):
@@ -105,6 +111,9 @@ class PolledRow:
         self._reader = reader or (lambda db: read_row(tier, key, db))
         self._lock = threading.Lock()
         self._generation = 0
+        # Set once a read has answered (a value, or no row): until then
+        # there is nothing to serve, only a read to wait for.
+        self._answered = threading.Event()
         self.reset()
 
     def reset(self) -> None:
@@ -113,6 +122,7 @@ class PolledRow:
         with self._lock:
             self._value, self._stamp, self._checked_at = None, None, None
             self._generation += 1
+            self._answered.clear()
 
     def expire(self) -> None:
         """Make the next get() check the row (tests; a forced reload)."""
@@ -141,14 +151,24 @@ class PolledRow:
                 self._checked_at = now  # one thread checks; the rest keep serving
             value, stamp, generation = self._value, self._stamp, self._generation
         if not due:
+            if not self._answered.is_set():
+                # Another thread is making the first read: wait for it
+                # rather than serve the fallback its answer would replace.
+                self._answered.wait(_FIRST_READ_WAIT_S)
+                return self.current()
             return value
 
         row = self._reader(db)
         if row is UNREADABLE:
             if value is None:
                 with self._lock:
-                    if self._generation == generation and self._checked_at == now:
-                        self._checked_at = now - self.every_s + _RETRY_EMPTY_S
+                    if self._generation == generation:
+                        if self._checked_at == now:
+                            self._checked_at = now - self.every_s + _RETRY_EMPTY_S
+                        # An answer too — "nothing yet": whoever waits falls
+                        # back now rather than wait out a database that
+                        # isn't answering, and the retry above reads again.
+                        self._answered.set()
             return value
         if row is None:
             value, stamp = None, None
@@ -161,6 +181,7 @@ class PolledRow:
         with self._lock:
             if self._generation == generation:
                 self._value, self._stamp = value, stamp
+                self._answered.set()
         return value
 
 

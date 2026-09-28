@@ -564,3 +564,18 @@ class TestChangesFromThePipelineProcess:
         bill_service._changed_since(shared_db, bill_service.utcnow())
         bill_service._changed_since(shared_db, bill_service.utcnow())
         assert len(queries) == 1
+
+
+def test_a_failed_rebuild_is_not_retried_on_every_request(monkeypatch):
+    import threading
+
+    from app.services import bill_service
+
+    starts = []
+    monkeypatch.setattr(bill_service, "_build_rows", lambda db: (starts.append(1), (_ for _ in ()).throw(RuntimeError("locked")))[1])
+    monkeypatch.setattr(threading, "Thread", lambda target, **_kw: type("T", (), {"start": lambda self: target()})())
+    monkeypatch.setattr("app.database.session_scope", __import__("contextlib").nullcontext)
+    monkeypatch.setattr(bill_service, "_refresh_failed_at", float("-inf"))
+    for _ in range(5):
+        bill_service._refresh_cache_in_background()
+    assert starts == [1]

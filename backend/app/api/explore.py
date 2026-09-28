@@ -380,7 +380,7 @@ async def get_explore_document_summary(
     # device's one LLM, so a store that can't answer refuses the request
     # rather than letting every one through.
     try:
-        claimed = await asyncio.to_thread(
+        claimed = await throttle.run(
             throttle.claim, _SUMMARY_BUCKET, str(doc_id), period=_SUMMARY_COOLDOWN, fail_open=False,
         )
     except throttle.Unavailable:
@@ -411,7 +411,7 @@ async def get_explore_document_summary(
             logger.exception("Explore doc summary streaming failed for doc_id=%s", doc_id)
             if not full_text:
                 # Nothing was generated: the next reader may try at once.
-                await asyncio.to_thread(throttle.release, _SUMMARY_BUCKET, str(doc_id))
+                await throttle.run(throttle.release, _SUMMARY_BUCKET, str(doc_id))
                 yield _sse({"done": True, "summary": "", "keyPoints": [], "impact": ""})
                 return
 
