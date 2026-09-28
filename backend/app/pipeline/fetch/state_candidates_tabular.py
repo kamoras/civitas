@@ -801,10 +801,31 @@ def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
     # the label, unless the state's config names the columns that say so.
     office_spec = fmt.get("house_from_columns")
 
+    # Where the contest is keyed by its party column too (a party primary
+    # named only by "ContestName" + "PartyName"), one party must make ONE
+    # contest however each row spells it. Illinois's per-precinct export
+    # spells its Republicans four ways across jurisdictions ("REPUBLICAN",
+    # "Republican", "REPUBLICAN PARTY", "Republican Party" -- read live
+    # from the 2026 Secretary of State file): keyed on the raw text, that
+    # was four contests for one primary, each resolved on its own, and the
+    # last one written won. It named Walter Adamczyk, who took 53-47 no
+    # part of the statewide total (Diane M. Harris won, 279,727 to
+    # 248,198). So a recognised party is keyed on the first spelling seen
+    # for its code; an unrecognised one stays as printed.
+    party_in_key = bool(party_col) and party_col in (
+        contest_col if isinstance(contest_col, list) else [contest_col]
+    )
+    spelling: dict[str, str] = {}
+
     tally: dict[str, dict] = defaultdict(
         lambda: {"votes": defaultdict(int), "party": {}, "office": None},
     )
     for row in rows:
+        if party_in_key:
+            raw_party = (row.get(party_col) or "").strip()
+            code = normalize_party(raw_party)
+            if code is not None:
+                row = {**row, party_col: spelling.setdefault(code, raw_party)}
         contest = _cell(row, contest_col)
         choice = _cell(row, choice_col)
         if not contest or not choice or choice.casefold() in excluded:

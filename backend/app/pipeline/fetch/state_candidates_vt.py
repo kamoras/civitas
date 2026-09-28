@@ -141,6 +141,7 @@ import httpx
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     DiscoveryFailed,
+    ballot_list_party,
     clean_display_name,
     normalize_party,
     parse_office,
@@ -319,11 +320,13 @@ def _general_ballot_statewide(report: dict) -> list[dict]:
     party named is the line's party, which is how Vermont orders them --
     Amanda Janoo won the Democratic primary and a Progressive write-in
     nomination). Read as a ballot list, so an independent is an ordinary
-    entry (normalize_party's ballot_list). A party the shared vocabulary
-    has no code for -- Vermont's Progressive, Freedom and Unity, Peace and
-    Justice -- is left out rather than stored under a wrong one; that is
-    the same set every primary-results state already omits, and the page
-    calls this section "nominees", never "the ballot".
+    entry (normalize_party's ballot_list), and so is every minor party:
+    Progressive has an FEC code (PRO), and a party with none -- Freedom
+    and Unity, Peace and Justice -- is kept under OTHER_PARTY with its
+    label as printed (ballot_list_party). The 2026 general report (read
+    2026-09-28) prints 17 statewide ballot lines; before this, four of
+    them (Dean Roy, June Goodband, Rachel Shaw, Zachary Hampl) were left
+    off the page.
 
     Write-in tallies (`wc`) are ignored: they are not ballot lines."""
     found: dict[tuple[str, str | None, int], tuple[str, str]] = {}
@@ -342,13 +345,18 @@ def _general_ballot_statewide(report: dict) -> list[dict]:
                     found.setdefault((code, seat, cid), (cn, str(c.get("pn") or "")))
     records = []
     for (code, seat, _cid), (cn, party_label) in found.items():
-        party = normalize_party(party_label.split("/")[0], ballot_list=True)
+        party = ballot_list_party(party_label.split("/")[0])
         if party is None:
-            logger.info("VT general ballot: %s %r (%s) has no party code -- not stored", code, cn, party_label)
+            # A ballot line printed with no party at all: nothing to key it
+            # under, and never seen on the real report.
+            logger.info("VT general ballot: %s %r prints no party -- not stored", code, cn)
             continue
         name = clean_display_name(cn)
         if name:
-            records.append({"office": code, "district": seat, "party": party, "last_name": name})
+            record = {"office": code, "district": seat, "party": party[0], "last_name": name}
+            if party[1]:
+                record["party_label"] = party[1]
+            records.append(record)
     return records
 
 

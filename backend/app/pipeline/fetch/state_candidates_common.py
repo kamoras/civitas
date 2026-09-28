@@ -100,9 +100,12 @@ _PARTY_PATTERNS = [
     (re.compile(r"\b(?:republican|rep|gop)\b", re.IGNORECASE), "R"),
     # Arizona's own 3-letter codes ("LBT", "GRN") and Wyoming's "LBR" don't
     # share a root with "lib"/"gre" — verified live off each state's export.
-    (re.compile(r"\b(?:libertarian|lib|lbt|lbr)\b", re.IGNORECASE), "L"),
+    # Florida's Division of Elections codes its state affiliates LPF
+    # (Libertarian Party of Florida) and CPF (Constitution Party of
+    # Florida) -- its 2026 general candidate list, read live 2026-09-28.
+    (re.compile(r"\b(?:libertarian|lib|lbt|lbr|lpf)\b", re.IGNORECASE), "L"),
     (re.compile(r"\b(?:green|gre|grn)\b", re.IGNORECASE), "G"),
-    (re.compile(r"\b(?:constitution|con|cst)\b", re.IGNORECASE), "C"),
+    (re.compile(r"\b(?:constitution|con|cst|cpf)\b", re.IGNORECASE), "C"),
     # South Carolina's United Citizens Party, which fields statewide and
     # legislative nominees on its 2026 general ballot. Spelled out only:
     # no abbreviation of it is safe inside a longer label.
@@ -376,7 +379,35 @@ PARTY_CODE_MAP = {
     "R": "REP", "D": "DEM", "L": "LIB", "G": "GRE", "I": "IND", "C": "CON",
     # FEC's own code for the United Citizen party (party-code table).
     "U": "UC",
+    # FEC's PRO, "Progressive Party" -- Vermont's Progressive Party, which
+    # fields statewide nominees on its 2026 general ballot. Read only from
+    # a certified ballot list (_BALLOT_LIST_PARTY_PATTERNS): Vermont's
+    # Progressive PRIMARY is write-in noise that must stay unread.
+    "P": "PRO",
 }
+
+# The code a certified ballot list's party is stored under when the list
+# prints a party this vocabulary cannot name -- Vermont's "FREEDOM AND
+# UNITY", South Carolina's "Workers", neither of which has an FEC code
+# either. Deliberately NOT in PARTY_CODE_MAP: it names no party, so it
+# must never take part in matching a federal candidate by party, and
+# every row stored under it carries the party as the state printed it
+# (`party_label`) -- that label, not this code, is what the page shows.
+# Distinct from "" (no party printed at all, as on a non-partisan
+# legislative seat), so the two cannot be confused in the unique keys.
+OTHER_PARTY = "O"
+# FEC's own code for "Other", sent to the page for OTHER_PARTY rows so
+# its party vocabulary stays FEC's (see state_nominee_party).
+OTHER_PARTY_FEC = "OTH"
+
+
+def state_nominee_party(code: str | None) -> str:
+    """The party a state-office nominee's stored code is sent to the page
+    as: FEC's 3-letter code, OTH for OTHER_PARTY (whose printed label goes
+    beside it), and a code the map does not know as itself."""
+    if code == OTHER_PARTY:
+        return OTHER_PARTY_FEC
+    return PARTY_CODE_MAP.get(code or "", code or "")
 
 # FEC's own party codes that name one of PARTY_CODE_MAP's parties under
 # another code — a data-format translation of FEC's published party-code
@@ -954,10 +985,24 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # NOPTY is Louisiana's "No Party"; PETITION is South Carolina's label for
 # a candidate who reached the ballot by petition rather than a party, and
 # Nebraska writes the same thing out as "By Petition". DTS is New Mexico's
-# "Declined to Select".
+# "Declined to Select". "Unenrolled" is Maine's word for a voter in no
+# party (its 2026 General Candidate List prints it beside "Independent").
+# Minor parties with an FEC code of their own, recognised ONLY on a
+# certified general-election list (normalize_party's ballot_list). On
+# primary results the same word is refused, deliberately: Vermont's
+# Progressive primary carried no declared candidate in 2026, only
+# scattered write-ins, and reading it would confirm a write-in fusion
+# nomination nobody verified (see state_candidates_vt). Checked AFTER
+# the major parties, so a fusion line ("Democratic/Progressive") keeps
+# the party it names first.
+_BALLOT_LIST_PARTY_PATTERNS = [
+    # Vermont prints both "PROGRESSIVE" and, on a fusion line, "PROG".
+    (re.compile(r"\b(?:progressive|prog)\b", re.IGNORECASE), "P"),
+]
+
 _INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent|unaffiliated|undeclared|no\s+party(\s+affiliation)?|non[\s-]?partisan|by\s+petition)\b",
+    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+party(\s+affiliation)?|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )
 
@@ -994,7 +1039,37 @@ def normalize_party(text: str, ballot_list: bool = False) -> str | None:
     for pattern, code in _PARTY_PATTERNS:
         if pattern.search(value):
             return code
+    if ballot_list:
+        for pattern, code in _BALLOT_LIST_PARTY_PATTERNS:
+            if pattern.search(value):
+                return code
     return None
+
+
+def ballot_list_party(text: str) -> tuple[str, str | None] | None:
+    """(code, printed label) for the party column of a certified GENERAL
+    list's state-office row, or None when the column prints no party.
+
+    A certified list's party column is the party by construction, so a
+    party the shared vocabulary cannot name is still a party: it is kept
+    as OTHER_PARTY with the label exactly as the state printed it
+    ("FREEDOM AND UNITY", "Workers") rather than the row being dropped --
+    dropping it removes a real November ballot line from the page. The
+    label is returned only for OTHER_PARTY; a recognised party renders
+    through its FEC code like every other nominee.
+
+    Never for primary results, and never for text that is not purely a
+    party column (a section heading such as Missouri's "JUDICIAL
+    CANDIDATES" names no party at all). A value with no two-letter word
+    in it (blank, a dash, a lone code letter like Texas's "W" for
+    write-in) prints no party and yields None."""
+    value = " ".join((text or "").split())
+    code = normalize_party(value, ballot_list=True)
+    if code is not None:
+        return code, None
+    if not re.search(r"[A-Za-z]{2}", value):
+        return None
+    return OTHER_PARTY, value
 
 
 async def discover_certification_link(

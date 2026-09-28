@@ -47,6 +47,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.state_candidates_common import (
+    ballot_list_party,
     normalize_party,
     parse_office,
     parse_statewide_office,
@@ -176,14 +177,21 @@ async def fetch_confirmed_candidates(
         if statewide:
             office_key, _seat = statewide
             name = clean_display_name(raw_name)
-            if not name:
+            # A state-office row is stored under a party CODE, never null:
+            # a party the shared codes cannot name keeps its printed label
+            # (ballot_list_party), and a row printing no party is skipped.
+            state_party = ballot_list_party(raw_party)
+            if not name or state_party is None:
                 continue
-            records.append({
+            record = {
                 "office": office_key,
                 "district": None,
-                "party": party,
+                "party": state_party[0],
                 "last_name": name,
-            })
+            }
+            if state_party[1]:
+                record["party_label"] = state_party[1]
+            records.append(record)
 
     if not federal_seen:
         # Ballot order puts the federal contests on page one. None here

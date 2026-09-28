@@ -209,8 +209,14 @@ export interface StatewideRace {
 
 export interface StatewideNominee {
   /** FEC's own 3-letter code, so majorPartyOf() applies here exactly as
-   * it does to every federal candidate on the page. */
+   * it does to every federal candidate on the page. "OTH" for a party
+   * neither we nor FEC have a code for — see partyLabel. */
   party: string;
+  /** The party exactly as the state's certified list printed it, sent
+   * only when `party` is "OTH" (Vermont's "FREEDOM AND UNITY", South
+   * Carolina's "Workers"); null otherwise. Rendered in place of the code,
+   * which names no party. Optional: an older backend omits it. */
+  partyLabel?: string | null;
   name: string;
 }
 

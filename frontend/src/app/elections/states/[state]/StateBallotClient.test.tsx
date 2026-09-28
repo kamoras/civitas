@@ -401,6 +401,33 @@ describe("statewide executive offices", () => {
     expect(el.className).not.toContain("text-dem-blue");
     expect(el.className).not.toContain("text-rep-red");
   });
+
+  it("shows a party with no code as the state printed it, not as OTH", async () => {
+    // Real 2026 Vermont general-ballot lines.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideCoverage: covered.statewideCoverage,
+          statewideRaces: [
+            {
+              office: "governor",
+              label: "Governor",
+              nominees: [
+                { party: "OTH", partyLabel: "FREEDOM AND UNITY", name: "DEAN ROY" },
+                { party: "REP", partyLabel: null, name: "PHIL SCOTT" },
+              ],
+            },
+          ],
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide offices/);
+    const roy = drawer.getByText("DEAN ROY").closest("span")!.parentElement!;
+    expect(roy.textContent).toContain("FREEDOM AND UNITY");
+    expect(roy.textContent).not.toContain("OTH");
+    const scott = drawer.getByText("PHIL SCOTT").closest("span")!.parentElement!;
+    expect(scott.textContent).toContain("REP");
+  });
 });
 
 describe("state legislature", () => {

@@ -1896,6 +1896,12 @@ class StatewideNominee(Base):
     # the second overwriting the first.
     district: Mapped[str | None] = mapped_column(String(8), nullable=True)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
+    # The party exactly as the state printed it, set only when `party` is
+    # state_candidates_common.OTHER_PARTY: a certified November list that
+    # names a party the shared codes cannot (Vermont's "FREEDOM AND
+    # UNITY", South Carolina's "Workers"). The page shows this label
+    # rather than a code. Null for every recognised party.
+    party_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # The name the state itself printed, annotations stripped (Rhode
     # Island marks its party-endorsed candidates with a bare asterisk).
     # There is deliberately no separate surname column: a surname exists
@@ -1964,6 +1970,8 @@ class StateLegNominee(Base):
     # Minnesota's "10A" really is a district of its own.
     seat: Mapped[str | None] = mapped_column(String(4), nullable=True)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
+    # As on StatewideNominee: the printed party, for OTHER_PARTY rows only.
+    party_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -2025,6 +2033,8 @@ class JudicialNominee(Base):
     # judgeship is a single office, never a multi-member body.
     seat: Mapped[str | None] = mapped_column(String(8), nullable=True)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
+    # As on StatewideNominee: the printed party, for OTHER_PARTY rows only.
+    party_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

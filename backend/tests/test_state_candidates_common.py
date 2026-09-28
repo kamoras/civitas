@@ -199,6 +199,46 @@ class TestNormalizeParty:
         assert common.normalize_party("No Party Preference") is None
         assert common.normalize_party("") is None
 
+    def test_progressive_is_read_only_from_a_ballot_list(self):
+        """Vermont's 2026 Progressive PRIMARY was scattered write-ins and
+        must stay unread; its general report's PROGRESSIVE lines are real
+        ballot lines, and FEC codes the party PRO."""
+        assert common.normalize_party("PROGRESSIVE") is None
+        assert common.normalize_party("PROGRESSIVE", ballot_list=True) == "P"
+        assert common.normalize_party("PROG", ballot_list=True) == "P"
+        assert common.PARTY_CODE_MAP["P"] == "PRO"
+        # A fusion line keeps the party it names first.
+        assert common.normalize_party("Democratic/Progressive", ballot_list=True) == "D"
+
+
+class TestBallotListParty:
+    """The party column of a certified GENERAL list, where a party the
+    shared codes cannot name is still a party."""
+
+    def test_a_recognised_party_is_its_code_with_no_label(self):
+        assert common.ballot_list_party("Republican") == ("R", None)
+        assert common.ballot_list_party("INDEPENDENT") == ("I", None)
+        assert common.ballot_list_party("PROGRESSIVE") == ("P", None)
+
+    def test_an_unknown_party_keeps_its_printed_label(self):
+        # Real 2026 labels: Vermont's general report, South Carolina's VREMS.
+        assert common.ballot_list_party("FREEDOM AND UNITY") == ("O", "FREEDOM AND UNITY")
+        assert common.ballot_list_party("  Workers ") == ("O", "Workers")
+
+    def test_a_column_printing_no_party_yields_none(self):
+        assert common.ballot_list_party("") is None
+        assert common.ballot_list_party(" - ") is None
+        # A lone code letter (Texas's "W" is a write-in) names no party.
+        assert common.ballot_list_party("W") is None
+
+    def test_other_party_never_takes_part_in_federal_matching(self):
+        """"O" names no party, so it is not an FEC party code of ours --
+        a federal candidate is never matched or contradicted through it."""
+        assert common.OTHER_PARTY not in common.PARTY_CODE_MAP
+        assert common.state_nominee_party("O") == "OTH"
+        assert common.state_nominee_party("D") == "DEM"
+        assert common.state_nominee_party("") == ""
+
 
 class TestSurname:
     def test_takes_trailing_token_and_drops_suffixes(self):

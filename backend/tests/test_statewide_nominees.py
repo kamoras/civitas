@@ -283,6 +283,60 @@ PSC_5_D = {"office": "public_service_commission", "district": "5", "party": "D",
            "last_name": "Fifth District Dem"}
 
 
+class TestMinorPartyLabel:
+    """A certified list's party with no code of ours or FEC's (Vermont's
+    "FREEDOM AND UNITY", South Carolina's "Workers") is stored under the
+    neutral "O" with the party exactly as printed, and sent as such."""
+
+    def _record(self, office, name, label, **extra):
+        return {"office": office, "district": extra.pop("district", None), "party": "O",
+                "last_name": name, "party_label": label, **extra}
+
+    def test_statewide_row_keeps_the_printed_party(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "VT", SOURCE, [
+            self._record("governor", "DEAN ROY", "FREEDOM AND UNITY"),
+            self._record("governor", "JUNE GOODBAND", "PEACE AND JUSTICE"),
+            {"office": "governor", "district": None, "party": "R", "last_name": "PHIL SCOTT"},
+        ])
+        races, _ = _statewide_section(db_session, "VT", CYCLE)
+        nominees = {(n["party"], n["partyLabel"], n["name"]) for n in races[0]["nominees"]}
+        assert nominees == {
+            ("OTH", "FREEDOM AND UNITY", "DEAN ROY"),
+            ("OTH", "PEACE AND JUSTICE", "JUNE GOODBAND"),
+            ("REP", None, "PHIL SCOTT"),
+        }
+
+    def test_a_label_beside_a_recognised_code_is_not_stored(self, db_session):
+        """The code is the whole fact for a party we can name; a second
+        spelling of it would be a second vocabulary."""
+        _sync_statewide_nominees(db_session, CYCLE, "VT", SOURCE, [
+            {**GOVERNOR_R, "party_label": "Republican"},
+        ])
+        assert db_session.query(StatewideNominee).one().party_label is None
+
+    def test_legislative_row_keeps_the_printed_party(self, db_session):
+        _sync_state_leg_nominees(db_session, CYCLE, "SC", SOURCE, [
+            self._record("lower", "Kiral Mace", "Workers", district="26"),
+        ])
+        seats = _state_leg_section(db_session, "SC", CYCLE, marker={"checkedAt": "x"})
+        nominee = seats[0]["districts"][0]["nominees"][0]
+        assert (nominee["party"], nominee["partyLabel"]) == ("OTH", "Workers")
+
+    def test_judicial_row_keeps_the_printed_party(self, db_session):
+        _sync_judicial_nominees(db_session, CYCLE, "XX", {**SOURCE, "judicial_offices": True}, [
+            {"office": "supreme", "district": None, "seat": "3", "party": "O",
+             "last_name": "Pat Doe", "party_label": "Working Families"},
+        ])
+        races, _ = _judicial_section(db_session, "XX", CYCLE, marker={"checkedAt": "x"})
+        nominee = races[0]["seats"][0]["nominees"][0]
+        assert (nominee["party"], nominee["partyLabel"]) == ("OTH", "Working Families")
+
+    def test_a_recognised_party_sends_a_null_label(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [GOVERNOR_D])
+        races, _ = _statewide_section(db_session, "RI", CYCLE)
+        assert races[0]["nominees"][0]["partyLabel"] is None
+
+
 class TestStatewideBodySeatedByDistrict:
     """Georgia's Public Service Commission is elected statewide, but a
     commissioner holds the seat for a district and each seat is its own
@@ -582,7 +636,7 @@ class TestSourcesFileOptIns:
     # Adapters that pass contest labels through parse_statewide_office.
     READS_STATEWIDE = {
         "al_special_primary", "canvass_summary_pdf", "certified_pdf", "certified_table",
-        "clarity", "ct_enr", "enhanced_voting", "ks_official_totals",
+        "clarity", "ct_enr", "dos_canlist", "enhanced_voting", "grouped_list_pdf", "ks_official_totals",
         "ma_pd43", "me_results", "nh_results", "or_abstract_pdf",
         "pa_returns", "sd_vip", "tabular", "tally_enr",
         "totalvote_enr", "tx_civix", "vrems", "vt_enr",
@@ -602,12 +656,22 @@ class TestSourcesFileOptIns:
     def test_a_general_lists_opt_in_is_read(self):
         """A certified November list can carry the claim itself (Wyoming,
         New Mexico, Tennessee): its strategy must read the labels, and it
-        must read them from the office column, not a federal code map."""
+        must read them through the shared gates -- from the office column,
+        or for a list keyed by the state's own office codes (Maine,
+        Colorado) through state_office_codes spelling them out -- never
+        from a federal code map alone. The two non-table strategies name
+        where their state offices are."""
+        needs = {
+            "certified_table": lambda g: g.get("format", {}).get("office_parse")
+            or g.get("format", {}).get("state_office_codes"),
+            "grouped_list_pdf": lambda g: g.get("discovery", {}).get("state_url_templates"),
+            "dos_canlist": lambda g: g.get("state_office_groups") and g.get("special_index_url"),
+        }
         for state, entry in self._states().items():
             general = entry.get("general_list") or {}
             if general.get("statewide_offices"):
                 assert general["strategy"] in self.READS_STATEWIDE, state
-                assert general.get("format", {}).get("office_parse"), state
+                assert needs.get(general["strategy"], lambda g: True)(general), state
                 assert not general.get("statewide_offices_basis"), state
 
     def test_a_basis_is_never_set_without_the_opt_in(self):
