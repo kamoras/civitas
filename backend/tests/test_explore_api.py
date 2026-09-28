@@ -149,10 +149,10 @@ class TestSummaryEndpointGuards:
             # Over and cached: the claim is given back.
             await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
 
-    async def test_an_unusable_output_holds_the_document_off(self, db_session):
-        # Asked again at once, it would most likely come out the same way.
-        from fastapi import HTTPException
-
+    async def test_an_unusable_output_is_the_answer_for_a_while(self, db_session):
+        # The same prompt at temperature 0 would come out the same way: not
+        # generated again for a while — and not a 429 "being written",
+        # which the page would wait out for nothing.
         doc = _make_doc(db_session)
 
         async def _garbled(*_args, **_kwargs):
@@ -164,9 +164,13 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
             await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
-            with pytest.raises(HTTPException) as exc_info:
-                await get_explore_document_summary(doc.id, None, db=db_session)
-        assert exc_info.value.status_code == 429
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm") as stream,
+        ):
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+        assert events == [{"done": True, "summary": "", "keyPoints": [], "impact": ""}]
+        stream.assert_not_called()
 
     async def test_generations_in_flight_are_capped(self, db_session):
         # Each finishes whether or not its reader stays: uncapped, a client
@@ -295,7 +299,7 @@ class TestSummaryEndpointGuards:
         monkeypatch.setattr(explore, "_SUMMARY_GENERATION_LIMIT_S", 0.05)
 
         async def _cut_off(*_args, **_kwargs):
-            yield "SUMMARY: The rule would"
+            yield "SUMMARY: The rule would apply.\nKEY POINTS:\n- One\n- Half a"
             if ending == "fails":
                 raise ConnectionError("dropped")
             await asyncio.sleep(10)
@@ -306,7 +310,9 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
             events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
-            assert events[-1]["done"] and events[-1]["summary"].startswith("The rule would")
+            # Shown without the sentence it stopped in.
+            assert events[-1] == {"done": True, "summary": "The rule would apply.", "keyPoints": ["One"],
+                                  "impact": ""}
             assert not mock_set_cache.called
             # And the next reader may make it afresh at once.
             await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))

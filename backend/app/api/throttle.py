@@ -651,6 +651,20 @@ def hold(bucket: str, keys: list[str], *, period: float) -> tuple[str, float] | 
     return None
 
 
+def held(bucket: str, key: str, *, period: float) -> bool:
+    """Whether `key` was claimed (claim or hold) in the last `period`
+    seconds — read only, claiming nothing. Unavailable when the store can't
+    answer."""
+    try:
+        with _Txn() as conn:
+            return conn.execute(
+                "SELECT 1 FROM claims WHERE bucket = ? AND key = ? AND claimed_at > ?",
+                (bucket, key, time.time() - period),
+            ).fetchone() is not None
+    except sqlite3.Error as error:
+        raise Unavailable(bucket) from error
+
+
 def release(bucket: str, key: str | None, *, token: float | None = None) -> None:
     """Give back a claim whose work didn't happen (the issue voted on didn't
     exist) or is over, so it doesn't hold the next attempt off. With

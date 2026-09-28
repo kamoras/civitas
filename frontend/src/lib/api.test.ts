@@ -386,7 +386,7 @@ describe("streamExploreDocumentSummary", () => {
       .mockResolvedValueOnce(done());
     vi.stubGlobal("fetch", fetchMock);
     const waits: number[] = [];
-    const result = await streamExploreDocumentSummary(1, () => {}, async (ms) => {
+    const result = await streamExploreDocumentSummary(1, () => {}, undefined, async (ms) => {
       waits.push(ms);
     });
     expect(result.summary).toBe("S");
@@ -396,7 +396,18 @@ describe("streamExploreDocumentSummary", () => {
 
   it("still fails on a refusal that isn't one to wait out", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
-    await expect(streamExploreDocumentSummary(1, () => {}, async () => {})).rejects.toThrow("404");
+    await expect(streamExploreDocumentSummary(1, () => {}, undefined, async () => {})).rejects.toThrow("404");
+  });
+
+  it("stops waiting and asking once the reader has left", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 429, headers: { "Retry-After": "10" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    const pending = streamExploreDocumentSummary(1, () => {}, controller.signal);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    controller.abort();
+    await expect(pending).rejects.toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

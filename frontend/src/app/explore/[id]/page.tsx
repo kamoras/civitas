@@ -43,6 +43,12 @@ function resolveSourceUrl(doc: ExploreDocumentDetail): string {
   return "";
 }
 
+const SUMMARY_UNAVAILABLE: ExploreDocumentSummary = {
+  summary: "Analysis unavailable. Try again later.",
+  keyPoints: [],
+  impact: "",
+};
+
 function scorecardHref(doc: ExploreDocumentDetail): string | null {
   if (!doc.politicianId) return null;
   return `/politicians/${doc.politicianId}`;
@@ -532,15 +538,23 @@ export default function ExploreDetailPage() {
   useEffect(() => {
     if (!docId || streamStarted.current === docId || summary) return;
     streamStarted.current = docId;
-    streamExploreDocumentSummary(docId, setLiveText)
-      .then(setSummary)
+    const controller = new AbortController();
+    streamExploreDocumentSummary(docId, setLiveText, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        // An empty summary is the server saying none could be made.
+        setSummary(result.summary ? result : SUMMARY_UNAVAILABLE);
+      })
       .catch(() => {
-        setSummary({
-          summary: "Analysis unavailable. Try again later.",
-          keyPoints: [],
-          impact: "",
-        });
+        if (!controller.signal.aborted) setSummary(SUMMARY_UNAVAILABLE);
       });
+    return () => {
+      // Leaving the document stops the request and any retries (which
+      // could otherwise start a generation nobody reads); a remount of
+      // the same document starts again.
+      controller.abort();
+      if (streamStarted.current === docId) streamStarted.current = null;
+    };
   }, [docId, summary]);
 
   // Both the success and the failure path of the stream set `summary`, so

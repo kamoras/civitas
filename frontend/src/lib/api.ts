@@ -899,6 +899,21 @@ export function summaryRetryDelayMs(retryAfter: string | null): number {
   return Math.min(Math.max(ms, 1_000), 60_000);
 }
 
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true }
+    );
+  });
+}
+
 // Reads the SSE stream from POST /explore/:id/summary — one JSON object
 // per `data:` line, either {delta: "<chunk>"} while generating or the
 // terminal {done: true, summary, keyPoints, impact} (cache hits send only
@@ -911,16 +926,23 @@ export function summaryRetryDelayMs(retryAfter: string | null): number {
 // document is under way; 503: the site's few generations are all busy) is
 // retried after its Retry-After, for as long as a generation can take — by
 // then the other reader's summary is usually cached and comes straight back.
+// `signal` stops it all — the request, the stream, and any wait between
+// retries — when the reader leaves, so nothing goes on asking for them.
 export async function streamExploreDocumentSummary(
   id: number,
   onDelta: (fullTextSoFar: string) => void,
-  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  signal?: AbortSignal,
+  wait: (ms: number, signal?: AbortSignal) => Promise<void> = abortableSleep
 ): Promise<ExploreDocumentSummary> {
   const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
-  let res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST" });
+  const ask = () => fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
+  let res = await ask();
   while ((res.status === 429 || res.status === 503) && Date.now() < giveUpAt) {
-    await wait(Math.min(summaryRetryDelayMs(res.headers.get("Retry-After")), Math.max(0, giveUpAt - Date.now())));
-    res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST" });
+    await wait(
+      Math.min(summaryRetryDelayMs(res.headers.get("Retry-After")), Math.max(0, giveUpAt - Date.now())),
+      signal
+    );
+    res = await ask();
   }
   if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
 

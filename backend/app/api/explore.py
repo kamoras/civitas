@@ -328,11 +328,14 @@ async def post_document_comment(
 # Each claim is held for the whole generation and given back, by its token,
 # when it ends (_Generation) — never one another generation made after it
 # lapsed. A generation is stopped at _SUMMARY_GENERATION_LIMIT_S, inside the
-# claim period; the period bounds how long a claim outlives a process that
-# died mid-generation, and holds off a document whose output couldn't be
-# used.
+# claim period, which bounds how long a claim outlives a process that died
+# mid-generation.
 _SUMMARY_BUCKET = "explore-summary"
 _SLOT_BUCKET = "explore-summary-slot"
+# A document whose output couldn't be used is not generated again for a
+# while: the same prompt at temperature 0 comes out the same way.
+_UNUSABLE_BUCKET = "explore-summary-unusable"
+_UNUSABLE_FOR_S = 30 * 60.0
 _MAX_GENERATIONS = 2
 _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
@@ -443,6 +446,13 @@ async def get_explore_document_summary(
             detail="Summaries are busy right now; please try again shortly.",
             headers={"Retry-After": str(_BUSY_RETRY_AFTER_S)},
         )
+    if outcome == "unusable":
+        # Nothing is being written and nothing will come of retrying soon:
+        # the answer, not a refusal to wait out.
+        async def nothing_usable():
+            yield _sse({"done": True, "summary": "", "keyPoints": [], "impact": ""})
+
+        return StreamingResponse(nothing_usable(), media_type="text/event-stream", headers=_STREAM_HEADERS)
     if isinstance(outcome, dict):  # made by another request while this one waited
         async def made_meanwhile():
             yield _sse({"done": True, **outcome})
@@ -467,7 +477,8 @@ class _Generation:
     """One summary generation: its claims, the generation, and the claims
     given back. `outcome` settles once the claims are decided — "go" (the
     events follow on `events`, None last), "held" (another generation of
-    the document is under way), "busy" (the cap is reached), "unavailable"
+    the document is under way), "busy" (the cap is reached), "unusable"
+    (its last output couldn't be used, recently), "unavailable"
     (the claim store can't answer: fails closed, since the claims are what
     stand between repeated POSTs and the device's one LLM), or the summary
     itself when another request made it meanwhile."""
@@ -518,6 +529,9 @@ class _Generation:
                 if not await self._claim(_SUMMARY_BUCKET, [str(self.doc_id)]):
                     self._settle("held")
                     return
+                if await throttle.run(throttle.held, _UNUSABLE_BUCKET, str(self.doc_id), period=_UNUSABLE_FOR_S):
+                    self._settle("unusable")
+                    return
                 if not await self._claim(_SLOT_BUCKET, [str(slot) for slot in range(_MAX_GENERATIONS)]):
                     self._settle("busy")
                     return
@@ -542,10 +556,11 @@ class _Generation:
         once the summary is cached and the claims are given back, so a
         reader asking again the moment it arrives is served or may start
         one."""
+        from app.api import throttle
         from app.pipeline.analyze.ollama_client import StreamCutOff
 
         text = ""
-        complete = cut_off = False
+        finished = at_limit = False
         try:
             async with asyncio.timeout(_SUMMARY_GENERATION_LIMIT_S):
                 async for delta in self._stream(
@@ -555,26 +570,27 @@ class _Generation:
                 ):
                     text += delta
                     self.events.put_nowait(_sse({"delta": delta}))
-            complete = True
+            finished = True
         except StreamCutOff:
-            # At the token limit: finished as far as it will ever get (the
-            # same prompt stops at the same place), less the section it was
-            # writing.
-            complete = cut_off = True
+            # At the token limit: as far as it will ever get (the same
+            # prompt stops at the same place).
+            at_limit = True
         except Exception:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", self.doc_id)
 
-        parsed = self._parse(text, cut_off=cut_off) if text else {"summary": "", "keyPoints": [], "impact": ""}
-        # Only a finished generation is cached: one that failed or ran out of
-        # time is shown to its reader and made afresh for the next, never
-        # kept as the document's summary.
-        if complete and parsed["summary"]:
+        # Anything but a natural end stopped mid-sentence: the section it was
+        # writing is dropped, for its reader as for the cache.
+        parsed = self._parse(text, cut_off=not finished) if text else {"summary": "", "keyPoints": [], "impact": ""}
+        # A failed or timed-out generation is shown to its reader and made
+        # afresh for the next; one that ended, naturally or at its limit, is
+        # the document's summary.
+        if (finished or at_limit) and parsed["summary"]:
             await asyncio.to_thread(self._set_cached, self.prompt["promptVersion"], self.cache_key, parsed)
-        if complete and not parsed["summary"]:
-            # An output that couldn't be used keeps the document's claim for
-            # its period: asked again at once, the same document would most
-            # likely come out the same way.
-            self._held = [held for held in self._held if held[0] != _SUMMARY_BUCKET]
+        elif finished or at_limit:
+            try:
+                await throttle.run(throttle.hold, _UNUSABLE_BUCKET, [str(self.doc_id)], period=_UNUSABLE_FOR_S)
+            except Exception:
+                logger.warning("Explore summary for doc_id=%s not marked unusable", self.doc_id, exc_info=True)
         await self._give_back()
         self.events.put_nowait(_sse({"done": True, **parsed}))
 
