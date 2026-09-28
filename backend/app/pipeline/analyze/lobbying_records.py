@@ -290,6 +290,7 @@ def names_bill(
     bill_id: str,
     pool: TitlePool | None,
     previous_titles: list[str] | None = None,
+    fits: tuple[float, float] | None = None,
 ) -> bool:
     """Whether the filer's words on one side of a bill number name that bill.
 
@@ -303,6 +304,8 @@ def names_bill(
     fits that bill better than the current one, the filer meant the old
     bill — even if the other side, a neighbour's title in a list, happens to
     fit the current H.R. 82.
+
+    `fits`: the (after, before) title fits, when the caller already has them.
     """
     sides = (after, before)
     if previous_titles:
@@ -312,8 +315,8 @@ def names_bill(
                 # The filer titled this number with the earlier bill's name;
                 # the other side, if it fits, is a neighbour's title.
                 return False
-    for side in sides:
-        score = title_match_score(side, titles)
+    scores = fits or (title_match_score(after, titles), title_match_score(before, titles))
+    for side, score in zip(sides, scores):
         if score < BILL_TITLE_MATCH_MIN:
             continue
         if pool is not None and score + RIVAL_TOLERANCE < pool.best_rival_score(side, bill_id):

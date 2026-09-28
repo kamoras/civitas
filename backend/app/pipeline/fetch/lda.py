@@ -101,6 +101,8 @@ class LobbyingActivity:
     mentions: list[dict] = field(default_factory=list)
     # False when the page cap was hit: the total is a lower bound.
     complete: bool = True
+    # The client names whose filings were counted (_own_filings).
+    clients: list[str] = field(default_factory=list)
 
 
 def _sum_filing_amounts(results: list[dict]) -> float:
@@ -176,9 +178,18 @@ def search_name(org_name: str) -> str:
     """The name to search the registry for: the organization's name without
     trailing legal-form words."""
     words = _name_key(org_name).split()
-    while len(words) > 1 and words[-1] in _LEGAL_FORM_WORDS:
+    # "ELI LILLY AND COMPANY" and "ELI LILLY & COMPANY" are one name; the
+    # ampersand is already gone as punctuation, so a dangling AND goes too.
+    while len(words) > 1 and (words[-1] in _LEGAL_FORM_WORDS or words[-1] == "AND"):
         words.pop()
     return " ".join(words)
+
+
+def _client_key(client_name: str) -> str:
+    """A filing's client as a search name: the registry often appends a
+    former name or scope in parentheses ("META PLATFORMS INC (FKA
+    FACEBOOK)"), which is not part of the name."""
+    return search_name((client_name or "").split("(")[0])
 
 
 def is_same_client(searched: str, client_name: str) -> bool:
@@ -195,7 +206,9 @@ def is_same_client(searched: str, client_name: str) -> bool:
     parenthesis (a registrant filing for the client: "WILMERHALE ON BEHALF
     OF APPLE INC."). A similarity ratio was tried and dropped: it accepted
     the American Veterinary Medical Association for the American Medical
-    Association.
+    Association. A prefix also admits a separate company that shares the
+    name ("COCA-COLA BOTTLING COMPANY UNITED" for "COCA COLA"), which
+    _own_filings resolves.
     """
     q = searched
     c = _name_key(client_name)
@@ -216,12 +229,45 @@ def is_same_client(searched: str, client_name: str) -> bool:
     return False
 
 
+def _is_exact_client(searched: str, client_name: str) -> bool:
+    """The client is the searched name itself (legal form aside), or a
+    registrant filing on behalf of exactly that name."""
+    if _client_key(client_name) == searched:
+        return True
+    c = _name_key(client_name)
+    for marker in (" ON BEHALF OF ", " OBO "):
+        i = c.find(marker)
+        if i >= 0 and search_name(c[i + len(marker):]) == searched:
+            return True
+    return False
+
+
+def _own_filings(searched: str, filings: list[dict]) -> list[dict]:
+    """The filings to attribute to the organization. When the registry has
+    a client under the organization's own name, only those count: a longer
+    name beginning with it may be a separate company (an independent
+    bottler beside The Coca-Cola Company, Boeing Employees' Credit Union
+    beside Boeing). When it has none, the organization files through
+    entities named after it (JPMORGAN CHASE HOLDINGS LLC, KOCH GOVERNMENT
+    AFFAIRS, GOOGLE CLIENT SERVICES LLC), and those count. Measured on 48
+    large clients' 2025 filings: 33 have an own-name client, 15 file only
+    under longer names. The page lists the client names counted, so what
+    was aggregated is visible either way."""
+    family = [f for f in filings if is_same_client(searched, _client_name(f))]
+    exact = [f for f in family if _is_exact_client(searched, _client_name(f))]
+    return exact or family
+
+
+def _client_name(filing: dict) -> str:
+    return (filing.get("client") or {}).get("name", "")
+
+
 def _cache_key(org_key: str, year: int) -> str:
     # Include a stable hash of the full org key so two different orgs that
     # share an 80-char prefix (e.g. federal vs. state PAC variants of one
     # sponsor) can't collide onto one cached figure.
     key_hash = hashlib.sha256(org_key.encode()).hexdigest()[:12]
-    return f"lda-activity-v4-{year}-{org_key[:60]}-{key_hash}"
+    return f"lda-activity-v5-{year}-{org_key[:60]}-{key_hash}"
 
 
 async def fetch_lobbying_activity(
@@ -247,6 +293,7 @@ async def fetch_lobbying_activity(
             total=float(cached.get("total", 0.0)),
             mentions=cached.get("mentions") or [],
             complete=bool(cached.get("complete", True)),
+            clients=cached.get("clients") or [],
         )
 
     # Follow pagination: a heavy-lobbying client can file dozens to
@@ -256,8 +303,7 @@ async def fetch_lobbying_activity(
     # verbatim in user-facing text. Bounded to keep one pathological org
     # from stalling the enrichment loop; the cap is logged if hit so a
     # silent truncation can't masquerade as a complete total.
-    total = 0.0
-    mentions: list[dict] = []
+    filings: list[dict] = []
     url: str | None = f"{LDA_API_BASE}/filings/"
     params: dict | None = {"client_name": org_key, "filing_year": year, "page_size": 25}
     headers = {"Authorization": f"Token {settings.LDA_API_KEY}"} if settings.LDA_API_KEY else None
@@ -274,12 +320,7 @@ async def fetch_lobbying_activity(
                 return None
             resp.raise_for_status()
             data = resp.json()
-            results = [
-                f for f in data.get("results", [])
-                if is_same_client(org_key, (f.get("client") or {}).get("name", ""))
-            ]
-            total += _sum_filing_amounts(results)
-            mentions.extend(_filing_mentions(results))
+            filings.extend(data.get("results", []))
             url = data.get("next")  # absolute URL from the API, or None
             params = None  # `next` already encodes the query
             pages += 1
@@ -287,6 +328,10 @@ async def fetch_lobbying_activity(
         logger.warning("LDA fetch failed for %s: %s", org_key, exc)
         return None
 
+    own = _own_filings(org_key, filings)
+    total = _sum_filing_amounts(own)
+    mentions = _filing_mentions(own)
+    clients = sorted({_client_name(f) for f in own if _client_name(f)})
     complete = not (url and pages >= _MAX_PAGES)
     if not complete:
         logger.warning(
@@ -307,10 +352,10 @@ async def fetch_lobbying_activity(
     mentions = list(merged.values())[:_MAX_MENTIONS]
     api_cache_set(
         db, "lda", cache_key,
-        {"total": round(total, 2), "mentions": mentions, "complete": complete},
+        {"total": round(total, 2), "mentions": mentions, "complete": complete, "clients": clients},
         normal_ttl_hours=ttl,
     )
-    return LobbyingActivity(total=total, mentions=mentions, complete=complete)
+    return LobbyingActivity(total=total, mentions=mentions, complete=complete, clients=clients)
 
 
 def _voted_bills(votes: list[dict] | None) -> dict[str, dict]:
@@ -455,11 +500,11 @@ async def lobbied_bills_for(
             continue
         if vote.get("billName"):
             titles.append(vote["billName"])
-        if not any(
-            max(title_match_score(m.get("before", ""), titles), title_match_score(m.get("after", ""), titles))
-            >= BILL_TITLE_MATCH_MIN
+        fits = {
+            id(m): (title_match_score(m.get("after", ""), titles), title_match_score(m.get("before", ""), titles))
             for m in mentions
-        ):
+        }
+        if not any(max(f) >= BILL_TITLE_MATCH_MIN for f in fits.values()):
             # No wording fits this bill at all: nothing to rule out, so the
             # previous congress's titles aren't worth a request.
             continue
@@ -474,7 +519,7 @@ async def lobbied_bills_for(
             # appended to them, and it differs between chambers and votes.
             key = (congress, bill_key, m.get("before", ""), m.get("after", ""), tuple(titles))
             if key not in _verdicts:
-                _verdicts[key] = names_bill(key[2], key[3], titles, bill_key, pool, previous)
+                _verdicts[key] = names_bill(key[2], key[3], titles, bill_key, pool, previous, fits[id(m)])
             if _verdicts[key]:
                 matching.append(m)
         if not matching:
@@ -556,9 +601,11 @@ async def enrich_lobbying_matches_with_lda(
                 if spend_year is not None and spend_year.total > 0:
                     # A total cut off at the page cap is a floor, not a total.
                     amount = f"${spend_year.total:,.0f}" if spend_year.complete else f"at least ${spend_year.total:,.0f}"
+                    shown = spend_year.clients[:3]
+                    filed_as = "; ".join(shown) + ("; and others" if len(spend_year.clients) > 3 else "")
                     m["description"] = (
                         m.get("description", "")
-                        + f" Registered federal lobbying (LDA {lda_year}): {amount}."
+                        + f" Registered federal lobbying (LDA {lda_year}): {amount}, filed as {filed_as}."
                     )
                 lobbied = await lobbied_bills_for(
                     lda_client, db, [a for a in activities.values() if a is not None], voted, congress,
@@ -581,8 +628,7 @@ async def enrich_lobbying_matches_with_lda(
                     "LDA enrichment failed for %s (non-fatal)", m.get("lobbyistOrg", "?"),
                 )
             finally:
-                # Once per match, whichever way it failed (the `continue`
-                # above included).
+                # Once per match, whichever way it failed.
                 if failed:
                     stats["failed"] += 1
     return stats

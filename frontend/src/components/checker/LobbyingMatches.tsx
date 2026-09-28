@@ -6,6 +6,21 @@ interface LobbyingMatchesProps {
   matches: LobbyingMatch[];
 }
 
+// What the vote shown decided, when it wasn't the vote on the bill itself
+// (bill_learning.MOTION_PROTOTYPES). Worded for what a Yea means: a Yea on
+// "overriding the veto" is a vote against the veto.
+const MOTION_LABELS: Record<string, string> = {
+  amendment: " (on an amendment to it)",
+  cloture: " (on cutting off debate on it)",
+  procedural: " (on a procedural motion)",
+  veto: " (on overriding the President's veto)",
+  nomination: " (on a nomination)",
+};
+
+function motionLabel(motionType: string | null | undefined): string {
+  return (motionType && MOTION_LABELS[motionType]) || "";
+}
+
 export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
   if (!matches || matches.length === 0) return null;
 
@@ -62,9 +77,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                               <>
                                 {" "}
                                 · voted {b.vote}
-                                {b.motionType && b.motionType !== "passage" && b.motionType !== "unknown"
-                                  ? ` (on ${b.motionType === "procedural" ? "a procedural motion" : b.motionType === "amendment" ? "an amendment" : b.motionType})`
-                                  : ""}
+                                {motionLabel(b.motionType)}
                               </>
                             )}
                             {filing && (

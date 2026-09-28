@@ -428,3 +428,31 @@ def test_the_motion_reaches_the_api():
         lobbied_bills=[{"billId": "HR.1", "motionType": "cloture", "vote": "Nay"}],
     ).model_dump(by_alias=True)
     assert dumped["lobbiedBills"][0]["motionType"] == "cloture"
+
+
+class TestOwnFilings:
+    def test_an_own_name_client_excludes_other_companies_with_the_prefix(self):
+        # Found in review, live: "COCA COLA" also returned an independent
+        # bottler, whose spend was added to Coca-Cola's.
+        filings = [{"client": {"name": "THE COCA-COLA COMPANY"}},
+                   {"client": {"name": "COCA-COLA BOTTLING COMPANY UNITED, INC."}}]
+        assert lda._own_filings("COCA COLA", filings) == filings[:1]
+
+    def test_without_one_the_named_entities_count(self):
+        filings = [{"client": {"name": "JPMORGAN CHASE HOLDINGS LLC"}},
+                   {"client": {"name": "JPMORGAN CHASE HOLDINGS, LLC"}}]
+        assert lda._own_filings(lda.search_name("JPMORGAN CHASE & CO."), filings) == filings
+
+    def test_a_registrant_filing_for_the_exact_name_counts_as_own(self):
+        filings = [{"client": {"name": "ELI LILLY AND COMPANY"}},
+                   {"client": {"name": "TIBER CREEK HEALTH STRATEGIES, INC. ON BEHALF OF ELI LILLY AND COMPANY"}},
+                   {"client": {"name": "ELI LILLY BIO"}}]
+        assert lda._own_filings(lda.search_name("Eli Lilly & Company"), filings) == filings[:2]
+
+    @pytest.mark.asyncio
+    async def test_the_description_names_the_clients_counted(self, db_session):
+        matches = [{"lobbyistOrg": "Coca-Cola", "description": ""}]
+        act = LobbyingActivity(total=10.0, clients=["THE COCA-COLA COMPANY"])
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=act)):
+            await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
+        assert "filed as THE COCA-COLA COMPANY." in matches[0]["description"]
