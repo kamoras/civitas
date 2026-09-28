@@ -2001,7 +2001,7 @@ export default function AboutPage() {
               />
               <Row
                 label="GovInfo API"
-                value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis — both chambers"
+                value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis — both chambers. Each day's Record is read in full; until September 2026 only its first 100 sections were, which on the busiest days left out the Senate's floor remarks entirely"
               />
               <Row
                 label="Congressional Record Daily Digest"
