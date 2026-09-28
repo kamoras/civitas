@@ -147,4 +147,22 @@ describe("VotingRecord", () => {
       expect(screen.queryByText(noise)).not.toBeInTheDocument();
     }
   });
+
+  it("links a vote stored before its roll call was recorded to the site's bill page", async () => {
+    const early: KeyVote = { ...vote("S.1071"), billId: "S.1071", rollCall: null };
+    const nomination: KeyVote = { ...vote("PN12-3"), billId: "PN12-3", rollCall: null };
+    fetchSenatorVotes.mockResolvedValueOnce({
+      ...votes("all", "unused"),
+      votes: [early, nomination],
+    });
+    render(<VotingRecord senatorId="S1" votingRecord={record} />);
+    await userEvent.click(screen.getByRole("button", { name: /VOTING RECORD/ }));
+
+    expect(await screen.findByRole("link", { name: "S.1071" })).toHaveAttribute(
+      "href",
+      "/congress/bills/S.1071"
+    );
+    // Not a bill: nothing to open, and never Congress.gov.
+    expect(screen.queryByRole("link", { name: "PN12-3" })).not.toBeInTheDocument();
+  });
 });

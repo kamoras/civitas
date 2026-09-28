@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchRepVotes, fetchSenatorVotes } from "@/lib/api";
+import { billPageHref } from "@/lib/congress";
 import type { AlignmentFacts, BreakVote, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import ComponentBars from "./ComponentBars";
 import ScoreColumn, { Block } from "./ScoreColumn";
@@ -19,6 +20,7 @@ const FLANK_SHOWN = 3;
  *  member's whole-Congress record is measured, a stored vote. */
 type ListedBreak = Omit<BreakVote, "rollCall"> & {
   rollCall?: BreakVote["rollCall"];
+  billId?: string;
   billName?: string;
   date?: string;
 };
@@ -94,19 +96,20 @@ function tally(p: { yea: number; nay: number }): string {
 function BreakRow({ vote }: { vote: ListedBreak }) {
   const rc = vote.rollCall;
   const fallback = vote.billName ?? "";
+  const href = billPageHref(rc ? rc.billId : vote.billId);
   const parties = rc?.parties.filter((p) => PARTY_SHORT[p.party] && p.yea + p.nay > 0) ?? [];
   return (
     <li className="flex flex-col gap-1 border-b border-white/[0.06] pb-2.5">
       <div className="flex items-start justify-between gap-3 text-sm">
         <span className="min-w-0 text-ink-hi">
-          {rc?.billId ? (
+          {href ? (
             // The bill's own page: its text, sponsor and every vote on it.
             <Link
-              href={`/congress/bills/${encodeURIComponent(rc.billId)}`}
+              href={href}
               className="line-clamp-2 underline decoration-white/20 underline-offset-2 hover:text-phos"
-              title={rc.title || fallback}
+              title={rc?.title || fallback}
             >
-              {voteTitle(rc.title, rc.billLabel, fallback)}
+              {voteTitle(rc?.title, rc?.billLabel, fallback)}
             </Link>
           ) : (
             // A nomination or a procedural question: no bill to open.

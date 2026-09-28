@@ -47,6 +47,17 @@ export function billHref(billId: string): string {
   return `/congress/bills/${encodeURIComponent(billId)}`;
 }
 
+const BILL_TYPES = new Set(["HR", "S", "HJRES", "SJRES", "HCONRES", "SCONRES", "HRES", "SRES"]);
+
+/** The site's page for a bill, from any form of id the data carries
+ * ("HR.8800", "H.R. 8800", the Clerk's "H R 8800"); null for anything that
+ * isn't a bill, such as a roll call's own id or a nomination. The page shows
+ * the current Congress's bill of that number. */
+export function billPageHref(billId: string | null | undefined): string | null {
+  const m = (billId ?? "").replace(/[\s.]/g, "").toUpperCase().match(/^([A-Z]+)(\d+)$/);
+  return m && BILL_TYPES.has(m[1]) ? billHref(`${m[1]}.${m[2]}`) : null;
+}
+
 /** The chamber's own result, as the site colours it: carried, rejected, or
  * neither said (a quorum call). Never derived from the tally. */
 export function resultTone(rejected: boolean | null): "yes" | "no" | "neutral" {

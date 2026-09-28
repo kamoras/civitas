@@ -23,6 +23,8 @@ from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.fetch.congress import expected_current_congress
+from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
 from app.models import (
@@ -161,12 +163,11 @@ def _issue_bill_ids(issue: ActionIssue) -> set[str]:
 
 
 def _internal_bill_congresses(db: Session, bill_ids: set[str]) -> dict[str, set[int]]:
-    """{bill_id: {congress, ...}} for bills our own /congress/bills/{id} page can show.
-
-    Mirrors bill_service.get_bill_detail's lookup (current members'
-    sponsored bills, either chamber) so we only emit an internal link when
-    that page would actually resolve rather than 404.
-    """
+    """{bill_id: {congress, ...}} for bills the site holds its own record
+    of (current members' sponsored bills, either chamber — bill_service.
+    get_bill_detail's lookup): what lets an entry with no recorded Congress,
+    or an earlier one, link to /congress/bills/{id}. Any current-Congress
+    bill links there regardless."""
     if not bill_ids:
         return {}
     found: dict[str, set[int]] = {}
@@ -241,18 +242,24 @@ def _build_issue_response(
     raw_bills = _parse_json_field(issue.related_bill_ids)
     if internal_bills is None:
         internal_bills = _internal_bill_congresses(db, _issue_bill_ids(issue))
+    current_congress = expected_current_congress()
     related_bills: list[dict] = []
     for b in raw_bills:
         if isinstance(b, dict) and b.get("id") and b.get("url"):
             bill_id = b["id"].upper()
-            # Link internally only when we host this bill — and, for
-            # entries that recorded which congress they refer to, only
-            # when our record is from that same congress (a bill number
-            # alone is ambiguous across congresses).
+            # The site's bill page shows any bill of the current Congress
+            # (its record comes from Congress.gov on demand). A bill of an
+            # earlier Congress links internally only when we hold it from
+            # that Congress; an entry that never recorded its Congress,
+            # only when we hold the bill at all (a bill number alone is
+            # ambiguous across congresses).
             entry_congress = b.get("congress")
             internal_congresses = internal_bills.get(bill_id)
-            is_internal = internal_congresses is not None and (
-                entry_congress is None or entry_congress in internal_congresses
+            is_internal = (
+                entry_congress == current_congress and parse_bill_id(bill_id) is not None
+            ) or (
+                internal_congresses is not None
+                and (entry_congress is None or entry_congress in internal_congresses)
             )
             related_bills.append(
                 RelatedBillSchema(
