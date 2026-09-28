@@ -584,8 +584,10 @@ export default function AboutPage() {
               a member&apos;s most recent completed election: six years of fundraising for a senator,
               two for a House member. The PAC share and top-donor concentration are each scored
               against the member&apos;s own chamber, but industry concentration is not, and no
-              adjustment makes six years and two years the same span. Within a chamber every member
-              is measured over the same length of time; across chambers the scores are best read
+              adjustment makes six years and two years the same span. Within a chamber members
+              are measured over the same length of time, except a member with no completed election
+              yet (appointed, or seated by a special election), who is measured on the campaign still
+              in progress; across chambers the scores are best read
               side by side, not ranked, which is why the compare page names no winner when a senator
               and a representative are compared. The window itself is deliberate: a strict two-year
               window would leave most senators with little or no fundraising to measure.
