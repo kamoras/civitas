@@ -49,6 +49,7 @@ def _validate_vote(v: dict, default_category: str = "recent") -> dict:
         ),
         "votedWithParty": v.get("votedWithParty"),
         "voteCategory": v.get("voteCategory", default_category),
+        "rollCall": v.get("rollCall"),
     }
 
 

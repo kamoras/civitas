@@ -84,6 +84,10 @@ class KeyVoteSchema(CamelModel):
     party_leaning: Literal["R", "D", "bipartisan"] | None = None
     voted_with_party: bool | None = None
     vote_category: Literal["recent", "key"] = "key"
+    # The Congress record's roll call (bill_record.roll_call_summaries):
+    # date, question, result and each party's tally. None for votes stored
+    # before it was recorded.
+    roll_call: dict | None = None
 
 
 class FundingSchema(CamelModel):

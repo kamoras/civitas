@@ -24,7 +24,7 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
-    version: "v6.18",
+    version: "v6.19",
     date: "2026-09-29",
     title: "Funding: party, candidate and leadership committees are political money, not an industry",
     tldr: "Money from a party committee, a candidate's campaign, a joint-fundraising committee or a leadership PAC no longer counts toward any industry. The FEC's own registration of each committee decides it, not the committee's name. Funding Independence moves by under two points for anyone; donor-vote connections built on such money are gone.",
@@ -33,6 +33,17 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "Now: every contributing committee is looked up in the FEC's committee master file. Committee types H, S and P (candidate campaigns) and X, Y and Z (party committees), and designations A, P and J (authorized by a candidate, principal campaign committee, joint fundraiser) and D (leadership PAC), are political money. That is the FEC's classification, read from the filing; no name is interpreted.",
       "Effect on the September 2026 Senate, recomputed from the live breakdowns: Funding Independence falls by up to 1.7 points (Bill Hagerty, Mike Lee, Chuck Grassley) where political money had made industry funding look more spread out, and moves by under 0.2 points for everyone else.",
       "Unscored, same release: donor-vote connections now show the organization's registered lobbying again (the registry moved to lda.gov, and every lookup since had failed and read as $0), look a PAC's sponsor up under the company's own name, and link any bill the member voted on that a lobbying filing under the donor's name names, showing the client each filing was for (a name can be shared by a separate company).",
+    ],
+  },
+  {
+    version: "v6.18",
+    date: "2026-09-28",
+    title: "A vote counts against the party only when the parties actually split on it",
+    tldr: "A vote now counts as a break with the party only when most of the member's party voted one way, most of the other party the other way, and the member sided with the other party. A vote whose roll call wasn't recorded no longer counts from what the bill says. Every break on a profile now shows the roll call's question, date and how each party voted.",
+    changes: [
+      "Before, a vote with no recorded roll call was judged by the bill's content: a Republican voting for a bill that read as Democratic counted as a break, however Republicans actually voted. Such votes no longer count.",
+      "Checked first: in a sample of 25 representatives and 10 senators, every party label on a recorded roll call already matched the chamber's official party totals, and none came from content, so no score in the sample changes.",
+      "The list of breaks on a profile read only \"key\" votes, so a member whose breaks were all recent roll calls saw a count and then an empty list. It now shows every break, each with the question voted on, the date, each party's tally and a link to the record.",
     ],
   },
   {

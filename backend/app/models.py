@@ -222,6 +222,10 @@ class KeyVote(Base):
     party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")  # "recent" or "key"
+    # Which roll call ("senate-119-2-242"; normalize_votes.roll_call_ref),
+    # so the vote API can show the Congress record's own question, date and
+    # party tallies. NULL for votes stored before 2026-09-28.
+    roll_call: Mapped[str | None] = mapped_column(String(24), nullable=True)
 
     senator: Mapped["Senator"] = relationship(back_populates="key_votes")
 
@@ -468,6 +472,7 @@ class RepKeyVote(Base):
     party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")
+    roll_call: Mapped[str | None] = mapped_column(String(24), nullable=True)  # see KeyVote.roll_call
 
     representative: Mapped["Representative"] = relationship(back_populates="key_votes")
 
