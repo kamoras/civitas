@@ -902,7 +902,8 @@ const SUMMARY_RETRY_WITHIN_MS = 10 * 60 * 1000;
 export function summaryRetryDelayMs(retryAfter: string | null): number {
   const seconds = Number(retryAfter);
   const ms = Number.isFinite(seconds) && retryAfter !== null && retryAfter.trim() !== "" ? seconds * 1000 : 10_000;
-  return Math.min(Math.max(ms, 1_000), 60_000);
+  // Up to three minutes: a document held off after a timeout says two.
+  return Math.min(Math.max(ms, 1_000), 180_000);
 }
 
 export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {

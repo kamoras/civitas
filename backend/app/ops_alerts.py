@@ -387,6 +387,7 @@ PIPELINE_SERVICE_SILENT_AFTER = timedelta(minutes=30)
 # When this process first failed to read the heartbeat, in the current
 # unbroken run of failures (None: the last read succeeded).
 _heartbeat_unreadable_since: datetime | None = None
+_heartbeat_missing_since: datetime | None = None
 
 
 def check_pipeline_service_alive() -> None:
@@ -402,7 +403,7 @@ def check_pipeline_service_alive() -> None:
     from app.scheduler import read_heartbeat
     from app.shared_state import UNREADABLE
 
-    global _heartbeat_unreadable_since
+    global _heartbeat_unreadable_since, _heartbeat_missing_since
     row = read_heartbeat()
     if row is UNREADABLE:
         # One unreadable round is a moment's I/O error, not evidence of
@@ -431,7 +432,17 @@ def check_pipeline_service_alive() -> None:
     _heartbeat_unreadable_since = None
     last = row[0] if isinstance(row, tuple) else None
     if last is not None and last >= utcnow() - PIPELINE_SERVICE_SILENT_AFTER:
+        _heartbeat_missing_since = None
         return
+    if last is None:
+        # No heartbeat file at all: the pipeline service may only be
+        # starting (its first deploy, a fresh volume — pulling, migrating),
+        # so it gets as long as a running one may be silent before paging.
+        now = utcnow()
+        if _heartbeat_missing_since is None:
+            _heartbeat_missing_since = now
+        if now - _heartbeat_missing_since < PIPELINE_SERVICE_SILENT_AFTER:
+            return
     since = f"since {last:%Y-%m-%d %H:%M} UTC" if last is not None else "ever"
     send_ops_alert(
         "Pipeline service is not running",

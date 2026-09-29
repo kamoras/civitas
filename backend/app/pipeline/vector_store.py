@@ -246,22 +246,30 @@ def get_vec_conn() -> sqlite3.Connection:
             conn = sqlite3.connect(
                 _VECTOR_DB_PATH, check_same_thread=False, timeout=_busy_timeout_s(),
             )
-            # WAL, as the main database has: the pipeline process writes
-            # this file while the API processes search it (PROCESS_ROLE),
-            # and under the default rollback journal a long write holds
-            # every reader off until it commits. Persistent in the file, so
-            # after the first switch this is a no-op — and every connection,
-            # this one included, follows a switch made by another.
-            _wal_retry_at = None if _switch_to_wal() else time.monotonic() + _WAL_RETRY_EVERY_S
-            # NORMAL only in WAL, where it is durable against a crash; in the
-            # rollback journal it can corrupt the file on power loss, so the
-            # default (FULL) stands until the switch takes.
-            if _wal_retry_at is None:
-                conn.execute("PRAGMA synchronous=NORMAL")
-            conn.enable_load_extension(True)
-            sqlite_vec.load(conn)
-            conn.enable_load_extension(False)
-            _ensure_schema(conn)
+            try:
+                # WAL, as the main database has: the pipeline process writes
+                # this file while the API processes search it (PROCESS_ROLE),
+                # and under the default rollback journal a long write holds
+                # every reader off until it commits. Persistent in the file,
+                # so after the first switch this is a no-op — and every
+                # connection, this one included, follows a switch made by
+                # another.
+                retry_at = None if _switch_to_wal() else time.monotonic() + _WAL_RETRY_EVERY_S
+                # NORMAL only in WAL, where it is durable against a crash; in
+                # the rollback journal it can corrupt the file on power loss,
+                # so the default (FULL) stands until the switch takes.
+                if retry_at is None:
+                    conn.execute("PRAGMA synchronous=NORMAL")
+                conn.enable_load_extension(True)
+                sqlite_vec.load(conn)
+                conn.enable_load_extension(False)
+                _ensure_schema(conn)
+            except BaseException:
+                # Not kept, so closed: a caller retrying through a locked
+                # file mustn't leave a connection behind per attempt.
+                conn.close()
+                raise
+            _wal_retry_at = retry_at
             _vec_conn = conn
         return _vec_conn
 

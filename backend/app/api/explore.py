@@ -354,7 +354,7 @@ _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
 _BUSY_RETRY_AFTER_S = 30
 _HELD_RETRY_AFTER_S = 10
-_SLOW_RETRY_AFTER_S = 60
+_SLOW_RETRY_AFTER_S = int(_SLOW_FOR_S)  # the whole hold-off: sooner is refused again
 # Marks a refusal that is only a wait (another generation, the cap, a
 # recent timeout, the store, the write budget): the page asks again after
 # Retry-After. A refusal without it — nginx's own — is not waited out.
@@ -471,7 +471,12 @@ async def get_explore_document_summary(
     # Claimed, checked and generated in a task of its own, which the
     # request only waits on: a request cancelled mid-claim (a disconnect)
     # can't leave a claim behind that nothing will give back.
-    generation = _Generation(doc_id, prompt, cache_key, ip)
+    # The generation outlives the request: it keeps the client's keys (an
+    # HMAC of the address, AGENTS.md §8), never the address itself.
+    write_key, client_key = await throttle.run(
+        lambda: (throttle.client_key(ip, rate_limit.WRITE_BUCKET), throttle.client_key(ip, _CLIENT_BUCKET)),
+    )
+    generation = _Generation(doc_id, prompt, cache_key, write_key, client_key)
     task = asyncio.create_task(generation.run())
     _generations.add(task)
     task.add_done_callback(_generations.discard)
@@ -554,7 +559,7 @@ class _Generation:
     The LLM calls are looked up on ollama_client when used, not bound at
     import, as the endpoint's are."""
 
-    def __init__(self, doc_id: int, prompt: dict, cache_key: dict, client: str):
+    def __init__(self, doc_id: int, prompt: dict, cache_key: dict, write_key, client_key):
         self.doc_id = doc_id
         self.prompt = prompt
         self.cache_key = cache_key
@@ -562,7 +567,10 @@ class _Generation:
         # document changed in place is a new generation, not held off by
         # the old text's.
         self.key = f"{doc_id}:{cache_key['prompt']}"
-        self.client = client
+        # throttle.client_key's, for the write limit and the one-per-client
+        # rule (None when the store couldn't make them).
+        self.write_key = write_key
+        self.client_key = client_key
         self.outcome: asyncio.Future = asyncio.get_running_loop().create_future()
         self.events: asyncio.Queue[str | None] = asyncio.Queue()
         # (bucket, key, token) for each claim held.
@@ -622,11 +630,10 @@ class _Generation:
                 # One in flight per client: the slots are the whole site's,
                 # and a generation outlives its reader, so one address must
                 # not be able to hold them all.
-                # Keyed off the loop (the day's salt may need making), and
-                # checked under the client's previous-day key too, so the
+                # Checked under the client's previous-day key too, so the
                 # rule doesn't reset at midnight (throttle.claim does the
                 # same).
-                client = await throttle.run(throttle.client_key, self.client, _CLIENT_BUCKET)
+                client = self.client_key
                 if client is None:
                     raise throttle.Unavailable(_CLIENT_BUCKET)
                 previous = ((_CLIENT_BUCKET, client.previous, _SUMMARY_CLAIM_S),) if client.previous else ()
@@ -652,7 +659,7 @@ class _Generation:
             # (a refusal to wait out does none of the work it limits). A
             # client over it held its claims only this long; they are given
             # back below.
-            decision = await throttle.run(rate_limit.charge_write, self.client)
+            decision = await throttle.run(rate_limit.charge_write, self.write_key)
             if not decision.allowed:
                 self._settle(decision)
                 return
@@ -690,11 +697,12 @@ class _Generation:
             at_limit = True
         except Exception as error:
             # Out of time: this deadline expired, or the LLM, once connected,
-            # stopped answering within its client's read timeout (it is busy:
-            # the pipeline's work, another generation). Anything else — the
-            # LLM unreachable (a connect timeout included), a bad response —
-            # is a failure, which may be retried at once.
-            if deadline.expired() or isinstance(error, httpx.ReadTimeout):
+            # stopped answering within its client's read timeout, or said it
+            # was busy (429/503) — the pipeline's work, another generation.
+            # Anything else — the LLM unreachable (a connect timeout
+            # included), a bad response — is a failure, retried at once.
+            busy = isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (429, 503)
+            if deadline.expired() or isinstance(error, httpx.ReadTimeout) or busy:
                 logger.warning("Explore doc summary for doc_id=%s ran out of time", self.doc_id)
                 timed_out = True
             else:

@@ -423,10 +423,20 @@ class TestPipelineServiceLiveness:
         check_pipeline_service_alive()
         assert sent == ["Pipeline service is not running"]
 
-    def test_no_heartbeat_ever_alerts(self, sent):
-        from app.ops_alerts import check_pipeline_service_alive
+    def test_no_heartbeat_yet_is_a_service_still_starting(self, sent, monkeypatch):
+        # Its first deploy (or a fresh volume): pulling, migrating. Not a
+        # page until it has been missing as long as silence is allowed.
+        from app import ops_alerts
+        from app.time_utils import utcnow
 
-        check_pipeline_service_alive()
+        monkeypatch.setattr(ops_alerts, "_heartbeat_missing_since", None)
+        ops_alerts.check_pipeline_service_alive()
+        assert sent == []
+        monkeypatch.setattr(
+            ops_alerts, "_heartbeat_missing_since",
+            utcnow() - ops_alerts.PIPELINE_SERVICE_SILENT_AFTER - timedelta(minutes=1),
+        )
+        ops_alerts.check_pipeline_service_alive()
         assert sent == ["Pipeline service is not running"]
 
     def test_an_unreadable_database_is_not_evidence(self, sent, monkeypatch):

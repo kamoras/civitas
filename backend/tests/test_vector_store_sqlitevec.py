@@ -242,3 +242,36 @@ def test_only_the_read_only_api_waits_briefly_on_the_vector_store(monkeypatch, r
 
     monkeypatch.setattr(settings, "PROCESS_ROLE", role)
     assert vector_store._busy_timeout_s() == expected
+
+
+def test_a_connection_that_failed_to_open_is_closed_not_leaked(vec_env, monkeypatch):
+    # A search retrying through a locked file opens a connection per attempt:
+    # each one not kept must be closed.
+    import sqlite3
+
+    opened = []
+    real_connect = sqlite3.connect
+
+    class Tracked:
+        def __init__(self, conn):
+            self.conn, self.closed = conn, False
+            opened.append(self)
+
+        def close(self):
+            self.closed = True
+            self.conn.close()
+
+        def __getattr__(self, name):
+            return getattr(self.conn, name)
+
+    monkeypatch.setattr(vector_store.sqlite3, "connect", lambda *a, **k: Tracked(real_connect(*a, **k)))
+    monkeypatch.setattr(vector_store, "_ensure_schema", lambda conn: (_ for _ in ()).throw(
+        sqlite3.OperationalError("database is locked")))
+    with patch.dict("sys.modules", {"sqlite_vec": MagicMock()}):
+        for _ in range(2):
+            with pytest.raises(sqlite3.OperationalError):
+                vector_store.get_vec_conn()
+    # Every connection opened (the WAL switch's short-lived ones included)
+    # was closed.
+    assert len(opened) >= 2 and all(t.closed for t in opened)
+    assert vector_store._vec_conn is None

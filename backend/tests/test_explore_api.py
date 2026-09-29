@@ -442,7 +442,7 @@ class TestSummaryEndpointGuards:
 
                 with pytest.raises(HTTPException) as exc_info:
                     await get_explore_document_summary(doc.id, _READER, db=db_session)
-                assert exc_info.value.status_code == 503 and exc_info.value.headers["Retry-After"] == "60"
+                assert exc_info.value.status_code == 503 and exc_info.value.headers["Retry-After"] == "120"
 
     async def test_a_generation_at_its_token_limit_is_cached_without_the_cut_section(self, db_session):
         # The same prompt stops at the same place every time: what came out
@@ -471,7 +471,11 @@ class TestSummaryEndpointGuards:
         (ConnectionError("unreachable"), False),
         (httpx.ConnectTimeout("unreachable"), False),
         (httpx.ReadTimeout("no answer"), True),
-    ], ids=["unreachable", "connect-timeout", "llm-read-timeout"])
+        (httpx.HTTPStatusError("busy", request=httpx.Request("POST", "http://llm"),
+                               response=httpx.Response(503)), True),
+        (httpx.HTTPStatusError("bad", request=httpx.Request("POST", "http://llm"),
+                               response=httpx.Response(400)), False),
+    ], ids=["unreachable", "connect-timeout", "llm-read-timeout", "llm-busy-503", "llm-400"])
     async def test_an_llm_that_stops_answering_is_slow_one_unreachable_a_failure(self, db_session, error, held_off):
         # A read timeout means the LLM is busy: held off briefly, like the
         # deadline, so waiting readers don't each start a generation that

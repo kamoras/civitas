@@ -464,7 +464,8 @@ describe("summaryRetryDelayMs", () => {
     expect(summaryRetryDelayMs(null)).toBe(10_000);
     expect(summaryRetryDelayMs("")).toBe(10_000);
     expect(summaryRetryDelayMs("0")).toBe(1_000);
-    expect(summaryRetryDelayMs("3600")).toBe(60_000);
+    expect(summaryRetryDelayMs("120")).toBe(120_000);
+    expect(summaryRetryDelayMs("3600")).toBe(180_000);
   });
 });
 
