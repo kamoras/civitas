@@ -221,15 +221,27 @@ export default function EnvironmentalPage() {
             </P>
             <div className="overflow-x-auto mt-2">
               <table className="w-full text-xs font-mono border-collapse">
+                <caption className="sr-only">
+                  Cloud AI compared with Civitas running locally
+                </caption>
                 <thead>
                   <tr className="border-b border-white/[0.07]">
-                    <th className="text-left text-ink-lo py-2 pr-4 font-normal tracking-wider">
+                    <th
+                      scope="col"
+                      className="text-left text-ink-lo py-2 pr-4 font-normal tracking-wider"
+                    >
                       METRIC
                     </th>
-                    <th className="text-right text-ink-lo py-2 pr-4 font-normal tracking-wider">
+                    <th
+                      scope="col"
+                      className="text-right text-ink-lo py-2 pr-4 font-normal tracking-wider"
+                    >
                       CLOUD AI (GPT-4o)
                     </th>
-                    <th className="text-right text-ink-hi py-2 font-normal tracking-wider">
+                    <th
+                      scope="col"
+                      className="text-right text-ink-hi py-2 font-normal tracking-wider"
+                    >
                       CIVITAS (LOCAL)
                     </th>
                   </tr>

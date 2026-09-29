@@ -329,6 +329,7 @@ function PresidentLeaderboard({
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm font-mono">
+            <caption className="sr-only">Presidents ranked by overall score</caption>
             <thead>
               <tr className="border-b border-white/[0.07] text-ink-lo text-xs uppercase tracking-widest">
                 <th scope="col" className="px-4 py-3 text-left w-14">
@@ -515,6 +516,7 @@ function JusticeLeaderboard({
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm font-mono">
+            <caption className="sr-only">Supreme Court justices ranked by score</caption>
             <thead>
               <tr className="border-b border-white/[0.07] text-ink-lo text-xs uppercase tracking-widest">
                 <th scope="col" className="px-4 py-3 text-left w-14">
@@ -975,6 +977,10 @@ function LeaderboardContent() {
                   {/* Desktop table */}
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm font-mono">
+                      <caption className="sr-only">
+                        {branch === "house" ? "Representatives" : "Senators"} ranked by
+                        Representation Score
+                      </caption>
                       <thead>
                         <tr className="border-b border-white/[0.07] text-ink-lo text-xs uppercase tracking-widest">
                           <th scope="col" className="px-4 py-3 text-left w-14">
