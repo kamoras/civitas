@@ -40,6 +40,13 @@ def _resp(body):
     return SimpleNamespace(json=lambda: body)
 
 
+async def _party_nominees(election_id, year):
+    """The federal House nominees ONE party's primary decides, or None on a
+    real fetch failure (the first half of _party_results)."""
+    result = await ct._party_results(None, election_id, year)
+    return None if result is None else result[0]
+
+
 class TestFindPrimary:
     def test_matches_the_real_2026_statewide_primaries_by_year_and_august(self):
         dem = ct._find_primary(ELECTIONS, 2026, "Democratic Primary")
@@ -94,12 +101,12 @@ class TestPartyNominees:
 
     async def test_real_democratic_primary_resolves_to_the_real_upset_winner(self, monkeypatch):
         await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=DEM_LOOKUP, votes=DEM_VOTES)
-        result = await ct._party_nominees(None, DEM_ID, 2026)
+        result = await _party_nominees(DEM_ID, 2026)
         assert result == [{"office": "H", "district": 1, "party": "D", "last_name": "Bronin", "display_name": "Luke Bronin"}]
 
     async def test_real_republican_primary_resolves_to_the_real_winners(self, monkeypatch):
         await self._patched(monkeypatch, election_id=REP_ID, version=10237, lookup=REP_LOOKUP, votes=REP_VOTES)
-        result = await ct._party_nominees(None, REP_ID, 2026)
+        result = await _party_nominees(REP_ID, 2026)
         assert sorted((r["district"], r["last_name"]) for r in result) == [
             (4, "Goldstein"), (5, "Shea"),
         ]
@@ -109,7 +116,7 @@ class TestPartyNominees:
             return None
 
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-        assert await ct._party_nominees(None, DEM_ID, 2026) is None
+        assert await _party_nominees(DEM_ID, 2026) is None
 
     async def test_lookup_fetch_failure_returns_none(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):
@@ -118,7 +125,7 @@ class TestPartyNominees:
             return None
 
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-        assert await ct._party_nominees(None, DEM_ID, 2026) is None
+        assert await _party_nominees(DEM_ID, 2026) is None
 
     async def test_votes_fetch_failure_returns_none(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):
@@ -129,14 +136,14 @@ class TestPartyNominees:
             return None
 
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-        assert await ct._party_nominees(None, DEM_ID, 2026) is None
+        assert await _party_nominees(DEM_ID, 2026) is None
 
     async def test_no_federal_house_race_this_party_is_a_healthy_empty_list(self, monkeypatch):
         empty_lookup = {**DEM_LOOKUP, "officeList": [
             o for o in DEM_LOOKUP["officeList"] if next(iter(o.values()))["OT"] != "C"
         ]}
         await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=empty_lookup, votes=DEM_VOTES)
-        assert await ct._party_nominees(None, DEM_ID, 2026) == []
+        assert await _party_nominees(DEM_ID, 2026) == []
 
     async def test_an_unresolvable_top_choice_blocks_confirmation_rather_than_winning(self, monkeypatch):
         # If the real vote LEADER's own candidate id is missing from
@@ -152,7 +159,7 @@ class TestPartyNominees:
             {"43479": {"V": "10000", "TO": "10%"}},  # Luke Bronin, real candidate id
         ]
         await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=DEM_LOOKUP, votes=votes)
-        result = await ct._party_nominees(None, DEM_ID, 2026)
+        result = await _party_nominees(DEM_ID, 2026)
         assert [r for r in result if r["district"] == 1] == []
 
     async def test_a_malformed_vote_count_is_skipped_not_a_crash(self, monkeypatch):
@@ -163,7 +170,7 @@ class TestPartyNominees:
             {"44087": {"V": "5000", "TO": "100%"}},  # John Larson, real candidate id
         ]
         await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=DEM_LOOKUP, votes=votes)
-        result = await ct._party_nominees(None, DEM_ID, 2026)
+        result = await _party_nominees(DEM_ID, 2026)
         assert [r for r in result if r["district"] == 1] == [
             {"office": "H", "district": 1, "party": "D", "last_name": "Larson", "display_name": "John B. Larson"},
         ]

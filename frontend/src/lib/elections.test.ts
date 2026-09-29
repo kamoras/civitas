@@ -8,7 +8,6 @@ import {
   matchesDistrictQuery,
   parseUtc,
   raceBadgeLabel,
-  raceTitleLabel,
   tierCandidates,
 } from "./elections";
 import type { BallotCandidate, CandidateSummary } from "@/types/election";
@@ -29,15 +28,9 @@ describe("race labels", () => {
   // guards against: a truthy `race.district ?` check treated 0 like null.
   const atLarge = { office: "H", state: "AK", district: 0 };
 
-  it("raceTitleLabel renders title-style labels", () => {
-    expect(raceTitleLabel(senate)).toBe("GA Senate");
-    expect(raceTitleLabel(house)).toBe("GA-7 House");
-    expect(raceTitleLabel(atLarge)).toBe("AK-AL House");
-  });
-
   it("does not conflate a null district (Senate) with at-large 0", () => {
-    expect(raceTitleLabel({ office: "H", state: "TX", district: null })).toBe("TX House");
-    expect(raceTitleLabel({ office: "H", state: "TX", district: 0 })).toBe("TX-AL House");
+    expect(raceBadgeLabel({ office: "H", district: null })).toBe("HOUSE");
+    expect(raceBadgeLabel({ office: "H", district: 0 })).toBe("HOUSE-AL");
   });
 
   it("raceBadgeLabel omits the state for a page already scoped to one", () => {

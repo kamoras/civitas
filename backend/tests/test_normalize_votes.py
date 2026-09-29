@@ -83,21 +83,21 @@ class TestExtractSenatorVote:
                 {"lastName": "WARREN", "state": "MA", "voteCast": "Nay"},
             ]
         }
-        assert extract_senator_vote(data, "", "Cruz", "TX") == "Yea"
-        assert extract_senator_vote(data, "", "Warren", "MA") == "Nay"
+        assert extract_senator_vote(data, "Cruz", "TX") == "Yea"
+        assert extract_senator_vote(data, "Warren", "MA") == "Nay"
 
     def test_case_insensitive(self):
         data = {"members": [{"lastName": "cruz", "state": "tx", "voteCast": "Nay"}]}
-        assert extract_senator_vote(data, "", "CRUZ", "TX") == "Nay"
+        assert extract_senator_vote(data, "CRUZ", "TX") == "Nay"
 
     def test_not_found_returns_none(self):
         data = {"members": [{"lastName": "SMITH", "state": "OH", "voteCast": "Yea"}]}
-        assert extract_senator_vote(data, "", "Jones", "CA") is None
+        assert extract_senator_vote(data, "Jones", "CA") is None
 
     def test_empty_data_returns_none(self):
-        assert extract_senator_vote(None, "") is None
-        assert extract_senator_vote({}, "") is None
-        assert extract_senator_vote({"members": []}, "") is None
+        assert extract_senator_vote(None) is None
+        assert extract_senator_vote({}) is None
+        assert extract_senator_vote({"members": []}) is None
 
     def test_multi_word_last_name(self):
         """Multi-word last names like 'Cortez Masto' and 'Van Hollen' must match."""
@@ -108,9 +108,9 @@ class TestExtractSenatorVote:
                 {"lastName": "Blunt Rochester", "state": "DE", "voteCast": "Yea"},
             ]
         }
-        assert extract_senator_vote(data, "", "Cortez Masto", "NV") == "Yea"
-        assert extract_senator_vote(data, "", "Van Hollen", "MD") == "Nay"
-        assert extract_senator_vote(data, "", "Blunt Rochester", "DE") == "Yea"
+        assert extract_senator_vote(data, "Cortez Masto", "NV") == "Yea"
+        assert extract_senator_vote(data, "Van Hollen", "MD") == "Nay"
+        assert extract_senator_vote(data, "Blunt Rochester", "DE") == "Yea"
 
     def test_unicode_accent_normalization(self):
         """Accented characters (e.g. Luján) must match unaccented form (Lujan)."""
@@ -119,8 +119,8 @@ class TestExtractSenatorVote:
                 {"lastName": "Lujan", "state": "NM", "voteCast": "Yea"},
             ]
         }
-        assert extract_senator_vote(data, "", "Luján", "NM") == "Yea"
-        assert extract_senator_vote(data, "", "Lujan", "NM") == "Yea"
+        assert extract_senator_vote(data, "Luján", "NM") == "Yea"
+        assert extract_senator_vote(data, "Lujan", "NM") == "Yea"
 
 
 class TestNormalizeVotes:

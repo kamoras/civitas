@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.highlights import build_highlights
 from app.api.response_helpers import (
     CACHE_TTL_CONFIG_S,
     CACHE_TTL_DETAIL_S,
@@ -85,17 +84,6 @@ def list_leaderboard(db: Session = Depends(get_db)) -> JSONResponse:
     """Return all senators ranked by representation score."""
     data = get_leaderboard(db)
     return _cached_json([e.model_dump(by_alias=True) for e in data], max_age=CACHE_TTL_LIST_S)
-
-
-@router.get("/senators/{senator_id}/highlights")
-async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> JSONResponse:
-    """Return data-driven highlights for a senator — no LLM, pure data."""
-    senator = get_senator_by_id(db, senator_id)
-    if senator is None:
-        raise HTTPException(status_code=404, detail="Senator not found")
-
-    highlights = build_highlights(senator.model_dump(by_alias=True))
-    return _cached_json({"highlights": highlights[:5]}, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/senators/{senator_id}/history")

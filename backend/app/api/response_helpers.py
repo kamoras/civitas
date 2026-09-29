@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 # (120, 300, 600, 3600...) with no indication of why that particular
 # tier applied to that particular endpoint.
 CACHE_TTL_SEARCH_S = 60          # rate-limited, CPU-intensive search endpoints
-CACHE_TTL_DETAIL_S = 120         # single-entity detail/breakdown/history/highlights
+CACHE_TTL_DETAIL_S = 120         # single-entity detail/breakdown/history
 CACHE_TTL_LIST_S = 300           # leaderboards and other paginated/aggregate lists
 CACHE_TTL_REFERENCE_S = 600      # rarely-changing reference lists (e.g. states index)
 CACHE_TTL_CONFIG_S = 3600        # config/weights — changes only on a deploy

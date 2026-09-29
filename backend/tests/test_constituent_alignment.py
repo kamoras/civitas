@@ -620,3 +620,19 @@ class TestVotePartStatus:
 
     def test_full(self):
         assert self.status(record(5, total=40)) == "full"
+
+
+def test_the_bundled_prior_is_stamped_with_the_current_statistic():
+    # The loader skips a chamber entry measured on another statistic. v6.20
+    # changed the statistic without restamping this file, so a deployment
+    # before its first run had no Constituent Alignment reference at all.
+    import json
+    import pathlib
+
+    from app.config_definitions import CONSTITUENT_REFERENCE_STATISTIC
+
+    bundled = json.loads(
+        (pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "constituent_reference.json").read_text()
+    )
+    for chamber in ("senate", "house"):
+        assert bundled[chamber]["statistic"] == CONSTITUENT_REFERENCE_STATISTIC, chamber

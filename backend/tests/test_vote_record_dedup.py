@@ -46,14 +46,14 @@ def _senator_record(classified_bills, roll_call_data_map, classified_recent, rec
     for bill in classified_bills:
         rcd = roll_call_data_map.get(bill["billId"])
         if rcd:
-            v = extract_senator_vote(rcd, "", "Smith", "OH")
+            v = extract_senator_vote(rcd, "Smith", "OH")
             if v:
                 senator_votes[bill["billId"]] = v
     for rc in recent_only:
         rc_id = rc.get("rcKey") or rc.get("billId", "")
         rcd = recent_rc_map.get(rc_id)
         if rcd:
-            v = extract_senator_vote(rcd, "", "Smith", "OH")
+            v = extract_senator_vote(rcd, "Smith", "OH")
             if v:
                 senator_votes[rc_id] = v
     record = normalize_votes("X", classified_bills + recent_only, senator_votes, senator_party="R")
