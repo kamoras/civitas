@@ -864,7 +864,8 @@ export interface ExploreDocumentSummary {
   keyPoints: string[];
   impact: string;
   /** The generation stopped before its end (the LLM failed or ran out of
-   *  time): what it wrote, less the sentence it stopped in. */
+   *  time): the sections it finished, less the one it was writing (a
+   *  summary cut mid-sentence is no summary). */
   partial?: boolean;
   /** It reached its length limit: kept, less the section it was writing. */
   truncated?: boolean;

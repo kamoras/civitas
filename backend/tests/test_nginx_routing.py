@@ -174,3 +174,17 @@ def test_explore_summaries_stream_from_the_pipeline_process():
     assert route("/api/explore/123/summary") == "pipeline_upstream"
     assert route("/api/explore/123") == "backend_upstream"
     assert route("/api/explore/123/comments") == "backend_upstream"
+
+
+def test_a_summary_read_goes_through_the_miss_hop_and_is_never_served_stale_while_updating():
+    # Its "none yet" answer is a no-store 204 a background refresh can't
+    # store: served stale while updating, a changed document would keep its
+    # old summary for good.
+    public, internal = _servers()
+    location = _match(_locations(public), "/api/explore/1/cached-summary")
+    assert location is not None and location[2] == _MISSES_HOP
+    assert "proxy_cache civitas_cache" in location[3] and "limit_req" not in location[3]
+    assert "updating" not in location[3]
+    assert "limit_req zone=" in _match(_locations(internal), "/api/explore/1/cached-summary")[3]
+    # Everything else keeps serving stale while it refreshes.
+    assert "updating" in _match(_locations(public), "/api/senators")[3]
