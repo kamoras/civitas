@@ -81,3 +81,11 @@ class TestCutOff:
         # An IMPACT: inside the summary doesn't make the key points whole.
         text = "SUMMARY: see IMPACT: x.\nKEY POINTS:\n- One\n- Tw"
         assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One"]
+
+    def test_cut_partway_through_a_marker_keeps_every_whole_section(self):
+        text = "SUMMARY: Complete sentence.\nKEY POI"
+        assert parse_explore_document_summary(text, cut_off=True) == {
+            "summary": "Complete sentence.", "keyPoints": [], "impact": "",
+        }
+        text = "SUMMARY: Whole.\nKEY POINTS:\n- One\n- Two\nIMPA"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One", "Two"]

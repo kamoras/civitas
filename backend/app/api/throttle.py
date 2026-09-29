@@ -355,6 +355,12 @@ def _rotate(conn: sqlite3.Connection, kind: str, today: str) -> tuple[tuple | No
     return row, previous, dropped
 
 
+def _utc_today() -> str:
+    """The current UTC day, as the salts are dated — the one spelling of it
+    here (tests move this module's clock)."""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
 def _salts_for(kind: str, today: str) -> tuple[bytes | None, bytes | None]:
     """`kind`'s salt for `today` (made if missing) and, for a kind kept past
     its day, yesterday's if the store has it — never made: a key under a
@@ -415,7 +421,7 @@ def forget_stale_salt() -> None:
     minute (run_maintenance). Creates nothing where the store doesn't exist
     yet."""
     global _last_forget, _swept_day
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = _utc_today()
     with _salt_lock:
         # A cache made yesterday also holds the day before's salt.
         for kind in [k for k, cached in _salt_cache.items() if cached[0] != today]:
@@ -463,7 +469,7 @@ def derived_salt(purpose: str, date: str) -> bytes | None:
     outlive their day. None if the store can't give one — or if `date` isn't
     today: today's salt outlives an earlier day, so a hash under it would
     stay recomputable after that day's salt is gone."""
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = _utc_today()
     if date != today:
         return None
     try:
@@ -499,7 +505,7 @@ def client_key(ip: str, purpose: str, scope: str = "") -> ClientKey | None:
     None when the store can't be read: hit and claim then let the request
     through, as they would on their own failure — never one shared key,
     which would count every affected client as one."""
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = _utc_today()
     try:
         salt, previous = _salts_for(_KEY_SALT, today)
     except sqlite3.Error:

@@ -469,18 +469,24 @@ class TestCachedSummaryRead:
 
 
 class TestJoining:
-    async def test_joining_a_generation_isnt_counted_by_the_request_limit(self, db_session, monkeypatch):
+    async def test_joining_counts_against_the_request_limit(self, db_session, monkeypatch):
+        # A join starts nothing, but holds a stream open on the one pipeline
+        # process: a client can't open them without limit.
         from app.api import explore
 
-        monkeypatch.setattr(explore, "_SUMMARY_REQUESTS_PER_MINUTE", 1)
+        monkeypatch.setattr(explore, "_SUMMARY_REQUESTS_PER_MINUTE", 2)
         doc = _make_doc(db_session)
         stream, release = _gate()
         patches, _ = _llm(stream)
         with patches[0], patches[1], patches[2]:
             first = await _ask(doc, db=db_session)
-            joiners = [await _ask(doc, db=db_session) for _ in range(3)]  # same reader, over its limit
+            joined = await _ask(doc, db=db_session)
+            refused = await _refused(doc, db_session)
+            assert refused.status_code == 429 and refused.headers["X-Summary-Wait"] == "1"
+            # Another reader still joins.
+            other = await _ask(doc, _reader("198.51.100.9"), db_session)
             release.set()
-            for response in [first, *joiners]:
+            for response in (first, joined, other):
                 assert (await _collect_sse_events(response))[-1]["summary"] == "A test summary."
             await _settled()
 

@@ -109,6 +109,18 @@ def prompt_for(doc) -> dict:
     })
 
 
+async def lookup(doc_id: int, doc) -> tuple[dict, dict, dict | None]:
+    """(the prompt, its cache key, the summary already made or None) for an
+    ExploreDocument — the one derivation both the API's read and the
+    pipeline's making go through."""
+    from app.pipeline.analyze.ollama_client import get_cached_llm_result
+
+    prompt = prompt_for(doc)
+    key = cache_key(doc_id, prompt)
+    made = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key)
+    return prompt, key, made
+
+
 class _Run:
     """One generation, and every event it has sent — replayed to a reader
     who joins late."""
@@ -174,12 +186,10 @@ def _prune(now: float) -> None:
 
 
 async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None) -> AsyncIterator[str]:
-    """The event stream for this text's summary: the cached one, a
+    """The event stream for a text with no summary cached (lookup): a
     generation joined, one started, or the answer that none can be made for
-    now. `limit()` — awaited once the answer isn't a cached one, so a summary
-    already made is never limited — raises to refuse. Raises Refusal."""
+    now. `limit()` raises to refuse. Raises Refusal."""
     from app.api import throttle
-    from app.pipeline.analyze.ollama_client import get_cached_llm_result
 
     key = f"{doc_id}:{key_['prompt']}"
 
@@ -194,14 +204,14 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
             return once(finished[1])
         return None
 
-    made = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key_)
-    if made is not None:
-        return once({"done": True, **made})
-    # Joining costs nothing to limit or key: nothing new starts.
-    if (stream := joined()) is not None:
-        return stream
+    # Counted before anything, a join included: a join starts nothing, but
+    # it holds a stream open on the one pipeline process, so a client can't
+    # open them without limit either (nginx also caps each address's).
     if limit is not None:
         await limit()
+    # Joining needs no key: nothing new starts.
+    if (stream := joined()) is not None:
+        return stream
     client = await throttle.run(throttle.client_key, ip, "explore-summary-client")
     # Looked at again after those awaits; from here on everything decides
     # and registers without yielding to another request, so two can't both

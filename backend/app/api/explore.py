@@ -1,6 +1,5 @@
 """Explore API — semantic search over government activity documents."""
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
@@ -367,22 +366,20 @@ async def get_cached_explore_summary(doc_id: int, db: Session = Depends(get_db))
     document."""
     from fastapi import Response
 
-    from app.pipeline.analyze.ollama_client import get_cached_llm_result
     from app.services import explore_summary
 
     doc = await _load_document(db, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    prompt = explore_summary.prompt_for(doc)
-    cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"],
-                                     explore_summary.cache_key(doc_id, prompt))
+    _prompt, _key, cached = await explore_summary.lookup(doc_id, doc)
     if cached is None:
         # Not made yet — and may be made any moment: never kept.
         return Response(status_code=204, headers={"Cache-Control": "no-store"})
-    # Keyed on the text it summarises, so it stands while the document
-    # does; a changed document is a new key, seen within this lifetime.
-    return JSONResponse(content={"done": True, **cached},
-                        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"})
+    # Kept briefly, no stale grace: this URL names the document, not the
+    # text summarised, so a document changed in place (a body backfilled, a
+    # data reset reusing its id) must stop being answered with the old
+    # text's summary soon — within this lifetime.
+    return JSONResponse(content={"done": True, **cached}, headers={"Cache-Control": "public, max-age=30"})
 
 
 @router.post("/{doc_id}/summary")
@@ -419,15 +416,15 @@ async def get_explore_document_summary(
     doc = await _load_document(db, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    prompt = explore_summary.prompt_for(doc)
-    key = explore_summary.cache_key(doc_id, prompt)
+    prompt, key, made = await explore_summary.lookup(doc_id, doc)
+    if made is not None:  # a summary already made is never limited
+        return StreamingResponse(explore_summary.once({"done": True, **made}), media_type="text/event-stream",
+                                 headers=_STREAM_HEADERS)
 
     ip = client_ip(request)
 
     async def limit():
-        # Only once the answer isn't a cached one: a summary already made
-        # costs nothing to hand out. A refused request isn't counted, so it
-        # is a wait too.
+        # A refused request isn't counted, so it is a wait too.
         counted = await throttle.run(limit_client, ip, _SUMMARY_REQUESTS_BUCKET,
                                      limit=_SUMMARY_REQUESTS_PER_MINUTE, period=60.0)
         if not counted.allowed:

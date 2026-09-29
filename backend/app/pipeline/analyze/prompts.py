@@ -57,6 +57,18 @@ SUMMARY: <2-3 sentences: what does this document do? What is its purpose and sub
     }
 
 
+def _before_a_partial_marker(text: str) -> str | None:
+    """`text` without a section marker it ends partway through ("...\nKEY
+    POI"), or None when it doesn't end in one."""
+    head, newline, last = text.rstrip(" ").rpartition("\n")
+    if not newline or not last:
+        return None
+    for marker in (SUMMARY_KEY_POINTS_MARKER, SUMMARY_IMPACT_MARKER):
+        if marker != last and marker.startswith(last):
+            return head
+    return None
+
+
 def parse_explore_document_summary(text: str, *, cut_off: bool = False) -> dict:
     """Split the plain-text SUMMARY/KEY POINTS/IMPACT format back into fields.
 
@@ -66,6 +78,12 @@ def parse_explore_document_summary(text: str, *, cut_off: bool = False) -> dict:
     old JSON-based cache entries used, so cache rows before and after this
     format change stay compatible).
     """
+    if cut_off:
+        whole = _before_a_partial_marker(text)
+        if whole is not None:
+            # Cut while writing the next section's marker: every section
+            # before it is whole.
+            text, cut_off = whole, False
     summary_part, key_points_marker, rest = text.partition(SUMMARY_KEY_POINTS_MARKER)
     key_points_part, impact_marker, impact_part = rest.partition(SUMMARY_IMPACT_MARKER)
 
