@@ -792,6 +792,10 @@ class PresidentTrade(Base):
     # version is read again (stock_pipeline._reread_trades). Rows stored
     # before versions existed are 1.
     parser_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # "periodic": from a 278-T. "annual": from the annual report's Part 7
+    # (president_fd), the record for its year, which replaces that year's
+    # periodic rows and states no notification date.
+    report_kind: Mapped[str] = mapped_column(String(8), default="periodic", server_default="periodic")
 
     president: Mapped["President"] = relationship(back_populates="trades")
 
