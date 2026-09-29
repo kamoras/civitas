@@ -166,6 +166,11 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "world", label: "GLOBE" },
 ];
 
+// A deep-linked card scrolls to its top: clear the fixed navbar
+// (--header-clearance) and the sticky tab bar below it (top-[82px], ~43px
+// tall), or its title and toggle land under them.
+const ISSUE_SCROLL_MARGIN = "scroll-mt-[calc(var(--header-clearance)+3rem)]";
+
 function HeroIssue({
   issue,
   userState,
@@ -191,7 +196,7 @@ function HeroIssue({
     <article
       ref={heroRef}
       {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
-      className="border border-phos/20 bg-surface p-6 sm:p-8"
+      className={`${ISSUE_SCROLL_MARGIN} border border-phos/20 bg-surface p-6 sm:p-8`}
     >
       <div className="mb-4 flex flex-wrap items-center gap-3 font-mono text-xs">
         <span className="border border-phos/40 px-2 py-0.5 tracking-[0.14em] text-phos-mid">
@@ -336,7 +341,7 @@ function SecondaryIssue({
     <article
       ref={cardRef}
       {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
-      className="border border-white/[0.09] bg-surface"
+      className={`${ISSUE_SCROLL_MARGIN} border border-white/[0.09] bg-surface`}
     >
       <button
         onClick={handleToggle}
@@ -578,7 +583,7 @@ function IssuesTab({
   initialDate?: string | null;
   onDateChange?: (date: string | null) => void;
   initialIssueId?: string | null;
-  onIssueChange?: (id: string | null, date: string | null) => void;
+  onIssueChange?: (id: string | null, date: string | null, toggled: string) => void;
 }) {
   // The selected day IS the request. Keying the fetch on it means the pager
   // can't get out of step with what is on screen: there is no separate
@@ -712,7 +717,7 @@ function IssuesTab({
   // loading, error, empty and loaded.
   if (loading) {
     return (
-      <div ref={rootRef} tabIndex={-1} className="space-y-6 outline-none">
+      <div ref={rootRef} tabIndex={-1} className="space-y-6">
         {pager}
         <div className="panel max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
           <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
@@ -725,7 +730,7 @@ function IssuesTab({
 
   if (fetchError) {
     return (
-      <div ref={rootRef} tabIndex={-1} className="space-y-6 outline-none">
+      <div ref={rootRef} tabIndex={-1} className="space-y-6">
         {pager}
         <div className="panel max-w-lg mx-auto p-6 text-center" role="alert">
           <div className="text-signal-red font-mono text-sm tracking-widest mb-2">
@@ -748,7 +753,7 @@ function IssuesTab({
 
   if (!heroIssue) {
     return (
-      <div ref={rootRef} tabIndex={-1} className="space-y-6 outline-none">
+      <div ref={rootRef} tabIndex={-1} className="space-y-6">
         {pager}
         <div className="panel max-w-lg mx-auto p-6 text-center" role="status" aria-live="polite">
           {selectedDate ? (
@@ -767,7 +772,7 @@ function IssuesTab({
   }
 
   return (
-    <div ref={rootRef} tabIndex={-1} className="space-y-6 outline-none">
+    <div ref={rootRef} tabIndex={-1} className="space-y-6">
       {pager}
 
       {/* Data freshness timestamp */}
@@ -816,7 +821,7 @@ function IssuesTab({
                 userState={userState}
                 onNavigate={onNavigate}
                 deepLinked={issueArrival === issue.publicId}
-                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null, selectedDate)}
+                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null, selectedDate, id)}
               />
             ))}
           </div>
@@ -1075,7 +1080,10 @@ function ActionPageInner() {
 
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
-    (id: string | null, date: string | null) => {
+    (id: string | null, date: string | null, toggled: string) => {
+      // Collapsing a card the URL doesn't name (another card was opened
+      // after it) leaves the URL on the one still open.
+      if (!id && new URLSearchParams(window.location.search).get("issue") !== toggled) return;
       // The day stays in the URL: an issue on an older day, reloaded or
       // shared as ?issue= alone, opened on the latest day, where it isn't.
       const url = date

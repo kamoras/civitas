@@ -420,6 +420,31 @@ describe("an issue expanded on an older day", () => {
   });
 });
 
+describe("the issue in the URL", () => {
+  it("stays on the card still open when another is collapsed", async () => {
+    serveIssues();
+    window.history.replaceState(null, "", `/action?tab=issues&date=${DATES[1]}`);
+    render(<ActionPage />);
+    const b = await screen.findByRole("button", { name: new RegExp(`Issue b of ${DATES[1]}`) });
+    const c = screen.getByRole("button", { name: new RegExp(`Issue c of ${DATES[1]}`) });
+    await userEvent.click(b);
+    await userEvent.click(c);
+    expect(window.location.search).toBe(`?date=${DATES[1]}&issue=pub-c-${DATES[1]}`);
+    await userEvent.click(b);
+    expect(window.location.search).toBe(`?date=${DATES[1]}&issue=pub-c-${DATES[1]}`);
+    await userEvent.click(c);
+    expect(window.location.search).toBe(`?date=${DATES[1]}`);
+  });
+
+  it("scrolls a deep-linked card clear of the navbar and the sticky tab bar", async () => {
+    serveIssues();
+    window.history.replaceState(null, "", "/action?issue=pub-b-latest");
+    render(<ActionPage />);
+    const card = await screen.findByRole("button", { name: new RegExp(`Issue b of ${LATEST}`) });
+    expect(card.closest("article")).toHaveClass("scroll-mt-[calc(var(--header-clearance)+3rem)]");
+  });
+});
+
 describe("a site with a single day of issues", () => {
   it("keeps the pager (and focus) after LATEST", async () => {
     vi.mocked(fetchActionIssues).mockImplementation(((date?: string) =>
