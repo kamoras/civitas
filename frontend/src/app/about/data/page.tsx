@@ -76,6 +76,10 @@ export default function DataChapter() {
             <Fact label="Voteview">
               Congress-by-congress roll-call positions (Nokken-Poole), for Constituent Alignment.
             </Fact>
+            <Fact label="Cooperative Election Study">
+              Approval of each member among their own constituents, by party (2024 survey, Harvard
+              Dataverse) — shown on profiles, not scored.
+            </Fact>
             <Fact label="Financial disclosures">
               STOCK Act trade reports and annual disclosures from the House Clerk and the
               Senate&apos;s eFD system; the sitting president&apos;s disclosures from the Office of

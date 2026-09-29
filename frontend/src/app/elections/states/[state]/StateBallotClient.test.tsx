@@ -338,6 +338,20 @@ describe("statewide executive offices", () => {
     expect(drawer.getByText(/an office may be missing, or missing a party's nominee/)).toBeInTheDocument();
   });
 
+  it("says what primary results can omit without claiming minor parties never appear", async () => {
+    // Ohio's official primary canvass has a Libertarian workbook (William
+    // B. Redpath for Senate), so "never include minor-party candidates"
+    // would be false there; what primary results genuinely can omit is an
+    // unopposed nominee a feed does not itemise, independents (who run in
+    // no primary) and a nominee a party named after it (R.C. 3513.31).
+    render(<StateBallotClient ballot={ballot(covered)} />);
+    const drawer = await openContest(/Statewide offices/);
+    const caveat = drawer.getByText(/Names come from primary results/);
+    expect(caveat.textContent).toMatch(/independent/);
+    expect(caveat.textContent).toMatch(/replaced after the primary/);
+    expect(caveat.textContent).not.toMatch(/never include/);
+  });
+
   const council = (district: string, towns: string[], name: string) => ({
     office: `executive_council-${district}`,
     label: `Executive Council, District ${district}`,
