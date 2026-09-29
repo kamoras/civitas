@@ -179,15 +179,20 @@ def _issue_bill_ids(issue: ActionIssue) -> set[str]:
     return {e["id"].upper() for e in entries if isinstance(e, dict) and e.get("id")}
 
 
-def _covering_issue(db: Session, bill_id: str, names: list[str], exclude_id: int | None = None) -> ActionIssue | None:
-    """A current, reported (not developing) issue about the bill: one that
-    records it among its related bills, or names it in its title, summary
-    or facts."""
-    issues = db.query(ActionIssue).filter(
+def _covering_issue(
+    db: Session, bill_id: str, names: list[str], exclude_id: int | None = None,
+    candidates: list[ActionIssue] | None = None,
+) -> ActionIssue | None:
+    """A reported (not developing) issue about the bill, among `candidates`
+    (by default the current issues): one that records it among its related
+    bills, or names it in its title, summary or facts."""
+    issues = candidates if candidates is not None else db.query(ActionIssue).filter(
         ActionIssue.is_current == True,  # noqa: E712
         ActionIssue.status != ActionIssueStatus.DEVELOPING,
     ).all()
     for issue in issues:
+        if issue.status == ActionIssueStatus.DEVELOPING:
+            continue
         if issue.id == exclude_id:
             continue
         if bill_id in _issue_bill_ids(issue):
@@ -347,29 +352,40 @@ def expire_stale_developing_issues(db: Session, now) -> int:
     return len(stale)
 
 
+ROLL_CALL_SOURCES = ("senate_roll_call_vote", "house_roll_call_vote")
+
+
+def covering_issue(db: Session, draft: ActionIssue, candidates: list[ActionIssue] | None = None) -> ActionIssue | None:
+    """The reported issue that covers a vote draft's bill, or None. The
+    draft's bill is the one it recorded, or for a draft from before it
+    recorded one, the first bill its text names."""
+    bill_id = next(iter(_issue_bill_ids(draft)), None) or first_bill_id(f"{draft.title} {draft.summary}")
+    if not bill_id:
+        return None
+    return _covering_issue(db, bill_id, _bill_names(db, bill_id), exclude_id=draft.id, candidates=candidates)
+
+
 def retire_covered_developing_issues(db: Session) -> int:
     """Retire a current vote draft whose bill a reported issue now covers.
     News that the matching pass didn't join to the draft (it reads as its
     own story) otherwise leaves two issues about one vote, the draft's the
-    thinner. The draft's bill is the one it recorded, or for a draft from
-    before it recorded one, the first bill its text names."""
+    thinner. Retiring only takes the draft off the Action Center; the
+    homepage's record keeps retired rows, and leaves the draft out as a
+    duplicate of the covering issue (action_center.mark_recent_duplicates)."""
     retired = 0
     drafts = db.query(ActionIssue).filter(
         ActionIssue.status == ActionIssueStatus.DEVELOPING,
         ActionIssue.is_current == True,  # noqa: E712
-        ActionIssue.source_type.in_(("senate_roll_call_vote", "house_roll_call_vote")),
+        ActionIssue.source_type.in_(ROLL_CALL_SOURCES),
     ).all()
     for draft in drafts:
-        bill_id = next(iter(_issue_bill_ids(draft)), None) or first_bill_id(f"{draft.title} {draft.summary}")
-        if not bill_id:
-            continue
-        covering = _covering_issue(db, bill_id, _bill_names(db, bill_id), exclude_id=draft.id)
+        covering = covering_issue(db, draft)
         if covering is None:
             continue
         draft.is_current = False
         retired += 1
         action_metrics.increment("early_signal_retired_covered")
-        logger.info("Retired developing issue %d: issue %d covers %s", draft.id, covering.id, bill_id)
+        logger.info("Retired developing issue %d: issue %d covers its bill", draft.id, covering.id)
     return retired
 
 
