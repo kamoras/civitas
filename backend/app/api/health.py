@@ -11,6 +11,19 @@ from app.schemas import HealthSchema
 router = APIRouter()
 
 
+@router.get("/live")
+async def live() -> dict:
+    """Liveness for the container health check: answered by the event
+    loop itself, with no database read and no call to llama-server. A loop
+    frozen by blocking work still fails it (the 2026-09-20 outage), but a
+    slow llama-server no longer does: /health waits up to 5s on
+    llama-server, the check's own timeout is 5s, so three slow answers from
+    a sibling service marked this one unhealthy and Swarm replaced it,
+    killing any pipeline run in progress (suspected 2026-09-29, a House run
+    7 minutes in)."""
+    return {"status": "ok"}
+
+
 @router.get("/health", response_model=HealthSchema)
 async def health_check(db: Session = Depends(get_db)) -> HealthSchema:
     db_status = "ok"

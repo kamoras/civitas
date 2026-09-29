@@ -69,7 +69,7 @@ sequenceDiagram
 
     Swarm->>New: start new task (update_config.order: start-first)
     Note over Old,New: both running — no gap in service
-    New->>New: HEALTHCHECK: curl -sf localhost:8000/api/health
+    New->>New: HEALTHCHECK: curl -sf localhost:8000/api/live
 
     alt healthcheck passes
         Swarm->>Nginx: service DNS now resolves to the new task
