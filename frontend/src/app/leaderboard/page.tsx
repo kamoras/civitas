@@ -22,6 +22,8 @@ import {
 } from "@/lib/api";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
 import MetricTooltip from "@/components/checker/MetricTooltip";
+import { useConfig } from "@/hooks/useConfig";
+import { SCORE_TERMS, type ScoreKey } from "@/lib/scoreTerms";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { BOXED_CONTROL, boxedControl } from "@/lib/controlStyles";
 import { asLabel, competitionRanks, displayScore, formatCurrency } from "@/lib/formatting";
@@ -655,6 +657,28 @@ function JusticeLeaderboard({
   );
 }
 
+/** "funding independence (33%) + …", from the weights /api/config serves
+ *  (config_definitions.SCORE_WEIGHTS), never typed here (AGENTS.md §5). */
+function WeightedFrom() {
+  const weights = useConfig()?.scoreWeights;
+  const keys = (weights ? Object.keys(weights) : Object.keys(SCORE_TERMS)).filter(
+    (k): k is ScoreKey => k in SCORE_TERMS
+  );
+  const total = weights ? keys.reduce((sum, k) => sum + (weights[k] ?? 0), 0) : 0;
+  return (
+    <>
+      {keys
+        .map((k) => {
+          const label = SCORE_TERMS[k].label.toLowerCase();
+          return weights && total > 0
+            ? `${label} (${Math.round(((weights[k] ?? 0) / total) * 100)}%)`
+            : label;
+        })
+        .join(" + ")}
+    </>
+  );
+}
+
 function LeaderboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1203,9 +1227,8 @@ function LeaderboardContent() {
               {!activeLoading && !activeError && displayed.length > 0 && (
                 <div className="mt-4 space-y-1 text-center">
                   <p className="font-sans text-xs text-ink-lo">
-                    Higher score = better constituent representation. Computed from: funding
-                    independence (33%) + constituent alignment (33%) + legislative effectiveness
-                    (34%). Click any row to view full profile.
+                    Higher score = better constituent representation. Computed from:{" "}
+                    <WeightedFrom />. Click any row to view full profile.
                   </p>
                   <p className="font-sans text-xs text-ink-min">
                     Scores are shrunk toward a neutral value when data is thin — members with

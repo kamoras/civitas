@@ -84,7 +84,8 @@ def recent_alerts(limit: int = 10) -> list[dict]:
     """Every open alert, then the newest ``limit`` others from the last
     HISTORY_SHOWN_FOR, each newest first — consumed by the admin API. An
     open alert is never pushed off, however old. Each is {subject, body, at,
-    condition, resolvedAt, open}: open while its condition is unresolved."""
+    condition, resolvedAt, supersededAt, open}: open while its condition is
+    unresolved and no newer alert has replaced it."""
     db = SessionLocal()
     try:
         rows = (
@@ -93,11 +94,17 @@ def recent_alerts(limit: int = 10) -> list[dict]:
             .order_by(ApiCache.cached_at.desc())
             .all()
         )
-        alerts = [{"condition": None, "resolvedAt": None, **json.loads(r.data_json)} for r in rows]
+        alerts = [
+            {"condition": None, "resolvedAt": None, "supersededAt": None, **json.loads(r.data_json)}
+            for r in rows
+        ]
         for a in alerts:
-            a["open"] = bool(a["condition"]) and not a["resolvedAt"]
+            a["open"] = _is_open(a)
         since = (utcnow() - HISTORY_SHOWN_FOR).isoformat()
-        history = [a for a in alerts if not a["open"] and (a["resolvedAt"] or a["at"]) >= since]
+        history = [
+            a for a in alerts
+            if not a["open"] and (a["resolvedAt"] or a["supersededAt"] or a["at"]) >= since
+        ]
         return [a for a in alerts if a["open"]] + history[:limit]
     except Exception:
         logger.exception("Failed to read ops alert history")
@@ -171,19 +178,39 @@ def resolve_ops_alert(condition: str) -> int:
             db.close()
 
 
-def _close_open(db, condition: str, now: datetime, keep: str | None = None) -> int:
+def _is_open(data: dict) -> bool:
+    return bool(data.get("condition")) and not data.get("resolvedAt") and not data.get("supersededAt")
+
+
+def _close_open(db, condition: str, now: datetime) -> int:
+    """Resolve: the condition is gone. Closes the open alert and frees the
+    dedupe key of every alert raised for it — the superseded ones' too,
+    since a recurrence the same day may come back under any of them."""
     closed = 0
     for row in db.query(ApiCache).filter(ApiCache.tier == _HISTORY_TIER).all():
-        if row.cache_key == keep:
-            continue
         data = json.loads(row.data_json)
-        if data.get("condition") != condition or data.get("resolvedAt"):
+        if data.get("condition") != condition:
             continue
-        row.data_json = json.dumps({**data, "resolvedAt": now.isoformat()})
+        if _is_open(data):
+            row.data_json = json.dumps({**data, "resolvedAt": now.isoformat()})
+            closed += 1
         if row.cache_key.startswith("dedupe-"):
             row.cache_key = f"resolved-{row.cache_key[len('dedupe-'):]}-{now.isoformat()}"
-        closed += 1
     return closed
+
+
+def _supersede_open(db, condition: str, now: datetime, keep: str | None = None) -> None:
+    """A newer alert for a condition still open replaces the open one. It
+    is not resolved — the problem never went away — and keeps its dedupe
+    key: freeing it would re-send that alert whenever the condition's
+    details swing back (a failing set of states A, then B, then A again),
+    once per swing."""
+    for row in db.query(ApiCache).filter(ApiCache.tier == _HISTORY_TIER).all():
+        if row.cache_key == keep:
+            continue  # the newer alert itself, already inserted
+        data = json.loads(row.data_json)
+        if data.get("condition") == condition and _is_open(data):
+            row.data_json = json.dumps({**data, "supersededAt": now.isoformat()})
 
 
 def _record(subject: str, body: str, dedupe_key: str | None, condition: str | None = None) -> bool:
@@ -201,6 +228,7 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
         "at": now.isoformat(),
         "condition": condition,
         "resolvedAt": None,
+        "supersededAt": None,
     })
     db = None
     try:
@@ -218,11 +246,11 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
             return False  # its dedupe key: already recorded, and sent
         if condition:
             # Superseded by this one: the condition is still open, and one
-            # alert for it says so — not this one, which the query finds too.
-            _close_open(db, condition, now, keep=key)
+            # alert for it says so.
+            _supersede_open(db, condition, now, keep=key)
         # Prune old history so the table stays bounded — never an open
         # alert, which would silently drop a live problem off the panel.
-        db.flush()
+        db.flush()  # the session doesn't autoflush; count this one in the prune
         cutoff_rows = (
             db.query(ApiCache)
             .filter(ApiCache.tier == _HISTORY_TIER)
@@ -231,10 +259,8 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
             .all()
         )
         for row in cutoff_rows:
-            data = json.loads(row.data_json)
-            if data.get("condition") and not data.get("resolvedAt"):
-                continue
-            db.delete(row)
+            if not _is_open(json.loads(row.data_json)):
+                db.delete(row)
         db.commit()
     except Exception:
         logger.exception("Failed to record ops alert")

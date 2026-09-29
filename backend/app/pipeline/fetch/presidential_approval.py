@@ -23,8 +23,10 @@ artifact) is also observed on at least one live page and must be skipped.
 
 URL slugs are NOT reliably derivable from a president's name (middle
 initials, "2nd-term" suffixes for repeat presidents, inconsistent
-formatting) — hardcoded per-president below, each verified live against
-presidency.ucsb.edu during development (2026-07). Only presidents with
+formatting) — listed per-president below, each verified live against
+presidency.ucsb.edu during development (2026-07). A president sworn in
+after that list is found in UCSB's own index of approval pages, by name
+(approval_slugs), so the list never needs a new entry. Only presidents with
 real polling-era coverage are included (Truman #33 onward, matching this
 platform's existing "modern presidents" framing) — pre-Truman presidents
 have no live source; their Public Mandate uses the election-margin
@@ -82,6 +84,14 @@ PRESIDENT_APPROVAL_SLUGS: dict[str, str] = {
     "biden-46": "joseph-r-biden-public-approval",
     "trump-47": "donald-j-trump-2nd-term-public-approval",
 }
+
+# UCSB's index of every approval page, newest president first, each link
+# named for the president ("Donald J. Trump", twice: newest term first).
+# A president sworn in after the table above was written is found here by
+# name, so their Public Mandate gets their own polling without anyone
+# typing a slug; the table stays as the verified set for the rest.
+INDEX_URL = f"{BASE_URL}/presidential-job-approval-all-data"
+_INDEX_CACHE_KEY = "approval-index"
 
 # UCSB doesn't publish a documented rate limit; this is a courteous
 # default for a nonprofit academic site rather than a fitted value (same
@@ -173,7 +183,7 @@ def _parse_approval_table(html: str) -> list[ApprovalPoll]:
 
 
 async def fetch_president_approval_history(
-    db: Session, president_id: str,
+    db: Session, president_id: str, slug: str | None = None,
 ) -> list[ApprovalPoll] | None:
     """Fetch + parse a president's full approval-poll history from UCSB.
 
@@ -181,7 +191,7 @@ async def fetch_president_approval_history(
     the fetch/parse failed — never an empty-but-successful list conflated
     with "no data source", so callers can tell "not applicable" from
     "temporarily unavailable"."""
-    slug = PRESIDENT_APPROVAL_SLUGS.get(president_id)
+    slug = slug or PRESIDENT_APPROVAL_SLUGS.get(president_id)
     if slug is None:
         return None
 
@@ -245,3 +255,59 @@ def recent_polls(polls: list[ApprovalPoll], days: int = 90, as_of: datetime | No
         if d >= cutoff:
             result.append(p)
     return result
+
+
+def parse_approval_index(html: str) -> list[tuple[str, str]]:
+    """(president's name, page slug) for every approval page UCSB's index
+    links, in its order (newest first), one per page."""
+    doc = lxml_html.fromstring(html)
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for a in doc.xpath('//a[contains(@href, "-public-approval")]'):
+        slug = (a.get("href") or "").rstrip("/").rsplit("/", 1)[-1]
+        name = a.text_content().strip()
+        # The index splits "Joseph R. Biden, Jr." over two links to one
+        # page; the first carries the name.
+        if not slug or slug in seen or not name or name.startswith(","):
+            continue
+        seen.add(slug)
+        out.append((name, slug))
+    return out
+
+
+async def approval_slugs(db: Session, presidents: list) -> dict[str, str]:
+    """{president id: page slug}: the verified table, plus every president
+    numbered after its newest entry whose name the index links. A name the
+    index lists more than once (a president with two terms) pairs its links,
+    newest first, with that president's terms, newest first."""
+    from app.pipeline.fetch.historical_executive_orders import name_key
+
+    slugs = dict(PRESIDENT_APPROVAL_SLUGS)
+    numbered = {p.id: p.number for p in presidents}
+    newest = max((numbered[pid] for pid in slugs if pid in numbered), default=0)
+    later = sorted((p for p in presidents if p.number > newest), key=lambda p: -p.number)
+    if not later:
+        return slugs
+
+    index = api_cache_get(db, _CACHE_TIER, _INDEX_CACHE_KEY, max_age_hours=_CACHE_MAX_AGE_HOURS)
+    if index is None:
+        resp = await fetch_with_retry_requests(_RATE_LIMITER, "GET", INDEX_URL, log_label="UCSB approval index")
+        if resp is None or resp.status_code != 200:
+            logger.warning("Failed to fetch UCSB approval index (%s)", INDEX_URL)
+            return slugs
+        index = {"pages": parse_approval_index(resp.text)}
+        api_cache_set(db, _CACHE_TIER, _INDEX_CACHE_KEY, index)
+
+    known = set(slugs.values())
+    by_name: dict[str, list[str]] = {}
+    for name, slug in index["pages"]:
+        by_name.setdefault(name_key(name), []).append(slug)
+    for president in later:
+        pages = by_name.get(name_key(president.name), [])
+        # Pages are newest first, as are the later presidents; the first
+        # page of this name not already claimed is this term's.
+        page = next((s for s in pages if s not in known), None)
+        if page:
+            slugs[president.id] = page
+            known.add(page)
+    return slugs

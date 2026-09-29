@@ -1932,6 +1932,7 @@ async def run_senate_pipeline(
 
         funding_reference = live_funding_reference(
             "senate", [p.get("funding") or {} for p in senator_prepared],
+            [p["senator"].get("state", "") for p in senator_prepared],
         )
         constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
             "senate",

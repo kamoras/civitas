@@ -14,7 +14,8 @@ from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTI
 from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
 from app.database import get_db, get_visits_db
-from app.election_calendar import next_election_day
+from app.election_calendar import next_election_day, seats_up_for_year
+from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
@@ -658,6 +659,11 @@ _MONTH_NAMES = [
 ]
 
 
+def _series(parts: list[str]) -> str:
+    """"a, b and c"."""
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
 def _upcoming_civic_events(year: int, today: date) -> list[dict]:
     """Return known upcoming civic events for the given year."""
     events: list[dict] = []
@@ -666,12 +672,20 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
     if election_day.year == year and election_day >= today:
         is_presidential = year % 4 == 0
         label = "Presidential & Congressional" if is_presidential else "Midterm Congressional"
+        # Counted, not typed: the House's seats from its apportionment (the
+        # district table the Clerk's list builds), the Senate's from the
+        # class up this year (the Senate's own list). Specials are extra.
+        house_seats = len(get_district_pvi_map())
+        senate_seats = len(seats_up_for_year(year))
+        seats = [f"all {house_seats} House seats" if house_seats else "every House seat"]
+        if senate_seats:
+            seats.append(f"{senate_seats} Senate seats")
+        if is_presidential:
+            seats.append("the presidency")
         events.append({
             "date": election_day.isoformat(),
             "title": f"{label} Election Day",
-            "description": f"Federal election day — all 435 House seats"
-                           f"{', 33-34 Senate seats' if not is_presidential else ', 33-34 Senate seats, and the presidency'}"
-                           " are on the ballot.",
+            "description": f"Federal election day — {_series(seats)} are on the ballot.",
             "category": "election",
             "link": "/elections",
             "linkLabel": "View races & state info",

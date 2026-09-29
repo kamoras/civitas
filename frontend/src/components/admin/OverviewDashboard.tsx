@@ -37,7 +37,7 @@ function MoreLink({ onClick, children }: { onClick: () => void; children: string
   );
 }
 
-/** One alert: subject, when, and the body; a resolved one says when. */
+/** One alert: subject, when, and the body; a resolved or replaced one says when. */
 function OpsAlertItem({ a }: { a: OpsAlert }) {
   return (
     <li className="py-2">
@@ -48,10 +48,17 @@ function OpsAlertItem({ a }: { a: OpsAlert }) {
         </time>
       </div>
       <p className="mt-1 text-ink-lo whitespace-pre-wrap break-words">{a.body}</p>
-      {a.resolvedAt && (
+      {a.resolvedAt ? (
         <p className="mt-1 text-ink-min">
           Resolved <time dateTime={a.resolvedAt}>{formatTime(a.resolvedAt)}</time>
         </p>
+      ) : (
+        a.supersededAt && (
+          <p className="mt-1 text-ink-min">
+            Replaced by a newer alert{" "}
+            <time dateTime={a.supersededAt}>{formatTime(a.supersededAt)}</time>
+          </p>
+        )
       )}
     </li>
   );

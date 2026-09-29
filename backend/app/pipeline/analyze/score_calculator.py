@@ -196,7 +196,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.23"
+ALGORITHM_VERSION = "v6.24"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -797,15 +797,15 @@ def _constituent_vote_part_status(senator: dict) -> str:
 # weight.
 #
 # WHERE these specific numbers come from: an ordinary-least-squares
-# regression of live senators' real smallDonorPercentage against
-# ln(state population) — expected_pct = A + B*ln(population_millions).
-# These are calculated values, not hand-picked, so (per AGENTS.md
-# "Calibrated constants are generated data") they live in a generated
-# JSON file rather than as Python literals someone copy-pasted from a
-# script's printed output — see _small_donor_baseline_fit() below and
-# scripts/fetch_state_small_donor_baseline.py, which computes and writes
-# app/data/small_donor_baseline.json. Rerun that script (network
-# required) to refresh the fit against current data.
+# regression of the Senate's smallDonorPercentage against ln(state
+# population) — expected_pct = A + B*ln(population_millions) — fitted every
+# run over the senators being scored (small_donor_baseline_fit, v6.24) and
+# stored in the Senate's funding reference. A fit made once drifts from the
+# Senate it scores (it did: 18.6% mean when fitted, 23.2% by 2026-09-29), so
+# per AGENTS.md §3a it is measured in the run. _small_donor_baseline_fit()
+# below reads app/data/small_donor_baseline.json
+# (scripts/fetch_state_small_donor_baseline.py) only as the fallback before
+# a deployment's first run.
 
 
 _small_donor_baseline_fit_cache: dict[str, float] | None = None
@@ -846,11 +846,47 @@ def _small_donor_baseline_fit() -> dict[str, float]:
     return _small_donor_baseline_fit_cache
 
 
-def _state_small_donor_baseline(state: str) -> float:
+def small_donor_baseline_fit(pairs: list[tuple[float, float]]) -> dict | None:
+    """The Senate's small-donor baseline, fitted from this run's senators:
+    `pairs` are (state population in millions, smallDonorPercentage).
+    smallDonorPercentage = A + B*ln(population) by least squares; the
+    saturation point is 1.5 residual standard deviations; the clamp is the
+    fitted range across the senators' states, padded 2 points each way.
+    The same method scripts/fetch_state_small_donor_baseline.py used to
+    produce the bundled fallback, now measured each run on the members being
+    scored, so it tracks the Senate as it is (AGENTS.md §3a). None below
+    _MIN_FUNDING_REFERENCE_MEMBERS usable senators."""
+    points = [(math.log(pop), pct) for pop, pct in pairs if pop and pop > 0]
+    if len(points) < _MIN_FUNDING_REFERENCE_MEMBERS:
+        return None
+    xs, ys = [x for x, _ in points], [y for _, y in points]
+    mx, my = statistics.mean(xs), statistics.mean(ys)
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if sxx == 0:
+        return None
+    b = sum((x - mx) * (y - my) for x, y in points) / sxx
+    a = my - b * mx
+    resid_sd = statistics.pstdev([y - (a + b * x) for x, y in points])
+    if resid_sd <= 0:
+        return None
+    fitted = [a + b * x for x in xs]
+    return {
+        "n": len(points),
+        "A": round(a, 4),
+        "B": round(b, 4),
+        "national_mean_pct": round(my, 4),
+        "min_expected_pct": round(max(0.0, min(fitted) - 2), 4),
+        "max_expected_pct": round(max(fitted) + 2, 4),
+        "saturation_pt": round(1.5 * resid_sd, 4),
+    }
+
+
+def _state_small_donor_baseline(state: str, fit: dict | None = None) -> float:
     """Expected small-donor % for a state's population. Unresolved states
     (unknown code, DC, territories) fall back to the national mean so an
-    unresolvable state is never itself a penalty or a windfall."""
-    fit = _small_donor_baseline_fit()
+    unresolvable state is never itself a penalty or a windfall. `fit`: the
+    run's (small_donor_baseline_fit), else the bundled fallback."""
+    fit = fit or _small_donor_baseline_fit()
     if not fit:
         return 0.0
     pop = _state_population().get(state)
@@ -866,8 +902,8 @@ def _small_donor_capacity_score(
     """Small-donor credit relative to what's expected for the seat, not a
     flat absolute cap. Returns (score, expected_pct).
 
-    Senate: expected from the state's population (the regression in
-    small_donor_baseline.json — bigger states have bigger natural donor
+    Senate: expected from the state's population (the run's regression,
+    small_donor_baseline_fit — bigger states have bigger natural donor
     pools), saturating at the fit's saturation point.
 
     House: districts are apportioned to ~760k people each, so population
@@ -885,10 +921,10 @@ def _small_donor_capacity_score(
             return 50.0, median or 0.0
         return max(0.0, min(100.0, 50.0 + 50.0 * (small_pct - median) / spread)), median
 
-    fit = _small_donor_baseline_fit()
+    fit = (chamber_ref or {}).get("small_donor_fit") or _small_donor_baseline_fit()
     if not fit:
         return 50.0, 0.0
-    expected = _state_small_donor_baseline(state)
+    expected = _state_small_donor_baseline(state, fit)
     saturation = fit["saturation_pt"]
     if small_pct >= expected:
         surplus = small_pct - expected
@@ -925,8 +961,8 @@ def _calc_funding_independence(
          totals spanning a primary and a general, rather than how much the
          campaign depended on PACs. With the size fit, r=+0.05 / -0.06.
       2. Small-donor share (10/53): unitemized (<$200) contributions,
-         against what the state's size predicts for senators
-         (small_donor_baseline.json) and against the House median for
+         against what the state's size predicts for senators (fitted each
+         run, small_donor_baseline_fit) and against the House median for
          representatives (_small_donor_capacity_score).
       3. Top-donor concentration (10/53): top-10 external donors as a share
          of the itemized external donor pool (self-funding and affiliated
@@ -1081,7 +1117,7 @@ def _expected_pac_ratio(base: float, ref: dict) -> float | None:
     return min(1.0, math.exp(ref["pac_size_intercept"] + ref["pac_size_slope"] * x))
 
 
-def compute_funding_reference(fundings: list[dict]) -> dict | None:
+def compute_funding_reference(fundings: list[dict], states: list[str] | None = None) -> dict | None:
     """One chamber's Funding Independence reference from this run's
     members' funding dicts:
 
@@ -1091,13 +1127,18 @@ def compute_funding_reference(fundings: list[dict]) -> dict | None:
     - pac_size_*: the PAC share campaigns of each size typically take
       (_pac_size_fit), which the PAC-dependency component is scored against;
     - concentration_p10 / _median / _p90: top-10 donor concentration among
-      members with a measurable pool.
+      members with a measurable pool;
+    - small_donor_fit: the Senate's small-donor share by state population
+      (small_donor_baseline_fit), when `states` — each member's, aligned
+      with `fundings` — is given. The House is compared with its own
+      median instead (_small_donor_capacity_score).
 
     None when too few members have funding to measure the PAC share; the
     concentration stats are omitted (keep the last persisted ones) when too
     few members have a measurable pool."""
-    ratios, sized, concentrations, small = [], [], [], []
-    for f in fundings:
+    ratios, sized, concentrations, small, by_population = [], [], [], [], []
+    population = _state_population() if states is not None else {}
+    for i, f in enumerate(fundings):
         f = f or {}
         base = funding_share_base(f)
         if base > 0:
@@ -1105,6 +1146,9 @@ def compute_funding_reference(fundings: list[dict]) -> dict | None:
             ratios.append(min(pac / base, 1.0))
             sized.append((base, pac))
             small.append(f.get("smallDonorPercentage") or 0)
+            pop = population.get(states[i]) if states is not None and i < len(states) else None
+            if pop:
+                by_population.append((pop, f.get("smallDonorPercentage") or 0))
         c, _, _ = _top_donor_concentration(f)
         if c is not None:
             concentrations.append(c)
@@ -1119,6 +1163,8 @@ def compute_funding_reference(fundings: list[dict]) -> dict | None:
         "small_donor_median": round(statistics.median(small), 4),
         "small_donor_p90": round(statistics.quantiles(small, n=10)[8], 4),
     }
+    if states is not None and (fit := small_donor_baseline_fit(by_population)):
+        ref["small_donor_fit"] = fit
     if len(concentrations) >= _MIN_FUNDING_REFERENCE_MEMBERS:
         deciles = statistics.quantiles(concentrations, n=10)
         ref.update({

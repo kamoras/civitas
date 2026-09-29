@@ -32,6 +32,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.24",
+    date: "2026-09-29",
+    title: "Funding Independence: the Senate's small-donor baseline is measured every run",
+    tldr: "A senator's share of money from small donors is compared with what a state of their size typically gives. That expectation was fitted once, on an older Senate, and had fallen behind: senators now raise more from small donors, so almost everyone looked better than typical. It is now measured on the current Senate each night. Senators' Funding Independence moves down by about 2 points at most; the House is unchanged.",
+    changes: [
+      "The small-donor component (10/53 of Funding Independence) compares a senator's small-donor share with A + B·ln(state population). A, B, the saturation and the clamp were a regression fitted once over 101 senators and shipped as a file. On 2026-09-29 the live Senate's mean small-donor share was 23.2% against the 18.6% it was fitted on, so the component averaged 58.3 instead of centring near 50.",
+      "The same regression is now fitted each run over the senators being scored (compute_funding_reference, small_donor_baseline_fit) and stored in the Senate's funding reference, so breakdowns read the run's numbers. The file is only the fallback before a deployment's first run (AGENTS.md §3a).",
+      "Measured on the 2026-09-29 live breakdowns: the component now averages 48.9; 93 senators move down and 7 already at full credit are unchanged. Funding Independence moves −1.8 on average, at most −2.6; the overall score −0.6 on average, at most −0.84. docs/methodology/member-score/v6.24.md has the table.",
+    ],
+  },
+  {
     version: "v6.23",
     date: "2026-09-29",
     title:
