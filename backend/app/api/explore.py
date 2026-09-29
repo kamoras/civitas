@@ -135,46 +135,41 @@ async def search_explore(
     )
 
 
-@router.get("/stats")
-async def explore_stats(db: Session = Depends(get_db)):
-    """Return counts of explore documents by type and chamber."""
-    total = db.query(ExploreDocument).count()
+def _explore_counts(db: Session) -> tuple[int, dict[str, int], dict[str, int], int]:
+    """(total, by type, by chamber, open for comment) — on a worker thread
+    (explore_stats' off_loop)."""
+    from sqlalchemy import func
 
+    total = db.query(ExploreDocument).count()
     type_counts: dict[str, int] = {}
     chamber_counts: dict[str, int] = {}
-
-    if total > 0:
-        from sqlalchemy import func
-        type_rows = (
-            db.query(ExploreDocument.doc_type, func.count())
-            .group_by(ExploreDocument.doc_type)
-            .all()
-        )
-        for doc_type, count in type_rows:
-            type_counts[doc_type] = count
-
-        chamber_rows = (
-            db.query(ExploreDocument.chamber, func.count())
-            .group_by(ExploreDocument.chamber)
-            .all()
-        )
-        for chamber, count in chamber_rows:
-            if chamber:
-                chamber_counts[chamber] = count
-
     open_for_comment = 0
     if total > 0:
-        today_str = comment_period_today()
+        for doc_type, count in db.query(ExploreDocument.doc_type, func.count()).group_by(
+            ExploreDocument.doc_type
+        ):
+            type_counts[doc_type] = count
+        for chamber, count in db.query(ExploreDocument.chamber, func.count()).group_by(
+            ExploreDocument.chamber
+        ):
+            if chamber:
+                chamber_counts[chamber] = count
         open_for_comment = (
             db.query(ExploreDocument)
             .filter(
                 ExploreDocument.comment_url.isnot(None),
                 ExploreDocument.comment_url != "",
-                ExploreDocument.comments_close_on >= today_str,
+                ExploreDocument.comments_close_on >= comment_period_today(),
             )
             .count()
         )
+    return total, type_counts, chamber_counts, open_for_comment
 
+
+@router.get("/stats")
+async def explore_stats(db: Session = Depends(get_db)):
+    """Return counts of explore documents by type and chamber."""
+    total, type_counts, chamber_counts, open_for_comment = await off_loop(db, _explore_counts)
     return JSONResponse(
         content={
             "totalDocuments": total,
@@ -441,22 +436,17 @@ async def get_explore_document_summary(
     from app.pipeline.analyze.ollama_client import get_cached_llm_result
     from app.pipeline.analyze.prompts import explore_document_summary_prompt
 
-    def read(session):
-        doc = session.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
-        if doc is None:
-            return None
-        return {
-            "title": doc.title,
-            "body": doc.body,
-            "doc_type": doc.doc_type,
-            "chamber": doc.chamber or "",
-            "politician_name": doc.politician_name or "",
-            "date": doc.date,
-        }
-
-    doc_dict = await off_loop(db, read)
-    if doc_dict is None:
+    doc = await _load_document(db, doc_id)
+    if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
+    doc_dict = {
+        "title": doc.title,
+        "body": doc.body,
+        "doc_type": doc.doc_type,
+        "chamber": doc.chamber or "",
+        "politician_name": doc.politician_name or "",
+        "date": doc.date,
+    }
     prompt = explore_document_summary_prompt(doc_dict)
     # Keyed on what the LLM is given, not the document's id alone: a
     # document whose text or metadata changes in place (a body backfilled,
@@ -529,11 +519,14 @@ async def get_explore_document_summary(
             detail="This summary is being written; please try again shortly.",
             headers={"Retry-After": str(_HELD_RETRY_AFTER_S), **_WAIT_OUT},
         )
-    if outcome == "busy":
+    if outcome == "busy" or (isinstance(outcome, tuple) and outcome[0] == "busy"):
+        # The cap, or the LLM itself said it was busy (for as long as that
+        # hold-off has left).
+        wait = _BUSY_RETRY_AFTER_S if outcome == "busy" else max(1, math.ceil(outcome[1]))
         raise HTTPException(
             status_code=503,
             detail="Summaries are busy right now; please try again shortly.",
-            headers={"Retry-After": str(_BUSY_RETRY_AFTER_S), **_WAIT_OUT},
+            headers={"Retry-After": str(wait), **_WAIT_OUT},
         )
     if isinstance(outcome, tuple) and outcome[0] == "slow":
         # Its last generation ran out of time — perhaps only because the
@@ -575,7 +568,9 @@ class _Generation:
     """One summary generation: its claims, the generation, and the claims
     given back. `outcome` settles once the claims are decided — "go" (the
     events follow on `events`, None last), "held" (another generation of
-    the document is under way), "busy" (the cap is reached), "unusable"
+    the document is under way), "busy" (the cap is reached, or this
+    client's one generation is under way), ("busy", seconds left) (the
+    LLM said it was busy, recently), "unusable"
     (its last output couldn't be used, recently), ("slow", seconds left)
     (its last generation ran out of time, recently), "unavailable" (the claim store
     can't answer: fails closed, since the claims are what stand between
@@ -654,7 +649,7 @@ class _Generation:
                 if isinstance(claimed, throttle.Blocked):
                     self._settle({
                         _SLOW_BUCKET: ("slow", claimed.lifts_in),
-                        _LLM_BUSY_BUCKET: "busy",
+                        _LLM_BUSY_BUCKET: ("busy", claimed.lifts_in),
                     }.get(claimed.bucket, "unusable"))
                     return
                 if not claimed:
@@ -731,16 +726,15 @@ class _Generation:
         except Exception as error:
             # Out of time: this deadline expired, or the LLM, once connected,
             # stopped answering within its client's read timeout. Busy: it
-            # said so (429/503) — a fact about the LLM, not this document,
-            # so it holds nothing off. Anything else — the LLM unreachable
-            # (a connect timeout included), a bad response — is a failure,
-            # retried at once.
+            # said so (429/503, before any text — the stream checks the
+            # status first) — a fact about the LLM, not this document, so it
+            # holds every request off briefly (_LLM_BUSY_BUCKET), none of
+            # them charged. Anything else — the LLM unreachable (a connect
+            # timeout included), a bad response — is a failure, retried at
+            # once.
             if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (429, 503):
                 logger.warning("Explore doc summary for doc_id=%s: the LLM is busy", self.doc_id)
                 llm_busy = True
-                # What it wrote before saying so is not an answer to keep
-                # or show as one: asked again, it can be had whole.
-                text = ""
                 try:
                     await throttle.run(throttle.hold, _LLM_BUSY_BUCKET, ["llm"], period=_BUSY_RETRY_AFTER_S)
                 except Exception:

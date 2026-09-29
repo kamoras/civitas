@@ -412,7 +412,7 @@ def _heartbeat_missing_long_enough() -> bool:
     path = record_path(_HEARTBEAT_MISSING_RECORD)
     record = read_record(path)
     if isinstance(record, tuple):
-        noticed = min(record[0], _heartbeat_missing_noticed)
+        noticed = record[0]  # the volume's, shared and surviving restarts
     else:
         noticed = _heartbeat_missing_noticed
         if record is not UNREADABLE:  # absent: start the record (never reset one)

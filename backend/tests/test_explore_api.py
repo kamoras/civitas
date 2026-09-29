@@ -504,7 +504,8 @@ class TestSummaryEndpointGuards:
                 other = _make_doc(db_session)  # any document, not just this one
                 with pytest.raises(HTTPException) as exc_info:
                     await get_explore_document_summary(other.id, _reader("198.51.100.5"), db=db_session)
-                assert exc_info.value.status_code == 503 and exc_info.value.headers["Retry-After"] == "30"
+                assert exc_info.value.status_code == 503
+                assert 25 <= int(exc_info.value.headers["Retry-After"]) <= 30  # what the hold has left
             elif held_off:
                 with pytest.raises(HTTPException) as exc_info:
                     await get_explore_document_summary(doc.id, _READER, db=db_session)
@@ -649,25 +650,6 @@ class TestSummaryEndpointGuards:
         ):
             events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
         assert events == [{"done": True, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 120}]
-
-    async def test_a_busy_llm_after_some_text_is_a_wait_not_a_partial_answer(self, db_session):
-        # The text before "busy" is not an answer: this reader is told to
-        # ask again, when it can be had whole.
-        doc = _make_doc(db_session)
-
-        async def _then_busy(*_args, **_kwargs):
-            yield "SUMMARY: half"
-            raise httpx.HTTPStatusError("busy", request=httpx.Request("POST", "http://llm"),
-                                        response=httpx.Response(503))
-
-        with (
-            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
-            patch("app.pipeline.analyze.ollama_client.stream_llm", _then_busy),
-            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
-        ):
-            events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
-        assert events[-1] == {"done": True, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 30}
-        assert not mock_set_cache.called
 
     async def test_a_hold_off_is_on_the_text_not_the_document(self, db_session):
         # An unusable output from an empty body doesn't hold off the
