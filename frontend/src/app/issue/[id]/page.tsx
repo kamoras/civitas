@@ -14,6 +14,9 @@ import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import IssueActions from "./IssueActions";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
+import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -119,9 +122,12 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
   // Resolved once, on the server, and handed to the client panel so a comment
   // period reads as open/closed identically before and after hydration.
   const today = new Date().toISOString().slice(0, 10);
+  const shareUrl = absoluteUrl(`/issue/${issue.publicId}`);
 
   return (
-    <>
+    <ShareSubjectProvider
+      subject={{ title: issue.title, subtitle: formatUtcDate(issue.date), url: shareUrl }}
+    >
       {issue.status !== "developing" && <JsonLd data={articleJsonLd(issue)} />}
       <Navbar />
       <main
@@ -141,7 +147,11 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           </div>
 
           {/* Header */}
-          <header className="mb-8 space-y-3 border-b border-white/[0.07] pb-8">
+          <header
+            id="summary"
+            {...{ [SHARE_SECTION_ATTR]: "summary" }}
+            className="mb-8 scroll-mt-[var(--header-clearance)] space-y-3 border-b border-white/[0.07] pb-8"
+          >
             {issue.policyAreas?.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {issue.policyAreas.map((area) => (
@@ -151,14 +161,18 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             )}
             <h1 className="text-xl leading-tight text-ink-hi">{issue.title}</h1>
             <p className="text-base text-ink leading-relaxed">{issue.summary}</p>
-            <div className="text-xs text-ink-min">
-              {/* firstSurfaced missing (not merely equal to date) falls back to
-                  date alone — see issueDateLabel's docstring in lib/formatting.ts
-                  for why that's a real case, not just a hypothetical. */}
-              {formatUtcDate(issue.firstSurfaced || issue.date)}
-              {issue.firstSurfaced &&
-                issue.firstSurfaced !== issue.date &&
-                ` · updated ${formatUtcDate(issue.date)}`}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-ink-min">
+              <span>
+                {/* firstSurfaced missing (not merely equal to date) falls back to
+                    date alone — see issueDateLabel's docstring in lib/formatting.ts
+                    for why that's a real case, not just a hypothetical. */}
+                {formatUtcDate(issue.firstSurfaced || issue.date)}
+                {issue.firstSurfaced &&
+                  issue.firstSurfaced !== issue.date &&
+                  ` · updated ${formatUtcDate(issue.date)}`}
+              </span>
+              {/* The header names the issue itself: no title strip. */}
+              <ShareSectionButton label="Issue summary" withStrip={false} />
             </div>
             <MonitorChips slugs={issue.relatedMonitorSlugs} />
           </header>
@@ -190,10 +204,15 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
           {/* Media coverage: lines quoted from the sources, each with its outlet */}
           {issue.facts?.length > 0 && (
-            <section className="mb-10">
-              <h2 className="text-xs text-ink-min mb-4 tracking-widest uppercase">
-                {factsHeading(issue.sourceType)}
-              </h2>
+            <section
+              id="media-coverage"
+              {...{ [SHARE_SECTION_ATTR]: "media-coverage" }}
+              className="mb-10 scroll-mt-[var(--header-clearance)]"
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-xs text-ink-min tracking-widest uppercase">{factsHeading(issue.sourceType)}</h2>
+                <ShareSectionButton label={factsHeading(issue.sourceType)} />
+              </div>
               <ul className="space-y-3">
                 {issue.facts.map((fact, i) => (
                   <li key={i} className="flex gap-3 text-sm text-ink">
@@ -213,7 +232,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </section>
           )}
 
-          <IssueActions issue={issue} today={today} shareUrl={absoluteUrl(`/issue/${issue.publicId}`)} />
+          <IssueActions issue={issue} today={today} shareUrl={shareUrl} />
 
           {/* Back */}
           <div className="pt-8 border-t border-white/[0.07]">
@@ -228,6 +247,6 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
       </main>
       <Footer />
       <BackToTop />
-    </>
+    </ShareSubjectProvider>
   );
 }

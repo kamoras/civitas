@@ -5,11 +5,7 @@ import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { LiveResults, PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
-import type {
-  JusticeScoreBreakdown,
-  PresidentScoreBreakdown,
-  RepresentationScoreBreakdown,
-} from "@/types/scoreBreakdown";
+import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -272,11 +268,6 @@ export async function fetchRepScoreBreakdown(repId: string): Promise<Representat
 export async function fetchPresidentScoreBreakdown(id: string): Promise<PresidentScoreBreakdown> {
   const raw = await cachedFetch(`${API_BASE}/presidents/${id}/score-breakdown`, TTL.MEDIUM);
   return camelizeKeys(raw) as PresidentScoreBreakdown;
-}
-
-export async function fetchJusticeScoreBreakdown(id: string): Promise<JusticeScoreBreakdown> {
-  const raw = await cachedFetch(`${API_BASE}/justices/${id}/score-breakdown`, TTL.MEDIUM);
-  return camelizeKeys(raw) as JusticeScoreBreakdown;
 }
 
 export interface PaginatedLeaderboard {

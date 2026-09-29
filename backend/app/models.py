@@ -253,6 +253,17 @@ class LobbyingMatch(Base):
     # policy_alignment.py's transient match dict.
     is_consensus_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
+    # Bills this member voted on that LDA filings for clients of the donor's
+    # name name, with the client (JSON list; fetch/lda.lobbied_bills_for).
+    # NULL for rows written before the column existed.
+    lobbied_bills: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # lobbying_spend by the registry's client names (JSON list of
+    # {"client", "amount"}): a name beginning with the donor's can be a
+    # separate company, so the total is never shown as one company's.
+    lobbying_clients: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Whether the LDA lookup succeeded: False means lobbying_spend is
+    # unknown, not zero. NULL when no lookup was attempted.
+    lobbying_checked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     senator: Mapped["Senator"] = relationship(back_populates="lobbying_matches")
 
@@ -491,6 +502,10 @@ class RepLobbyingMatch(Base):
     representative_vote_aligned: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
     is_consensus_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
+    # Same as LobbyingMatch.lobbied_bills / lobbying_clients / lobbying_checked.
+    lobbied_bills: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lobbying_clients: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lobbying_checked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     representative: Mapped["Representative"] = relationship(back_populates="lobbying_matches")
 
@@ -1074,7 +1089,8 @@ class LiveResultRead(Base):
 
 
 class Justice(Base):
-    """Supreme Court justice with ideological consistency scores."""
+    """Supreme Court justice: the voting record from Oyez, and loyalty to
+    the appointing president, the score (pipeline/analyze/justice_loyalty)."""
     __tablename__ = "justices"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)  # oyez identifier
@@ -1088,13 +1104,32 @@ class Justice(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     thumbnail_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Unscored since justice v2 (Consistency and Independence) and v6.13
+    # (the other two; justice_analyzer's module docstring), but NOT NULL
+    # columns the previous image reads, so kept until the contract release
+    # drops them (migrations/README.md). Never read.
     score_consistency: Mapped[float] = mapped_column(Float, default=0.0)
     score_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    # Unscored since v6.13 (justice_analyzer's module docstring) but still
-    # NOT NULL columns the previous image reads, so kept until the contract
-    # release drops them (migrations/README.md). Never read.
     score_bipartisan_agreement: Mapped[float] = mapped_column(Float, default=0.0)
     score_judicial_restraint: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Loyalty to the appointing president (justice_loyalty): the score, the
+    # shrunk effect (a share: 0.145 is 14.5 points) and its standard error,
+    # the votes under the appointing president and under others with the
+    # share of each for the government, and the Supreme Court Database term
+    # the record runs through. NULL until measured, or for a justice the
+    # Database doesn't cover yet.
+    score_loyalty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty_se: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty_votes_in: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    loyalty_votes_out: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    loyalty_rate_in: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty_rate_out: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loyalty_through_term: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Martin-Quinn position per term, [[term, position], ...] as JSON: shown,
+    # not scored.
+    ideal_points: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     cases_decided: Mapped[int] = mapped_column(Integer, default=0)
     majority_pct: Mapped[float] = mapped_column(Float, default=0.0)
@@ -1262,6 +1297,10 @@ class ActionIssue(Base):
     # it" signal. Read by app/fact_diff.py to mark newly-added facts.
     previous_facts: Mapped[str] = mapped_column(Text, default="[]")
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
+    # The row this one is a near-identical duplicate of, among the newest
+    # rows the homepage feed reads (action_center.mark_recent_duplicates);
+    # None for a representative, or a row never compared.
+    duplicate_of_id: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
     # Only ever set from a source article whose feed explicitly granted
     # redistribution rights (see pipeline/fetch/news_feeds.py's

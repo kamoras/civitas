@@ -96,7 +96,7 @@ function tally(p: { yea: number; nay: number }): string {
 function BreakRow({ vote }: { vote: ListedBreak }) {
   const rc = vote.rollCall;
   const fallback = vote.billName ?? "";
-  const href = billPageHref(rc ? rc.billId : vote.billId);
+  const href = rc ? billPageHref(rc.billId, rc.congress) : billPageHref(vote.billId);
   const parties = rc?.parties.filter((p) => PARTY_SHORT[p.party] && p.yea + p.nay > 0) ?? [];
   return (
     <li className="flex flex-col gap-1 border-b border-white/[0.06] pb-2.5">
@@ -190,6 +190,7 @@ export default function AlignmentColumn({
   return (
     <ScoreColumn
       title="Constituent Alignment"
+      shareId="constituent-alignment"
       weight={weight}
       score={score}
       more={{ label: "Every recorded vote", onClick: onMore }}

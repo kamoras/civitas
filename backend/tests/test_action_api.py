@@ -236,7 +236,7 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22"
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22?congress=119"
         # stored congress.gov URL stays available verbatim as the fact-check fallback
         assert resp["relatedBills"][0]["url"] == (
             "https://www.congress.gov/bill/119th-congress/house-bill/22"
@@ -254,10 +254,10 @@ class TestRelatedBillInternalLinks:
 
         assert resp["relatedBills"][0]["internalUrl"] is None
 
-    def test_congress_mismatch_blocks_internal_link(self, db_session):
+    def test_an_earlier_congress_links_to_that_congress_bill(self, db_session):
         """A bill number alone is ambiguous across congresses — an issue
         entry that recorded a different congress than our hosted record
-        must not link to our (different) bill."""
+        links to that Congress's bill, never to ours."""
         from app.api.action import _build_issue_response
 
         self._host_senate_bill(db_session, "HR.3055", congress=119)
@@ -269,7 +269,16 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] is None
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.3055?congress=101"
+
+    def test_a_congress_that_has_not_convened_is_not_linked(self, db_session):
+        from app.api.action import _build_issue_response
+        from app.pipeline.fetch.congress import expected_current_congress
+
+        issue = self._make_issue_with_bill(db_session, {
+            "name": "A bill", "id": "S.1", "url": "https://www.congress.gov/", "congress": expected_current_congress() + 1,
+        })
+        assert _build_issue_response(issue, db_session)["relatedBills"][0]["internalUrl"] is None
 
     def test_legacy_entry_without_congress_still_links(self, db_session):
         """Rows stored before the congress field existed match by id alone."""
@@ -283,7 +292,7 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22"
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22?congress=119"
 
     def test_any_current_congress_bill_links_to_the_sites_bill_page(self, db_session):
         """The bill page shows any bill of the current Congress (its record
@@ -301,7 +310,7 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/S.55"
+        assert resp["relatedBills"][0]["internalUrl"] == f"/congress/bills/S.55?congress={current}"
 
 
 class TestElectionsAndTimelineRoutesUseCanonicalClock:
@@ -771,44 +780,38 @@ class TestRecentActionIssues:
     report: "we're saying we're collecting a record but records seem to
     disappear"). This endpoint deliberately ignores is_current.
 
-    dedupe_near_identical_issues is patched to a passthrough throughout —
-    its own correctness (clustering, keep-freshest, threshold calibration)
-    is covered in test_action_center.py; real embeddings on these short,
-    similarly-worded test titles risk an accidental collapse that has
-    nothing to do with what each test below actually checks.
+    Which rows are near-identical duplicates is decided by the hourly
+    refresh (action_center.mark_recent_duplicates, covered in
+    test_action_center.py); this read path only filters on it, and must
+    never load a model.
     """
 
     @pytest.fixture(autouse=True)
-    def _passthrough_dedupe(self):
-        with patch(
-            "app.pipeline.analyze.action_center.dedupe_near_identical_issues",
-            side_effect=lambda issues: issues,
-        ):
+    def _no_model_on_the_read_path(self):
+        def refuse(*a, **k):
+            raise AssertionError("the recent-issues GET loaded an embedding model")
+
+        with patch("app.pipeline.vector_store.get_similarity_model", side_effect=refuse), \
+                patch("app.pipeline.vector_store.get_embedding_model", side_effect=refuse):
             yield
 
-    async def test_dedupes_the_oversized_raw_pool_down_to_the_limit(self, db_session):
-        # A near-identical-title cluster can be several rows deep (the
-        # beef-tariff incident was 4), so the endpoint must overfetch past
-        # `limit` before deduping rather than dedupe away entries the
-        # caller actually wanted — this pins that it does, and that the
-        # real dedupe function (not a stand-in) is what gets called.
+    async def test_leaves_out_rows_marked_duplicates(self, db_session):
         from fastapi import Response
 
-        from app.api.action import _RECENT_ISSUES_RAW_POOL_MULTIPLIER, get_recent_action_issues
+        from app.api.action import get_recent_action_issues
 
-        for i in range(5):
-            db_session.add(_make_issue("2026-08-21", i + 1, f"Issue {i}", is_current=True))
+        kept = _make_issue("2026-08-21", 1, "Beef import tariffs", is_current=True)
+        db_session.add(kept)
+        db_session.flush()
+        copy = _make_issue("2026-08-21", 2, "Beef import tariff", is_current=False)
+        copy.duplicate_of_id = kept.id
+        db_session.add(copy)
+        db_session.add(_make_issue("2026-08-20", 1, "Something else", is_current=False))
         db_session.commit()
 
-        with patch(
-            "app.pipeline.analyze.action_center.dedupe_near_identical_issues",
-            side_effect=lambda issues: issues,
-        ) as mock_dedupe:
-            resp = Response()
-            await get_recent_action_issues(resp, limit=2, db=db_session)
+        result = await get_recent_action_issues(Response(), limit=10, db=db_session)
 
-        (raw_arg,), _ = mock_dedupe.call_args
-        assert len(raw_arg) == min(5, 2 * _RECENT_ISSUES_RAW_POOL_MULTIPLIER)
+        assert [i["title"] for i in result["issues"]] == ["Beef import tariffs", "Something else"]
 
     async def test_includes_retired_issues(self, db_session):
         from fastapi import Response

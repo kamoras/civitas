@@ -4,16 +4,16 @@ general-election counts
 New tables only, so the previous image runs unchanged against the
 migrated schema.
 
-Revision ID: 0011
-Revises: 0010
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-09-28
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0011'
-down_revision = '0010'
+revision = '0014'
+down_revision = '0013'
 branch_labels = None
 depends_on = None
 

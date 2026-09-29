@@ -76,7 +76,7 @@ export default function IssueActions({
         <div className="mt-3 flex justify-end">
           <LogActionButton issueTitle={issue.title} />
         </div>
-        <ShareButtons issue={issue} shareUrl={shareUrl} />
+        <ShareButtons issue={issue} shareUrl={shareUrl} imageShare={false} />
       </section>
     </>
   );

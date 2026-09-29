@@ -7,6 +7,7 @@ import { useConfig } from "@/hooks/useConfig";
 import ComponentBars from "./ComponentBars";
 import ScoreColumn, { Block } from "./ScoreColumn";
 import { count } from "./format";
+import { billHref } from "@/lib/congress";
 
 // Bills listed as furthest along; the drawer lists every one.
 const BILLS_SHOWN = 4;
@@ -68,6 +69,7 @@ export default function EffectivenessColumn({
   return (
     <ScoreColumn
       title="Legislative Effectiveness"
+      shareId="legislative-effectiveness"
       weight={weight}
       score={score}
       more={{ label: `All ${total} sponsored bills`, onClick: onMore }}
@@ -106,7 +108,7 @@ export default function EffectivenessColumn({
             {furthest.map((b) => (
               <li key={b.billId} className="flex items-baseline justify-between gap-3 text-sm">
                 <Link
-                  href={`/congress/bills/${encodeURIComponent(b.billId)}`}
+                  href={billHref(b.billId, b.congress)}
                   className="line-clamp-2 min-w-0 text-ink underline decoration-white/15 underline-offset-2 hover:text-phos"
                   title={b.title}
                 >
