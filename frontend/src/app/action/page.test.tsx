@@ -451,6 +451,18 @@ describe("the issue in the URL", () => {
     expect(window.location.search).toBe(`?date=${DATES[1]}`);
   });
 
+  it("doesn't fall back to a linked issue that isn't on the day shown", async () => {
+    // A shared link names no day: its issue may have left the latest day.
+    serveIssues();
+    window.history.replaceState(null, "", `/action?issue=pub-b-${DATES[1]}`);
+    render(<ActionPage />);
+    const b = await screen.findByRole("button", { name: new RegExp(`Issue b of ${LATEST}`) });
+    await userEvent.click(b);
+    expect(window.location.search).toBe(`?issue=pub-b-latest`);
+    await userEvent.click(b);
+    expect(window.location.search).toBe("?tab=issues");
+  });
+
   it("scrolls a deep-linked card clear of the navbar and the sticky tab bar", async () => {
     serveIssues();
     window.history.replaceState(null, "", "/action?issue=pub-b-latest");

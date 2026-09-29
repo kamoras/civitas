@@ -616,13 +616,17 @@ function IssuesTab({
   const openIssues = useRef<string[]>(initialIssueId ? [initialIssueId] : []);
   const onToggle = useCallback(
     (id: string, expanded: boolean) => {
+      // Only cards on the day shown: a shared ?issue= link (it names no day)
+      // can name an issue no longer on the latest day, and the URL must not
+      // fall back to it when the cards actually opened are collapsed.
+      const onDay = new Set(data?.issues?.map((i) => i.publicId));
       openIssues.current = [
-        ...openIssues.current.filter((o) => o !== id),
+        ...openIssues.current.filter((o) => o !== id && onDay.has(o)),
         ...(expanded ? [id] : []),
       ];
       onIssueChange?.(openIssues.current.at(-1) ?? null, selectedDate);
     },
-    [onIssueChange, selectedDate]
+    [onIssueChange, selectedDate, data]
   );
   const goTo = useCallback(
     (d: string | null) => {
