@@ -19,7 +19,10 @@ Delivery to Bluesky is at most once per attempt and bounded:
   - a failed send is retried by `deliver_pending` (run hourly, from the
     Action Center run), no sooner than RETRY_AFTER after the last try, so
     the tries are an hour apart and ride out a longer outage than a burst
-    would; at most MAX_BSKY_ATTEMPTS tries in all;
+    would; at most MAX_BSKY_ATTEMPTS tries in all; a run stops after
+    MAX_CONSECUTIVE_REFUSALS in a row, each try being a login;
+  - except the kinds in NO_RETRY_KINDS (election-night counts), whose
+    words are only true for minutes;
   - and only on the Eastern day it was written. A post can say
     "Yesterday: …" (bluesky_poster._staleness_prefix); delivered a day late
     it would say something false. The feed entry keeps its own
@@ -54,6 +57,8 @@ KINDS: dict[str, str] = {
 }
 
 MAX_BSKY_ATTEMPTS = 3
+# deliver_pending stops after this many refusals in a row (its docstring).
+MAX_CONSECUTIVE_REFUSALS = 2
 # Kinds deliver_pending never resends. An election-night post describes a
 # count that moves every few minutes: resent an hour later, word for word,
 # it could say a seat is changing party after the count reverted and the
@@ -186,10 +191,13 @@ def _deliver_to_bluesky(db: Session, post: BroadcastPost) -> bool:
 def deliver_pending(db: Session) -> int:
     """Retry today's posts that Bluesky didn't take. Returns how many went out.
 
-    Stops at the first refusal: each try is a fresh login, and a Bluesky
-    that refused one post an hour after the last try is still down — trying
-    every other post in the same burst only spends the account's login
-    allowance. The rest wait for the next run."""
+    Stops after two refusals in a row: each try is a fresh login, and a
+    Bluesky refusing twice an hour after the last tries is still down —
+    trying every other post in the same burst only spends the account's
+    login allowance, and the rest wait for the next run. Not after one: a
+    refusal can be about the post itself (a link card Bluesky rejects),
+    and that post would otherwise hold back every later one until its
+    tries ran out."""
     if not _bluesky_configured():
         return 0
     today = datetime.now(_POST_DAY_TZ).date().isoformat()
@@ -210,16 +218,20 @@ def deliver_pending(db: Session) -> int:
         .order_by(BroadcastPost.id)
         .all()
     )
-    sent = 0
+    sent = refused = 0
     for post in rows:
         if _post_day(post.published_at) != today:
             continue
-        if not _deliver_to_bluesky(db, post):
-            db.refresh(post)
-            if post.bsky_status == "failed":
-                break
+        if _deliver_to_bluesky(db, post):
+            sent += 1
+            refused = 0
+            continue
+        db.refresh(post)
+        if post.bsky_status != "failed":
             continue  # claimed by another sender
-        sent += 1
+        refused += 1
+        if refused >= MAX_CONSECUTIVE_REFUSALS:
+            break
     return sent
 
 

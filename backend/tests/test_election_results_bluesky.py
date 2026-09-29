@@ -446,3 +446,22 @@ class TestPublishing:
                                      title="t", text="t", url="u", published_at=utcnow(), bsky_status="sent"))
         db_session.flush()
         assert rb._history(db_session, DAY, utcnow()).this_election == 0
+
+
+def test_a_flip_that_reverted_during_a_reset_still_gets_its_correction(db_session):
+    """The sync measures against its own events, which a reset wipes: a flip
+    that reverted before the rebuilt count's first read raised nothing."""
+    _race(db_session, "2026-SEN-GA", flip=False)
+    _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
+    [(text, _)] = _run(db_session)
+    assert "no longer shows a change of party" in text
+    assert _run(db_session) == []  # owed once
+    events = db_session.query(ElectionResultEvent).filter_by(kind=er.FLIP_REVERSED).all()
+    assert len(events) == 1
+
+
+def test_a_standing_flip_owes_nothing(db_session):
+    _race(db_session, "2026-SEN-GA", flip=True)
+    _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
+    assert _run(db_session) == []
+    assert db_session.query(ElectionResultEvent).count() == 0

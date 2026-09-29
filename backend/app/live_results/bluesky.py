@@ -72,6 +72,7 @@ _TITLES = {
     er.LEAD_CHANGE: "lead changes",
     er.ALL_REPORTING: "every unit reporting",
 }
+_PRIORITY = {CORRECTION: 0, er.FLIP: 1, er.OFFICIAL: 2, er.LEAD_CHANGE: 3, er.ALL_REPORTING: 4}
 
 
 def _title(kind: str, race: Race, d: dict) -> str:
@@ -84,7 +85,6 @@ def _title(kind: str, race: Race, d: dict) -> str:
 def _subject(election_date: str, race_id: str, kind: str) -> str:
     """Keyed by election, so a runoff weeks later has its own budget."""
     return f"result:{election_date}:{race_id}:{kind}"
-_PRIORITY = {CORRECTION: 0, er.FLIP: 1, er.OFFICIAL: 2, er.LEAD_CHANGE: 3, er.ALL_REPORTING: 4}
 
 
 def _reporting(d: dict) -> str:
@@ -198,8 +198,10 @@ class _History:
     keeps the posts and wipes the events, and reading the events let the
     rebuilt count post its flips again, with the budget back at zero."""
 
-    # race -> (kind, Bluesky status) of its latest flip-or-correction post
+    # race -> (kind, Bluesky status) of its latest flip-or-correction post,
+    # and when it was published
     last_claim: dict[str, tuple[str, str]] = field(default_factory=dict)
+    claim_at: dict[str, datetime] = field(default_factory=dict)
     said: set[tuple[str, str]] = field(default_factory=set)  # (race, kind)
     recent: set[str] = field(default_factory=set)  # races posted about in the cooldown
     last_hour: int = 0  # posts that spend the budget — corrections never do
@@ -218,6 +220,7 @@ def _history(db: Session, election_date: str, now: datetime) -> _History:
         h.said.add((race_id, kind))
         if kind in (er.FLIP, CORRECTION):
             h.last_claim[race_id] = (kind, bsky_status)
+            h.claim_at[race_id] = published_at
         if published_at >= now - timedelta(minutes=RACE_COOLDOWN_MINUTES):
             h.recent.add(race_id)
         if kind != CORRECTION:
@@ -257,6 +260,29 @@ def _as_of_now(result: RaceResult, d: dict) -> dict:
     return er.event_detail(result, **({"previousLeader": d["previousLeader"]} if d.get("previousLeader") else {}))
 
 
+def _owed_reversals(db: Session, election_date: str, h: _History) -> list[ElectionResultEvent]:
+    """A reversal the sync can't raise: a posted flip whose count has since
+    reverted, with no reversal event since the post. The sync measures new
+    events against its own events, and a data reset wipes those — a flip
+    that reverted before the rebuilt count's first read raised nothing,
+    leaving the flip as the account's last word on the race. Raised once per
+    flip post: the event, once stored, is the guard."""
+    raised = []
+    for race_id, (kind, _) in h.last_claim.items():
+        result = db.get(RaceResult, race_id)
+        if kind != er.FLIP or result is None or result.election_date != election_date or er.is_flip(result):
+            continue
+        since = h.claim_at[race_id]
+        if db.query(ElectionResultEvent.id).filter(
+            ElectionResultEvent.race_id == race_id, ElectionResultEvent.election_date == election_date,
+            ElectionResultEvent.kind == er.FLIP_REVERSED, ElectionResultEvent.created_at >= since,
+        ).first() is None:
+            raised.append(er._event(db, result, er.FLIP_REVERSED))
+    if raised:
+        db.flush()
+    return raised
+
+
 def post_result_updates(db: Session, election_date: str) -> int:
     """Post this pass's worthwhile events within budget, most important
     first. An event is marked considered (bsky_posted_at) once it is
@@ -272,19 +298,21 @@ def post_result_updates(db: Session, election_date: str) -> int:
     count stands. A correction goes to Bluesky only when the flip it
     corrects did; the feed always gets it."""
     now = utcnow()
+    h = _history(db, election_date, now)
+    _owed_reversals(db, election_date, h)
     pending = (
         db.query(ElectionResultEvent)
         .filter(ElectionResultEvent.bsky_posted_at.is_(None), ElectionResultEvent.election_date == election_date)
         .all()
     )
     if not pending:
+        db.commit()
         return 0
 
     # A correction is owed where the account's latest flip-or-correction
     # post on a race is a flip. Owing one wherever a flip was ever posted
     # sent a second "no longer shows a change of party" after the first,
     # in a race swinging around the line.
-    h = _history(db, election_date, now)
     posted_flip_races = {rid for rid, (kind, _) in h.last_claim.items() if kind == er.FLIP}
     recent_races = h.recent
     hour_left = MAX_POSTS_PER_HOUR - h.last_hour
@@ -337,7 +365,9 @@ def post_result_updates(db: Session, election_date: str) -> int:
         # twice, or mark one published that never was.
         # A correction of a flip Bluesky never showed would read, there, as
         # retracting something the account never said.
-        to_bluesky = not correction or h.last_claim.get(race.id, ("", ""))[1] in ("pending", "sending", "sent")
+        # "sending" is a send that may have gone out; "pending" on a result
+        # post is one never tried (they are never retried), so not shown.
+        to_bluesky = not correction or h.last_claim.get(race.id, ("", ""))[1] in ("sending", "sent")
         post = broadcast.publish(
             db, kind="result", subject=_subject(election_date, race.id, kind), title=_title(kind, race, details),
             text=text, url=url, state=race.state, bluesky=to_bluesky,

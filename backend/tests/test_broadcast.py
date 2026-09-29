@@ -183,18 +183,46 @@ def test_withdrawn_subjects_come_from_the_retraction_log():
     assert ids and broadcast.withdrawn_subjects() == {f"issue:{pid}" for pid in ids}
 
 
-def test_a_retry_run_stops_at_the_first_refusal(db_session, bluesky_configured):
+def _failed_posts(db, n):
+    for i in range(n):
+        _publish(db, kind="race", subject=f"race:x{i}", text=f"post {i}")
+    db.query(broadcast.BroadcastPost).update(
+        {"bsky_status": "failed", "bsky_attempts": 1, "bsky_last_attempt_at": utcnow() - timedelta(hours=1)})
+    db.commit()
+
+
+def test_a_retry_run_stops_after_two_refusals_in_a_row(db_session, bluesky_configured):
     """Each try is a login; a Bluesky still refusing an hour on is down, and
     trying the rest in the same burst only spends the login allowance."""
-    for i in range(3):
-        _publish(db_session, kind="race", subject=f"race:x{i}")
-    db_session.query(broadcast.BroadcastPost).update(
-        {"bsky_status": "failed", "bsky_attempts": 1, "bsky_last_attempt_at": utcnow() - timedelta(hours=1)})
-    db_session.commit()
+    _failed_posts(db_session, 4)
     tried = []
     with patch.object(broadcast, "publish_post", lambda text, url, **k: tried.append(text) or False):
         assert broadcast.deliver_pending(db_session) == 0
-    assert len(tried) == 1
+    assert tried == ["post 0", "post 1"]
+
+
+def test_one_post_bluesky_rejects_does_not_hold_back_the_rest(db_session, bluesky_configured):
+    _failed_posts(db_session, 3)
+    with patch.object(broadcast, "publish_post", lambda text, url, **k: text != "post 0"):
+        assert broadcast.deliver_pending(db_session) == 2
+
+
+def test_a_post_another_sender_claimed_does_not_count_as_a_refusal(db_session, bluesky_configured, monkeypatch):
+    _failed_posts(db_session, 3)
+    real = broadcast._deliver_to_bluesky
+
+    def deliver(db, post):
+        if post.text == "post 0":  # claimed elsewhere between the query and this send
+            db.query(broadcast.BroadcastPost).filter_by(id=post.id).update({"bsky_status": "sent"})
+            db.commit()
+            return False
+        return real(db, post)
+
+    monkeypatch.setattr(broadcast, "_deliver_to_bluesky", deliver)
+    tried = []
+    with patch.object(broadcast, "publish_post", lambda text, url, **k: tried.append(text) or False):
+        broadcast.deliver_pending(db_session)
+    assert tried == ["post 1", "post 2"]
 
 
 def test_a_feed_only_post_is_never_sent(db_session, bluesky_configured):
