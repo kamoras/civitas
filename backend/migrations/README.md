@@ -90,16 +90,20 @@ Found against production on PR #615. v6.13 first dropped and renamed columns
 that `main`'s models still read, and `main`'s code then failed with `no such
 column: presidents.gdp_growth_adjusted` on the migrated copy.
 
-### Pending contract (the release after v6.13)
+### Pending contract
 
-Write these as the next free revision (`0007` or later — `0005` added the
-financial-holdings tables, `0006` versioned the trade parser) once v6.13 is
-the running image:
+`0020` dropped the columns no image had mapped since v6.13 (outside
+spending, the opposing-party unity figure, GDP-adjusted growth) and released
+the ones below: unmapped, made nullable so this image's inserts can leave
+them out, kept in the database because the image before still selects them.
+`tests/test_alembic_migrations.py`'s `UNMAPPED_PENDING_DROP` lists them, and
+checks each is still present and nullable.
+
+Write the drops as the next free revision once an image from `0020` or later
+is the running one, and remove each from `UNMAPPED_PENDING_DROP`:
 
 | Change | Why it waits |
 |---|---|
-| Drop `justices.score_bipartisan_agreement`, `justices.score_judicial_restraint` | Unscored since v6.13; still NOT NULL and read by the v6.12 image. Drop them from the model in the same change. |
-| Drop `senators.outside_spending_for`, `representatives.outside_spending_for` | No longer in the model (outside spending left Funding Independence); v6.12 reads them. |
-| Drop `key_votes.opposing_party_unity_pct`, `rep_key_votes.opposing_party_unity_pct` | No longer in the model; v6.12 reads them. |
-| Drop `presidents.gdp_growth_adjusted` | No longer in the model; v6.12 reads it. |
-| Rename `score_independent_voting` → `score_constituent_alignment` on `senators` and `representatives` | The model maps `score_constituent_alignment` onto the old column name until then. Rename in place, which keeps stored scores. |
+| Drop `justices.score_consistency`, `score_independence`, `score_bipartisan_agreement`, `score_judicial_restraint` | Unscored since justice v2 / v6.13; images before `0020` still map them. |
+| Drop `candidates.last_coverage_search` | The Bluesky candidate search it paced was removed; images before `0020` still map it. |
+| Rename `score_independent_voting` → `score_constituent_alignment` on `senators` and `representatives` | Every image so far maps `score_constituent_alignment` onto the old column name, so an in-place rename breaks the running one. It needs two releases: add the new column and write both, then drop the old one. |

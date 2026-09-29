@@ -5,17 +5,6 @@
 
 import type { BallotCandidate, CandidateSummary } from "@/types/election";
 
-/** The minimal race shape the label/sort helpers need — lets tests and
- * callers pass any of the race types (RaceSummary, RaceWithCandidates)
- * without depending on their full shape. */
-export interface RaceLike {
-  /** "S" = Senate, "H" = House — FEC office codes. */
-  office: string;
-  state: string;
-  /** null = statewide (Senate); 0 = at-large House district (FEC "00"). */
-  district: number | null;
-}
-
 /** Formats a signed PVI int as "R+3"/"D+3"/"EVEN" — display-only, not a computation. */
 export function formatPvi(pvi: number | null): string {
   if (pvi == null) return "N/A";
@@ -40,16 +29,8 @@ function districtToken(district: number): string {
   return district === 0 ? "AL" : String(district);
 }
 
-/** Title-style label: "GA Senate" / "GA-7 House" / "AK-AL House". */
-export function raceTitleLabel(race: RaceLike): string {
-  if (race.office === "S") return `${race.state} Senate`;
-  if (race.district == null) return `${race.state} House`;
-  return `${race.state}-${districtToken(race.district)} House`;
-}
-
-/** Same idea as raceTitleLabel but without the state prefix — "SENATE" /
- * "HOUSE-7" / "HOUSE-AL" — for badges inside a page already scoped to
- * one state (e.g. the state ballot's aggregated coverage feed), where
+/** A race's short label without the state — "SENATE" / "HOUSE-7" /
+ * "HOUSE-AL" — for badges inside a page already scoped to one state (e.g. the state ballot's aggregated coverage feed), where
  * repeating the state on every item would be redundant. */
 export function raceBadgeLabel(race: { office: string; district: number | null }): string {
   if (race.office === "S") return "SENATE";

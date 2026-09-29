@@ -13,6 +13,13 @@ expiry wiring), not asserted here from an untested heuristic.
 Nothing in this module posts anything publicly. It only ever creates an
 ActionIssue with status=DEVELOPING; action_center.py is responsible for
 excluding those from Bluesky posting until promoted.
+
+A vote's draft is filled from the vote record by a fixed template, not
+written by the model: the model's drafts characterized the record ("a
+narrow 77-22", 2026-09-28) in ways no check lists in advance. A vote on a
+bill a current issue already covers is not drafted, and a draft whose bill
+news coverage has since reached as a separate issue is retired
+(retire_covered_developing_issues): the reporting is the fuller story.
 """
 
 import asyncio
@@ -24,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.http_client import make_async_client
-from app.models import ActionIssue, ActionIssueStatus
+from app.models import ActionIssue, ActionIssueStatus, RepSponsoredBill, SponsoredBill
 from app.pipeline.analyze import action_metrics
 from app.pipeline.analyze.bill_analyzer import classify_policy_area, recent_roll_call_key
 from app.pipeline.analyze.grounding import (
@@ -34,16 +41,16 @@ from app.pipeline.analyze.grounding import (
 )
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.fetch.congress import fetch_recent_house_roll_calls, fetch_recent_roll_calls
+from app.pipeline.fetch.daily_digest import first_bill_id
 from app.pipeline.fetch.federal_register import fetch_recent_significant_rules
+from app.pipeline.fetch.floor_logs import bill_id_from_number
+from app.pipeline.transform.normalize_votes import vote_date_iso
+from app.services.bill_service import names_phrase, short_title
+from app.services.congress_service import bill_label
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-EARLY_SIGNAL_PROMPT_VERSION = "early-signal-v1"
-# Distinct from EARLY_SIGNAL_PROMPT_VERSION — different system/user prompt
-# text (a Federal Register rule, not a floor vote), and per cache.py's own
-# guidance a prompt-text change gets its own version rather than reusing
-# one string across two differently-shaped prompts.
 EARLY_SIGNAL_RULE_PROMPT_VERSION = "early-signal-rule-v1"
 
 # Deliberately conservative and NOT calibrated from data — there is no
@@ -125,108 +132,76 @@ def _is_final_passage(vote: dict) -> bool:
     return any(marker in text for marker in markers)
 
 
-def _vote_source_text(vote: dict) -> str:
-    """The ground-truth text a hedged draft's grounding check runs against
-    — everything the vote record itself states, nothing more."""
-    chamber_name, _ = _chamber_labels(vote)
+def _tally(vote: dict) -> tuple[int, int, int]:
     casts = [m.get("voteCast", "") for m in vote.get("members", [])]
     yeas = sum(1 for c in casts if c == "Yea")
     nays = sum(1 for c in casts if c == "Nay")
-    not_voting = sum(1 for c in casts if c not in ("Yea", "Nay"))
-    return (
-        f"{chamber_name} roll call vote {vote.get('rollNumber')}, {vote.get('congress')}th "
-        f"Congress, session {vote.get('session')}, dated {vote.get('voteDate')}. "
-        f"Question: {vote.get('question', '')}. "
-        f"Document: {vote.get('documentTitle', '')} ({vote.get('documentName', '')}). "
-        f"Result: {yeas} Yea, {nays} Nay, {not_voting} Not Voting."
+    return yeas, nays, len(casts) - yeas - nays
+
+
+def _compose_developing_issue(vote: dict) -> tuple[str, str, list[str]]:
+    """(title, summary, facts) for a vote, every word either the template's
+    or the vote record's own: the measure as the chamber names it, the
+    question, the result, the tally and the date."""
+    chamber_name, _ = _chamber_labels(vote)
+    short = "House" if vote.get("chamber") == "House" else "Senate"
+    measure = (vote.get("documentName") or vote.get("voteTitle") or "the measure").strip()
+    question = (vote.get("question") or "").strip()
+    result = (vote.get("result") or "").strip()
+    measure_title = (vote.get("documentTitle") or "").strip()
+    yeas, nays, not_voting = _tally(vote)
+    day = vote_date_iso(vote.get("voteDate"))
+
+    title = f"{short} vote on {measure}: {result}, {yeas}-{nays}" if result else f"{short} vote on {measure}, {yeas}-{nays}"
+    summary = (
+        f"The {short} voted {yeas} to {nays}{f' on {day}' if day else ''} "
+        f"on the question \"{question}\" for {measure}{f'. Result: {result}' if result else ''}. "
+        "This is from the chamber's official roll-call record; news coverage of the vote has not appeared yet."
     )
+    facts = [f"Tally: {yeas} yea, {nays} nay, {not_voting} not voting."]
+    if measure_title and measure_title != measure:
+        facts.append(f"{measure}: {measure_title}")
+    facts.append(f"Chamber: {chamber_name}{f', {day}' if day else ''}.")
+    return title[:500], summary, facts
 
 
-_EARLY_SIGNAL_SYSTEM_PROMPT = """\
-You are a nonpartisan civic information analyst. You are drafting a \
-PROVISIONAL report about a {chamber_name} floor vote that just occurred, based \
-ONLY on the official vote record below — no news coverage of this vote \
-exists yet. Report only what the vote record states: the matter voted \
-on, the outcome, and the tally. Do not speculate about what happens \
-next, why {member_noun} voted as they did, or how this will be covered. \
-State plainly that broader press coverage has not yet appeared. Never \
-advocate for or against any policy, and never state or imply that the \
-outcome was warranted, justified, or expected."""
-
-_EARLY_SIGNAL_PROMPT_TEMPLATE = """\
-A {chamber_name} roll-call vote just occurred. Below is the official vote record. \
-Produce a JSON object with these fields:
-
-- "title": A concise, neutral headline for this vote (max 15 words), \
-naming the actual matter voted on and its outcome.
-- "summary": 2-3 factual sentences describing what was voted on and the \
-result (the tally, e.g. 60-40), stated directly from the vote record \
-below. Include one sentence noting this is based on the official record \
-and that broader news coverage has not yet appeared.
-- "facts": An array of 2-4 factual bullet points — the vote tally, the \
-matter's official title, the date, and the chamber. Every fact must be \
-directly stated in the vote record below — never infer intent or \
-predict what happens next.
-
-Vote record:
-{vote_text}
-
-Respond with ONLY the JSON object, no other text.
-"""
+def _bill_names(db: Session, bill_id: str) -> list[str]:
+    """What an issue can call the bill: its number, as the Record prints
+    it and as the site writes it, and its short title (bill_service)."""
+    names = {bill_id.lower()}
+    if label := bill_label(bill_id):
+        names.add(label.lower())
+    for model in (SponsoredBill, RepSponsoredBill):
+        for (title,) in db.query(model.title).filter(model.bill_id == bill_id, model.congress == settings.CURRENT_CONGRESS):
+            if name := short_title(title):
+                names.add(name)
+    return sorted(names)
 
 
-def _draft_developing_issue(vote: dict, db: Session) -> tuple[str, str, list[str]] | None:
-    """Generate a hedged, grounded (title, summary, facts) from a vote
-    record, or None if two attempts both fail grounding.
+def _issue_bill_ids(issue: ActionIssue) -> set[str]:
+    try:
+        entries = json.loads(issue.related_bill_ids or "[]")
+    except (TypeError, ValueError):
+        return set()
+    return {e["id"].upper() for e in entries if isinstance(e, dict) and e.get("id")}
 
-    Two attempts, each checked against the vote record, which is the only
-    source this draft has.
-    """
-    source_text = _vote_source_text(vote)
-    chamber_name, member_noun = _chamber_labels(vote)
-    user_prompt = _EARLY_SIGNAL_PROMPT_TEMPLATE.format(vote_text=source_text, chamber_name=chamber_name)
-    system_prompt = _EARLY_SIGNAL_SYSTEM_PROMPT.format(chamber_name=chamber_name, member_noun=member_noun)
 
-    for attempt in range(1, 3):
-        prompt = user_prompt
-        if attempt > 1:
-            prompt += (
-                "\n\nYour previous response was rejected. Use ONLY the "
-                "vote record above: do not state any number not in it, do "
-                "not predict what happens next, do not evaluate whether "
-                "the outcome was warranted, and do not omit the note that "
-                "broader coverage has not yet appeared."
-            )
-        result = call_llm(
-            prompt_version=EARLY_SIGNAL_PROMPT_VERSION,
-            system_prompt=system_prompt,
-            user_prompt=prompt,
-            cache_key=None,
-            db_session=db,
-            max_tokens=512,
-            num_ctx=2048,
-        )
-        if isinstance(result, str):
-            result = extract_json(result)
-        if not isinstance(result, dict):
+def _covering_issue(db: Session, bill_id: str, names: list[str], exclude_id: int | None = None) -> ActionIssue | None:
+    """A current, reported (not developing) issue about the bill: one that
+    records it among its related bills, or names it in its title, summary
+    or facts."""
+    issues = db.query(ActionIssue).filter(
+        ActionIssue.is_current == True,  # noqa: E712
+        ActionIssue.status != ActionIssueStatus.DEVELOPING,
+    ).all()
+    for issue in issues:
+        if issue.id == exclude_id:
             continue
-
-        title = (result.get("title") or "").strip()
-        summary = (result.get("summary") or "").strip()
-        facts = validate_facts(result.get("facts", []), source_text=source_text)
-        combined = f"{title} {summary} " + " ".join(facts)
-
-        reasons = (
-            grounding_violations(combined, source_text)
-            + hedge_and_editorializing_violations(combined, allow_hedging=True)
-        )
-        if title and summary and not reasons:
-            return title, summary, facts
-        logger.warning(
-            "Early-signal draft failed grounding (attempt %d): %s",
-            attempt, "; ".join(reasons) or "empty title/summary",
-        )
-
+        if bill_id in _issue_bill_ids(issue):
+            return issue
+        text = f"{issue.title} {issue.summary} {issue.facts or ''}".lower()
+        if any(names_phrase(text, name) for name in names):
+            return issue
     return None
 
 
@@ -264,15 +239,20 @@ def _fetch_recent_votes(db: Session) -> list[dict]:
         loop.close()
 
 
-def check_roll_call_signals(db: Session) -> int:
+def check_roll_call_signals(db: Session, today: str | None = None) -> int:
     """Poll recent Senate and House roll calls, gate for notability, draft
     and store a DEVELOPING ActionIssue for any genuinely new, non-
     procedural, final-passage vote. Returns the number of new rows created.
 
     Called from action_center._run_refresh, before the news-fetch stage,
     on the existing hourly cadence — a roll call only changes when
-    Congress votes, so no separate scheduled job is needed.
+    Congress votes, so no separate scheduled job is needed. `today` is the
+    refresh's own date, which every issue it shows carries: the Action
+    Center lists the latest date's issues, and a Senate vote's raw date
+    ("September 28, 2026,  09:42 PM") sorted after every ISO date and hid
+    them all.
     """
+    today = today or utcnow().strftime("%Y-%m-%d")
     created = 0
     seen_keys: set[str] = set()
 
@@ -312,15 +292,16 @@ def check_roll_call_signals(db: Session) -> int:
         if already_exists:
             continue
 
-        drafted = _draft_developing_issue(vote, db)
-        if drafted is None:
-            action_metrics.increment("early_signal_gate_grounding_failed")
+        bill_id = bill_id_from_number(vote.get("documentName"))
+        if bill_id and _covering_issue(db, bill_id, _bill_names(db, bill_id)) is not None:
+            action_metrics.increment("early_signal_gate_already_covered")
             continue
-        title, summary, facts = drafted
+
+        title, summary, facts = _compose_developing_issue(vote)
 
         is_house = chamber == "House"
         row = ActionIssue(
-            date=vote.get("voteDate") or utcnow().strftime("%Y-%m-%d"),
+            date=today,
             rank=999,  # placeholder — renumbered alongside every other row each run
             title=title[:500],
             summary=summary,
@@ -334,7 +315,8 @@ def check_roll_call_signals(db: Session) -> int:
             source_type="house_roll_call_vote" if is_house else "senate_roll_call_vote",
             primary_source_url=vote_url,
             confirmation_deadline=utcnow() + timedelta(hours=CONFIRMATION_WINDOW_HOURS),
-            primary_article_date=vote.get("voteDate"),
+            primary_article_date=vote_date_iso(vote.get("voteDate")) or today,
+            related_bill_ids=json.dumps([{"name": bill_label(bill_id) or bill_id, "id": bill_id}] if bill_id else []),
         )
         db.add(row)
         created += 1
@@ -370,6 +352,32 @@ def expire_stale_developing_issues(db: Session, now) -> int:
         action_metrics.increment(f"early_signal_expired_{row.source_type or 'unknown'}")
         logger.info("Expired unconfirmed developing issue %d: '%s'", row.id, row.title[:60])
     return len(stale)
+
+
+def retire_covered_developing_issues(db: Session) -> int:
+    """Retire a current vote draft whose bill a reported issue now covers.
+    News that the matching pass didn't join to the draft (it reads as its
+    own story) otherwise leaves two issues about one vote, the draft's the
+    thinner. The draft's bill is the one it recorded, or for a draft from
+    before it recorded one, the first bill its text names."""
+    retired = 0
+    drafts = db.query(ActionIssue).filter(
+        ActionIssue.status == ActionIssueStatus.DEVELOPING,
+        ActionIssue.is_current == True,  # noqa: E712
+        ActionIssue.source_type.in_(("senate_roll_call_vote", "house_roll_call_vote")),
+    ).all()
+    for draft in drafts:
+        bill_id = next(iter(_issue_bill_ids(draft)), None) or first_bill_id(f"{draft.title} {draft.summary}")
+        if not bill_id:
+            continue
+        covering = _covering_issue(db, bill_id, _bill_names(db, bill_id), exclude_id=draft.id)
+        if covering is None:
+            continue
+        draft.is_current = False
+        retired += 1
+        action_metrics.increment("early_signal_retired_covered")
+        logger.info("Retired developing issue %d: issue %d covers %s", draft.id, covering.id, bill_id)
+    return retired
 
 
 def _rule_source_text(rule: dict) -> str:
@@ -483,7 +491,7 @@ def _fetch_recent_rules(db: Session) -> list[dict]:
         loop.close()
 
 
-def check_federal_register_signals(db: Session) -> int:
+def check_federal_register_signals(db: Session, today: str | None = None) -> int:
     """Poll recently published significant Federal Register rules, draft
     and store a DEVELOPING ActionIssue for any genuinely new one. Returns
     the number of new rows created.
@@ -520,7 +528,7 @@ def check_federal_register_signals(db: Session) -> int:
         title, summary, facts = drafted
 
         row = ActionIssue(
-            date=rule.get("publicationDate") or utcnow().strftime("%Y-%m-%d"),
+            date=today or utcnow().strftime("%Y-%m-%d"),
             rank=999,  # placeholder — renumbered alongside every other row each run
             title=title[:500],
             summary=summary,

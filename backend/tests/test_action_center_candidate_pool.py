@@ -41,6 +41,7 @@ def refresh(monkeypatch):
     ac = action_center
     for name in (
         "check_roll_call_signals", "check_federal_register_signals", "expire_stale_developing_issues",
+        "retire_covered_developing_issues",
         "_run_periodic_bluesky_posts", "generate_period_summaries",
         "_update_national_monitors", "_save_timeline_entry",
         "_prune_stale_api_cache", "_build_full_story", "_cleanup_old_unposted_issues",
@@ -84,7 +85,7 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "grounding_violations", lambda text, source: [])
     monkeypatch.setattr(ac, "hedge_and_editorializing_violations", lambda text: [])
     monkeypatch.setattr(ac, "_classify_issue_policy_areas", lambda t, s: [])
-    monkeypatch.setattr(ac, "_resolve_bills", lambda raw, texts: [{"id": "hr1-119", "title": "A bill"}])
+    monkeypatch.setattr(ac, "_resolve_bills", lambda raw, texts, titles=None: [{"id": "hr1-119", "title": "A bill"}])
     monkeypatch.setattr(ac, "_find_related_explore_docs", lambda *a: [])
     monkeypatch.setattr(ac, "_find_related_senators", lambda *a: [])
     monkeypatch.setattr(ac, "_find_related_officials", lambda *a: [])

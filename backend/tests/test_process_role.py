@@ -88,14 +88,15 @@ class TestStartup:
         }
 
 
-def test_both_embedding_models_are_preloaded():
+def test_the_search_model_is_preloaded_and_nothing_else():
     # No read request may load a model (AGENTS.md): Explore search encodes
-    # with the similarity model, /api/qa with the primary one.
+    # with the similarity model. No read uses the primary one (it served
+    # /api/qa), so no API worker holds a copy of it.
     loaded: list[str] = []
     with patch("app.pipeline.vector_store.get_similarity_model", lambda: loaded.append("similarity")), \
             patch("app.pipeline.vector_store.get_embedding_model", lambda: loaded.append("primary")):
         main_module._preload_models()
-    assert loaded == ["similarity", "primary"]
+    assert loaded == ["similarity"]
 
 
 def test_a_request_during_the_preload_waits_for_it_rather_than_loading_twice(monkeypatch):
@@ -121,15 +122,12 @@ def test_a_request_during_the_preload_waits_for_it_rather_than_loading_twice(mon
     assert len(built) == 1
 
 
-def test_a_failed_model_preload_is_only_logged_and_the_other_still_loads():
+def test_a_failed_model_preload_is_only_logged():
     def boom():
         raise OSError("no model files")
 
-    loaded = []
-    with patch("app.pipeline.vector_store.get_similarity_model", boom), \
-            patch("app.pipeline.vector_store.get_embedding_model", lambda: loaded.append("primary")):
-        main_module._preload_models()
-    assert loaded == ["primary"]
+    with patch("app.pipeline.vector_store.get_similarity_model", boom):
+        main_module._preload_models()  # no raise
 
 
 def test_a_late_scheduler_job_still_runs():

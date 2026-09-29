@@ -10,12 +10,8 @@ import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
-import type { PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
-import type {
-  PresidentScoreBreakdown,
-  RepresentationScoreBreakdown,
-  SignalOverlap,
-} from "@/types/scoreBreakdown";
+import type { PviMap, TownBallot, TownEntry } from "@/types/election";
+import type { SignalOverlap } from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -258,26 +254,6 @@ export async function fetchRepresentativesByState(
 
 export async function fetchRepresentative(repId: string): Promise<Senator> {
   return requestJson(`${API_BASE}/representatives/${repId}`, "Representative not found");
-}
-
-// Score-breakdown ("show the math") panel data — lazy-fetched on first
-// expand, cached via cachedFetch so re-toggling a panel doesn't refetch.
-// 5-minute TTL: this is deterministic derived data that only changes once
-// a day at most (the nightly pipeline run).
-
-export async function fetchSenatorScoreBreakdown(
-  senatorId: string
-): Promise<RepresentationScoreBreakdown> {
-  return cachedFetch(`${API_BASE}/senators/${senatorId}/score-breakdown`, TTL.MEDIUM);
-}
-
-export async function fetchRepScoreBreakdown(repId: string): Promise<RepresentationScoreBreakdown> {
-  return cachedFetch(`${API_BASE}/representatives/${repId}/score-breakdown`, TTL.MEDIUM);
-}
-
-export async function fetchPresidentScoreBreakdown(id: string): Promise<PresidentScoreBreakdown> {
-  const raw = await cachedFetch(`${API_BASE}/presidents/${id}/score-breakdown`, TTL.MEDIUM);
-  return camelizeKeys(raw) as PresidentScoreBreakdown;
 }
 
 export interface PaginatedLeaderboard {
@@ -1780,11 +1756,6 @@ export async function fetchElectionInfo(): Promise<ElectionInfo> {
 // lightweight Action Center teaser; this is the fuller candidate-research
 // feature) — see backend/app/api/elections.py. Race detail is fetched
 // server-side by app/elections/[raceId]/page.tsx, not through this client.
-
-export async function fetchRaces(): Promise<RaceSummary[]> {
-  const url = `${API_BASE}/elections/races`;
-  return asList(await cachedFetch(url, TTL.SHORT), url);
-}
 
 export async function fetchPviMap(): Promise<PviMap> {
   // `states` and `districts` are maps, not lists, and callers index into them

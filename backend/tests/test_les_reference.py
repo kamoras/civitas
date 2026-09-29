@@ -26,7 +26,6 @@ from app.pipeline.analyze.score_calculator import (
     compute_les_reference,
     derive_chamber_majority,
     load_les_reference,
-    write_les_reference,
 )
 from app.pipeline.live_references import live_les_reference, sitting_president_party
 
@@ -138,14 +137,14 @@ class TestChamberSpecificSaturation:
 class TestReferenceFiles:
     def test_live_file_overrides_bundled_per_chamber(self, pinned_les_reference):
         live = {**pinned_les_reference["senate"], "median_credit": 10.0}
-        write_les_reference("senate", live)
+        LES_REFERENCE.write("senate", live)
         loaded = load_les_reference()
         assert loaded["senate"]["median_credit"] == 10.0
         assert loaded["house"] == pinned_les_reference["house"]  # still bundled
 
     def test_writes_merge_rather_than_clobber(self, pinned_les_reference):
-        write_les_reference("senate", pinned_les_reference["senate"])
-        write_les_reference("house", {**pinned_les_reference["house"], "n": 1})
+        LES_REFERENCE.write("senate", pinned_les_reference["senate"])
+        LES_REFERENCE.write("house", {**pinned_les_reference["house"], "n": 1})
         on_disk = json.loads(open(LES_REFERENCE.live_path).read())
         assert set(on_disk) == {"senate", "house"}
         assert "computed_at" in on_disk["senate"]
@@ -153,7 +152,7 @@ class TestReferenceFiles:
     def test_reader_picks_up_another_process_writing_the_file(self, pinned_les_reference):
         # The API worker that didn't run the pipeline must not keep serving
         # the previous run's reference from its cache.
-        write_les_reference("senate", pinned_les_reference["senate"])
+        LES_REFERENCE.write("senate", pinned_les_reference["senate"])
         assert load_les_reference()["senate"]["median_credit"] == pinned_les_reference["senate"]["median_credit"]
         path = LES_REFERENCE.live_path
         data = json.loads(open(path).read())

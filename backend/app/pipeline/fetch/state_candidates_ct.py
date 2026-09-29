@@ -220,15 +220,6 @@ async def _party_results(
     return records, contested
 
 
-async def _party_nominees(
-    client: httpx.AsyncClient, election_id: str, year: int,
-) -> list[dict] | None:
-    """Every confirmed federal House nominee ONE party's primary
-    decides, or None on a real fetch failure."""
-    result = await _party_results(client, election_id, year)
-    return None if result is None else result[0]
-
-
 # ── Convention endorsements (statewide offices) ─────────────────────
 #
 # A Connecticut party nominates its statewide ticket at a CONVENTION. The

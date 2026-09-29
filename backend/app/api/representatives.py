@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.highlights import build_highlights
 from app.api.response_helpers import (
     CACHE_TTL_DETAIL_S,
     CACHE_TTL_LIST_S,
@@ -58,17 +57,6 @@ def get_rep_score_breakdown_route(rep_id: str, db: Session = Depends(get_db)) ->
     if breakdown is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(breakdown, max_age=CACHE_TTL_DETAIL_S)
-
-
-@router.get("/representatives/{rep_id}/highlights")
-def get_rep_highlights(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
-    """Return data-driven highlights for a representative — no LLM, pure data."""
-    rep = get_representative_by_id(db, rep_id)
-    if rep is None:
-        raise HTTPException(status_code=404, detail="Representative not found")
-
-    highlights = build_highlights(rep.model_dump(by_alias=True))
-    return _cached_json({"highlights": highlights[:5]}, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/representatives/{rep_id}/votes")

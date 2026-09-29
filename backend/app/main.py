@@ -67,21 +67,18 @@ async def _bootstrap_explore() -> None:
 
 
 def _preload_models() -> None:
-    """Load both embedding models at startup, so no read request loads one
-    (AGENTS.md: "never load the embedding model or LLM on API read
-    requests"): the similarity model Explore search encodes queries with
-    (vector_store.search_explore_documents) and the primary one /api/qa
-    classifies intent with. Every API worker holds its own copy; the primary
-    adds ~10 MB to a worker (measured). (Until 2026-09 only the primary was
-    preloaded, so the first search after a restart paid the other's load.)"""
+    """Load the similarity model Explore search encodes queries with
+    (vector_store.search_explore_documents) at startup, so no read request
+    loads one (AGENTS.md: "never load the embedding model or LLM on API read
+    requests"). Only that one: the primary model served /api/qa's intent
+    classification, which is gone, and every API worker would hold a copy
+    no request uses."""
     from app.pipeline import vector_store
 
-    # Each on its own: one failing must not leave the other to a request.
-    for load in (vector_store.get_similarity_model, vector_store.get_embedding_model):
-        try:
-            load()
-        except Exception as e:
-            logging.getLogger("app.main").warning("Embedding model preload failed (%s): %s", load.__name__, e)
+    try:
+        vector_store.get_similarity_model()
+    except Exception as e:
+        logging.getLogger("app.main").warning("Embedding model preload failed: %s", e)
 
 
 def _invalidate_orphaned_pipelines() -> None:

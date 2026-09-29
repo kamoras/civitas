@@ -49,7 +49,7 @@ Cost: plain sqlite3 on a per-thread connection — measured at ~40 µs a `hit`
 and ~15 µs a `client_key` on a development container (SQLAlchemy sessions
 cost ~1.4 ms for the same work). Paid by every request that
 reaches the backend on a limited route: every mutation (WriteRateLimit), the
-public API, Explore search and /api/qa (public.RateLimit), and the two
+public API and Explore search (public.RateLimit), and the two
 live-lookup routes, bills/{id}/record and explore/{id}/comments
 (UpstreamRouteLimit, plus the shared hourly budget on a cache miss).
 

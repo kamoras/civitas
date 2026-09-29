@@ -12,7 +12,6 @@ from app.pipeline.analyze.grounding import (
     log_intensifier_usage,
     ungrounded_electoral_claims,
     ungrounded_numbers,
-    ungrounded_statistics,
     ungrounded_titled_names,
 )
 
@@ -96,30 +95,6 @@ class TestUngroundedTitledNames:
         assert ungrounded_titled_names(
             "He is the chair. Whitfield spoke next.", SOURCE
         ) == []
-
-
-class TestUngroundedStatistics:
-    @pytest.mark.parametrize(
-        "text, expected",
-        [
-            pytest.param("costs $4.7 billion", ["4.7"], id="fabricated_money_flagged"),
-            pytest.param("supported by 87% of voters", ["87"], id="fabricated_percent_flagged"),
-            # "three of the 12 members" — 12 is not statistic-shaped, so long-form
-            # prose isn't rejected over phrasing differences.
-            pytest.param("three of the 12 members agreed", [], id="contextual_plain_numbers_ignored"),
-            pytest.param("the $1.2 trillion package", [], id="grounded_statistic_passes"),
-            # A bare year is a statistic even with no $/%/magnitude word nearby —
-            # it's exactly what a model invents when padding thin source facts.
-            pytest.param("the ban was lifted in 2023", ["2023"], id="fabricated_year_flagged"),
-            pytest.param("the 2026 session", [], id="grounded_year_passes"),
-            # 1500 falls outside the plausible calendar-year range and has no
-            # magnitude context, so it's treated as an ordinary contextual number.
-            pytest.param("about 1500 attendees", [], id="four_digit_non_year_not_flagged_as_year_but_may_be_fabricated"),
-            pytest.param("a rise of 1.5 degrees", ["1.5"], id="fabricated_magnitude_word_flagged"),
-        ],
-    )
-    def test_ungrounded_statistics(self, text, expected):
-        assert ungrounded_statistics(text, SOURCE) == expected
 
 
 class TestHedgeLanguage:
@@ -895,7 +870,6 @@ class TestEveryPublishingPathIsChecked:
     PUBLISHES_PROSE = {
         "_generate_period_summary",
         "_generate_monitor_metadata", "_run_refresh",
-        "_draft_developing_issue",
         "_draft_developing_rule_issue", "_generate_post_text", "_generate_summary",
     }
     # Functions whose LLM output is a located SPAN, verified verbatim by

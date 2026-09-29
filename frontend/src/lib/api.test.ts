@@ -14,7 +14,6 @@ import {
   fetchPoliticianDirectory,
   fetchPresidentLeaderboard,
   fetchPviMap,
-  fetchRaces,
   fetchRepStates,
   fetchSenatorsByState,
   fetchStates,
@@ -191,7 +190,6 @@ describe("API shape guarantees", () => {
     ["fetchJusticeLeaderboard", () => fetchJusticeLeaderboard()],
     ["fetchPresidentLeaderboard", () => fetchPresidentLeaderboard()],
     ["fetchOpenComments", () => fetchOpenComments()],
-    ["fetchRaces", () => fetchRaces()],
     ["fetchPoliticianDirectory", () => fetchPoliticianDirectory()],
     ["fetchSenatorsByState", () => fetchSenatorsByState("CA")],
   ];
