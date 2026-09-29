@@ -346,6 +346,9 @@ _UNUSABLE_BUCKET = "explore-summary-unusable"
 _UNUSABLE_FOR_S = 30 * 60.0
 _SLOW_BUCKET = "explore-summary-slow"
 _SLOW_FOR_S = 2 * 60.0
+# A timeout, remembered for _UNUSABLE_FOR_S: a second one of the same text
+# in that time holds it off as unusable.
+_SLOW_STRIKE_BUCKET = "explore-summary-slow-strike"
 _MAX_GENERATIONS = 2
 _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
@@ -619,10 +622,15 @@ class _Generation:
                 # One in flight per client: the slots are the whole site's,
                 # and a generation outlives its reader, so one address must
                 # not be able to hold them all.
-                client = throttle.client_key(self.client, _CLIENT_BUCKET)
+                # Keyed off the loop (the day's salt may need making), and
+                # checked under the client's previous-day key too, so the
+                # rule doesn't reset at midnight (throttle.claim does the
+                # same).
+                client = await throttle.run(throttle.client_key, self.client, _CLIENT_BUCKET)
                 if client is None:
                     raise throttle.Unavailable(_CLIENT_BUCKET)
-                if not await self._claim(_CLIENT_BUCKET, [str(client)]):
+                previous = ((_CLIENT_BUCKET, client.previous, _SUMMARY_CLAIM_S),) if client.previous else ()
+                if await self._claim(_CLIENT_BUCKET, [str(client)], blocked_by=previous) is not True:
                     self._settle("busy")
                     return
                 if not await self._claim(_SLOT_BUCKET, [str(slot) for slot in range(_MAX_GENERATIONS)]):
@@ -703,22 +711,31 @@ class _Generation:
         ended = finished or at_limit
         # Kept at its token limit, but less the section it stopped in: said
         # so, to this reader and every later one (the cached copy says it).
-        if at_limit and parsed != parse_explore_document_summary(text):
+        if at_limit:  # it stopped mid-section, even one just begun
             parsed["truncated"] = True
         if ended and parsed["summary"]:
             await asyncio.to_thread(ollama_client.set_cached_llm_result, self.prompt["promptVersion"],
                                     self.cache_key, parsed)
-        elif ended or timed_out:
-            bucket, period = (_SLOW_BUCKET, _SLOW_FOR_S) if timed_out else (_UNUSABLE_BUCKET, _UNUSABLE_FOR_S)
+        held_slow = False
+        if not (ended and parsed["summary"]) and (ended or timed_out):
             try:
+                if timed_out:
+                    # A second timeout of the same text within the strike
+                    # window is the prompt, not a busy moment: held off as
+                    # unusable, so it isn't run to its limit over and over.
+                    first = await throttle.run(throttle.hold, _SLOW_STRIKE_BUCKET, [self.key], period=_UNUSABLE_FOR_S)
+                    bucket, period = (_SLOW_BUCKET, _SLOW_FOR_S) if first else (_UNUSABLE_BUCKET, _UNUSABLE_FOR_S)
+                else:
+                    bucket, period = _UNUSABLE_BUCKET, _UNUSABLE_FOR_S
                 await throttle.run(throttle.hold, bucket, [self.key], period=period)
+                held_slow = bucket == _SLOW_BUCKET
             except Exception:
                 logger.warning("Explore summary for doc_id=%s not held off", self.doc_id, exc_info=True)
         await self._give_back()
         last = {"done": True, **parsed}
         if not ended and parsed["summary"]:
             last["partial"] = True
-        elif timed_out:
+        elif held_slow:
             # Nothing usable came of it, and the document is held off only
             # briefly: this reader is told when to ask again, as a waiting
             # reader is (the page's retry), not that there is no summary.

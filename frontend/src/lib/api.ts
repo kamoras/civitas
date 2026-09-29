@@ -963,7 +963,9 @@ export async function streamExploreDocumentSummary(
     // usable: asked again after the brief hold-off, as a waiting reader is.
     if (result.retryAfter !== undefined && !result.summary && Date.now() < giveUpAt) {
       onDelta("");
-      await waitFor(String(result.retryAfter));
+      // The whole hold-off, not Retry-After's ceiling: asked sooner, the
+      // server would only refuse again.
+      await wait(Math.min(result.retryAfter * 1000 + 5_000, Math.max(0, giveUpAt - Date.now())), signal);
       continue;
     }
     return result;

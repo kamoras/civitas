@@ -511,7 +511,7 @@ describe("streamExploreDocumentSummary after its own generation timed out", () =
     });
     expect(result.summary).toBe("S");
     expect(result.truncated).toBe(true);
-    expect(waits).toEqual([60_000]); // Retry-After's ceiling
+    expect(waits).toEqual([125_000]); // the whole hold-off, and a margin
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

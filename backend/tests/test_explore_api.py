@@ -257,6 +257,68 @@ class TestSummaryEndpointGuards:
             assert any("delta" in e for e in await _collect_sse_events(response))
             await asyncio.gather(*list(explore._generations))
 
+    async def test_the_one_per_client_rule_holds_across_midnight(self, db_session, monkeypatch):
+        # A generation claimed under yesterday's key still counts once the
+        # day turns (as throttle.claim's rules do).
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from app.api import explore, throttle
+
+        first, second = _make_doc(db_session), _make_doc(db_session)
+        finish = asyncio.Event()
+
+        async def _held_stream(*_args, **_kwargs):
+            await finish.wait()
+            yield "SUMMARY: s\n"
+
+        yesterday = throttle.client_key("203.0.113.7", "explore-summary-client")
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _held_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            await get_explore_document_summary(first.id, _READER, db=db_session)
+            # The day turns: today's key is new, yesterday's is `previous`.
+            today = throttle.ClientKey("a-new-days-key")
+            today.previous = str(yesterday)
+            monkeypatch.setattr(throttle, "client_key", lambda ip, purpose, scope="": today)
+            with pytest.raises(HTTPException) as exc_info:
+                await get_explore_document_summary(second.id, _READER, db=db_session)
+            assert exc_info.value.status_code == 503
+            finish.set()
+            await asyncio.gather(*list(explore._generations))
+
+    async def test_a_text_that_times_out_twice_is_held_off_as_unusable(self, db_session):
+        # Once may be a busy LLM; twice in the window is the prompt.
+        import httpx
+
+        from fastapi import HTTPException
+
+        doc = _make_doc(db_session)
+
+        async def _no_answer(*_args, **_kwargs):
+            raise httpx.ReadTimeout("busy")
+            yield  # pragma: no cover
+
+        from app.api import throttle
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _no_answer),
+        ):
+            first = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+            assert first[-1]["retryAfter"] == 120
+            with pytest.raises(HTTPException):  # held off: slow
+                await get_explore_document_summary(doc.id, _READER, db=db_session)
+            with throttle._using() as conn:  # the slow hold-off lapses
+                conn.execute("DELETE FROM claims WHERE bucket = 'explore-summary-slow'")
+            second = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+            assert "retryAfter" not in second[-1]  # the answer now, not a wait
+            third = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+        assert third == [{"done": True, "summary": "", "keyPoints": [], "impact": ""}]
+
     async def test_shutdown_stops_generations_and_gives_their_claims_back(self, db_session):
         import asyncio
 
