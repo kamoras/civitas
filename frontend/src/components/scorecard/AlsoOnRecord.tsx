@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
+import { countLobbiedBills } from "@/lib/lobbying";
 import type { Senator } from "@/types/senator";
 
 export type RecordView = "trades" | "donorVotes" | "positions";
@@ -38,7 +39,8 @@ function Tile({
 /** What is on record about the member but not scored, one line each; a
  *  tile with something behind it opens it in the drawer. Counts are the
  *  API's (the trades endpoint's total and late count, the stored
- *  donor-vote overlaps and policy positions). */
+ *  donor-vote overlaps with the bills their lobbying filings name, and
+ *  policy positions). */
 export default function AlsoOnRecord({
   member,
   chamber,
@@ -65,6 +67,7 @@ export default function AlsoOnRecord({
   }, [member.id, chamber]);
 
   const overlaps = member.lobbyingMatches?.length ?? 0;
+  const lobbied = countLobbiedBills(member.lobbyingMatches ?? []);
   const positions = member.partisanDepth?.totalPositions ?? 0;
 
   return (
@@ -95,9 +98,13 @@ export default function AlsoOnRecord({
           line={
             overlaps === 0
               ? "None found in tracked votes"
-              : `${overlaps} donor-vote overlap${overlaps !== 1 ? "s" : ""}`
+              : `${overlaps} donor-vote overlap${overlaps !== 1 ? "s" : ""}${
+                  lobbied > 0
+                    ? ` · ${lobbied} bill${lobbied !== 1 ? "s" : ""} named in lobbying filings under donors' names`
+                    : ""
+                }`
           }
-          meta="Donor industries beside votes cast"
+          meta="Donor industries beside votes cast; LDA lobbying filings"
           onOpen={overlaps > 0 ? () => onOpen("donorVotes") : undefined}
         />
         <Tile

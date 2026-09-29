@@ -31,6 +31,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.database import SessionLocal
 from app.models import (
     ActionIssue,
@@ -658,8 +659,9 @@ def _same_story(
     return bool((not sig or not cand_sig) and sim >= TOPIC_CHANGE_THRESHOLD)
 
 
-def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIssue"]:
-    """One representative per cluster of near-identical titles (same
+def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
+    """Index -> index of its cluster's representative, over clusters of
+    near-identical titles (same
     _NEAR_IDENTICAL_TITLE_THRESHOLD/_is_exact_content_duplicate logic
     _find_matching_issue uses), keeping whichever cluster member has the
     latest created_at. Relative order of the kept issues is preserved
@@ -669,9 +671,10 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
     recent-issues endpoint deliberately does NOT filter on is_current (so a
     retired-for-real row doesn't vanish from the record), so a row retired
     specifically for BEING a duplicate would otherwise resurface there
-    anyway. Read-time dedup, not a second is_current flip, because
-    "duplicate of something else" and "no longer current" are different
-    facts about a row that shouldn't be conflated into one flag.
+    anyway. Recorded in its own column (mark_recent_duplicates), not a
+    second is_current flip, because "duplicate of something else" and "no
+    longer current" are different facts about a row that shouldn't be
+    conflated into one flag.
 
     Calls the same _same_story predicate _find_matching_issue calls,
     covering the same shared-source-URL and signature-overlap signals, not
@@ -688,9 +691,6 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
     matches one new issue against existing rows one at a time, never
     clusters several issues against each other), so only this pass needs it.
     """
-    if len(issues) < 2:
-        return list(issues)
-
     embs = np.array(_embed_texts_sim([i.title or "" for i in issues]))
     sims = embs @ embs.T
 
@@ -726,14 +726,11 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
 
     # Complete-linkage: only merge two clusters when every issue in one
     # matches every issue in the other, so a single weak edge can never
-    # bridge an unrelated cluster in (see docstring above). This runs on
-    # the live GET recent-issues path (app/api/action.py), not a
-    # background job — but n is the raw pool size, hard-capped at
-    # limit * _RECENT_ISSUES_RAW_POOL_MULTIPLIER (<= 90 today via the
-    # endpoint's own query validation), and real news-cluster match
-    # graphs are sparse (most issues share no signal with most others),
-    # so the polynomial worst case doesn't bite in practice. Revisit if
-    # the pool size cap ever grows substantially.
+    # bridge an unrelated cluster in (see docstring above). n is at most
+    # the feed's pool (RECENT_FEED_MAX_LIMIT * RECENT_FEED_POOL_MULTIPLIER,
+    # 90), and real news-cluster match graphs are sparse (most issues share
+    # no signal with most others), so the polynomial worst case doesn't
+    # bite in practice. Revisit if the pool grows substantially.
     clusters: list[list[int]] = [[i] for i in range(n)]
     merged = True
     while merged:
@@ -748,7 +745,7 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
             if merged:
                 break
 
-    keep_idx = set()
+    representative: dict[int, int] = {}
     for members in clusters:
         # (has a real timestamp, the timestamp itself, id) — a plain
         # `created_at or id` fallback would compare a datetime against an
@@ -758,9 +755,47 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
             members,
             key=lambda idx: (issues[idx].created_at is not None, issues[idx].created_at, issues[idx].id),
         )
-        keep_idx.add(best)
+        for idx in members:
+            representative[idx] = best
+    return representative
 
-    return [issue for idx, issue in enumerate(issues) if idx in keep_idx]
+
+def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIssue"]:
+    """One representative per cluster of near-identical issues
+    (_near_identical_clusters), in input order."""
+    if len(issues) < 2:
+        return list(issues)
+    representative = _near_identical_clusters(issues)
+    return [issue for idx, issue in enumerate(issues) if representative[idx] == idx]
+
+
+def mark_recent_duplicates(db: "Session") -> int:
+    """Record, on each of the newest rows the homepage's feed can read,
+    which row it duplicates (duplicate_of_id; None for a representative).
+
+    The feed deliberately ignores is_current (a retired story stays in the
+    record), so a row retired for BEING a duplicate would resurface there.
+    It used to be deduped on every request, which ran the embedding model
+    on a public GET inside the event loop — the read path must never load a
+    model (AGENTS.md). The same clustering runs here, in the hourly
+    refresh that has the model loaded, and the feed reads the result.
+    Returns how many rows are marked duplicates."""
+    pool = (
+        db.query(ActionIssue)
+        .order_by(ActionIssue.date.desc(), ActionIssue.rank.asc())
+        .limit(RECENT_FEED_MAX_LIMIT * RECENT_FEED_POOL_MULTIPLIER)
+        .all()
+    )
+    if not pool:
+        return 0
+    representative = _near_identical_clusters(pool) if len(pool) > 1 else {0: 0}
+    marked = 0
+    for idx, issue in enumerate(pool):
+        rep = representative[idx]
+        issue.duplicate_of_id = None if rep == idx else pool[rep].id
+        marked += rep != idx
+    db.commit()
+    return marked
 
 
 _SYSTEM_PROMPT = """\
@@ -4507,6 +4542,15 @@ def _run_refresh(db: Session) -> int:
     if issues_created > 0:
         _save_timeline_entry(today, db)
         generate_period_summaries(today, db)
+
+    # The homepage feed's duplicates, marked here where the model is loaded
+    # (mark_recent_duplicates). Every run, not only when issues were
+    # created: a retirement or a re-rank changes which rows it reads.
+    try:
+        mark_recent_duplicates(db)
+    except Exception:
+        logger.exception("Marking the recent feed's duplicates failed")
+        db.rollback()
 
     # Stage 4: Post new/surging issues to Bluesky.
     # Deliberately runs BEFORE full-story generation below: posting only

@@ -16,7 +16,6 @@ from app.pipeline.analyze.president_scorer import (
 )
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
-    _funding_independence_core,
     _measure_advancement_rates,
     _small_donor_capacity_score,
     compute_funding_reference,
@@ -36,13 +35,12 @@ def _donors(top_share, pool=1_000_000):
 
 
 class TestFundingReferenceStats:
-    def test_measures_pac_dollars_small_donor_and_concentration(self):
+    def test_measures_small_donor_and_concentration(self):
         fundings = [
             _funding(pac=100_000 * (i % 7 + 1), small=10 + i % 20, donors=_donors(0.20 + 0.005 * (i % 30)))
             for i in range(40)
         ]
         ref = compute_funding_reference(fundings)
-        assert ref["pac_dollars_median"] == 400_000
         assert ref["small_donor_p10"] < ref["small_donor_median"] < ref["small_donor_p90"]
         assert ref["concentration_n"] == 40
         assert ref["concentration_p10"] < ref["concentration_median"] < ref["concentration_p90"]
@@ -50,15 +48,6 @@ class TestFundingReferenceStats:
     def test_concentration_omitted_when_too_few_pools_are_measurable(self):
         ref = compute_funding_reference([_funding(pac=1) for _ in range(40)])
         assert "concentration_median" not in ref and "pac_ratio_median" in ref
-
-    def test_fallback_volume_scale_follows_the_measured_median(self):
-        def pac_score(pac, median):
-            ref = {"senate": {"pac_ratio_median": 0.2, "pac_dollars_median": median}}
-            funding = _funding(pac, base=pac * 10, donors=[{"total": 1} for _ in range(3)])
-            return _funding_independence_core(funding, reference=ref)["components"][0]["detail"]
-        # At the median the fallback factor is x0.75; at twice it, x0.50.
-        assert "scaled ×0.75" in pac_score(500_000, 500_000)
-        assert "scaled ×0.50" in pac_score(1_000_000, 500_000)
 
     def test_house_small_donor_share_is_relative_to_the_house_median(self):
         ref = {"small_donor_p10": 10.0, "small_donor_median": 20.0, "small_donor_p90": 30.0}

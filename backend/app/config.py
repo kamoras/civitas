@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = ""
     CONGRESS_RPS: float = 1.2
     FEC_RPS: float = 0.25
+    # Optional free key for the Lobbying Disclosure Act API (lda.gov): a
+    # higher rate limit than ~15 requests/minute anonymous. See fetch/lda.py.
+    LDA_API_KEY: str | None = None
     GOVINFO_RPS: float = 1.0
     HOUSE_PTR_RPS: float = 1.0
     SENATE_PTR_RPS: float = 0.5

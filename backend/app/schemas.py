@@ -31,9 +31,9 @@ class DonorSchema(CamelModel):
     pac_sponsor: str | None = None
     pac_industry: str | None = None
     pac_analysis: str | None = None
-    # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified)
-    # for this donor's own committee, when known — see
-    # score_calculator._funding_independence_core's PAC-utilization signal.
+    # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified,
+    # ...) for this donor's own committee, when the donor is one. Reported,
+    # not scored (the PAC-utilization signal that read it left in v6.22).
     committee_type: str | None = None
 
 
@@ -295,6 +295,38 @@ class CommitteeSchema(CamelModel):
     title: str | None = None  # "Chairman" / "Ranking Member", else None
 
 
+class LobbiedBillSchema(CamelModel):
+    """A bill the member voted on that an LDA filing for a client of the
+    donor's name names, one entry per client (fetch/lda.lobbied_bills_for).
+    `client` is the registry's name for that client, which can be a separate
+    company sharing the name."""
+    bill_id: str
+    label: str = ""
+    bill_name: str = ""
+    vote: str | None = None
+    # What the vote shown decided ("passage", "cloture", "amendment" ...).
+    motion_type: str | None = None
+    # How the page says which vote is shown; "" for the vote on passage
+    # (lda.vote_context). A row without one must not read as passage.
+    vote_context: str = "on a motion, not necessarily passage"
+    filing_year: int | None = None
+    filing_url: str | None = None
+    registrant: str | None = None
+    # The registry's name for the filing's client (lda.is_same_client).
+    client: str | None = None
+    # The registrant when it isn't the client or named in it (lda._filed_by).
+    filed_by: str | None = None
+    filing_count: int = 1
+
+
+class LobbyingClientSchema(CamelModel):
+    """One registry client counted in a match's lobbying spend."""
+    client: str
+    amount: float
+    # False when the year's filings ran past the page cap: amount is a floor.
+    complete: bool = True
+
+
 class LobbyingMatchSchema(CamelModel):
     lobbyist_org: str
     industry: str
@@ -303,6 +335,11 @@ class LobbyingMatchSchema(CamelModel):
     bills_influenced: list[str]
     senator_vote_aligned: bool | None = None
     description: str
+    lobbied_bills: list[LobbiedBillSchema] = []
+    # lobbying_spend's parts by the registry's client names.
+    lobbying_clients: list[LobbyingClientSchema] = []
+    # False: the LDA lookup failed, so lobbying_spend is unknown, not zero.
+    lobbying_checked: bool | None = None
 
 
 class PolicyAlignmentSchema(CamelModel):
@@ -590,10 +627,26 @@ class PresidentLeaderboardEntry(CamelModel):
 # ── Supreme Court Justices ──────────────────────────────────────────
 
 class JusticeScoreSchema(CamelModel):
-    consistency: float
-    independence: float
+    # Loyalty to the appointing president, 0-100 (justice_loyalty.score);
+    # None until the Supreme Court Database covers the justice.
+    loyalty: float | None = None
     # Backend-computed overall (justice_service._build_score).
-    overall: float = 0.0
+    overall: float | None = None
+
+
+class JusticeLoyaltySchema(CamelModel):
+    """The loyalty estimate behind the score: points more often for the
+    government while the appointing president is in office (a share), its
+    standard error, the votes under the appointing president and under
+    others with the share of each for the government, and the Supreme Court
+    Database term the record runs through."""
+    estimate: float
+    se: float
+    votes_in: int
+    votes_out: int
+    rate_in: float
+    rate_out: float
+    through_term: int | None = None
 
 
 class JusticeSchema(CamelModel):
@@ -615,9 +668,10 @@ class JusticeSchema(CamelModel):
     authored_dissent: int = 0
     authored_concurrence: int = 0
     close_case_majority_pct: float = 0.0
-    cross_bloc_pct: float = 0.0
     agreement_matrix: dict[str, float] = {}
-    summary: str = ""
+    loyalty: JusticeLoyaltySchema | None = None
+    # Martin-Quinn position per term, [[term, position], ...]: shown, not scored.
+    ideal_points: list[tuple[int, float]] = []
 
 
 class JusticeLeaderboardEntry(CamelModel):
@@ -633,7 +687,7 @@ class JusticeLeaderboardEntry(CamelModel):
     cases_decided: int = 0
     majority_pct: float = 0.0
     dissent_pct: float = 0.0
-    cross_bloc_pct: float = 0.0
+    loyalty: JusticeLoyaltySchema | None = None
 
 
 # ── Action Center ─────────────────────────────────────────────────

@@ -642,26 +642,308 @@ async def fetch_pac_receipts(
 COMMITTEE_TYPE_CACHE_TTL_HOURS = 24 * 90
 
 
-async def fetch_committee_type(
+async def fetch_committee_meta(
     client: httpx.AsyncClient, db: Session, committee_id: str,
-) -> str | None:
-    """A PAC's FEC committee_type code, for computing its per-election
-    contribution cap (see score_calculator._funding_independence_core):
-    "Q" = PAC-Qualified (multicandidate, $5,000/election cap), "N" =
-    PAC-Nonqualified (capped at the same per-election limit as an
-    individual). Returns None if the committee isn't found or has no
-    committee_type on record.
+) -> dict | None:
+    """One committee's FEC registration from the per-committee API, in the
+    committee master's shape ({"type", "designation", "connectedOrg"}): the
+    fallback for a committee the bulk master lacks, such as one registered
+    since the last weekly file. committee_type "Q" = PAC-Qualified
+    (multicandidate, $5,000/election cap), "N" = PAC-Nonqualified; the
+    designation carries the leadership-PAC and candidate-committee codes
+    (is_political_committee). The connected organization is left None: the
+    API's affiliated-committee field is not the sponsor field, and the
+    lobbying lookup would rather search the donor's own name than a wrong one.
+    Returns None if the committee isn't found.
     """
-    cache_key = f"committee-type-v1-{committee_id}"
+    cache_key = f"committee-meta-v1-{committee_id}"
     cached = api_cache_get(db, "fec", cache_key, max_age_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
     if cached is not None:
-        return cached.get("committee_type")
+        return cached.get("meta")
+    # The type-only entries this replaced are still warm (90-day TTL). One
+    # answers the committee-type question without a request; the designation is
+    # then unknown, so the leadership-PAC half of the political rule can't
+    # fire for it until the entry ages out, but party and candidate
+    # committees (by type) still do. Only reached when the bulk master
+    # lacks the committee.
+    legacy = api_cache_get(
+        db, "fec", f"committee-type-v1-{committee_id}", max_age_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS,
+    )
+    if legacy is not None and legacy.get("committee_type"):
+        return {"type": legacy["committee_type"], "designation": None, "connectedOrg": None}
 
     data = await _fetch_with_retry(client, f"{FEC_API_BASE}/committee/{committee_id}/")
     results = (data or {}).get("results", [])
-    committee_type = results[0].get("committee_type") if results else None
-    api_cache_set(db, "fec", cache_key, {"committee_type": committee_type})
-    return committee_type
+    meta = {
+        "type": results[0].get("committee_type"),
+        "designation": results[0].get("designation"),
+        "connectedOrg": None,
+    } if results else None
+    if data is not None:
+        # A failed fetch (None) is not cached: an outage mustn't mark a real
+        # committee as unknown for 90 days.
+        api_cache_set(db, "fec", cache_key, {"meta": meta},
+                      normal_ttl_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
+    return meta
+
+
+# ── Committee master file (bulk) ─────────────────────────────────
+
+# The FEC's committee master file, one per two-year cycle: every registered
+# committee's type, designation and connected organization. One ~2.5 MB
+# download per cycle replaces thousands of per-committee API calls, which
+# matters because two of its columns are needed for every contributing PAC
+# and the API's hourly key limit is 1,000 calls.
+COMMITTEE_MASTER_URL = "https://www.fec.gov/files/bulk-downloads/{year}/cm{yy}.zip"
+# The file is regenerated weekly and a committee's registration changes
+# rarely (a new committee appears, a treasurer changes), so a week is fine.
+COMMITTEE_MASTER_CACHE_TTL_HOURS = 24 * 7
+
+# Column positions in cm.txt, per the FEC's published data dictionary
+# ("Committee master file description"): pipe-delimited, no header row.
+_CM_ID, _CM_NAME, _CM_DESIGNATION, _CM_TYPE, _CM_ORG_TYPE, _CM_CONNECTED_ORG = 0, 1, 8, 9, 12, 13
+
+
+# FEC committee types filed by an organization in its own name rather than
+# by a political committee: C communication cost, E electioneering
+# communication, I independent expenditure filer (FEC committee type codes).
+_ORGANIZATION_FILER_TYPES = frozenset({"C", "E", "I"})
+
+
+def _exact_name_key(name: str) -> str:
+    """A name compared ignoring case and punctuation only. An apostrophe is
+    dropped, not a word break: "AMERICA'S" is spelled "AMERICAS" too."""
+    unquoted = re.sub(r"['\u2019]", "", (name or "").upper())
+    return " ".join(re.sub(r"[^A-Z0-9]+", " ", unquoted).split())
+
+
+_ALIAS_RE = re.compile(r"\([^()]*\)")
+
+
+def _committee_name_key(name: str) -> str:
+    """A committee name compared ignoring case, punctuation and parenthesised
+    aliases: registrations cite "AMERICAN BANKERS ASSOCIATION PAC" and
+    "AMERICAN BANKERS ASSOCIATION PAC (BANKPAC)" for one committee."""
+    return _exact_name_key(_ALIAS_RE.sub(" ", name or ""))
+
+
+def parse_committee_rows(text: str) -> dict[str, dict]:
+    """cm.txt -> {committee_id: {"name", "type", "designation", "sponsor"}},
+    the file as registered: "sponsor" is the connected organization as
+    stated, for a separate segregated fund only (see
+    resolve_connected_orgs). Empty fields become None; a malformed short
+    line is skipped."""
+    out: dict[str, dict] = {}
+    for line in text.splitlines():
+        cols = line.split("|")
+        if len(cols) <= _CM_CONNECTED_ORG or not cols[_CM_ID]:
+            continue
+        org = cols[_CM_CONNECTED_ORG].strip()
+        sponsored = bool(cols[_CM_ORG_TYPE].strip()) and org.upper() not in ("", "NONE")
+        out[cols[_CM_ID]] = {
+            "name": cols[_CM_NAME].strip(),
+            "type": cols[_CM_TYPE] or None,
+            "designation": cols[_CM_DESIGNATION] or None,
+            "sponsor": org if sponsored else None,
+        }
+    return out
+
+
+def resolve_connected_orgs(
+    rows: dict[str, dict],
+    names: dict[str, set[str]] | None = None,
+    last_cycle: dict[str, int] | None = None,
+) -> dict[str, dict]:
+    """{committee_id: {"type", "designation", "connectedOrg"}} from
+    parse_committee_rows output. `names` adds every earlier name a committee
+    has registered under, since a sponsor can cite a PAC by an old one.
+    `last_cycle` is the latest cycle each committee is registered in: a
+    committee last seen before the registration citing it can't be the one
+    it means (a 2020-only super PAC sharing the Coalition for a Prosperous
+    America's name, cited in 2026).
+
+    The connected organization is a PAC's sponsor only for a separate
+    segregated fund, which is exactly the committee the FEC gives an
+    interest-group category (ORG_TP: corporation, labor, membership, trade,
+    cooperative, corporation without stock). Elsewhere the same column
+    holds joint-fundraising partners ("TAKE BACK THE HOUSE 2022", "TRUMP
+    VICTORY") or the form's "NONE" placeholder (28,595 of the 2020-2026
+    files' rows), neither of which is a lobbying client. A fund that names
+    itself as its own connected organization (157 of cm26's 2,067 sponsored
+    committees) names no sponsor either.
+
+    A sponsor can be named by a name that is also a committee's. When that
+    committee files for an organization itself (_ORGANIZATION_FILER_TYPES:
+    the NEA's, the AFL-CIO's, the ABA's own registrations), it is the
+    sponsor. When it is another PAC (a state bankers' PAC naming the
+    American Bankers Association's), that PAC's sponsor is followed. Chains
+    can loop (MINEPAC <-> COALPAC) or end at a committee with no sponsor,
+    which leaves none. Measured over the 2020-2026 files, 41 of cm26's
+    sponsors resolve to an organization this way and 17 to none (a PAC
+    naming itself under another alias among them).
+    """
+    all_names = {cid: {row["name"]} | (names or {}).get(cid, set()) for cid, row in rows.items()}
+    by_name: dict[str, list[str]] = {}
+    for cid, own in all_names.items():
+        for key in {_committee_name_key(n) for n in own}:
+            by_name.setdefault(key, []).append(cid)
+
+    cycle_of = last_cycle or {}
+
+    def resolve(cid: str) -> str | None:
+        org = rows[cid]["sponsor"]
+        cited_in = cycle_of.get(cid, 0)
+        # Its current name only: a PAC once registered under its sponsor's
+        # name ("PRINTING UNITED ALLIANCE") still names that sponsor.
+        if org is None or _exact_name_key(org) == _exact_name_key(rows[cid]["name"]):
+            return None  # names itself
+        seen = {cid}
+        while True:
+            matches = [m for m in by_name.get(_committee_name_key(org), []) if cycle_of.get(m, 0) >= cited_in]
+            named = [m for m in matches if m not in seen]
+            if len(seen) > 1 and len(named) < len(matches):
+                return None  # back to a committee already followed: a loop
+            if not named:
+                # Only the committee itself matches, by its name without an
+                # alias: "X" for "X (XPAC)" is the organization, while
+                # "X PAC (XX-PAC)" for "X PAC (X-PAC)" is itself again.
+                return None if matches and _ALIAS_RE.search(org) else org
+            if any(rows[m]["type"] in _ORGANIZATION_FILER_TYPES for m in named):
+                return org
+            seen.add(named[0])
+            org = rows[named[0]]["sponsor"]
+            if org is None:
+                return None
+
+    return {
+        cid: {"type": row["type"], "designation": row["designation"], "connectedOrg": resolve(cid)}
+        for cid, row in rows.items()
+    }
+
+
+def parse_committee_master(text: str) -> dict[str, dict]:
+    """One cycle's cm.txt -> {committee_id: {"type", "designation",
+    "connectedOrg"}}, resolved within that file (resolve_connected_orgs)."""
+    return resolve_connected_orgs(parse_committee_rows(text))
+
+
+async def fetch_committee_master(
+    client: httpx.AsyncClient, db: Session, cycles: list[int],
+) -> dict[str, dict]:
+    """Committee type, designation and connected organization for every
+    committee registered in any of `cycles` (even years). Later cycles win
+    for a committee in several, since a registration can be amended, and
+    sponsors are resolved once over all of them, so a sponsor citing a PAC
+    by a name it has since changed still resolves.
+
+    Best-effort per cycle: a failed download leaves that cycle out (logged)
+    rather than failing the run, and callers fall back to the per-committee
+    API for anything missing. A failure is not cached.
+    """
+    import io
+    import zipfile
+
+    merged: dict[str, dict] = {}
+    names: dict[str, set[str]] = {}
+    last_cycle: dict[str, int] = {}
+    for cycle in sorted(set(cycles)):
+        # The file as registered is cached, not the resolution: bump the
+        # version whenever parse_committee_rows' output changes.
+        cache_key = f"committee-master-rows-v1-{cycle}"
+        cached = api_cache_get(
+            db, "fec", cache_key, max_age_hours=COMMITTEE_MASTER_CACHE_TTL_HOURS,
+        )
+        if cached is None:
+            url = COMMITTEE_MASTER_URL.format(year=cycle, yy=f"{cycle % 100:02d}")
+            try:
+                # fec.gov answers bulk downloads with a redirect to storage.
+                resp = await client.get(url, timeout=DEFAULT_FETCH_TIMEOUT_S * 4, follow_redirects=True)
+                resp.raise_for_status()
+                with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+                    name = next(n for n in zf.namelist() if n.lower().endswith(".txt"))
+                    text = zf.read(name).decode("latin-1")
+            except Exception as exc:
+                logger.warning("FEC committee master %d unavailable: %s", cycle, exc)
+                continue
+            cached = parse_committee_rows(text)
+            api_cache_set(
+                db, "fec", cache_key, cached,
+                normal_ttl_hours=COMMITTEE_MASTER_CACHE_TTL_HOURS,
+            )
+        for cid, row in cached.items():
+            names.setdefault(cid, set()).add(row["name"])
+            last_cycle[cid] = cycle
+        merged.update(cached)
+    return resolve_connected_orgs(merged, names, last_cycle)
+
+
+# Committee types and designations the FEC itself defines as political
+# rather than as an organization's fund ("Committee type codes" and
+# "Committee designation codes" in the FEC data dictionary). This is a
+# documented data-format convention, tier 1 of the classification strategy
+# (AGENTS.md): no name is read to decide it.
+#   types: H/S/P candidate committees, X/Y/Z party committees
+#   designations: A authorized by a candidate, P principal campaign
+#   committee, J joint fundraiser, D leadership PAC
+POLITICAL_COMMITTEE_TYPES = frozenset({"H", "S", "P", "X", "Y", "Z"})
+POLITICAL_COMMITTEE_DESIGNATIONS = frozenset({"A", "P", "J", "D"})
+
+
+def committee_master_cycles(today: date | None = None) -> list[int]:
+    """The cycles whose committee files cover every funding window, plus
+    the current cycle for committees registered since."""
+    year = (today or utcnow().date()).year
+    current = year + (year % 2)
+    # A senator's most recent completed election can be six years back, and
+    # its window spans the three cycles before it: 2026 back to 2016.
+    return [current - 2 * k for k in range(2 * _ELECTION_PERIOD_CYCLES["S"])]
+
+
+async def resolve_committee_meta(
+    client: httpx.AsyncClient, db: Session, committee_ids: set[str], master: dict[str, dict],
+) -> dict[str, dict]:
+    """{committee_id: {"type", "designation", "connectedOrg"}} for the
+    contributing PACs; a committee found nowhere is left out.
+
+    The bulk master answers almost every committee; the per-committee API
+    (fetch_committee_meta) is asked only for one the master lacks, such as a
+    committee registered after the last weekly file, or every committee if
+    the bulk files couldn't be downloaded. Either way the political-committee
+    rule sees a type and designation.
+    """
+    metas: dict[str, dict] = {}
+    for cid in committee_ids:
+        meta = master.get(cid) or await fetch_committee_meta(client, db, cid)
+        if meta:
+            metas[cid] = meta
+    return metas
+
+
+# Schedule A entity types whose contributor is itself a committee: "COM"
+# (committee), "PAC", "PTY" (party organization) and "CCM" (candidate
+# committee). Only "COM" used to be looked up, and live Senate top-donor
+# lists showed the cost: 36 of 2,136 PAC donors carried a committee type.
+COMMITTEE_ENTITY_TYPES = frozenset({"COM", "PAC", "PTY", "CCM"})
+
+
+def committee_id_of(receipt: dict) -> str | None:
+    """The contributing committee's FEC id, when the row's contributor is a
+    committee."""
+    if receipt.get("entity_type") in COMMITTEE_ENTITY_TYPES and receipt.get("contributor_id"):
+        return receipt["contributor_id"]
+    return None
+
+
+def is_political_committee(meta: dict | None) -> bool:
+    """Whether the FEC's own registration says this committee is a party,
+    candidate, joint-fundraising or leadership committee — money from it is
+    political money, not an industry's."""
+    if not meta:
+        return False
+    return (
+        meta.get("type") in POLITICAL_COMMITTEE_TYPES
+        or meta.get("designation") in POLITICAL_COMMITTEE_DESIGNATIONS
+    )
 
 
 async def fetch_aggregated_contributors(

@@ -1,8 +1,25 @@
 export interface JusticeScore {
-  consistency: number;
-  independence: number;
+  /** Independence from the appointing president, 0-100; null until the
+   *  Supreme Court Database covers the justice. */
+  loyalty: number | null;
   /** Backend-computed weighted total — never recompute this client-side. */
-  overall: number;
+  overall: number | null;
+}
+
+/** The estimate behind the score (backend justice_loyalty): how many points
+ *  more often the justice sided with the federal government while the
+ *  appointing president was in office, as a share (0.145 = 14.5 points),
+ *  shrunk across justices, with its standard error; the votes under the
+ *  appointing president and under others, and the share of each for the
+ *  government. */
+export interface JusticeLoyalty {
+  estimate: number;
+  se: number;
+  votesIn: number;
+  votesOut: number;
+  rateIn: number;
+  rateOut: number;
+  throughTerm: number | null;
 }
 
 export interface Justice {
@@ -24,9 +41,11 @@ export interface Justice {
   authoredDissent: number;
   authoredConcurrence: number;
   closeCaseMajorityPct: number;
-  crossBlocPct: number;
   agreementMatrix: Record<string, number>;
-  summary: string;
+  loyalty: JusticeLoyalty | null;
+  /** Martin-Quinn position per term, [[term, position], ...], oldest first:
+   *  shown, not scored. Negative is liberal, positive conservative. */
+  idealPoints: [number, number][];
 }
 
 export interface JusticeLeaderboardEntry {
@@ -42,5 +61,5 @@ export interface JusticeLeaderboardEntry {
   casesDecided: number;
   majorityPct: number;
   dissentPct: number;
-  crossBlocPct: number;
+  loyalty: JusticeLoyalty | null;
 }
