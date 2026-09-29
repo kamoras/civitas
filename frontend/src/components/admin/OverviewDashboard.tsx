@@ -37,27 +37,62 @@ function MoreLink({ onClick, children }: { onClick: () => void; children: string
   );
 }
 
-/** The pipelines' operator alerts, newest first. The backend has recorded
- *  these since 2026-07 but nothing showed them, so an alert with no ntfy
- *  channel configured reached no one. */
+/** One alert: subject, when, and the body; a resolved one says when. */
+function OpsAlertItem({ a }: { a: OpsAlert }) {
+  return (
+    <li className="py-2">
+      <div className="flex flex-wrap justify-between gap-x-3">
+        <span className={a.open ? "text-signal-magenta" : "text-ink"}>{a.subject}</span>
+        <time dateTime={a.at} className="text-ink-lo tabular-nums">
+          {formatTime(a.at)}
+        </time>
+      </div>
+      <p className="mt-1 text-ink-lo whitespace-pre-wrap break-words">{a.body}</p>
+      {a.resolvedAt && (
+        <p className="mt-1 text-ink-min">
+          Resolved <time dateTime={a.resolvedAt}>{formatTime(a.resolvedAt)}</time>
+        </p>
+      )}
+    </li>
+  );
+}
+
+/** The pipelines' operator alerts: the ones still open first, then the
+ *  rest (resolved conditions and one-off events), newest first. An alert
+ *  closes when the code that raised it sees its condition gone
+ *  (ops_alerts.resolve_ops_alert), so "Active" is what's wrong right now. */
 export function OpsAlerts({ alerts }: { alerts: OpsAlert[] | undefined }) {
   if (!alerts) return <p className="text-xs font-mono text-ink-min">Loading…</p>;
   if (alerts.length === 0)
     return <p className="text-xs font-mono text-ink-min">No alerts recorded.</p>;
+  const active = alerts.filter((a) => a.open);
+  const earlier = alerts.filter((a) => !a.open);
+  const key = (a: OpsAlert) => `${a.at}-${a.subject}`;
   return (
-    <ul className="divide-y divide-white/[0.04] text-xs font-mono">
-      {alerts.map((a) => (
-        <li key={`${a.at}-${a.subject}`} className="py-2">
-          <div className="flex flex-wrap justify-between gap-x-3">
-            <span className="text-signal-magenta">{a.subject}</span>
-            <time dateTime={a.at} className="text-ink-lo tabular-nums">
-              {formatTime(a.at)}
-            </time>
-          </div>
-          <p className="mt-1 text-ink-lo whitespace-pre-wrap break-words">{a.body}</p>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-4 text-xs font-mono">
+      <section aria-label="Active alerts">
+        <h3 className="mb-1 tracking-wider text-ink-lo">ACTIVE ({active.length})</h3>
+        {active.length === 0 ? (
+          <p className="text-ink-min">Nothing is wrong right now.</p>
+        ) : (
+          <ul className="divide-y divide-white/[0.04]">
+            {active.map((a) => (
+              <OpsAlertItem key={key(a)} a={a} />
+            ))}
+          </ul>
+        )}
+      </section>
+      {earlier.length > 0 && (
+        <section aria-label="Earlier alerts">
+          <h3 className="mb-1 tracking-wider text-ink-lo">EARLIER</h3>
+          <ul className="divide-y divide-white/[0.04]">
+            {earlier.map((a) => (
+              <OpsAlertItem key={key(a)} a={a} />
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }
 

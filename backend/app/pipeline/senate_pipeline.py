@@ -2222,6 +2222,7 @@ async def run_senate_pipeline(
                     f"(run #{pipeline_run.id}):\n{lines}"
                 ),
                 dedupe_key=f"ground-truth-run-{pipeline_run.id}",
+                condition="ground-truth-senate",
             )
         except Exception:
             logger.exception("Ground truth check failed (non-fatal)")

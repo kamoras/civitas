@@ -1052,7 +1052,7 @@ async def test_a_late_cycle_notice_for_documents_that_may_never_come(monkeypatch
     from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
     sent = []
-    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda subject, body, dedupe_key=None: sent.append(dedupe_key))
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda subject, body, dedupe_key=None, condition=None: sent.append(dedupe_key))
     monkeypatch.setattr(election_pipeline, "_past_expected_by", lambda src, day: True)
     _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
     _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
@@ -1097,7 +1097,7 @@ async def test_the_ingest_alert_fires_every_night_a_state_fails(monkeypatch, db_
     import app.ops_alerts as ops_alerts
 
     keys = []
-    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None: keys.append(dedupe_key))
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None, condition=None: keys.append(dedupe_key))
     election_pipeline._alert_ingest_failures(["CA"], "2026-11-03")
     election_pipeline._alert_ingest_failures(["CA", "MI"], "2026-11-03")
     assert len(set(keys)) == 2

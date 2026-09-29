@@ -50,7 +50,7 @@ async function load(
   id: string,
   congress: number | null
 ): Promise<{ record: BillRecord | null; detail: BillDetail | null }> {
-  const [record, trackedOrError] = await Promise.all([
+  const [{ record, failed: recordFailed }, trackedOrError] = await Promise.all([
     fetchBillRecord(id, congress),
     fetchTrackedBill(id, congress).catch((e: unknown) =>
       e instanceof Error ? e : new Error(String(e))
@@ -61,6 +61,9 @@ async function load(
   // error page, never a 404 for a bill that exists.
   if (trackedOrError instanceof Error && !record) throw trackedOrError;
   const tracked = trackedOrError instanceof Error ? null : trackedOrError;
+  // Neither record, and Congress.gov's side failed rather than saying "no
+  // such bill": the bill may well exist, so this is not a 404 either.
+  if (!record && !tracked && recordFailed) throw new Error(`bill ${id}: record unavailable`);
   const detail = tracked && record && tracked.congress !== record.congress ? null : tracked;
   return { record, detail };
 }
