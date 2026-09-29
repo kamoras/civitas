@@ -1,10 +1,10 @@
 Font software in this directory, all licensed under the SIL Open Font License 1.1.
-Files obtained from Fontsource 5.3.0 (@fontsource-variable/archivo, @fontsource/press-start-2p, @fontsource/share-tech-mono), which repackages the Google Fonts releases.
+The files are Google Fonts' releases, unmodified, as fetched by
+backend/scripts/fetch_site_fonts.py. Copyright notices, from each font's name table:
 
-Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo) Archivo-Italic[wdth,wght].ttf: Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
+Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
 Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"
-Copyright (c) 2012, Carrois Type Design, Ralph du Carrois (www.carrois.com post@carrois.com), with Reserved Font Name 'Share'
-
+Copyright (c) 2012, Carrois Type Design, Ralph du Carrois (post@carrois.com www.carrois.com), with Reserved Font Name 'Share'
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

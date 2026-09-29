@@ -8,10 +8,13 @@
 # install together; pinned exactly, like requirements.txt. Direct needs:
 # pandas (+ openpyxl, which its read_excel loads for .xlsx), statsmodels,
 # rdata and pyreadr (the R-format replication datasets), onnxruntime
-# (evaluate_embedding_models.py's ONNX comparison). The rest is
+# (evaluate_embedding_models.py's ONNX comparison), fonttools and brotli
+# (fetch_site_fonts.py; fontTools reads woff2 through brotli). The rest is
 # what those pull in beyond requirements.txt.
+brotli==1.2.0
 et-xmlfile==2.0.0
 flatbuffers==25.12.19
+fonttools==4.66.0
 formulaic==1.2.2
 interface-meta==2.0.1
 onnxruntime==1.30.0

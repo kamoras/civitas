@@ -4,6 +4,7 @@ import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import NavigationBeacon from "@/components/NavigationBeacon";
 import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
 import { fontVariables, shareTech } from "./fonts";
+import "./fonts/fallback.css";
 import "./globals.css";
 
 // Site-wide defaults only. No `alternates.canonical` and no `openGraph.url`
