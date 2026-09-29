@@ -1230,6 +1230,16 @@ or ntfy is where an overnight alert is still found the next afternoon. Each
 alert carries a dedupe key (per day, per run or per cycle), so a recurring
 problem notifies once for that span.
 
+An alert about an ongoing condition names it and stays **active** until the
+code that detects the condition sees it gone and calls `resolve_ops_alert`:
+the overrun and staleness watchdogs on their next clean tick, a failed step
+when that step next completes, a skipped nightly phase when it next runs, the
+justice alert when loyalty is next measured, and so on for every alert. The
+panel lists active alerts first, then resolved ones (with when) and one-off
+events. A newer alert for the same condition supersedes the older, and
+resolving frees the dedupe key so a recurrence alerts again. Open alerts are
+never pushed off the panel by newer history.
+
 ### Docker Swarm Architecture
 
 The project runs on a single-node Docker Swarm (`docker swarm init` is a

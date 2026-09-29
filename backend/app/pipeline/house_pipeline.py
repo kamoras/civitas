@@ -965,6 +965,7 @@ async def run_house_pipeline() -> dict:
                         f"(run #{house_run.id}):\n{lines}"
                     ),
                     dedupe_key=f"house-ground-truth-run-{house_run.id}",
+                    condition="ground-truth-house",
                 )
             except Exception:
                 logger.exception("House ground truth check failed (non-fatal)")
