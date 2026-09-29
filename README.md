@@ -1239,7 +1239,9 @@ justice alert when loyalty is next measured, and so on for every alert. The
 panel lists active alerts first, then resolved ones (with when) and one-off
 events. A newer alert for the same condition supersedes the older, and
 resolving frees the dedupe key so a recurrence alerts again. Open alerts are
-never pushed off the panel by newer history.
+never pushed off the panel by newer history, and never pruned from storage.
+Resolved alerts and events stay listed for seven days (the slowest regular
+jobs run weekly, so every job's latest outcome stays in view), at most ten.
 
 ### Docker Swarm Architecture
 
