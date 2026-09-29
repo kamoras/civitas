@@ -159,16 +159,20 @@ export default function RepresentationScore({
         : "no voting record · defaults to 50";
     }
     const tracked = `${votingRecord.totalVotes} votes tracked`;
-    if (status === "typical:few-votes") return `${tracked} · too few party-line votes, vote part set to the party's typical score`;
-    if (status === "neutral:few-votes") return `${tracked} · too few party-line votes, vote part neutral 50`;
-    if (status === "neutral:no-expectation") return `${tracked} · no party norm to compare with, vote part neutral 50`;
+    if (status === "typical:few-votes")
+      return `${tracked} · too few party-line votes, vote part set to the party's typical score`;
+    if (status === "neutral:few-votes")
+      return `${tracked} · too few party-line votes, vote part neutral 50`;
+    if (status === "neutral:no-expectation")
+      return `${tracked} · no party norm to compare with, vote part neutral 50`;
     // "shrunk" pulls toward the party's measured typical score,
     // "shrunk-neutral" toward 50 (no measured typical yet).
     const shrunk = status?.match(/^(shrunk|shrunk-neutral):(.+)$/);
     if (shrunk) {
       const kept = Math.round(parseFloat(shrunk[2]) * 100);
       const target = shrunk[1] === "shrunk" ? "the party's typical score" : "50";
-      if (Number.isFinite(kept)) return `${tracked} · few party-line votes, vote part keeps ${kept}% of its distance from ${target}`;
+      if (Number.isFinite(kept))
+        return `${tracked} · few party-line votes, vote part keeps ${kept}% of its distance from ${target}`;
     }
     return tracked;
   })();

@@ -12,9 +12,13 @@ describe("CollapsibleSection", () => {
 
   it("names the heading by its title alone, whatever the summary says", () => {
     render(
-      <CollapsibleSection title="Holdings" summary="213 assets" source="disclosures-clerk.house.gov">
+      <CollapsibleSection
+        title="Holdings"
+        summary="213 assets"
+        source="disclosures-clerk.house.gov"
+      >
         body
-      </CollapsibleSection>,
+      </CollapsibleSection>
     );
     expect(screen.getByRole("heading", { name: "Holdings" })).toBeTruthy();
     // The whole header is still the toggle.

@@ -46,7 +46,13 @@ import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
  *  Design: font-mono/tracked-uppercase/text-ink-min matches every other
  *  small label on this page (SOURCES:, MEDIA COVERAGE) — this is that same
  *  register, not a one-off caption style. */
-export function IssueImage({ issue, size = "full" }: { issue: ActionIssue; size?: "full" | "thumbnail" }) {
+export function IssueImage({
+  issue,
+  size = "full",
+}: {
+  issue: ActionIssue;
+  size?: "full" | "thumbnail";
+}) {
   if (!issue.imageUrl) return null;
   const alt = issue.imageAlt || issue.title;
 
@@ -123,8 +129,7 @@ export function DevelopingBadge() {
 export function DevelopingDisclosure() {
   return (
     <p className="mb-4 font-mono text-xs text-ink-min">
-      Based on a primary-source vote record; broader news coverage has not
-      yet confirmed this story.
+      Based on a primary-source vote record; broader news coverage has not yet confirmed this story.
     </p>
   );
 }

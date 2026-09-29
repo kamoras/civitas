@@ -67,7 +67,7 @@ describe("DistrictFinder", () => {
 
   it("renders nothing when no race carries counties", () => {
     const { container } = render(
-      <DistrictFinder races={[race(1, [])]} onPick={vi.fn()} picked={null} />,
+      <DistrictFinder races={[race(1, [])]} onPick={vi.fn()} picked={null} />
     );
     expect(container).toBeEmptyDOMElement();
   });

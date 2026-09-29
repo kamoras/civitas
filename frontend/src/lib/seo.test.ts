@@ -4,7 +4,10 @@ import { describeBill, describeProfile, personJsonLd } from "./seo";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { BillDetail } from "@/types/bill";
 
-function profile(branch: string, identity: Partial<PoliticianProfile["identity"]>): PoliticianProfile {
+function profile(
+  branch: string,
+  identity: Partial<PoliticianProfile["identity"]>
+): PoliticianProfile {
   return {
     id: "x",
     branch,
@@ -15,7 +18,7 @@ function profile(branch: string, identity: Partial<PoliticianProfile["identity"]
 describe("describeProfile", () => {
   it("leads a senator's title with the name and party-state tag", () => {
     const { title, description } = describeProfile(
-      profile("senate", { state: "CA", stateName: "California", isCurrent: true }),
+      profile("senate", { state: "CA", stateName: "California", isCurrent: true })
     );
     expect(title).toBe("Sen. Jane Doe (D-CA): Voting Record, Donors & Scorecard");
     expect(description).toContain("Democratic senator for California");
@@ -24,7 +27,15 @@ describe("describeProfile", () => {
 
   it("names a House district with a correct ordinal, and at-large seats", () => {
     const rep = (district: number) =>
-      describeProfile(profile("house", { role: "Representative", party: "R", state: "TX", stateName: "Texas", district }));
+      describeProfile(
+        profile("house", {
+          role: "Representative",
+          party: "R",
+          state: "TX",
+          stateName: "Texas",
+          district,
+        })
+      );
     expect(rep(12).description).toContain("Texas's 12th district");
     expect(rep(22).description).toContain("Texas's 22nd district");
     expect(rep(0).description).toContain("Texas (at-large)");
@@ -32,7 +43,7 @@ describe("describeProfile", () => {
 
   it("marks former members", () => {
     const { title, description } = describeProfile(
-      profile("senate", { state: "OH", stateName: "Ohio", isCurrent: false }),
+      profile("senate", { state: "OH", stateName: "Ohio", isCurrent: false })
     );
     expect(title).toMatch(/^Former Sen\. /);
     expect(description).toContain("Jane Doe, former Democratic senator for Ohio");
@@ -45,9 +56,9 @@ describe("describeProfile", () => {
   });
 
   it("gives presidents their own title", () => {
-    expect(describeProfile(profile("president", { role: "President (16th)", party: "R" })).title).toBe(
-      "Jane Doe: Presidential Record & Scorecard",
-    );
+    expect(
+      describeProfile(profile("president", { role: "President (16th)", party: "R" })).title
+    ).toBe("Jane Doe: Presidential Record & Scorecard");
   });
 });
 
@@ -87,7 +98,11 @@ describe("JSON-LD", () => {
       "@type": "PoliticalParty",
       name: "Democratic Party",
     });
-    expect(personJsonLd("b", profile("scotus", { role: "Associate Justice" }))).not.toHaveProperty("affiliation");
-    expect(personJsonLd("c", profile("senate", { state: "VT", party: "I" }))).not.toHaveProperty("affiliation");
+    expect(personJsonLd("b", profile("scotus", { role: "Associate Justice" }))).not.toHaveProperty(
+      "affiliation"
+    );
+    expect(personJsonLd("c", profile("senate", { state: "VT", party: "I" }))).not.toHaveProperty(
+      "affiliation"
+    );
   });
 });

@@ -1,11 +1,21 @@
-import { Holdings, LeaderboardEntry, PaginatedStockTrades, PaginatedVotes, Senator } from "@/types/senator";
+import {
+  Holdings,
+  LeaderboardEntry,
+  PaginatedStockTrades,
+  PaginatedVotes,
+  Senator,
+} from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
-import type { PresidentScoreBreakdown, RepresentationScoreBreakdown, SignalOverlap } from "@/types/scoreBreakdown";
+import type {
+  PresidentScoreBreakdown,
+  RepresentationScoreBreakdown,
+  SignalOverlap,
+} from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -305,7 +315,12 @@ export async function fetchRepLeaderboard(
 async function fetchPaginatedVotes(
   chamber: Chamber,
   entityId: string,
-  options?: { category?: "recent" | "key" | "all"; page?: number; perPage?: number; filter?: string }
+  options?: {
+    category?: "recent" | "key" | "all";
+    page?: number;
+    perPage?: number;
+    filter?: string;
+  }
 ): Promise<PaginatedVotes> {
   const params = new URLSearchParams();
   if (options?.category) params.set("category", options.category);
@@ -320,14 +335,24 @@ async function fetchPaginatedVotes(
 
 export async function fetchRepVotes(
   repId: string,
-  options?: { category?: "recent" | "key" | "all"; page?: number; perPage?: number; filter?: string }
+  options?: {
+    category?: "recent" | "key" | "all";
+    page?: number;
+    perPage?: number;
+    filter?: string;
+  }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.House, repId, options);
 }
 
 export async function fetchSenatorVotes(
   senatorId: string,
-  options?: { category?: "recent" | "key" | "all"; page?: number; perPage?: number; filter?: string }
+  options?: {
+    category?: "recent" | "key" | "all";
+    page?: number;
+    perPage?: number;
+    filter?: string;
+  }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.Senate, senatorId, options);
 }
@@ -381,17 +406,23 @@ async function fetchHoldings(
   // client cache.
   return requestJson(
     `${API_BASE}/${segment}/${memberId}/holdings?${params}`,
-    "Failed to load holdings",
+    "Failed to load holdings"
   );
 }
 
 type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };
 
-export async function fetchSenatorHoldings(senatorId: string, options?: HoldingsOptions): Promise<Holdings> {
+export async function fetchSenatorHoldings(
+  senatorId: string,
+  options?: HoldingsOptions
+): Promise<Holdings> {
   return fetchHoldings(CHAMBER_PATH[Chamber.Senate], senatorId, options);
 }
 
-export async function fetchRepHoldings(repId: string, options?: HoldingsOptions): Promise<Holdings> {
+export async function fetchRepHoldings(
+  repId: string,
+  options?: HoldingsOptions
+): Promise<Holdings> {
   return fetchHoldings(CHAMBER_PATH[Chamber.House], repId, options);
 }
 

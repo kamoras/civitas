@@ -423,7 +423,6 @@ export interface StateBallot {
   omits: string[];
 }
 
-
 /** Provenance of the district table /pvi serves — the lines this cycle's
  * House races are fought on (backend fetch/district_pvi.district_pvi_for_congress).
  * Any field may be null when the data file lacks it. */

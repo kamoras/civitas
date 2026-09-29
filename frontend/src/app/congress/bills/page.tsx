@@ -207,7 +207,11 @@ function BillsPageContent() {
 
 export default function BillsPage() {
   return (
-    <Suspense fallback={<PageFallback eyebrow={"Bills · legislative pipeline"} title={"Bills in motion"} rows={5} />}>
+    <Suspense
+      fallback={
+        <PageFallback eyebrow={"Bills · legislative pipeline"} title={"Bills in motion"} rows={5} />
+      }
+    >
       <BillsPageContent />
     </Suspense>
   );

@@ -73,8 +73,8 @@ export default function Masthead() {
           </h1>
 
           <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
-            Scored nightly from federal and state filings. Every number traces back to the
-            document it came from. Nothing here is an estimate.
+            Scored nightly from federal and state filings. Every number traces back to the document
+            it came from. Nothing here is an estimate.
           </p>
         </div>
 

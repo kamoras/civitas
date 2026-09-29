@@ -150,9 +150,9 @@ def test_env_example_does_not_pin_current_congress():
     import pathlib
     import re
 
-    from dotenv import dotenv_values
-
     example = pathlib.Path(__file__).resolve().parents[2] / ".env.example"
-    assert "CURRENT_CONGRESS" not in dotenv_values(example)
     text = example.read_text()
+    # A live assignment, as a dotenv parser reads one (optional `export`);
+    # comment lines don't count.
+    assert not re.search(r"(?m)^\s*(?:export\s+)?CURRENT_CONGRESS\s*=", text)
     assert re.search(r"(?m)^#\s*CURRENT_CONGRESS=", text), "keep the documented, commented-out example"

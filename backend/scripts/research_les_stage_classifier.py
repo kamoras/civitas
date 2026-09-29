@@ -13,6 +13,9 @@ the five stages it reaches, and compared per member with V&W's published
 counts (all three significance tiers summed). Members are joined on ICPSR
 number through Voteview's member file (bioguide id -> ICPSR).
 
+Research-only dependencies (scripts/requirements-research.txt):
+    pip install -r requirements.txt -r scripts/requirements-research.txt
+
 Usage:
     python backend/scripts/research_les_stage_classifier.py [--cache DIR]
 

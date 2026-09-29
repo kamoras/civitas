@@ -20,7 +20,6 @@ const GEO_URL = "/data/states-10m.json";
 // itself lives in lib/stateCodes.ts so server modules can use it too.
 export { FIPS_TO_STATE };
 
-
 // States too small to hit on the map itself — Rhode Island renders at
 // 4x5 pixels on a phone, Delaware 5x8 — measured with a hit test against
 // the live page at 390px wide. Each gets a labelled box off the coast,

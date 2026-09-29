@@ -6,7 +6,12 @@ import type { BillRecordVote, PartySplit, VoteDetail, VoteMember } from "@/types
 import { CHAMBER_NAME, resultTone, shortDate } from "@/lib/congress";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 
-const PARTY_NAME: Record<string, string> = { R: "Republicans", D: "Democrats", I: "Independents", ID: "Independents" };
+const PARTY_NAME: Record<string, string> = {
+  R: "Republicans",
+  D: "Democrats",
+  I: "Independents",
+  ID: "Independents",
+};
 const BUCKETS: { key: VoteMember["bucket"]; label: string; tone: string }[] = [
   { key: "yea", label: "Yea", tone: "text-phos-mid" },
   { key: "nay", label: "Nay", tone: "text-signal-red" },
@@ -37,7 +42,13 @@ function PartyBar({ split }: { split: PartySplit }) {
 
 /** A bill's recorded votes, and for the selected one every member's
  * position, filterable to a state (a drill-down, never an address). */
-export default function VotePanel({ votes, congress }: { votes: BillRecordVote[]; congress: number }) {
+export default function VotePanel({
+  votes,
+  congress,
+}: {
+  votes: BillRecordVote[];
+  congress: number;
+}) {
   const [chosen, setChosen] = useState<string | null>(null);
   // Each vote's members, fetched once: a vote never changes after it is taken.
   const [loaded, setLoaded] = useState<Record<string, VoteDetail | "failed">>({});
@@ -52,7 +63,7 @@ export default function VotePanel({ votes, congress }: { votes: BillRecordVote[]
       return () => window.removeEventListener("hashchange", onChange);
     },
     () => window.location.hash.slice(1),
-    () => "",
+    () => ""
   );
   const fromHash = votes.some((v) => voteKey(v) === hash) ? hash : null;
   const selected = chosen ?? fromHash ?? (votes[0] ? voteKey(votes[0]) : "");
@@ -77,12 +88,14 @@ export default function VotePanel({ votes, congress }: { votes: BillRecordVote[]
 
   const states = useMemo(
     () => (detail ? [...new Set(detail.members.map((m) => m.state))].sort() : []),
-    [detail],
+    [detail]
   );
   const members = detail ? detail.members.filter((m) => !state || m.state === state) : [];
 
   if (!votes.length) {
-    return <p className="text-[15px] text-ink-lo">No recorded votes on this bill in either chamber.</p>;
+    return (
+      <p className="text-[15px] text-ink-lo">No recorded votes on this bill in either chamber.</p>
+    );
   }
 
   return (
@@ -102,12 +115,18 @@ export default function VotePanel({ votes, congress }: { votes: BillRecordVote[]
                 }`}
               >
                 <span className="flex flex-col gap-1 pl-2 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
-                  <span>{CHAMBER_NAME[v.chamber]} {v.number}</span>
+                  <span>
+                    {CHAMBER_NAME[v.chamber]} {v.number}
+                  </span>
                   <span className="text-ink-min">{shortDate(v.date)}</span>
                 </span>
                 <span className="text-[15px] leading-snug text-ink">{v.question}</span>
                 <span className="col-start-2 flex flex-col items-start gap-1 pr-2 sm:col-start-auto sm:items-end">
-                  <span className={`font-mono text-xs uppercase tracking-[0.1em] ${TONE[resultTone(v.rejected)]}`}>{v.result}</span>
+                  <span
+                    className={`font-mono text-xs uppercase tracking-[0.1em] ${TONE[resultTone(v.rejected)]}`}
+                  >
+                    {v.result}
+                  </span>
                   <span className="font-mono text-lg tabular-nums text-ink-hi">
                     {v.yeas}–{v.nays}
                   </span>
@@ -152,8 +171,14 @@ export default function VotePanel({ votes, congress }: { votes: BillRecordVote[]
               <PartyBar key={p.party} split={p} />
             ))}
           </div>
-          {failed && <p className="text-sm text-signal-amber">Each member&apos;s vote could not be loaded. Try again shortly.</p>}
-          {!detail && !failed && <p className="text-sm text-ink-lo">Loading each member&apos;s vote…</p>}
+          {failed && (
+            <p className="text-sm text-signal-amber">
+              Each member&apos;s vote could not be loaded. Try again shortly.
+            </p>
+          )}
+          {!detail && !failed && (
+            <p className="text-sm text-ink-lo">Loading each member&apos;s vote…</p>
+          )}
           {detail && (
             <div className="grid gap-5 border-t border-white/[0.09] pt-4 sm:grid-cols-2 lg:grid-cols-4">
               {BUCKETS.map(({ key, label, tone }) => {
@@ -168,7 +193,10 @@ export default function VotePanel({ votes, congress }: { votes: BillRecordVote[]
                       {group.map((m) => {
                         const name = m.firstName ? `${m.firstName} ${m.lastName}` : m.lastName;
                         return (
-                          <li key={`${m.lastName}-${m.state}-${m.firstName}`} className="flex items-baseline gap-2">
+                          <li
+                            key={`${m.lastName}-${m.state}-${m.firstName}`}
+                            className="flex items-baseline gap-2"
+                          >
                             {m.page ? (
                               <Link href={m.page} className="text-ink hover:text-phos">
                                 {name}
@@ -176,7 +204,9 @@ export default function VotePanel({ votes, congress }: { votes: BillRecordVote[]
                             ) : (
                               <span className="text-ink">{name}</span>
                             )}
-                            <span className={`whitespace-nowrap font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
+                            <span
+                              className={`whitespace-nowrap font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
+                            >
                               {m.party}-{m.state}
                             </span>
                           </li>

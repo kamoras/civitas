@@ -126,7 +126,7 @@ export default function DistrictMap({
 
   if (!multiDistrict || failed || !topo || !fit) return null;
 
-  const pickedDistrict = picked ? races.find((r) => r.id === picked)?.district ?? null : null;
+  const pickedDistrict = picked ? (races.find((r) => r.id === picked)?.district ?? null) : null;
   const focus = hovered ?? pickedDistrict;
   const focusRace = focus != null ? byDistrict.get(focus) : undefined;
 
@@ -225,7 +225,9 @@ function DistrictPreview({ state, race }: { state: string; race: RaceWithCandida
         return (
           <span
             key={c.id}
-            className={major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink-lo"}
+            className={
+              major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink-lo"
+            }
           >
             {candidateName(c)}
           </span>

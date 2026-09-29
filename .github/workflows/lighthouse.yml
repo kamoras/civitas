@@ -76,7 +76,7 @@ jobs:
           # Never fire the nightly pipeline inside the job.
           PIPELINE_CRON_SCHEDULE: "0 3 1 1 *"
         run: |
-          pip install -r requirements.txt
+          pip install --only-binary=:all: -r requirements.txt
           python scripts/seed_ui_fixture.py
           nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/backend.log 2>&1 &
           for i in $(seq 90); do

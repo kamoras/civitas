@@ -47,8 +47,11 @@ describe("BallotMeasureCard", () => {
   it("names the drafter beside the official title when the state publishes one", () => {
     render(
       <BallotMeasureCard
-        measure={measure({ officialTitle: "BUDGET STABILIZATION FUND", titleAuthority: "Florida Legislature" })}
-      />,
+        measure={measure({
+          officialTitle: "BUDGET STABILIZATION FUND",
+          titleAuthority: "Florida Legislature",
+        })}
+      />
     );
     const title = screen.getByText("OFFICIAL BALLOT TITLE").closest("section");
     expect(title).toHaveTextContent("BUDGET STABILIZATION FUND");

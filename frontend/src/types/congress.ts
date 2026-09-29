@@ -54,7 +54,8 @@ export interface DayCounts {
 
 /** no_record_published: the Congressional Record has no issue for the day
  * (it is published for every day either chamber is in session). */
-export type ChamberStatus = "final" | "live" | "not_in_session" | "no_record" | "no_record_published";
+export type ChamberStatus =
+  "final" | "live" | "not_in_session" | "no_record" | "no_record_published";
 
 export interface ChamberDay {
   chamber: Chamber;
@@ -142,7 +143,13 @@ export interface PeriodReport {
 }
 
 export interface MonthReport extends PeriodReport {
-  weeks: { week: string; start: string; end: string; sentence: string; totals: Record<Chamber, PeriodTotals> }[];
+  weeks: {
+    week: string;
+    start: string;
+    end: string;
+    sentence: string;
+    totals: Record<Chamber, PeriodTotals>;
+  }[];
 }
 
 export interface PartySplit {
@@ -208,10 +215,19 @@ export interface BillRecord {
   cosponsors: BillPerson[];
   cboCostEstimates: { title: string; description: string; pubDate: string; url: string }[];
   summary: { actionDesc: string; actionDate: string; paragraphs: string[] } | null;
-  actions: { date: string; text: string; type: string; rollCalls: { chamber: string; number: number; session: number }[] }[];
+  actions: {
+    date: string;
+    text: string;
+    type: string;
+    rollCalls: { chamber: string; number: number; session: number }[];
+  }[];
   textVersions: { type: string; date: string; formats: Record<string, string> }[];
   votes: BillRecordVote[];
-  days: { date: string; chamber: Chamber; entries: { kind: string; text: string; source: string }[] }[];
+  days: {
+    date: string;
+    chamber: Chamber;
+    entries: { kind: string; text: string; source: string }[];
+  }[];
   congressGovUrl: string;
   /** Parts Congress.gov could not return this time: shown as unavailable, never as empty. */
   unavailable: string[];

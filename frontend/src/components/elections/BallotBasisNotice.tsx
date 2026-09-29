@@ -56,7 +56,10 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
 
   if (basis.basis === "filers") {
     return (
-      <p className="mb-6 font-mono text-xs leading-relaxed text-ink-min" data-testid="ballot-filers">
+      <p
+        className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
+        data-testid="ballot-filers"
+      >
         Candidates below are FEC filers, not confirmed ballot positions — this state&apos;s primary
         has not been held yet, so nobody knows the ballot. Sorted by money raised, which is the only
         published signal of who is running a real campaign.
@@ -66,7 +69,10 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
 
   if (basis.basis === "primary") {
     return (
-      <p className="mb-6 font-mono text-xs leading-relaxed text-ink-min" data-testid="ballot-primary">
+      <p
+        className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
+        data-testid="ballot-primary"
+      >
         Candidates below are on this state&apos;s PRIMARY ballot. Being on it says nothing about
         surviving it.
       </p>

@@ -5,16 +5,32 @@ import LobbyingMatches from "./LobbyingMatches";
 
 function lobbied(overrides: Partial<LobbiedBill>): LobbiedBill {
   return {
-    billId: "HR.1492", label: "H.R. 1492", billName: "", vote: "Yea", motionType: "passage", voteContext: "",
-    filingYear: 2025, filingUrl: "https://lda.gov/f/1/print/", registrant: "ALTRIUS GROUP, LLC",
-    client: "PFIZER INC.", filedBy: "ALTRIUS GROUP, LLC", filingCount: 1, ...overrides,
+    billId: "HR.1492",
+    label: "H.R. 1492",
+    billName: "",
+    vote: "Yea",
+    motionType: "passage",
+    voteContext: "",
+    filingYear: 2025,
+    filingUrl: "https://lda.gov/f/1/print/",
+    registrant: "ALTRIUS GROUP, LLC",
+    client: "PFIZER INC.",
+    filedBy: "ALTRIUS GROUP, LLC",
+    filingCount: 1,
+    ...overrides,
   };
 }
 
 function match(bills: LobbiedBill[], topical: string[] = []): LobbyingMatch {
   return {
-    lobbyistOrg: "Pfizer Inc PAC", industry: "PHARMA", lobbyingSpend: 0, donationToSenator: 5000,
-    billsInfluenced: topical, senatorVoteAligned: null, description: "d", lobbiedBills: bills,
+    lobbyistOrg: "Pfizer Inc PAC",
+    industry: "PHARMA",
+    lobbyingSpend: 0,
+    donationToSenator: 5000,
+    billsInfluenced: topical,
+    senatorVoteAligned: null,
+    description: "d",
+    lobbiedBills: bills,
   };
 }
 
@@ -30,8 +46,24 @@ describe("LobbyingMatches", () => {
         matches={[
           match([
             lobbied({}),
-            lobbied({ billId: "S.1040", label: "S. 1040", vote: "Nay", motionType: "veto", voteContext: "on a motion about the President's veto", client: "X", filedBy: null }),
-            lobbied({ billId: "S.1041", label: "S. 1041", vote: "Nay", motionType: null, voteContext: "on a motion, not necessarily passage", client: "Y", filedBy: null }),
+            lobbied({
+              billId: "S.1040",
+              label: "S. 1040",
+              vote: "Nay",
+              motionType: "veto",
+              voteContext: "on a motion about the President's veto",
+              client: "X",
+              filedBy: null,
+            }),
+            lobbied({
+              billId: "S.1041",
+              label: "S. 1041",
+              vote: "Nay",
+              motionType: null,
+              voteContext: "on a motion, not necessarily passage",
+              client: "Y",
+              filedBy: null,
+            }),
           ]),
         ]}
       />
