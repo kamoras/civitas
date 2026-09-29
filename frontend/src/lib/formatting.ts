@@ -245,3 +245,12 @@ export function competitionRanks<T>(
   });
   return ranks;
 }
+
+/**
+ * A backend phrase shown on its own as a label: its first letter raised
+ * ("progressive Democrat leader" -> "Progressive Democrat leader"). The
+ * phrase is written lowercase so it also reads mid-sentence.
+ */
+export function asLabel(phrase: string): string {
+  return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+}

@@ -1,10 +1,11 @@
 """Tests for early_signal.py — drafting a hedged, primary-source-only
 ActionIssue from a Senate roll-call vote before press coverage exists."""
 
+import json
 from datetime import timedelta
 from unittest.mock import patch
 
-from app.models import ActionIssue, ActionIssueStatus
+from app.models import ActionIssue, ActionIssueStatus, Senator, SponsoredBill
 from app.pipeline.analyze import early_signal as es
 from app.time_utils import utcnow
 
@@ -208,20 +209,97 @@ class TestCheckRollCallSignals:
         source_types = {row.source_type for row in db_session.query(ActionIssue).all()}
         assert source_types == {"senate_roll_call_vote", "house_roll_call_vote"}
 
-    def test_generation_that_never_grounds_creates_nothing(self, db_session):
-        """A generation that keeps fabricating a number outside the vote
-        record must not create a row, not just a low-quality one."""
-        bad_result = {
-            "title": "Senate passes the bill",
-            "summary": "The Senate voted 999-1 on the measure.",
-            "facts": ["The vote passed 999-1."],
-        }
-        with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=bad_result):
-            created = es.check_roll_call_signals(db_session)
-        assert created == 0
-        assert db_session.query(ActionIssue).count() == 0
+    def test_the_draft_is_the_vote_record_in_a_template(self, db_session):
+        """2026-09-28: the model's draft of S. 4668's passage called 77-22
+        "a narrow" vote. The draft now states only the record: measure,
+        question, result, tally, date. The issue carries the refresh's
+        date, never the Senate's raw one, which sorted after every ISO date
+        and hid the rest of the Action Center."""
+        vote = _vote(
+            roll_number=250, yeas=77, nays=22, vote_date="September 28, 2026,  09:42 PM",
+            document_title="A bill to protect the name, image, and likeness rights of student athletes.",
+        )
+        vote.update(documentName="S. 4668", result="Bill Passed")
+        with patch.object(es, "_fetch_recent_votes", return_value=[vote]), \
+                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
+            assert es.check_roll_call_signals(db_session, "2026-09-29") == 1
+        row = db_session.query(ActionIssue).one()
+        assert row.title == "Senate vote on S. 4668: Bill Passed, 77-22"
+        assert row.date == "2026-09-29" and row.primary_article_date == "2026-09-28"
+        assert "narrow" not in f"{row.title} {row.summary} {row.facts}"
+        assert json.loads(row.related_bill_ids) == [{"name": "S. 4668", "id": "S.4668"}]
+        assert json.loads(row.facts)[0] == "Tally: 77 yea, 22 nay, 0 not voting."
+
+
+def _reported(db_session, title, summary="", bills=None):
+    row = ActionIssue(
+        date="2026-09-29", rank=1, title=title, summary=summary, facts="[]", source_urls="[]",
+        source_names='["NPR"]', is_current=True, status=ActionIssueStatus.CONFIRMED,
+        related_bill_ids=json.dumps(bills or []),
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+class TestCoveredVotes:
+    """2026-09-28: news of S. 4668's passage ("the Protect College Sports
+    Act") became an issue first; the roll-call draft then made a second,
+    thinner issue about the same vote."""
+
+    def _vote(self):
+        vote = _vote(roll_number=250, yeas=77, nays=22)
+        vote.update(documentName="S. 4668", result="Bill Passed")
+        return vote
+
+    def _bill(self, db_session):
+        db_session.add(Senator(id="S1", name="A Senator", state="TX", party="R", is_current=True))
+        db_session.add(SponsoredBill(senator_id="S1", bill_id="S.4668", title="Protect College Sports Act of 2026",
+                                     congress=119))
+        db_session.commit()
+
+    def test_a_vote_whose_bill_an_issue_names_by_short_title_is_not_drafted(self, db_session):
+        self._bill(db_session)
+        _reported(db_session, "The Senate passes the Protect College Sports Act, but the bill's future is unclear")
+        with patch.object(es, "_fetch_recent_votes", return_value=[self._vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
+            assert es.check_roll_call_signals(db_session, "2026-09-29") == 0
+
+    def test_a_vote_whose_bill_an_issue_records_is_not_drafted(self, db_session):
+        _reported(db_session, "College sports bill heads to the House", bills=[{"name": "S. 4668", "id": "S.4668"}])
+        with patch.object(es, "_fetch_recent_votes", return_value=[self._vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
+            assert es.check_roll_call_signals(db_session, "2026-09-29") == 0
+
+    def test_an_unrelated_issue_does_not_stop_the_draft(self, db_session):
+        self._bill(db_session)
+        _reported(db_session, "US, China agree to cut tariffs on $60B worth of products")
+        with patch.object(es, "_fetch_recent_votes", return_value=[self._vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
+            assert es.check_roll_call_signals(db_session, "2026-09-29") == 1
+
+    def test_a_draft_gives_way_once_reporting_covers_its_bill(self, db_session):
+        self._bill(db_session)
+        with patch.object(es, "_fetch_recent_votes", return_value=[self._vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
+            es.check_roll_call_signals(db_session, "2026-09-29")
+        draft = db_session.query(ActionIssue).one()
+        assert es.retire_covered_developing_issues(db_session) == 0
+        news = _reported(db_session, "Senate passes college sports bill", "The Protect College Sports Act passed 77-22.")
+        assert es.retire_covered_developing_issues(db_session) == 1
+        assert draft.is_current is False and news.is_current is True
+
+    def test_a_draft_from_before_it_recorded_its_bill_is_matched_by_its_text(self, db_session):
+        self._bill(db_session)
+        legacy = ActionIssue(
+            date="2026-09-29", rank=4, title="Senate vote on S. 4668", summary="The Senate voted 77 in favor.",
+            facts="[]", source_urls="[]", source_names="[]", is_current=True,
+            status=ActionIssueStatus.DEVELOPING, source_type="senate_roll_call_vote",
+        )
+        db_session.add(legacy)
+        db_session.commit()
+        _reported(db_session, "The Senate passes the Protect College Sports Act")
+        assert es.retire_covered_developing_issues(db_session) == 1
 
 
 class TestCheckFederalRegisterSignals:

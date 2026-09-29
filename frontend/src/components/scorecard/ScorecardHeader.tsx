@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Senator } from "@/types/senator";
 import type { Committee } from "@/types/politicians";
-import { displayScore, safeHref } from "@/lib/formatting";
+import { asLabel, displayScore, safeHref } from "@/lib/formatting";
 import { getScoreColor, getScoreLabel } from "@/lib/representation";
 import { currentCongressLabel } from "@/lib/sources";
 import { PARTY_BORDER, PARTY_COLORS, PARTY_LABELS } from "@/lib/partyStyles";
@@ -92,7 +92,7 @@ export default function ScorecardHeader({
               )}
               {member.sponsorshipDescription && (
                 <MetricTooltip text="Derived from cosponsorship patterns: PageRank for influence and SVD for ideology, relative to the rest of the chamber.">
-                  {member.sponsorshipDescription}
+                  {asLabel(member.sponsorshipDescription)}
                 </MetricTooltip>
               )}
             </p>

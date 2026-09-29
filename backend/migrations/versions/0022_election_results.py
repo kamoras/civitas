@@ -4,16 +4,16 @@ general-election counts; action_issues.count_as_of / count_official
 New tables and two nullable columns only, so the previous image runs
 unchanged against the migrated schema.
 
-Revision ID: 0021
-Revises: 0020
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-09-28
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0021'
-down_revision = '0020'
+revision = '0022'
+down_revision = '0021'
 branch_labels = None
 depends_on = None
 
