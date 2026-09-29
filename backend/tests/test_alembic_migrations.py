@@ -188,19 +188,19 @@ def test_an_owner_this_image_does_not_know_reads_as_unknown():
     assert StockTradeSchema(owner="spouse", **fields).owner == "spouse"
 
 
-def test_0016_backfills_a_successful_check_only_for_established_answers(patched_engine):
+def test_0017_backfills_a_successful_check_only_for_established_answers(patched_engine):
     """last_success_at means an answer was established (covered or
     confirmed none). A not_yet_covered or ingest_failed row established
     nothing, so the backfill must not give it a "last read successfully"
     date."""
-    database._run_migrations("0015")
+    database._run_migrations("0016")
     with patched_engine.begin() as conn:
         for n, status in enumerate(["covered", "confirmed_none", "not_yet_covered", "ingest_failed"]):
             conn.execute(text(
                 "INSERT INTO measure_coverage (state, election_date, status, measure_count, checked_at) "
                 f"VALUES ('S{n}', '2026-11-03', '{status}', 0, '2026-09-01 00:00:00')"
             ))
-    database._run_migrations("0016")
+    database._run_migrations("0017")
     with patched_engine.connect() as conn:
         rows = conn.execute(text(
             "SELECT status, last_success_at IS NOT NULL FROM measure_coverage ORDER BY state"
