@@ -27,4 +27,18 @@ describe("retryKeepingFocus", () => {
     retryKeepingFocus(retry)({ currentTarget: document.getElementById("retry")! });
     expect(retry).toHaveBeenCalledOnce();
   });
+
+  it("prefers the caller's nearer target", () => {
+    document.body.innerHTML = `
+      <div role="tabpanel" tabindex="0">
+        <ul><li><button id="toggle" aria-expanded="true">Row</button>
+          <button id="retry">Try again</button></li></ul>
+      </div>`;
+    const retry = vi.fn();
+    retryKeepingFocus(retry, (b) =>
+      b.closest("li")?.querySelector<HTMLElement>("button[aria-expanded]")
+    )({ currentTarget: document.getElementById("retry")! });
+    expect(document.activeElement?.id).toBe("toggle");
+    expect(retry).toHaveBeenCalledOnce();
+  });
 });

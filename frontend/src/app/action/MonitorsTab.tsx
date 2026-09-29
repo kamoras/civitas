@@ -38,7 +38,12 @@ function MonitorUpdates({ slug }: { slug: string }) {
     return (
       <p role="alert" className="py-3 font-mono text-xs text-signal-red">
         Could not load this monitor&apos;s updates.{" "}
-        <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
+        <button
+          onClick={retryKeepingFocus(request.retry, (b) =>
+            b.closest("li")?.querySelector<HTMLElement>("button[aria-expanded]")
+          )}
+          className={TEXT_LINK}
+        >
           Try again
         </button>
       </p>
