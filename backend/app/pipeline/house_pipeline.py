@@ -950,6 +950,11 @@ async def run_house_pipeline() -> dict:
             except Exception:
                 logger.exception("House ground truth check failed (non-fatal)")
 
+            # Same component-overlap check as senate_pipeline.py.
+            from app.pipeline.analyze.signal_overlap import record_signal_overlap
+
+            record_signal_overlap(db, "house")
+
             progress.complete("snapshots")
 
             from app.models import Representative
