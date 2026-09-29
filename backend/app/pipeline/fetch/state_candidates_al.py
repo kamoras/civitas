@@ -2,6 +2,13 @@
 single-state deployment covering ONLY the 2026-08-11 special primary — not
 Alabama's whole federal slate, and not by choice.
 
+(Two more readings ride beside it, both from a different Secretary of
+State publication -- the official primary and runoff precinct results,
+see "State offices" below: a state that opts in with `statewide_offices`
+gets its statewide executive nominees, and `state_office_results.
+read_senate` adds the U.S. SENATE nominees, and `read_house` the House
+districts the special primary does NOT decide.)
+
 WHY JUST THE SPECIAL PRIMARY: following Louisiana v. Callais (2026-04-29)
 and a Alabama Legislature special session, Governor Ivey ordered four of
 Alabama's seven US House districts (1, 2, 6, 7) redrawn and re-run under a
@@ -19,15 +26,16 @@ SCANNED image with no text layer at all (confirmed: pdftotext, pdffonts and
 pdfimages against six of these certification PDFs all show zero embedded
 fonts, only JPEG/JBIG2 raster pages) — unreadable without OCR, which this
 codebase does not build. And the one piece that WOULD close the gap without
-OCR — the June 16 Republican Senate runoff's own vote count — has no
-published machine-readable file anywhere findable (the Democratic runoff's
-Excel exists publicly; the Republican Party's equivalent apparently was
-only ever shared with the Secretary of State's office directly, per its own
-certification letter: "the documents found in the shared Dropbox folder").
-So CD3, CD4, CD5 and the Senate seat stay on the ordinary FEC-filer
-fallback rather than being wrongly guessed from certification news
-coverage — this module reads only what has a genuine machine-readable
-source: the four redrawn districts.
+OCR — the June 16 Republican Senate runoff's own vote count — was not
+found when this module was written (2026-09-03): the party workbooks above
+include the Democratic runoff but not the Republican one. It does exist:
+the Secretary of State later posted official precinct results for BOTH
+elections, both parties, on its election-data page (the
+2026-07/{year}_Primary_Election.zip and _PRIMARY_RUNOFF_ELECTION.zip
+files, found 2026-09-28), and the Senate seat is now read from them (see
+"State offices" below), as are CD3, CD4 and CD5 -- the districts the
+map left alone -- with `read_house`. The special-primary page stays the
+only source for the four redrawn districts.
 
 ecode=1001300 is the special primary's own results-page id on Alabama's
 ASP.NET election-night system, verified live 2026-09-03 (weeks after the
@@ -58,16 +66,26 @@ Mercer (CD6 D, 64.17%), Gary Palmer (CD6 R, 86.98%), Ammie Akin (CD7 R,
 meaning Democrats fielded no candidate in those three redrawn districts.
 """
 
+import asyncio
+import html
+import io
 import logging
+import re
+import zipfile
 from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 import httpx
+import xlrd
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
+    clean_display_name,
     federal_record,
     normalize_party,
     parse_office,
+    parse_statewide_office,
     pick_nominee,
     surname,
 )
@@ -160,16 +178,257 @@ class _ContestResultsParser(HTMLParser):
         self._capture = None
 
 
-async def fetch_confirmed_candidates(
-    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is AL-only by construction
-) -> list[dict] | None:
-    if year != YEAR:
-        # See module docstring — ecode=1001300 names one specific 2026
-        # election with no date of its own; reusing it for any other
-        # cycle would confirm that cycle's candidates off a stale surname
-        # match rather than that cycle's real result.
-        return []
+# ── State offices: the official precinct results ─────────────────────
+#
+# The special primary above only ever carried four congressional
+# districts. Alabama's statewide executive offices were decided in the
+# ORDINARY May primary and June runoff, and the Secretary of State
+# publishes both as official precinct results on its election-data page:
+# one zip per election ("2026_Primary_Election.zip",
+# "2026_PRIMARY_RUNOFF_ELECTION.zip"), holding one legacy .xls workbook
+# per county. Each sheet has three label columns -- Contest Title, Party,
+# Candidate -- and then one column per precinct (plus ABSENTEE and
+# PROVISIONAL), so a candidate's statewide total is the sum of every
+# numeric cell in their row across all 67 counties. Summed that way the
+# 2026 Republican primary gives Thomas (Tommy) Tuberville 422,255 votes for
+# Governor and Jim Zeigler 194,062 for PSC Place 2, both exactly the
+# Alabama Republican Party's own certified workbook's figures.
+#
+# Alabama nominates by MAJORITY (runoff_threshold_pct 50 in the config):
+# a primary leader below it is withheld and the runoff decides. A runoff
+# that has not been published yet decides nothing, so that office is
+# withheld rather than handed to the primary leader.
+#
+# Only STATEWIDE offices, and (with read_senate) the U.S. Senate seat, are
+# read from these files. The Senate seat was never redistricted, so its
+# regular primary and runoff are the real contest: the 2026 Republican
+# runoff gives Barry Moore 173,673 to Jared Hudson's 137,552, the
+# Democratic runoff Everett Wess 50,428 to Dakarai Larriett's 41,985.
+# Their House contests for the districts the special primary decides are
+# NEVER read: those are the pre-redistricting primaries its new map
+# voided. That set is the union of the districts with a contest on the
+# special primary's own page and the config's special_primary_districts
+# (from the proclamation), so neither a missing page contest nor a stale
+# config can let one through (special_primary_districts()). The other
+# House districts -- CD3, CD4, CD5 in 2026 -- are read with read_house,
+# only in the cycle whose special primary was actually read: Mike Rogers
+# (R-3, 83.2%), Robert Aderholt (R-4, 77.6%), Amanda Pusczek (D-4,
+# 62.8%), Andrew Sneed (D-5, runoff 16,688 to 4,607). Dale Strong (R-5)
+# was unopposed and is in no primary file -- and the same holds for a
+# STATEWIDE nominee who ran unopposed: Alabama prints no uncontested
+# contest, so an office read here can hold one party's nominee while the
+# other party's is absent. The Secretary of State's certifications of
+# general-election candidates, which would name them, are image-only
+# scans (checked 2026-09-28: 2026GeneralElectionStateCertificationof
+# {Democratic,Republican}Candidates.pdf, 13 and 14 pages, no text layer),
+# and are not OCR'd. The page says so: a primary-results source's marker
+# carries ballotList false, and the statewide section tells the reader an
+# office may be missing a party's nominee. Their legislative contests include State Senate districts 25
+# and 26, also redrawn and re-run. Reading either would publish a nominee
+# for a contest that no longer exists.
 
+_LABEL_COLUMNS = ("Contest Title", "Party", "Candidate")
+
+
+def _workbook_rows(payload: bytes) -> list[tuple[str, str, str, int]]:
+    """(contest, party, candidate, votes) for every row of one county's
+    precinct workbook, votes summed across its precinct columns. Empty
+    for a workbook without the three label columns."""
+    book = xlrd.open_workbook(file_contents=payload)
+    sheet = book.sheet_by_index(0)
+    if sheet.nrows == 0:
+        return []
+    header = [str(v).strip() for v in sheet.row_values(0)]
+    try:
+        cols = [header.index(name) for name in _LABEL_COLUMNS]
+    except ValueError:
+        return []
+    rows = []
+    for r in range(1, sheet.nrows):
+        values = sheet.row_values(r)
+        contest, party, candidate = (" ".join(str(values[c]).split()) for c in cols)
+        votes = sum(
+            v for i, v in enumerate(values)
+            if i not in cols and isinstance(v, float)
+        )
+        rows.append((contest, party, candidate, int(votes)))
+    return rows
+
+
+def contest_totals(archive: bytes, exclude: set[str]) -> dict[tuple[str, str], dict[str, int]]:
+    """{(contest, party): {candidate: statewide votes}} over every county
+    workbook in one election's zip."""
+    totals: dict[tuple[str, str], dict[str, int]] = {}
+    with zipfile.ZipFile(io.BytesIO(archive)) as zf:
+        for member in zf.namelist():
+            if not member.lower().endswith(".xls"):
+                continue
+            for contest, party, candidate, votes in _workbook_rows(zf.read(member)):
+                if not contest or not candidate or candidate in exclude:
+                    continue
+                seat = totals.setdefault((contest, party), {})
+                seat[candidate] = seat.get(candidate, 0) + votes
+    return totals
+
+
+def _regular_seat(
+    contest: str, party_text: str, senate: bool, house_excluded: frozenset[int] | None = None,
+) -> tuple[str, str | int | None] | None:
+    """(office, seat) for a contest these files may decide, or None.
+
+    A statewide executive office; the U.S. SENATE seat when `senate` is
+    set; and a U.S. House district only when `house_excluded` is given
+    and does NOT name it. `house_excluded` is every district the special
+    primary decides (see fetch_confirmed_candidates): those districts'
+    contests in these files are the pre-redistricting primaries the
+    court-ordered map voided, and are never read. None reads no House
+    contest at all."""
+    if normalize_party(party_text) is None:
+        return None
+    statewide = parse_statewide_office(contest)
+    if statewide is not None:
+        return statewide
+    federal = parse_office(contest)
+    if senate and federal == ("S", None):
+        return "S", None
+    if (
+        house_excluded is not None and federal is not None and federal[0] == "H"
+        and federal[1] is not None and federal[1] not in house_excluded
+    ):
+        return "H", federal[1]
+    return None
+
+
+def resolve_statewide(
+    primary: dict[tuple[str, str], dict[str, int]],
+    runoff: dict[tuple[str, str], dict[str, int]] | None,
+    runoff_threshold_pct: float | None,
+    senate: bool = False,
+    house_excluded: frozenset[int] | None = None,
+) -> list[dict]:
+    """One record per party per contest these files decide (see
+    _regular_seat): the primary's majority winner, or else the runoff's
+    winner -- who must have been on that primary's ballot. Nothing for a
+    contest whose runoff is not published, or that no one can be named
+    for safely (a tie). A Senate nominee is built as the same federal
+    record the House path emits, so it is confirmed against FEC the
+    same way."""
+    records = []
+    for (contest, party_text), choices in primary.items():
+        seat = _regular_seat(contest, party_text, senate, house_excluded)
+        if seat is None:
+            continue
+        party = normalize_party(party_text)
+        won = pick_nominee(list(choices.items()), runoff_threshold_pct=runoff_threshold_pct)
+        if won is None and runoff is not None:
+            second = runoff.get((contest, party_text)) or {}
+            won = pick_nominee(list(second.items()), runoff_threshold_pct=None)
+            if won is not None and won[0] not in choices:
+                won = None
+        if won is None:
+            continue
+        if seat[0] in ("S", "H"):
+            record = federal_record(seat[0], seat[1], party, won[0])
+            if record:
+                records.append(record)
+            continue
+        name = clean_display_name(won[0])
+        if name:
+            records.append({"office": seat[0], "district": seat[1], "party": party, "last_name": name})
+    return records
+
+
+def _runoff_owed(
+    primary: dict[tuple[str, str], dict[str, int]], runoff_threshold_pct: float | None, senate: bool = False,
+    house_excluded: frozenset[int] | None = None,
+) -> bool:
+    """Whether any contest these files decide had a primary leader short
+    of the majority, so that its nominee is decided by a runoff."""
+    return any(
+        _regular_seat(contest, party, senate, house_excluded) is not None
+        and pick_nominee(list(choices.items()), runoff_threshold_pct=runoff_threshold_pct) is None
+        for (contest, party), choices in primary.items()
+    )
+
+
+def _one_link(page: str, pattern: str | None, year: int) -> str | None:
+    if not pattern:
+        return None
+    found = {html.unescape(m.group(1)) for m in re.finditer(pattern.replace("{year}", str(year)), page)}
+    return found.pop() if len(found) == 1 else None
+
+
+async def _regular_nominees(
+    client: httpx.AsyncClient, year: int, spec: dict, senate: bool,
+    house_excluded: frozenset[int] | None = None,
+) -> list[dict] | None:
+    """Every statewide (and, with `senate`, U.S. Senate) nominee the
+    official primary and runoff precinct results name, or None when they
+    cannot be read in full.
+
+    None, never [], for results not posted yet: the caller records the
+    state as checked, so an empty list would publish "no statewide
+    offices on this ballot" for a state that simply has not counted.
+    The same holds while a runoff is owed but not posted -- the list
+    would silently lack every office still being decided."""
+    page_url = spec.get("page_url")
+    if not page_url:
+        return None
+    page = await fetch_text_with_retry(client, _rate_limiter, page_url, f"AL election data {year}")
+    if page is None:
+        return None
+    primary_link = _one_link(page, spec.get("primary_link_regex"), year)
+    if primary_link is None:
+        logger.info("AL: no single %d primary precinct-results file linked yet", year)
+        return None
+    runoff_link = _one_link(page, spec.get("runoff_link_regex"), year)
+    exclude = set(spec.get("exclude_choices") or [])
+
+    async def _totals(link: str, label: str) -> dict | None:
+        resp = await fetch_with_retry(
+            client, _rate_limiter, "GET", urljoin(page_url, link), timeout=120.0,
+            log_label=f"AL {label} precinct results {year}", headers=_HEADERS,
+        )
+        if resp is None:
+            return None
+        try:
+            return await asyncio.to_thread(contest_totals, resp.content, exclude)
+        except Exception:  # noqa: BLE001 - a corrupt zip or workbook is a skip, not a crash
+            logger.warning("AL %s precinct results for %d were not a readable zip of workbooks", label, year)
+            return None
+
+    primary = await _totals(primary_link, "primary")
+    if primary is None:
+        return None
+    threshold = runoff_threshold(spec)
+    runoff = None
+    if runoff_link is not None:
+        runoff = await _totals(runoff_link, "runoff")
+        if runoff is None:
+            return None
+    elif _runoff_owed(primary, threshold, senate, house_excluded):
+        logger.info("AL: %d statewide runoff results are owed but not posted yet", year)
+        return None
+    return resolve_statewide(primary, runoff, threshold, senate, house_excluded)
+
+
+def special_primary_districts(contests: dict[str, list], configured: list | None) -> frozenset[int]:
+    """Every House district the special primary decides: each district
+    with a contest on its own results page, plus every district the
+    config names from the proclamation. The union, because each alone can
+    miss one -- the page shows no contest for a party that fielded
+    nobody (CD1, CD2 and CD7 have no Democratic contest), and a
+    district where NEITHER party did would vanish from the page
+    entirely while still having been redrawn."""
+    seen = set()
+    for contest in contests:
+        office = parse_office(contest)
+        if office is not None and office[0] == "H" and office[1] is not None:
+            seen.add(office[1])
+    return frozenset(seen | {int(d) for d in (configured or [])})
+
+
+async def _special_primary(client: httpx.AsyncClient, year: int, source: dict) -> dict[str, list] | None:
     results_url = (
         "https://www2.alabamavotes.gov/electionNight/statewideResultsByContest.aspx"
         f"?ecode={source.get('ecode')}"
@@ -190,9 +449,26 @@ async def fetch_confirmed_candidates(
     if not parser.contests:
         logger.warning("No contests found on AL special primary results page")
         return None
+    return parser.contests
+
+
+async def fetch_confirmed_candidates(
+    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is AL-only by construction
+) -> list[dict] | None:
+    spec = source.get("state_office_results") or {}
+    want_statewide = bool(source.get("statewide_offices"))
+    want_senate = bool(spec.get("read_senate"))
+
+    # See module docstring — ecode=1001300 names one specific 2026
+    # election with no date of its own; reusing it for any other cycle
+    # would confirm that cycle's candidates off a stale surname match
+    # rather than that cycle's real result.
+    contests = await _special_primary(client, year, source) if year == YEAR else {}
+    if contests is None:
+        return None
 
     results: list[dict] = []
-    for contest, choices in parser.contests.items():
+    for contest, choices in contests.items():
         office_district = parse_office(contest)
         if office_district is None:
             continue
@@ -215,7 +491,32 @@ async def fetch_confirmed_candidates(
         if record:
             results.append(record)
 
-    if not results:
+    if year == YEAR and not results:
         logger.warning("AL special primary results yielded no confirmed nominees")
         return None
+
+    # The House districts the regular files may decide: only in the cycle
+    # whose special primary was just read, only when the config names the
+    # redistricted districts, and never one of those.
+    house_excluded = None
+    if spec.get("read_house") and year == YEAR and spec.get("special_primary_districts"):
+        house_excluded = special_primary_districts(contests, spec.get("special_primary_districts"))
+
+    if want_statewide or want_senate or house_excluded is not None:
+        found = await _regular_nominees(client, year, spec, want_senate, house_excluded)
+        if found is None:
+            # Nothing these files decide may be claimed from a partial
+            # reading.
+            return None
+        for record in found:
+            if record["office"] == "H":
+                # Belt and braces: _regular_seat already refuses these.
+                if house_excluded is None or record["district"] in house_excluded:
+                    continue
+            elif record["office"] == "S":
+                if not want_senate:
+                    continue
+            elif not want_statewide:
+                continue
+            results.append(record)
     return results
