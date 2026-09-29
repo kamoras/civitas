@@ -13,7 +13,13 @@ import pytest
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.pipeline.analyze.justice_loyalty import Vote, fit, label, loyalty_by_justice, president_on, score
 from app.pipeline.fetch.justice_records import fetch_scdb, fjc_appointments, scdb_president_votes
-from app.pipeline.justice_pipeline import _appointers, _bundled_rows, _database_name, run_justice_pipeline
+from app.pipeline.justice_pipeline import (
+    _appointers,
+    _bundled_rows,
+    _database_name,
+    _measure_loyalty,
+    run_justice_pipeline,
+)
 
 TERMS = [("P1", "2000-01-20", "2008-01-20"), ("P2", "2008-01-20", None)]
 
@@ -140,6 +146,15 @@ def test_the_run_reports_when_loyalty_was_not_measured(db_session):
     justice = {"id": "clarence_thomas", "name": "Clarence Thomas", "last_name": "Thomas"}
     with patch("app.pipeline.justice_pipeline.fetch_current_justices", AsyncMock(return_value=[justice])), \
          patch("app.pipeline.justice_pipeline.fetch_case_votes", AsyncMock(return_value=[])), \
-         patch("app.pipeline.justice_pipeline._measure_loyalty", AsyncMock(return_value=None)):
+         patch("app.pipeline.justice_pipeline._measure_loyalty", AsyncMock(return_value=(None, "x could not be read"))):
         result = asyncio.run(run_justice_pipeline(db_session))
-    assert result == {"justices": 1, "votes": 0, "loyalty_measured": False}
+    assert result == {"justices": 1, "votes": 0, "loyalty_unmeasured": "x could not be read"}
+
+
+def test_unmeasured_loyalty_names_every_source_that_was_down(db_session):
+    # No presidents stored, the Database down, the FJC file fine.
+    with patch("app.pipeline.justice_pipeline.fetch_scdb", AsyncMock(return_value=None)), \
+         patch("app.pipeline.justice_pipeline.fetch_fjc", AsyncMock(return_value=[{"last": "thomas"}])):
+        measured, why = asyncio.run(_measure_loyalty(None, db_session))
+    assert measured is None
+    assert why == "the Supreme Court Database and the presidents table could not be read"

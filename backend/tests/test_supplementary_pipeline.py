@@ -153,10 +153,20 @@ class TestSupplementaryPipelineRunTracking:
     def test_justice_step_says_when_loyalty_was_not_measured(self, db_session):
         # The voting record refreshing is not the score being measured: a
         # bare "9 scored" hid the SCDB 403 of 2026-09-29.
-        _run(db_session, justice_result={"justices": 9, "loyalty_measured": False})
+        why = "the Supreme Court Database could not be read"
+        with patch("app.pipeline.supplementary_pipeline.send_ops_alert") as alert:
+            _run(db_session, justice_result={"justices": 9, "loyalty_unmeasured": why})
         steps = json.loads(db_session.query(SupplementaryPipelineRun).one().progress_detail)
         step = next(s for s in steps if s["key"] == "justice_scorecards")
-        assert step["detail"] == "9 scored, loyalty not measured (a source is down)"
+        assert step["detail"] == f"9 scored, loyalty not measured: {why}"
+        # The alert carries the reason: the logs that named it rotated away.
+        alert.assert_called_once()
+        assert why in alert.call_args.args[1]
+
+    def test_a_measured_run_sends_no_alert(self, db_session):
+        with patch("app.pipeline.supplementary_pipeline.send_ops_alert") as alert:
+            _run(db_session, justice_result={"justices": 9, "loyalty_unmeasured": None})
+        alert.assert_not_called()
 
     def test_committee_leadership_skipped_outside_weekly_cadence_when_not_missing(self, db_session):
         with patch("app.pipeline.supplementary_pipeline.utcnow",

@@ -58,15 +58,23 @@ def _appointers(names: set[str], appointments: list[dict], terms: list[tuple[str
     return out
 
 
-async def _measure_loyalty(client: httpx.AsyncClient, db: Session) -> dict | None:
-    """{"loyalty": {database name: Loyalty}, "term", "current", "ideal"}, or
-    None when a source can't be read (the stored values then stand)."""
+async def _measure_loyalty(client: httpx.AsyncClient, db: Session) -> tuple[dict | None, str | None]:
+    """({"loyalty": {database name: Loyalty}, "term", "current", "ideal"},
+    None), or (None, what couldn't be read) when a source is down: the
+    stored values then stand, and the reason goes into the run's alert,
+    which outlives the logs."""
     scdb = await fetch_scdb(client, db)
     appointments = await fetch_fjc(client, db)
     terms = [(p.name, p.term_start, p.term_end) for p in db.query(President).order_by(President.term_start)]
-    if scdb is None or appointments is None or not terms:
-        logger.warning("Justice loyalty not measured: %s", "no presidents stored" if not terms else "a source is down")
-        return None
+    down = [name for name, missing in (
+        ("the Supreme Court Database", scdb is None),
+        ("the FJC judges file", appointments is None),
+        ("the presidents table", not terms),
+    ) if missing]
+    if down:
+        why = " and ".join(down) + " could not be read"
+        logger.warning("Justice loyalty not measured: %s", why)
+        return None, why
     votes = [Vote(j, d, pet, gov) for j, d, pet, gov, term in scdb["votes"] if term > _BUNDLE_LAST_TERM]
     rows = _bundled_rows()
     for justice, labeled in label(votes, _appointers({v.justice for v in votes}, appointments, terms), terms).items():
@@ -75,7 +83,7 @@ async def _measure_loyalty(client: httpx.AsyncClient, db: Session) -> dict | Non
     logger.info("Justice loyalty: %d justices, mean %+.3f, between-justice sd %.3f (%s)",
                 len(loyalty), mean, spread, scdb["release"])
     return {"loyalty": loyalty, "term": scdb["term"], "current": scdb["current"],
-            "ideal": await fetch_martin_quinn(client, db) or {}}
+            "ideal": await fetch_martin_quinn(client, db) or {}}, None
 
 
 def _database_name(justice: dict, current: list[str]) -> str | None:
@@ -119,7 +127,7 @@ async def run_justice_pipeline(db: Session) -> dict:
             return {"justices": 0, "votes": 0}
 
         all_votes = await fetch_case_votes(client)
-        measured = await _measure_loyalty(client, db)
+        measured, unmeasured_why = await _measure_loyalty(client, db)
 
     case_votes, justice_votes = group_votes_by_case_and_justice(all_votes)
 
@@ -165,4 +173,4 @@ async def run_justice_pipeline(db: Session) -> dict:
 
     db.commit()
     logger.info("=== Justice pipeline complete: %d justices, %d votes ===", len(justices), len(all_votes))
-    return {"justices": len(justices), "votes": len(all_votes), "loyalty_measured": measured is not None}
+    return {"justices": len(justices), "votes": len(all_votes), "loyalty_unmeasured": unmeasured_why}
