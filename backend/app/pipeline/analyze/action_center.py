@@ -51,8 +51,10 @@ from app.pipeline.analyze import action_thresholds
 from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
 from app.pipeline.analyze.early_signal import (
     CONFIRMATION_WINDOW_HOURS,
+    ROLL_CALL_SOURCES,
     check_federal_register_signals,
     check_roll_call_signals,
+    covering_issue,
     expire_stale_developing_issues,
     retire_covered_developing_issues,
 )
@@ -794,7 +796,17 @@ def mark_recent_duplicates(db: "Session") -> int:
     for idx, issue in enumerate(pool):
         rep = representative[idx]
         issue.duplicate_of_id = None if rep == idx else pool[rep].id
-        marked += rep != idx
+        # A vote draft whose bill a reported issue covers duplicates that
+        # issue, though the titles differ too much to cluster ("Senate vote
+        # on S. 4668" / "The Senate passes the Protect College Sports Act").
+        # Decided here, from the pool, not stored by the retirement pass:
+        # this loop resets every mark each run, and a covering issue that
+        # has since left the Action Center still covers the vote.
+        if issue.duplicate_of_id is None and issue.status == ActionIssueStatus.DEVELOPING \
+                and issue.source_type in ROLL_CALL_SOURCES:
+            covering = covering_issue(db, issue, pool)
+            issue.duplicate_of_id = covering.id if covering else None
+        marked += issue.duplicate_of_id is not None
     db.commit()
     return marked
 
@@ -3834,7 +3846,8 @@ def _find_matching_issue(
 
 
 def _run_periodic_bluesky_posts(db: Session) -> None:
-    """The daily member spotlight.
+    """The daily member spotlight, and the hourly retry of posts Bluesky
+    refused (broadcast.deliver_pending).
 
     It doesn't depend on the news at all — it reads member scores — but it
     ran only as stage 6 of the refresh, downstream of the two early
@@ -3853,6 +3866,13 @@ def _run_periodic_bluesky_posts(db: Session) -> None:
         post_daily_spotlight(db)
     except Exception:
         logger.exception("Bluesky spotlight post failed (non-fatal)")
+    # Hourly, whatever the news did: a post Bluesky refused earlier today
+    # (it is already in the feed) gets another try.
+    try:
+        from app.broadcast import deliver_pending
+        deliver_pending(db)
+    except Exception:
+        logger.exception("Retrying undelivered Bluesky posts failed (non-fatal)")
 
 
 def _persist_metrics(db: Session) -> dict[str, int]:

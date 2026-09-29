@@ -1,4 +1,5 @@
-"""The daily member spotlight on Bluesky.
+"""The daily member spotlight: in the Atom feed, and on Bluesky when an
+account is configured (app.broadcast.publish).
 
 Once a day, picks a senator or representative who hasn't been spotlighted
 yet (cycling through everyone before repeating) and posts their scores.
@@ -17,14 +18,11 @@ from datetime import datetime, UTC
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app import broadcast
 from app.models import BskySenatorSpotlight, Representative, Senator
-from app.pipeline.analyze.bluesky_utils import publish_post
 from app.pipeline.analyze.score_calculator import compute_overall_score
 
 logger = logging.getLogger(__name__)
-
-SITE = "https://civitas-research.org"
 
 
 def _scored_chamber_pool(db: Session, model) -> list:
@@ -91,13 +89,17 @@ def _pick_politician(
     return pick, rank, len(own_chamber), chamber
 
 
-def compose_spotlight(entity: "Senator | Representative", rank: int, total: int, chamber: str) -> str:
-    """The post: who, their Representation Score and rank within their own
-    chamber, and each dimension's score."""
-    identity = (
+def _identity(entity: "Senator | Representative", chamber: str) -> str:
+    return (
         f"{entity.name} ({entity.party}-{entity.state})" if chamber == "senate"
         else f"{entity.name} ({entity.party}-{entity.state}-{entity.district})"
     )
+
+
+def compose_spotlight(entity: "Senator | Representative", rank: int, total: int, chamber: str) -> str:
+    """The post: who, their Representation Score and rank within their own
+    chamber, and each dimension's score."""
+    identity = _identity(entity, chamber)
     noun = "senators" if chamber == "senate" else "representatives"
     # The same weighted composite the leaderboard shows.
     overall = compute_overall_score(entity)
@@ -109,22 +111,17 @@ def compose_spotlight(entity: "Senator | Representative", rank: int, total: int,
     )
 
 
-def _publish_spotlight(text: str, entity: "Senator | Representative") -> bool:
-    """Post the spotlight to Bluesky. Returns True on success."""
-    url = f"{SITE}/politicians/{entity.id}"
-    return publish_post(
-        text, url,
-        success_msg=f"Posted spotlight: {entity.name}",
-        error_context=f"politician {entity.id}",
+def _publish_spotlight(db: Session, text: str, entity: "Senator | Representative", chamber: str) -> None:
+    """Publish the spotlight: to the feed, then Bluesky if configured."""
+    broadcast.publish(
+        db, kind="spotlight", subject=f"member:{chamber}:{entity.id}", title=f"Member spotlight: {_identity(entity, chamber)}", text=text,
+        url=f"{broadcast.SITE_URL}/politicians/{entity.id}", state=entity.state,
     )
 
 
 def post_daily_spotlight(db: Session) -> None:
-    """Post a daily senator/representative score spotlight. No-op if
-    already posted today."""
-    if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
-        return
-
+    """Publish a daily senator/representative score spotlight. No-op if
+    already published today."""
     today = datetime.now(UTC).date().isoformat()
     already_posted = (
         db.query(BskySenatorSpotlight)
@@ -141,12 +138,13 @@ def post_daily_spotlight(db: Session) -> None:
         return
 
     text = compose_spotlight(entity, rank, total, chamber)
-    if _publish_spotlight(text, entity):
-        db.add(BskySenatorSpotlight(
-            senator_id=entity.id,
-            chamber=chamber,
-            posted_at=datetime.now(UTC),
-            post_text=text,
-        ))
-        db.commit()
-        logger.info("Spotlight posted (%s): %s", chamber, entity.name)
+    # Recorded in the same commit as the published post (broadcast.publish
+    # commits), so a crash can't publish a second spotlight today.
+    db.add(BskySenatorSpotlight(
+        senator_id=entity.id,
+        chamber=chamber,
+        posted_at=datetime.now(UTC),
+        post_text=text,
+    ))
+    _publish_spotlight(db, text, entity, chamber)
+    logger.info("Spotlight published (%s): %s", chamber, entity.name)

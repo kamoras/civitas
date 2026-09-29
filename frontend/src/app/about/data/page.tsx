@@ -199,8 +199,10 @@ export default function DataChapter() {
               the same, and short summaries of each period on the year-in-review timeline.
             </Item>
             <Item label="Explore">A summary of a document, only when you ask for one.</Item>
-            <Item label="Bluesky">
-              The wording around a post; an issue post&apos;s lead is the verified quote itself.
+            <Item label="Race posts">
+              Finding who did what in a news report about a race. Both parts are copied from the
+              report word for word and checked against it. An issue post is its issue&apos;s checked
+              claim; every other post fills a fixed template.
             </Item>
           </List>
         </Sub>

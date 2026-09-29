@@ -112,7 +112,10 @@ async def fetch_scdb(client: httpx.AsyncClient, db: Session) -> dict | None:
     release page or its download can't be read, or the file isn't the
     justice-centered data it should be."""
     archive = await _get(client, SCDB_ARCHIVE, "SCDB archive")
-    releases = sorted({(int(y), int(n)) for y, n in _RELEASE_RE.findall(archive.text)}) if archive else []
+    if archive is None:
+        logger.warning("SCDB: the archive %s could not be read", SCDB_ARCHIVE)
+        return None
+    releases = sorted({(int(y), int(n)) for y, n in _RELEASE_RE.findall(archive.text)})
     if not releases:
         logger.warning("SCDB: no release found on %s", SCDB_ARCHIVE)
         return None

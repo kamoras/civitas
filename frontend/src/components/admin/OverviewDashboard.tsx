@@ -10,6 +10,7 @@ import {
   type AdminPipelineStatus,
   type HostStats,
   type LoadTimes,
+  type OpsAlert,
   type PipelineTrendRun,
   type VisitorStatsDay,
 } from "@/lib/api";
@@ -33,6 +34,30 @@ function MoreLink({ onClick, children }: { onClick: () => void; children: string
     >
       {children} →
     </button>
+  );
+}
+
+/** The pipelines' operator alerts, newest first. The backend has recorded
+ *  these since 2026-07 but nothing showed them, so an alert with no ntfy
+ *  channel configured reached no one. */
+export function OpsAlerts({ alerts }: { alerts: OpsAlert[] | undefined }) {
+  if (!alerts) return <p className="text-xs font-mono text-ink-min">Loading…</p>;
+  if (alerts.length === 0)
+    return <p className="text-xs font-mono text-ink-min">No alerts recorded.</p>;
+  return (
+    <ul className="divide-y divide-white/[0.04] text-xs font-mono">
+      {alerts.map((a) => (
+        <li key={`${a.at}-${a.subject}`} className="py-2">
+          <div className="flex flex-wrap justify-between gap-x-3">
+            <span className="text-signal-magenta">{a.subject}</span>
+            <time dateTime={a.at} className="text-ink-lo tabular-nums">
+              {formatTime(a.at)}
+            </time>
+          </div>
+          <p className="mt-1 text-ink-lo whitespace-pre-wrap break-words">{a.body}</p>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -139,6 +164,10 @@ export function OverviewDashboard({
           note={dashboard?.pipeline.cronSchedule}
         />
       </div>
+
+      <Panel title="Ops alerts">
+        <OpsAlerts alerts={dashboard?.opsAlerts} />
+      </Panel>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel
