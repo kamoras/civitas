@@ -35,9 +35,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
 from app.election_calendar import (
-    CLASS_I_STATES,
-    CLASS_II_STATES,
-    CLASS_III_STATES,
+    federal_states,
     next_election_day,
     seats_up_for_year,
 )
@@ -80,14 +78,13 @@ ELECTION_PIPELINE_STEPS = [
 # set cycles through over multiple nightly runs rather than one multi-hour pass.
 FINANCIALS_BATCH_SIZE = 500
 
-# Every senator belongs to exactly one class, so the union of the three
-# class sets is precisely the 50 states — the only jurisdictions that hold
-# federal Senate/House elections. FEC candidate files also include DC and
-# territorial delegate filings (DC, PR, GU, VI, AS, MP); those are
+# The states (election_calendar.federal_states: every state with Senate
+# seats, read from the Senate's own list) are the only jurisdictions that
+# hold federal Senate/House elections. FEC candidate files also include DC
+# and territorial delegate filings (DC, PR, GU, VI, AS, MP); those are
 # deliberately excluded from the roster: PR's Resident Commissioner isn't
 # even elected in midterm years, and mixing non-voting delegate seats
 # unlabeled into a "House races" directory misstates what's on the ballot.
-STATES_WITH_FEDERAL_RACES = CLASS_I_STATES | CLASS_II_STATES | CLASS_III_STATES
 
 # Coverage items older than this are pruned outright — the coverage feed is
 # a live-coverage surface (race detail shows the latest 50), not an archive,
@@ -181,7 +178,7 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
 
     Validation per record: must confirm an election in `cycle`
     (_on_ballot_in), must be in one of the 50 states
-    (STATES_WITH_FEDERAL_RACES — DC/territorial delegate filings excluded,
+    (federal_states() — DC/territorial delegate filings excluded,
     see that constant's comment), and for House records, the district must
     exist in the real 435-seat apportionment (district_pvi.json's own
     "ST-N" keys, already the authoritative real-district map used
@@ -220,6 +217,7 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
     skipped_bad_district = 0
     skipped_no_senate_race = 0
     regular_senate_states = seats_up_for_year(cycle)
+    states = federal_states()
     real_districts = set(get_district_pvi_map())
     for raw in candidates_raw:
         try:
@@ -228,7 +226,7 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
             office = raw.get("office")
             if not candidate_id or not state or office not in ("H", "S"):
                 continue
-            if state not in STATES_WITH_FEDERAL_RACES:
+            if state not in states:
                 skipped_non_state += 1
                 continue
             if not _on_ballot_in(raw, cycle):
@@ -1258,7 +1256,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     failing: list[str] = []
     synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day, failing)
 
-    unread = sorted((STATES_WITH_FEDERAL_RACES | {"DC"}) - configured_states())
+    unread = sorted((federal_states() | {"DC"}) - configured_states())
     for state in unread:
         _record_unread_state(db, state, election_day)
     db.commit()
@@ -1363,6 +1361,11 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             db.commit()
             logger.info("--- Election: ROSTER SYNC ---")
             progress.begin("roster_sync")
+            # Which states hold which Senate class, from the Senate's own
+            # list, before the roster is filtered by it. Best-effort: a
+            # failed read keeps what is stored (senate_classes.py).
+            from app.pipeline.fetch.senate_classes import refresh_senate_classes
+            await refresh_senate_classes(client)
             try:
                 house_raw = await fetch_all_candidates(client, db, cycle, "H")
                 senate_raw = await fetch_all_candidates(client, db, cycle, "S")

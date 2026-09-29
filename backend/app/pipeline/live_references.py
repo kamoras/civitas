@@ -72,7 +72,7 @@ def live_les_reference(
     return LES_REFERENCE.with_live(chamber, ref)
 
 
-def live_funding_reference(chamber: str, fundings: list[dict]) -> dict:
+def live_funding_reference(chamber: str, fundings: list[dict], states: list[str] | None = None) -> dict:
     """This run's Funding Independence reference for `chamber` (median PAC
     share of contributions — see score_calculator.compute_funding_reference),
     persisted and merged the same way as live_les_reference. Falls back to
@@ -80,7 +80,7 @@ def live_funding_reference(chamber: str, fundings: list[dict]) -> dict:
     from app.pipeline.analyze.population_reference import FUNDING_REFERENCE
     from app.pipeline.analyze.score_calculator import compute_funding_reference
 
-    ref = compute_funding_reference(fundings)
+    ref = compute_funding_reference(fundings, states)
     if ref is None:
         logger.warning(
             "Too few %s members with funding to measure a PAC-share reference "

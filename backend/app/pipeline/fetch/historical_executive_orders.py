@@ -112,6 +112,21 @@ _NAME_ALIASES: dict[str, str] = {
 _NAME_LOOKUP: dict[str, str] = {k.replace(".", ""): v for k, v in NAME_TO_ID.items()}
 
 
+def derived_president_id(name: str, number: int) -> str:
+    """The id for a president NAME_TO_ID doesn't list — a president sworn
+    in after it was written: the surname and the number ("vance-48"), the
+    same shape as the listed ids. The number makes it unique; the listed
+    ids stay as they are, since other tables key on them."""
+    words = [w for w in re.sub(r"[^a-z ]", "", name.lower()).split() if w not in {"jr", "sr", "ii", "iii"}]
+    return f"{words[-1] if words else 'president'}-{number}"
+
+
+def name_key(name: str) -> str:
+    """A name as the UCSB tables' join key: party tag, periods, case and
+    spacing removed."""
+    return _normalize_name(name).replace(".", "")
+
+
 def resolve_president_id(name: str) -> str | None:
     """Resolve a plain president name (case/whitespace/period differences
     handled here; term-disambiguating suffixes like "- I"/"- II" must
@@ -163,9 +178,10 @@ def _parse_eo_table(html: str) -> dict[str, dict]:
             name_raw = cells[0].text_content().strip()
             if not name_raw:
                 continue
-            pid = NAME_TO_ID.get(_normalize_name(name_raw))
-            if pid is None:
-                continue
+            # A president the id table doesn't list yet is kept under their
+            # name (by_name_key), so the roster can still join them: they
+            # get a derived id there, and their party and counts from here.
+            pid = NAME_TO_ID.get(_normalize_name(name_raw)) or by_name_key(name_raw)
 
             def _num(cell) -> float | None:
                 text = cell.text_content().strip().replace(",", "")
@@ -188,6 +204,17 @@ def _parse_eo_table(html: str) -> dict[str, dict]:
         if result:
             break  # the EO table is the first (and only) real data table on the page
     return result
+
+
+def by_name_key(name: str) -> str:
+    """Where _parse_eo_table keeps a president it has no id for."""
+    return f"name:{name_key(name)}"
+
+
+def eo_entry(eo_data: dict[str, dict], president_id: str, name: str) -> dict:
+    """A president's EO-table entry, by id, or by name for one the id table
+    doesn't list (their id is derived: derived_president_id)."""
+    return eo_data.get(president_id) or eo_data.get(by_name_key(name)) or {}
 
 
 async def fetch_historical_eo_counts(db: Session) -> dict[str, dict]:

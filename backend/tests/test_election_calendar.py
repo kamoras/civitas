@@ -1,20 +1,24 @@
 """Tests for election_calendar — the Senate three-class rotation and its
-mapping to election years. These sets are the authoritative cross-check
-_sync_roster uses to label special elections, so getting a class roster
-wrong silently mislabels real races; the structural invariants below
-(every state covered by the rotation) catch a typo'd roster.
+mapping to election years. The class sets are data (app/data/
+senate_classes.json, from the Senate's own member list; pipeline/fetch/
+senate_classes.py); these are the authoritative cross-check _sync_roster
+uses to label special elections, so the structural invariants below
+(every state covered by the rotation) check the bundled file.
 """
 
 from datetime import date
 
 from app.election_calendar import (
-    CLASS_I_STATES,
-    CLASS_II_STATES,
-    CLASS_III_STATES,
+    federal_states,
     next_election_day,
     next_senate_election_year,
     seats_up_for_year,
+    senate_classes,
 )
+
+CLASS_I_STATES = senate_classes()[1]
+CLASS_II_STATES = senate_classes()[2]
+CLASS_III_STATES = senate_classes()[3]
 
 ALL_STATES = frozenset({
     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -44,6 +48,7 @@ class TestClassRosters:
         # Every state elects senators, and every senator belongs to exactly
         # one class — so the three sets must cover all 50 states, no more.
         assert CLASS_I_STATES | CLASS_II_STATES | CLASS_III_STATES == ALL_STATES
+        assert federal_states() == ALL_STATES
 
     def test_class_sizes_are_33_33_34(self):
         """The constitutional split of 100 seats. This exact test would
@@ -107,3 +112,65 @@ class TestNextElectionDay:
 
     def test_day_after_election_day_rolls_to_next_cycle(self):
         assert next_election_day(date(2026, 11, 4)) == date(2028, 11, 7)
+
+
+class TestSenateClassesFromTheSenatesList:
+    """The class sets are read from senate.gov's member list, never typed."""
+
+    _XML = b"""<contact_information>
+    <member><state>MD</state><class>Class I</class></member>
+    <member><state>MD</state><class>Class III</class></member>
+    <member><state>AK</state><class>Class II</class></member>
+    <member><state>AK</state><class>Class III</class></member>
+    <member><state>ZZ</state><class>Class I</class></member>
+    </contact_information>"""
+
+    def test_parses_each_senators_class(self):
+        from app.pipeline.fetch.senate_classes import parse_senate_classes
+
+        assert parse_senate_classes(self._XML) == {1: {"MD", "ZZ"}, 2: {"AK"}, 3: {"MD", "AK"}}
+
+    def test_a_new_state_needs_no_code_change(self):
+        # "ZZ" parsed above like any other state: nothing lists the states.
+        from app.pipeline.fetch.senate_classes import gate, parse_senate_classes
+
+        assert gate(parse_senate_classes(self._XML)) == []
+
+    def test_gates_refuse_a_list_that_lost_a_class_or_put_a_state_in_all_three(self):
+        from app.pipeline.fetch.senate_classes import gate
+
+        assert gate({1: {"MD"}, 2: {"AK"}})
+        assert gate({1: {"MD"}, 2: {"MD"}, 3: {"MD"}})
+
+    async def test_a_vacant_seat_does_not_drop_its_state(self, tmp_path, monkeypatch):
+        import httpx
+
+        from app import election_calendar
+        from app.pipeline.fetch import senate_classes as sc
+
+        path = tmp_path / "senate_classes.json"
+        sc.write_classes({1: {"MD", "DE"}, 2: {"AK", "DE"}, 3: {"MD", "AK"}}, path)
+        # DE's Class I senator has left; the list shows only its Class II one.
+        vacancy = b"""<contact_information>
+        <member><state>MD</state><class>Class I</class></member>
+        <member><state>AK</state><class>Class II</class></member><member><state>DE</state><class>Class II</class></member>
+        <member><state>MD</state><class>Class III</class></member><member><state>AK</state><class>Class III</class></member>
+        </contact_information>"""
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, content=vacancy))
+        async with httpx.AsyncClient(transport=transport) as client:
+            assert await sc.refresh_senate_classes(client, str(path)) is True
+        assert "DE" in sc._stored(path)[1]
+        election_calendar.reset_senate_classes()
+
+    async def test_an_unreadable_list_keeps_what_is_stored(self, tmp_path):
+        import httpx
+
+        from app.pipeline.fetch import senate_classes as sc
+
+        path = tmp_path / "senate_classes.json"
+        sc.write_classes({1: {"MD"}, 2: {"AK"}, 3: {"MD", "AK"}}, path)
+        before = path.read_text()
+        transport = httpx.MockTransport(lambda request: httpx.Response(503))
+        async with httpx.AsyncClient(transport=transport) as client:
+            assert await sc.refresh_senate_classes(client, str(path)) is False
+        assert path.read_text() == before

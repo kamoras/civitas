@@ -4,6 +4,8 @@ import logging
 import re
 import unicodedata
 
+from app.election_calendar import federal_states
+from app.state_names import STATE_NAME_TO_CODE as STATE_NAMES_TO_CODES
 from app.time_utils import utcnow
 from app.pipeline.transform.committee_data import (
     load_committee_membership,
@@ -31,60 +33,8 @@ _NEUTRAL_REPRESENTATION_SCORE = {
     "legislativeEffectiveness": NEUTRAL_SCORE,
 }
 
-STATE_NAME_TO_CODE = {
-    "Alabama": "AL",
-    "Alaska": "AK",
-    "Arizona": "AZ",
-    "Arkansas": "AR",
-    "California": "CA",
-    "Colorado": "CO",
-    "Connecticut": "CT",
-    "Delaware": "DE",
-    "Florida": "FL",
-    "Georgia": "GA",
-    "Hawaii": "HI",
-    "Idaho": "ID",
-    "Illinois": "IL",
-    "Indiana": "IN",
-    "Iowa": "IA",
-    "Kansas": "KS",
-    "Kentucky": "KY",
-    "Louisiana": "LA",
-    "Maine": "ME",
-    "Maryland": "MD",
-    "Massachusetts": "MA",
-    "Michigan": "MI",
-    "Minnesota": "MN",
-    "Mississippi": "MS",
-    "Missouri": "MO",
-    "Montana": "MT",
-    "Nebraska": "NE",
-    "Nevada": "NV",
-    "New Hampshire": "NH",
-    "New Jersey": "NJ",
-    "New Mexico": "NM",
-    "New York": "NY",
-    "North Carolina": "NC",
-    "North Dakota": "ND",
-    "Ohio": "OH",
-    "Oklahoma": "OK",
-    "Oregon": "OR",
-    "Pennsylvania": "PA",
-    "Rhode Island": "RI",
-    "South Carolina": "SC",
-    "South Dakota": "SD",
-    "Tennessee": "TN",
-    "Texas": "TX",
-    "Utah": "UT",
-    "Vermont": "VT",
-    "Virginia": "VA",
-    "Washington": "WA",
-    "West Virginia": "WV",
-    "Wisconsin": "WI",
-    "Wyoming": "WY",
-}
+STATE_NAME_TO_CODE = STATE_NAMES_TO_CODES  # the one table (app/state_names.py), re-exported
 
-_VALID_STATE_CODES = set(STATE_NAME_TO_CODE.values())
 
 
 def normalize_members(
@@ -211,9 +161,10 @@ def normalize_house_members(
         raw_name = m.get("name") or f"{m.get('firstName', '')} {m.get('lastName', '')}"
         state = _extract_state_code(m, detail)
 
-        # Skip non-voting delegates (DC, PR, GU, VI, AS, MP) — only the 50
-        # states have voting House members (435 seats).
-        if state not in _VALID_STATE_CODES:
+        # Skip non-voting delegates (DC, PR, GU, VI, AS, MP): only the
+        # states (those with Senate seats, from the Senate's own list) have
+        # voting House members.
+        if state not in federal_states():
             continue
 
         party = _normalize_party(m.get("partyName") or m.get("party"))

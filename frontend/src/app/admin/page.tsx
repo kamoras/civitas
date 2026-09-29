@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSessionToken } from "@/hooks/useSessionToken";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import { focusTabWhenSelected } from "@/lib/tabFocus";
+import { focusTabWhenSelected, keepFocusOnSelectedTab } from "@/lib/tabFocus";
 import {
   adminAuth,
   fetchAdminDashboard,
@@ -168,6 +168,8 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+  // Back and Forward change the tab with focus still on the tab bar.
+  useEffect(() => keepFocusOnSelectedTab(`admin-tab-${tab}`), [tab]);
 
   const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const ids = TABS.map((t) => t.id);

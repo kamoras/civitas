@@ -1299,7 +1299,7 @@ async def test_a_state_with_no_direct_source_is_not_yet_covered(monkeypatch, db_
 
     election = _page_election()
     _direct_source(monkeypatch, [["1"]])
-    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "GA", "OR"})
+    monkeypatch.setattr(election_pipeline, "federal_states", lambda: frozenset({"CA", "GA", "OR"}))
     election_pipeline._set_coverage(
         db_session, "GA", election, MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart",
     )
@@ -1389,7 +1389,7 @@ async def test_an_unregistered_state_keeps_the_date_of_measures_still_on_file(mo
     until the election passes; the date that read happened still dates them."""
     election = _page_election()
     _direct_source(monkeypatch, [["1"]])
-    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "OR"})
+    monkeypatch.setattr(election_pipeline, "federal_states", lambda: frozenset({"CA", "OR"}))
     _measure(db_session, f"OR-{election}-1", state="OR", date=election, number="1", source_name="Oregon SoS")
     election_pipeline._set_coverage(db_session, "OR", election, MeasureCoverage.COVERED, 1, source_name="Oregon SoS")
     db_session.commit()
@@ -1413,7 +1413,7 @@ def test_every_unread_state_has_a_reason_and_no_read_state_claims_one():
     sources.invalidate_cache()
     registry = sources._load()
     unread = set(registry["unread"])
-    expected = (election_pipeline.STATES_WITH_FEDERAL_RACES | {"DC"}) - sources.configured_states()
+    expected = (election_pipeline.federal_states() | {"DC"}) - sources.configured_states()
     assert unread == expected
     assert not unread & sources.configured_states()
     for state, entry in registry["unread"].items():
@@ -1471,7 +1471,7 @@ def test_the_page_gives_an_unread_states_reason(db_session):
 @pytest.mark.asyncio
 async def test_an_unread_states_coverage_records_its_reason(monkeypatch, db_session):
     _direct_source(monkeypatch, [["1"]])
-    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "MS"})
+    monkeypatch.setattr(election_pipeline, "federal_states", lambda: frozenset({"CA", "MS"}))
     from app.pipeline.fetch import ballot_measure_pdf_sources as sources
 
     monkeypatch.setattr(sources, "unread_reason", lambda st: "Mississippi publishes no list." if st == "MS" else None)

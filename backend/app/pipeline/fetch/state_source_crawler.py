@@ -50,6 +50,8 @@ from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, runoff_threshold
 from app.pipeline.rate_limiter import RateLimiter
 
+from app.state_names import STATE_NAMES  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 _HEADERS = BROWSER_HEADERS
@@ -98,20 +100,9 @@ ELECTION_DOMAINS = {
 # portal is found without anyone being told its address.
 _RESULTS_PREFIXES = ["results", "electionresults", "enr", "results.enr", "election-results", ""]
 
-_STATE_NAMES = {
-    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California",
-    "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "FL": "Florida", "GA": "Georgia",
-    "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
-    "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
-    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
-    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
-    "NH": "NewHampshire", "NJ": "NewJersey", "NM": "NewMexico", "NY": "NewYork",
-    "NC": "NorthCarolina", "ND": "NorthDakota", "OH": "Ohio", "OK": "Oklahoma",
-    "OR": "Oregon", "PA": "Pennsylvania", "RI": "RhodeIsland", "SC": "SouthCarolina",
-    "SD": "SouthDakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
-    "VA": "Virginia", "WA": "Washington", "WV": "WestVirginia", "WI": "Wisconsin",
-    "WY": "Wyoming",
-}
+# The Enhanced Voting portal names a state in its API path without spaces
+# ("NewHampshire"), from the one state-name table.
+_STATE_NAMES = {code: name.replace(" ", "") for code, name in STATE_NAMES.items()}
 
 # An election this module will read nominees from, and one it won't. Both
 # are about the KIND of election, never its date, so they hold every cycle.

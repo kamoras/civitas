@@ -27,9 +27,16 @@ Coverage is real but incomplete by construction, not a fetch failure:
     remains the most recent data. Every currently-serving or just-out-of-
     office president has no score here, same null-when-inapplicable
     pattern as every other dimension in this pipeline.
-  - Grover Cleveland is rated once (historians assess the person, not
-    each of this platform's per-term id splits) — applied to both
-    cleveland-22 and cleveland-24.
+  - A president with two non-consecutive terms is rated once (historians
+    assess the person, not this platform's per-term ids): the score goes
+    to each of their terms that had ended by the survey's year — both of
+    Cleveland's; in the 2021 edition, Trump's first only. Read from the
+    presidents table's term dates, not a per-name rule.
+
+Which edition: the newest C-SPAN publishes. Each refresh tries the
+editions from this year back to 2021 (the one the parser was verified
+against) and keeps the newest that parses, so a new survey is picked up
+without a code change.
 
 Population score stats (mean/stdev, for the z-score+tanh mapping to 0-100
 — see president_scorer.calc_historical_legacy) are computed live from
@@ -44,14 +51,22 @@ import httpx
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
+from app.models import President
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.historical_executive_orders import resolve_president_id
+from app.pipeline.fetch.historical_executive_orders import name_key, resolve_president_id
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-URL = "https://www.c-span.org/presidentsurvey2021/?page=overall"
+# The edition the parser was verified against (2026-07); newer ones are
+# probed each refresh (see the module docstring).
+FIRST_EDITION = 2021
+
+
+def edition_url(edition: int) -> str:
+    return f"https://www.c-span.org/presidentsurvey{edition}/?page=overall"
 
 # C-SPAN's WAF blocks requests with no browser-like User-Agent (confirmed
 # 2026-07: a plain httpx/default-UA request 403s, the same UA string this
@@ -60,13 +75,14 @@ _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0)"}
 
 _RATE_LIMITER = RateLimiter(rps=1.0)
 _CACHE_TIER = "cspan-historians-survey"
-_CACHE_KEY = "2021-overall"
+_CACHE_KEY = "latest-overall"
 _CACHE_MAX_AGE_HOURS = 24 * 90  # a closed historical survey cycle changes at most once every few years
 
 
-def _parse_survey_table(html: str) -> dict[str, int]:
-    """Returns president_id -> 2021 Final Score (raw C-SPAN points, not
-    yet normalized to 0-100 — see calc_historical_legacy)."""
+def _parse_survey_table(html: str, edition: int, terms: list[tuple[str, str, str | None]]) -> dict[str, int]:
+    """Returns president_id -> the edition's Final Score (raw C-SPAN points,
+    not yet normalized to 0-100 — see calc_historical_legacy). `terms`:
+    every president's (id, name, term end), from the presidents table."""
     doc = lxml_html.fromstring(html)
     result: dict[str, int] = {}
     # The page embeds 11 near-identical tables (the aggregate "Final
@@ -85,28 +101,33 @@ def _parse_survey_table(html: str) -> dict[str, int]:
         except ValueError:
             continue
 
-        if name == "Grover Cleveland":
-            result["cleveland-22"] = score
-            result["cleveland-24"] = score
-            continue
-        if name == "Donald J. Trump":
-            # 2021 cycle only rates a completed term — this is Trump-45's
-            # just-finished first term, not (nonexistent at the time)
-            # trump-47.
-            result["trump-45"] = score
-            continue
-
-        pid = resolve_president_id(name)
-        if pid is None:
+        ids = rated_terms(name, edition, terms)
+        if not ids:
             logger.warning("C-SPAN historians survey: no id mapping for %r", name)
             continue
-        result[pid] = score
+        for pid in ids:
+            result[pid] = score
 
     return result
 
 
+def rated_terms(name: str, edition: int, terms: list[tuple[str, str, str | None]]) -> list[str]:
+    """The president ids a survey row rates: every term of that person
+    (their name, or the id their name resolves to) that had ended by the
+    edition's year — historians rate completed terms, and rate a person
+    once however many terms they served."""
+    resolved = resolve_president_id(name)
+    # The person's names: the survey's, and the roster's for the id it
+    # resolves to (they can differ: "James A. Garfield" / "James Garfield").
+    names = {name_key(name)} | {name_key(n) for pid, n, _ in terms if pid == resolved}
+    mine = [(pid, end) for pid, n, end in terms if pid == resolved or name_key(n) in names]
+    if not mine:
+        return [resolved] if resolved else []
+    return [pid for pid, end in mine if end and int(end[:4]) <= edition]
+
+
 async def fetch_cspan_historians_survey(client: httpx.AsyncClient, db: Session) -> dict[str, int]:
-    """Fetch + parse the 2021 C-SPAN Presidential Historians Survey.
+    """Fetch + parse the newest C-SPAN Presidential Historians Survey.
 
     Returns an empty dict (never None) on failure — callers should treat
     "couldn't fetch this run" as "leave existing rows alone," same as
@@ -115,26 +136,28 @@ async def fetch_cspan_historians_survey(client: httpx.AsyncClient, db: Session) 
     if cached is not None:
         return {k: int(v) for k, v in cached["data"].items()}
 
-    resp = await fetch_with_retry(
-        client, _RATE_LIMITER, "GET", URL, log_label="C-SPAN historians survey",
-        headers=_HEADERS,
-    )
-    if resp is None or resp.status_code != 200:
-        logger.warning("Failed to fetch C-SPAN historians survey (%s)", URL)
-        return {}
-
-    try:
-        data = _parse_survey_table(resp.text)
-    except Exception:
-        logger.exception("Failed to parse C-SPAN historians survey table")
-        return {}
-
-    if len(data) < 40:  # sanity floor — real page covers 44 presidents (46 rows minus Cleveland's dup)
-        logger.warning(
-            "C-SPAN historians survey parsed to only %d presidents — page structure may have changed",
-            len(data),
+    terms = [(p.id, p.name, p.term_end) for p in db.query(President).all()]
+    for edition in range(utcnow().year, FIRST_EDITION - 1, -1):
+        url = edition_url(edition)
+        resp = await fetch_with_retry(
+            client, _RATE_LIMITER, "GET", url, log_label="C-SPAN historians survey",
+            headers=_HEADERS, retry_on_4xx=False,
         )
-        return data or {}
+        if resp is None or resp.status_code != 200:
+            continue  # no such edition (yet), or unreachable: try the one before
+        try:
+            data = _parse_survey_table(resp.text, edition, terms)
+        except Exception:
+            logger.exception("Failed to parse C-SPAN historians survey table (%s)", url)
+            continue
+        # Sanity floor — a real edition rates every past president (44 in
+        # 2021); a page that parses to fewer is a layout the parser no
+        # longer reads, and an older edition is better than a fragment.
+        if len(data) < 40:
+            logger.warning("C-SPAN historians survey %s parsed to only %d presidents", url, len(data))
+            continue
+        api_cache_set(db, _CACHE_TIER, _CACHE_KEY, {"edition": edition, "data": data})
+        return data
 
-    api_cache_set(db, _CACHE_TIER, _CACHE_KEY, {"data": data})
-    return data
+    logger.warning("No C-SPAN historians survey edition could be read")
+    return {}
