@@ -414,7 +414,10 @@ async def fetch_and_parse_ptr(
                 try:
                     # A blank owner is not stated on the Senate's forms, as
                     # on its electronic tables.
-                    rows, confidence = parse_pdf_bytes(pdf_resp.content, blank_owner="unknown")
+                    # A row whose date alone isn't legible is kept undated
+                    # (ptr_common.ocr_extract_rows); its disclosure date is
+                    # the filed date, below.
+                    rows, confidence = parse_pdf_bytes(pdf_resp.content, blank_owner="unknown", keep_undated=True)
                 except Exception as e:
                     logger.error("Failed to parse Senate paper PTR %s: %s", filing["report_url"], e)
     else:
@@ -445,7 +448,7 @@ async def fetch_and_parse_ptr(
         # date (the date the report was actually filed with the Secretary
         # of the Senate) is the real disclosure date; use it whenever the
         # parser had no genuine notification signal of its own.
-        if filed_date and row.disclosure_date == row.transaction_date:
+        if filed_date and (not row.disclosure_date or row.disclosure_date == row.transaction_date):
             row.disclosure_date = filed_date
 
     # The API cache stores plain JSON, not dataclasses — convert at this
