@@ -147,7 +147,7 @@ export default function FeedbackPage() {
                     maxLength={MESSAGE_MAX}
                     rows={6}
                     placeholder="Describe what you were trying to do, what happened, and what you expected instead."
-                    className="w-full font-mono text-sm bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder-white/15 px-3 py-2 outline-none resize-y"
+                    className="w-full font-mono text-sm bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-2 outline-none resize-y"
                   />
                   <p className="font-mono text-xs mt-1 flex items-center justify-between">
                     {/* The button disables below MESSAGE_MIN with nothing on

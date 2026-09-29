@@ -320,7 +320,8 @@ class StockTrade(Base):
     asset_name: Mapped[str] = mapped_column(String, nullable=False)
     owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent | unknown
     transaction_type: Mapped[str] = mapped_column(String, nullable=False)  # purchase | sale_full | sale_partial | exchange
-    transaction_date: Mapped[str] = mapped_column(String, nullable=False)
+    # NULL for a scanned row whose date isn't legible (ptr_common.ocr_extract_rows).
+    transaction_date: Mapped[str | None] = mapped_column(String, nullable=True)
     disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
     days_to_disclose: Mapped[int] = mapped_column(Integer, default=0)
     amount_low: Mapped[float] = mapped_column(Float, default=0.0)
@@ -567,7 +568,8 @@ class RepStockTrade(Base):
     asset_name: Mapped[str] = mapped_column(String, nullable=False)
     owner: Mapped[str] = mapped_column(String, default="self")
     transaction_type: Mapped[str] = mapped_column(String, nullable=False)
-    transaction_date: Mapped[str] = mapped_column(String, nullable=False)
+    # NULL for a scanned row whose date isn't legible (ptr_common.ocr_extract_rows).
+    transaction_date: Mapped[str | None] = mapped_column(String, nullable=True)
     disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
     days_to_disclose: Mapped[int] = mapped_column(Integer, default=0)
     amount_low: Mapped[float] = mapped_column(Float, default=0.0)

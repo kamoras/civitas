@@ -10,7 +10,8 @@ from app.pipeline.fetch.fec import (
     committee_master_cycles,
     fetch_committee_master,
     is_political_committee,
-    parse_committee_master,
+    parse_committee_rows,
+    resolve_connected_orgs,
     resolve_committee_meta,
 )
 
@@ -38,8 +39,13 @@ CHAIN_ROWS = "\n".join([
 ])
 
 
+def _master(text: str) -> dict[str, dict]:
+    """One cycle's cm.txt, resolved within that file."""
+    return resolve_connected_orgs(parse_committee_rows(text))
+
+
 def test_a_sponsor_that_is_a_pac_is_followed_to_its_sponsor():
-    master = parse_committee_master(CHAIN_ROWS)
+    master = _master(CHAIN_ROWS)
     # Named with or without the alias, the ABA's PAC leads to the ABA; its
     # own type-E registration is the organization, not another PAC.
     assert master["C00074799"]["connectedOrg"] == "AMERICAN BANKERS ASSOCIATION (ABA)"
@@ -48,13 +54,13 @@ def test_a_sponsor_that_is_a_pac_is_followed_to_its_sponsor():
 
 
 def test_a_sponsor_matching_only_the_committees_own_alias_is_the_organization():
-    master = parse_committee_master(CHAIN_ROWS)
+    master = _master(CHAIN_ROWS)
     assert master["C00048181"]["connectedOrg"] == "WISCONSIN BANKERS ASSOCIATION"
 
 
 def test_a_pac_naming_itself_under_another_alias_names_no_sponsor():
     # cm26: C00343590 is "(MCA-PAC)" and names "(MCAA-PAC)" as its sponsor.
-    master = parse_committee_master(
+    master = _master(
         "C00343590|MECHANICAL CONTRACTORS ASSOCIATION OF AMERICA POLITICAL ACTION COMMITTEE (MCA-PAC)"
         "|X|A||C|MD|1|B|Q||M|T|MECHANICAL CONTRACTORS ASSOCIATION OF AMERICA POLITICAL ACTION COMMITTEE (MCAA-PAC)|"
     )
@@ -111,20 +117,20 @@ def test_a_committee_gone_before_the_citing_registration_is_not_followed():
 
 
 def test_a_sponsor_loop_names_no_sponsor():
-    master = parse_committee_master(CHAIN_ROWS)
+    master = _master(CHAIN_ROWS)
     assert master["C00000001"]["connectedOrg"] is None
     assert master["C00000002"]["connectedOrg"] is None
 
 
 def test_parse_reads_type_designation_and_connected_org():
-    master = parse_committee_master(CM_ROWS)
+    master = _master(CM_ROWS)
     assert master["C00104299"] == {"type": "Q", "designation": "B", "connectedOrg": "JPMORGAN CHASE & CO."}
     assert master["C00027466"]["type"] == "Y"
     assert "short" not in master
 
 
 def test_political_committees_by_registration():
-    master = parse_committee_master(CM_ROWS)
+    master = _master(CM_ROWS)
     assert is_political_committee(master["C00027466"])       # party (Y)
     assert not is_political_committee(master["C00104299"])   # corporate SSF
     assert is_political_committee({"type": "N", "designation": "D"})  # leadership PAC
@@ -140,7 +146,7 @@ def test_cycles_cover_the_oldest_senate_window_and_the_current_cycle():
 
 @pytest.mark.asyncio
 async def test_api_is_asked_only_for_committees_the_master_lacks(db_session):
-    master = parse_committee_master(CM_ROWS)
+    master = _master(CM_ROWS)
     party = {"type": "Y", "designation": "U", "connectedOrg": None}
     with patch("app.pipeline.fetch.fec.fetch_committee_meta", new=AsyncMock(return_value=party)) as api:
         metas = await resolve_committee_meta(None, db_session, {"C00104299", "C09999999"}, master)
@@ -151,7 +157,7 @@ async def test_api_is_asked_only_for_committees_the_master_lacks(db_session):
 
 
 def test_connected_org_only_for_a_sponsored_pac():
-    master = parse_committee_master(CM_ROWS)
+    master = _master(CM_ROWS)
     # The NRSC row's column holds a joint-fundraising partner, not a sponsor.
     assert master["C00027466"]["connectedOrg"] is None
     # The FEC form's placeholder.

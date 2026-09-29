@@ -658,18 +658,32 @@ async def record_pulse_vote(
     }
 
 
+# The globe's answer, held in process: (monotonic time, payload). The one
+# uvicorn worker (backend/Dockerfile) makes this the only copy.
+_COUNTRY_NEWS_TTL_S = 600.0
+_country_news: tuple[float, dict] | None = None
+_country_news_lock = asyncio.Lock()
+
+
 @router.get("/country-news")
 async def get_country_news(response: Response):
     """Return recent news articles grouped by country mentioned."""
-    # Backed by a live external RSS fetch (fetch_news_articles), not a DB
-    # read — this bounds how often that external feed gets hit, not how
-    # fresh the DB is.
+    # Backed by a live fetch of every RSS feed (fetch_news_articles), ~50
+    # outlets one after another, not a DB read. nginx caches the response,
+    # but its key includes the query string, so `?anything` reached here
+    # every time: a request loop was a loop of 50 outbound fetches, each
+    # holding a worker thread that search and the rest of the API share,
+    # and a way to get this server rate-limited by the outlets. So the
+    # answer is also held here, and concurrent misses share one fetch.
+    global _country_news
     response.headers["Cache-Control"] = "public, max-age=600"
-    from app.pipeline.fetch.news_feeds import fetch_news_articles
+    async with _country_news_lock:
+        if _country_news is None or time.monotonic() - _country_news[0] >= _COUNTRY_NEWS_TTL_S:
+            from app.pipeline.fetch.news_feeds import fetch_news_articles
 
-    articles = await asyncio.to_thread(fetch_news_articles)
-    countries = _extract_country_mentions(articles)
-    return {"countries": countries}
+            articles = await asyncio.to_thread(fetch_news_articles)
+            _country_news = (time.monotonic(), {"countries": _extract_country_mentions(articles)})
+        return _country_news[1]
 
 
 _COUNTRIES: dict[str, dict] = {

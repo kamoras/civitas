@@ -145,9 +145,6 @@ class TestVoteMarginRatio:
 
 
 class TestCheckRollCallSignals:
-    def _mock_llm_result(self, title="Senate passes the bill", summary="text", facts=None):
-        return {"title": title, "summary": summary, "facts": facts or ["A fact stated in the record."]}
-
     def test_procedural_vote_is_rejected(self, db_session):
         with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
                 patch.object(es, "classify_policy_area", return_value=("PROCEDURAL", 0.9)):
@@ -164,8 +161,7 @@ class TestCheckRollCallSignals:
 
     def test_qualifying_vote_creates_a_developing_issue(self, db_session):
         with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
             created = es.check_roll_call_signals(db_session)
         assert created == 1
         row = db_session.query(ActionIssue).one()
@@ -177,8 +173,7 @@ class TestCheckRollCallSignals:
 
     def test_same_vote_is_not_created_twice(self, db_session):
         with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
             es.check_roll_call_signals(db_session)
             created_second_pass = es.check_roll_call_signals(db_session)
         assert created_second_pass == 0
@@ -186,8 +181,7 @@ class TestCheckRollCallSignals:
 
     def test_qualifying_house_vote_creates_a_developing_issue(self, db_session):
         with patch.object(es, "_fetch_recent_votes", return_value=[_house_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
             created = es.check_roll_call_signals(db_session)
         assert created == 1
         row = db_session.query(ActionIssue).one()
@@ -202,8 +196,7 @@ class TestCheckRollCallSignals:
         with patch.object(
             es, "_fetch_recent_votes",
             return_value=[_vote(roll_number=42), _house_vote(roll_number=42)],
-        ), patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+        ), patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
             created = es.check_roll_call_signals(db_session)
         assert created == 2
         source_types = {row.source_type for row in db_session.query(ActionIssue).all()}
@@ -303,13 +296,9 @@ class TestCoveredVotes:
 
 
 class TestCheckFederalRegisterSignals:
-    def _mock_llm_result(self, title="Interior changes hunting process", summary="text", facts=None):
-        return {"title": title, "summary": summary, "facts": facts or ["A fact stated in the record."]}
-
     def test_qualifying_rule_creates_a_developing_issue(self, db_session):
-        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
-            created = es.check_federal_register_signals(db_session)
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]):
+            created = es.check_federal_register_signals(db_session, "2026-08-31")
         assert created == 1
         row = db_session.query(ActionIssue).one()
         assert row.status == ActionIssueStatus.DEVELOPING
@@ -317,6 +306,7 @@ class TestCheckFederalRegisterSignals:
         assert row.primary_source_url == _rule()["htmlUrl"]
         assert row.confirmation_deadline is not None
         assert row.is_current is True
+        assert row.date == "2026-08-31"
 
     def test_missing_document_number_is_skipped(self, db_session):
         with patch.object(es, "_fetch_recent_rules", return_value=[_rule(document_number="")]):
@@ -325,37 +315,41 @@ class TestCheckFederalRegisterSignals:
         assert db_session.query(ActionIssue).count() == 0
 
     def test_same_rule_is_not_created_twice(self, db_session):
-        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]):
             es.check_federal_register_signals(db_session)
             created_second_pass = es.check_federal_register_signals(db_session)
         assert created_second_pass == 0
         assert db_session.query(ActionIssue).count() == 1
 
-    def test_generation_that_never_grounds_creates_nothing(self, db_session):
-        bad_result = {
-            "title": "Interior changes hunting process",
-            "summary": "The rule affects 10 million acres nationwide.",
-            "facts": ["It affects 10 million acres."],
-        }
-        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
-                patch.object(es, "call_llm", return_value=bad_result):
-            created = es.check_federal_register_signals(db_session)
-        assert created == 0
-        assert db_session.query(ActionIssue).count() == 0
 
+class TestRuleDraft:
+    """A rule's draft is the Federal Register record in a template: nothing
+    in it the record doesn't state (the model's drafts were dropped with
+    the vote drafts', after one called a 77-22 vote "narrow")."""
 
-class TestRuleSourceText:
-    def test_includes_agencies_title_and_abstract(self):
-        text = es._rule_source_text(_rule())
-        assert "2026-17733" in text
-        assert "Interior Department" in text
-        assert "Process for Authorizing Seasonal Migratory Game Bird Hunting" in text
-        assert "changing the administrative process" in text
+    def test_states_the_record_and_nothing_else(self):
+        title, summary, facts = es._compose_developing_rule_issue(_rule())
+        assert title == "Interior Department final rule: Process for Authorizing Seasonal Migratory Game Bird Hunting"
+        assert summary == (
+            'Interior Department published the final rule "Process for Authorizing Seasonal Migratory Game '
+            'Bird Hunting" in the Federal Register on 2026-08-31. The Service is changing the administrative '
+            "process. This is from the Federal Register; news coverage of the rule has not appeared yet."
+        )
+        assert facts == [
+            "Agency: Interior Department.",
+            "Federal Register document 2026-17733, published 2026-08-31.",
+            "Abstract: The Service is changing the administrative process.",
+        ]
+
+    def test_a_long_abstract_is_quoted_by_whole_sentences(self):
+        abstract = "First sentence. " + "Second sentence runs on " * 30 + "and ends."
+        _, summary, facts = es._compose_developing_rule_issue(_rule(abstract=abstract))
+        assert "First sentence. This is from the Federal Register" in summary
+        assert facts[-1] == f"Abstract: {' '.join(abstract.split())}"
 
     def test_missing_agencies_falls_back(self):
-        text = es._rule_source_text(_rule(agencies=[]))
-        assert "an unspecified agency" in text
+        title, _, _ = es._compose_developing_rule_issue(_rule(agencies=[]))
+        assert title.startswith("A federal agency final rule:")
 
 
 class TestExpireStaleDevelopingIssues:

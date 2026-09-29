@@ -105,6 +105,16 @@ def test_get_senator_stock_trades_sorted_most_recent_first(db_session):
     assert result.trades[1].ticker == "OLD"
 
 
+def test_an_undated_scan_row_lists_after_the_dated_ones(db_session):
+    _senator(db_session)
+    db_session.add(_trade("S1", transaction_date=None, ticker="UNDATED"))
+    db_session.add(_trade("S1", transaction_date="2026-01-01", ticker="OLD"))
+    db_session.commit()
+    result = get_senator_stock_trades(db_session, "S1")
+    assert [t.ticker for t in result.trades] == ["OLD", "UNDATED"]
+    assert result.trades[1].transaction_date is None
+
+
 def test_get_rep_stock_trades_not_found_returns_none(db_session):
     assert get_rep_stock_trades(db_session, "does-not-exist") is None
 

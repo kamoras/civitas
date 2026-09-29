@@ -304,6 +304,7 @@ export default function ElectionsTab() {
             <button
               key={abbr}
               onClick={() => setSelectedState(selectedState === abbr ? null : abbr)}
+              aria-pressed={selectedState === abbr}
               className={`font-mono text-xs py-1.5 px-2 border  transition-colors ${
                 selectedState === abbr ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}

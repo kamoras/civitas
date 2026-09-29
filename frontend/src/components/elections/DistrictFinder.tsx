@@ -131,6 +131,7 @@ export default function DistrictFinder({
                   <button
                     type="button"
                     onClick={() => onPick(ids[0])}
+                    aria-pressed={picked === ids[0]}
                     className={`border px-2 py-1 font-mono text-[11px] ${
                       picked === ids[0]
                         ? "border-phos bg-phos/10 text-phos"

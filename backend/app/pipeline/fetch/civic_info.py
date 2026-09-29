@@ -56,6 +56,7 @@ later should cost us a field, not the whole lookup.
 """
 
 import logging
+from collections.abc import Callable
 
 import httpx
 
@@ -165,6 +166,7 @@ def _parse_contests(payload: dict) -> list[dict]:
 
 async def fetch_town_ballot(
     client: httpx.AsyncClient, db, state: str, town: str,
+    spend: Callable[[int], None] | None = None,
 ) -> dict | None:
     """Contests and measures at `town`'s representative address, or None
     on missing config, an unknown town, or a fetch/parse failure.
@@ -173,6 +175,9 @@ async def fetch_town_ballot(
     that as the town's own ingest_failed, same tri-state discipline the
     statewide measure readers use (ballot_measures_pdf), never as "no
     local races".
+
+    `spend(1)` is charged before a lookup the cache can't answer (a public
+    route's upstream budget, api/rate_limit.py); it raises to refuse one.
     """
     if not is_configured():
         return None
@@ -186,6 +191,8 @@ async def fetch_town_ballot(
     if cached is not None:
         return _to_result(cached, address)
 
+    if spend is not None:
+        spend(1)
     try:
         response = await client.get(
             f"{CIVIC_BASE}/voterinfo",

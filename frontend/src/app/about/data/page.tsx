@@ -86,8 +86,9 @@ export default function DataChapter() {
               Government Ethics. The president&apos;s annual report lists every transaction of its
               year and is the record for that year, and its asset lists back the president&apos;s
               holdings; the periodic reports since are scans, read by OCR, and their dates support
-              no timeliness figure. One 2026 report is printed at half size and its dates can&apos;t
-              be read, so its trades are listed with the date marked not legible.
+              no timeliness figure. Where a scanned report&apos;s date can&apos;t be read (one 2026
+              presidential report is printed at half size), the trade is listed with the date marked
+              not legible, for members&apos; paper filings as for the president&apos;s.
             </Fact>
             <Fact label="Lobbying Disclosure Act registry (lda.gov)">
               Registered lobbying spending by organizations that appear among donors, and the bills
@@ -196,12 +197,6 @@ export default function DataChapter() {
             <Item label="Monitors and the timeline">
               Deciding whether a story is significant enough to track and whether two monitors are
               the same, and short summaries of each period on the year-in-review timeline.
-            </Item>
-            <Item label="Developing issues">
-              A hedged draft about a significant new federal rule, written from the Federal Register
-              before the news covers it, checked against it and labelled as developing. A
-              bill&apos;s final passage is drafted from the roll-call record by a template, with no
-              model.
             </Item>
             <Item label="Explore">A summary of a document, only when you ask for one.</Item>
             <Item label="Bluesky">
@@ -344,8 +339,9 @@ export default function DataChapter() {
       <Section id="infrastructure" title="The computer it runs on">
         <P>
           The whole of Civitas — database, models, pipeline and website — runs on one Raspberry Pi
-          5, a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. It draws
-          about 5–12 watts; a cloud AI accelerator draws 250–400
+          5, a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. Its board
+          measured 2–7 watts during the nightly pipeline, and we budget 7 for the whole machine; a
+          cloud AI accelerator draws 250–400
           <Cite id="patterson2021" />. The trade is speed: the nightly pipeline takes hours rather
           than minutes, which is fine for a nightly job. See the{" "}
           <A href="/environmental">environmental page</A> for the full energy accounting.
