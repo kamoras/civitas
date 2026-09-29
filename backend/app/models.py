@@ -1833,6 +1833,9 @@ class BroadcastPost(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
+    # The outside item a post restates, when it restates one (a race
+    # update's news article): published once, ever, whatever its dates say.
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     # Two-letter state the post is about, when it is about one (a race, a
     # member) — what the per-state feeds filter on.
     state: Mapped[str | None] = mapped_column(String(2), nullable=True, index=True)
@@ -1840,6 +1843,8 @@ class BroadcastPost(Base):
     # off (no account configured when published) | pending | sending | sent | failed.
     bsky_status: Mapped[str] = mapped_column(String(10), nullable=False, default="off", server_default="off")
     bsky_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # When the last send was started, so retries are spaced (broadcast.RETRY_AFTER).
+    bsky_last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     bsky_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 

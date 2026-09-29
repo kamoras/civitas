@@ -68,21 +68,40 @@ def test_the_post_is_stored_before_bluesky_is_tried(db_session, monkeypatch, blu
     assert broadcast.deliver_pending(db_session) == 0
 
 
+def _an_hour_passes(db, post):
+    post.bsky_last_attempt_at = utcnow() - broadcast.RETRY_AFTER - timedelta(minutes=1)
+    db.commit()
+
+
 def test_a_refused_post_is_retried_the_same_day_up_to_the_limit(db_session, bluesky_configured):
     bluesky_configured.ok = False
     post = _publish(db_session)
     assert post.bsky_status == "failed"
 
     for _ in range(broadcast.MAX_BSKY_ATTEMPTS + 2):
+        _an_hour_passes(db_session, post)
         broadcast.deliver_pending(db_session)
     assert post.bsky_attempts == broadcast.MAX_BSKY_ATTEMPTS
 
     post.bsky_attempts = 1
-    db_session.commit()
+    _an_hour_passes(db_session, post)
     bluesky_configured.ok = True
     assert broadcast.deliver_pending(db_session) == 1
     assert post.bsky_status == "sent"
     assert broadcast.deliver_pending(db_session) == 0
+
+
+def test_a_retry_waits_for_the_next_run_not_the_same_one(db_session, bluesky_configured):
+    """The Action Center run that just failed to send a post calls
+    deliver_pending seconds later; that must not spend a second try."""
+    bluesky_configured.ok = False
+    post = _publish(db_session)
+    bluesky_configured.ok = True
+    assert broadcast.deliver_pending(db_session) == 0
+    assert post.bsky_attempts == 1
+    _an_hour_passes(db_session, post)
+    assert broadcast.deliver_pending(db_session) == 1
+    assert (post.bsky_attempts, post.bsky_status) == (2, "sent")
 
 
 def test_a_post_from_an_earlier_eastern_day_is_not_retried(db_session, bluesky_configured):
@@ -94,7 +113,7 @@ def test_a_post_from_an_earlier_eastern_day_is_not_retried(db_session, bluesky_c
 
     eastern_midnight = datetime.now(broadcast._POST_DAY_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
     post.published_at = (eastern_midnight - timedelta(minutes=1)).astimezone(timezone.utc).replace(tzinfo=None)
-    db_session.commit()
+    _an_hour_passes(db_session, post)
 
     assert broadcast.deliver_pending(db_session) == 0
     assert post.bsky_status == "failed"

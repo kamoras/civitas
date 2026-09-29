@@ -275,7 +275,7 @@ class TestPostRaceCoverageUpdates:
         other_session_factory = sessionmaker(bind=db_session.get_bind())
         seen_at_publish_time = {}
 
-        def crashing_publish(db, text, race):
+        def crashing_publish(db, text, race, source_url=None):
             # A separate session sees only COMMITTED state — this is the
             # exact record a crashed process would leave behind.
             other = other_session_factory()
@@ -411,7 +411,7 @@ class TestOnlyVettedSourcesArePosted:
     def test_an_arbitrary_social_post_is_never_eligible(self, db_session, monkeypatch):
         _stub_relevance(monkeypatch)
         published = []
-        monkeypatch.setattr(eb, "_publish", lambda db, text, race: published.append(text))
+        monkeypatch.setattr(eb, "_publish", lambda db, text, race, source_url=None: published.append(text))
         monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
         monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
 
@@ -429,7 +429,7 @@ class TestOnlyVettedSourcesArePosted:
     def test_a_news_item_still_posts(self, db_session, monkeypatch):
         _stub_relevance(monkeypatch)
         published = []
-        monkeypatch.setattr(eb, "_publish", lambda db, text, race: published.append(text))
+        monkeypatch.setattr(eb, "_publish", lambda db, text, race, source_url=None: published.append(text))
         monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
         monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
 
@@ -501,8 +501,31 @@ def test_an_old_article_fetched_again_is_drained_by_its_own_date(db_session):
     assert fresh.bsky_posted_at is None and undated.bsky_posted_at is None
 
 
-def test_the_cooldown_covers_everything_the_drain_lets_through():
-    """The drain's docstring relies on this: an article young enough to
-    survive the drain is inside its race's cooldown if the race was posted
-    about it, so a reset can't re-post it."""
-    assert election_bluesky.RACE_COOLDOWN_HOURS >= election_bluesky.CONSIDER_MAX_AGE_HOURS
+def test_an_article_already_published_about_is_never_published_again(db_session, monkeypatch):
+    """An undated article posted about three days ago, re-ingested after a
+    data reset: past the race's cooldown and with no date to drain it by,
+    it is still the same article."""
+    from app import broadcast
+    from app.models import BroadcastPost
+
+    _stub_relevance(monkeypatch)
+    race = _race(db_session)
+    _candidate(db_session)
+    db_session.commit()
+    old = broadcast.publish(db_session, kind="race", subject=f"race:{race.id}", title="t", text="x",
+                            url="u", state="GA", source_url="https://apnews.com/a1")
+    old.published_at = utcnow() - timedelta(days=3)
+    db_session.commit()
+
+    _item(db_session, url="https://apnews.com/a1")  # same article, fresh fetch, no date
+    db_session.commit()
+    with patch.object(election_bluesky, "_generate_post_text", return_value="A sentence.") as gen:
+        assert election_bluesky.post_race_coverage_updates(db_session) == 0
+    gen.assert_not_called()
+
+    _item(db_session, url="https://apnews.com/a2")  # a different article about the race
+    db_session.commit()
+    with patch.object(election_bluesky, "_generate_post_text", return_value="A sentence."):
+        assert election_bluesky.post_race_coverage_updates(db_session) == 1
+    assert db_session.query(BroadcastPost).order_by(BroadcastPost.id.desc()).first().source_url == (
+        "https://apnews.com/a2")

@@ -28,10 +28,12 @@ def upgrade() -> None:
         sa.Column("title", sa.Text(), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("url", sa.Text(), nullable=False),
+        sa.Column("source_url", sa.Text(), nullable=True),
         sa.Column("state", sa.String(length=2), nullable=True),
         sa.Column("published_at", sa.DateTime(), nullable=False),
         sa.Column("bsky_status", sa.String(length=10), server_default="off", nullable=False),
         sa.Column("bsky_attempts", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("bsky_last_attempt_at", sa.DateTime(), nullable=True),
         sa.Column("bsky_sent_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         # Ids are the feed entries' ids and must never be reused.
@@ -41,6 +43,7 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f("ix_broadcast_posts_kind"), ["kind"], unique=False)
         batch_op.create_index(batch_op.f("ix_broadcast_posts_published_at"), ["published_at"], unique=False)
         batch_op.create_index(batch_op.f("ix_broadcast_posts_subject"), ["subject"], unique=False)
+        batch_op.create_index(batch_op.f("ix_broadcast_posts_source_url"), ["source_url"], unique=False)
         batch_op.create_index(batch_op.f("ix_broadcast_posts_state"), ["state"], unique=False)
 
 

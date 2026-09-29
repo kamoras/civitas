@@ -16,8 +16,10 @@ dedupe and budget state, unchanged); this module decides where it goes.
 Delivery to Bluesky is at most once per attempt and bounded:
   - the row is committed before any network call, so a crash mid-send can
     never produce a second post (a row left `sending` is not retried);
-  - a failed send is retried by `deliver_pending` (hourly, from the Action
-    Center run), at most MAX_BSKY_ATTEMPTS times in all;
+  - a failed send is retried by `deliver_pending` (run hourly, from the
+    Action Center run), no sooner than RETRY_AFTER after the last try, so
+    the tries are an hour apart and ride out a longer outage than a burst
+    would; at most MAX_BSKY_ATTEMPTS tries in all;
   - and only on the Eastern day it was written. A post can say
     "Yesterday: …" (bluesky_poster._staleness_prefix); delivered a day late
     it would say something false. The feed entry keeps its own
@@ -28,6 +30,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -50,6 +53,10 @@ KINDS: dict[str, str] = {
 }
 
 MAX_BSKY_ATTEMPTS = 3
+# Under the hour between Action Center runs, so the next run always
+# qualifies, but long enough that the run which just failed to send a post
+# doesn't try it again seconds later.
+RETRY_AFTER = timedelta(minutes=45)
 
 # The day a post's words are true on (see the module docstring). Eastern,
 # like every other day boundary the posts use.
@@ -99,6 +106,7 @@ def publish(
     text: str,
     url: str,
     state: str | None = None,
+    source_url: str | None = None,
 ) -> BroadcastPost:
     """Record a post, then deliver it to Bluesky if an account is set up.
 
@@ -116,6 +124,7 @@ def publish(
         title=strip_hashtags(title),
         text=strip_hashtags(text),
         url=url,
+        source_url=source_url,
         state=state.upper() if state else None,
         published_at=utcnow(),
         bsky_status="pending" if _bluesky_configured() else "off",
@@ -138,7 +147,11 @@ def _deliver_to_bluesky(db: Session, post: BroadcastPost) -> bool:
         db.query(BroadcastPost)
         .filter(BroadcastPost.id == post.id, BroadcastPost.bsky_status.in_(("pending", "failed")))
         .update(
-            {"bsky_status": "sending", "bsky_attempts": BroadcastPost.bsky_attempts + 1},
+            {
+                "bsky_status": "sending",
+                "bsky_attempts": BroadcastPost.bsky_attempts + 1,
+                "bsky_last_attempt_at": utcnow(),
+            },
             synchronize_session=False,
         )
     )
@@ -168,6 +181,10 @@ def deliver_pending(db: Session) -> int:
         .filter(
             BroadcastPost.bsky_status.in_(("pending", "failed")),
             BroadcastPost.bsky_attempts < MAX_BSKY_ATTEMPTS,
+            or_(
+                BroadcastPost.bsky_last_attempt_at.is_(None),
+                BroadcastPost.bsky_last_attempt_at <= utcnow() - RETRY_AFTER,
+            ),
             # Bounds the scan; the Eastern-day check below is the rule.
             BroadcastPost.published_at >= utcnow() - timedelta(days=1),
         )
@@ -186,6 +203,11 @@ def deliver_pending(db: Session) -> int:
 def was_published(db: Session, subject: str) -> bool:
     """Whether anything about `subject` was ever published."""
     return db.query(BroadcastPost.id).filter(BroadcastPost.subject == subject).first() is not None
+
+
+def source_was_published(db: Session, source_url: str) -> bool:
+    """Whether a post restating this outside item was ever published."""
+    return db.query(BroadcastPost.id).filter(BroadcastPost.source_url == source_url).first() is not None
 
 
 def subjects_published_since(db: Session, kind: str, since: datetime) -> list[str]:

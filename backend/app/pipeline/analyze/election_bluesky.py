@@ -238,7 +238,7 @@ Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
     return None
 
 
-def _publish(db: Session, text: str, race: Race) -> None:
+def _publish(db: Session, text: str, race: Race, source_url: str | None = None) -> None:
     """Publish the post: to the feed, then Bluesky if configured."""
     # 2026-08: race detail merged into the state ballot page — old
     # /elections/{race.id} links still redirect here, but new posts go
@@ -246,7 +246,7 @@ def _publish(db: Session, text: str, race: Race) -> None:
     url = f"{broadcast.SITE_URL}/elections/states/{race.state}#race-{race.id}"
     broadcast.publish(
         db, kind="race", subject=f"race:{race.id}", title=f"Update on {_office_label(race)}", text=text,
-        url=url, state=race.state,
+        url=url, state=race.state, source_url=source_url,
     )
 
 
@@ -291,12 +291,12 @@ def _drain_stale_unconsidered(db: Session) -> int:
     considered-without-posting so the eligible pool stays bounded.
 
     Aged by the article's own date where it has one, and by when it was
-    fetched where it doesn't. A data reset wipes the coverage items and the
-    next ingest fetches the same articles again, all stamped now: aged by
-    fetch time alone, a story posted days before the reset would be
-    eligible a second time. Anything younger than the window is also
-    inside every race's cooldown (RACE_COOLDOWN_HOURS, the same length),
-    which counts the published posts and so survives the reset too."""
+    fetched where it doesn't: a data reset wipes the coverage items and the
+    next ingest fetches the same articles again, all stamped now, and an
+    old article is not news again because it was fetched again. (What stops
+    an article being posted twice is the published-source check in
+    post_race_coverage_updates, which also covers undated articles; this
+    only keeps stale news out of the pool.)"""
     cutoff = utcnow() - timedelta(hours=CONSIDER_MAX_AGE_HOURS)
     drained = (
         db.query(RaceCoverageItem)
@@ -367,6 +367,11 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         db.commit()
         if race is None:
             continue
+        # An article already published about stays published about: a data
+        # reset re-ingests coverage as new items, and an undated article has
+        # no date the drain could age it by.
+        if broadcast.source_was_published(db, item.url):
+            continue
         if posted >= budget:
             continue
         if item.race_id in cooled_down:
@@ -393,7 +398,7 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
 
         # Marked in the same commit that stores the post (_publish commits).
         item.bsky_posted = True
-        _publish(db, text, race)
+        _publish(db, text, race, item.url)
         cooled_down.add(item.race_id)
         posted += 1
 
