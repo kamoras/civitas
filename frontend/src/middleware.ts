@@ -53,6 +53,6 @@ export const config = {
   // counted (app/photo/bioguide/[id]/route.ts). The feeds are polled by
   // readers and bots on a schedule, which is not anyone visiting.
   matcher: [
-    "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|sitemap.xml|robots.txt|opengraph-image|feed\\.xml|feed/).*)",
+    "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|sitemap.xml|sitemap-index.xml|sitemaps/|robots.txt|opengraph-image|feed\\.xml|feed/).*)",
   ],
 };
