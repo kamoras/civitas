@@ -63,14 +63,6 @@ from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
 
 logger = logging.getLogger(__name__)
 
-# Rulemaking data (Agency Alignment) has no historical-proxy source (see
-# _agency_alignment_core's docstring on why this is a genuine conceptual
-# absence, not an unfetched dataset) — still gated to the presidents
-# Federal Register actually covers.
-RULEMAKING_ELIGIBLE_PRESIDENTS = [
-    "clinton-42", "gwbush-43", "obama-44", "trump-45", "biden-46", "trump-47",
-]
-
 # BLS payroll data starts 1939 — presidents whose full term falls after
 # that get a real jobs-created figure; earlier presidents' Effectiveness
 # is computed from GDP growth alone (see _effectiveness_core).

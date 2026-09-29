@@ -10,8 +10,8 @@ left for the refresh to retire.
 
 Data only, so the previous image runs unchanged against the result.
 
-Revision ID: 0020
-Revises: 0019
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-09-29
 """
 from datetime import datetime
@@ -20,8 +20,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0020"
-down_revision = "0019"
+revision = "0021"
+down_revision = "0020"
 branch_labels = None
 depends_on = None
 

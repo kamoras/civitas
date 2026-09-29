@@ -82,8 +82,7 @@ export function getScoreBgColor(score: number): string {
 }
 
 // ASCII progress bar for a 0-100 score in the terminal aesthetic: 20 cells,
-// each worth 5 points. The compare view and the per-metric RepresentationScore
-// bar computed this identically inline before this extraction.
+// each worth 5 points.
 export function asciiScoreBar(score: number): string {
   const filled = Math.round(score / 5);
   const empty = 20 - filled;

@@ -280,8 +280,6 @@ def get_senator_history(
                         "fundingIndependence": round(s.score_1, 1),
                         "promisePersistence": round(s.score_2, 1),
                         "constituentAlignment": round(s.score_3, 1),
-                        # Deprecated alias (the key's name until 2026-09).
-                        "independentVoting": round(s.score_3, 1),
                         "fundingDiversity": round(s.score_4, 1),
                         "legislativeEffectiveness": round(s.score_5, 1),
                     },
@@ -375,8 +373,6 @@ def get_representative_history(
                         "fundingIndependence": round(s.score_1, 1),
                         "promisePersistence": round(s.score_2, 1),
                         "constituentAlignment": round(s.score_3, 1),
-                        # Deprecated alias (the key's name until 2026-09).
-                        "independentVoting": round(s.score_3, 1),
                         "fundingDiversity": round(s.score_4, 1),
                         "legislativeEffectiveness": round(s.score_5, 1),
                     },

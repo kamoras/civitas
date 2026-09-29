@@ -22,6 +22,7 @@ from app.models import (
     Representative,
     Senator,
 )
+from app.pipeline.analyze.grounding import validate_facts as _validate_facts
 from app.database import Base
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
@@ -50,7 +51,6 @@ from app.pipeline.analyze.action_center import (
     _mentions_full_name,
     _signatures_match,
     _surname_owned_by_other_name,
-    _validate_facts,
     _log_summary_source_consistency,
     _learned_relevance_prototypes,
     _log_relevance_prototype_agreement,
