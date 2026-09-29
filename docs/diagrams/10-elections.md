@@ -16,7 +16,7 @@ uses), `backend/app/api/elections.py` (what a page is allowed to show).
 flowchart LR
     NIGHTLY(["Nightly chain<br/>(scheduler.py)"]) --> SEN[Senate] --> SUP[Supplementary] --> HOUSE[House] --> STOCK[Stock trades] --> ELEC["<b>Election pipeline</b>"]
     QUARTER(["Every 15 min,<br/>election season only"]) --> COV["Coverage + posting phases only<br/>(_election_coverage_refresh)"]
-    SIX(["Every 6 h at :50 UTC,<br/>election season only"]) --> BAL["Ballot step only<br/>(_election_ballot_sync → run_ballot_sync)"]
+    SIX(["Every 6 h at :50 UTC,<br/>election season, up to election day"]) --> BAL["Ballot step only<br/>(_election_ballot_sync → run_ballot_sync)"]
     FIVE(["Every 5 min, election day through<br/>the results window (hourly once settled)"]) --> RES["Live count<br/>(_election_results_sync → sync_live_results)"]
 ```
 
@@ -25,7 +25,11 @@ that aborts the chain also skips it — check `election_pipeline_runs` after
 any nightly interruption. In the 60-day election season the ballot step
 (certified lists / primary results, then filing lists) also runs on its own
 every 6 hours, so an upstream abort can't hold ballots back; it and the
-nightly ballot phase each step aside while the other is running.
+nightly ballot phase each step aside while the other is running. From the
+day after an election neither reads that election's ballot or measures
+again (`ballot_is_final`): through the results window the site stays on it,
+but its sources have moved on, and a re-read would unwrite what was
+certified.
 
 ## The run
 

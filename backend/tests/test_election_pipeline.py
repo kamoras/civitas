@@ -556,6 +556,12 @@ class TestPruneStaleCoverage:
 
 
 class TestBallotSync:
+    @pytest.fixture(autouse=True)
+    def _campaign_clock(self, monkeypatch):
+        """A campaign date unless a test says otherwise: after election day
+        the ballot is final and every ballot step stands aside."""
+        monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 10, 1))
+
     def test_summarises_which_states_answered(self, db_session):
         confirm = {
             "AK": {"status": "ok", "confirmed": 6},
@@ -571,6 +577,47 @@ class TestBallotSync:
             "status": "ok", "confirmed": 6, "statesOk": ["AK"], "statesFailed": ["NY"],
             "filings": {"NC": 3},
         }
+
+    def test_a_held_elections_ballot_is_not_re_read(self, db_session):
+        """After election day the site stays on the election just held, but
+        its ballot sources move on: Oklahoma's one "next election" page and
+        a candidate list past its election answer "not published yet",
+        which would unwrite a certified ballot. The ballot stands as read."""
+        with (
+            patch("app.election_phase.election_today", return_value=date(2026, 11, 10)),
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as confirm,
+            patch("app.pipeline.election_pipeline.sync_ballot_filings") as filings,
+        ):
+            result = asyncio.run(election_pipeline.run_ballot_sync())
+        confirm.assert_not_called()
+        filings.assert_not_called()
+        assert result["status"] == "skipped"
+        assert result["reason"] == election_pipeline.BALLOT_FINAL
+
+    def test_the_nightly_run_skips_a_held_elections_ballot_but_still_prunes(self, db_session):
+        import json
+
+        with (
+            patch("app.election_phase.election_today", return_value=date(2026, 11, 10)),
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
+            _mock_downstream_pipeline_phases(),
+            patch("app.pipeline.election_pipeline.crawl_for_new_sources") as crawl,
+            patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as confirm,
+            patch("app.pipeline.election_pipeline._sync_ballot_measures") as measures,
+            patch("app.pipeline.election_pipeline._prune_past_measures", return_value=0) as prune,
+        ):
+            asyncio.run(election_pipeline.run_election_pipeline(2026))
+        crawl.assert_not_called()
+        confirm.assert_not_called()
+        measures.assert_not_called()
+        prune.assert_called_once()
+        run = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
+        steps = {s["key"]: s for s in json.loads(run.progress_detail)}
+        for key in ("confirmed_candidates", "ballot_measures"):
+            assert steps[key]["status"] == "skipped"
+            assert steps[key]["detail"] == f"skipped: {election_pipeline.BALLOT_FINAL}"
 
     def test_the_nightly_ballot_and_coverage_steps_yield_their_leases(self, db_session):
         """A ballot sync or coverage refresh in another process holds its

@@ -133,6 +133,16 @@ def active_election(db: Session | None = None, today: date | None = None) -> Act
     return resolve_active_election(today, lookup)
 
 
+def ballot_is_final(election: ActiveElection, today: date | None = None) -> bool:
+    """Whether the election's ballot can no longer change: its day has
+    passed. Through the results window the site stays on the election just
+    held, but its ballot sources move on -- a state's single "next election"
+    page lists the next one, a candidate list reads as "not published yet"
+    -- so re-reading them would unwrite a certified ballot. What was read
+    before the day stands."""
+    return election.election_day < (today or election_today())
+
+
 def days_until(election: ActiveElection, today: date | None = None) -> int:
     today = today or election_today()
     return (election.election_day - today).days

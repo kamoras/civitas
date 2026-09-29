@@ -475,6 +475,9 @@ def _election_ballot_sync() -> None:
             result = lease.run_tracked(lease.BALLOT_SYNC, ballot_tracker(), run_ballot_sync, who="Ballot sync")
             if result is None:
                 return
+            if result.get("status") == "skipped":
+                logger.info("Election-season ballot sync skipped: %s", result["reason"])
+                return
             logger.info(
                 "Election-season ballot sync: %d confirmed, %d states ok, failed: %s",
                 result["confirmed"], len(result["statesOk"]), result["statesFailed"] or "none",

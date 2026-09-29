@@ -130,15 +130,18 @@ describe("useLiveResults", () => {
     expect(fetchLiveResults).toHaveBeenCalledTimes(3);
   });
 
-  it("re-arms at setTimeout's ceiling for an election more than 24 days out", async () => {
+  it("waits past setTimeout's ceiling without asking, for an election more than 24 days out", async () => {
     vi.setSystemTime(new Date("2026-06-01T12:00:00Z"));
     fetchLiveResults.mockResolvedValue(phase("campaign"));
     renderHook(() => useLiveResults());
     await act(async () => {});
     await act(async () => vi.advanceTimersByTime(2 ** 31 - 1));
-    // One ask at the ceiling (still far), none at once on arming.
-    expect(fetchLiveResults).toHaveBeenCalledTimes(2);
-    await act(async () => vi.advanceTimersByTime(1000));
+    // The ceiling cut the wait short: it waits on, asking nothing new.
+    expect(fetchLiveResults).toHaveBeenCalledTimes(1);
+    const near = Date.parse("2026-11-01T12:00:00Z");
+    await act(async () => vi.advanceTimersByTime(near - Date.now() - 1));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTime(1));
     expect(fetchLiveResults).toHaveBeenCalledTimes(2);
   });
 

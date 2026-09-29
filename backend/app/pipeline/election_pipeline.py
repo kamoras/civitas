@@ -40,7 +40,7 @@ from app.election_calendar import (
     CLASS_III_STATES,
     seats_up_for_year,
 )
-from app.election_phase import active_election
+from app.election_phase import active_election, ballot_is_final
 from app.http_client import make_async_client
 from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
@@ -117,6 +117,13 @@ def election_pipeline_age():
 _ballot_tracker = PipelineRunTracker()
 
 
+BALLOT_FINAL = "election held; its ballot is final"
+
+
+class _BallotFinal(Exception):
+    """Leaves a ballot phase's try block once it is marked skipped."""
+
+
 def ballot_tracker() -> PipelineRunTracker:
     return _ballot_tracker
 
@@ -142,6 +149,12 @@ async def run_ballot_sync(cycle: int | None = None) -> dict:
     one per second; the roster and financial refresh stay nightly."""
     db = SessionLocal()
     try:
+        if ballot_is_final(active_election(db)):
+            # The held election's ballot stands as read (ballot_is_final).
+            return {
+                "status": "skipped", "reason": BALLOT_FINAL,
+                "confirmed": 0, "statesOk": [], "statesFailed": [], "filings": {},
+            }
         cycle = cycle if cycle is not None else current_election_cycle(db)
         async with make_async_client() as client:
             confirm_result, filing_result = await _sync_ballots(db, client, cycle)
@@ -1383,12 +1396,21 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 logger.exception("Financial refresh phase failed — continuing")
                 progress.fail("financial_refresh")
 
+            # After election day the held election's ballot is final
+            # (ballot_is_final): neither phase re-reads its sources, which
+            # have moved on and would unwrite what was certified.
+            ballot_final = ballot_is_final(active_election(db))
+
             run.current_phase = "confirmed_candidates"
             db.commit()
             logger.info("--- Election: CONFIRMED CANDIDATES ---")
             progress.begin("confirmed_candidates")
             confirmed_open = True  # until the phase is marked done or skipped
             try:
+                if ballot_final:
+                    progress.skip("confirmed_candidates", detail=f"skipped: {BALLOT_FINAL}")
+                    confirmed_open = False
+                    raise _BallotFinal
                 # Each state is crawled weekly — what the crawl looks for,
                 # a state standing up a results portal or a new cycle's file
                 # appearing, moves on the scale of weeks — but the crawl
@@ -1425,6 +1447,8 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         detail = await _confirmed_candidates_phase(db, client, cycle)
                         progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
                     confirmed_open = False
+            except _BallotFinal:
+                pass
             except lease.CutOff as cut:
                 db.rollback()
                 logger.warning("Confirmed-candidate phase: %s — continuing", cut)
@@ -1441,6 +1465,11 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             logger.info("--- Election: BALLOT MEASURES ---")
             progress.begin("ballot_measures")
             try:
+                if ballot_final:
+                    # Earlier elections' rows still age out.
+                    _prune_past_measures(db)
+                    progress.skip("ballot_measures", detail=f"skipped: {BALLOT_FINAL}")
+                    raise _BallotFinal
                 measure_result = await _sync_ballot_measures(db, client, cycle)
                 if measure_result.get("skipped"):
                     progress.complete("ballot_measures", detail="skipped (no API key)")
@@ -1451,6 +1480,8 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                     )
                     logger.info("Ballot measures: %s", detail)
                     progress.complete("ballot_measures", detail=detail)
+            except _BallotFinal:
+                pass
             except Exception:
                 db.rollback()
                 logger.exception("Ballot measure sync failed — continuing")

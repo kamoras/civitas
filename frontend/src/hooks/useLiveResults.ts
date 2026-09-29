@@ -100,6 +100,9 @@ export function useLiveResults(
     // The next ask is the one election day's approach is due to make, not
     // a poll: a tab shown again doesn't bring it forward.
     let untilNear = false;
+    // The last answer's phase, so a wait cut short by setTimeout's ceiling
+    // re-arms rather than asking a question it already has the answer to.
+    let lastPhase: LiveResults["phase"] | null = null;
     // When the next ask is due (ms since epoch), so a tab shown again
     // mid-backoff waits out the rest rather than asking at once.
     let nextAt = 0;
@@ -110,6 +113,7 @@ export function useLiveResults(
         .then((next) => {
           if (cancelled) return;
           failures = 0;
+          lastPhase = next.phase;
           setData(next);
           setError(null);
           setRetryMs(null);
@@ -133,13 +137,20 @@ export function useLiveResults(
           schedule(wait);
         });
     };
+    // Due: ask — unless this was the wait for election day to come near and
+    // it was only cut short at setTimeout's ceiling, when it waits on.
+    const due = () => {
+      const rest = untilNear ? msUntilNear(lastPhase) : null;
+      if (rest != null) schedule(rest, true);
+      else load();
+    };
     const schedule = (wait: number | null, isUntilNear = false) => {
       nextWait = wait;
       untilNear = isUntilNear;
       nextAt = wait != null ? Date.now() + wait : 0;
       if (timer) clearTimeout(timer);
       timer = null;
-      if (wait != null && document.visibilityState === "visible") timer = setTimeout(load, wait);
+      if (wait != null && document.visibilityState === "visible") timer = setTimeout(due, wait);
     };
     const onVisible = () => {
       // Catch up only if the page was still asking. After a success a tab
@@ -150,9 +161,9 @@ export function useLiveResults(
       if (timer) clearTimeout(timer);
       timer = null;
       if (document.visibilityState !== "visible" || nextWait == null) return;
-      const due = failures > 0 || untilNear ? nextAt - Date.now() : 0;
-      if (due <= 0) load();
-      else timer = setTimeout(load, due);
+      const dueIn = failures > 0 || untilNear ? nextAt - Date.now() : 0;
+      if (dueIn <= 0) due();
+      else timer = setTimeout(due, dueIn);
     };
 
     load();
