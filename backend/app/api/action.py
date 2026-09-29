@@ -124,24 +124,18 @@ def _is_iso_day(text: str) -> bool:
     return True
 
 
-def _pager_dates(db: Session, day: str) -> list[str]:
-    """The days that can be opened, newest first: the 14 newest days of
-    confirmed issues, plus the confirmed days either side of `day`, so a
-    deep link to an older day (the timeline's year-in-review links) still
-    pages to its neighbours. Not `day` itself unless it holds issues: the
-    timeline offers every listed day as one to open. Confirmed issues only: a developing
-    draft is listed beside the newest day, not on a day of its own, so a
-    day holding nothing but a draft (a seat flip restamped past midnight
-    before the next refresh) would page to a view the landing view
-    already shows."""
-    confirmed = db.query(ActionIssue.date).filter(_NOT_DEVELOPING).distinct()
-    around = {
-        confirmed.filter(ActionIssue.date < day).order_by(ActionIssue.date.desc()).limit(1).scalar(),
-        confirmed.filter(ActionIssue.date > day).order_by(ActionIssue.date.asc()).limit(1).scalar(),
-    }
-    newest = [row[0] for row in confirmed.order_by(ActionIssue.date.desc()).limit(14).all()]
-    itself = confirmed.filter(ActionIssue.date == day).limit(1).scalar()
-    return sorted({itself, *newest, *around} - {None}, reverse=True)
+def _pager_dates(db: Session) -> list[str]:
+    """Every day that holds confirmed issues, newest first: the pager's days
+    and the Archive's openable ones. Not capped at the newest few: the
+    Archive offers a listed day to open, and a capped list made an older day
+    openable only while Today showed a day beside it. (About a year's worth
+    of dates is a few kilobytes; issues are kept 14 days unless posted.)
+    Confirmed issues only: a developing draft is listed beside the newest
+    day, not on a day of its own, so a day holding nothing but a draft (a
+    seat flip restamped past midnight before the next refresh) would page
+    to a view the landing view already shows."""
+    return [row[0] for row in
+            db.query(ActionIssue.date).filter(_NOT_DEVELOPING).distinct().order_by(ActionIssue.date.desc())]
 
 
 def _latest_current_issues(db: Session, for_date: str | None = None) -> list[ActionIssue]:
@@ -461,12 +455,12 @@ async def get_action_issues(
         # followed a link to it can page to the days either side.
         return {
             "date": date, "issues": [],
-            "availableDates": _pager_dates(db, date) if date and _is_iso_day(date) else [],
+            "availableDates": _pager_dates(db) if date and _is_iso_day(date) else [],
             "generatedAt": generated_at,
         }
 
     issue_date = date or _latest_issue_date(db) or issues[0].date
-    available_dates = _pager_dates(db, issue_date)
+    available_dates = _pager_dates(db)
 
     all_explore_ids: list[int] = []
     for i in issues:

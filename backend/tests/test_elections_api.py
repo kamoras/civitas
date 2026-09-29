@@ -245,9 +245,12 @@ class TestPviMap:
         data = _body(elections.pvi_map(db_session))
         assert data["cycleYear"] == current_election_cycle(db_session)
 
-    def test_includes_next_election_day(self, db_session):
+    def test_includes_next_election_day(self, db_session, monkeypatch):
         """The /elections masthead's countdown. A date, not a day count:
         the response is cached, and a count would go stale with it."""
+        from datetime import date
+
+        monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 9, 29))
         data = _body(elections.pvi_map(db_session))
         assert data["electionDay"] == "2026-11-03"
 

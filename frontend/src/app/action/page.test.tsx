@@ -171,3 +171,25 @@ describe("a seat-flip issue's developing disclosure", () => {
     for (const p of shown) expect(p.textContent).toMatch(/which is not final/);
   });
 });
+
+describe("the list beside the top issue", () => {
+  it("doesn't call a seat flip from another day one of 'this day's'", async () => {
+    const flip = {
+      ...issueFor("2026-09-29", "b"),
+      status: "developing",
+      sourceType: "election_results",
+    } as ActionIssue;
+    vi.mocked(fetchActionIssues).mockImplementation((() =>
+      Promise.resolve({
+        date: LATEST,
+        availableDates: DATES,
+        generatedAt: `${LATEST}T12:00:00Z`,
+        issues: [issueFor(LATEST, "a"), flip],
+      })) as unknown as typeof fetchActionIssues);
+    window.history.replaceState(null, "", "/action?tab=issues");
+    render(<ActionPage />);
+    expect(await screen.findByRole("heading", { name: /^More issues/ })).toHaveTextContent(
+      /^More issues1$/
+    );
+  });
+});

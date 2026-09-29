@@ -1045,3 +1045,21 @@ class TestIssuesListPagerFields:
 
         live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
         assert live["generatedAt"] is None
+
+
+async def test_every_kept_day_is_openable_whatever_day_is_shown(db_session):
+    """The Archive offers a listed day to open; capped at the newest 14, an
+    older day was openable only while Today showed a day beside it."""
+    from datetime import date, timedelta
+
+    from fastapi import Response
+
+    from app.api.action import get_action_issues
+
+    days = [(date(2026, 9, 1) + timedelta(days=i)).isoformat() for i in range(20)]
+    for d in days:
+        db_session.add(ActionIssue(date=d, rank=1, title=f"t{d}", summary="s", is_current=True))
+    db_session.commit()
+    for shown in (None, days[10], days[0]):
+        resp = await get_action_issues(Response(), date=shown, db=db_session, db_visits=db_session)
+        assert resp["availableDates"] == sorted(days, reverse=True), shown

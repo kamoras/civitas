@@ -362,7 +362,13 @@ function IssuesTab({
       {secondaryIssues.length > 0 && (
         <section aria-labelledby="more-issues-heading" className="mt-12">
           <h2 id="more-issues-heading" className={SECTION_HEADING}>
-            <span>More issues this day</span>
+            <span>
+              {/* A developing seat flip is listed beside the newest day
+                  whatever its own date (backend _latest_current_issues). */}
+              {secondaryIssues.every((i) => i.date === heroIssue?.date)
+                ? "More issues this day"
+                : "More issues"}
+            </span>
             <span aria-hidden="true">{secondaryIssues.length}</span>
           </h2>
           <ul>

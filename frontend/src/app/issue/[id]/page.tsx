@@ -8,14 +8,7 @@ import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
 import { commentPeriodToday, formatUtcDate } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
-import {
-  countIsOfficial,
-  factsAreTheCount,
-  factsHeading,
-  factsSectionId,
-  factsShareLabel,
-} from "@/lib/developing";
-import { formatEasternTime } from "@/lib/results";
+import { countIsOfficial, factsHeading, factsSectionId, factsShareLabel } from "@/lib/developing";
 import {
   Coverage,
   DevelopingDisclosure,
@@ -157,16 +150,6 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
   const renderedAt = new Date();
   const shareUrl = absoluteUrl(`/issue/${issue.publicId}`);
   const factsId = factsSectionId(issue);
-  // A count issue's facts are the count as this page read it, and the issue
-  // carries no time of its own (only a date), so the section says when that
-  // was and whether the state calls it official — inside the section, so a
-  // shared image of it says so too, not just the frame's capture day.
-  // When Civitas read these figures (the backend's countAsOf); an older
-  // backend sends none, and then the render time stands in, labelled as
-  // when this page read it.
-  const countReadAt = factsAreTheCount(issue)
-    ? formatEasternTime(issue.countAsOf ?? renderedAt.toISOString())
-    : null;
 
   return (
     <ShareSubjectProvider
@@ -255,6 +238,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
               <Coverage
                 issue={issue}
                 className="mt-10"
+                renderedAt={renderedAt.toISOString()}
                 heading={
                   <div className={SECTION_HEADING}>
                     <h2>{factsHeading(issue)}</h2>
@@ -262,18 +246,6 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                   </div>
                 }
               />
-              {countReadAt && (
-                <p className="mt-4 text-xs text-ink-min">
-                  {countIsOfficial(issue) ? (
-                    <span className="text-ink-hi">OFFICIAL COUNT</span>
-                  ) : (
-                    <span className="text-signal-amber">NOT FINAL</span>
-                  )}{" "}
-                  · the count as of {countReadAt},{" "}
-                  {issue.countAsOf ? "when Civitas read it" : "when this page read it"}. The
-                  state&apos;s own results site has the current count.
-                </p>
-              )}
             </div>
           )}
 

@@ -131,7 +131,8 @@ export default function NewsChapter() {
           their own contact form), follow the bills involved, and read or comment on the related
           federal documents while their comment period is open. When the coverage names no member,
           it points to the directory, where you pick your own state; the site never asks where you
-          live.
+          live. A seat changing party on election night is the exception: its issue is the count, so
+          what you can do is follow that count on its state&apos;s page.
         </P>
         <More label="Keeping the hourly refresh running">
           <P>

@@ -20,7 +20,13 @@
 
 import Link from "next/link";
 import { formatUtcDate, isNewFact, issueDateLabel, issueRef, safeHref } from "@/lib/formatting";
-import { developingSource, factsHeading } from "@/lib/developing";
+import {
+  countIsOfficial,
+  developingSource,
+  factsAreTheCount,
+  factsHeading,
+} from "@/lib/developing";
+import { formatEasternTime } from "@/lib/results";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { monitorHref } from "@/lib/routes";
 import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
@@ -320,7 +326,10 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       label: url ? "Contact ↗" : "Scorecard →",
     });
   }
-  if (members.length === 0) {
+  // No member to contact: point at the directory — except on a count issue
+  // (a seat changing party on election night), where there is no coverage
+  // to have named anyone and the useful action is the count itself.
+  if (members.length === 0 && followResultsActions(issue).length === 0) {
     rows.push({
       key: "directory",
       verb: "Contact",
@@ -438,12 +447,16 @@ export function Coverage({
   className = "mt-8",
   headingLevel = "h3",
   heading,
+  renderedAt,
 }: {
   issue: ActionIssue;
   className?: string;
   headingLevel?: "h2" | "h3" | "h4";
   /** Replaces the plain heading, e.g. to add a share button beside it. */
   heading?: React.ReactNode;
+  /** When a server render read the issue (ISO): the count's time when the
+   *  backend sent none (an older backend). */
+  renderedAt?: string;
 }) {
   const facts = issue.facts ?? [];
   if (facts.length === 0) return null;
@@ -469,7 +482,32 @@ export function Coverage({
           </li>
         ))}
       </ol>
+      <CountAsOf issue={issue} renderedAt={renderedAt} />
     </section>
+  );
+}
+
+/** A count issue's facts are the count as Civitas read it, and the issue
+ *  carries no time of its own (only a date): say when, and whether the
+ *  state calls it official — inside the facts section, so a shared image of
+ *  it (card or page) says so too. */
+function CountAsOf({ issue, renderedAt }: { issue: ActionIssue; renderedAt?: string }) {
+  if (!factsAreTheCount(issue)) return null;
+  const readAt = issue.countAsOf ?? renderedAt;
+  const when = readAt ? formatEasternTime(readAt) : "";
+  return (
+    <p className="mt-4 text-xs text-ink-min">
+      {countIsOfficial(issue) ? (
+        <span className="text-ink-hi">OFFICIAL COUNT</span>
+      ) : (
+        <span className="text-signal-amber">NOT FINAL</span>
+      )}{" "}
+      ·{" "}
+      {when
+        ? `the count as of ${when}, ${issue.countAsOf ? "when Civitas read it" : "when this page read it"}. `
+        : ""}
+      The state&apos;s own results site has the current count.
+    </p>
   );
 }
 
