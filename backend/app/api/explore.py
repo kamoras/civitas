@@ -186,10 +186,22 @@ async def explore_stats(db: Session = Depends(get_db)):
     )
 
 
+async def _load_document(db: Session, doc_id: int) -> ExploreDocument | None:
+    """The document, read off the event loop on a session of its own
+    (off_loop) and detached from it, its columns loaded."""
+    def read(session):
+        doc = session.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+        if doc is not None:
+            session.expunge(doc)
+        return doc
+
+    return await off_loop(db, read)
+
+
 @router.get("/{doc_id}")
 async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
     """Return full details for a single explore document."""
-    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    doc = await _load_document(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -223,7 +235,7 @@ async def get_document_comments(
     db: Session = Depends(get_db),
 ):
     """Fetch public comments for a regulatory document from regulations.gov."""
-    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    doc = await _load_document(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -282,7 +294,7 @@ async def post_document_comment(
     organization = submission.organization
     dry_run = submission.dry_run
 
-    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    doc = await _load_document(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -350,6 +362,11 @@ _SLOW_FOR_S = 2 * 60.0
 # A timeout, remembered for _UNUSABLE_FOR_S: a second one of the same text
 # in that time holds it off as unusable.
 _SLOW_STRIKE_BUCKET = "explore-summary-slow-strike"
+# The LLM said it was busy (429/503): a fact about it, not any document, so
+# every request is held off for the busy wait — refused as busy without
+# being charged or calling the LLM — rather than each reader's retry
+# spending its budget to hear the same thing.
+_LLM_BUSY_BUCKET = "explore-summary-llm-busy"
 _MAX_GENERATIONS = 2
 _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
@@ -628,10 +645,17 @@ class _Generation:
                 key = self.key
                 claimed = await self._claim(
                     _SUMMARY_BUCKET, [key],
-                    blocked_by=((_UNUSABLE_BUCKET, key, _UNUSABLE_FOR_S), (_SLOW_BUCKET, key, _SLOW_FOR_S)),
+                    blocked_by=(
+                        (_UNUSABLE_BUCKET, key, _UNUSABLE_FOR_S),
+                        (_SLOW_BUCKET, key, _SLOW_FOR_S),
+                        (_LLM_BUSY_BUCKET, "llm", _BUSY_RETRY_AFTER_S),
+                    ),
                 )
                 if isinstance(claimed, throttle.Blocked):
-                    self._settle(("slow", claimed.lifts_in) if claimed.bucket == _SLOW_BUCKET else "unusable")
+                    self._settle({
+                        _SLOW_BUCKET: ("slow", claimed.lifts_in),
+                        _LLM_BUSY_BUCKET: "busy",
+                    }.get(claimed.bucket, "unusable"))
                     return
                 if not claimed:
                     self._settle("held")
@@ -714,6 +738,13 @@ class _Generation:
             if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (429, 503):
                 logger.warning("Explore doc summary for doc_id=%s: the LLM is busy", self.doc_id)
                 llm_busy = True
+                # What it wrote before saying so is not an answer to keep
+                # or show as one: asked again, it can be had whole.
+                text = ""
+                try:
+                    await throttle.run(throttle.hold, _LLM_BUSY_BUCKET, ["llm"], period=_BUSY_RETRY_AFTER_S)
+                except Exception:
+                    logger.warning("The LLM's busy hold-off not recorded", exc_info=True)
             elif deadline.expired() or isinstance(error, httpx.ReadTimeout):
                 logger.warning("Explore doc summary for doc_id=%s ran out of time", self.doc_id)
                 timed_out = True

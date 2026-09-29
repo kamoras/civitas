@@ -471,10 +471,11 @@ class TestSummaryEndpointGuards:
         (ConnectionError("unreachable"), False, None),
         (httpx.ConnectTimeout("unreachable"), False, None),
         (httpx.ReadTimeout("no answer"), True, 120),
-        # Busy is the LLM's state, not the document's: nothing held off,
-        # and this reader asks again at the busy wait.
+        # Busy is the LLM's state, not the document's: every request is
+        # held off for the busy wait (refused, not charged), this reader
+        # included.
         (httpx.HTTPStatusError("busy", request=httpx.Request("POST", "http://llm"),
-                               response=httpx.Response(503)), False, 30),
+                               response=httpx.Response(503)), "busy", 30),
         (httpx.HTTPStatusError("bad", request=httpx.Request("POST", "http://llm"),
                                response=httpx.Response(400)), False, None),
     ], ids=["unreachable", "connect-timeout", "llm-read-timeout", "llm-busy-503", "llm-400"])
@@ -499,7 +500,12 @@ class TestSummaryEndpointGuards:
         ):
             first = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
             assert first[-1].get("retryAfter") == retry_after
-            if held_off:
+            if held_off == "busy":
+                other = _make_doc(db_session)  # any document, not just this one
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_explore_document_summary(other.id, _reader("198.51.100.5"), db=db_session)
+                assert exc_info.value.status_code == 503 and exc_info.value.headers["Retry-After"] == "30"
+            elif held_off:
                 with pytest.raises(HTTPException) as exc_info:
                     await get_explore_document_summary(doc.id, _READER, db=db_session)
                 assert exc_info.value.status_code == 503
@@ -643,6 +649,25 @@ class TestSummaryEndpointGuards:
         ):
             events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
         assert events == [{"done": True, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 120}]
+
+    async def test_a_busy_llm_after_some_text_is_a_wait_not_a_partial_answer(self, db_session):
+        # The text before "busy" is not an answer: this reader is told to
+        # ask again, when it can be had whole.
+        doc = _make_doc(db_session)
+
+        async def _then_busy(*_args, **_kwargs):
+            yield "SUMMARY: half"
+            raise httpx.HTTPStatusError("busy", request=httpx.Request("POST", "http://llm"),
+                                        response=httpx.Response(503))
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _then_busy),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
+        ):
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+        assert events[-1] == {"done": True, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 30}
+        assert not mock_set_cache.called
 
     async def test_a_hold_off_is_on_the_text_not_the_document(self, db_session):
         # An unusable output from an empty body doesn't hold off the

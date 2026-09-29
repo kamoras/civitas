@@ -423,7 +423,7 @@ class TestPipelineServiceLiveness:
         check_pipeline_service_alive()
         assert sent == ["Pipeline service is not running"]
 
-    def test_no_heartbeat_yet_is_a_service_still_starting(self, sent):
+    def test_no_heartbeat_yet_is_a_service_still_starting(self, sent, monkeypatch):
         # Its first deploy (or a fresh volume): pulling, migrating. Not a
         # page until it has been missing as long as silence is allowed —
         # counted from a record on the volume, so an API restarted by each
@@ -434,11 +434,26 @@ class TestPipelineServiceLiveness:
         from app import ops_alerts
         from app.shared_state import record_path
 
+        monkeypatch.setattr(ops_alerts, "_heartbeat_missing_noticed", None)
         ops_alerts.check_pipeline_service_alive()
         assert sent == []
         path = record_path(ops_alerts._HEARTBEAT_MISSING_RECORD)
         noticed = time.time() - ops_alerts.PIPELINE_SERVICE_SILENT_AFTER.total_seconds() - 60
         os.utime(path, (noticed, noticed))
+        ops_alerts.check_pipeline_service_alive()
+        assert sent == ["Pipeline service is not running"]
+
+    def test_a_missing_heartbeat_still_pages_when_the_record_cant_be_written(self, sent, monkeypatch):
+        # A volume refusing the write must not silence the alert for good.
+        from app import ops_alerts
+        from app.time_utils import utcnow
+
+        def refuse(*_a, **_k):
+            raise OSError("read-only")
+
+        monkeypatch.setattr("app.shared_state.write_record", refuse)
+        monkeypatch.setattr(ops_alerts, "_heartbeat_missing_noticed",
+                            utcnow() - ops_alerts.PIPELINE_SERVICE_SILENT_AFTER - timedelta(minutes=1))
         ops_alerts.check_pipeline_service_alive()
         assert sent == ["Pipeline service is not running"]
 

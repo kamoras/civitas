@@ -396,18 +396,31 @@ _heartbeat_unreadable_since: datetime | None = None
 _HEARTBEAT_MISSING_RECORD = "pipeline_heartbeat_missing_since.json"
 
 
-def _heartbeat_missing_long_enough() -> bool:
-    from app.shared_state import read_record, record_path, write_record
+# This process's own first sighting, the fallback when the record can't be
+# written or read: a volume that refuses the write must not also silence
+# the alert for good.
+_heartbeat_missing_noticed: datetime | None = None
 
+
+def _heartbeat_missing_long_enough() -> bool:
+    from app.shared_state import UNREADABLE, read_record, record_path, write_record
+
+    global _heartbeat_missing_noticed
+    now = utcnow()
+    if _heartbeat_missing_noticed is None:
+        _heartbeat_missing_noticed = now
     path = record_path(_HEARTBEAT_MISSING_RECORD)
     record = read_record(path)
-    if not isinstance(record, tuple):
-        try:
-            write_record(path, {})
-        except OSError:
-            logger.warning("Couldn't record the missing pipeline heartbeat", exc_info=True)
-        return False
-    return utcnow() - record[0] >= PIPELINE_SERVICE_SILENT_AFTER
+    if isinstance(record, tuple):
+        noticed = min(record[0], _heartbeat_missing_noticed)
+    else:
+        noticed = _heartbeat_missing_noticed
+        if record is not UNREADABLE:  # absent: start the record (never reset one)
+            try:
+                write_record(path, {})
+            except OSError:
+                logger.warning("Couldn't record the missing pipeline heartbeat", exc_info=True)
+    return now - noticed >= PIPELINE_SERVICE_SILENT_AFTER
 
 
 def _forget_heartbeat_missing() -> None:
@@ -415,6 +428,8 @@ def _forget_heartbeat_missing() -> None:
 
     from app.shared_state import record_path
 
+    global _heartbeat_missing_noticed
+    _heartbeat_missing_noticed = None
     try:
         os.unlink(record_path(_HEARTBEAT_MISSING_RECORD))
     except OSError:
