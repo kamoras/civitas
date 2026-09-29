@@ -7,16 +7,16 @@ change of Congress.
 
 Expand only: one nullable column. An image without it never reads it.
 
-Revision ID: 0023
-Revises: 0022
+Revision ID: 0024
+Revises: 0023
 Create Date: 2026-09-29
 """
 import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0023"
-down_revision = "0022"
+revision = "0024"
+down_revision = "0023"
 branch_labels = None
 depends_on = None
 
