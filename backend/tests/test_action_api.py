@@ -962,6 +962,30 @@ class TestPagerAroundAnOlderDay:
         assert dates[0] == days[-1]
 
 
+class TestEmptyDayPager:
+    async def test_a_day_with_no_issues_left_still_pages_to_its_neighbours(self, db_session):
+        """A re-matched issue is restamped to the day that matched it, so a
+        day can end up with no rows; the timeline still links to it."""
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        db_session.add(ActionIssue(date="2026-10-01", rank=1, title="Old", is_current=False))
+        db_session.add(ActionIssue(date="2026-10-03", rank=1, title="Moved on", is_current=True))
+        db_session.commit()
+        resp = await get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
+        assert resp["issues"] == []
+        assert resp["availableDates"] == ["2026-10-03", "2026-10-02", "2026-10-01"]
+
+    async def test_a_malformed_date_is_not_offered_as_a_day(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        resp = await get_action_issues(Response(), date="not-a-day", db=db_session, db_visits=db_session)
+        assert resp == {"date": "not-a-day", "issues": [], "availableDates": []}
+
+
 class TestMyRepsIssueDay:
     async def test_evening_eastern_still_finds_todays_issues(self, db_session):
         """My Reps used utcnow()'s date: from 8 PM Eastern (the next UTC

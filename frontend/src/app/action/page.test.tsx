@@ -243,6 +243,30 @@ describe("arriving at a day or an issue from inside the Action Center", () => {
   });
 });
 
+describe("a day with no issues left", () => {
+  it("still has a pager, and doesn't call a past day empty for now", async () => {
+    // Every issue on a day can move on (a re-matched issue is restamped to
+    // the day that matched it), and the timeline still links to that day.
+    vi.mocked(fetchActionIssues).mockImplementation(((date?: string) =>
+      Promise.resolve({
+        date: date ?? LATEST,
+        availableDates: DATES,
+        generatedAt: `${LATEST}T12:00:00Z`,
+        issues: date === DATES[1] ? [] : (["a"] as const).map((slot) => issueFor(LATEST, slot)),
+      })) as unknown as typeof fetchActionIssues);
+    window.history.replaceState(null, "", `/action?tab=issues&date=${DATES[1]}`);
+    render(<ActionPage />);
+    expect(await screen.findByText("No issues are recorded for this day.")).toBeInTheDocument();
+    expect(screen.queryByText(/Check back soon/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous day" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Next day" }));
+    await waitFor(() =>
+      expect(screen.queryByText("No issues are recorded for this day.")).not.toBeInTheDocument()
+    );
+    expect(vi.mocked(fetchActionIssues).mock.calls.map((c) => c[0])).toContain(undefined);
+  });
+});
+
 describe("focus after Back/Forward", () => {
   async function popTo(url: string) {
     await act(async () => {

@@ -650,57 +650,70 @@ function IssuesTab({
   const heroIssue = data?.issues?.[0];
   const secondaryIssues = data?.issues?.slice(1) || [];
 
+  // Shown on an empty day too: a day whose issues all moved on (a
+  // re-matched issue is restamped to the day that matched it) is reached
+  // by the timeline's links, and without a pager it strands the reader.
+  const pager = (availableDates.length > 1 || selectedDate) && (
+    <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-widest">
+      <button
+        onClick={goToPrev}
+        disabled={currentIdx >= availableDates.length - 1}
+        className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
+        aria-label="Previous day"
+      >
+        ← PREV
+      </button>
+      <span className="text-ink px-3 py-1 border border-white/[0.07] bg-white/[0.03] min-w-[110px] text-center">
+        {currentDate
+          ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" })
+          : "—"}
+      </span>
+      <button
+        onClick={goToNext}
+        disabled={currentIdx <= 0 && !selectedDate}
+        className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
+        aria-label="Next day"
+      >
+        NEXT →
+      </button>
+      {selectedDate && (
+        <button
+          onClick={() => {
+            setSelectedDate(null);
+            onDateChange?.(null);
+          }}
+          className="text-ink-lo hover:text-phos transition-colors ml-1"
+          aria-label="Jump to present"
+        >
+          LATEST
+        </button>
+      )}
+    </div>
+  );
+
   if (!heroIssue) {
     return (
-      <div className="panel max-w-lg mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-signal-amber font-mono text-sm tracking-widest mb-2">
-          NO ISSUES YET
+      <div className="space-y-6">
+        {pager}
+        <div className="panel max-w-lg mx-auto p-6 text-center" role="status" aria-live="polite">
+          {selectedDate ? (
+            <p className="text-ink-lo text-base">No issues are recorded for this day.</p>
+          ) : (
+            <>
+              <div className="text-signal-amber font-mono text-sm tracking-widest mb-2">
+                NO ISSUES YET
+              </div>
+              <p className="text-ink-lo text-base">Check back soon.</p>
+            </>
+          )}
         </div>
-        <p className="text-ink-lo text-base">Check back soon.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Date navigation */}
-      {availableDates.length > 1 && (
-        <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-widest">
-          <button
-            onClick={goToPrev}
-            disabled={currentIdx >= availableDates.length - 1}
-            className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
-            aria-label="Previous day"
-          >
-            ← PREV
-          </button>
-          <span className="text-ink px-3 py-1 border border-white/[0.07] bg-white/[0.03] min-w-[110px] text-center">
-            {currentDate
-              ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" })
-              : "—"}
-          </span>
-          <button
-            onClick={goToNext}
-            disabled={currentIdx <= 0 && !selectedDate}
-            className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
-            aria-label="Next day"
-          >
-            NEXT →
-          </button>
-          {selectedDate && (
-            <button
-              onClick={() => {
-                setSelectedDate(null);
-                onDateChange?.(null);
-              }}
-              className="text-ink-lo hover:text-phos transition-colors ml-1"
-              aria-label="Jump to present"
-            >
-              LATEST
-            </button>
-          )}
-        </div>
-      )}
+      {pager}
 
       {/* Data freshness timestamp */}
       {generatedAt && (

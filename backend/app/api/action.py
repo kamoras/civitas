@@ -115,6 +115,27 @@ def _latest_issue_date(db: Session) -> str | None:
     )
 
 
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _pager_dates(db: Session, day: str) -> list[str]:
+    """The Action Center pager's days, newest first: the 14 newest days of
+    confirmed issues, plus `day` and the confirmed days either side of it,
+    so a deep link to an older day (the timeline's year-in-review links)
+    still pages to its neighbours. Confirmed issues only: a developing
+    draft is listed beside the newest day, not on a day of its own, so a
+    day holding nothing but a draft (a seat flip restamped past midnight
+    before the next refresh) would page to a view the landing view
+    already shows."""
+    confirmed = db.query(ActionIssue.date).filter(_NOT_DEVELOPING).distinct()
+    around = {
+        confirmed.filter(ActionIssue.date < day).order_by(ActionIssue.date.desc()).limit(1).scalar(),
+        confirmed.filter(ActionIssue.date > day).order_by(ActionIssue.date.asc()).limit(1).scalar(),
+    }
+    newest = [row[0] for row in confirmed.order_by(ActionIssue.date.desc()).limit(14).all()]
+    return sorted({day, *newest, *around} - {None}, reverse=True)
+
+
 def _latest_current_issues(db: Session, for_date: str | None = None) -> list[ActionIssue]:
     """Return the most recent day's action issues, tolerating a wedged refresh.
 
@@ -397,24 +418,16 @@ async def get_action_issues(
     issues = _latest_current_issues(db, for_date=date)
 
     if not issues:
-        return {"date": date, "issues": []}
+        # A day whose issues all moved on (a re-matched issue is restamped
+        # to the day that matched it) still gets a pager, so a reader who
+        # followed a link to it can page to the days either side.
+        return {
+            "date": date, "issues": [],
+            "availableDates": _pager_dates(db, date) if date and _ISO_DAY.match(date) else [],
+        }
 
     issue_date = date or _latest_issue_date(db) or issues[0].date
-
-    # Days of confirmed issues only: a developing draft is listed beside the
-    # newest day, not on a day of its own, so a day holding nothing but a
-    # draft (a seat flip restamped past midnight before the next refresh)
-    # would page to a view the landing view already shows.
-    # The pager's days: the 14 newest, plus the day shown and the confirmed
-    # days either side of it, so a deep link to an older day (the
-    # timeline's year-in-review links) still pages to its neighbours.
-    confirmed_dates = db.query(ActionIssue.date).filter(_NOT_DEVELOPING).distinct()
-    around = {
-        confirmed_dates.filter(ActionIssue.date < issue_date).order_by(ActionIssue.date.desc()).limit(1).scalar(),
-        confirmed_dates.filter(ActionIssue.date > issue_date).order_by(ActionIssue.date.asc()).limit(1).scalar(),
-    }
-    newest = [row[0] for row in confirmed_dates.order_by(ActionIssue.date.desc()).limit(14).all()]
-    available_dates = sorted({issue_date, *newest, *around} - {None}, reverse=True)
+    available_dates = _pager_dates(db, issue_date)
 
     all_explore_ids: list[int] = []
     for i in issues:
