@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 
 import { boxedControl } from "@/lib/controlStyles";
+import { focusTabWhenSelected } from "@/lib/tabFocus";
 
 export type Branch = "senate" | "house" | "president" | "scotus";
 
@@ -36,9 +37,7 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
       }
       e.preventDefault();
       onChange(BRANCHES[next].key);
-      requestAnimationFrame(() => {
-        document.getElementById(`branch-panel-${BRANCHES[next].key}`)?.focus();
-      });
+      focusTabWhenSelected(`branch-tab-${BRANCHES[next].key}`);
     },
     [selected, onChange]
   );
