@@ -583,7 +583,7 @@ function IssuesTab({
   initialDate?: string | null;
   onDateChange?: (date: string | null) => void;
   initialIssueId?: string | null;
-  onIssueChange?: (id: string | null, date: string | null, toggled: string) => void;
+  onIssueChange?: (id: string | null, date: string | null) => void;
 }) {
   // The selected day IS the request. Keying the fetch on it means the pager
   // can't get out of step with what is on screen: there is no separate
@@ -610,8 +610,23 @@ function IssuesTab({
   // the page ends the arrival: coming back to that day must not expand and
   // scroll to the card again.
   const [issueArrival, setIssueArrival] = useState<string | null>(initialIssueId ?? null);
+  // The cards open on this day, in the order they were opened (a deep-
+  // linked card first): the URL names the newest one still open, so
+  // collapsing any card, in any order, leaves it on a card that is open.
+  const openIssues = useRef<string[]>(initialIssueId ? [initialIssueId] : []);
+  const onToggle = useCallback(
+    (id: string, expanded: boolean) => {
+      openIssues.current = [
+        ...openIssues.current.filter((o) => o !== id),
+        ...(expanded ? [id] : []),
+      ];
+      onIssueChange?.(openIssues.current.at(-1) ?? null, selectedDate);
+    },
+    [onIssueChange, selectedDate]
+  );
   const goTo = useCallback(
     (d: string | null) => {
+      openIssues.current = [];
       setIssueArrival(null);
       setSelectedDate(d);
       onDateChange?.(d);
@@ -821,7 +836,7 @@ function IssuesTab({
                 userState={userState}
                 onNavigate={onNavigate}
                 deepLinked={issueArrival === issue.publicId}
-                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null, selectedDate, id)}
+                onToggle={onToggle}
               />
             ))}
           </div>
@@ -1080,10 +1095,7 @@ function ActionPageInner() {
 
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
-    (id: string | null, date: string | null, toggled: string) => {
-      // Collapsing a card the URL doesn't name (another card was opened
-      // after it) leaves the URL on the one still open.
-      if (!id && new URLSearchParams(window.location.search).get("issue") !== toggled) return;
+    (id: string | null, date: string | null) => {
       // The day stays in the URL: an issue on an older day, reloaded or
       // shared as ?issue= alone, opened on the latest day, where it isn't.
       const url = date

@@ -220,12 +220,13 @@ describe("arriving at a day or an issue from inside the Action Center", () => {
     await waitFor(() => expect(scrolls).toHaveBeenCalledTimes(1));
     const fetches = vi.mocked(fetchActionIssues).mock.calls.length;
 
-    // Expanding another card writes ?issue=<it>; collapsing writes ?tab=issues;
+    // Expanding another card writes ?issue=<it>; collapsing it goes back to
+    // the deep-linked card, still open;
     // paging a day writes ?date=.
     await userEvent.click(screen.getByRole("button", { name: new RegExp(`Issue c of ${LATEST}`) }));
     expect(window.location.search).toBe(`?issue=pub-c-${"latest"}`);
     await userEvent.click(screen.getByRole("button", { name: new RegExp(`Issue c of ${LATEST}`) }));
-    expect(window.location.search).toBe("?tab=issues");
+    expect(window.location.search).toBe("?issue=pub-b-latest");
     await act(() => new Promise((r) => setTimeout(r, 150)));
     expect(scrolls).toHaveBeenCalledTimes(1);
     // No remount either: the same fetch serves the page.
@@ -433,6 +434,20 @@ describe("the issue in the URL", () => {
     await userEvent.click(b);
     expect(window.location.search).toBe(`?date=${DATES[1]}&issue=pub-c-${DATES[1]}`);
     await userEvent.click(c);
+    expect(window.location.search).toBe(`?date=${DATES[1]}`);
+  });
+
+  it("stays on the earlier card when the newest open card is collapsed", async () => {
+    serveIssues();
+    window.history.replaceState(null, "", `/action?tab=issues&date=${DATES[1]}`);
+    render(<ActionPage />);
+    const b = await screen.findByRole("button", { name: new RegExp(`Issue b of ${DATES[1]}`) });
+    const c = screen.getByRole("button", { name: new RegExp(`Issue c of ${DATES[1]}`) });
+    await userEvent.click(b);
+    await userEvent.click(c);
+    await userEvent.click(c);
+    expect(window.location.search).toBe(`?date=${DATES[1]}&issue=pub-b-${DATES[1]}`);
+    await userEvent.click(b);
     expect(window.location.search).toBe(`?date=${DATES[1]}`);
   });
 
