@@ -1275,6 +1275,11 @@ export interface OpsAlert {
   subject: string;
   body: string;
   at: string;
+  /** The ongoing problem it reports; null for a one-off event. */
+  condition?: string | null;
+  resolvedAt?: string | null;
+  /** Its condition is unresolved (the backend decides; never derived here). */
+  open?: boolean;
 }
 
 export async function fetchAdminDashboard(token: string): Promise<AdminDashboard> {

@@ -511,7 +511,7 @@ class TestPipelineServiceLiveness:
 
         engine = create_engine(f"sqlite:///{tmp_path / 'alerts.db'}", connect_args={"timeout": 5})
         Base.metadata.create_all(engine)
-        monkeypatch.setattr("app.database.SessionLocal", sessionmaker(bind=engine))
+        monkeypatch.setattr(ops_alerts, "SessionLocal", sessionmaker(bind=engine))
         # Both pass the read check before either records: the race.
         monkeypatch.setattr(ops_alerts, "_already_sent", lambda key: False)
         delivered = []
@@ -544,7 +544,7 @@ def test_a_second_outage_the_same_day_alerts_again(monkeypatch, tmp_path):
     from app.time_utils import utcnow
 
     keys = []
-    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None: keys.append(dedupe_key))
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None, condition=None: keys.append(dedupe_key))
     for last in (utcnow() - timedelta(hours=9), utcnow() - timedelta(hours=1)):
         monkeypatch.setattr("app.scheduler.read_heartbeat", lambda last=last: (last, {}))
         ops_alerts.check_pipeline_service_alive()
@@ -580,3 +580,17 @@ async def test_the_pipeline_lock_is_taken_before_init_db(monkeypatch):
     except RuntimeError:
         pass
     assert order == ["lock", "init_db"]
+
+
+def test_a_beating_pipeline_service_resolves_its_silent_alert(monkeypatch):
+    # Open until the heartbeat is back: the dashboard shows it as active
+    # only while the service is really down, and a later outage alerts anew.
+    from app import ops_alerts
+    from app.time_utils import utcnow
+
+    resolved = []
+    monkeypatch.setattr(ops_alerts, "resolve_ops_alert", resolved.append)
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **k: None)
+    monkeypatch.setattr("app.scheduler.read_heartbeat", lambda: (utcnow(), {}))
+    ops_alerts.check_pipeline_service_alive()
+    assert "pipeline-service-silent" in resolved

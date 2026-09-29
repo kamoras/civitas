@@ -21,7 +21,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.ops_alerts import send_ops_alert
+from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import rate_limiter
 from app.time_utils import utcnow
 
@@ -86,6 +86,7 @@ class ProgressTracker:
             step["done"] = step["total"]
         self._flush()
         self._record_timing(step)
+        resolve_ops_alert(self._failed_condition(key))
 
     def skip(self, key: str, *, detail: str | None = None) -> None:
         step = self._steps.get(key)
@@ -130,7 +131,12 @@ class ProgressTracker:
             f"{pipeline} step '{key}' failed and the run continued without it"
             + (f": {detail}" if detail else "") + ". The traceback is in that run's logs.",
             dedupe_key=f"step-failed-{pipeline}-{key}-{utcnow():%Y-%m-%d}",
+            condition=self._failed_condition(key),
         )
+
+    def _failed_condition(self, key: str) -> str:
+        """Open from a failed step until the step next completes."""
+        return f"step-failed-{type(self._run).__name__}-{key}"
 
     def _flush(self) -> None:
         ordered = [self._steps[k] for k, _, _ in self._steps_def]

@@ -859,6 +859,7 @@ def _late_cycle_notice(state: str, election_day: str, source_name: str, awaited)
             f"before {election_day}. That can be the real answer (the document exists only in a year "
             f"with a measure); worth a manual look at the source in case the reader has broken.",
             dedupe_key=f"ballot-measure-late-{state}-{election_day}",
+            condition=f"ballot-measure-late-{state}-{election_day}",
         )
     except Exception:
         logger.exception("Could not send late-cycle ballot-measure notice for %s", state)
@@ -1082,6 +1083,21 @@ def _write_direct_answer(
     return len(seen_ids), marked
 
 
+def _resolve_answered_notices(db: Session, election_day: str) -> None:
+    """Close each late-cycle notice whose state has now answered (measures
+    covered, or confirmed none). Run after the sync commits: the alert
+    store writes through its own session."""
+    from app.models import MeasureCoverage
+    from app.ops_alerts import resolve_ops_alert
+
+    answered = db.query(MeasureCoverage.state).filter(
+        MeasureCoverage.election_date == election_day,
+        MeasureCoverage.status.in_((MeasureCoverage.COVERED, MeasureCoverage.CONFIRMED_NONE)),
+    ).all()
+    for (state,) in answered:
+        resolve_ops_alert(f"ballot-measure-late-{state}-{election_day}")
+
+
 def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
     """One ops alert per night per set of failing states. The dedupe key
     carries the date and a digest of the states: send_ops_alert dedupes
@@ -1091,7 +1107,10 @@ def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
     Same shape as state_candidates' recurring alerts."""
     import hashlib
 
+    from app.ops_alerts import resolve_ops_alert
+
     if not failing:
+        resolve_ops_alert(f"ballot-measure-ingest-{election_day}")
         return
     states = sorted(set(failing))
     digest = hashlib.sha1("|".join(states).encode()).hexdigest()[:12]
@@ -1106,6 +1125,7 @@ def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
             f"for {election_day}: {', '.join(states)}. Those states render as 'not yet covered' "
             f"rather than 'no measures' until this clears.",
             dedupe_key=f"ballot-measure-ingest-{election_day}-{utcnow().date().isoformat()}-{digest}",
+            condition=f"ballot-measure-ingest-{election_day}",
         )
     except Exception:
         logger.exception("Could not send ballot-measure ops alert")
@@ -1244,6 +1264,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     db.commit()
 
     _alert_ingest_failures(failing, election_day)
+    _resolve_answered_notices(db, election_day)
 
     return {
         "synced": synced,

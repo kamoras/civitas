@@ -92,15 +92,21 @@ def _today_str(today: str | None) -> str:
     return today or utcnow().strftime("%Y-%m-%d")
 
 
-def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
+def _alert(subject: str, body: str, *, dedupe_key: str, condition: str) -> None:
     """Best-effort ops alert. Imported lazily and never allowed to raise —
     this module runs mid-pipeline and an alerting failure must not take the
     nightly run down with it (same lazy-import pattern as scheduler.py)."""
     try:
         from app.ops_alerts import send_ops_alert
-        send_ops_alert(subject, body, dedupe_key=dedupe_key)
+        send_ops_alert(subject, body, dedupe_key=dedupe_key, condition=condition)
     except Exception:
         logger.exception("Failed to send ops alert: %s", subject)
+
+
+def _resolve(condition: str) -> None:
+    from app.ops_alerts import resolve_ops_alert
+
+    resolve_ops_alert(condition)  # never raises
 
 
 def _is_iso_date(value: str | None) -> bool:
@@ -164,6 +170,7 @@ def reconcile_roster(
             "retired. Departures will go undetected until it recovers; if "
             "this repeats, check the cached roster.",
             dedupe_key=f"roster-skipped-{chamber}-{today}",
+            condition=f"roster-skipped-{chamber}",
         )
         return {
             "status": "skipped",
@@ -172,6 +179,7 @@ def reconcile_roster(
             "restored": [],
         }
 
+    _resolve(f"roster-skipped-{chamber}")  # a full roster again
     departed: list[str] = []
     restored: list[str] = []
     unmatchable = 0

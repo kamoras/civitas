@@ -624,7 +624,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # failed or was cut off, a model change) is rebuilt whole, here and
         # under this run's lease, rather than topped up: an incremental pass
         # can't make it whole, and calibration below measures it.
-        rebuilt = None
+        rebuilt, failed = None, False
         try:
             whole = await asyncio.to_thread(index_is_whole)
         except Exception:
@@ -646,8 +646,13 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                     f"{exc}). Semantic search stays off (keyword-only) until a rebuild completes; the next "
                     "Explore run or pipeline start tries again.",
                     dedupe_key=f"explore-index-rebuild-{utcnow():%Y-%m-%d}",
+                    condition="explore-index-rebuild",
                 )
-                rebuilt = 0
+                rebuilt, failed = 0, True
+        if whole or (rebuilt is not None and not failed):
+            from app.ops_alerts import resolve_ops_alert
+
+            await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
         if rebuilt is not None:
             embedded = rebuilt
         else:

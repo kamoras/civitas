@@ -16,6 +16,8 @@ import json
 import logging
 from typing import Any
 
+from app.ops_alerts import resolve_ops_alert, send_ops_alert
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,9 +47,11 @@ def persist_ground_truth_failures(
     alert_title: str,
     alert_body: str,
     dedupe_key: str,
+    condition: str,
 ) -> None:
     """Persist ``gt_failures`` on ``run.ground_truth_failures`` (committed) so
-    they surface in the admin dashboard, and fire an ops alert if non-empty.
+    they surface in the admin dashboard, and fire an ops alert if non-empty;
+    a clean gate resolves the chamber's open one.
 
     The caller computes ``gt_failures`` (the two pipelines gather them
     differently) and supplies the fully-formatted alert text.
@@ -55,5 +59,6 @@ def persist_ground_truth_failures(
     run.ground_truth_failures = json.dumps(gt_failures)
     db.commit()
     if gt_failures:
-        from app.ops_alerts import send_ops_alert
-        send_ops_alert(alert_title, alert_body, dedupe_key=dedupe_key)
+        send_ops_alert(alert_title, alert_body, dedupe_key=dedupe_key, condition=condition)
+    else:
+        resolve_ops_alert(condition)
