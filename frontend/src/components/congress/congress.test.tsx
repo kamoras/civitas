@@ -222,7 +222,10 @@ describe("day report", () => {
     // "Live floor log" over no log at all.
     const voting: DayReport = {
       ...day,
-      chambers: { ...day.chambers, senate: chamber({ chamber: "senate", status: "live", floorLogStatus: "absent" }) },
+      chambers: {
+        ...day.chambers,
+        senate: chamber({ chamber: "senate", status: "live", floorLogStatus: "absent" }),
+      },
     };
     render(<DayReportView report={voting} />);
     expect(screen.getByText(/^Record votes so far/)).toBeTruthy();
