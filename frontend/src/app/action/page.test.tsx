@@ -273,7 +273,7 @@ describe("a day with no issues left", () => {
 describe("the day pager", () => {
   it("treats a malformed or impossible ?date= as no date", async () => {
     serveIssues();
-    for (const bad of ["garbage", "2026-1-2", "2026-02-30"]) {
+    for (const bad of ["garbage", "2026-1-2", "2026-02-30", "0000-01-01"]) {
       window.history.replaceState(null, "", `/action?tab=issues&date=${bad}`);
       render(<ActionPage />);
       await screen.findByRole("button", { name: "Previous day" });
@@ -305,6 +305,69 @@ describe("the day pager", () => {
     expect(screen.getByRole("button", { name: "Previous day" })).toHaveFocus();
     await act(async () => release());
     expect(screen.getByRole("button", { name: "Previous day" })).toHaveFocus();
+  });
+});
+
+describe("the day pager while a day loads", () => {
+  it("waits for a deep-linked day before paging from it", async () => {
+    // On a cold ?date= load there is no day list yet: NEXT sent the reader
+    // to the latest day, not the next one.
+    const pending: Array<() => void> = [];
+    const release = () => pending.splice(0).forEach((r) => r());
+    vi.mocked(fetchActionIssues).mockImplementation(
+      ((date?: string) =>
+        new Promise((resolve) => {
+          pending.push(() =>
+            resolve({
+              date: date ?? LATEST,
+              availableDates: DATES,
+              generatedAt: `${LATEST}T12:00:00Z`,
+              issues: [issueFor(date ?? LATEST, "a")],
+            } as never)
+          );
+        })) as unknown as typeof fetchActionIssues
+    );
+    window.history.replaceState(null, "", `/action?tab=issues&date=${DATES[2]}`);
+    render(<ActionPage />);
+    const next = await screen.findByRole("button", { name: "Next day" });
+    expect(next).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(next);
+    expect(window.location.search).toContain(`date=${DATES[2]}`);
+    await act(async () => release());
+    expect(await screen.findByText(`Issue a of ${DATES[2]}`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next day" })).not.toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
+  });
+
+  it("keeps focus on LATEST once it has been used", async () => {
+    serveIssues();
+    window.history.replaceState(null, "", `/action?tab=issues&date=${DATES[1]}`);
+    render(<ActionPage />);
+    await screen.findByText(`Issue a of ${DATES[1]}`);
+    const latest = screen.getByRole("button", { name: "Jump to present" });
+    latest.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText(`Issue a of ${LATEST}`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Jump to present" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Jump to present" })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
+  });
+
+  it("doesn't scroll back to an issue link's card on paging back to its day", async () => {
+    serveIssues();
+    window.history.replaceState(null, "", "/action?issue=pub-b-latest");
+    render(<ActionPage />);
+    await waitFor(() => expect(scrolls).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole("button", { name: "Previous day" }));
+    expect(await screen.findByText(`Issue a of ${DATES[1]}`)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Next day" }));
+    expect(await screen.findByText(`Issue a of ${LATEST}`)).toBeInTheDocument();
+    await act(() => new Promise((r) => setTimeout(r, 150)));
+    expect(scrolls).toHaveBeenCalledTimes(1);
   });
 });
 

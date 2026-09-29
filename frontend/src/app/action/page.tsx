@@ -557,7 +557,8 @@ function SecondaryIssue({
  * malformed or impossible one ("2026-1-2", "2026-02-30") would otherwise be
  * requested as a day and labelled "Invalid Date" or a day that isn't it. */
 function isoDayOrNull(value: string | null): string | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  // Year 0000 too: JS Date accepts it, the API's date.fromisoformat doesn't.
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith("0000")) return null;
   const d = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value ? value : null;
 }
@@ -600,26 +601,36 @@ function IssuesTab({
   const currentDate = selectedDate || data?.date || null;
   const currentIdx = currentDate ? availableDates.indexOf(currentDate) : 0;
 
-  const goToPrev = useCallback(() => {
-    if (currentIdx >= 0 && currentIdx < availableDates.length - 1) {
-      const d = availableDates[currentIdx + 1];
+  // An issue link (?issue=) scrolls to its card once, on arrival. Turning
+  // the page ends the arrival: coming back to that day must not expand and
+  // scroll to the card again.
+  const [issueArrival, setIssueArrival] = useState<string | null>(initialIssueId ?? null);
+  const goTo = useCallback(
+    (d: string | null) => {
+      setIssueArrival(null);
       setSelectedDate(d);
       onDateChange?.(d);
-    }
-  }, [currentIdx, availableDates, onDateChange]);
+    },
+    [onDateChange]
+  );
 
+  // While a day loads the list is the previous day's, which (14 newest plus
+  // that day's neighbours) may not hold the true next day, and on a cold
+  // deep link is empty: the pager waits for the day it is on.
+  const canPrev = !loading && currentIdx >= 0 && currentIdx < availableDates.length - 1;
+  const canNext = !loading && (currentIdx > 0 || !!selectedDate);
+  const goToPrev = useCallback(() => {
+    if (canPrev) goTo(availableDates[currentIdx + 1]);
+  }, [canPrev, availableDates, currentIdx, goTo]);
   const goToNext = useCallback(() => {
-    if (currentIdx > 0) {
-      const d = availableDates[currentIdx - 1];
-      setSelectedDate(d);
-      onDateChange?.(d);
-    } else if (currentIdx <= 0 && selectedDate) {
-      // The newest day, or a chosen day the list doesn't hold: on to the
-      // latest.
-      setSelectedDate(null);
-      onDateChange?.(null);
-    }
-  }, [currentIdx, availableDates, selectedDate, onDateChange]);
+    if (!canNext) return;
+    // The newest day, or a chosen day the list doesn't hold: on to the
+    // latest.
+    goTo(currentIdx > 0 ? availableDates[currentIdx - 1] : null);
+  }, [canNext, availableDates, currentIdx, goTo]);
+  const goToLatest = useCallback(() => {
+    if (selectedDate) goTo(null);
+  }, [selectedDate, goTo]);
 
   const generatedAt = data?.generatedAt;
 
@@ -647,7 +658,7 @@ function IssuesTab({
           page body. The handlers do nothing at either end. */}
       <button
         onClick={goToPrev}
-        aria-disabled={currentIdx < 0 || currentIdx >= availableDates.length - 1}
+        aria-disabled={!canPrev}
         className="text-ink-lo hover:text-phos aria-disabled:text-ink-min aria-disabled:cursor-not-allowed transition-colors"
         aria-label="Previous day"
       >
@@ -660,24 +671,22 @@ function IssuesTab({
       </span>
       <button
         onClick={goToNext}
-        aria-disabled={currentIdx <= 0 && !selectedDate}
+        aria-disabled={!canNext}
         className="text-ink-lo hover:text-phos aria-disabled:text-ink-min aria-disabled:cursor-not-allowed transition-colors"
         aria-label="Next day"
       >
         NEXT →
       </button>
-      {selectedDate && (
-        <button
-          onClick={() => {
-            setSelectedDate(null);
-            onDateChange?.(null);
-          }}
-          className="text-ink-lo hover:text-phos transition-colors ml-1"
-          aria-label="Jump to present"
-        >
-          LATEST
-        </button>
-      )}
+      {/* Kept mounted (aria-disabled on the latest day) so activating it
+          doesn't unmount the focused button. */}
+      <button
+        onClick={goToLatest}
+        aria-disabled={!selectedDate}
+        className="text-ink-lo hover:text-phos aria-disabled:text-ink-min aria-disabled:cursor-not-allowed transition-colors ml-1"
+        aria-label="Jump to present"
+      >
+        LATEST
+      </button>
     </div>
   );
 
@@ -774,7 +783,7 @@ function IssuesTab({
         issue={heroIssue}
         userState={userState}
         onNavigate={onNavigate}
-        isDeepLinked={initialIssueId === heroIssue.publicId}
+        isDeepLinked={issueArrival === heroIssue.publicId}
       />
 
       {secondaryIssues.length > 0 && (
@@ -789,7 +798,7 @@ function IssuesTab({
                 issue={issue}
                 userState={userState}
                 onNavigate={onNavigate}
-                deepLinked={initialIssueId === issue.publicId}
+                deepLinked={issueArrival === issue.publicId}
                 onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
               />
             ))}
