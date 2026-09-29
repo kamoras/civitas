@@ -15,7 +15,9 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-# hnswlib has no prebuilt aarch64 wheel and compiles from source. Left to its
+# Any package that has no prebuilt aarch64 wheel compiles from source here —
+# hnswlib did (it left with ChromaDB in the sqlite-vec migration; every
+# current pin ships a wheel), and a future dependency may again. Left to its
 # own defaults, gcc auto-detects the *build host's* CPU (-march=native-ish
 # tuning), which on GitHub's ubuntu-24.04-arm runners (server-grade
 # Ampere/Cobalt) bakes in SIMD instructions absent on a Pi 5 (Cortex-A76) ->
