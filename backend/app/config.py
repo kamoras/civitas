@@ -87,7 +87,8 @@ class Settings(BaseSettings):
     PIPELINE_CACHE_TTL_HOURS: int = 72
     PIPELINE_LOG_LEVEL: str = "info"
     PIPELINE_CRON_SCHEDULE: str = "0 3 * * *"
-    # Which half of the backend this process runs (app.process_role):
+    # Which half of the backend this process runs (app.background's
+    # writers_allowed, main.lifespan):
     #   all    — both, in one process: local dev, plain `docker compose up`
     #   api    — public reads only; no scheduler, no startup jobs, and any
     #            attempt to start a background writer is refused (503)

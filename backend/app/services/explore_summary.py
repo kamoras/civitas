@@ -93,6 +93,22 @@ def cache_key(doc_id: int, prompt: dict) -> dict:
     return {"doc_id": doc_id, "v": CACHE_KEY_VERSION, "prompt": digest}
 
 
+def prompt_for(doc) -> dict:
+    """The LLM prompt for an ExploreDocument — the one the cache key is made
+    from, so the API's read of a summary and the pipeline's making of it
+    agree on it."""
+    from app.pipeline.analyze.prompts import explore_document_summary_prompt
+
+    return explore_document_summary_prompt({
+        "title": doc.title,
+        "body": doc.body,
+        "doc_type": doc.doc_type,
+        "chamber": doc.chamber or "",
+        "politician_name": doc.politician_name or "",
+        "date": doc.date,
+    })
+
+
 class _Run:
     """One generation, and every event it has sent — replayed to a reader
     who joins late."""
@@ -165,24 +181,34 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
     from app.api import throttle
     from app.pipeline.analyze.ollama_client import get_cached_llm_result
 
-    # The awaits first; everything after them decides and registers without
-    # yielding to another request, so two can't both pass the same check.
+    key = f"{doc_id}:{key_['prompt']}"
+
+    def joined() -> AsyncIterator[str] | None:
+        """A run of this text under way or just over, if any."""
+        run = _runs.get(key)
+        if run is not None:
+            return run.follow()
+        _prune(time.monotonic())
+        finished = _finished.get(key)
+        if finished is not None:  # over a moment ago; its cache write raced our read
+            return once(finished[1])
+        return None
+
     made = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key_)
     if made is not None:
         return once({"done": True, **made})
+    # Joining costs nothing to limit or key: nothing new starts.
+    if (stream := joined()) is not None:
+        return stream
     if limit is not None:
         await limit()
     client = await throttle.run(throttle.client_key, ip, "explore-summary-client")
-
-    key = f"{doc_id}:{key_['prompt']}"
-    run = _runs.get(key)
-    if run is not None:
-        return run.follow()
+    # Looked at again after those awaits; from here on everything decides
+    # and registers without yielding to another request, so two can't both
+    # pass the same check.
+    if (stream := joined()) is not None:
+        return stream
     now = time.monotonic()
-    _prune(now)
-    finished = _finished.get(key)
-    if finished is not None:  # over a moment ago; its cache write raced our read
-        return once(finished[1])
     if _llm_busy_until > now:
         raise _busy(_llm_busy_until - now)
     held = _holds.get(key)

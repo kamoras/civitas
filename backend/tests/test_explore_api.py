@@ -433,6 +433,58 @@ class TestEndings:
         assert events[-1]["summary"] == "A test summary." and written == {}
 
 
+class TestCachedSummaryRead:
+    """GET .../cached-summary: served by the API and nginx, so a summary
+    already made never waits on the pipeline process."""
+
+    async def test_a_summary_already_made_is_read_without_the_pipeline(self, db_session, monkeypatch):
+        from app.api.explore import get_cached_explore_summary
+        from app.config import settings
+
+        doc = _make_doc(db_session)
+        made = {"summary": "s", "keyPoints": [], "impact": ""}
+        monkeypatch.setattr(settings, "PROCESS_ROLE", "api")  # the read-only API serves it
+        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=made) as read:
+            resp = await get_cached_explore_summary(doc.id, db=db_session)
+        assert resp.status_code == 200 and json.loads(resp.body) == {"done": True, **made}
+        assert resp.headers["Cache-Control"].startswith("public")
+        # Asked under the same key the pipeline process files it under.
+        prompt = explore_summary.prompt_for(doc)
+        assert read.call_args.args == (prompt["promptVersion"], explore_summary.cache_key(doc.id, prompt))
+
+    async def test_none_yet_is_a_204_never_kept(self, db_session):
+        from app.api.explore import get_cached_explore_summary
+
+        doc = _make_doc(db_session)
+        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None):
+            resp = await get_cached_explore_summary(doc.id, db=db_session)
+        assert resp.status_code == 204 and resp.headers["Cache-Control"] == "no-store"
+
+    async def test_no_such_document_is_a_404(self, db_session):
+        from app.api.explore import get_cached_explore_summary
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_cached_explore_summary(999999, db=db_session)
+        assert exc_info.value.status_code == 404
+
+
+class TestJoining:
+    async def test_joining_a_generation_isnt_counted_by_the_request_limit(self, db_session, monkeypatch):
+        from app.api import explore
+
+        monkeypatch.setattr(explore, "_SUMMARY_REQUESTS_PER_MINUTE", 1)
+        doc = _make_doc(db_session)
+        stream, release = _gate()
+        patches, _ = _llm(stream)
+        with patches[0], patches[1], patches[2]:
+            first = await _ask(doc, db=db_session)
+            joiners = [await _ask(doc, db=db_session) for _ in range(3)]  # same reader, over its limit
+            release.set()
+            for response in [first, *joiners]:
+                assert (await _collect_sse_events(response))[-1]["summary"] == "A test summary."
+            await _settled()
+
+
 class TestAfterTheStream:
     async def test_readers_hear_it_is_over_before_the_cache_write(self, db_session):
         # The write can wait on the pipeline's own write lock: the page

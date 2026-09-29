@@ -1,5 +1,6 @@
 """Explore API — semantic search over government activity documents."""
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
@@ -357,6 +358,33 @@ _SUMMARY_REQUESTS_PER_MINUTE = 60
 _STREAM_HEADERS = {"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
 
 
+@router.get("/{doc_id}/cached-summary")
+async def get_cached_explore_summary(doc_id: int, db: Session = Depends(get_db)):
+    """A summary already made, served by the API (and nginx's cache) — a
+    read, so it never waits on the pipeline process that makes them: 200
+    with it, 204 when none has been made (the page then asks
+    `POST .../summary`, which the pipeline process streams), 404 for no such
+    document."""
+    from fastapi import Response
+
+    from app.pipeline.analyze.ollama_client import get_cached_llm_result
+    from app.services import explore_summary
+
+    doc = await _load_document(db, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    prompt = explore_summary.prompt_for(doc)
+    cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"],
+                                     explore_summary.cache_key(doc_id, prompt))
+    if cached is None:
+        # Not made yet — and may be made any moment: never kept.
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+    # Keyed on the text it summarises, so it stands while the document
+    # does; a changed document is a new key, seen within this lifetime.
+    return JSONResponse(content={"done": True, **cached},
+                        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"})
+
+
 @router.post("/{doc_id}/summary")
 async def get_explore_document_summary(
     doc_id: int,
@@ -376,7 +404,6 @@ async def get_explore_document_summary(
     immediately, as a single event, with no intermediate deltas).
     """
     from app.background import writers_allowed
-    from app.pipeline.analyze.prompts import explore_document_summary_prompt
     from app.services import explore_summary
 
     if not writers_allowed():
@@ -392,14 +419,7 @@ async def get_explore_document_summary(
     doc = await _load_document(db, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    prompt = explore_document_summary_prompt({
-        "title": doc.title,
-        "body": doc.body,
-        "doc_type": doc.doc_type,
-        "chamber": doc.chamber or "",
-        "politician_name": doc.politician_name or "",
-        "date": doc.date,
-    })
+    prompt = explore_summary.prompt_for(doc)
     key = explore_summary.cache_key(doc_id, prompt)
 
     ip = client_ip(request)

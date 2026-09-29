@@ -368,6 +368,22 @@ describe("submitDocumentComment", () => {
   });
 });
 
+/** The summary's two requests: the cached read (GET, "none yet" unless
+ *  `cached` is given) and the generation (POST, `post`). */
+function stubSummaryFetch(
+  post: (url: string, init?: RequestInit) => Promise<Response> | undefined,
+  cached?: Response
+) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) =>
+      init?.method === "POST"
+        ? post(url, init)
+        : Promise.resolve(cached ?? new Response(null, { status: 204 }))
+    )
+  );
+}
+
 describe("streamExploreDocumentSummary", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -387,7 +403,7 @@ describe("streamExploreDocumentSummary", () => {
       )
       .mockResolvedValueOnce(new Response("", { status: 503, headers: { "X-Summary-Wait": "1" } }))
       .mockResolvedValueOnce(done());
-    vi.stubGlobal("fetch", fetchMock);
+    stubSummaryFetch(fetchMock);
     const waits: number[] = [];
     const result = await streamExploreDocumentSummary(
       1,
@@ -403,7 +419,7 @@ describe("streamExploreDocumentSummary", () => {
   });
 
   it("still fails on a refusal that isn't one to wait out", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
+    stubSummaryFetch(vi.fn().mockResolvedValue(new Response("", { status: 404 })));
     await expect(
       streamExploreDocumentSummary(
         1,
@@ -417,7 +433,7 @@ describe("streamExploreDocumentSummary", () => {
   it("releases each refusal's body before waiting", async () => {
     const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
     const cancel = vi.spyOn(refused.body!, "cancel");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(done()));
+    stubSummaryFetch(vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(done()));
     await streamExploreDocumentSummary(
       1,
       () => {},
@@ -432,7 +448,7 @@ describe("streamExploreDocumentSummary", () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(new Response("", { status, headers: { "Retry-After": "5" } }));
-      vi.stubGlobal("fetch", fetchMock);
+      stubSummaryFetch(fetchMock);
       await expect(
         streamExploreDocumentSummary(
           1,
@@ -451,7 +467,7 @@ describe("streamExploreDocumentSummary", () => {
       .mockResolvedValue(
         new Response("", { status: 429, headers: { "Retry-After": "10", "X-Summary-Wait": "1" } })
       );
-    vi.stubGlobal("fetch", fetchMock);
+    stubSummaryFetch(fetchMock);
     const controller = new AbortController();
     const pending = streamExploreDocumentSummary(1, () => {}, controller.signal);
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -494,7 +510,7 @@ describe("streamExploreDocumentSummary's result", () => {
   it("says when the summary was cut short", async () => {
     const body =
       'data: {"done": true, "summary": "S", "keyPoints": [], "impact": "", "partial": true}\n\n';
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+    stubSummaryFetch(vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
     expect((await streamExploreDocumentSummary(1, () => {})).partial).toBe(true);
   });
 });
@@ -512,7 +528,7 @@ describe("streamExploreDocumentSummary after its own generation timed out", () =
       .mockResolvedValueOnce(
         sse('{"done": true, "summary": "S", "keyPoints": [], "impact": "", "truncated": true}')
       );
-    vi.stubGlobal("fetch", fetchMock);
+    stubSummaryFetch(fetchMock);
     const waits: number[] = [];
     const result = await streamExploreDocumentSummary(
       1,
@@ -541,7 +557,7 @@ describe("streamExploreDocumentSummary when its stream is cut", () => {
       }
     );
     const fetchMock = vi.fn().mockResolvedValueOnce(cut).mockResolvedValueOnce(whole);
-    vi.stubGlobal("fetch", fetchMock);
+    stubSummaryFetch(fetchMock);
     const seen: string[] = [];
     const result = await streamExploreDocumentSummary(
       1,
@@ -552,5 +568,30 @@ describe("streamExploreDocumentSummary when its stream is cut", () => {
     expect(result.summary).toBe("S");
     expect(seen).toEqual(["SUMMARY: half", ""]); // the cut text is cleared before asking again
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("streamExploreDocumentSummary with a summary already made", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads it from the API without asking the pipeline", async () => {
+    const post = vi.fn();
+    stubSummaryFetch(
+      post,
+      new Response('{"done": true, "summary": "S", "keyPoints": [], "impact": ""}', { status: 200 })
+    );
+    expect((await streamExploreDocumentSummary(1, () => {})).summary).toBe("S");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("still asks the pipeline when the cached read fails", async () => {
+    const post = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('data: {"done": true, "summary": "S", "keyPoints": [], "impact": ""}\n\n')
+      );
+    stubSummaryFetch(post, new Response("", { status: 502 }));
+    expect((await streamExploreDocumentSummary(1, () => {})).summary).toBe("S");
+    expect(post).toHaveBeenCalledTimes(1);
   });
 });

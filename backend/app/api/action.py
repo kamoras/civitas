@@ -609,8 +609,9 @@ async def record_pulse_vote(
     }
 
 
-# The globe's answer, held in process: (monotonic time, payload). The one
-# uvicorn worker (backend/Dockerfile) makes this the only copy.
+# The globe's answer, held in process: (monotonic time, payload) — one copy
+# per API worker (WEB_CONCURRENCY), which is fine for data every client sees
+# alike (AGENTS.md); nginx's path-keyed cache and its lock stand in front.
 _COUNTRY_NEWS_TTL_S = 600.0
 _country_news: tuple[float, dict] | None = None
 _country_news_lock = asyncio.Lock()

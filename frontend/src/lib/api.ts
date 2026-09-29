@@ -958,6 +958,15 @@ export async function streamExploreDocumentSummary(
   signal?: AbortSignal,
   wait: (ms: number, signal?: AbortSignal) => Promise<void> = abortableSleep
 ): Promise<ExploreDocumentSummary> {
+  // A summary already made is read from the API (and nginx's cache): it
+  // never waits on the pipeline process that makes them. Anything but a 200
+  // — none yet, or the read failing — goes on to ask for one.
+  try {
+    const cached = await fetch(`${API_BASE}/explore/${id}/cached-summary`, { signal });
+    if (cached.status === 200) return toSummary(await cached.json());
+  } catch (error) {
+    if (signal?.aborted) throw error;
+  }
   const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
   const waitFor = (retryAfter: string | null) =>
     wait(Math.min(summaryRetryDelayMs(retryAfter), Math.max(0, giveUpAt - Date.now())), signal);
@@ -977,9 +986,11 @@ export async function streamExploreDocumentSummary(
     try {
       result = await readSummaryStream(res.body, onDelta);
     } catch (error) {
-      // The stream was cut before its last event — the API restarting under
-      // a deploy, most often. Asked again: the generation it was part of
-      // finishes on its own, so the retry is usually served from the cache.
+      // The stream was cut before its last event — the pipeline service
+      // restarting under a deploy, most often, which stops the generation
+      // too. Asked again once it is back (nginx answers the gap as a wait):
+      // a reader who only lost the connection joins the generation still
+      // running, or reads it from the cache.
       if (signal?.aborted || Date.now() >= giveUpAt) throw error;
       onDelta("");
       await waitFor(null);
@@ -999,6 +1010,20 @@ export async function streamExploreDocumentSummary(
     }
     return result;
   }
+}
+
+/** The final event's fields, as the page reads them. */
+function toSummary(
+  parsed: Record<string, unknown>
+): ExploreDocumentSummary & { retryAfter?: number } {
+  return {
+    summary: typeof parsed.summary === "string" ? parsed.summary : "",
+    keyPoints: Array.isArray(parsed.keyPoints) ? (parsed.keyPoints as string[]) : [],
+    impact: typeof parsed.impact === "string" ? parsed.impact : "",
+    partial: parsed.partial === true,
+    truncated: parsed.truncated === true,
+    ...(typeof parsed.retryAfter === "number" ? { retryAfter: parsed.retryAfter } : {}),
+  };
 }
 
 async function readSummaryStream(
@@ -1022,16 +1047,7 @@ async function readSummaryStream(
       const line = event.trim();
       if (!line.startsWith("data:")) continue;
       const parsed = JSON.parse(line.slice("data:".length).trim());
-      if (parsed.done) {
-        return {
-          summary: parsed.summary ?? "",
-          keyPoints: parsed.keyPoints ?? [],
-          impact: parsed.impact ?? "",
-          partial: parsed.partial === true,
-          truncated: parsed.truncated === true,
-          ...(typeof parsed.retryAfter === "number" ? { retryAfter: parsed.retryAfter } : {}),
-        };
-      }
+      if (parsed.done) return toSummary(parsed);
       if (typeof parsed.delta === "string") {
         fullText += parsed.delta;
         onDelta(fullText);

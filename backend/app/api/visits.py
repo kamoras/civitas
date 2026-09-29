@@ -297,6 +297,11 @@ def _load_or_create_salt(date: str) -> bytes | None:
         db.close()
 
 
+def _today() -> str:
+    """The current UTC day, as the salts are dated."""
+    return datetime.now(UTC).date().isoformat()
+
+
 async def _daily_salt(date: str) -> bytes:
     global _salt_cache
     if _salt_cache is not None and _salt_cache[0] == date:
@@ -324,9 +329,7 @@ async def _daily_salt(date: str) -> bytes:
     # Cached only while its day lasts: a salt loaded just before midnight
     # and returned after it, once the sweep has cleared the cache, must not
     # put the ended day's salt back in memory.
-    from datetime import datetime, timezone
-
-    if date == datetime.now(timezone.utc).date().isoformat():
+    if date == _today():
         _salt_cache = (date, salt)
     return salt
 
@@ -350,7 +353,7 @@ def _forget_stale_salts() -> None:
     day's first visit: until then, anyone holding it could recompute
     yesterday's visitor hashes (AGENTS.md §8)."""
     global _salt_cache, _fallback_salt
-    today = datetime.now(UTC).date().isoformat()
+    today = _today()
     if _salt_cache is not None and _salt_cache[0] != today:
         _salt_cache = None
     if _fallback_salt is not None and _fallback_salt[0] != today:
@@ -377,10 +380,8 @@ def _fallback_salt_for(date: str) -> bytes:
     deleted when the day ends) — or, while that store is down too, this process's own, kept
     only until the shared one can be made: a private salt kept all day
     would count this worker's visitors apart from every other worker's."""
-    from datetime import datetime, timezone
-
     global _fallback_salt
-    if date != datetime.now(timezone.utc).date().isoformat():
+    if date != _today():
         # A visit from a day that has ended: hashed with a salt nobody keeps,
         # as _daily_salt does once the day's salt is gone — never with a
         # salt that outlives its day.
@@ -500,7 +501,7 @@ async def track_visit(request: Request, path: str = Query("/")) -> None:
     """
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    date = datetime.now(UTC).date().isoformat()
+    date = _today()
 
     event = _VisitEvent(
         date=date,
@@ -545,7 +546,7 @@ async def track_timing(
     if not buckets:
         return
     event = _TimingEvent(
-        date=datetime.now(UTC).date().isoformat(),
+        date=_today(),
         normalized_path=_normalize_path(path),
         buckets=buckets,
     )
