@@ -23,13 +23,11 @@ function formatCountdown(days: number): { value: string; unit: string }[] {
   return parts;
 }
 
-/** The next even (federal-election) year: this year if even, else next year. */
-function nextElectionYear(): number {
-  const y = new Date().getFullYear();
-  return y % 2 === 0 ? y : y + 1;
-}
-
-function SenatorRow({ senator }: { senator: ElectionSenator }) {
+// The election year comes from the API (nextElection.year), never the
+// browser's clock: through the results window the site stays on the
+// election just held, into January, and the seats marked "up" are that
+// election's.
+function SenatorRow({ senator, year }: { senator: ElectionSenator; year: number }) {
   return (
     <Link
       href={`/politicians/${senator.id}`}
@@ -42,7 +40,7 @@ function SenatorRow({ senator }: { senator: ElectionSenator }) {
         <span className="text-sm text-ink group-hover:text-phos truncate">{senator.name}</span>
         {senator.upForElection && (
           <span className="text-xs font-mono px-1.5 py-0.5 bg-signal-amber/10 border border-signal-amber/40 text-signal-amber shrink-0">
-            UP IN {nextElectionYear()}
+            UP IN {year}
           </span>
         )}
       </div>
@@ -56,7 +54,15 @@ function SenatorRow({ senator }: { senator: ElectionSenator }) {
   );
 }
 
-function StatePanel({ stateData, onClose }: { stateData: ElectionState; onClose: () => void }) {
+function StatePanel({
+  stateData,
+  year,
+  onClose,
+}: {
+  stateData: ElectionState;
+  year: number;
+  onClose: () => void;
+}) {
   return (
     <div
       className="panel border-t-2 border-t-signal-cyan p-5"
@@ -92,7 +98,7 @@ function StatePanel({ stateData, onClose }: { stateData: ElectionState; onClose:
           <h4 className="font-mono text-xs text-ink-lo mb-2">CURRENT SENATORS</h4>
           <div className="space-y-2">
             {stateData.senators.map((s) => (
-              <SenatorRow key={s.id} senator={s} />
+              <SenatorRow key={s.id} senator={s} year={year} />
             ))}
           </div>
         </div>
@@ -108,7 +114,7 @@ function StatePanel({ stateData, onClose }: { stateData: ElectionState; onClose:
                   ? "At-large district"
                   : `${stateData.houseDistricts} congressional districts`}
               </span>
-              <span className="text-xs font-mono text-ink-lo">ALL UP IN {nextElectionYear()}</span>
+              <span className="text-xs font-mono text-ink-lo">ALL UP IN {year}</span>
             </div>
             <p className="text-xs text-ink-min mt-2">
               All {stateData.houseDistricts === 1 ? "1 seat" : `${stateData.houseDistricts} seats`}{" "}
@@ -310,7 +316,11 @@ export default function ElectionsTab() {
 
       {/* State detail panel */}
       {selectedData && (
-        <StatePanel stateData={selectedData} onClose={() => setSelectedState(null)} />
+        <StatePanel
+          stateData={selectedData}
+          year={el.year}
+          onClose={() => setSelectedState(null)}
+        />
       )}
 
       {!selectedData && (

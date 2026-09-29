@@ -613,7 +613,8 @@ def ballot_final(held: str, today: date | None = None) -> bool:
     """True once the general election on `held` is within the UOCAVA
     transmission window (BALLOT_FINAL_DAYS_BEFORE), i.e. the ballot has
     been mailed and is what voters will see. An unparseable date is never
-    final."""
+    final. (Not election_phase.election_is_held, the day after the
+    election, from which nothing re-reads the ballot at all.)"""
     try:
         election_day = date.fromisoformat(str(held or "")[:10])
     except ValueError:

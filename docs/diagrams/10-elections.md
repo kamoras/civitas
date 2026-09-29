@@ -26,8 +26,8 @@ any nightly interruption. In the 60-day election season the ballot step
 (certified lists / primary results, then filing lists) also runs on its own
 every 6 hours, so an upstream abort can't hold ballots back; it and the
 nightly ballot phase each step aside while the other is running. From the
-day after an election neither reads that election's ballot or measures
-again (`ballot_is_final`): through the results window the site stays on it,
+day after an election neither they nor the nightly FEC roster sync read
+that election's candidates or measures again (`election_is_held`): through the results window the site stays on it,
 but its sources have moved on, and a re-read would unwrite what was
 certified.
 

@@ -40,7 +40,7 @@ from app.election_calendar import (
     CLASS_III_STATES,
     seats_up_for_year,
 )
-from app.election_phase import active_election, ballot_is_final
+from app.election_phase import active_election, election_is_held
 from app.http_client import make_async_client
 from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
@@ -117,10 +117,10 @@ def election_pipeline_age():
 _ballot_tracker = PipelineRunTracker()
 
 
-BALLOT_FINAL = "election held; its ballot is final"
+ELECTION_HELD = "election held; its ballot stands as read"
 
 
-class _BallotFinal(Exception):
+class _ElectionHeld(Exception):
     """Leaves a ballot phase's try block once it is marked skipped."""
 
 
@@ -149,10 +149,10 @@ async def run_ballot_sync(cycle: int | None = None) -> dict:
     one per second; the roster and financial refresh stay nightly."""
     db = SessionLocal()
     try:
-        if ballot_is_final(active_election(db)):
-            # The held election's ballot stands as read (ballot_is_final).
+        if election_is_held(active_election(db)):
+            # The held election's ballot stands as read (election_is_held).
             return {
-                "status": "skipped", "reason": BALLOT_FINAL,
+                "status": "skipped", "reason": ELECTION_HELD,
                 "confirmed": 0, "statesOk": [], "statesFailed": [], "filings": {},
             }
         cycle = cycle if cycle is not None else current_election_cycle(db)
@@ -190,6 +190,25 @@ def _on_ballot_in(raw: dict, cycle: int) -> bool:
     """
     years = raw.get("election_years") or []
     return raw.get("candidate_election_year") == cycle or cycle in years
+
+
+def _district_in(raw: dict, cycle: int) -> int | None:
+    """The House district a candidate record names for `cycle`. FEC's
+    `district_number` is the candidate's LATEST election's (H2TX35144:
+    districts 35, 35, 37 for 2022, 2024, 2026 -- `district_number` 37), so
+    a member who files for the next cycle in a new district would read as
+    running there this cycle. `election_districts` pairs with
+    `election_years`; the year's own entry is used when it is there."""
+    years = raw.get("election_years") or []
+    districts = raw.get("election_districts") or []
+    if cycle in years and len(districts) == len(years):
+        # Listed as zero-padded strings ("05", "00"); district_number is
+        # the int the rest of the roster keys on.
+        try:
+            return int(districts[years.index(cycle)])
+        except (TypeError, ValueError):
+            pass
+    return raw.get("district_number")
 
 
 def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
@@ -250,7 +269,7 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
             if not _on_ballot_in(raw, cycle):
                 skipped_off_ballot += 1
                 continue
-            district = raw.get("district_number") if office == "H" else None
+            district = _district_in(raw, cycle) if office == "H" else None
             if office == "H" and f"{state}-{district}" not in real_districts:
                 skipped_bad_district += 1
                 continue
@@ -1366,17 +1385,32 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
         logger.info("=== ELECTION PIPELINE START (cycle %d) ===", cycle)
 
         async with make_async_client() as client:
+            # After election day the held election's ballot is final
+            # (election_is_held): no phase that places candidates on it
+            # re-reads its sources, which have moved on and would unwrite
+            # what was certified. FEC's roster in particular gives each
+            # candidate's LATEST district and incumbency, so a nominee who
+            # files for the next cycle elsewhere would move races.
+            # Financials still refresh: post-general reports are this
+            # election's money.
+            election_held = election_is_held(active_election(db))
+
             run.current_phase = "roster"
             db.commit()
             logger.info("--- Election: ROSTER SYNC ---")
             progress.begin("roster_sync")
             try:
+                if election_held:
+                    progress.skip("roster_sync", detail=f"skipped: {ELECTION_HELD}")
+                    raise _ElectionHeld
                 house_raw = await fetch_all_candidates(client, db, cycle, "H")
                 senate_raw = await fetch_all_candidates(client, db, cycle, "S")
                 synced = _sync_roster(db, cycle, house_raw + senate_raw)
                 run.candidates_synced = synced
                 logger.info("Synced %d candidates", synced)
                 progress.complete("roster_sync", detail=f"{synced} candidates")
+            except _ElectionHeld:
+                pass
             except Exception:
                 db.rollback()
                 logger.exception("Roster sync failed — continuing")
@@ -1396,21 +1430,16 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 logger.exception("Financial refresh phase failed — continuing")
                 progress.fail("financial_refresh")
 
-            # After election day the held election's ballot is final
-            # (ballot_is_final): neither phase re-reads its sources, which
-            # have moved on and would unwrite what was certified.
-            ballot_final = ballot_is_final(active_election(db))
-
             run.current_phase = "confirmed_candidates"
             db.commit()
             logger.info("--- Election: CONFIRMED CANDIDATES ---")
             progress.begin("confirmed_candidates")
             confirmed_open = True  # until the phase is marked done or skipped
             try:
-                if ballot_final:
-                    progress.skip("confirmed_candidates", detail=f"skipped: {BALLOT_FINAL}")
+                if election_held:
+                    progress.skip("confirmed_candidates", detail=f"skipped: {ELECTION_HELD}")
                     confirmed_open = False
-                    raise _BallotFinal
+                    raise _ElectionHeld
                 # Each state is crawled weekly — what the crawl looks for,
                 # a state standing up a results portal or a new cycle's file
                 # appearing, moves on the scale of weeks — but the crawl
@@ -1447,7 +1476,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         detail = await _confirmed_candidates_phase(db, client, cycle)
                         progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
                     confirmed_open = False
-            except _BallotFinal:
+            except _ElectionHeld:
                 pass
             except lease.CutOff as cut:
                 db.rollback()
@@ -1465,11 +1494,11 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             logger.info("--- Election: BALLOT MEASURES ---")
             progress.begin("ballot_measures")
             try:
-                if ballot_final:
+                if election_held:
                     # Earlier elections' rows still age out.
                     _prune_past_measures(db)
-                    progress.skip("ballot_measures", detail=f"skipped: {BALLOT_FINAL}")
-                    raise _BallotFinal
+                    progress.skip("ballot_measures", detail=f"skipped: {ELECTION_HELD}")
+                    raise _ElectionHeld
                 measure_result = await _sync_ballot_measures(db, client, cycle)
                 if measure_result.get("skipped"):
                     progress.complete("ballot_measures", detail="skipped (no API key)")
@@ -1480,7 +1509,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                     )
                     logger.info("Ballot measures: %s", detail)
                     progress.complete("ballot_measures", detail=detail)
-            except _BallotFinal:
+            except _ElectionHeld:
                 pass
             except Exception:
                 db.rollback()
