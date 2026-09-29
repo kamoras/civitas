@@ -1,6 +1,7 @@
 """app/broadcast.py: every post is stored first, then delivered to Bluesky."""
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -180,3 +181,34 @@ def test_withdrawn_subjects_come_from_the_retraction_log():
 
     ids = [pid for e in entries() for pid in e["publicIds"]]
     assert ids and broadcast.withdrawn_subjects() == {f"issue:{pid}" for pid in ids}
+
+
+def test_a_retry_run_stops_at_the_first_refusal(db_session, bluesky_configured):
+    """Each try is a login; a Bluesky still refusing an hour on is down, and
+    trying the rest in the same burst only spends the login allowance."""
+    for i in range(3):
+        _publish(db_session, kind="race", subject=f"race:x{i}")
+    db_session.query(broadcast.BroadcastPost).update(
+        {"bsky_status": "failed", "bsky_attempts": 1, "bsky_last_attempt_at": utcnow() - timedelta(hours=1)})
+    db_session.commit()
+    tried = []
+    with patch.object(broadcast, "publish_post", lambda text, url, **k: tried.append(text) or False):
+        assert broadcast.deliver_pending(db_session) == 0
+    assert len(tried) == 1
+
+
+def test_a_feed_only_post_is_never_sent(db_session, bluesky_configured):
+    post = broadcast.publish(db_session, kind="result", subject="result:x", title="t", text="t", url="u",
+                             bluesky=False)
+    assert post.bsky_status == "off"
+    assert broadcast.deliver_pending(db_session) == 0
+
+
+def test_result_posts_are_never_retried(db_session, bluesky_configured):
+    with patch.object(broadcast, "publish_post", return_value=False):
+        broadcast.publish(db_session, kind="result", subject="result:x", title="t", text="t", url="u")
+    db_session.query(broadcast.BroadcastPost).update({"bsky_last_attempt_at": utcnow() - timedelta(hours=1)})
+    db_session.commit()
+    with patch.object(broadcast, "publish_post", return_value=True) as send:
+        assert broadcast.deliver_pending(db_session) == 0
+    send.assert_not_called()

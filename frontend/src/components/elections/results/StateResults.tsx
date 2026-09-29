@@ -24,7 +24,7 @@ import type { LiveRaceResult, LiveResults, StateBallot } from "@/types/election"
  * The top of a state page from election day on: this state's count, read
  * from its own election office, above the ballot research.
  *
- * A #race-{id} link (every election-night Bluesky post carries one) lands
+ * A #race-{id} link (every election-night post carries one) lands
  * on that race's count here rather than on its research drawer. Which of
  * the two it lands on is decided once, by the page (StateBallotClient),
  * when the count first loads; this only scrolls to `arrivalRace`.

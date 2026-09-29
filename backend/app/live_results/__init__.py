@@ -1,5 +1,6 @@
 """Election-night results: the live count (sync), the seat-flip DEVELOPING
-issue (signals) and the election-night Bluesky posts (bluesky).
+issue (signals) and the election-night posts, to the feed and Bluesky
+(bluesky).
 
 Deliberately outside app/pipeline/. Nothing here classifies, scores or
 learns a label — a count is stored as the state published it and every

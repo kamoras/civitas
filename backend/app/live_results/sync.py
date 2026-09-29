@@ -637,10 +637,10 @@ async def sync_live_results(db: Session, client: httpx.AsyncClient, election_day
     from app.live_results.bluesky import post_result_updates
 
     try:
-        summary["_bluesky"] = {"posted": post_result_updates(db, election_day.isoformat())}
+        summary["_posts"] = {"published": post_result_updates(db, election_day.isoformat())}
     except Exception:
         db.rollback()
-        logger.exception("Election-night Bluesky posting failed")
+        logger.exception("Election-night posting failed")
     return summary
 
 

@@ -1,5 +1,6 @@
-"""Election-night Bluesky posts (live_results/bluesky.py):
-what earns a post, the order and budget, and corrections outside it."""
+"""Election-night posts (live_results/bluesky.py), published to the feed
+and Bluesky: what earns a post, the order and budget, corrections outside
+it, and what a refused send or a data reset does."""
 
 from datetime import date, timedelta
 from unittest.mock import patch
@@ -48,6 +49,14 @@ def _event(db, rid, kind, detail=None, age=timedelta(0), **kw):
     db.add(e)
     db.flush()
     return e
+
+
+def _said(db, rid, kind, at=None, status="sent"):
+    """A result post already published — the history the pass reads."""
+    db.add(BroadcastPost(kind="result", subject=rb._subject(DAY, rid, kind), title="t", text="t",
+                         url="https://civitas-research.org/x", state=rid.split("-")[-1][:2],
+                         published_at=at or utcnow(), bsky_status=status))
+    db.flush()
 
 
 def _run(db):
@@ -125,9 +134,9 @@ class TestBudget:
 
     def test_a_correction_posts_even_with_the_budget_spent(self, db_session):
         _race(db_session, "2026-SEN-GA", flip=False)
-        _event(db_session, "2026-SEN-GA", er.FLIP, bsky_posted=True, bsky_posted_at=utcnow())
+        _said(db_session, "2026-SEN-GA", er.FLIP)
         for i in range(rb.MAX_POSTS_PER_HOUR):
-            _event(db_session, "2026-SEN-GA", er.ALL_REPORTING, bsky_posted=True, bsky_posted_at=utcnow())
+            _said(db_session, "2026-SEN-GA", er.ALL_REPORTING)
         _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
         [(text, url)] = _run(db_session)
         assert text.startswith("Update on Georgia's U.S. Senate: Ray Jones (D) is ahead again")
@@ -152,7 +161,7 @@ class TestBudget:
 
     def test_a_race_in_its_cooldown_is_held_not_dropped(self, db_session):
         _race(db_session, "2026-SEN-GA")
-        _event(db_session, "2026-SEN-GA", er.FLIP, bsky_posted=True, bsky_posted_at=utcnow())
+        _said(db_session, "2026-SEN-GA", er.FLIP)
         official = _event(db_session, "2026-SEN-GA", er.OFFICIAL, _detail(reporting=100, official=True))
         assert _run(db_session) == []
         assert official.bsky_posted_at is None
@@ -160,16 +169,17 @@ class TestBudget:
             [(text, _)] = _run(db_session)
         assert "lists its count as official" in text
 
-    def test_a_refused_send_is_in_the_feed_and_left_to_the_retry(self, db_session):
-        """Bluesky refusing a send doesn't hold the post back: it is stored
-        (the feed entry), and broadcast.deliver_pending retries the send."""
+    def test_a_refused_send_is_in_the_feed_and_never_resent(self, db_session):
+        """Bluesky refusing a send doesn't hold the post back from the feed.
+        It is not resent (test_a_refused_flip_is_never_resent_after_its_correction)."""
         _race(db_session, "2026-SEN-GA")
         e = _event(db_session, "2026-SEN-GA", er.FLIP)
         with patch.object(broadcast, "publish_post", return_value=False):
             assert rb.post_result_updates(db_session, DAY) == 1
         assert e.bsky_posted is True
         [post] = db_session.query(BroadcastPost).all()
-        assert (post.kind, post.subject, post.state, post.bsky_status) == ("result", f"result:{e.id}", "GA", "failed")
+        assert (post.kind, post.subject, post.state, post.bsky_status) == (
+            "result", f"result:{DAY}:2026-SEN-GA:flip", "GA", "failed")
         assert "leads in a seat" in post.text
         assert _run(db_session) == []  # this pass won't send it again
 
@@ -184,12 +194,13 @@ class TestBudget:
     def test_corrections_do_not_spend_the_budget(self, db_session):
         _race(db_session, "2026-SEN-GA", flip=False)
         for _ in range(3):
-            _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, bsky_posted=True, bsky_posted_at=utcnow())
-        assert rb._published_since(db_session, utcnow() - timedelta(hours=1)) == 0
+            _said(db_session, "2026-SEN-GA", rb.CORRECTION)
+        h = rb._history(db_session, DAY, utcnow())
+        assert (h.last_hour, h.this_election) == (0, 0)
 
     def test_a_correction_is_owed_past_the_two_hour_cap(self, db_session):
         _race(db_session, "2026-SEN-GA", flip=False)
-        _event(db_session, "2026-SEN-GA", er.FLIP, bsky_posted=True, bsky_posted_at=utcnow() - timedelta(hours=4))
+        _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=4))
         _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"), age=timedelta(hours=3))
         [(text, _)] = _run(db_session)
         assert text.startswith("Update on Georgia's U.S. Senate")
@@ -299,7 +310,7 @@ class TestRoundTwo:
 
     def test_a_correction_is_dropped_once_the_flip_is_back(self, db_session):
         _race(db_session, "2026-SEN-GA", flip=True)
-        _event(db_session, "2026-SEN-GA", er.FLIP, bsky_posted=True, bsky_posted_at=utcnow() - timedelta(hours=1))
+        _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
         correction = _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
         assert _run(db_session) == []
         assert correction.bsky_posted_at is not None and not correction.bsky_posted
@@ -347,9 +358,8 @@ class TestRoundThree:
     def test_no_second_correction_while_the_last_word_is_one(self, db_session):
         _race(db_session, "2026-SEN-GA", flip=False)
         t = utcnow()
-        _event(db_session, "2026-SEN-GA", er.FLIP, bsky_posted=True, bsky_posted_at=t - timedelta(minutes=30))
-        _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"),
-               bsky_posted=True, bsky_posted_at=t - timedelta(minutes=20))
+        _said(db_session, "2026-SEN-GA", er.FLIP, at=t - timedelta(minutes=30))
+        _said(db_session, "2026-SEN-GA", rb.CORRECTION, at=t - timedelta(minutes=20))
         _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
         assert _run(db_session) == []
 
@@ -360,3 +370,79 @@ class TestRoundThree:
         d = json.loads(_detail())
         d["totalUnits"] = None
         assert rb.compose(er.ALL_REPORTING, race, d) is None
+
+
+class TestPublishing:
+    def test_a_refused_flip_is_never_resent_after_its_correction(self, db_session):
+        """The hourly retry resent a refused flip word for word — after the
+        count had reverted and the correction had gone out, leaving the
+        false flip as the account's last word on the race."""
+        _race(db_session, "2026-SEN-GA")
+        _event(db_session, "2026-SEN-GA", er.FLIP)
+        with patch.object(broadcast, "publish_post", return_value=False):
+            rb.post_result_updates(db_session, DAY)
+        result = db_session.get(RaceResult, "2026-SEN-GA")
+        import json
+
+        result.tallies = json.dumps([{"name": "Dana Smith", "party": "DEM", "votes": 1100},
+                                     {"name": "Ray Jones", "party": "REP", "votes": 1000}])
+        _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
+        later = utcnow() + timedelta(minutes=rb.RACE_COOLDOWN_MINUTES + 1)
+        with patch.object(rb, "utcnow", return_value=later):
+            _run(db_session)
+        with patch.object(broadcast, "utcnow", return_value=utcnow() + timedelta(hours=2)):
+            sent = []
+            with patch.object(broadcast, "publish_post", lambda text, url, **k: sent.append(text) or True):
+                broadcast.deliver_pending(db_session)
+        assert sent == []
+
+    def test_a_correction_of_a_flip_bluesky_never_showed_stays_in_the_feed(self, db_session):
+        _race(db_session, "2026-SEN-GA", flip=False)
+        _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1), status="failed")
+        _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
+        assert _run(db_session) == []  # nothing sent to Bluesky
+        correction = db_session.query(BroadcastPost).filter(
+            BroadcastPost.subject == rb._subject(DAY, "2026-SEN-GA", rb.CORRECTION)).one()
+        assert correction.bsky_status == "off"
+
+    def test_a_correction_of_a_flip_bluesky_showed_goes_to_bluesky(self, db_session):
+        _race(db_session, "2026-SEN-GA", flip=False)
+        _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1), status="sent")
+        _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
+        [(text, _)] = _run(db_session)
+        assert "no longer shows a change of party" in text
+
+    def test_an_official_flip_is_titled_official(self, db_session):
+        _race(db_session, "2026-SEN-GA")
+        db_session.flush()
+        db_session.get(RaceResult, "2026-SEN-GA").official = True
+        _event(db_session, "2026-SEN-GA", er.FLIP, _detail(official=True))
+        [(text, _)] = _run(db_session)
+        [post] = db_session.query(BroadcastPost).all()
+        assert "wins in the official count" in text
+        assert "not final" not in post.title and "official count" in post.title
+
+    def test_a_data_reset_does_not_post_the_night_again(self, db_session):
+        """broadcast_posts survives a reset; the events don't. The rebuilt
+        count raises the same flip and official count again."""
+        _race(db_session, "2026-SEN-GA")
+        _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
+        _said(db_session, "2026-SEN-GA", er.OFFICIAL, at=utcnow() - timedelta(minutes=50))
+        flip = _event(db_session, "2026-SEN-GA", er.FLIP)
+        official = _event(db_session, "2026-SEN-GA", er.OFFICIAL, _detail(reporting=100, official=True))
+        assert _run(db_session) == []
+        assert flip.bsky_posted_at is not None and not flip.bsky_posted
+        assert official.bsky_posted_at is not None and not official.bsky_posted
+
+    def test_the_budget_survives_a_data_reset(self, db_session):
+        for i in range(rb.MAX_POSTS_PER_HOUR):
+            _said(db_session, f"2026-HOUSE-GA-{i}", er.FLIP, at=utcnow() - timedelta(minutes=30))
+        _race(db_session, "2026-HOUSE-GA-9", office="H", district=9)
+        _event(db_session, "2026-HOUSE-GA-9", er.FLIP)
+        assert _run(db_session) == []
+
+    def test_a_runoff_has_its_own_budget(self, db_session):
+        db_session.add(BroadcastPost(kind="result", subject=rb._subject("2026-12-01", "2026-SEN-GA", er.FLIP),
+                                     title="t", text="t", url="u", published_at=utcnow(), bsky_status="sent"))
+        db_session.flush()
+        assert rb._history(db_session, DAY, utcnow()).this_election == 0

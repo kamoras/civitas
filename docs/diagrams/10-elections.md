@@ -415,9 +415,12 @@ a Senate lead change with most of the count in, and every unit reporting in
 a Senate race. Six posts an hour and forty an election; one post per race
 per 20 minutes. A post the budget or cooldown holds back waits for a later
 pass (up to two hours), and a later post about the same race supersedes it;
-every post is worded from the count as it stands when it goes out. A send
-Bluesky refuses is retried hourly by `broadcast.deliver_pending`; the post is
-in the feed either way.
+every post is worded from the count as it stands when it goes out. The post
+is in the feed whatever Bluesky does; a send Bluesky refuses is never resent
+(`broadcast.NO_RETRY_KINDS`), since an hour on it could describe a count that
+has moved or reverted. A correction goes to Bluesky only if the flip it
+corrects did. The budget, cooldown and what has been said are read from the
+stored posts, which a data reset keeps.
 A correction (a posted flip that reverted) is outside every cap and owed for
 up to a day. Posts are composed to fit — figures are dropped before the
 "Not final." qualifier, never the reverse — and the routine race-coverage
