@@ -314,6 +314,50 @@ describe("MemberScorecard", () => {
     expect(fetchRepVotes).not.toHaveBeenCalled();
   });
 
+  it("shows constituents' approval by party in the alignment column, marked not scored", async () => {
+    // Illustrative figures, not Burchett's.
+    const surveyed = {
+      ...member,
+      constituentApproval: {
+        survey: "CES 2024 Common Content (pre-election wave, Oct-Nov 2024)",
+        fielded: "2024-10/2024-11",
+        surveyedAs: "Tim Burchett",
+        byParty: [
+          { party: "D" as const, approve: 0.21, ownWeight: 0.3, respondents: 40 },
+          { party: "R" as const, approve: 0.74, ownWeight: 0.6, respondents: 90 },
+        ],
+      },
+    };
+    render(
+      <main>
+        <MemberScorecard
+          member={surveyed}
+          chamber="house"
+          breakdown={breakdown}
+          district={2}
+          stateName="Tennessee"
+          committees={[]}
+        />
+      </main>
+    );
+    await screen.findByText("H.R. 8800");
+    const column = document.getElementById("constituent-alignment")!;
+    const list = within(column).getByRole("list", { name: /Approval among constituents/ });
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent)
+    ).toEqual([
+      expect.stringMatching(/Democrats21% approve40 with an opinion · mostly based on similar/),
+      expect.stringMatching(/Republicans74% approve90 with an opinion$/),
+    ]);
+    expect(within(column).getByText(/Informational, not scored\./)).toBeInTheDocument();
+    const violations = (
+      await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } })
+    ).violations.map((v) => v.id);
+    expect(violations).toEqual([]);
+  });
+
   it("opens the full record in a drawer and closes it with Escape", async () => {
     renderCard();
     await userEvent.click(screen.getByRole("button", { name: /All 65 sponsored bills/ }));
