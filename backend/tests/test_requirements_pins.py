@@ -213,3 +213,54 @@ def test_torch_is_the_cpu_build():
             if re.match(r"(nvidia-|cuda-|triton$)", name)
         )
         assert not cuda_stack, f"[{machine}] CUDA packages in the dependency tree: {cuda_stack}"
+
+
+def _imported_distributions(*roots: str) -> dict[str, set[str]]:
+    """{distribution (or '?module' if none provides it): files importing it}."""
+    import ast
+
+    module_to_dist = md.packages_distributions()
+    local = {p.stem for p in (BACKEND / "scripts").glob("*.py")} | {"app", "tests", "conftest"}
+    found: dict[str, set[str]] = {}
+    for root in roots:
+        for path in (BACKEND / root).rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.Import):
+                    modules = [a.name for a in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                    modules = [node.module]
+                else:
+                    continue
+                for module in modules:
+                    top = module.split(".")[0]
+                    if top in sys.stdlib_module_names or top in local:
+                        continue
+                    for dist in module_to_dist.get(top, [f"?{top}"]):
+                        found.setdefault(canonicalize_name(dist), set()).add(
+                            str(path.relative_to(BACKEND))
+                        )
+    return found
+
+
+def test_every_app_import_is_a_direct_dependency():
+    """Importing a package that only arrives transitively works until the
+    parent drops it; declare it in DIRECT (and so pin it as a root)."""
+    undeclared = {
+        dist: sorted(files)[:3]
+        for dist, files in _imported_distributions("app", "migrations", "tests").items()
+        if dist not in DIRECT
+    }
+    assert not undeclared, f"imported but not in DIRECT: {undeclared}"
+
+
+def test_every_script_import_is_declared():
+    try:
+        md.distribution("pandas")
+    except md.PackageNotFoundError:
+        pytest.skip("research dependencies not installed (the Research deps CI job installs them)")
+    undeclared = {
+        dist: sorted(files)[:3]
+        for dist, files in _imported_distributions("scripts").items()
+        if dist not in DIRECT | RESEARCH_DIRECT
+    }
+    assert not undeclared, f"scripts import packages no requirements file declares: {undeclared}"

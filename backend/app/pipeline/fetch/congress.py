@@ -128,8 +128,9 @@ def expected_current_congress(now=None) -> int:
     """
     from app.time_utils import utcnow
 
-    year = (now or utcnow()).year
-    return congress_for_year(year)
+    # Date-aware, like the config default it checks: comparing by year alone
+    # would call CURRENT_CONGRESS stale on January 1-2 of an odd year.
+    return congress_of_date((now or utcnow()).date().isoformat())
 
 async def fetch_significant_bills(
     client: httpx.AsyncClient,

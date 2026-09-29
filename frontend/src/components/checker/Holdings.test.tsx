@@ -8,6 +8,7 @@ const fetchSenatorHoldings = vi.fn();
 vi.mock("@/lib/api", () => ({
   fetchSenatorHoldings: (...args: unknown[]) => fetchSenatorHoldings(...args),
   fetchRepHoldings: vi.fn(),
+  fetchPresidentHoldings: vi.fn(),
 }));
 
 function category(overrides: Partial<HoldingCategory>): HoldingCategory {

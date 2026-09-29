@@ -71,6 +71,31 @@ export interface PresidentScoreBreakdown {
   historicalLegacy: ScoreBreakdownDimension;
 }
 
+/** GET /api/signal-overlap: how closely two related score components moved
+ * together over the last run's members (analyze/signal_overlap.py). */
+export interface SignalOverlapPair {
+  /** Pearson r, or null when there was nothing to measure. */
+  r: number | null;
+  n: number;
+  band: "ok" | "watch" | "action" | "none";
+  labels: [string, string];
+}
+
+export type SignalOverlapPairKey = "constituent" | "effectiveness";
+
+export interface SignalOverlap {
+  actionR: number;
+  watchR: number;
+  /** null for a chamber not yet measured. */
+  chambers: Record<
+    "senate" | "house",
+    {
+      pairs: Partial<Record<SignalOverlapPairKey, SignalOverlapPair>>;
+      computedAt: string | null;
+    } | null
+  >;
+}
+
 /** President: publicMandate.facts. Approval where polling exists (Truman
  *  onward), else the average election margin; means are all presidents'. */
 export interface PublicMandateFacts {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Holding, HoldingCategory, Holdings as HoldingsData } from "@/types/senator";
-import { fetchRepHoldings, fetchSenatorHoldings } from "@/lib/api";
+import { fetchPresidentHoldings, fetchRepHoldings, fetchSenatorHoldings } from "@/lib/api";
 import { formatCurrency } from "@/lib/formatting";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
@@ -20,15 +20,26 @@ const PANEL_HOLDINGS_PER_PAGE = 5;
 const FETCHER = {
   senate: fetchSenatorHoldings,
   house: fetchRepHoldings,
+  president: fetchPresidentHoldings,
 } as const;
 
 const SOURCE_LABEL = {
   senate: "efdsearch.senate.gov",
   house: "disclosures-clerk.house.gov",
+  president: "oge.gov",
 } as const;
 
-const ABOUT_TEXT =
+const MEMBER_ABOUT_TEXT =
   "Every asset listed on this member's most recent financial disclosure report — held by the member, their spouse, or a dependent child at the end of the year for an annual report, or on the date it states for a newly seated senator's new-filer report. The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Informational only — not part of the overall score.";
+
+const PRESIDENT_ABOUT_TEXT =
+  "Every asset with a stated value on the president's latest annual financial disclosure report (OGE Form 278e): the business entities of Schedule 1, the spouse's assets, and the investment accounts. Values are reported in ranges, never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range, which on this report is \"Over $50,000,000\"). The form has no asset-type column: a business entity's category comes from the underlying assets it states (real estate, a bank account, cryptocurrency), a fund is one the form marks as an excepted investment fund, and every other security is 'type not stated' rather than guessed from its name. Informational only — not part of the score.";
+
+const ABOUT_TEXT = {
+  senate: MEMBER_ABOUT_TEXT,
+  house: MEMBER_ABOUT_TEXT,
+  president: PRESIDENT_ABOUT_TEXT,
+} as const;
 
 function formatHoldingValue(h: Holding, when: string): string {
   if (h.valueLow === null || h.valueHigh === null) return h.valueText || "Not stated";
@@ -247,7 +258,8 @@ function HoldingRow({ holding, when }: { holding: Holding; when: string }) {
 
 interface HoldingsProps {
   memberId: string;
-  chamber?: "senate" | "house";
+  /** Whose report: a senator's, a representative's or the sitting president's. */
+  filer?: "senate" | "house" | "president";
   /** "panel": its own titled box with the chart and the list side by side
    *  and always open — how the member scorecard features it. "section"
    *  (default): a collapsible section like the others. */
@@ -256,7 +268,7 @@ interface HoldingsProps {
 
 export default function Holdings({
   memberId,
-  chamber = "senate",
+  filer = "senate",
   variant = "section",
 }: HoldingsProps) {
   const [hovered, setHovered] = useState<string | null>(null);
@@ -272,13 +284,13 @@ export default function Holdings({
   const load = useCallback(
     (page: number, cat: string | null) =>
       request(cat, () =>
-        FETCHER[chamber](memberId, {
+        FETCHER[filer](memberId, {
           page,
           perPage: variant === "panel" ? PANEL_HOLDINGS_PER_PAGE : HOLDINGS_PER_PAGE,
           category: cat,
         })
       ),
-    [request, memberId, chamber, variant]
+    [request, memberId, filer, variant]
   );
 
   useEffect(() => {
@@ -331,7 +343,7 @@ export default function Holdings({
     </a>
   );
 
-  const about = <MetricTooltip text={ABOUT_TEXT}>ABOUT THIS DATA</MetricTooltip>;
+  const about = <MetricTooltip text={ABOUT_TEXT[filer]}>ABOUT THIS DATA</MetricTooltip>;
   // Inside the panel the panel is the box; a section draws its own.
   const box = variant === "panel" ? "" : "panel p-4";
   const hasSlices = data.categories.some((c) => c.weight > 0);
@@ -514,7 +526,7 @@ export default function Holdings({
             ? "paper filing"
             : "not machine-readable"
       }
-      source={SOURCE_LABEL[chamber]}
+      source={SOURCE_LABEL[filer]}
       alwaysVisible={
         <>
           {chart}

@@ -453,6 +453,10 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.district = rep_data.get("district", existing.district or 0)
     existing.party = rep_data.get("party", existing.party)
     existing.years_in_office = rep_data.get("yearsInOffice", existing.years_in_office)
+    if "swornDate" in rep_data:
+        # Absent when the Clerk's list could not be read this run: keep the
+        # last known date rather than erase it.
+        existing.sworn_date = rep_data["swornDate"]
     existing.initials = rep_data.get("initials", existing.initials)
     existing.leadership_title = rep_data.get("leadershipTitle", existing.leadership_title)
     if "committees" in rep_data:

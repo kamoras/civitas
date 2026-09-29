@@ -758,6 +758,9 @@ class TestLegislativeEffectiveness:
         assert _les_bill_stage({"latestAction": "Ordered to be reported", "billType": s}) == 2
         assert _les_bill_stage({"latestAction": "Passed Senate", "billType": s}) == 4
         assert _les_bill_stage({"latestAction": "Agreed to", "billType": s}) == 4
+        # A chamber declining the bill is not passage.
+        assert _les_bill_stage({"latestAction": "Motion to proceed to consideration of measure not agreed to in Senate", "billType": s}) == 1
+        assert _les_bill_stage({"latestAction": "On motion to suspend the rules and pass the bill Failed by the Yeas and Nays", "billType": s}) == 1
         assert _les_bill_stage({"latestAction": "Anything", "billType": s, "isLaw": True}) == 5
         # Real `stage` classification always wins over the text fallback.
         assert _les_bill_stage({"stage": "IN_COMMITTEE", "latestAction": "Introduced"}) == 2

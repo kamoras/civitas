@@ -179,15 +179,25 @@ def get_all_presidents(db: Session) -> list[PresidentSchema]:
     return [_build_response(p) for p in presidents]
 
 
+def current_president(db: Session) -> President | None:
+    """The sitting president's row. During a transition the roster can
+    briefly carry two is_current rows; the higher number is the later
+    presidency, so every caller (the scorecard, the trades and holdings
+    ingests) names the same one rather than whichever the query returns."""
+    return (
+        db.query(President)
+        .filter(President.is_current == True)  # noqa: E712
+        .order_by(President.number.desc())
+        .first()
+    )
+
+
 def get_current_president(db: Session) -> PresidentSchema | None:
     """The currently-serving president, if any — excluded from get_
     president_leaderboard (see that function's docstring) but still
     needed for the frontend's separate "currently serving" spotlight
-    view. `.first()` rather than raising on >1 row: is_current should
-    never be true for more than one president, but a same-day roster
-    sync mid-transition is a real (if brief) window this shouldn't 500
-    on."""
-    p = db.query(President).filter(President.is_current == True).first()  # noqa: E712
+    view."""
+    p = current_president(db)
     return _build_response(p) if p else None
 
 
