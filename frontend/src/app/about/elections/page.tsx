@@ -218,11 +218,11 @@ export default function ElectionsChapter() {
         <Sub title="“No measures” is different from “we don’t know yet”">
           <P>
             An empty section reads as &ldquo;nothing to research&rdquo; — a damaging thing to imply
-            about a state with seventeen amendments pending. So a state our source reports as having
-            no statewide measures says so, and a state we haven&apos;t covered, or whose ingest
-            failed, says <em>that</em> and points to the official lookup. Measures removed from the
-            ballot — courts have struck about 2.3% since 1995 — are marked removed and kept for a
-            while, not silently deleted.
+            about a state with seventeen amendments pending. So a state is shown as having no
+            statewide measures only when its official source establishes it, and a state we
+            haven&apos;t covered, or whose ingest failed, says <em>that</em> and points to the
+            official lookup. Measures removed from the ballot — courts have struck about 2.3% since
+            1995 — are marked removed and kept for a while, not silently deleted.
           </P>
         </Sub>
         <Sub title="Why there’s no plain-language summary">
@@ -237,11 +237,12 @@ export default function ElectionsChapter() {
           </P>
         </Sub>
         <P>
-          Where a state publishes its measures in a form we can read reliably — currently
-          California, Colorado, Louisiana, Massachusetts, Missouri and Virginia — they are read
-          straight from the state&apos;s own official voter guide. Elsewhere they come from Vote
-          Smart&apos;s free public API, a nonpartisan nonprofit. The state&apos;s official source is
-          linked from every measure. See{" "}
+          Every measure is read directly from the state itself — its Secretary of State, elections
+          board or legislature — through its certified list, voter guide or ballot notice. We use no
+          third-party source for measures. A state we don&apos;t read automatically yet, or which
+          publishes no official list, says it isn&apos;t covered and which of the two it is; a guide
+          not yet published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s
+          official source is linked from every measure. See{" "}
           <A href="/about/limitations#ballot-coverage">known limitations</A> for where coverage is
           still incomplete.
         </P>

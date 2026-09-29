@@ -87,7 +87,12 @@ const ballot: StateBallot = {
     },
   ],
   measures: [],
-  measureCoverage: { status: "confirmed_none", sourceName: "NC SBE", checkedAt: null },
+  measureCoverage: {
+    status: "confirmed_none",
+    sourceName: "NC SBE",
+    checkedAt: null,
+    lastAttemptAt: null,
+  },
   statewideRaces: [],
   statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
   stateLegRaces: [],

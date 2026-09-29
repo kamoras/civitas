@@ -53,6 +53,39 @@ describe("countBallotContests", () => {
   });
 });
 
+describe("statewide ballot measures", () => {
+  const m = (id: string, status: string) => ({ id, number: id, title: id, status });
+
+  it("counts only measures still on the ballot", () => {
+    const b = ballot({
+      measureCoverage: { status: "covered" },
+      measures: [m("1", "certified"), m("2", "removed"), m("3", "withdrawn")],
+    } as unknown as Partial<StateBallot>);
+    const contests = buildBallotContests(b, false);
+    expect(contests.find((c) => c.kind === "measures")!.subtitle).toBe("1 measure");
+    expect(countBallotContests(contests, b)).toBe(2 + 1);
+  });
+
+  it("never calls a dropped list that no read confirmed empty 'none'", () => {
+    const b = ballot({
+      measureCoverage: { status: "not_yet_covered" },
+      measures: [m("SQ 1", "removed")],
+    } as unknown as Partial<StateBallot>);
+    const subtitle = buildBallotContests(b, false).find((c) => c.kind === "measures")!.subtitle;
+    expect(subtitle).toBe("None current — check the official lookup");
+  });
+
+  it("does not word an operator's 'none' as the state's", () => {
+    const b = ballot({
+      measureCoverage: { status: "confirmed_none", basis: "operator" },
+      measures: [],
+    } as unknown as Partial<StateBallot>);
+    expect(buildBallotContests(b, false).find((c) => c.kind === "measures")!.subtitle).toBe(
+      "None remaining"
+    );
+  });
+});
+
 describe("statewide seats", () => {
   const gov = { office: "governor", label: "Governor", nominees: [] };
   const seat = (code: string, n: string, electedBy: "district" | "statewide" | null) => ({

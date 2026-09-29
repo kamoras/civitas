@@ -9,6 +9,7 @@ heading paragraph sits as the LAST child of Amendment 7's <div>, not
 the first child of its own.
 """
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from lxml import html as lxml_html
 from app.pipeline.fetch import ballot_measures_mo as mo
 
 FIXTURE_HTML = (Path(__file__).parent / "fixtures_mo_ballot_measures.html").read_text()
+PROPOSITION_A = (Path(__file__).parent / "fixtures_mo_proposition_a_2026.html").read_text()
 
 
 class TestFetchMeasuresParsing:
@@ -125,10 +127,86 @@ class TestFetchMeasures:
 
         assert await mo.fetch_measures(None, 2026) is None
 
-    async def test_no_general_election_heading_returns_empty(self, monkeypatch):
+    async def test_an_unknown_page_is_a_failure_not_none(self, monkeypatch):
+        """The regression: a page with no general-election heading — a
+        restyled page, an error page with an <h2> — returned [], i.e.
+        confirmed none."""
         async def fake_get_text(client, rl, url, label, **kw):
             return "<html><body><h2>Nothing relevant this cycle</h2></body></html>"
 
         monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
 
+        assert await mo.fetch_measures(None, 2026) is None
+
+    async def test_only_the_primary_section_so_far_is_not_yet_published(self, monkeypatch):
+        from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+        # The same page before anything was certified to November: only
+        # the primary's section.
+        general = FIXTURE_HTML.index("<h2")
+        primary = FIXTURE_HTML.index("<h2", general + 1)
+        primary_only = FIXTURE_HTML[:general] + FIXTURE_HTML[primary:]
+
+        async def fake_get_text(client, rl, url, label, **kw):
+            return primary_only
+
+        monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
+        with pytest.raises(NotYetPublished):
+            await mo.fetch_measures(None, 2026)
+
+    async def test_general_section_with_no_measure_is_confirmed_none(self, monkeypatch):
+        async def fake_get_text(client, rl, url, label, **kw):
+            return (
+                "<html><body><h2>The following ballot measures will appear on the "
+                "November 3, 2026 General Election ballot</h2><p>None.</p></body></html>"
+            )
+
+        monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
         assert await mo.fetch_measures(None, 2026) == []
+
+    async def test_a_proposition_is_read_not_dropped(self, monkeypatch):
+        """The regression, live: the 2026 general section carries
+        Proposition A — the referendum petition on the General Assembly's
+        congressional map — and the Amendment-only heading pattern skipped
+        it without a trace, publishing Missouri's ballot one measure short."""
+        general = FIXTURE_HTML.index("<h2")
+        primary = FIXTURE_HTML.index("<h2", general + 1)
+        with_prop = FIXTURE_HTML[:primary] + PROPOSITION_A + FIXTURE_HTML[primary:]
+
+        async def fake_get_text(client, rl, url, label, **kw):
+            return with_prop
+
+        monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
+        results = await mo.fetch_measures(None, 2026)
+        assert [p["number"] for p, _ in results] == ["3", "7", "8", "A"]
+        prop = results[-1][0]
+        assert prop["title"] == "Proposition A"
+        assert prop["origin"] == "Missouri voters (referendum petition)"
+        assert prop["official_summary"].startswith("Do the people of the state of Missouri approve the act")
+        # A veto referendum: the state's own framing says what YES does.
+        assert prop["yes_means"].startswith("approve the act of the General Assembly")
+        assert prop["fiscal_impact"] == "State and local governmental entities estimate no costs or savings."
+
+    async def test_a_measure_heading_it_cannot_number_refuses_the_page(self, monkeypatch):
+        """A measure heading of a kind this reader doesn't know refuses the
+        page; an unparseable measure used to be skipped."""
+        html = FIXTURE_HTML.replace("</strong>Amendment 7</p>", "</strong>Question Seven</p>", 1)
+        assert html != FIXTURE_HTML
+
+        async def fake_get_text(client, rl, url, label, **kw):
+            return html
+
+        monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
+        assert await mo.fetch_measures(None, 2026) is None
+
+
+def test_an_unparseable_measure_refuses_the_page_instead_of_being_skipped():
+    broken = FIXTURE_HTML.replace("Official Ballot Title:", "Ballot Title Text:", 1)
+    assert broken != FIXTURE_HTML
+
+    async def fake_get_text(client, rl, url, label, **kw):
+        return broken
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mo, "fetch_text_with_retry", fake_get_text)
+        assert asyncio.run(mo.fetch_measures(None, 2026)) is None

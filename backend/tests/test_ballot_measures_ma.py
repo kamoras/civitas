@@ -23,6 +23,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.pipeline.fetch import ballot_measures_ma as ma
 
 
@@ -99,8 +101,12 @@ def test_a_lone_page_from_a_multi_page_question_is_incomplete_alone():
     assert results[0]["no_means"] is None
 
 
-def test_page_with_no_question_marker_returns_empty():
-    assert ma.parse_information_for_voters([_fake_page("q1_page5")][:0]) == []
+def test_a_guide_with_no_question_found_is_a_failure_never_none():
+    """[] from this parser used to become confirmed_none — for a guide
+    the Secretary publishes BECAUSE there are questions. A document with
+    none readable (no text layer, a new layout) now raises (ingest_failed)."""
+    with pytest.raises(ValueError):
+        ma.parse_information_for_voters([_fake_page("q1_page5")][:0])
 
 
 def test_prose_reads_single_column_in_natural_order_when_no_real_split():
@@ -119,3 +125,13 @@ def test_prose_reads_single_column_in_natural_order_when_no_real_split():
 def test_yes_no_returns_none_none_when_block_is_not_two_column():
     words = [{"text": "solo", "top": 0, "x0": 113, "x1": 130}]
     assert ma._yes_no(words) == (None, None)
+
+
+def test_a_question_whose_summary_cant_be_read_fails_the_guide():
+    """The regression: a question header with no readable summary was
+    skipped, publishing the guide one question short as "covered"."""
+    page = _fake_page("q1_page5")
+    words = [w for w in page.extract_words() if w["text"] != "SUMMARY"]
+    stripped = SimpleNamespace(extract_words=lambda **kw: words)
+    with pytest.raises(ValueError):
+        ma.parse_information_for_voters([stripped])

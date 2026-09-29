@@ -1,251 +1,303 @@
-"""California's ballot-measure PDF strategy — parses the state's own
-official Voter Information Guide PDF (vig.cdn.sos.ca.gov). One of
-potentially many per-state strategies registered in
-ballot_measures_pdf.py's generic fetch/cache/upsert pipeline; this module
-owns only the page-parsing logic specific to California's document.
+"""California's ballot-measure strategy — the Secretary of State's
+Official Voter Information Guide, read as HTML (one of the
+MULTI_DOCUMENT_STRATEGIES in ballot_measures_pdf.py: an index page plus
+two pages per proposition).
 
-WHY THIS EXISTS: the user asked to stop depending on Vote Smart's
-approval-gated signup and get the same data independently, state by
-state. Checked directly whether California publishes something better
-than a per-county composite ballot: it does — the Secretary of State's
-own "Quick Reference Guide" section is a purpose-built, state-level
-ballot-measure-only summary (title, origin, official summary, fiscal
-impact, and — critically — explicit "WHAT YOUR VOTE MEANS: YES.../NO..."
-framing in the state's own words, not derived). Two propositions per
-page, consistent format across election cycles (verified against real
-PDFs from two different elections: 2026 primary, 36.7MB / 64 pages, and
-2024 general, 5MB / 144 pages).
+Why HTML and not the guide's PDF: this module used to read the PDF's
+"Quick Reference Guide" pages, and the 2026 general guide broke that in a
+way no parser can fix. Its text layer maps the fi/fl/ff ligature glyphs
+to a bare "f" — the extractable text literally reads "infation",
+"fnance", "efect" — so quoting it would put words on the page the state
+never wrote. The same guide is published as HTML at
+voterguide.sos.ca.gov, whose text is real characters, and the Secretary
+keeps past guides at vigarchive.sos.ca.gov/<year>/general/. The PDF
+reader is gone: the HTML covers every guide it was verified on.
 
-REAL DOCUMENT, NOT ASSUMED: the 2026 general election guide isn't
-published yet at the standard CDN path when this is written, the same
-timing constraint every other source in this codebase has for a general
-still ahead of it. Built and verified against the 2024 general guide
-instead, which has real propositions (the 2026 primary guide that IS
-already published has none — CA propositions are a general-election-cycle
-thing, not guaranteed on primaries). The parser targets the DOCUMENT
-FORMAT, which is consistent guide-to-guide, not this specific election's
-content.
+Discovery, for `year` (never a hardcoded election): the current guide
+(voterguide.sos.ca.gov) is used when its banner names "General Election"
+and `year`'s election day ("November 3, 2026"); otherwise the archive's
+<year>/general/ guide, whose banner must name it the same way. A current
+guide for some other election (the June primary) and no archived guide
+for `year` (404) means this general's guide isn't posted yet:
+NotYetPublished (not yet covered). A page that can't be fetched is a
+failure (None).
 
-THE HARD PART: pdfplumber's plain extract_text() badly mangles this page.
-It's not one 2-column layout — the "Quick Reference Guide" page has TWO
-levels of column splitting: the two propositions side by side, AND, within
-each proposition's own half, a further YES/NO (and separately PRO/CON) sub-
-split for the "WHAT YOUR VOTE MEANS" and "ARGUMENTS" sections. A naive
-single geometric crop() at a fixed x-coordinate literally cuts words in
-half at the boundary (verified: "this" split into "th"/"his" across two
-crops) because the sub-column gutter is narrow and text isn't rigidly
-justified to it on every line.
+Per proposition, all verbatim:
+- the guide's index (/propositions/) lists every proposition on the
+  ballot, and each is read (any that can't be is a refusal). That index
+  must list exactly the propositions the guide's separate Quick Reference
+  Guide index (/quick-reference-guide/) lists — a second, independent
+  count — or the state is refused (None);
+- "Official Title and Summary" (propositions/<n>/title-summary.htm),
+  under the page's own "PREPARED BY THE ATTORNEY GENERAL" heading: the
+  title (official_title — the ballot label title) and the bulleted
+  summary (official_summary), title_authority the Attorney General; then,
+  under "SUMMARY OF LEGISLATIVE ANALYST'S ESTIMATE OF NET STATE AND LOCAL
+  GOVERNMENT FISCAL IMPACT", the fiscal bullets (fiscal_impact),
+  fiscal_authority the Legislative Analyst's Office. The page must name
+  both drafters itself, or it is refused.
+- the proposition's Quick Reference page (propositions/<n>/): the
+  state's own "A YES vote on this measure means: ..." / "A NO vote ..."
+  sentences (yes_means / no_means: the text after "means:", which the
+  card labels "A YES VOTE" / "A NO VOTE"), and "Put on the Ballot by
+  ..." (origin).
 
-Fixed with a two-phase, GAP-based (not fixed-coordinate) reconstruction,
-built and verified against this exact real page's word coordinates:
+Each page must carry the proposition's own number (its "PROP <n>" badge)
+and the same title on both pages. Bullets are kept one per line ("• ",
+and "– " for a list nested inside an item, as the page nests them) —
+layout, not wording. Anything missing refuses the whole state.
 
-1. Determine the true OUTER column boundary once, from unambiguous rows in
-   the SUMMARY zone (which never has more than 2 text fragments per visual
-   row) — the x-gap there reliably marks the Prop-A/Prop-B gutter. Using a
-   single largest-gap-per-row rule across the WHOLE page failed: rows in
-   the sub-split zones have 4 fragments (PropA-YES, PropA-NO, PropB-YES,
-   PropB-NO), and the largest gap on those specific rows is not reliably
-   the outer one.
-2. Bucket every word on the page by that fixed threshold into PropA/PropB.
-3. WITHIN each already-isolated side, apply a per-row largest-x-gap split
-   AGAIN (now genuinely unambiguous — only 2 fragments per row within one
-   side) to separate YES from NO, and separately PRO from CON (see
-   ballot_measure_pdf_geometry.split_by_row_gap, shared with any other
-   state whose layout turns out to need the same technique).
-
-Verified end to end against Proposition 2 in the real 2024 guide: the
-reconstructed YES/NO text matches the source exactly, word for word.
+Verified live 2026-09-28: all 14 propositions on the November 3, 2026
+guide (1-5, 37-45), and all 10 on the archived November 5, 2024 guide
+(2-6, 32-36).
 """
 
 import logging
 import re
+from urllib.parse import urljoin
 
-from app.pipeline.fetch.ballot_measure_pdf_geometry import (
-    clean_text,
-    lines_from_words,
-    looks_corrupted,
-    rows,
-    split_by_row_gap,
+import httpx
+from lxml import html as lxml_html
+
+from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+from app.pipeline.fetch.ballot_measures_state_common import (
+    election_day,
+    get_text,
+    get_text_or_missing,
+    long_date,
 )
 
 logger = logging.getLogger(__name__)
 
+CURRENT_GUIDE = "https://voterguide.sos.ca.gov/"
+ARCHIVE_GUIDE = "https://vigarchive.sos.ca.gov/{year}/general/"
 TITLE_AUTHORITY = "California Attorney General"
 FISCAL_AUTHORITY = "California Legislative Analyst's Office"
 
+_PROP_LINK_RE = re.compile(r"/propositions/(\d+)/(?:index\.htm)?$")
+_MEANS_RE = re.compile(r"^(YES|NO)\s+A (YES|NO) vote on this measure means\s*:\s*(.+)$", re.DOTALL)
+_PUT_ON_RE = re.compile(r"^Put on the Ballot by\s+(.+)$", re.IGNORECASE)
+_LAO_HEADING_RE = re.compile(r"LEGISLATIVE ANALYST.S ESTIMATE .*FISCAL IMPACT", re.IGNORECASE)
 
-def _outer_boundary(page) -> float | None:
-    """The Prop-A/Prop-B gutter x-coordinate, calibrated from the SUMMARY
-    zone's own rows (top < the first 'WHAT' heading), where every row has
-    exactly two fragments and the single gap found IS the outer gutter —
-    unlike the sub-split zones lower on the page, where per-row gap-finding
-    is ambiguous (see module docstring). None if no 'WHAT' heading is
-    found at all — this page isn't in the expected Quick Reference format,
-    and the caller should skip it rather than guess a boundary."""
-    words = page.extract_words()
-    what_tops = [w["top"] for w in words if w["text"] == "WHAT"]
-    if not what_tops:
+
+def _text(el) -> str:
+    return clean_text(el.text_content()) or ""
+
+
+def names_general_election(page_html: str, year: int) -> bool:
+    """Whether the guide's own banner names `year`'s general election."""
+    tree = lxml_html.fromstring(page_html)
+    banner = tree.xpath("//div[@id='txtBnr']")
+    text = _text(banner[0]) if banner else ""
+    return "General Election" in text and long_date(election_day(year)) in text
+
+
+def proposition_links(index_html: str, index_url: str) -> dict[str, str] | None:
+    """{number: proposition page url} from the guide's index, in page
+    order; None when the index lists nothing it can read (a guide page
+    without its proposition list is not a guide with no propositions)."""
+    tree = lxml_html.fromstring(index_html)
+    items = tree.xpath("//div[@id='mainCont']//ul[contains(@class,'contentNav')]/li")
+    links: dict[str, str] = {}
+    for li in items:
+        a = li.xpath("./a[@href]")
+        m = _PROP_LINK_RE.search(a[0].get("href").split("?")[0]) if a else None
+        if m is None or m.group(1) in links:
+            logger.warning("CA guide index entry %r isn't a proposition link this reader knows", _text(li)[:80])
+            return None
+        links[m.group(1)] = urljoin(index_url, a[0].get("href"))
+    return links or None
+
+
+_QRG_LINK_RE = re.compile(r"/quick-reference-guide/(\d+)\.htm$")
+
+
+def quick_reference_numbers(qrg_html: str) -> list[str] | None:
+    """The proposition numbers the guide's separate Quick Reference Guide
+    index lists — the second, independent count completeness is checked
+    against. None when it lists none it can read."""
+    tree = lxml_html.fromstring(qrg_html)
+    numbers = []
+    for a in tree.xpath("//div[@id='mainCont']//ul[contains(@class,'contentNav')]/li/a[@href]"):
+        m = _QRG_LINK_RE.search(a.get("href").split("?")[0])
+        if m is None:
+            return None
+        numbers.append(m.group(1))
+    return numbers or None
+
+
+def _prop_badge(tree) -> tuple[str | None, str | None]:
+    """(number, title) from the page's own "PROP <n>" badge and name."""
+    num = tree.xpath("//div[@id='mainCont']//span[@id='propNum']")
+    name = tree.xpath("//div[@id='mainCont']//div[contains(@class,'propName')]//h2")
+    return (
+        (_text(num[0]) or None) if len(num) == 1 else None,
+        (_text(name[0]) or None) if len(name) == 1 else None,
+    )
+
+
+def _bullets(ul) -> str | None:
+    """A bulleted list as one line per item — "• " for an item, "– " for
+    an item of a list nested inside it — words untouched."""
+    lines: list[str] = []
+    for li in ul.xpath("./li"):
+        own_parts = [li.text or ""]
+        for child in li:
+            if child.tag != "ul":
+                own_parts.append(child.text_content())
+            own_parts.append(child.tail or "")
+        own = clean_text(" ".join(own_parts))
+        if own:
+            lines.append(f"• {own}")
+        for sub_li in li.xpath("./ul/li"):
+            t = _text(sub_li)
+            if t:
+                lines.append(f"– {t}")
+    return "\n".join(lines) or None
+
+
+def parse_title_summary(page_html: str, number: str) -> dict | None:
+    """{title, summary, fiscal} from a proposition's Official Title and
+    Summary page, or None when it isn't that page for `number` or either
+    drafter's section is missing."""
+    tree = lxml_html.fromstring(page_html)
+    badge, title = _prop_badge(tree)
+    main = tree.xpath("//div[@id='mainCont']")
+    if badge != number or not title or not main:
         return None
-    summary_zone_end = min(what_tops)
-    summary_words = [w for w in words if w["top"] < summary_zone_end]
-    gaps = []
-    for top, row in rows(summary_words).items():
-        row = sorted(row, key=lambda w: w["x0"])
-        if len(row) < 2:
-            continue
-        i = max(range(len(row) - 1), key=lambda i: row[i + 1]["x0"] - row[i]["x1"])
-        gaps.append((row[i]["x1"] + row[i + 1]["x0"]) / 2)
-    if not gaps:
+    heads = [_text(h) for h in main[0].xpath(".//div[contains(@class,'titleSumPrepared')]//h3")]
+    if "OFFICIAL TITLE AND SUMMARY" not in heads or "PREPARED BY THE ATTORNEY GENERAL" not in heads:
         return None
-    gaps.sort()
-    return gaps[len(gaps) // 2]  # median — robust to one or two odd rows
-
-
-_YES_MEANS_RE = re.compile(r"A YES vote on this measure means:\s*(.*)$", re.IGNORECASE)
-_NO_MEANS_RE = re.compile(r"A NO vote on this measure means:\s*(.*)$", re.IGNORECASE)
-# A non-greedy capture with no reliable stop point (verified as a real
-# bug: with nothing to anchor the end on, ".+?" expanded to swallow the
-# entire rest of the summary paragraph as "origin"). California propos-
-# itions only ever reach the ballot one of two ways under state election
-# law, so match those two fixed phrases explicitly rather than an open-
-# ended capture — a phrase this module has never seen costs us the
-# `origin` field alone (falls through to None), not a corrupted summary.
-_ORIGIN_RE = re.compile(r"Put on the Ballot by (the Legislature|Petition Signatures)")
-_FISCAL_SPLIT_RE = re.compile(r"\bFiscal Impact:\s*", re.IGNORECASE)
-_SUPPORTERS_SPLIT_RE = re.compile(r"\bSupporters:\s*", re.IGNORECASE)
-
-
-def _parse_side(
-    number: str, title: str, summary_words: list[dict], vote_means_words: list[dict],
-) -> dict | None:
-    """One proposition's fields, from its own already-isolated word set
-    (see parse_quick_reference_page for how `summary_words`/
-    `vote_means_words` get split to just this side)."""
-    summary_text = " ".join(lines_from_words(summary_words))
-    origin_match = _ORIGIN_RE.search(summary_text)
-    origin = clean_text(origin_match.group(1)) if origin_match else None
-
-    # "SUMMARY <origin line> <official summary...> Fiscal Impact: <...>
-    # Supporters: <...> Opponents: <...>" — split on the fixed markers
-    # rather than guessing where prose ends, so a shift in the state's own
-    # wording costs us a field, not a garbled blend of two fields.
-    body = summary_text
-    if origin_match:
-        body = body[origin_match.end():]
-    fiscal_split = _FISCAL_SPLIT_RE.split(body, maxsplit=1)
-    official_summary = clean_text(fiscal_split[0])
-    fiscal_impact = None
-    if len(fiscal_split) > 1:
-        supporters_split = _SUPPORTERS_SPLIT_RE.split(fiscal_split[1], maxsplit=1)
-        fiscal_impact = clean_text(supporters_split[0])
-
-    yes_words, no_words = split_by_row_gap(vote_means_words)
-    yes_text = " ".join(lines_from_words(yes_words))
-    no_text = " ".join(lines_from_words(no_words))
-    yes_match = _YES_MEANS_RE.search(yes_text)
-    no_match = _NO_MEANS_RE.search(no_text)
-    yes_means = clean_text(yes_match.group(1)) if yes_match else None
-    no_means = clean_text(no_match.group(1)) if no_match else None
-    if (yes_means and looks_corrupted(yes_means)) or (no_means and looks_corrupted(no_means)):
-        # See ballot_measure_pdf_geometry.looks_corrupted's docstring —
-        # both checks there are calibrated against this exact real
-        # failure (Prop 3's yes_means/no_means on a wrapped line where
-        # the row-gap split had nothing to find). Drop both rather than
-        # ship one that might be scrambled.
-        logger.warning(
-            "CA Prop %s: yes_means/no_means text looks corrupted — "
-            "dropping both rather than risk shipping scrambled text", number,
-        )
-        yes_means = no_means = None
-
-    if not official_summary:
-        # No official summary means this side of the split didn't land on
-        # real proposition content (e.g. a page-edge artifact) — nothing
-        # trustworthy to return rather than a mostly-empty record.
+    lists = main[0].xpath(".//ul[contains(@class,'blts')][not(ancestor::ul)]")
+    lao = [h for h in main[0].xpath(".//h3") if _LAO_HEADING_RE.search(_text(h))]
+    if len(lists) != 2 or len(lao) != 1:
         return None
+    summary_ul, fiscal_ul = lists
+    # The LAO heading sits between the two lists, directly above its own.
+    if lao[0].getnext() is not fiscal_ul:
+        return None
+    summary, fiscal = _bullets(summary_ul), _bullets(fiscal_ul)
+    if not summary or not fiscal:
+        return None
+    return {"title": title, "summary": summary, "fiscal": fiscal}
 
+
+def parse_quick_reference(page_html: str, number: str) -> dict | None:
+    """{title, origin, yes, no} from a proposition's Quick Reference page,
+    or None when it isn't that page for `number` or either vote sentence
+    is missing."""
+    tree = lxml_html.fromstring(page_html)
+    badge, title = _prop_badge(tree)
+    if badge != number or not title:
+        return None
+    put_on = [
+        m.group(1) for h in tree.xpath("//div[@id='mainCont']//h3[contains(@class,'preparedBy')]")
+        if (m := _PUT_ON_RE.match(_text(h)))
+    ]
+    means: dict[str, str] = {}
+    for p in tree.xpath("//div[@id='mainCont']//p[span[contains(@class,'yesNoProCon')]]"):
+        m = _MEANS_RE.match(_text(p))
+        if m is None:
+            continue  # the PRO / CON arguments share the label class
+        if m.group(1) != m.group(2) or m.group(1) in means:
+            return None
+        means[m.group(1)] = clean_text(m.group(3))
+    if set(means) != {"YES", "NO"} or len(put_on) != 1:
+        return None
+    return {"title": title, "origin": clean_text(put_on[0]), "yes": means["YES"], "no": means["NO"]}
+
+
+def combine(number: str, title_summary: dict, quick: dict) -> dict | None:
+    if title_summary["title"] != quick["title"]:
+        return None
     return {
         "number": number,
-        "title": clean_text(title),
-        "origin": origin,
-        "official_summary": official_summary,
-        "fiscal_impact": fiscal_impact,
-        "yes_means": yes_means,
-        "no_means": no_means,
+        "title": title_summary["title"],
+        # The Attorney General's ballot label title, printed on the ballot.
+        "official_title": title_summary["title"],
+        "origin": quick["origin"],
+        "official_summary": title_summary["summary"],
+        "fiscal_impact": title_summary["fiscal"],
+        "yes_means": quick["yes"],
+        "no_means": quick["no"],
         "title_authority": TITLE_AUTHORITY,
         "fiscal_authority": FISCAL_AUTHORITY,
     }
 
 
-def parse_quick_reference_page(page) -> list[dict]:
-    """Both propositions on one Quick Reference Guide page, or [] if this
-    page isn't in that format (caller should still check other pages —
-    this is a per-page result, not a whole-document verdict). Registered
-    under strategy key "ca_quick_reference" in
-    ballot_measure_pdf_sources.json — see ballot_measures_pdf.py."""
-    boundary = _outer_boundary(page)
-    if boundary is None:
-        return []
+async def find_guide(client: httpx.AsyncClient, year: int) -> str | None:
+    """The guide root for `year`'s general election. Raises
+    NotYetPublished when the current guide is for another election and
+    the archive has none for `year`; None when a page couldn't be read."""
+    current = await get_text(client, urljoin(CURRENT_GUIDE, "propositions/"), "CA current voter guide")
+    if current is None:
+        return None
+    if names_general_election(current, year):
+        return CURRENT_GUIDE
+    archive = ARCHIVE_GUIDE.format(year=year)
+    archived, missing = await get_text_or_missing(
+        client, urljoin(archive, "propositions/"), f"CA {year} archived voter guide",
+    )
+    if archived is not None and names_general_election(archived, year):
+        return archive
+    if missing:
+        raise NotYetPublished(f"California's Official Voter Information Guide for the {year} general election")
+    logger.warning("CA %d: archived guide unreachable or not this election's", year)
+    return None
 
-    words = page.extract_words()
-    left_words = [w for w in words if w["x0"] < boundary]
-    right_words = [w for w in words if w["x0"] >= boundary]
 
-    results = []
-    for side_words in (left_words, right_words):
-        # PROP <number>\n<TITLE...> precedes SUMMARY; "WHAT" marks the
-        # start of the yes/no zone. Isolate each by top position within
-        # this side's own words — same "read the real boundary from the
-        # words, don't assume a fixed one" discipline as the outer split.
-        prop_tops = sorted({w["top"] for w in side_words if w["text"] == "PROP"})
-        what_tops = sorted({w["top"] for w in side_words if w["text"] == "WHAT"})
-        if not prop_tops or not what_tops:
-            continue
-        # "ARGUMENTS" (PRO/CON) follows "WHAT YOUR VOTE MEANS" on the same
-        # page, in the same 2-fragment-per-row shape — if left unbounded,
-        # vote_means_words would include it, and the YES/NO regexes'
-        # `.search()`-to-end-of-string would sweep PRO/CON text into
-        # yes_means/no_means. Bound the zone to end at "ARGUMENTS" (or the
-        # side's last word, if this page has no arguments section).
-        arguments_tops = sorted({w["top"] for w in side_words if w["text"] == "ARGUMENTS"})
-        vote_means_end = arguments_tops[0] if arguments_tops else float("inf")
-        # "SUMMARY" itself marks where the title block ends and the
-        # summary block begins — without it, title_words and
-        # summary_words both span the same PROP-to-WHAT range and end up
-        # as duplicate copies of the whole zone (title text polluted with
-        # the entire summary paragraph, verified as a real bug here).
-        summary_tops = sorted({w["top"] for w in side_words if w["text"] == "SUMMARY"})
-        summary_start = summary_tops[0] if summary_tops else what_tops[0]
-        title_words = [w for w in side_words if prop_tops[0] < w["top"] < summary_start]
-        summary_words = [w for w in side_words if summary_start <= w["top"] < what_tops[0]]
-        # Number sits alone on its own row directly under "PROP" in this
-        # layout (verified: "PROP" then "2" on the next row, both left-
-        # aligned at the same x as the title that follows) — the first
-        # short numeric-only line in the title zone.
-        number = None
-        for line in lines_from_words(title_words):
-            if line.strip().isdigit():
-                number = line.strip()
-                break
-        title_text = " ".join(
-            line for line in lines_from_words(title_words) if not line.strip().isdigit()
+async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
+    guide = await find_guide(client, year)
+    if guide is None:
+        return None
+    index_url = urljoin(guide, "propositions/")
+    index_html = await get_text(client, index_url, f"CA {year} propositions index")
+    if index_html is None:
+        return None
+    try:
+        if not names_general_election(index_html, year):
+            return None
+        links = proposition_links(index_html, index_url)
+    except Exception:
+        logger.exception("CA %d propositions index was not parseable", year)
+        return None
+    if links is None:
+        return None
+    # Completeness is checked against a SECOND list the guide publishes on
+    # its own: the Quick Reference Guide index. The propositions index
+    # alone can't catch a proposition missing from it.
+    qrg_html = await get_text(client, urljoin(guide, "quick-reference-guide/"), f"CA {year} quick reference index")
+    if qrg_html is None:
+        return None
+    try:
+        qrg = quick_reference_numbers(qrg_html)
+    except Exception:
+        logger.exception("CA %d quick reference index was not parseable", year)
+        return None
+    if qrg is None or sorted(qrg, key=int) != sorted(links, key=int):
+        logger.warning(
+            "CA %d: propositions index lists %s but the quick reference guide lists %s — refusing",
+            year, list(links), qrg,
         )
-        vote_means_words = [
-            w for w in side_words if what_tops[0] <= w["top"] < vote_means_end
-        ]
-        parsed = _parse_side(number or "", title_text, summary_words, vote_means_words)
-        if parsed:
-            results.append(parsed)
-    return results
+        return None
 
-
-def parse_document(pages) -> list[dict]:
-    """Every proposition across the whole PDF — registered under strategy
-    key "ca_quick_reference" in ballot_measure_pdf_sources.json (see
-    ballot_measures_pdf.py). A thin per-page loop suffices here: unlike
-    Massachusetts, California's format never splits one proposition's
-    fields across pages (verified against both real documents checked)."""
-    results = []
-    for page in pages:
-        results.extend(parse_quick_reference_page(page))
+    results: list[tuple[dict, str]] = []
+    for number, prop_url in links.items():
+        summary_url = urljoin(prop_url, "title-summary.htm")
+        quick_html = await get_text(client, prop_url, f"CA Prop {number}")
+        summary_html = await get_text(client, summary_url, f"CA Prop {number} title and summary")
+        if quick_html is None or summary_html is None:
+            return None
+        try:
+            ts = parse_title_summary(summary_html, number)
+            quick = parse_quick_reference(quick_html, number)
+            parsed = combine(number, ts, quick) if ts and quick else None
+        except Exception:
+            logger.exception("CA Prop %s pages were not parseable", number)
+            return None
+        if parsed is None:
+            logger.warning("CA Prop %s pages didn't match the verified shape — refusing the guide", number)
+            return None
+        results.append((parsed, summary_url))
     return results

@@ -15,6 +15,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.pipeline.fetch import ballot_measures_la as la
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures_la_2022_pages.json").read_text())
@@ -66,5 +68,15 @@ def test_title_and_summary_match_real_source_text():
     assert "expand certain property tax exemptions" in two["official_summary"]
 
 
-def test_empty_document_returns_no_amendments():
-    assert la.parse_document(_fake_pages([""])) == []
+def test_a_document_with_no_amendment_found_is_a_failure_never_none():
+    """[] used to become confirmed_none — for an unreadable document (a
+    scan with no text layer reads as ""), the guide the Secretary
+    publishes because amendments are on the ballot."""
+    with pytest.raises(ValueError):
+        la.parse_document(_fake_pages([""]))
+
+
+def test_a_numbered_amendment_with_no_text_refuses_the_document():
+    pages = _fake_pages(["Proposed Amendment No. 1\nDo you support it?\nProposed Amendment No. 2\n"])
+    with pytest.raises(ValueError):
+        la.parse_document(pages)

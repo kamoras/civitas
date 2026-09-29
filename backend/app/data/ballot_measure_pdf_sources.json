@@ -1,26 +1,94 @@
 {
   "_source": "Hand-verified during research: checked each state's own Secretary of State (or equivalent) site directly for a plain, static, address-free official ballot-measure document (a voter guide/pamphlet covering proposition text), not an API, not a lookup tool.",
-  "_method": "Each entry here has a real, currently-or-recently-fetched document backing it and a registered parsing strategy in ballot_measures_pdf.py's STRATEGIES map. A state with no entry here still falls back to Vote Smart in election_pipeline._sync_ballot_measures — this file only ever ADDS coverage, it never removes a state's chance at data. Two ways to point at a state's PDF: 'url_pattern' (a {year}-substitutable formula, verified stable across two real elections) for states whose filename convention doesn't change; 'landing_page_url' + optional 'keyword' (discover_pdf_url in ballot_measures_pdf.py) for states that republish under a NEW filename every cycle but keep the same stable landing page and human-readable link text (e.g. 'Blue Book 2024') — this is what makes those entries evergreen without a human updating a URL each cycle.",
+  "_method": "Each entry here has a real, currently-or-recently-fetched document backing it and a registered parsing strategy in ballot_measures_pdf.py's STRATEGIES map. A state with no entry here is not read at all: election_pipeline._sync_ballot_measures records it not_yet_covered (never confirmed_none), and its page links the official lookup and gives the `reason` from 'unread' — every such state needs one there, and a state leaves 'unread' when it is registered (test_ballot_measures enforces both). Two ways to point at a state's PDF: 'url_pattern' (a {year}-substitutable formula, verified stable across two real elections) for states whose filename convention doesn't change; 'landing_page_url' + optional 'keyword' (discover_pdf_url in ballot_measures_pdf.py) for states that republish under a NEW filename every cycle but keep the same stable landing page and human-readable link text (e.g. 'Blue Book 2024') — this is what makes those entries evergreen without a human updating a URL each cycle. 'absent_until_published': true makes a 404 (url_pattern) or a crawl that read every page and found no link (landing_page_url) raise NotYetPublished — not_yet_covered, no alert — instead of reading as a failed ingest; set only where the state is known to post the document late or only in a year with a measure. A fetch that failed is still a failure. A document the state publishes for EVERY general that is still not published past its expected-by cutoff (the entry's 'expected_by_days_before', with 'expected_by_basis' citing the statute where one sets the date; otherwise election_pipeline.DEFAULT_EXPECTED_BY_DAYS_BEFORE) reads as ingest_failed. 'absence_can_mean_none': true marks a document that exists only in a year with a measure (Vermont's notice, Wyoming's propositions), whose absence never hits that cutoff.",
   "_as_of": "2026-08-07",
+  "_unread_as_of": "Each entry's `reason` is served to voters (measureCoverage.unreadReason) and must be true wherever and whenever Civitas runs — no dates, years or 'this election': either a fact about what the state publishes, or that Civitas does not read the state's list automatically yet. Never a claim about network access, which differs between servers. `dev_note` is for developers only (what was found, from where, when) and is never sent by the API.",
+  "unread": {
+    "AZ": {
+      "reason": "Civitas does not read Arizona's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: azsos.gov answered with a Cloudflare challenge."
+    },
+    "DC": {
+      "reason": "Civitas does not read the District of Columbia's official measure list automatically yet.",
+      "dev_note": "2026-09-28: DCBOE had posted only the proposed wording of Initiative 86, not certified ballot wording for the 2026-11-03 election. Revisit once it posts; a reader can then be registered."
+    },
+    "DE": {
+      "reason": "Delaware publishes no statewide list of certified ballot measures.",
+      "dev_note": "2026-09-28: no statewide list of certified measures on elections.delaware.gov; sample ballots refused the dev container's requests."
+    },
+    "GA": {
+      "reason": "Civitas does not read Georgia's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: sos.ga.gov answered with a Cloudflare challenge."
+    },
+    "IA": {
+      "reason": "Civitas does not read Iowa's official measure list automatically yet.",
+      "dev_note": "2026-09-28: no Secretary of State list of certified measures; voterready.iowa.gov answered the dev container with a Cloudflare challenge."
+    },
+    "MS": {
+      "reason": "Mississippi publishes no official list of the measures certified for the ballot.",
+      "dev_note": "2026-09-28: no official list of certified measures found on sos.ms.gov."
+    },
+    "NH": {
+      "reason": "Civitas does not read New Hampshire's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: Akamai refused non-browser clients."
+    },
+    "NV": {
+      "reason": "Civitas does not read Nevada's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: nvsos.gov answered with an Imperva challenge."
+    },
+    "NY": {
+      "reason": "Civitas does not read New York's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: elections.ny.gov answered with a Cloudflare challenge."
+    },
+    "OH": {
+      "reason": "Civitas does not read Ohio's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: the Ohio SoS firewall blocked the container's egress IP. Production's server may reach it."
+    },
+    "OR": {
+      "reason": "Civitas does not read Oregon's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: the measure database required a captcha; the state voters' pamphlet was due 2026-09-29."
+    },
+    "PA": {
+      "reason": "Pennsylvania publishes no list of certified statewide ballot measures before the election.",
+      "dev_note": "2026-09-28: Pennsylvania publishes no list of certified statewide measures before the election."
+    },
+    "RI": {
+      "reason": "Civitas does not read Rhode Island's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: the elections site answered with a Cloudflare challenge."
+    },
+    "UT": {
+      "reason": "Civitas does not read Utah's official measure list automatically yet.",
+      "dev_note": "2026-09-28: no current official list of certified measures was reachable from the dev container."
+    },
+    "WI": {
+      "reason": "Civitas does not read Wisconsin's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: elections.wi.gov answered with a Cloudflare challenge."
+    }
+  },
   "states": {
     "CA": {
-      "url_pattern": "https://vig.cdn.sos.ca.gov/{year}/general/pdf/complete-vig.pdf",
       "source_name": "California Secretary of State",
-      "strategy": "ca_quick_reference",
-      "description": "Official Voter Information Guide, 'Quick Reference Guide' section. Verified against the real 2024 general (144 pages, 10 real propositions) and 2026 primary (64 pages, correctly zero propositions) guides. url_pattern's {year} is substituted at fetch time; the general-election path is the only one that carries propositions."
+      "strategy": "ca_voter_guide_html",
+      "description": "The Official Voter Information Guide as HTML — voterguide.sos.ca.gov for the current election, vigarchive.sos.ca.gov/<year>/general/ once archived; the guide whose banner names the year's general election is used. Per proposition: the Attorney General's Official Title and Summary, the Legislative Analyst's fiscal estimate, and the state's own 'A YES/NO vote on this measure means' sentences, verbatim; the count read must equal the guide's own index. Replaced the PDF reader, whose 2026 guide text layer maps fi/fl/ff ligatures to a bare 'f' ('infation', 'fnance'). Verified live 2026-09-28: 14 propositions on the November 3, 2026 guide, 10 on the archived 2024 guide. See ballot_measures_ca.py.",
+      "expected_by_days_before": 21,
+      "expected_by_basis": "Cal. Elections Code §9094: the state voter information guide is mailed no later than 21 days before the election; its web edition is up well before that."
     },
     "MA": {
       "url_pattern": "https://www.sec.state.ma.us/divisions/elections/download/research-and-statistics/IFV_{year}.pdf",
       "source_name": "Massachusetts Secretary of the Commonwealth",
       "strategy": "ma_information_for_voters",
-      "description": "Official 'Information For Voters' guide. URL pattern verified stable across two real elections (2024 general, 5 real questions; 2022 general, 3 real questions) — same two-election bar CA's pattern was held to. All 8 real questions across both years parse with correct official_summary/fiscal_impact/yes_means/no_means."
+      "description": "Official 'Information For Voters' guide. URL pattern verified stable across two real elections (2024 general, 5 real questions; 2022 general, 3 real questions) — same two-election bar CA's pattern was held to. All 8 real questions across both years parse with correct official_summary/fiscal_impact/yes_means/no_means. A 404 for the year's guide reads as not yet published (absent_until_published): IFV_2026.pdf still answered 404 on 2026-09-28.",
+      "absent_until_published": true
     },
     "CO": {
       "landing_page_url": "https://leg.colorado.gov",
       "keyword": "blue",
       "source_name": "Colorado Legislative Council",
       "strategy": "co_quick_ballot_reference",
-      "description": "Official 'Blue Book', 'Quick Ballot Reference Guide' section. Filename changes every cycle (verified: a different one-off convention nearly every year back to 2012), AND the exact listing page isn't guaranteed stable either (no state is bound to a particular site layout) — so landing_page_url is deliberately the bare legislature domain, not a specific sub-page. discover_pdf_url's bounded crawl (generic election-vocabulary link-following, same-domain only) finds the real PDF from there every time, verified live: 3 real years (2024, 2022, 2020), both from the exact listing page AND from this bare-domain starting point, with default crawl bounds. Note: colorado's Blue Book is published by the LEGISLATURE, not the Secretary of State — verified the SOS's own domain does not lead to it at all (correctly returns no match rather than guessing). Parser verified against 2024's format (14/14 measures, 12/14 clean yes/no); 2022 uses a different sub-format for legislature-referred amendments that isn't handled yet (see ballot_measures_co.py's module docstring) — those measures are safely dropped, not guessed."
+      "description": "Official 'Blue Book', 'Quick Ballot Reference Guide' section. Filename changes every cycle (verified: a different one-off convention nearly every year back to 2012), AND the exact listing page isn't guaranteed stable either (no state is bound to a particular site layout) — so landing_page_url is deliberately the bare legislature domain, not a specific sub-page. discover_pdf_url's bounded crawl (generic election-vocabulary link-following, same-domain only) finds the real PDF from there every time, verified live: 3 real years (2024, 2022, 2020), both from the exact listing page AND from this bare-domain starting point, with default crawl bounds. Note: colorado's Blue Book is published by the LEGISLATURE, not the Secretary of State — verified the SOS's own domain does not lead to it at all (correctly returns no match rather than guessing). Parser verified against 2024's format (14/14 measures, 12/14 clean yes/no); 2022 uses a different sub-format for legislature-referred amendments that isn't handled yet (see ballot_measures_co.py's module docstring) — a Blue Book in that shape fails the state (ingest_failed) rather than publishing a list with those measures missing. A crawl that reads every page and finds no Blue Book for the year reads as not yet published (absent_until_published): checked live 2026-09-28, the Legislature's Blue Book page lists nothing after 2024 yet.",
+      "absent_until_published": true,
+      "expected_by_days_before": 30,
+      "expected_by_basis": "Colo. Const. art. V, §1(7.5): the ballot information booklet (Blue Book) goes to voters at least 30 days before the election."
     },
     "LA": {
       "landing_page_url": "https://www.sos.la.gov/elections-voting/types-of-elections",
@@ -44,7 +112,187 @@
     "MO": {
       "source_name": "Missouri Secretary of State",
       "strategy": "mo_ballot_measures",
-      "description": "No PDF at all — the certified measures are published directly as HTML at a stable, evergreen url_pattern (sos.mo.gov/petitions/{year}ballotmeasures), verified live across 3 real cycles (2022/2024/2026, all 200 OK). The page carries both the state's August primary measures and its November general measures under two 'The following ballot measures ... <election>' headings; this strategy reads only the general-election section. Verified live 2026-09-03 against all 3 real measures on the November 3, 2026 ballot (reproductive rights/abortion repeal, a new state endowment fund, county sheriff elections): 3/3 parse with real 'Official Ballot Title' summaries, real fiscal notes, AND real 'A yes vote will.../A no vote will...' framing (Fair Ballot Language) — richer data than most states registered so far. Survived a real site inconsistency found in the process: Amendment 8's own heading paragraph sits as the last child of Amendment 7's <div>, not the first child of its own — this strategy flattens elements across div boundaries before splitting on the heading text itself, unaffected by that. Origin is read per-measure from its own 'Proposed by ...' line, not hardcoded fixed, since Missouri has a real citizen-initiative process for constitutional amendments (unlike LA/VA)."
+      "description": "No PDF at all — the certified measures are published directly as HTML at a stable, evergreen url_pattern (sos.mo.gov/petitions/{year}ballotmeasures), verified live across 3 real cycles (2022/2024/2026, all 200 OK). The page carries both the state's August primary measures and its November general measures under two 'The following ballot measures ... <election>' headings; this strategy reads only the general-election section. Verified live 2026-09-03 against all 3 real measures on the November 3, 2026 ballot (reproductive rights/abortion repeal, a new state endowment fund, county sheriff elections): 3/3 parse with real 'Official Ballot Title' summaries, real fiscal notes, AND real 'A yes vote will.../A no vote will...' framing (Fair Ballot Language) — richer data than most states registered so far. Survived a real site inconsistency found in the process: Amendment 8's own heading paragraph sits as the last child of Amendment 7's <div>, not the first child of its own — this strategy flattens elements across div boundaries before splitting on the heading text itself, unaffected by that. Origin is read per-measure from its own 'Proposed by ...' line, not hardcoded fixed, since Missouri has a real citizen-initiative process for constitutional amendments (unlike LA/VA). Propositions (statutory initiatives and referenda on acts) are read as well as Amendments — checked live 2026-09-28, the general section carries Amendments 3, 6, 7, 8 and Proposition A (the referendum on the congressional map), which the Amendment-only reader had been dropping."
+    },
+    "CT": {
+      "source_name": "Connecticut Secretary of the State",
+      "strategy": "ct_sample_ballots",
+      "description": "Proves absence only: the Secretary of the State's official town sample ballots for the November state election (index: portal.ct.gov/sots/election-services/town-ballots/ballots; the year's page is found by slug, which changes shape between cycles). A statewide question (legislature-referred amendment or the convention question — Connecticut has no initiative) is printed on every town's ballot, so one complete ('Sheet 1 of 1') state-election ballot with no question column proves there is none; returns [] then, else None (a ballot with a question may be local — 2026 Burlington's is). Never returns a measure. Verified live 2026-09-28: 15 of 19 posted 2026 ballots carry no question column (Eastford first); run against 2024 (whose no-excuse-absentee amendment is on every town's ballot), none of the first 12 ballots is question-free and the check correctly refuses to conclude."
+    },
+    "NJ": {
+      "source_name": "New Jersey Division of Elections",
+      "strategy": "nj_public_questions",
+      "description": "The Division's per-year page nj.gov/state/elections/election-information-{year}.shtml (stable 2019-2026) and the one-page 'Public Question No. N - English' PDFs it links; interpretive statement stored verbatim, YES/NO ballot-box column cropped off. HTML comments are stripped first: the page template carries a commented-out, re-dated 2023 question block every year (2024-2026 all verified) whose PDFs 404. [] only when the page visibly carries this year's general-election candidate certification and no question link. Parser verified on the real 2019, 2020 and 2021 PDFs (4 questions). 2026 (live 2026-09-28): certification posted 09/04/26, no public question."
+    },
+    "VT": {
+      "landing_page_url": "https://legislature.vermont.gov/home/noteworthy/announcements",
+      "keyword": [
+        "const",
+        "amendment"
+      ],
+      "source_name": "Vermont General Assembly",
+      "strategy": "vt_constitutional_amendment_notice",
+      "description": "The General Assembly's statutory notice of proposed constitutional amendments (17 V.S.A. ch. 32), a PDF linked from the Legislature's Announcements page with the election year in its filename; per proposal, the Assembly's one-sentence plain-language description is stored verbatim. Verified live 2026-09-28 against the 2026 notice: Proposal 3 (collective bargaining) and Proposal 4 (equal protection), matching the Governor's 2026-07-27 proclamations. Vermont has no initiative; no yes/no framing or fiscal statement is published, so those stay null. No notice linked for the year reads as not yet published (absent_until_published): the notice exists only in a year with a proposal, so its absence is neither a failure nor a checked 'none'.",
+      "absent_until_published": true,
+      "absence_can_mean_none": true
+    },
+    "ME": {
+      "source_name": "Maine Secretary of State",
+      "strategy": "me_citizens_guide",
+      "description": "The 'Maine Citizen's Guide to the Referendum Election' (SOS with the Attorney General, Treasurer and Office of Fiscal and Program Review), found from the Upcoming Elections page / the SOS news release announcing it because its filename changes every year. Reads the AG's Intent and Content (official_summary) and verbatim 'A “YES” vote ...'/'A “NO” vote ...' sentences, plus Treasurer debt service and OFPR fiscal impact. Verified against the real 2024 (5 questions) and 2025 (2 questions) guides; the parsed list must match the guide's own question listing. 2026 guide not yet published as of 2026-09-28, so this reads not-yet-covered rather than guessing."
+    },
+    "AL": {
+      "source_name": "Alabama Secretary of State (Fair Ballot Commission ballot statements)",
+      "strategy": "al_fair_ballot_statements",
+      "description": "Per-amendment Fair Ballot Commission ballot statements (Ala. Code 17-6-81) linked from sos.alabama.gov/alabama-votes/voter/ballot-measures/statewide under a heading naming the election. Each gives the ballot text, a plain-language summary, the state's own YES/NO sentences and the cost statement. Statewide only (local amendments are not on the page). Verified live 2026-09-28: Amendments 1-4 on the November 3, 2026 ballot. See ballot_measures_al.py."
+    },
+    "AR": {
+      "source_name": "Arkansas Secretary of State",
+      "strategy": "ar_general_assembly_referrals",
+      "description": "Initiatives and Referenda page, section '<year> Proposed Initiatives as Certified by the General Assembly': one art. 19 s.22 public notice PDF per issue (Popular Name + Ballot Title, or Ballot Title + Ballot Question for a bond referral). The Attorney-General-certified petition section is never read as content (the page says a listing there is not ballot certification), and no SOS page records an initiative's certification for the ballot (checked against 2024, when citizen-initiated Issue 2 qualified and the page listed nothing) — so the referrals are returned only when that section for the year says 'None'; otherwise the state reads as not covered. Verified live 2026-09-28: Issues 1-4 on the November 3, 2026 ballot. See ballot_measures_ar.py."
+    },
+    "FL": {
+      "source_name": "Florida Division of Elections",
+      "strategy": "fl_initiatives_database",
+      "description": "Initiatives / Amendments / Revisions Database (constitutionalinitiatives.dos.fl.gov) queried with Year=<year>, Made Ballot=YES; each row's detail page gives the ballot title and summary. Drafter read per record: a court-ordered Attorney General rewrite (2026's Amendment 3) is attributed to the Attorney General. Verified live 2026-09-28: Amendments 1-3 on the November 3, 2026 ballot. See ballot_measures_fl.py."
+    },
+    "KY": {
+      "source_name": "Kentucky Secretary of State",
+      "strategy": "ky_constitutional_amendments",
+      "description": "sos.ky.gov/elections/Pages/Constitutional-Amendments.aspx, reused each cycle; its title's year is checked. The question as put to voters. Verified live 2026-09-28: one amendment (SB 10, pardon blackout) on the November 3, 2026 ballot. See ballot_measures_ky.py."
+    },
+    "MD": {
+      "source_name": "Maryland State Board of Elections",
+      "strategy": "md_ballot_questions",
+      "description": "elections.maryland.gov/elections/{year}/ballot_questions.html; only its statewide 'SBE' block is read (county questions are skipped by structure), and the <h1> must name the election date (the site answers a missing year with a 200 soft-404). Secretary of State ballot language with its own FOR/AGAINST explanations where published. Verified live 2026-09-28: Questions 1-3 on the November 3, 2026 ballot. See ballot_measures_md.py."
+    },
+    "NC": {
+      "source_name": "North Carolina State Board of Elections",
+      "strategy": "nc_statewide_referenda",
+      "description": "The Board's statewide 'Referendum Choices List' report (Elections/<year>/Candidate Filing/statewide_referendums_<yyyymmdd>.pdf, linked from ncsbe.gov/voting/upcoming-election as 'Statewide referenda'); its criteria line must name the election date, ALL COUNTIES and the STATE ONLY VIEW. Verified live 2026-09-28: three amendments on the November 3, 2026 ballot. See ballot_measures_nc.py."
+    },
+    "SC": {
+      "source_name": "South Carolina State Election Commission",
+      "strategy": "sc_vrems_referendums",
+      "description": "The Commission's VREMS referendum listing for the statewide general election (vrems.scvotes.sc.gov); statewide rows are those with no responsible county and no party. Re-checked every run. CONFIRMED NONE for November 3, 2026 as of 2026-09-28: 42 referendums listed, all county questions; the same query for November 5, 2024 returns that year's statewide amendment. See ballot_measures_sc.py."
+    },
+    "TN": {
+      "source_name": "Tennessee Secretary of State",
+      "strategy": "tn_proposed_amendments",
+      "description": "sos.tn.gov/elections/announcements/{year}-proposed-constitutional-amendments, section 'Proposed Amendments on the November <year> Ballot' only (the page also previews amendments pending for a later ballot). Attorney General summaries and the page's own YES/NO sentences. Verified live 2026-09-28: Amendments #1-#3 on the November 3, 2026 ballot. See ballot_measures_tn.py."
+    },
+    "TX": {
+      "source_name": "Texas Legislative Reference Library",
+      "strategy": "tx_lrl_amendment_elections",
+      "description": "lrl.texas.gov/legis/ConstAmends/electiondates.cfm lists every constitutional-amendment election (Texas's only statewide ballot measures); an entry for this year's general-election date is read, and its absence is a re-checked 'none'. CONFIRMED NONE for November 3, 2026 as of 2026-09-28: newest entry is November 4, 2025. See ballot_measures_tx.py."
+    },
+    "WV": {
+      "source_name": "West Virginia Secretary of State",
+      "strategy": "wv_amendment_notices",
+      "description": "The Secretary of State's dated public notice of each proposed amendment (found through the sos.wv.gov news listing), carrying the joint resolution's Title of Amendment and Summary of Purpose. Cannot establish 'none' (no notice found reads as not covered). Verified live 2026-09-28: Amendment 1 (SJR 9) on the November 3, 2026 ballot. See ballot_measures_wv.py."
+    },
+    "IL": {
+      "source_name": "Illinois State Board of Elections",
+      "strategy": "il_voters_guide_questions",
+      "description": "The Board's own Illinois Voters' Guide, 'Questions of Public Policy' page (votersguide.elections.il.gov), reached by the same WebForms postback the page's election dropdown makes. Verified live 2026-09-28: the 2026 general reads 'There are no statewide questions of public policy for this election.' — the Board's own statement, the only thing that becomes confirmed_none; 2024 (three advisory questions) and 2022 (one amendment) each list a PDF, which this strategy has no reader for yet and so reports as a failed ingest, never as none. Re-checked every run."
+    },
+    "IN": {
+      "source_name": "Indiana Election Division",
+      "strategy": "in_legislation_summary",
+      "description": "The Election Division's 'Summary of <year> Election Legislation' PDF (found by that link text on its legislation-summaries index page), whose 'INDIANA CONSTITUTIONAL AMENDMENTS' section quotes each public question's statutory ballot text in full. Verified live 2026-09-28: Public Questions #1 (bail) and #2 (city/town court judges' residence), each introduced as on 'the November 3, 2026, general election' ballot. A legislation summary is not a certified list, so an empty read is a failure, never confirmed_none."
+    },
+    "KS": {
+      "source_name": "Kansas Secretary of State",
+      "strategy": "ks_proposed_amendments",
+      "description": "The Secretary of State's evergreen 'Proposed Constitutional Amendments' HTML page, read only under its 'The following constitutional amendment will be voted on during the November 3, 2026 General Election.' sentence. Verified live 2026-09-28 (1 amendment, citizenship requirement to vote) and against the same URL's July 2026 capture carrying the August primary's amendment (correctly not read for November). Explanatory statement and the state's own 'A vote for/against this proposition would ...' lines, verbatim."
+    },
+    "MI": {
+      "source_name": "Michigan Bureau of Elections",
+      "strategy": "mi_ballot_questions",
+      "description": "The Bureau of Elections' '<year> November ballot questions' PDF, found by that link text on michigan.gov/sos/elections (its URL carries a ?rev= hash that changes on republish). Verified live 2026-09-28: Proposal 2026-1 (constitutional convention) and 2026-2 (initiated law on utility/contractor campaign contributions); bold title lines and the question read from the PDF's own fonts. michigan.gov's CDN rejects the '(+contact)' User-Agent comment (measured), so this source sends the standard headers with that comment dropped, still identifying as Civitas."
+    },
+    "MN": {
+      "source_name": "Minnesota Secretary of State",
+      "strategy": "mn_constitutional_amendments",
+      "description": "The Secretary of State's 'Constitutional amendments' page under What's On My Ballot. Verified live 2026-09-28: 'In 2026, there will be one proposed constitutional amendment on the ballot in Minnesota.' — that stated count must equal the number of ballot questions read ('Increasing funding to school districts'). The page sits behind a bot manager that intermittently serves a challenge page; that page carries no count sentence and reads as a failed fetch, never as none."
+    },
+    "ND": {
+      "source_name": "North Dakota Secretary of State",
+      "strategy": "nd_measures_on_ballot",
+      "description": "The Secretary of State's 'Measures on Ballot' page ('2026 General Election' section) and each measure's one-page 'Official Ballot Language' PDF. Verified live 2026-09-28: Constitutional Measure No. 1 (HCR 3003, 60% threshold for amendments) and Initiated Constitutional Measure No. 2 (school meals); explanation, the fiscal-impact sentence (the Legislative Council's estimate) and the state's own 'Yes – Means .../No – Means ...' lines, verbatim."
+    },
+    "NE": {
+      "source_name": "Nebraska Secretary of State",
+      "strategy": "ne_ballot_measures",
+      "description": "sos.nebraska.gov/elections lists the general-election measures: 'Initiative Nos. 440-442' (read from the Informational Pamphlet's 'Ballot Title and Text' pages — the question plus the state's own 'A vote “FOR”/“AGAINST” ...' framing) and the legislature-referred LR19CA (its ballot statement is a scanned image, so the Legislature's own enrolled resolution, linked from the same page, supplies its 'ballot language' instead). Verified live 2026-09-28: 4 measures; the page's initiative range must equal what the pamphlet yields."
+    },
+    "OK": {
+      "source_name": "Oklahoma Secretary of State",
+      "strategy": "ok_state_questions",
+      "description": "The Secretary of State's State Questions register (sos.ok.gov/gov/questions.aspx), rows dated 'ELECTION DATE: November 3, 2026'. Verified live 2026-09-28: SQ 845 (Judicial Nominating Commission) and SQ 847 (Real Property Valuation), matching the State Election Board's 'Two state questions have qualified'. The ballot titles exist only in scanned PDFs (845 no text layer, 847 OCR with errors), so only the register's own SQ number and subject line are stored and each links its filed PDF — no OCR'd text is presented as ballot language."
+    },
+    "SD": {
+      "source_name": "South Dakota Secretary of State",
+      "strategy": "sd_ballot_questions",
+      "description": "The Secretary of State's '<year> Ballot Questions' page ('2026 General Election Ballot Measures' section: Constitutional Amendments I, J, K, L, each 'Proposed and passed by the 2025 South Dakota Legislature') cross-checked against the Ballot Question Pro/Con Pamphlet, which prints the Attorney General's title, explanation and 'Vote “Yes”/“No” ...' recitation for each. Verified live 2026-09-28: 4/4. Circulating petitions, listed under separate headings on the same page, are never read."
+    },
+    "AK": {
+      "url_pattern": "https://www.elections.alaska.gov/election/{year}/General/SampleBallots/HD1-JD1.pdf",
+      "source_name": "Alaska Division of Elections",
+      "strategy": "ak_sample_ballot",
+      "description": "Official general-election sample ballot, House District 1 (statewide measures are identical on every district's ballot). Used because the 2026 Official Election Pamphlet was not yet posted on 2026-09-28 while the sample ballots were. url_pattern verified on two real generals: 2024 (Ballot Measures No. 1 and 2) and 2026 (No. 2 and 3 — No. 1 was on the August primary, so numbers are read, never assumed). Columns are cropped from the words' own aligned edges; see ballot_measures_ak.py. A 404 for the year's sample ballot reads as not yet published (absent_until_published): the Division posts them about 50 days before the election.",
+      "absent_until_published": true
+    },
+    "HI": {
+      "source_name": "Hawaii Office of Elections",
+      "strategy": "hi_proposed_amendments",
+      "description": "HTML page elections.hawaii.gov/voting/{year}-proposed-amendments-to-the-hawaii-state-constitution/ (verified 2024 and 2026). Each 'QUESTION #N: title' paired with the blockquoted ballot question. Verified live 2026-09-28: 2 questions. Hawaii has no initiative/referendum, so every question is legislature-referred; no yes/no framing or fiscal statement is published. See ballot_measures_hi.py."
+    },
+    "ID": {
+      "landing_page_url": "https://voteidaho.gov/idaho-general-election/",
+      "keyword": [
+        "voter_pamphlet"
+      ],
+      "exclude": [
+        "primary",
+        "folleto"
+      ],
+      "source_name": "Idaho Secretary of State",
+      "strategy": "id_voter_pamphlet",
+      "description": "Official Idaho Voter Pamphlet (archive.voteidaho.gov/download/{year}_Voter_Pamphlet.pdf, discovered from the general-election page; the Spanish 'Folleto' is excluded). Verified live 2026-09-28: HJR 4, HJR 6, Proposition One and the House Bill 932 advisory question, with Idaho's own 'WHAT YOUR VOTE WILL DO' YES/NO framing and the Division of Financial Management's fiscal summary. See ballot_measures_id.py."
+    },
+    "MT": {
+      "source_name": "Montana Secretary of State",
+      "strategy": "mt_qualified_ballot_issues",
+      "description": "sosmt.gov/elections/ballot_issues/proposed-{year}-ballot-issues/ (verified 2022, 2024, 2026): the 'Issues Qualified for the {year} General Election Ballot' section, each issue's text read from its linked 'BALLOT LANGUAGE FOR ...' PDF (the page's own subjects may be paraphrased, by its own footnote). Verified live 2026-09-28: CI-132, CI-133, I-194. See ballot_measures_mt.py."
+    },
+    "NM": {
+      "source_name": "New Mexico Legislature",
+      "strategy": "nm_amendments_and_bonds",
+      "bond_acts": {
+        "2026": {
+          "bill": "HB 248",
+          "url": "https://www.nmlegis.gov/Sessions/26%20Regular/final/HB0248.pdf"
+        }
+      },
+      "description": "Two official documents: the Legislative Council Service's constitutional-amendments publication (nmlegis.gov .../Constitutional_Amendments_{year}.pdf, verified 2024 and 2026) and the ballot language written into that year's General Obligation Bond Act (final version, configured per year in bond_acts because the bill number changes every session; a year without one reads as ingest_failed, never an amendments-only list). Verified live 2026-09-28: Constitutional Amendments 1-4 and HB 248's three bond questions. See ballot_measures_nm.py."
+    },
+    "WA": {
+      "source_name": "Washington Secretary of State",
+      "strategy": "wa_certified_measures",
+      "description": "sos.wa.gov/elections/voters/proposed-ballot-measure-information, the {year} section — read only once its 'Certification of Measures to General Election' link is present. Each measure's Attorney General ballot-title letter (ballot title + ballot measure summary) and OFM fiscal impact summary. Verified live 2026-09-28: IL26-001, IL26-638, IP26-645. See ballot_measures_wa.py."
+    },
+    "WY": {
+      "landing_page_url": "https://sos.wyo.gov/Elections/Default.aspx",
+      "keyword": [
+        "statewide",
+        "propositions"
+      ],
+      "source_name": "Wyoming Secretary of State",
+      "strategy": "wy_statewide_ballot_propositions",
+      "description": "'{year} Statewide Ballot Propositions' PDF, discovered from the Elections landing page (the 2026 path's pattern 404s for 2024/2022, so no url_pattern). Verified live 2026-09-28: Proposed Initiative Proposition Number One (homeowner's property-tax exemption) with its estimated fiscal impact. See ballot_measures_wy.py. No document linked for the year reads as not yet published (absent_until_published); a linked document with no readable proposition fails the state.",
+      "absent_until_published": true,
+      "absence_can_mean_none": true
     }
   }
 }
