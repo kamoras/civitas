@@ -96,6 +96,21 @@ def _invalidate_orphaned_pipelines() -> None:
 PROCESS_STARTED_AT: str | None = None
 
 
+def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]:
+    """The startup Constituent Alignment rescore (constituent_rescore.py) on
+    one read of the district table, recording that read's Congress on each
+    rescored representative in the same commit as their score. The file can
+    be rewritten meanwhile (another backend, mid-rollout); the Congress
+    recorded must be the lines the score used, so the breakdown — and the
+    overlap check the rescore re-measures from it — recompute on the same
+    ones. Never raises (the rescore's own contract)."""
+    from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
+    from app.pipeline.fetch.district_pvi import current_lines
+
+    with current_lines() as lines:
+        return rescore_stale_constituent_alignment(session_factory, house_lines=lines)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global PROCESS_STARTED_AT
@@ -140,7 +155,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # (les_rescore.py, constituent_rescore.py). One thread, one after the
     # other, so the two never contend for SQLite's write lock.
     from app.database import SessionLocal as _rescore_session
-    from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
     from app.pipeline.les_rescore import rescore_stale_legislative_effectiveness
 
     def _startup_rescore() -> None:
@@ -157,17 +171,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     )
                     return
                 rescore_stale_legislative_effectiveness(_rescore_session)
-                from app.pipeline.fetch.district_pvi import current_lines, stamp_house_lines
-
-                # One read of the district table for the whole rescore, and
-                # its Congress from that same read: the file can be
-                # rewritten meanwhile (another backend, mid-rollout), and
-                # the Congress recorded must be the lines the scores used,
-                # so the breakdown recomputes on the same ones.
-                with current_lines() as lines:
-                    rescored = rescore_stale_constituent_alignment(_rescore_session)
-                if "house" in rescored:
-                    stamp_house_lines(_rescore_session, lines)
+                rescore_constituent_alignment_on_current_lines(_rescore_session)
         except Exception:
             # Each rescore logs its own failures; this is the lease's.
             logging.getLogger("app.main").exception("Startup rescore failed")

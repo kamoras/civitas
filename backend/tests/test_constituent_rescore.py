@@ -88,7 +88,7 @@ def test_senate_scores_match_what_a_pipeline_run_stores(db_session):
     _make_stale("senate")
     _seed_senate(db_session)
 
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == ["senate"]
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["senate"]
 
     ref = CONSTITUENT_REFERENCE.load()["senate"]
     assert ref["statistic"] == CONSTITUENT_REFERENCE_STATISTIC and ref["n"] == 40
@@ -107,7 +107,7 @@ def test_house_scores_match_what_a_pipeline_run_stores(db_session):
     _make_stale("house")
     _seed_house(db_session)
 
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == ["house"]
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["house"]
 
     assert CONSTITUENT_REFERENCE.load()["house"]["statistic"] == CONSTITUENT_REFERENCE_STATISTIC
     db_session.expire_all()
@@ -126,7 +126,7 @@ def test_independent_scored_as_the_pipeline_scores_them(db_session, caucus):
     s.party, s.caucus_party = "I", caucus
     db_session.commit()
 
-    rescore_stale_constituent_alignment(_factory(db_session))
+    rescore_stale_constituent_alignment(_factory(db_session), house_lines=None)
 
     db_session.expire_all()
     s = db_session.get(Senator, "S000")
@@ -143,7 +143,7 @@ def test_votes_on_one_bill_each_count(db_session):
                            vote="Nay", voted_with_party=False))
     db_session.commit()
 
-    rescore_stale_constituent_alignment(_factory(db_session))
+    rescore_stale_constituent_alignment(_factory(db_session), house_lines=None)
 
     db_session.expire_all()
     s = db_session.get(Senator, "S001")
@@ -158,7 +158,7 @@ def test_empty_confidence_gets_the_status(db_session):
     # Every senator on main was stored with score_confidence "{}".
     _make_stale("senate")
     _seed_senate(db_session, confidence="{}")
-    rescore_stale_constituent_alignment(_factory(db_session))
+    rescore_stale_constituent_alignment(_factory(db_session), house_lines=None)
     db_session.expire_all()
     assert all(set(json.loads(s.score_confidence)) == {"constituentAlignmentVotePart"}
                for s in db_session.query(Senator))
@@ -171,7 +171,7 @@ def test_only_the_stale_chamber_is_rescored(db_session):
     _seed_senate(db_session)
     _seed_house(db_session)
 
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == ["senate"]
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["senate"]
 
     house_after = {k: v for k, v in CONSTITUENT_REFERENCE.load()["house"].items() if k != "computed_at"}
     assert house_after == {k: v for k, v in house_before.items() if k != "computed_at"}
@@ -182,9 +182,9 @@ def test_only_the_stale_chamber_is_rescored(db_session):
 def test_current_or_absent_reference_is_left_alone(db_session):
     _seed_senate(db_session)
     # No persisted entry: scored against the bundled prior, as the breakdown reads.
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == []
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == []
     CONSTITUENT_REFERENCE.write("senate", CONSTITUENT_REFERENCE.load()["senate"])
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == []
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == []
     db_session.expire_all()
     assert {s.score_constituent_alignment for s in db_session.query(Senator)} == {100.0}
 
@@ -200,14 +200,14 @@ def test_reference_is_persisted_only_after_the_scores_commit(db_session, monkeyp
         return real(*a, **k)
 
     monkeypatch.setattr(sc, "_constituent_alignment_core", flaky)
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == []
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == []
     # Still stale (so the next startup retries), scores untouched.
     assert "statistic" not in json.loads(CONSTITUENT_REFERENCE.live_path.read_text())["senate"]
     db_session.expire_all()
     assert {s.score_constituent_alignment for s in db_session.query(Senator)} == {100.0}
 
     fail[0] = False
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == ["senate"]
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["senate"]
 
 
 def test_a_live_run_blocks_only_its_own_chamber(db_session):
@@ -217,7 +217,7 @@ def test_a_live_run_blocks_only_its_own_chamber(db_session):
     _seed_house(db_session)
     db_session.add(HousePipelineRun(status=PipelineStatus.RUNNING))
     db_session.commit()
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == ["senate"]
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["senate"]
 
 
 def test_an_orphaned_run_does_not_block(db_session):
@@ -225,13 +225,13 @@ def test_an_orphaned_run_does_not_block(db_session):
     _seed_senate(db_session)
     db_session.add(PipelineRun(status=PipelineStatus.RUNNING, started_at=utcnow() - timedelta(hours=13)))
     db_session.commit()
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == ["senate"]
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["senate"]
 
 
 def test_too_few_members_to_measure_leaves_scores(db_session):
     _make_stale("senate")
     _seed_senate(db_session, n=4)
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == []
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == []
     db_session.expire_all()
     assert {s.score_constituent_alignment for s in db_session.query(Senator)} == {100.0}
 
@@ -246,5 +246,5 @@ def test_the_signal_overlap_is_re_measured_after_a_rescore(db_session, monkeypat
     _make_stale("senate")
     _seed_senate(db_session)
 
-    assert rescore_stale_constituent_alignment(_factory(db_session)) == ["senate"]
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["senate"]
     assert measured == ["senate"]

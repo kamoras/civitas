@@ -723,8 +723,8 @@ def _scoring_lines() -> SeatLines:
     is this one or _reset_caches's, both SeatLines. score_calculator's own
     loader installs a plain dict only while the cache is None — at process
     start, before anything here has run; main's lifespan installs one
-    (current_lines) before serving a request, so a lines_of() block never
-    meets that window."""
+    (it calls lines_congress()) before serving a request, so a lines_of()
+    block never meets that window."""
     from app.pipeline.analyze import score_calculator as sc
 
     cache = sc._district_pvi_cache
@@ -774,35 +774,17 @@ def current_lines() -> Iterator[int | None]:
     table in effect as the block opened — one read, whatever the file (or
     this process's cache) becomes meanwhile. Yields that table's Congress:
     what to record beside scores computed inside the block (main's startup
-    rescore, then stamp_house_lines). Reading the Congress separately
-    afterwards could name lines another process wrote in between — a Swarm
-    start-first rollout runs two backends on one volume."""
+    rescore passes it to constituent_rescore, which records it on each
+    rescored representative in the same commit as the score). Reading the
+    Congress separately afterwards could name lines another process wrote
+    in between — a Swarm start-first rollout runs two backends on one
+    volume."""
     lines = _scoring_lines()
     token = _OTHER_LINES.set(dict(lines))
     try:
         yield lines.congress
     finally:
         _OTHER_LINES.reset(token)
-
-
-def stamp_house_lines(session_factory, congress: int | None) -> None:
-    """Record `congress` — the lines a rescore read (current_lines) — on
-    every current representative, for a rescore that rewrote their stored
-    Constituent Alignment (main's startup rescore; constituent_rescore.py).
-    Never raises."""
-    from app.models import Representative
-
-    db = session_factory()
-    try:
-        db.query(Representative).filter(Representative.is_current.is_(True)).update(
-            {Representative.district_lines_congress: congress}, synchronize_session=False,
-        )
-        db.commit()
-    except Exception:
-        db.rollback()
-        logger.exception("district-pvi: recording the rescored members' lines failed")
-    finally:
-        db.close()
 
 
 def _sitting_congress() -> int:

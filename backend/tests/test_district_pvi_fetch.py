@@ -1035,24 +1035,85 @@ class TestStoredScoresKeepTheirLines:
         db_session.commit()
         assert db_session.get(Representative, "tn9").district_lines_congress == 119
 
-    def test_a_startup_rescore_records_the_lines_it_rescored_on(self, monkeypatch, tmp_path, db_session):
-        """main's startup Constituent Alignment rescore rewrites current
-        members' scores on the lines in effect; a former member keeps the
-        lines their score was stored on."""
+    def _stale_house_on_119(self, db_session, monkeypatch, tmp_path):
+        """40 current TN members stored on the 119th's lines with a stale
+        Constituent Alignment reference (so the startup rescore runs), and
+        one former member."""
         from app.models import Representative
+        from app.pipeline.analyze.signal_overlap import SIGNAL_OVERLAP
+        from tests.test_constituent_rescore import _make_stale, _seed_house
+
+        monkeypatch.setattr(SIGNAL_OVERLAP, "live_path", tmp_path / "signal_overlap_live.json")
+        monkeypatch.setattr(SIGNAL_OVERLAP, "_cache", None)
+        _make_stale("house")
+        _seed_house(db_session)
+        for i, r in enumerate(db_session.query(Representative).order_by(Representative.id)):
+            r.state, r.district, r.district_lines_congress = "TN", i % 9 + 1, 119
+        db_session.add(Representative(id="gone", name="G", state="TN", district=8, party="R",
+                                      is_current=False, district_lines_congress=119))
+        db_session.commit()
+
+    def test_a_startup_rescore_records_its_lines_with_the_scores(self, monkeypatch, tmp_path, db_session):
+        """main's startup rescore rewrites current members' Constituent
+        Alignment on the sitting (120th) lines and records the 120th in the
+        same commit — before it re-measures the signal overlap, which reads
+        each member's breakdown on their recorded lines. Recorded afterwards
+        (the old stamp_house_lines), every breakdown the overlap check read
+        was on the 119th's lines beside a score just written on the 120th's.
+        A former member keeps the lines their score was stored on."""
+        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.models import Representative
+        from app.services import _scorecard_common
+        from tests.test_constituent_rescore import _factory
+
+        _, base, new = self._file(monkeypatch, tmp_path, 120)
+        self._stale_house_on_119(db_session, monkeypatch, tmp_path)
+        real, seen = _scorecard_common.explain_scores, []
+
+        def spy(d):
+            seen.append((d["district"], score_calculator._seat_pvi(d["state"], d["district"])))
+            return real(d)
+
+        monkeypatch.setattr(_scorecard_common, "explain_scores", spy)
+        assert rescore_constituent_alignment_on_current_lines(_factory(db_session)) == ["house"]
+
+        assert len(seen) == 40
+        assert any(base[f"TN-{d}"] != new[f"TN-{d}"] for d, _ in seen)
+        assert [pvi for _, pvi in seen] == [new[f"TN-{d}"] for d, _ in seen]
+        db_session.expire_all()
+        lines = {r.id: r.district_lines_congress for r in db_session.query(Representative)}
+        assert lines.pop("gone") == 119
+        assert set(lines.values()) == {120}
+
+    def test_a_house_run_committing_after_a_startup_rescore_keeps_its_lines(
+        self, monkeypatch, tmp_path, db_session,
+    ):
+        """Another backend (mid-rollout) runs the House once the rescore has
+        committed, storing a member on the lines it read: nothing the
+        rescore does afterwards re-stamps that member with the rescore's
+        lines (the old separate stamp_house_lines bulk update did)."""
+        import app.pipeline.analyze.signal_overlap as so
+        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.models import Representative
+        from tests.test_constituent_rescore import _factory
 
         self._file(monkeypatch, tmp_path, 120)
-        db_session.add_all([
-            Representative(id="cur", name="C", state="TN", district=9, party="D", is_current=True,
-                           district_lines_congress=119),
-            Representative(id="gone", name="G", state="TN", district=8, party="R", is_current=False,
-                           district_lines_congress=119),
-        ])
-        db_session.commit()
-        dp.stamp_house_lines(lambda: _Unclosable(db_session), 120)
+        self._stale_house_on_119(db_session, monkeypatch, tmp_path)
+        other = _factory(db_session)
+
+        def a_house_run_commits(db, chamber):
+            s = other()
+            try:
+                s.get(Representative, "H000").district_lines_congress = 121
+                s.commit()
+            finally:
+                s.close()
+
+        monkeypatch.setattr(so, "record_signal_overlap", a_house_run_commits)
+        assert rescore_constituent_alignment_on_current_lines(_factory(db_session)) == ["house"]
         db_session.expire_all()
-        assert db_session.get(Representative, "cur").district_lines_congress == 120
-        assert db_session.get(Representative, "gone").district_lines_congress == 119
+        assert db_session.get(Representative, "H000").district_lines_congress == 121
+        assert db_session.get(Representative, "H001").district_lines_congress == 120
 
     def test_a_reset_during_lines_of_keeps_the_override(self, monkeypatch, tmp_path):
         """A House run starting (or a refresh writing the file) resets the
@@ -1088,15 +1149,11 @@ class TestStoredScoresKeepTheirLines:
         t.join()
         assert seen["tn9"] == base["TN-9"]
 
-    def test_current_lines_holds_one_read_and_names_its_congress(self, monkeypatch, tmp_path, db_session):
+    def test_current_lines_holds_one_read_and_names_its_congress(self, monkeypatch, tmp_path):
         """main's startup rescore: the scores it computes and the Congress it
         records come from one read, though another backend switches the
         file (and this process re-reads it) mid-rescore."""
-        from app.models import Representative
-
         out, base, new = self._file(monkeypatch, tmp_path, 119)
-        db_session.add(Representative(id="cur", name="C", state="TN", district=9, party="D", is_current=True))
-        db_session.commit()
         seen = []
         with dp.current_lines() as congress:
             seen.append(score_calculator._seat_pvi("TN", 9))
@@ -1105,9 +1162,6 @@ class TestStoredScoresKeepTheirLines:
             seen.append(score_calculator._seat_pvi("TN", 9))
         assert congress == 119
         assert seen == [base["TN-9"], base["TN-9"]]
-        dp.stamp_house_lines(lambda: _Unclosable(db_session), congress)
-        db_session.expire_all()
-        assert db_session.get(Representative, "cur").district_lines_congress == 119
         # Outside the block, scoring reads the file as it is now.
         assert dp.lines_congress() == 120
         assert score_calculator._seat_pvi("TN", 9) == new["TN-9"]
