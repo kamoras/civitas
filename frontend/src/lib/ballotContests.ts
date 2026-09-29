@@ -1,5 +1,5 @@
 import type { RaceCoverageItem, RaceWithCandidates, StateBallot, StatewideRace } from "@/types/election";
-import { candidateName, isActiveCandidate } from "@/lib/elections";
+import { candidateName, isActiveCandidate, majorPartyOf } from "@/lib/elections";
 
 /** One contest as the ballot page lays it out: a box in one of three
  * printed-ballot columns on desktop, a row in the index on a phone, and
@@ -68,6 +68,14 @@ export type StatewideGroup = { key: string; race?: StatewideRace; seats?: Statew
 /** Statewide rows in the backend's order, with every seat of one body (the
  * rows sharing an officeCode that carry a seat) gathered under that body:
  * New Hampshire's five Executive Council districts are one office, not five. */
+/** A contest listing two nominees of one major party fills more than one
+ * seat. Major parties only: two nonpartisan ("N") or two minor-party
+ * ("OTH") nominees can be rivals for a single seat. */
+function fillsSeveralSeats(race: StatewideRace): boolean {
+  const majors = (race.nominees ?? []).map(majorPartyOf).filter((party) => party !== null);
+  return new Set(majors).size < majors.length;
+}
+
 export function groupStatewideRaces(races: StatewideRace[]): StatewideGroup[] {
   const groups: StatewideGroup[] = [];
   for (const race of races) {
@@ -142,19 +150,24 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
       column: "state",
       title: "Statewide offices",
       subtitle: n === 0 ? "None on this ballot" : `${offices}${basis}`,
-      instruction: n === 0 ? null : "Vote for one in each",
+      // Not where one contest fills several seats (North Dakota's PSC lists
+      // two nominees per party, and a voter marks two): the API carries no
+      // seat count per contest, so the box can't say how many to mark.
+      instruction: n === 0 || (ballot.statewideRaces ?? []).some(fillsSeveralSeats) ? null : "Vote for one in each",
       summary: n === 0 ? "None on this ballot" : offices,
     });
   }
 
   if (ballot.stateLegRaces.length > 0) {
     const seats = ballot.stateLegRaces.reduce((sum, c) => sum + c.districts.length, 0);
+    // The legislature is read from the same list as the statewide offices.
+    const basis = ballot.statewideCoverage?.ballotList ? "" : " · from primary results";
     contests.push({
       key: "stateleg",
       kind: "stateleg",
       column: "state",
       title: ballot.stateLegRaces.map((c) => c.label).join(" · "),
-      subtitle: "Your seats depend on where you live",
+      subtitle: `Your seats depend on where you live${basis}`,
       instruction: "One seat per chamber",
       summary: `${plural(seats, "seat")} contested · find yours`,
     });
@@ -162,12 +175,13 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
 
   if (ballot.judicialCoverage && ballot.judicialCoverage.status !== "not_yet_covered") {
     const courts = ballot.judicialRaces.length;
+    const basis = ballot.judicialCoverage.ballotList ? "" : " · from primary results";
     contests.push({
       key: "judicial",
       kind: "judicial",
       column: "state",
       title: "Judges",
-      subtitle: courts === 0 ? "None on this ballot" : plural(courts, "court"),
+      subtitle: courts === 0 ? "None on this ballot" : `${plural(courts, "court")}${basis}`,
       instruction: null,
       summary: courts === 0 ? "None on this ballot" : plural(courts, "court"),
     });

@@ -83,6 +83,44 @@ describe("statewide seats", () => {
     expect(contests.find((c) => c.kind === "statewide")!.subtitle).toBe("1 office · from primary results");
     expect(countBallotContests(contests, b)).toBe(2 + 2);
   });
+
+  it("gives no one-per-contest instruction where a contest fills two seats", () => {
+    // North Dakota's PSC: two nominees per party, and a voter marks two.
+    const nominee = (name: string, party: string) => ({ name, party });
+    const psc = {
+      office: "psc", label: "Public Service Commission",
+      nominees: [nominee("A", "REP"), nominee("B", "REP"), nominee("C", "DEM"), nominee("D", "DEM")],
+    };
+    const b = ballot({ statewideCoverage: { status: "covered", ballotList: true }, statewideRaces: [gov, psc] } as unknown as Partial<StateBallot>);
+    expect(buildBallotContests(b, false).find((c) => c.kind === "statewide")!.instruction).toBeNull();
+
+    // Two nonpartisan nominees are rivals for one seat, not two seats.
+    const supt = { office: "supt", label: "Superintendent", nominees: [nominee("E", "N"), nominee("F", "N")] };
+    const one = ballot({ statewideCoverage: { status: "covered", ballotList: true }, statewideRaces: [gov, supt] } as unknown as Partial<StateBallot>);
+    expect(buildBallotContests(one, false).find((c) => c.kind === "statewide")!.instruction).toBe("Vote for one in each");
+  });
+
+  it("says the legislature and judges came from primary results, as the statewide box does", () => {
+    const fromPrimaries = ballot({
+      statewideCoverage: { status: "covered" },
+      stateLegRaces: [{ label: "State Senate", districts: [1] }],
+      judicialCoverage: { status: "covered" },
+      judicialRaces: [{}],
+    } as unknown as Partial<StateBallot>);
+    let contests = buildBallotContests(fromPrimaries, false);
+    expect(contests.find((c) => c.kind === "stateleg")!.subtitle).toBe("Your seats depend on where you live · from primary results");
+    expect(contests.find((c) => c.kind === "judicial")!.subtitle).toBe("1 court · from primary results");
+
+    const certified = ballot({
+      statewideCoverage: { status: "covered", ballotList: true },
+      stateLegRaces: [{ label: "State Senate", districts: [1] }],
+      judicialCoverage: { status: "covered", ballotList: true },
+      judicialRaces: [{}],
+    } as unknown as Partial<StateBallot>);
+    contests = buildBallotContests(certified, false);
+    expect(contests.find((c) => c.kind === "stateleg")!.subtitle).toBe("Your seats depend on where you live");
+    expect(contests.find((c) => c.kind === "judicial")!.subtitle).toBe("1 court");
+  });
 });
 
 // A shared image of a contest links to the fragment that reopens it; the
