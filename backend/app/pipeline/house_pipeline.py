@@ -759,9 +759,8 @@ async def run_house_pipeline() -> dict:
                                 aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id, cycles=recent_cycles))
 
                         # Resolve PAC committee type, designation and
-                        # connected organization: the PAC-utilization signal
-                        # in score_calculator._funding_independence_core, and
-                        # the tier-1 political-committee rule and lobbying
+                        # connected organization: the tier-1
+                        # political-committee rule and lobbying
                         # client name in normalize_finance. The FEC's bulk
                         # committee master (loaded once, on the first member
                         # with receipts) answers almost every PAC; the

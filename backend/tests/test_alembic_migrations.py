@@ -186,3 +186,23 @@ def test_an_owner_this_image_does_not_know_reads_as_unknown():
     assert StockTradeSchema(owner="unknown", **fields).owner == "unknown"
     assert StockTradeSchema(owner="trust", **fields).owner == "unknown"
     assert StockTradeSchema(owner="spouse", **fields).owner == "spouse"
+
+
+def test_a_database_that_ran_the_justice_change_as_0012_converges(patched_engine):
+    # Two branches each merged a "0012" (action_issues.duplicate_of_id and
+    # the justice loyalty columns); prod ran the justice one under that
+    # number. Stamped 0012 but without the other's column, the upgrade must
+    # still end at the models' schema.
+    eng = patched_engine
+    database._run_migrations("0011")
+    with eng.begin() as conn:
+        for name, kind in (("score_loyalty", "FLOAT"), ("loyalty", "FLOAT"), ("loyalty_se", "FLOAT"),
+                           ("loyalty_votes_in", "INTEGER"), ("loyalty_votes_out", "INTEGER"),
+                           ("loyalty_rate_in", "FLOAT"), ("loyalty_rate_out", "FLOAT"),
+                           ("loyalty_through_term", "INTEGER"), ("ideal_points", "TEXT")):
+            conn.execute(text(f"ALTER TABLE justices ADD COLUMN {name} {kind}"))
+        conn.execute(text("UPDATE alembic_version SET version_num = '0012'"))
+    database._run_migrations()
+    assert _revision(eng) == _head()
+    assert "duplicate_of_id" in {c["name"] for c in inspect(eng).get_columns("action_issues")}
+    assert "score_loyalty" in {c["name"] for c in inspect(eng).get_columns("justices")}
