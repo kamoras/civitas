@@ -839,6 +839,7 @@ async def classify_recent_votes(
                 "partyAlignmentWeight": 0.0,
                 "stance": "nomination",
                 "partyLeaning": "bipartisan",
+                "motionType": motion_type,
             })
             procedural_count += 1
             _record_if_possible(db_session, bill_id, bill_content, "PROCEDURAL", 0.95)
@@ -864,6 +865,7 @@ async def classify_recent_votes(
                 "partyAlignmentWeight": 0.0,
                 "stance": "procedural",
                 "partyLeaning": "bipartisan",
+                "motionType": motion_type,
             })
             procedural_count += 1
         else:
@@ -902,6 +904,7 @@ async def classify_recent_votes(
                 "partyAlignmentWeight": alignment_weight,
                 "stance": stance_direction,
                 "partyLeaning": content_alignment,
+                "motionType": motion_type,
             })
 
         _record_if_possible(db_session, bill_id, bill_content, policy_area, confidence)

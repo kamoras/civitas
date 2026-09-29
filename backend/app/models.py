@@ -253,6 +253,17 @@ class LobbyingMatch(Base):
     # policy_alignment.py's transient match dict.
     is_consensus_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
+    # Bills this member voted on that LDA filings for clients of the donor's
+    # name name, with the client (JSON list; fetch/lda.lobbied_bills_for).
+    # NULL for rows written before the column existed.
+    lobbied_bills: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # lobbying_spend by the registry's client names (JSON list of
+    # {"client", "amount"}): a name beginning with the donor's can be a
+    # separate company, so the total is never shown as one company's.
+    lobbying_clients: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Whether the LDA lookup succeeded: False means lobbying_spend is
+    # unknown, not zero. NULL when no lookup was attempted.
+    lobbying_checked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     senator: Mapped["Senator"] = relationship(back_populates="lobbying_matches")
 
@@ -491,6 +502,10 @@ class RepLobbyingMatch(Base):
     representative_vote_aligned: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
     is_consensus_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
+    # Same as LobbyingMatch.lobbied_bills / lobbying_clients / lobbying_checked.
+    lobbied_bills: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lobbying_clients: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lobbying_checked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     representative: Mapped["Representative"] = relationship(back_populates="lobbying_matches")
 
