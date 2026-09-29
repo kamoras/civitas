@@ -38,7 +38,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import BroadcastPost
-from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags
+from app.pipeline.analyze.bluesky_utils import fetch_og_card, publish_post, strip_hashtags
 from app.time_utils import COMMENT_DEADLINE_TZ, utcnow
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,12 @@ NO_RETRY_KINDS = frozenset({"result"})
 # qualifies, but long enough that the run which just failed to send a post
 # doesn't try it again seconds later.
 RETRY_AFTER = timedelta(minutes=45)
+
+# How far back the hourly pass fills in a card the page didn't give at
+# publish time (a fetch that failed, or a post from before cards were kept):
+# a week of posts covers every feed's newest entries, and a page still
+# unreadable after a week is left without one.
+CARD_BACKFILL_WINDOW = timedelta(days=7)
 
 # The day a post's words are true on (see the module docstring). Eastern,
 # like every other day boundary the posts use.
@@ -148,9 +154,41 @@ def publish(
     )
     db.add(post)
     db.commit()
+    capture_card(db, post)
     if post.bsky_status == "pending":
         _deliver_to_bluesky(db, post)
     return post
+
+
+def capture_card(db: Session, post: BroadcastPost) -> bool:
+    """Keep the linked page's card on the post, for the feed entry: read
+    after the post is stored, so a page that can't be read never holds the
+    post back. False, and the card left unset for the hourly pass to fill
+    (fill_missing_cards), when the page can't be read."""
+    card = fetch_og_card(post.url)
+    if card is None:
+        return False
+    post.card_image = card["image"]
+    post.card_image_alt = card["image_alt"] or None
+    post.card_description = card["description"] or None
+    db.commit()
+    return True
+
+
+def fill_missing_cards(db: Session) -> int:
+    """The card for each recent post that doesn't have one yet. Returns how
+    many were filled."""
+    rows = (
+        db.query(BroadcastPost)
+        .filter(
+            BroadcastPost.card_image.is_(None),
+            BroadcastPost.published_at >= utcnow() - CARD_BACKFILL_WINDOW,
+            BroadcastPost.subject.notin_(withdrawn_subjects()),
+        )
+        .order_by(BroadcastPost.id)
+        .all()
+    )
+    return sum(capture_card(db, post) for post in rows)
 
 
 def _deliver_to_bluesky(db: Session, post: BroadcastPost) -> bool:

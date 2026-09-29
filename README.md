@@ -916,7 +916,7 @@ Every post goes through one function, `app/broadcast.publish`, which stores it a
 | `/feed/issues.xml`, `/feed/congress.xml`, `/feed/members.xml`, `/feed/elections.xml` | One topic (`broadcast.FEEDS`) |
 | `/feed/states/<ST>.xml` | One state's race posts, election-night counts and member spotlights |
 
-Anyone can follow a feed with a reader, a Discord or Slack bot, or their own program, and Civitas keeps no list of who does (AGENTS.md §8). The feeds are served by `app/api/feed.py` (50 newest entries, ETag/304) and cached by nginx for 5 minutes. A post is in the feed whatever Bluesky does with it. A send Bluesky refuses is retried hourly (`broadcast.deliver_pending`), for at most three tries in all, only on the Eastern day it was written, since a post can say "Yesterday: …", and stopping after two refusals in a row, since each try is a login; election-night result posts are never resent (below). A send interrupted by a crash is never retried, so nothing is posted twice. The table survives an admin data reset (`RESET_KEEPS`): it is what the posting modules check (by each post's `subject`, e.g. `race:2026-SEN-GA`) before publishing again, so a reset neither empties the feeds nor re-posts the last few days.
+Anyone can follow a feed with a reader, a Discord or Slack bot, or their own program, and Civitas keeps no list of who does (AGENTS.md §8). The feeds are served by `app/api/feed.py` (50 newest entries, ETag/304) and cached by nginx for 5 minutes. Each entry carries what the Bluesky post's link card shows: the linked page's picture and description, read once from its Open Graph tags (`bluesky_utils.og_card`, the same reading the Bluesky card uses) and kept on the row (`card_image`, `card_image_alt`, `card_description`). The entry's content is HTML (the picture, the post, a "Read on Civitas" link, and the source article when the post restates one), with the description as its summary, the picture as an enclosure and a Media RSS thumbnail for readers and chat bots, and the source as a `related` link. The card is read right after the post is stored, so an unreadable page never holds a post back; the hourly pass (`broadcast.fill_missing_cards`) fills in any it missed from the last week. The feed itself never fetches anything. A post is in the feed whatever Bluesky does with it. A send Bluesky refuses is retried hourly (`broadcast.deliver_pending`), for at most three tries in all, only on the Eastern day it was written, since a post can say "Yesterday: …", and stopping after two refusals in a row, since each try is a login; election-night result posts are never resent (below). A send interrupted by a crash is never retried, so nothing is posted twice. The table survives an admin data reset (`RESET_KEEPS`): it is what the posting modules check (by each post's `subject`, e.g. `race:2026-SEN-GA`) before publishing again, so a reset neither empties the feeds nor re-posts the last few days.
 
 The posting modules below decide what to publish and when. The Civitas Bluesky account (`@civitas-research.org`) carries the same posts as the feeds, except any Bluesky still hadn't taken by the end of that day (an election-night result it refused, at once) and a correction of a flip it never showed:
 
@@ -1287,7 +1287,9 @@ justice alert when loyalty is next measured, and so on for every alert. The
 panel lists active alerts first, then resolved ones (with when) and one-off
 events. A newer alert for the same condition supersedes the older, and
 resolving frees the dedupe key so a recurrence alerts again. Open alerts are
-never pushed off the panel by newer history.
+never pushed off the panel by newer history, and never pruned from storage.
+Resolved alerts and events stay listed for seven days (the slowest regular
+jobs run weekly, so every job's latest outcome stays in view), at most ten.
 
 ### Docker Swarm Architecture
 
@@ -1425,6 +1427,8 @@ npm run lint     # eslint, including jsx-a11y
 npm test         # vitest
 npm run build    # type errors block CI
 ```
+
+The build makes no network requests for fonts. The site's three typefaces (Archivo, Press Start 2P, Share Tech Mono; SIL OFL) are committed under `frontend/src/app/fonts/`, one file per script subset, and loaded with `next/font/local`. `next/font/google` fetched them during every build, and about one build in five failed when Google answered with a URL Turbopack rejects. `backend/scripts/fetch_site_fonts.py` refetches them the way `next/font/google` did and rewrites `manifest.json` and `fallback.css`; `fonts.test.ts` fails if `fonts.ts` drifts from the manifest.
 
 ### Project Structure
 
