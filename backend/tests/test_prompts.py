@@ -90,9 +90,19 @@ class TestCutOff:
         text = "SUMMARY: Whole.\nKEY POINTS:\n- One\n- Two\nIMPA"
         assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One", "Two"]
 
-    def test_cut_just_after_a_line_ended_keeps_that_line(self):
-        assert parse_explore_document_summary("SUMMARY: The bill does X.\n", cut_off=True)["summary"] == (
-            "The bill does X."
-        )
+    def test_cut_just_after_a_key_point_ended_keeps_that_point(self):
         text = "SUMMARY: s.\nKEY POINTS:\n- a\n- b\n"
         assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a", "b"]
+        text = "SUMMARY: s.\nKEY POINTS:\n"
+        assert parse_explore_document_summary(text, cut_off=True) == {
+            "summary": "s.", "keyPoints": [], "impact": "",
+        }
+
+    def test_a_line_break_does_not_end_the_summary_or_the_impact(self):
+        # Prose that can run to another paragraph: stopped after one, the
+        # section is still unfinished.
+        assert parse_explore_document_summary("SUMMARY: The bill does X.\n", cut_off=True)["summary"] == ""
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\nIMPACT: First paragraph.\n"
+        assert parse_explore_document_summary(text, cut_off=True) == {
+            "summary": "s.", "keyPoints": ["a"], "impact": "",
+        }

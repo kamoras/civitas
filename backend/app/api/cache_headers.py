@@ -102,7 +102,7 @@ class ETagCacheMiddleware(BaseHTTPMiddleware):
 
         body = b"".join([chunk async for chunk in response.body_iterator])
         etag = _etag_for(body)
-        cache_control = response.headers.get("Cache-Control") or _cache_control()
+        cache_control = _with_stale_bound(response.headers.get("Cache-Control") or _cache_control())
         vary = response.headers.get("Vary")
         if not vary:
             vary = "Accept-Encoding"
@@ -130,6 +130,27 @@ class ETagCacheMiddleware(BaseHTTPMiddleware):
         fresh.headers["Cache-Control"] = cache_control
         fresh.headers["Vary"] = vary
         return fresh
+
+
+# A route's own public max-age without a stale-while-revalidate gets one:
+# this long past expiry at most (its own max-age if shorter). nginx serves
+# a stale copy while refreshing only as far as a response's
+# stale-while-revalidate allows (nginx/civitas.conf) — so this is what keeps
+# a route's readers off a refresh, and bounds how long a URL that stopped
+# being cacheable (a record deleted, a partial answer) keeps its old copy.
+_STALE_BOUND_S = 300
+
+
+def _with_stale_bound(cache_control: str) -> str:
+    lowered = cache_control.lower()
+    if "public" not in lowered or "no-store" in lowered or "stale-while-revalidate" in lowered:
+        return cache_control
+    import re
+
+    match = re.search(r"max-age=(\d+)", lowered)
+    if match is None:
+        return cache_control
+    return f"{cache_control}, stale-while-revalidate={min(int(match.group(1)), _STALE_BOUND_S)}"
 
 
 def _cache_control() -> str:

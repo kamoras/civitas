@@ -98,7 +98,9 @@ def test_middleware_does_not_override_a_route_own_cache_control(client):
     # the route's 30s value never reached the actual HTTP response.
     resp = client.get("/api/senators/short-cache")
     assert resp.status_code == 200
-    assert resp.headers["Cache-Control"] == "public, max-age=30"
+    # Its max-age kept; only a stale-while-revalidate bound added, no longer
+    # than that max-age (_with_stale_bound).
+    assert resp.headers["Cache-Control"] == "public, max-age=30, stale-while-revalidate=30"
     # The ETag/revalidation benefit still applies regardless — a route's
     # own freshness policy and the shared conditional-GET machinery are
     # independent concerns.
@@ -113,7 +115,7 @@ def test_matching_conditional_request_also_respects_route_own_cache_control(clie
     etag = client.get("/api/senators/short-cache").headers["ETag"]
     resp = client.get("/api/senators/short-cache", headers={"If-None-Match": etag})
     assert resp.status_code == 304
-    assert resp.headers["Cache-Control"] == "public, max-age=30"
+    assert resp.headers["Cache-Control"] == "public, max-age=30, stale-while-revalidate=30"
 
 
 def test_matching_conditional_request_gets_304_with_no_body(client):
@@ -357,3 +359,17 @@ def test_real_app_action_issues_revalidate_after_an_hourly_write(db_session, mon
         assert "New story" in resp.text
     finally:
         app.dependency_overrides.clear()
+
+
+def test_a_routes_own_public_max_age_gets_a_bounded_stale_while_revalidate():
+    # nginx serves stale while refreshing only within a response's own
+    # stale-while-revalidate: this keeps a route's readers off a refresh,
+    # and bounds how long a URL that stopped being cacheable keeps its copy.
+    from app.api.cache_headers import _STALE_BOUND_S, _with_stale_bound
+
+    assert _with_stale_bound("public, max-age=30") == "public, max-age=30, stale-while-revalidate=30"
+    assert _with_stale_bound("public, max-age=3600") == (
+        f"public, max-age=3600, stale-while-revalidate={_STALE_BOUND_S}"
+    )
+    for untouched in ("no-store", "private, max-age=60", "public, max-age=60, stale-while-revalidate=5"):
+        assert _with_stale_bound(untouched) == untouched

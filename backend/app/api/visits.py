@@ -17,7 +17,6 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from datetime import datetime, UTC
 
 from fastapi import APIRouter, Query, Request
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -298,8 +297,11 @@ def _load_or_create_salt(date: str) -> bytes | None:
 
 
 def _today() -> str:
-    """The current UTC day, as the salts are dated."""
-    return datetime.now(UTC).date().isoformat()
+    """The current UTC day, as the salts are dated — the throttle store's
+    own clock, since a visit salt can come from there (_shared_salt)."""
+    from app.api import throttle
+
+    return throttle._utc_today()
 
 
 async def _daily_salt(date: str) -> bytes:

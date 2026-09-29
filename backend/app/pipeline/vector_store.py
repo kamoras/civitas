@@ -227,6 +227,11 @@ def _busy_timeout_s() -> float:
     return _API_BUSY_TIMEOUT_S if settings.PROCESS_ROLE == "api" else SQLITE_BUSY_TIMEOUT_S
 
 
+# vec_meta key: set while ensure_explore_index rebuilds the index from
+# scratch, cleared when the last batch is in.
+_REBUILDING = "explore_index_rebuilding"
+
+
 def get_vec_conn() -> sqlite3.Connection:
     """Get or create the sqlite-vec connection (singleton, extension loaded)."""
     global _vec_conn, _wal_retry_at
@@ -677,7 +682,11 @@ def search_explore_documents(
     # Built by another model (a deploy changed it, and the pipeline process —
     # which rebuilds the index — hasn't yet): its vectors don't live in this
     # model's space, and ranking against them would be noise presented as a
-    # whole answer. Not ready, like a rebuild in progress.
+    # whole answer. Nor while a rebuild is partway: a few hundred documents
+    # are not the index. Not ready, either way.
+    if _get_meta(conn, _REBUILDING):
+        logger.warning("explore index being rebuilt — not ready")
+        return None
     if _get_meta(conn, "explore_index_model") != index_identity():
         logger.warning("explore index built by another model — not ready until it is rebuilt")
         return None
@@ -888,13 +897,20 @@ def ensure_explore_index(db_session_factory) -> None:
     conn = get_vec_conn()
     stored = _get_meta(conn, "explore_index_model")
     count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    if stored == index_identity() and count > 0:
+    # A rebuild that died partway (a restart, an error) left its mark: not
+    # complete, whatever identity its batches recorded.
+    if stored == index_identity() and count > 0 and not _get_meta(conn, _REBUILDING):
         return
 
     def _reindex() -> None:
         db = db_session_factory()
         try:
             from app.models import ExploreDocument
+
+            # Marked until the last batch is in: each batch records the
+            # identity, so without this search would take a few hundred
+            # documents for the whole index a minute into the rebuild.
+            _set_meta(conn, _REBUILDING, index_identity())
 
             if stored is not None and stored != index_identity():
                 logger.warning(
@@ -941,6 +957,7 @@ def ensure_explore_index(db_session_factory) -> None:
                     for d in docs
                 ])
                 offset += BATCH
+            _set_meta(conn, _REBUILDING, "")
             logger.info("Explore index rebuild complete: %d documents", total)
         except Exception:
             logger.exception("Explore index rebuild failed")

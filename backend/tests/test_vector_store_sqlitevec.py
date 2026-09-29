@@ -70,6 +70,16 @@ class TestEmbedAndSearch:
         monkeypatch.setattr(vector_store, "index_identity", lambda: "another-model|v9")
         assert vector_store.search_explore_documents("Pentagon") is None
 
+    def test_an_index_mid_rebuild_is_not_searched(self, vec_env):
+        # Each rebuild batch records the identity, so without the mark a
+        # search would take the first few hundred documents for the index.
+        vector_store.embed_explore_documents([_doc(1, "Pentagon appropriations act")])
+        conn = vector_store.get_vec_conn()
+        vector_store._set_meta(conn, vector_store._REBUILDING, vector_store.index_identity())
+        assert vector_store.search_explore_documents("Pentagon") is None
+        vector_store._set_meta(conn, vector_store._REBUILDING, "")
+        assert vector_store.search_explore_documents("Pentagon") is not None
+
     def test_empty_index_returns_none_not_empty_list(self, vec_env):
         assert vector_store.search_explore_documents("anything") is None
 
@@ -179,6 +189,15 @@ class TestEnsureExploreIndex:
         with patch.object(vector_store.threading, "Thread") as thread:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_not_called()
+
+    def test_a_rebuild_that_died_partway_is_restarted(self, vec_env):
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        vector_store._set_meta(
+            vector_store.get_vec_conn(), vector_store._REBUILDING, vector_store.index_identity(),
+        )
+        with patch.object(vector_store.threading, "Thread") as thread:
+            vector_store.ensure_explore_index(lambda: None)
+        thread.assert_called_once()
 
     def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session):
         db_session.add(ExploreDocument(

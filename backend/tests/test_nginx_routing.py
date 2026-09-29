@@ -176,6 +176,17 @@ def test_explore_summaries_stream_from_the_pipeline_process():
     assert route("/api/explore/123/comments") == "backend_upstream"
 
 
+def test_every_refusal_nginx_makes_on_the_summary_route_is_a_wait():
+    # The page asks again after a wait (X-Summary-Wait) and shows anything
+    # else as a failure. limit_req and limit_conn refuse with a bare 503 by
+    # default, which error_page would not turn into one.
+    public, _ = _servers()
+    body = _match(_locations(public), "/api/explore/1/summary")[3]
+    assert "limit_req_status 429;" in body
+    assert "limit_conn_status 429;" in body
+    assert "error_page 429 502 504 = @summary_wait;" in body
+
+
 def test_a_summary_read_goes_through_the_miss_hop_and_is_never_served_stale_while_updating():
     # Its "none yet" answer is a no-store 204 a background refresh can't
     # store: served stale while updating, a changed document would keep its
@@ -186,5 +197,8 @@ def test_a_summary_read_goes_through_the_miss_hop_and_is_never_served_stale_whil
     assert "proxy_cache civitas_cache" in location[3] and "limit_req" not in location[3]
     assert "updating" not in location[3]
     assert "limit_req zone=" in _match(_locations(internal), "/api/explore/1/cached-summary")[3]
-    # Everything else keeps serving stale while it refreshes.
-    assert "updating" in _match(_locations(public), "/api/senators")[3]
+    # Nor does any location that follows the backend's Cache-Control: stale
+    # while refreshing comes only from a response's own, bounded
+    # stale-while-revalidate (api/cache_headers.py).
+    for path in ("/api/senators", "/api/explore", "/api/action/country-news"):
+        assert "updating" not in _match(_locations(public), path)[3], path
