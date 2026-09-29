@@ -23,17 +23,21 @@ page lists every past election's files, dated in the filename itself
 ("20260806AllbyPrecinct.xlsx"), so the current cycle's file is found by
 date the same way Florida's is.
 
-Tennessee requires a MAJORITY (not a plurality) for a federal primary
-to be decided outright — Tenn. Code Ann. 2-8-113: any of governor, US
-Senator or US Representative that fails to clear 50% goes to a runoff
-the last Thursday in August. runoff_threshold_pct is 50 for exactly
-this reason; pick_nominee already withholds a sub-threshold leader
-rather than mislabel a runoff-bound candidate as the nominee — verified
-live against the real 2026 primary, where 2 of 9 House Republican
-fields and 4 of 9 House Democratic fields (real 3+-way splits) came in
-under 50% and are correctly left unconfirmed by this alone. Merging the
-runoff itself is the documented upgrade (ponytail: this file only ever
-carries the August primary; a second, later file decides those seats).
+Tennessee nominates by PLURALITY. This module used to withhold any
+leader under 50% on the belief that a runoff followed; none does. The
+Secretary of State's certified November 2026 lists name the plurality
+leader of every one of the seven 2026 party fields that came in under
+50% — Marsha Blackburn for Governor (43.6%), Victoria Broderick TN-4 D
+(37.9%), Chaz Molder TN-5 D (40.5%), Mike Croley TN-6 D (28.9%), Johnny
+Garrett TN-6 R (43.6%), Darden Copeland TN-7 D (39.8%) and Brent Taylor
+TN-9 R (46.0%) — and the results page lists no runoff election after
+the August 6 primary. The threshold is read from the state's entry
+(null), like every other adapter's.
+
+The workbook carries up to TEN candidate column groups (RNAME1 ..
+RNAME10), not five: a 2026 criminal-court race filled seven. Reading
+five would drop the sixth-and-later candidates' votes from any field
+that large, and could name the wrong leader.
 
 Tennessee publishes no certification flag anywhere in this file, same
 as Florida — settle_days is the only gate.
@@ -44,6 +48,7 @@ import re
 
 import httpx
 
+from app.pipeline.fetch.state_candidates_common import runoff_threshold
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import (
@@ -68,12 +73,11 @@ DISCOVERY = {
     "require_official": True,
     "settle_days": 21,
 }
-RUNOFF_THRESHOLD_PCT = 50.0
 
 _rate_limiter = RateLimiter(rps=1.0)
 
 _DISTRICT_RE = re.compile(r"District (\d+)")
-_MAX_CANDIDATE_SLOTS = 5
+_MAX_CANDIDATE_SLOTS = 10
 
 
 def _office_and_district(office_name: str) -> tuple[str, int | None] | None:
@@ -134,7 +138,7 @@ def _sum_precinct_votes(rows: list[dict]) -> dict[tuple[str, int | None, str], l
 
 
 async def fetch_confirmed_candidates(
-    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state/source unused, this strategy is TN-only by construction
+    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is TN-only by construction
 ) -> list[dict] | None:
     stages = await _discover_urls(client, "TN", year, DISCOVERY)
     if not stages:
@@ -166,7 +170,7 @@ async def fetch_confirmed_candidates(
 
     results = []
     for (office, district, party), choices in race_choices.items():
-        won = pick_nominee(choices, runoff_threshold_pct=RUNOFF_THRESHOLD_PCT)
+        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold(source))
         record = federal_record(office, district, party, won[0]) if won else None
         if record:
             results.append(record)

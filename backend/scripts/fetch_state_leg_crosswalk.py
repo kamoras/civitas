@@ -96,6 +96,15 @@ _STRONG_MCD_STATES = {
 _COUNTY_SUBDIVISION_LAYER = 1
 _INCORPORATED_PLACE_LAYER = 4
 
+# Hawaii has no incorporated municipality at all — its only local
+# governments are the four counties and the consolidated City and County
+# of Honolulu — so the incorporated-places layer returns nothing for it.
+# The places a resident names (Hilo, Kailua, Hanalei) are Census
+# Designated Places, Census's own name for exactly that case: a
+# recognised community with no municipal government.
+_CDP_STATES = {"HI"}
+_CENSUS_DESIGNATED_PLACE_LAYER = 5
+
 # Counties, used only as a fallback. A district can contain no
 # incorporated place at all — three of Georgia's 180 House districts sit
 # entirely in unincorporated county land, mostly suburban Atlanta — and
@@ -250,18 +259,25 @@ def _districts(state_fips: str, chamber: str) -> list[tuple[str, list, tuple]]:
         # Normalised the same way parse_state_leg_office normalises what
         # it reads off a ballot label: leading zeros dropped, a trailing
         # letter kept and upper-cased (Minnesota's house districts are
-        # "10A"/"10B"). A BASENAME in any other shape belongs to a
-        # chamber that doesn't identify its seats the way the contest
-        # labels do, and is skipped rather than guessed at.
-        match = re.match(r"0*(\d+)([A-Za-z]?)$", basename.strip())
+        # "10A"/"10B"), and a district named by a single letter kept as
+        # that letter (Alaska's senate districts are "A" through "T",
+        # which parse_state_leg_office reads the same way). A BASENAME
+        # in any other shape belongs to a chamber that doesn't identify
+        # its seats the way the contest labels do, and is skipped rather
+        # than guessed at.
+        name = basename.strip()
+        match = re.match(r"0*(\d+)([A-Za-z]?)$", name)
         if rings and match:
             out.append((match.group(1) + match.group(2).upper(), rings, _bbox(rings)))
+        elif rings and re.fullmatch(r"[A-Za-z]", name):
+            out.append((name.upper(), rings, _bbox(rings)))
     return out
 
 
 def _towns(state: str, state_fips: str) -> list[tuple[str, list]]:
     layer = (
         _COUNTY_SUBDIVISION_LAYER if state in _STRONG_MCD_STATES
+        else _CENSUS_DESIGNATED_PLACE_LAYER if state in _CDP_STATES
         else _INCORPORATED_PLACE_LAYER
     )
     features = _query_all(_TOWN_URL.format(layer=layer), {

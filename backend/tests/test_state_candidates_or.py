@@ -244,3 +244,198 @@ class TestFetchConfirmedCandidates:
         assert {"office": "S", "district": None, "party": "R", "last_name": "Smith"} not in result
         # Merkley's real 2-way majority is untouched by the same threshold.
         assert {"office": "S", "district": None, "party": "D", "last_name": "Merkley"} in result
+
+
+# ── Statewide executive contests ─────────────────────────────────────
+#
+# fixtures_or_primary_statewide.pdf is a REAL 9-page slice of the same
+# official 2026 Abstract of Votes (uri=16180585, fetched 2026-09-28),
+# trimmed with pypdfium2's page import, not hand-built: the US Senator
+# Democratic page (federal, must stay federal), all four Governor pages
+# ("Democrat", "Democrat (cont.)", "Republican", "Republican (cont.)"),
+# the first State Senator page (Districts 3, 4 and 6), the Commissioner
+# of the Bureau of Labor and Industries page, the Supreme Court
+# Position 4 page and the Clatsop County District Attorney page. Every
+# name and figure asserted below is read off those real pages.
+
+STATEWIDE_PDF = (FIXTURES / "fixtures_or_primary_statewide.pdf").read_bytes()
+_OR_SOURCE = {
+    "settle_days": 1, "statewide_offices": True,
+    "nonpartisan_resolution": "elects", "nonpartisan_advance_count": 2,
+}
+
+
+def _contests():
+    return orm._statewide_contests(STATEWIDE_PDF)
+
+
+class TestStatewideContests:
+    def test_only_the_two_real_statewide_offices_are_read(self):
+        # State Senator, the Supreme Court and a county DA are all on
+        # the slice and none of them is a statewide executive office.
+        assert set(_contests()) == {("governor", None), ("labor_commissioner", None)}
+
+    def test_the_governor_field_is_merged_across_its_continuation_pages(self):
+        blocks = _contests()[("governor", None)]
+        dem = [c for party, block in blocks if party == "D" for c in block]
+        rep = [c for party, block in blocks if party == "R" for c in block]
+        # 10 named Democrats + Misc., 14 named Republicans + Misc.
+        assert len(dem) == 11
+        assert len(rep) == 15
+
+    def test_whole_names_come_from_word_positions_not_the_split_table(self):
+        # The text-strategy table cuts these mid-word ("Alexander At" |
+        # "kinson IV", "County Fo" | "rest (Fora)") and on the
+        # continuation page hands "William" to the wrong column.
+        cells = {cell: (given, votes) for _p, block in _contests()[("governor", None)]
+                 for cell, given, votes in block}
+        assert cells["*Kotek"] == ("Tina", 385999)
+        assert cells["Atkinson IV"] == ("James", 5902)
+        assert cells["Alexander"] == ("Forest (Fora)", 12684)
+        assert cells["Laible"] == ("Steve William", 3692)
+        assert cells["Jones"] == ("Brittany", 13939)
+        assert cells["Weigler"] == ("Miranda", 10161)
+        assert cells["*Drazan"] == ("Christine", 172474)
+        assert cells["Romero Jr"] == ("Paul J", 1615)
+
+    def test_boli_is_one_non_partisan_block(self):
+        assert _contests()[("labor_commissioner", None)] == [
+            (None, [("Lynch", "Chris", 341903), ("**Stephenson", "Christina E", 595583), ("Misc.", "", 4535)]),
+        ]
+
+
+class TestStatewideNominees:
+    def test_the_real_governor_nominees(self):
+        assert orm._statewide_nominees(_contests(), _OR_SOURCE) == [
+            {"office": "governor", "district": None, "party": "D", "last_name": "Tina Kotek"},
+            {"office": "governor", "district": None, "party": "R", "last_name": "Christine Drazan"},
+        ]
+
+    def test_boli_elected_in_may_is_not_a_november_contest(self):
+        # Christina E Stephenson took 595,583 of 942,021 -- 63.2% counting
+        # write-ins -- and the Abstract marks her "**" (Elected). ORS
+        # 249.088(1)(b): a majority ELECTS, so nobody runs in November.
+        records = orm._statewide_nominees(_contests(), _OR_SOURCE)
+        assert not [r for r in records if r["office"] == "labor_commissioner"]
+
+    def test_a_no_majority_non_partisan_contest_sends_the_top_two(self):
+        # ORS 249.088(1)(a). Hypothetical figures on the real layout.
+        contests = {("labor_commissioner", None): [
+            (None, [("*Lynch", "Chris", 400), ("*Stephenson", "Christina E", 450),
+                    ("Helt", "Cheri", 200), ("Misc.", "", 10)]),
+        ]}
+        assert orm._statewide_nominees(contests, _OR_SOURCE) == [
+            {"office": "labor_commissioner", "district": None, "party": "N", "party_label": "Nonpartisan",
+             "last_name": "Christina E Stephenson"},
+            {"office": "labor_commissioner", "district": None, "party": "N", "party_label": "Nonpartisan",
+             "last_name": "Chris Lynch"},
+        ]
+
+    def test_write_ins_count_toward_the_majority(self):
+        # 510 of 1,010 named votes is a majority of the named field but
+        # not of the votes cast for the office once 30 write-ins count.
+        contests = {("labor_commissioner", None): [
+            (None, [("*Lynch", "Chris", 510), ("*Stephenson", "Christina E", 490), ("Misc.", "", 30)]),
+        ]}
+        names = [r["last_name"] for r in orm._statewide_nominees(contests, _OR_SOURCE)]
+        assert names == ["Chris Lynch", "Christina E Stephenson"]
+
+    # Every case below FAILS rather than dropping the contest: with the
+    # opt-in set, a missing contest is recorded as a confirmed absence.
+
+    def test_a_non_partisan_contest_without_a_configured_rule_fails(self):
+        contests = {("labor_commissioner", None): [
+            (None, [("*Lynch", "Chris", 400), ("*Stephenson", "Christina E", 450)]),
+        ]}
+        with pytest.raises(orm.DiscoveryFailed):
+            orm._statewide_nominees(contests, {"statewide_offices": True})
+
+    def test_a_majority_winner_the_abstract_does_not_mark_elected_fails(self):
+        # ORS 249.091(2)(b): a majority in a VACANCY contest nominates
+        # rather than elects, and the Abstract would print "*". Publishing
+        # nobody there would hide a real November contest.
+        contests = {("labor_commissioner", None): [
+            (None, [("Lynch", "Chris", 400), ("*Stephenson", "Christina E", 600)]),
+        ]}
+        with pytest.raises(orm.DiscoveryFailed):
+            orm._statewide_nominees(contests, _OR_SOURCE)
+
+    def test_a_computed_winner_the_abstract_does_not_mark_fails(self):
+        contests = {("governor", None): [
+            ("D", [("Kotek", "Tina", 385999), ("*Jones", "Brittany", 13939)]),
+        ]}
+        with pytest.raises(orm.DiscoveryFailed):
+            orm._statewide_nominees(contests, _OR_SOURCE)
+
+    def test_a_contest_mixing_party_and_non_party_blocks_fails(self):
+        contests = {("governor", None): [
+            ("D", [("*Kotek", "Tina", 385999)]),
+            (None, [("*Drazan", "Christine", 172474)]),
+        ]}
+        with pytest.raises(orm.DiscoveryFailed):
+            orm._statewide_nominees(contests, _OR_SOURCE)
+
+    def test_an_unreadable_page_fails(self):
+        with pytest.raises(orm.DiscoveryFailed):
+            orm._statewide_nominees({("governor", None): None}, _OR_SOURCE)
+
+
+def _w(text, x0, x1, top):
+    return {"text": text, "x0": x0, "x1": x1, "top": top}
+
+
+class TestPageBlocks:
+    def test_a_block_with_no_total_row_makes_the_page_unreadable(self):
+        lines = [
+            [_w("Democrat", 41, 87, 93)],
+            [_w("*Kotek", 315, 347, 106)],
+            [_w("County", 41, 74, 120), _w("Tina", 327, 347, 120)],
+            [_w("Baker", 41, 67, 133), _w("635", 330, 347, 133)],
+        ]
+        assert orm._page_blocks(lines) is None
+
+    def test_a_name_outside_every_column_makes_the_page_unreadable(self):
+        lines = [
+            [_w("Democrat", 41, 87, 93)],
+            [_w("*Kotek", 315, 347, 106), _w("Stray", 500, 530, 106)],
+            [_w("County", 41, 74, 120), _w("Tina", 327, 347, 120)],
+            [_w("Total", 59, 82, 622), _w("385,999", 310, 347, 622)],
+        ]
+        assert orm._page_blocks(lines) is None
+
+    def test_an_unrecognised_party_heading_does_not_inherit_the_last_party(self):
+        lines = [
+            [_w("Democrat", 41, 87, 93)],
+            [_w("*Kotek", 315, 347, 106)],
+            [_w("County", 41, 74, 120), _w("Tina", 327, 347, 120)],
+            [_w("Total", 59, 82, 200), _w("385,999", 310, 347, 200)],
+            [_w("Progressive", 41, 97, 220)],
+            [_w("*Someone", 315, 347, 233)],
+            [_w("County", 41, 74, 246), _w("Pat", 327, 347, 246)],
+            [_w("Total", 59, 82, 300), _w("9", 340, 347, 300)],
+        ]
+        assert orm._page_blocks(lines) is None
+
+
+class TestFetchWithStatewideOffices:
+    async def test_statewide_nominees_ride_the_same_fetch(self, monkeypatch):
+        _patched(monkeypatch, pdf=STATEWIDE_PDF)
+        result = await orm.fetch_confirmed_candidates(None, 2026, "OR", _OR_SOURCE)
+        assert {"office": "S", "district": None, "party": "D", "last_name": "Merkley"} in result
+        statewide = [r for r in result if r["office"] not in ("S", "H")]
+        assert statewide == [
+            {"office": "governor", "district": None, "party": "D", "last_name": "Tina Kotek"},
+            {"office": "governor", "district": None, "party": "R", "last_name": "Christine Drazan"},
+        ]
+
+    async def test_an_unreadable_statewide_page_fails_the_whole_fetch(self, monkeypatch):
+        # Returning the federal records alone would sync Oregon as
+        # "checked, no governor's race".
+        _patched(monkeypatch, pdf=STATEWIDE_PDF)
+        monkeypatch.setattr(orm, "_page_blocks", lambda lines: None)
+        assert await orm.fetch_confirmed_candidates(None, 2026, "OR", _OR_SOURCE) is None
+
+    async def test_without_the_opt_in_nothing_statewide_is_read(self, monkeypatch):
+        _patched(monkeypatch, pdf=STATEWIDE_PDF)
+        result = await orm.fetch_confirmed_candidates(None, 2026, "OR", {"settle_days": 1})
+        assert all(r["office"] in ("S", "H") for r in result)

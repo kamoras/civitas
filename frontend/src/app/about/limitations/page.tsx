@@ -160,7 +160,8 @@ export default function LimitationsChapter() {
           <P>
             Ballots are printed per precinct, so there&apos;s no single &ldquo;ballot&rdquo; for a
             whole state. Pages show federal contests, statewide measures and — where a state&apos;s
-            own results name them — statewide offices, state legislative seats and judgeships.
+            own results or candidate list name them — statewide offices, state legislative seats
+            and judgeships.
             County and city offices and local measures are shown only for a small, hand-picked list
             of towns (looked up from each town hall&apos;s address); anywhere else, showing them
             would mean taking a home address to a lookup service, and we won&apos;t do that. Every
