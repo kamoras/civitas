@@ -95,6 +95,20 @@ describe("day report", () => {
     expect(screen.getByText(/floor log could not be read/)).toBeTruthy();
   });
 
+  it("says the Senate's floor log comes after the session, not that the day is empty", () => {
+    // 2026-09-28: the Senate had voted 4 times; senate.gov had no floor log
+    // for the day yet (it posts one after the session), so the column read
+    // "Live floor log" over no log at all.
+    const voting: DayReport = {
+      ...day,
+      chambers: { ...day.chambers, senate: chamber({ chamber: "senate", status: "live", floorLogStatus: "absent" }) },
+    };
+    render(<DayReportView report={voting} />);
+    expect(screen.getByText(/^Record votes so far/)).toBeTruthy();
+    expect(screen.getByText(/publishes its floor log after the day's session ends/)).toBeTruthy();
+    expect(screen.queryByText("Live floor log")).toBeNull();
+  });
+
   it("has no axe violations", async () => {
     render(<DayReportView report={day} />);
     expect(await violations()).toEqual([]);
