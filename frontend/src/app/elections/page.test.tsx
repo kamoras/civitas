@@ -52,10 +52,11 @@ const RESULTS = {
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 // RaceMap pulls in react-simple-maps and a topojson payload; the page's own
 // behaviour is what is under test here, not the map's rendering.
-const mapFill = vi.hoisted(() => ({ current: null as null | ((s: string) => string) }));
+const mapFill = vi.hoisted(() => ({ current: null as null | ((s: string) => string), renders: 0 }));
 vi.mock("@/components/elections/RaceMap", () => ({
   default: (props: { getFillColor: (s: string) => string }) => {
     mapFill.current = props.getFillColor;
+    mapFill.renders += 1;
     return <div data-testid="race-map" />;
   },
   FIPS_TO_STATE: { "13": "GA", "36": "NY", "11": "DC" },
@@ -102,6 +103,21 @@ describe("ElectionsPage", () => {
 
     await screen.findByTestId("race-map");
     expect(screen.queryByRole("link", { name: /^DC/ })).not.toBeInTheDocument();
+  });
+
+  it("does not re-render once a second outside election night", async () => {
+    // The page reads the clock only on election day before any count; a
+    // page that subscribed all year re-rendered the map and every state row
+    // once a second.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2026 });
+    render(<ElectionsPage />);
+    await screen.findByText(/D-LEANING/);
+    const settled = mapFill.renders;
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(mapFill.renders).toBe(settled);
   });
 
   it("surfaces a fetch failure instead of hanging on the loading line", async () => {

@@ -185,7 +185,7 @@ function StateLegislatureDetail({ ballot }: { ballot: StateBallot }) {
   return (
     <div>
       <p className="text-xs text-ink-min mb-3">
-        You vote in exactly one seat per chamber. Each is listed with the towns it covers —
+        Each voter votes in exactly one seat per chamber. Each is listed with the towns it covers —
         filter by yours to find it.
       </p>
       {ballot.stateLegRaces.map((chamber) => (
@@ -784,6 +784,7 @@ function HouseDetail({
   results,
   feedAnswered,
   lookupHref,
+  lookupIsStateSpecific = false,
   resultsMode = false,
 }: {
   ballot: StateBallot;
@@ -794,6 +795,8 @@ function HouseDetail({
   /** The state's official ballot/voter lookup, or the generic election-
    * office finder when there is no state-specific one. */
   lookupHref: string;
+  /** lookupHref is the state's own lookup, not the national directory. */
+  lookupIsStateSpecific?: boolean;
   /** Live counts by district, from election day — the map shades by them. */
   results?: Map<number, LiveRaceResult>;
   /** The state's feed has given a count for some race (DistrictMap). */
@@ -865,7 +868,7 @@ function HouseDetail({
           your district may not be the one your current representative was elected in, and
           lookups by representative show today&apos;s districts, not these. Point at the map, pick
           your county, or filter by a county or district number
-          {ballot.officialLookup.isStateSpecific ? (
+          {lookupIsStateSpecific ? (
             <>
               {" "}— or check{" "}
               <a
@@ -1081,7 +1084,7 @@ function ContestOverview({
                       </span>
                     </span>
                     {g.seats![0].electedBy === "district" && (
-                      <span className="block text-[12px] text-ink-lo">You vote in your district&apos;s seat only</span>
+                      <span className="block text-[12px] text-ink-lo">Each voter votes in their district&apos;s seat only</span>
                     )}
                     {g.seats![0].electedBy === "statewide" && (
                       <span className="block text-[12px] text-ink-lo">Every voter votes for each seat</span>
@@ -1217,6 +1220,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // visitor" (election_pipeline.py), so on a malformed/unsafe URL this
   // falls back to the same USAGov default the backend itself falls back to.
   const lookupHref = safeHref(officialLookup.url) || "https://www.usa.gov/election-office";
+  // A rejected URL falls back to the national directory, so it isn't the
+  // state's own site whatever the flag says.
+  const lookupIsStateSpecific = officialLookup.isStateSpecific && !!safeHref(officialLookup.url);
   const stateName = ballot.stateName ?? ballot.state;
 
   const [towns, setTowns] = useState<TownEntry[]>([]);
@@ -1253,7 +1259,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // ballot") once its polls have closed. Until then people are voting, so
   // the page keeps the research framing, present tense, with the count
   // section saying when the polls close. Unknown is "not closed".
-  const now = useNow();
+  // Subscribed only while the live phase shows results (poll close is the
+  // one time-dependent switch); otherwise the page would re-render its whole
+  // tree once a second all year.
+  const now = useNow(!!live && showsResults(live.phase));
   const resultsFraming =
     resultsMode &&
     (ballot.phase?.phase === "results" ||
@@ -1363,6 +1372,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             results={liveByDistrict}
             feedAnswered={feedAnswered}
             lookupHref={lookupHref}
+            lookupIsStateSpecific={lookupIsStateSpecific}
             resultsMode={resultsMode}
           />
         );
@@ -1464,6 +1474,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 retryMs={liveRetryMs}
                 arrivalRace={arrival?.toCount ?? null}
                 lookupHref={lookupHref}
+                lookupIsStateSpecific={lookupIsStateSpecific}
               />
               {resultsFraming && (
                 <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs tracking-[0.16em] text-ink-min">

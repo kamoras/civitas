@@ -50,8 +50,18 @@ function getServerSnapshot(): number {
   return 0;
 }
 
-export function useNow(): number {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+function subscribeNever(): () => void {
+  return () => {};
+}
+
+/**
+ * `enabled = false` reads the clock without subscribing to it: the caller
+ * gets a time but is not re-rendered every second. A page that only needs the
+ * clock in one phase (election night) passes that condition, so it doesn't
+ * re-render its whole tree once a second for the rest of the year.
+ */
+export function useNow(enabled = true): number {
+  return useSyncExternalStore(enabled ? subscribe : subscribeNever, getSnapshot, getServerSnapshot);
 }
 
 /** Test seam: drops the shared ticker so suites don't leak timers into each other. */

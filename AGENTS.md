@@ -763,8 +763,9 @@ wrong number on election night is worse than none:
   a fixed template around the source's figures, never model text. A flip needs
   half the reporting units in. Where the units are places (counties, cities
   and towns), which "report" on their first batch, it needs every place in and
-  `COUNTY_FLIP_SETTLE` since the first votes instead. Either way, the source's
-  official flag also suffices.
+  `COUNTY_FLIP_SETTLE` since the first votes instead. Where the units are
+  places, or the source gives no reporting figure, the source's official flag
+  also suffices; beside a precinct count that states one, it does not.
 
 After both member pipelines complete, `stock_pipeline.py` runs as a sibling
 phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction

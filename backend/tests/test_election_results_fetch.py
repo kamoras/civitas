@@ -564,6 +564,31 @@ class TestEnhancedVotingUnitsAndWriteIns:
         assert ev._unit_label(payload) == "precincts"
         assert ev._unit_label({"ballotItems": [], "localityElections": []}) == "precincts"
 
+    @pytest.mark.parametrize("key", ["UT24", "WA26"])
+    def test_locality_units_without_a_statewide_item(self, key):
+        """With no statewide contest on the ballot (Utah elects no senator
+        in 2026), the House contests still count counties: 2 of 4 counties
+        in must not read as "2 of 4 precincts", which the half-in rule
+        would take as most of the count."""
+        payload = _ev_payload(key)
+        localities = len(payload["localityElections"])
+        payload["ballotItems"] = [
+            item for item in payload["ballotItems"]
+            if (item.get("reportingStatus") or {}).get("totalUnits") != localities
+        ]
+        assert payload["ballotItems"], "the fixture should keep its district contests"
+        assert ev._unit_label(payload) == "counties"
+
+    def test_one_contest_counting_precincts_makes_it_precincts(self):
+        payload = _ev_payload("UT24")
+        localities = len(payload["localityElections"])
+        payload["ballotItems"] = [
+            item for item in payload["ballotItems"]
+            if (item.get("reportingStatus") or {}).get("totalUnits") != localities
+        ]
+        payload["ballotItems"][0]["reportingStatus"] = {"reportingUnits": 3, "totalUnits": 412}
+        assert ev._unit_label(payload) == "precincts"
+
     async def test_fetch_carries_the_unit_label(self, monkeypatch):
         TestEnhancedVotingDemoAndAmbiguity._serve(monkeypatch, _EV["indexes"]["UT"], _ev_payload("UT24"))
         got = await ev.fetch_general_results(None, date(2024, 11, 5), "UT", TestEnhancedVotingDemoAndAmbiguity.UT)

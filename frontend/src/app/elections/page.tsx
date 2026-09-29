@@ -77,13 +77,13 @@ export default function ElectionsPage() {
   // voting, so the masthead says results come in as polls close — not
   // "results" as if there were some. Once one state's polls close, the count
   // leads.
-  const now = useNow();
+  // The clock is only read on election day before any count: any other
+  // time, subscribing would re-render the whole page once a second.
+  const beforeAnyCount =
+    resultsMode && !!results && results.phase.phase === "election_day" && results.races.length === 0;
+  const now = useNow(beforeAnyCount);
   const stillVoting =
-    resultsMode &&
-    !!results &&
-    results.phase.phase === "election_day" &&
-    results.races.length === 0 &&
-    results.liveStates.every((st) => pollsStillOpen(results, st, now));
+    beforeAnyCount && !!results && results.liveStates.every((st) => pollsStillOpen(results, st, now));
   const firstClose = stillVoting
     ? Object.values(results?.pollsClose ?? {})
         .filter((t) => Date.parse(t) > now)

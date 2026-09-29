@@ -36,6 +36,7 @@ export default function StateResults({
   retryMs = null,
   arrivalRace = null,
   lookupHref,
+  lookupIsStateSpecific,
 }: {
   ballot: StateBallot;
   results: LiveResults | null;
@@ -48,6 +49,10 @@ export default function StateResults({
    * (no such link, or it went to research). Decided once by the page. */
   arrivalRace?: string | null;
   lookupHref: string;
+  /** False when lookupHref is USAGov's national directory of election
+   * offices, not the state's own site: the link then says it finds the
+   * office rather than promising the state's count is at the other end. */
+  lookupIsStateSpecific: boolean;
 }) {
   const races = useMemo(() => results?.races ?? [], [results]);
   const senate = races.filter((r) => r.office === "S");
@@ -109,14 +114,7 @@ export default function StateResults({
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
           This page retries {describeInterval(retryMs ?? RETRY_BACKOFF_MS[0])}.{" "}
-          <a
-            href={lookupHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-phos hover:underline"
-          >
-            {stateName}&apos;s election office publishes the count ↗
-          </a>
+          <OfficeLink href={lookupHref} stateName={stateName} stateSpecific={lookupIsStateSpecific} what="the count" />
         </p>
       </section>
     );
@@ -141,14 +139,7 @@ export default function StateResults({
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
           This election&apos;s results are no longer followed live on this page.{" "}
-          <a
-            href={lookupHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-phos hover:underline"
-          >
-            {stateName}&apos;s election office publishes the final count ↗
-          </a>
+          <OfficeLink href={lookupHref} stateName={stateName} stateSpecific={lookupIsStateSpecific} what="the final count" />
         </p>
       </section>
     );
@@ -163,14 +154,7 @@ export default function StateResults({
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
           {stateName}&apos;s election office doesn&apos;t publish a results feed this page can read,
           so its count isn&apos;t shown or coloured here.{" "}
-          <a
-            href={lookupHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-phos hover:underline"
-          >
-            {stateName}&apos;s election office publishes it ↗
-          </a>
+          <OfficeLink href={lookupHref} stateName={stateName} stateSpecific={lookupIsStateSpecific} what="it" />
         </p>
       </section>
     );
@@ -195,14 +179,7 @@ export default function StateResults({
             Civitas couldn&apos;t read {stateName}&apos;s results feed (last tried{" "}
             {formatEasternTime(feed.checkedAt)}), so no count is shown here yet. This page keeps
             trying.{" "}
-            <a
-              href={lookupHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-phos hover:underline"
-            >
-              {stateName}&apos;s election office publishes the count ↗
-            </a>
+            <OfficeLink href={lookupHref} stateName={stateName} stateSpecific={lookupIsStateSpecific} what="the count" />
           </p>
         ) : (
           <p className="border border-white/[0.09] bg-surface p-4 text-sm text-ink-lo">
@@ -285,5 +262,30 @@ export default function StateResults({
         <LiveUpdates updates={results.updates} limit={8} linkToState={false} />
       )}
     </section>
+  );
+}
+
+/**
+ * Where the state's own count is published. Worded by what the link really
+ * is: the state's election office, or USAGov's directory of them — the
+ * latter doesn't show a count, it finds the office that does.
+ */
+function OfficeLink({
+  href,
+  stateName,
+  stateSpecific,
+  what,
+}: {
+  href: string;
+  stateName: string;
+  stateSpecific: boolean;
+  what: "the count" | "the final count" | "it";
+}) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-phos hover:underline">
+      {stateSpecific
+        ? `${stateName}'s election office publishes ${what} ↗`
+        : `Find ${stateName}'s election office, which publishes ${what} (USAGov directory) ↗`}
+    </a>
   );
 }

@@ -448,15 +448,22 @@ def _unit_label(payload: dict, source: dict | None = None) -> str:
     localities where that holds (its `locality_label`, default counties:
     Rhode Island has five counties, not forty), since "29 of 29 precincts"
     would claim a precinct-level completeness the source never stated;
-    anything else stays precincts."""
+    anything else stays precincts.
+
+    A statewide item isn't always on the ballot (Utah elects no senator in
+    2026), and a House contest counts only the localities it covers (UT's
+    districts: 8, 13, 11 and 4 of 29). So a ballot whose every contest
+    counts no more units than the state has localities is locality-counted
+    too; any contest counting more is by precinct."""
     localities = len([loc for loc in payload.get("localityElections") or [] if isinstance(loc, dict)])
     if not localities:
         return "precincts"
     totals = [
-        (item.get("reportingStatus") or {}).get("totalUnits")
-        for item in payload.get("ballotItems") or [] if isinstance(item, dict)
+        t for item in payload.get("ballotItems") or [] if isinstance(item, dict)
+        for t in [(item.get("reportingStatus") or {}).get("totalUnits")]
+        if isinstance(t, int) and not isinstance(t, bool) and t > 0
     ]
-    if localities not in totals:
+    if localities not in totals and not (totals and max(totals) <= localities):
         return "precincts"
     return (source or {}).get("locality_label") or "counties"
 

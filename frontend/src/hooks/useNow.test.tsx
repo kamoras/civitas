@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, act, cleanup } from "@testing-library/react";
 import { useNow, __resetNowTicker } from "./useNow";
 
-function Clock({ label = "now" }: { label?: string }) {
-  return <span data-testid={label}>{useNow()}</span>;
+function Clock({ label = "now", enabled }: { label?: string; enabled?: boolean }) {
+  return <span data-testid={label}>{useNow(enabled)}</span>;
 }
 
 describe("useNow", () => {
@@ -61,5 +61,31 @@ describe("useNow", () => {
     expect(vi.getTimerCount()).toBe(1);
     unmount();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not re-render or start a timer when disabled", () => {
+    const rendered = vi.fn();
+    function Counted() {
+      rendered();
+      return <span>{useNow(false)}</span>;
+    }
+    render(<Counted />);
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(rendered).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts ticking when a disabled reader is enabled", () => {
+    vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+    const { rerender } = render(<Clock enabled={false} />);
+    vi.setSystemTime(new Date("2026-11-04T01:00:00Z"));
+    rerender(<Clock enabled />);
+    expect(Number(screen.getByTestId("now").textContent)).toBe(Date.parse("2026-11-04T01:00:00Z"));
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(Number(screen.getByTestId("now").textContent)).toBe(Date.parse("2026-11-04T01:00:01Z"));
   });
 });

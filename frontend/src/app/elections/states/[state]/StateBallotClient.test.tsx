@@ -528,7 +528,7 @@ describe("statewide executive offices", () => {
     // Governor, Secretary of State and the Council: three offices, not four rows.
     expect(box.getByText(/^3 offices · from primary results$/)).toBeInTheDocument();
     expect(box.getByText(/Executive Council/)).toBeInTheDocument();
-    expect(box.getByText(/You vote in your district's seat only/)).toBeInTheDocument();
+    expect(box.getByText(/Each voter votes in their district's seat only/)).toBeInTheDocument();
     expect(box.getByText("District 2")).toBeInTheDocument();
     expect(box.getByText("Tobin Menard")).toBeInTheDocument();
   });

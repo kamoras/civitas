@@ -235,6 +235,50 @@ describe("the state page in results mode", () => {
     );
   });
 
+  it("words the national directory as a directory, not as the state's count", async () => {
+    // With no verified state link the lookup is USAGov's office finder: the
+    // link can't promise the count is at the other end.
+    fetchLiveResults.mockResolvedValue(live({ liveStates: ["GA"], races: [] }));
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          officialLookup: {
+            url: "https://www.usa.gov/election-office",
+            label: "Find your election office",
+            sourceName: "USA.gov",
+            isStateSpecific: false,
+            verifiedAt: null,
+          },
+        })}
+      />
+    );
+    await screen.findByRole("heading", { name: "No live count for Ohio here" });
+    const link = screen.getByRole("link", { name: /Find Ohio's election office, which publishes it \(USAGov directory\)/ });
+    expect(link).toHaveAttribute("href", "https://www.usa.gov/election-office");
+    expect(screen.queryByRole("link", { name: /^Ohio's election office publishes/ })).not.toBeInTheDocument();
+  });
+
+  it("treats a rejected state link as the national directory", async () => {
+    fetchLiveResults.mockRejectedValue(new Error("502"));
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          officialLookup: {
+            url: "javascript:alert(1)",
+            label: "Ohio Secretary of State",
+            sourceName: "Ohio SOS",
+            isStateSpecific: true,
+            verifiedAt: null,
+          },
+        })}
+      />
+    );
+    const alert = await screen.findByRole("alert");
+    const link = within(alert).getByRole("link");
+    expect(link).toHaveAttribute("href", "https://www.usa.gov/election-office");
+    expect(link).toHaveTextContent("Find Ohio's election office, which publishes the count (USAGov directory)");
+  });
+
   it("says the feed couldn't be read rather than that counting hasn't started", async () => {
     fetchLiveResults.mockResolvedValue(
       live({
