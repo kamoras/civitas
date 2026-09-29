@@ -8,6 +8,7 @@ import type { ActionIssue } from "@/types/action";
 import type { BillInFlight } from "@/types/bill";
 import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
 import { issueRef, parseUtc } from "@/lib/formatting";
+import { billHref } from "@/lib/congress";
 
 /**
  * The dense, dated index of what has recently entered the record.
@@ -107,7 +108,7 @@ export function buildRecordEntries(
       date: b.latestActionDate,
       title: b.title,
       detail: clamp(b.latestAction, 78),
-      href: `/congress/bills/${encodeURIComponent(b.billId)}`,
+      href: billHref(b.billId, b.congress),
       tone: "text-signal-cyan",
     })),
   ];

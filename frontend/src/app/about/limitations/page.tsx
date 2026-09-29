@@ -39,8 +39,8 @@ export default function LimitationsChapter() {
     >
       <Summary>
         <Point>
-          A bigger campaign looks more independent by percentage, and funding covers six years for a
-          senator but two for a representative.
+          Funding covers six years for a senator but two for a representative, so the two are
+          best read side by side, not ranked.
         </Point>
         <Point>
           &ldquo;What a seat expects&rdquo; comes from how it votes for president: a broad stand-in
@@ -53,19 +53,19 @@ export default function LimitationsChapter() {
       </Summary>
 
       <Section id="money" title="Money">
-        <Limitation title="Bigger campaigns look more independent by percentage">
-          <P>
-            PAC checks are capped by law and individual money isn&apos;t, so a larger campaign
-            naturally has a smaller PAC share. Scaling PAC dependency by how close each PAC came to
-            its legal limit measures the depth of that money directly, but no single number fully
-            separates &ldquo;independent&rdquo; from &ldquo;big&rdquo;.
-          </P>
-        </Limitation>
         <Limitation title="Funding windows differ by chamber">
           <P>
-            Funding covers the election that won the current seat — six years of fundraising for a
-            senator, two for a representative — so cross-chamber comparisons weigh different spans
-            of time. FEC filings also lag donations by weeks or months.
+            Funding covers a member&apos;s most recent completed election: six years of fundraising
+            for a senator, two for a representative. The PAC share and top-donor concentration are
+            each scored against the member&apos;s own chamber, but industry concentration is not, and
+            no adjustment makes six years and two years the same span. Within a chamber members are
+            measured over the same length of time, except a member with no completed election yet
+            (appointed, or seated by a special election), who is measured on the campaign still in
+            progress; across chambers the scores are best read side by side, not ranked, which is
+            why the compare page names no winner when a senator and a representative are compared.
+            The window itself is deliberate: a strict two-year window would leave most senators
+            with little or no fundraising to measure. FEC filings also lag donations by weeks or
+            months.
           </P>
         </Limitation>
       </Section>

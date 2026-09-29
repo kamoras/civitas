@@ -105,9 +105,14 @@ async def run_supplementary_pipeline() -> dict:
         progress.begin("justice_scorecards")
         # SCOTUS data changes a few times per term, but the Oyez fetch is
         # uncached per-case crawling (5h+ in run 69). Refresh weekly
-        # (Sunday UTC), or whenever the justices table is empty.
+        # (Sunday UTC), or whenever the justices table is empty or a sitting
+        # justice's loyalty has never been measured (a new install, or a
+        # source that was down: the fields stay unset until a run reads them).
         justices_missing = db.query(Justice.id).first() is None
-        run_justices = justices_missing or utcnow().weekday() == 6
+        unmeasured = db.query(Justice.id).filter(
+            Justice.is_active.is_(True), Justice.loyalty_through_term.is_(None),
+        ).first() is not None
+        run_justices = justices_missing or unmeasured or utcnow().weekday() == 6
         if not run_justices:
             logger.info("Justice refresh skipped (weekly cadence; next on Sunday UTC)")
             run.justices_skipped = True

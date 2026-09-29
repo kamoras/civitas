@@ -39,8 +39,7 @@ def weights():
     """Score weight breakdown for the justice scorecard."""
     w = JUSTICE_SCORE_WEIGHTS
     return _cached_json({
-        "consistency": {"weight": w["consistency"], "label": "Ideological Consistency", "description": "How unpredictable are their votes? Low bloc-alignment = high consistency (follows law, not party)."},
-        "independence": {"weight": w["independence"], "label": "Independence", "description": "How often they break from their appointing-party's expected voting bloc in split decisions."},
+        "loyalty": {"weight": w["loyalty"], "label": "Independence from the appointing president", "description": "How much more often a justice sides with the government while the president who appointed them is in office than under other presidents (Epstein & Posner 2016). 100 is no difference either way."},
     }, max_age=CACHE_TTL_CONFIG_S)
 
 
