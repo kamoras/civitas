@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.config_definitions import BillStage
+from app.issue_ids import to_public_id
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.schemas import (
     BillDetailSchema,
@@ -326,6 +327,7 @@ def _issues_mentioning(db: Session, bill_id: str) -> list[RelatedIssueSchema]:
         if any(isinstance(e, dict) and e.get("id") == bill_id for e in entries):
             result.append(RelatedIssueSchema(
                 id=issue_id, date=date, first_surfaced=created_at.strftime("%Y-%m-%d"), title=title,
+                public_id=to_public_id(issue_id),
             ))
     return result
 

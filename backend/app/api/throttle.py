@@ -1,19 +1,19 @@
 """Rate limits and once-per-period rules that hold across every API worker.
 
 These used to be dicts in each module (the write limiter, the public API's
-read limiter, the pulse vote dedup, the Explore summary cooldown, the
-upstream lookup budget), which was correct only while the backend ran as
-one process. With several uvicorn workers each would keep its own copy: a
-client could vote twice on the same issue by landing on the other worker,
-and every per-IP limit would stretch to its value times the number of
-workers.
+read limiter, the Explore summary cooldown, the upstream lookup budget),
+which was correct only while the backend ran as one process. With several
+uvicorn workers each would keep its own copy: every per-IP limit would
+stretch to its value times the number of workers, and a once-per-period
+rule would let a second one through on the other worker.
 
 Where it lives. A small SQLite file in RAM (THROTTLE_DB_PATH, /dev/shm by
 default): shared by every worker process in the container, and never on
 disk. That is the same lifetime the dicts had — it resets when the
 container restarts — and the same exposure: what it records about visitors
-(which issue a visitor voted on today) can be read only from the running
-container's memory, as the dicts could, never from the data volume.
+(how often a key made from an address asked for something today) can be
+read only from the running container's memory, as the dicts could, never
+from the data volume.
 
 Keys. Per-client keys are an HMAC of the client IP (with a purpose and a
 scope) under a random salt this store makes for each UTC day (client_key).
@@ -22,9 +22,8 @@ hash (a different salt), and once a day's salt is deleted no key made with
 it can be recomputed from an address. A day's salt is kept through the
 next day, not deleted at midnight: a client's limits and claims are
 counted under both its keys, so a rule doesn't restart at 00:00 UTC — a
-pulse vote at 23:59 must still hold off a second one a minute later, as
-the per-process dicts' rolling 24 hours did (and a rate window straddling
-midnight must still count both halves). No rule here is longer than a day,
+rate window straddling midnight must still count both halves, as the
+per-process dicts did. No rule here is longer than a day,
 so that is as long as an old key can matter. derived_salt uses a salt of
 its own that is deleted when its day ends: what it salts (the visit
 counter's fallback) promises no longer.
@@ -55,9 +54,7 @@ live-lookup routes, bills/{id}/record and explore/{id}/comments
 
 The limits fail open: a limiter that can't reach its store lets the
 request through and logs it, rather than turning a locked database into an
-outage of every endpoint behind it. The exceptions say so and raise
-Unavailable instead — claim(fail_open=False) — for work that must not
-start unchecked (a pulse vote's dedup).
+outage of every endpoint behind it.
 """
 
 import hashlib
@@ -494,10 +491,9 @@ def _hmac_key(salt: bytes, message: bytes) -> str:
     return hmac.new(salt, message, hashlib.sha256).hexdigest()[:32]
 
 
-def client_key(ip: str, purpose: str, scope: str = "") -> ClientKey | None:
-    """The key a per-client limit counts `ip` under, for `purpose` (and
-    `scope` within it: the issue a pulse vote is on), with its key under
-    yesterday's salt. A day's salt is deleted once the day after it ends
+def client_key(ip: str, purpose: str) -> ClientKey | None:
+    """The key a per-client limit counts `ip` under, for `purpose`, with its
+    key under yesterday's salt. A day's salt is deleted once the day after it ends
     (the first key of the day after that, or the minute tick). Only
     earlier days are deleted, never "any other": a worker that read the
     clock just before midnight must not delete the new day's salt another
@@ -514,7 +510,7 @@ def client_key(ip: str, purpose: str, scope: str = "") -> ClientKey | None:
         return None
     if salt is None:
         return None
-    message = f"{purpose}\x00{ip}\x00{scope}".encode()
+    message = f"{purpose}\x00{ip}\x00".encode()
     key = ClientKey(_hmac_key(salt, message))
     key.previous = _hmac_key(previous, message) if previous is not None else None
     return key
@@ -592,10 +588,6 @@ async def run(fn, *args, **kwargs):
     return await asyncio.get_running_loop().run_in_executor(_executor, functools.partial(fn, *args, **kwargs))
 
 
-class Unavailable(RuntimeError):
-    """The store couldn't answer, for a caller that asked not to fail open."""
-
-
 # Retry-After for a refusal because the store couldn't answer. Unlike a
 # limit's refusal there is no reset time to compute (rate_limit.retry_after):
 # this is how often the store's own maintenance comes round, the soonest a
@@ -603,14 +595,11 @@ class Unavailable(RuntimeError):
 UNAVAILABLE_RETRY_AFTER_S = int(_PURGE_INTERVAL_S)
 
 
-def claim(bucket: str, key: str | None, *, period: float, fail_open: bool = True) -> bool:
+def claim(bucket: str, key: str | None, *, period: float) -> bool:
     """Claim `key` unless it was claimed less than `period` seconds ago.
-    True when this caller got it. When the store can't answer (or `key` is
-    None: client_key failed), True — or, with fail_open=False, Unavailable
-    for a caller whose rule matters more than its availability."""
+    True when this caller got it, and when the store can't answer (or `key`
+    is None: client_key failed)."""
     if key is None:
-        if not fail_open:
-            raise Unavailable(bucket)
         return True
     now = time.time()
     previous = _previous_key(key)
@@ -629,24 +618,10 @@ def claim(bucket: str, key: str | None, *, period: float, fail_open: bool = True
                 (bucket, str(key), now, now + period, now - period),
             ).fetchone() is not None
             _purge_expired(conn, now)
-    except sqlite3.Error as error:
-        if not fail_open:
-            raise Unavailable(bucket) from error
+    except sqlite3.Error:
         logger.warning("Throttle %r unavailable — allowing the claim", bucket, exc_info=True)
         return True
     return won
-
-
-def release(bucket: str, key: str | None) -> None:
-    """Give back a claim whose work didn't happen (the issue voted on didn't
-    exist), so it doesn't hold the next attempt off."""
-    if key is None:
-        return
-    try:
-        with _Txn() as conn:
-            conn.execute("DELETE FROM claims WHERE bucket = ? AND key = ?", (bucket, str(key)))
-    except sqlite3.Error:
-        logger.warning("Throttle %r release failed", bucket, exc_info=True)
 
 
 def clear(*buckets: str) -> None:

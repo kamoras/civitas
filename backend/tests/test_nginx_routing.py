@@ -20,7 +20,6 @@ CONF = Path(__file__).resolve().parents[2] / "nginx" / "civitas.conf"
 # Adding a route here is a claim that it starts no background writer
 # (app.background.start_writer / writing) — the API process would refuse it.
 SERVED_BY_API = {
-    "/api/action/pulse",
     "/api/explore/{doc_id}/comments",
     "/api/feedback",
     "/api/track-visit",
@@ -202,7 +201,7 @@ def test_a_summary_read_goes_through_the_miss_hop_and_is_never_served_stale_whil
     # Nor does any location that follows the backend's Cache-Control: stale
     # while refreshing comes only from a response's own
     # stale-while-revalidate (api/cache_headers.py).
-    for path in ("/api/senators", "/api/explore", "/api/action/country-news"):
+    for path in ("/api/senators", "/api/explore", "/api/action/monitors"):
         assert "updating" not in _match(_locations(public), path)[3], path
 
 

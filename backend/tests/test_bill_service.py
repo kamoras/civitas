@@ -429,6 +429,9 @@ class TestGetBillDetail:
         # first_surfaced is the label shown next to the title; date drives
         # the /action?date= link only — see RelatedIssueSchema's docstring.
         assert detail.related_issues[0].first_surfaced != ""
+        # The bill page links each title to that issue's own page.
+        from app.issue_ids import to_public_id
+        assert detail.related_issues[0].public_id == to_public_id(detail.related_issues[0].id)
 
     def test_excludes_non_current_issues_from_related(self, db_session):
         senator = _make_senator(db_session)

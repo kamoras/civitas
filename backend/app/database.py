@@ -1157,7 +1157,7 @@ def own_session(db: Session) -> Generator[Session, None, None]:
     For work a request hands to a worker thread: the request's session is
     closed by get_db's cleanup when the request is cancelled (a client
     disconnect), which would otherwise happen under the thread still using
-    it. The one way to get such a session (off_loop, the pulse vote)."""
+    it. The one way to get such a session (off_loop)."""
     own = SessionLocal(bind=db.get_bind())  # SessionLocal's settings, db's engine
     try:
         yield own

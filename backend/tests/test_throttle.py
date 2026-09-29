@@ -24,8 +24,8 @@ def _worker(path: str, calls: int, start, results) -> None:
     throttle.use_path(path)
     start.wait()
     allowed = sum(throttle.hit("write", "k", limit=20, period=3600).allowed for _ in range(calls))
-    claimed = sum(throttle.claim("pulse", "k:1", period=3600) for _ in range(calls))
-    results.put((allowed, claimed, throttle.client_key("203.0.113.1", "pulse", "1")))
+    claimed = sum(throttle.claim("once", "k:1", period=3600) for _ in range(calls))
+    results.put((allowed, claimed, throttle.client_key("203.0.113.1", "once")))
 
 
 def test_limits_claims_and_keys_hold_across_processes(tmp_path):
@@ -129,18 +129,13 @@ class TestClaim:
         assert throttle.claim("b", "other", period=30)
         assert throttle.claim("c", "k", period=30)
 
-    def test_release_frees_the_claim(self):
-        assert throttle.claim("b", "k", period=30)
-        throttle.release("b", "k")
-        assert throttle.claim("b", "k", period=30)
-
     def test_expired_claims_are_purged_in_every_bucket(self, throttle_store, monkeypatch):
-        # A quiet bucket's rows (a day's pulse claims) go as surely as a
+        # A quiet bucket's rows (a day's claims) go as surely as a
         # busy one's: the purge is by expiry, across buckets, on a timer.
         at = [0.0]
         monkeypatch.setattr(throttle.time, "time", lambda: at[0])
         monkeypatch.setattr(throttle, "_last_purge", 0.0)
-        throttle.claim("pulse", "old", period=86400)
+        throttle.claim("once", "old", period=86400)
         at[0] = 86400 + 61
         throttle.claim("summary", "new", period=30)
         assert _rows(throttle_store, "SELECT key FROM claims") == [("new",)]
@@ -157,19 +152,18 @@ class TestClaim:
 
 @pytest.mark.usefixtures("throttle_store")
 class TestClientKey:
-    def test_stable_within_a_day_and_distinct_by_purpose_and_scope(self):
-        key = throttle.client_key("203.0.113.1", "pulse", "1")
-        assert key == throttle.client_key("203.0.113.1", "pulse", "1")
+    def test_stable_within_a_day_and_distinct_by_purpose_and_address(self):
+        key = throttle.client_key("203.0.113.1", "once")
+        assert key == throttle.client_key("203.0.113.1", "once")
         others = {
-            throttle.client_key("203.0.113.1", "pulse", "2"),
             throttle.client_key("203.0.113.1", "write"),
-            throttle.client_key("203.0.113.2", "pulse", "1"),
+            throttle.client_key("203.0.113.2", "once"),
         }
-        assert key not in others and len(others) == 3
+        assert key not in others and len(others) == 2
         assert len(key) == 32 and "203.0.113.1" not in key
 
     def test_a_new_day_replaces_the_salt(self, throttle_store, monkeypatch):
-        key = throttle.client_key("203.0.113.1", "pulse", "1")
+        key = throttle.client_key("203.0.113.1", "once")
 
         class _Tomorrow(datetime):
             @classmethod
@@ -177,7 +171,7 @@ class TestClientKey:
                 return datetime(2099, 1, 2, tzinfo=timezone.utc)
 
         monkeypatch.setattr(throttle, "datetime", _Tomorrow)
-        assert throttle.client_key("203.0.113.1", "pulse", "1") != key
+        assert throttle.client_key("203.0.113.1", "once") != key
         assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'") == [("2099-01-02",)]
 
     def test_not_the_visitor_hash_a_visit_stores(self):
@@ -207,9 +201,8 @@ class TestFailsOpen:
     def test_claim(self):
         assert throttle.claim("b", "k", period=30)
 
-    def test_release_and_clear(self):
-        throttle.release("b", "k")  # logs, doesn't raise
-        throttle.clear("b")
+    def test_clear(self):
+        throttle.clear("b")  # logs, doesn't raise
 
     def test_client_key(self):
         assert throttle.client_key("203.0.113.1", "write") is None
@@ -223,14 +216,13 @@ class TestNoKey:
     def test_hit_and_claim_let_it_through(self):
         for _ in range(5):
             assert throttle.hit("write", None, limit=1, period=60).allowed
-            assert throttle.claim("pulse", None, period=86400)
-        throttle.release("pulse", None)
+            assert throttle.claim("once", None, period=86400)
 
     def test_the_store_is_not_touched(self, throttle_store):
         import os
 
         throttle.hit("write", None, limit=1, period=60)
-        throttle.claim("pulse", None, period=86400)
+        throttle.claim("once", None, period=86400)
         assert not os.path.exists(throttle_store)
 
 
@@ -332,18 +324,6 @@ class TestForgetStaleSalt:
         for _ in range(5):
             throttle.forget_stale_salt()
         assert began == [1]
-
-
-def test_a_claim_that_must_not_fail_open_raises(monkeypatch, tmp_path):
-    previous = throttle._path
-    throttle.use_path(str(tmp_path / "no-such-dir" / "t.db"))
-    try:
-        with pytest.raises(throttle.Unavailable):
-            throttle.claim("pulse", "k", period=60, fail_open=False)
-        with pytest.raises(throttle.Unavailable):
-            throttle.claim("pulse", None, period=60, fail_open=False)
-    finally:
-        throttle.use_path(previous)
 
 
 def test_a_dropped_salt_leaves_no_bytes_behind(throttle_store, monkeypatch):
@@ -482,11 +462,11 @@ class TestAcrossMidnight:
 
     def test_a_claim_before_midnight_still_holds_after_it(self, throttle_store, monkeypatch):
         self._at(monkeypatch, 1, 23, 59)
-        assert throttle.claim("pulse", throttle.client_key("203.0.113.1", "pulse", "7"), period=86400)
+        assert throttle.claim("once", throttle.client_key("203.0.113.1", "once"), period=86400)
         self._at(monkeypatch, 2, 0, 1)
-        assert not throttle.claim("pulse", throttle.client_key("203.0.113.1", "pulse", "7"), period=86400)
+        assert not throttle.claim("once", throttle.client_key("203.0.113.1", "once"), period=86400)
         self._at(monkeypatch, 2, 23, 59, 30)  # a full day on
-        assert throttle.claim("pulse", throttle.client_key("203.0.113.1", "pulse", "7"), period=86400)
+        assert throttle.claim("once", throttle.client_key("203.0.113.1", "once"), period=86400)
 
     def test_a_window_straddling_midnight_counts_both_halves(self, throttle_store, monkeypatch):
         self._at(monkeypatch, 1, 23, 59, 50)

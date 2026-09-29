@@ -1,367 +1,242 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useAsyncData } from "@/hooks/useAsyncData";
+import { useState } from "react";
 import Link from "next/link";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { retryKeepingFocus } from "@/lib/tabFocus";
 import { fetchTimeline } from "@/lib/api";
-import { formatWeekRange, safeHref } from "@/lib/formatting";
-import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
-import type { TimelineEntry, TimelineWeek, TimelineMonth, UpcomingEvent } from "@/lib/api";
+import { formatUtcDate, formatWeekRange, safeHref } from "@/lib/formatting";
+import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
+import type { TimelineEntry, TimelineMonth, TimelineWeek, UpcomingEvent } from "@/lib/api";
 
-const MONTH_NAMES = [
-  "",
-  "JANUARY",
-  "FEBRUARY",
-  "MARCH",
-  "APRIL",
-  "MAY",
-  "JUNE",
-  "JULY",
-  "AUGUST",
-  "SEPTEMBER",
-  "OCTOBER",
-  "NOVEMBER",
-  "DECEMBER",
-];
+/*
+  The year so far: each day's top issue, grouped by month and week, with the
+  period summaries the pipeline writes. Set in the records style — hairline
+  rows and small mono headers — where it used to be purple panels.
 
-const EVENT_STYLES: Record<
-  string,
-  { border: string; dot: string; badge: string; badgeText: string }
-> = {
-  election: {
-    border: "border-signal-red/30",
-    dot: "bg-signal-red",
-    badge: "border-signal-red/40 text-signal-red bg-signal-red/10",
-    badgeText: "ELECTION",
-  },
-  scotus: {
-    border: "border-dem-blue/30",
-    dot: "bg-dem-blue",
-    badge: "border-dem-blue/40 text-dem-blue/90 bg-dem-blue/10",
-    badgeText: "SCOTUS",
-  },
-  congress: {
-    border: "border-phos/30",
-    dot: "bg-phos",
-    badge: "border-phos/40 text-phos/90 bg-phos/10",
-    badgeText: "CONGRESS",
-  },
-  executive: {
-    border: "border-signal-amber/40",
-    dot: "bg-signal-amber",
-    badge: "border-signal-amber/40 text-signal-amber bg-signal-amber/10",
-    badgeText: "EXECUTIVE",
-  },
-};
+  Days and monitors open inside the page through callbacks rather than
+  <Link>s: both live on /action itself, and a soft navigation to the same
+  route is never re-read by the page (see ActionPageInner's deep link).
+*/
 
-function daysUntil(dateStr: string): number {
+interface Handlers {
+  onOpenDay: (date: string) => void;
+  onOpenMonitor: (slug: string) => void;
+  /** Days the Action Center still has issues for (its pager's list). Older
+   *  unposted issues are deleted after 14 days
+   *  (action_center._cleanup_old_unposted_issues), so an older day would
+   *  open onto nothing; the entry here is its record. Null while that list
+   *  is unknown (loading, or its request failed): every day stays openable
+   *  rather than the rows changing shape once it lands, and Today says so
+   *  if a day turns out to be empty. */
+  openableDates: string[] | null;
+}
+
+const dayLabel = (d: string) => formatUtcDate(d, { month: "short", day: "2-digit" }).toUpperCase();
+
+function daysAway(dateStr: string, asOf: number): number {
   const target = new Date(dateStr + "T00:00:00");
-  const now = new Date();
+  const now = new Date(asOf);
   now.setHours(0, 0, 0, 0);
   return Math.round((target.getTime() - now.getTime()) / 86_400_000);
 }
 
-function EventCard({ event }: { event: UpcomingEvent }) {
-  const days = daysUntil(event.date);
-  const style = EVENT_STYLES[event.category] ?? EVENT_STYLES.congress;
+function DayRow({
+  entry,
+  onOpenDay,
+  onOpenMonitor,
+  openableDates,
+}: { entry: TimelineEntry } & Handlers) {
+  const source = safeHref(entry.sourceUrl);
+  const openable = openableDates === null || openableDates.includes(entry.date);
   return (
-    <div className={`panel border-l-4 ${style.border} p-4 sm:p-5`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className={`text-xs font-mono px-2 py-0.5 border ${style.badge}`}>
-              {style.badgeText}
-            </span>
-            <span className="text-xs text-ink-min font-mono">{event.date}</span>
-          </div>
-          <h4 className="font-mono text-sm text-ink-hi leading-relaxed mb-1">{event.title}</h4>
-          <p className="mb-3 font-sans text-xs leading-relaxed text-ink-lo">{event.description}</p>
-          <Link
-            href={event.link}
-            className="text-xs font-mono tracking-widest text-ink-lo hover:text-phos transition-colors"
+    <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-white/[0.07] py-2.5">
+      <span className="font-mono text-xs tracking-[0.08em] tabular-nums text-ink-min">
+        {dayLabel(entry.date)}
+      </span>
+      <span className="min-w-0">
+        {openable ? (
+          <button
+            onClick={() => onOpenDay(entry.date)}
+            className="text-left font-display text-[15px] leading-snug text-ink-hi hover:underline"
           >
-            {event.linkLabel.toUpperCase()} →
-          </Link>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="font-display font-semibold text-2xl sm:text-3xl text-ink-hi">{days}</div>
-          <div className="text-xs font-mono text-ink-min">DAY{days !== 1 ? "S" : ""} AWAY</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DayEntry({ entry }: { entry: TimelineEntry }) {
-  return (
-    <div className="relative group">
-      <div
-        className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 bg-ind-purple/40 border border-ind-purple/60"
-        aria-hidden="true"
-      />
-      <Link
-        href={`/action?date=${entry.date}`}
-        className="block hover:bg-white/[0.02] transition-colors px-1 -mx-1 py-0.5"
-      >
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs text-ink-min font-mono">{entry.date}</span>
-          {entry.policyAreas.slice(0, 2).map((area) => (
-            <span
-              key={area}
-              className="text-xs font-mono px-1.5 py-0.5 border border-signal-amber/40 text-ink-lo"
+            {entry.title}
+          </button>
+        ) : (
+          <>
+            <span className="block font-display text-[15px] leading-snug text-ink-hi">
+              {entry.title}
+            </span>
+            {entry.summary && (
+              <span className="mt-0.5 block font-display text-[13px] leading-snug text-ink-lo">
+                {entry.summary.length > 200 ? `${entry.summary.slice(0, 200)}…` : entry.summary}
+              </span>
+            )}
+          </>
+        )}
+        <span className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs tracking-[0.06em] text-ink-min">
+          {(entry.policyAreas ?? []).length > 0 && (
+            <span>{entry.policyAreas.slice(0, 2).join(" · ")}</span>
+          )}
+          {entry.monitorSlug && (
+            <button
+              onClick={() => onOpenMonitor(entry.monitorSlug!)}
+              className="text-ink-lo underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
             >
-              {area}
-            </span>
-          ))}
-        </div>
-        <p className="text-base text-ink-hi group-hover:text-phos font-medium leading-relaxed">
-          {entry.title}
-        </p>
-        <p className="text-xs text-ink-lo leading-relaxed mt-1">
-          {entry.summary.slice(0, 200)}
-          {entry.summary.length > 200 ? "…" : ""}
-        </p>
-      </Link>
-      <div className="flex items-center gap-3 mt-1 px-1">
-        {entry.sourceUrl && (
-          <a
-            href={safeHref(entry.sourceUrl) || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-ink-lo hover:text-phos transition-colors"
-          >
-            {entry.sourceName || "Source"} <span aria-hidden="true">↗</span>
-          </a>
-        )}
-        {entry.monitorSlug && (
-          <Link
-            href={ACTION_CENTER_MONITORS_HREF}
-            className="text-xs font-mono text-signal-amber hover:text-signal-amber transition-colors"
-          >
-            ● MONITORED
-          </Link>
-        )}
-      </div>
-    </div>
+              Tracked concern
+            </button>
+          )}
+          {source && (
+            <a
+              href={source}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-ink-lo underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
+            >
+              {entry.sourceName || "Source"} <span aria-hidden="true">↗</span>
+            </a>
+          )}
+        </span>
+      </span>
+    </li>
   );
 }
 
-function DayList({ entries }: { entries: TimelineEntry[] }) {
+function DayList({ entries, ...handlers }: { entries: TimelineEntry[] } & Handlers) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? entries : entries.slice(0, 7);
   const remaining = entries.length - 7;
   return (
-    <div className="relative pl-4 border-l border-ind-purple/20 space-y-3">
-      {visible.map((e) => (
-        <DayEntry key={e.date} entry={e} />
-      ))}
+    <>
+      <ul>
+        {visible.map((e) => (
+          <DayRow key={e.date} entry={e} {...handlers} />
+        ))}
+      </ul>
       {remaining > 0 && (
-        <button
-          onClick={() => setShowAll((v) => !v)}
-          className="w-full text-center text-xs font-mono py-2 border border-ind-purple/20 text-ind-purple hover:text-ind-purple hover:border-ind-purple/40 transition-colors"
-        >
-          {showAll ? "▲ SHOW LESS" : `▼ SHOW ${remaining} MORE DAY${remaining !== 1 ? "S" : ""}`}
+        <button onClick={() => setShowAll((v) => !v)} className={`${TEXT_LINK} mt-3`}>
+          {showAll ? "Show fewer days" : `Show ${remaining} more day${remaining !== 1 ? "s" : ""}`}
         </button>
       )}
+    </>
+  );
+}
+
+function PeriodSummary({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="my-3 max-w-3xl font-display text-[15px] leading-relaxed text-ink">{children}</p>
+  );
+}
+
+function WeekBlock({ week, ...handlers }: { week: TimelineWeek } & Handlers) {
+  return (
+    <div className="mt-5">
+      <h3 className="flex flex-wrap items-baseline justify-between gap-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+        <span>{week.isCurrent ? "This week" : formatWeekRange(week.startDate, week.endDate)}</span>
+        <span className="text-ink-min">
+          {week.entryCount} day{week.entryCount !== 1 ? "s" : ""}
+        </span>
+      </h3>
+      {week.summary && !week.isCurrent && <PeriodSummary>{week.summary}</PeriodSummary>}
+      <DayList entries={week.entries} {...handlers} />
     </div>
   );
 }
 
-function WeekCard({ week }: { week: TimelineWeek }) {
-  const [expanded, setExpanded] = useState(week.isCurrent);
-  const label = week.isCurrent ? "CURRENT WEEK" : formatWeekRange(week.startDate, week.endDate);
-
+function MonthBody({ month, ...handlers }: { month: TimelineMonth } & Handlers) {
   return (
-    <div className="border border-white/[0.07]">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full text-left px-3 py-2.5 flex items-center justify-between hover:bg-white/[0.01] transition-colors"
-        aria-expanded={expanded}
-      >
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <span
-            className={`font-mono text-xs ${week.isCurrent ? "text-signal-cyan" : "text-ink-lo"}`}
-          >
-            {label}
-          </span>
-          <span className="text-xs text-ink-min">
-            {week.entryCount} day{week.entryCount !== 1 ? "s" : ""}
-          </span>
-          {week.topAreas.slice(0, 3).map((a) => (
-            <span
-              key={a}
-              className="hidden sm:inline text-xs font-mono px-1.5 py-0.5 border border-white/[0.07] text-ink-min"
+    <>
+      {!month.isCurrent && month.summary && <PeriodSummary>{month.summary}</PeriodSummary>}
+      {month.weeks.length > 1 ? (
+        month.weeks.map((week) => <WeekBlock key={week.weekNum} week={week} {...handlers} />)
+      ) : (
+        <DayList entries={month.entries} {...handlers} />
+      )}
+    </>
+  );
+}
+
+function monthMeta(month: TimelineMonth): string {
+  const n = month.entries.length;
+  const parts = [`${n} day${n !== 1 ? "s" : ""}`];
+  if (!month.isCurrent && month.topAreas.length > 0)
+    parts.push(month.topAreas.slice(0, 3).join(", "));
+  return parts.join(" · ");
+}
+
+function ComingUp({ events, asOf }: { events: UpcomingEvent[]; asOf: number }) {
+  return (
+    <section aria-labelledby="coming-up-heading" className="mt-10">
+      <h2 id="coming-up-heading" className={SECTION_HEADING}>
+        Coming up
+      </h2>
+      <ul>
+        {events.map((ev) => {
+          const days = daysAway(ev.date, asOf);
+          return (
+            <li
+              key={ev.date + ev.category}
+              className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-baseline gap-3 border-b border-white/[0.07] py-3"
             >
-              {a}
-            </span>
-          ))}
-        </div>
-        <span className="text-ink-min font-mono text-base leading-none shrink-0">
-          {expanded ? "−" : "+"}
-        </span>
-      </button>
-
-      {expanded && (
-        <div className="px-3 pb-3 border-t border-white/[0.07] pt-3 space-y-3">
-          {week.summary && !week.isCurrent && (
-            <div className="border-l-2 border-ind-purple/30 pl-3 py-1">
-              <div className="text-xs font-mono tracking-widest text-ind-purple mb-1">
-                WEEK IN REVIEW
-              </div>
-              <p className="text-xs text-ink-lo leading-relaxed italic">{week.summary}</p>
-            </div>
-          )}
-          <DayList entries={week.entries} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MonthCard({
-  month,
-  defaultExpanded,
-  eventsByMonth,
-}: {
-  month: TimelineMonth;
-  defaultExpanded: boolean;
-  eventsByMonth: Record<number, UpcomingEvent[]>;
-}) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const monthEvents = eventsByMonth[month.month] ?? [];
-
-  return (
-    <div className="panel">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full text-left p-4 sm:p-5 flex items-center justify-between"
-        aria-expanded={expanded}
-      >
-        <div className="flex items-center gap-3 flex-wrap">
-          <span
-            className={`font-mono text-sm ${month.isCurrent ? "text-ind-purple" : "text-ind-purple"}`}
-          >
-            {month.name.toUpperCase()}
-          </span>
-          <span className="text-xs text-ink-min">
-            {month.entries.length} day{month.entries.length !== 1 ? "s" : ""}
-          </span>
-          {monthEvents.length > 0 && (
-            <span className="text-xs font-mono text-ink-lo">
-              +{monthEvents.length} event{monthEvents.length !== 1 ? "s" : ""}
-            </span>
-          )}
-          {!month.isCurrent &&
-            month.topAreas.slice(0, 3).map((a) => (
-              <span
-                key={a}
-                className="hidden sm:inline text-xs font-mono px-1.5 py-0.5 border border-white/[0.07] text-ink-min"
-              >
-                {a}
+              <span className="font-mono text-xs tracking-[0.08em] tabular-nums text-ink-min">
+                {dayLabel(ev.date)}
               </span>
-            ))}
-        </div>
-        <span className="text-ink-min font-mono text-base leading-none" aria-hidden="true">
-          {expanded ? "−" : "+"}
-        </span>
-      </button>
-
-      {expanded && (
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-white/[0.07] pt-4 space-y-4">
-          {monthEvents.length > 0 && (
-            <div className="space-y-2">
-              {monthEvents.map((ev) => {
-                const style = EVENT_STYLES[ev.category] ?? EVENT_STYLES.congress;
-                return (
-                  <Link
-                    key={ev.date + ev.category}
-                    href={ev.link}
-                    className={`block border-l-2 ${style.border} pl-3 py-2 hover:bg-white/[0.02] transition-colors`}
-                  >
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`w-2 h-2 ${style.dot}`} aria-hidden="true" />
-                      <span className="text-xs text-ink-min font-mono">{ev.date}</span>
-                      <span className={`text-xs font-mono px-1.5 py-0.5 border ${style.badge}`}>
-                        {style.badgeText}
-                      </span>
-                    </div>
-                    <span className="text-sm text-ink-hi font-medium">{ev.title}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Past month: show LLM summary + week breakdown */}
-          {!month.isCurrent && month.summary && (
-            <div className="border-l-2 border-ind-purple/30 pl-3 py-1">
-              <div className="text-xs font-mono tracking-widest text-ind-purple mb-1">
-                MONTH IN REVIEW
-              </div>
-              <p className="text-xs text-ink-lo leading-relaxed italic">{month.summary}</p>
-            </div>
-          )}
-
-          {/* Current month: show week cards */}
-          {month.isCurrent ? (
-            <div className="space-y-2">
-              {month.weeks.map((week) => (
-                <WeekCard key={week.weekNum} week={week} />
-              ))}
-            </div>
-          ) : (
-            /* Past month: week breakdown + days */
-            <div className="space-y-2">
-              {month.weeks.length > 1 ? (
-                month.weeks.map((week) => <WeekCard key={week.weekNum} week={week} />)
-              ) : (
-                <DayList entries={month.entries} />
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+              <span className="min-w-0">
+                <Link
+                  href={ev.link}
+                  className="font-display text-[15px] leading-snug text-ink-hi hover:underline"
+                >
+                  {ev.title}
+                </Link>
+                <span className="mt-0.5 block font-display text-[13px] leading-snug text-ink-lo">
+                  {ev.description}
+                </span>
+              </span>
+              <span className="whitespace-nowrap font-mono text-xs tabular-nums text-ink-lo">
+                {days <= 0 ? "today" : `in ${days} day${days !== 1 ? "s" : ""}`}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
-export default function TimelineTab() {
+export default function TimelineTab(handlers: Handlers) {
   const request = useAsyncData("action-timeline", fetchTimeline);
+  // Read once, so the "in N days" figures don't change on a re-render.
+  const [asOf] = useState(() => Date.now());
+
+  if (request.loading) {
+    return (
+      <p
+        role="status"
+        aria-live="polite"
+        className="py-10 font-mono text-sm tracking-[0.12em] text-ink-min"
+      >
+        Reading the archive…
+      </p>
+    );
+  }
+
+  if (request.error !== null) {
+    return (
+      <div
+        role="alert"
+        className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
+      >
+        <span>Could not load the archive.</span>
+        <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   const data = request.data;
-  const loading = request.loading;
-  const fetchError = request.error !== null;
-
-  const eventsByMonth = useMemo(() => {
-    if (!data?.upcomingEvents) return {} as Record<number, UpcomingEvent[]>;
-    const map: Record<number, UpcomingEvent[]> = {};
-    for (const ev of data.upcomingEvents) {
-      const m = parseInt(ev.date.slice(5, 7), 10);
-      (map[m] ??= []).push(ev);
-    }
-    return map;
-  }, [data]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="text-ind-purple font-mono text-xs tracking-widest animate-pulse">
-          LOADING TIMELINE...
-        </div>
-      </div>
-    );
-  }
-
-  if (fetchError) {
-    return (
-      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
-        <div className="font-mono text-sm text-signal-red">CONNECTION ERROR</div>
-        <p className="text-ink-lo text-base">Could not load timeline data.</p>
-      </div>
-    );
-  }
-
   // Every list is normalized once, here, rather than defended at each of its
-  // dozen use sites. A payload missing `months` used to reach `.some()` and
+  // use sites. A payload missing `months` used to reach `.some()` and
   // white-screen the whole tab; a partial answer should render the part that
   // did arrive, and an empty one should say so.
   const months = data?.months ?? [];
@@ -371,189 +246,115 @@ export default function TimelineTab() {
 
   if (!data || (!data.totalDays && months.length === 0 && upcomingEvents.length === 0)) {
     return (
-      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4">
-        <div className="font-mono text-sm text-ind-purple">NO TIMELINE DATA YET</div>
-        <p className="text-ink-lo text-base">
-          The timeline builds automatically as issues are tracked each day. Check back as the year
-          progresses.
-        </p>
-      </div>
+      <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo">
+        The archive fills in as each day&apos;s top issue is recorded. Nothing is on it yet.
+      </p>
     );
   }
 
-  const isYearComplete = !months.some((m) => m.isCurrent);
-  const currentMonthData = months.find((m) => m.isCurrent);
+  const currentMonth = months.find((m) => m.isCurrent);
   const pastMonths = months.filter((m) => !m.isCurrent);
-
-  // Future months with only events (no entries yet)
-  const monthsWithEntries = new Set(months.map((m) => m.month));
-  const futureMonthsFromEvents = Object.keys(eventsByMonth)
-    .map(Number)
-    .filter((m) => !monthsWithEntries.has(m))
-    .sort((a, b) => a - b);
+  const activeMonitors = monitors.filter((m) => m.status === "active").length;
+  const top = topThemes[0];
 
   return (
-    <div className="space-y-6">
-      {/* Year header */}
-      <div className="panel border-t-2 border-t-ind-purple/50 p-5 sm:p-6 text-center">
-        <h2 className="font-display font-semibold text-xl sm:text-2xl text-ind-purple mb-2">
-          {isYearComplete ? `${data.year} YEAR IN REVIEW` : `${data.year} — IN PROGRESS`}
-        </h2>
-        <p className="text-ink-lo text-base mb-4">
-          {data.totalDays} day{data.totalDays !== 1 ? "s" : ""} tracked
-          {monitors.length > 0 &&
-            ` · ${monitors.length} ongoing monitor${monitors.length !== 1 ? "s" : ""}`}
-          {upcomingEvents.length > 0 &&
-            ` · ${upcomingEvents.length} upcoming event${upcomingEvents.length !== 1 ? "s" : ""}`}
-        </p>
-        {topThemes.length > 0 && (
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            <span className="font-mono text-xs tracking-widest text-ink-min">TOP THEMES</span>
-            {topThemes.slice(0, 6).map((t) => (
-              <span
-                key={t.area}
-                className="text-xs font-mono px-2 py-0.5 border border-ind-purple/30 text-ind-purple bg-ind-purple/5"
-              >
-                {t.area} ({t.count})
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+    <div>
+      <p className="mb-5 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
+        Each day&apos;s top issue since January, with a summary of each finished week and month.
+        Recent days open in Today, with every issue from that day.
+      </p>
 
-      {/* Year summary (if complete year) */}
-      {data.yearSummary && (
-        <div className="panel border-l-4 border-l-ind-purple/50 p-5">
-          <div className="text-xs font-mono tracking-widest text-ind-purple mb-2">
-            YEAR IN REVIEW — {data.year}
-          </div>
-          <p className="text-base text-ink leading-relaxed italic">{data.yearSummary.summary}</p>
-          {(data.yearSummary.topAreas?.length ?? 0) > 0 && (
-            <div className="flex gap-2 flex-wrap mt-3">
-              {data.yearSummary.topAreas!.map((a) => (
-                <span
-                  key={a}
-                  className="text-xs font-mono px-1.5 py-0.5 border border-ind-purple/20 text-ind-purple"
-                >
-                  {a}
+      <dl className="grid grid-cols-1 gap-px border border-white/[0.07] bg-white/[0.07] sm:grid-cols-3">
+        <div className="bg-surface-base px-4 py-3.5">
+          <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+            Days on record · {data.year}
+          </dt>
+          <dd className="mt-1.5 font-display text-2xl font-bold tabular-nums text-ink-hi">
+            {data.totalDays}
+          </dd>
+        </div>
+        <div className="bg-surface-base px-4 py-3.5">
+          <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+            Most covered
+          </dt>
+          <dd className="mt-1.5 font-display text-2xl font-bold text-ink-hi">
+            {top ? (
+              <>
+                {top.area}{" "}
+                <span className="text-sm font-normal text-ink-lo">
+                  {top.count} day{top.count !== 1 ? "s" : ""}
                 </span>
-              ))}
-            </div>
-          )}
+              </>
+            ) : (
+              "—"
+            )}
+          </dd>
         </div>
-      )}
-
-      {/* Upcoming events */}
-      {upcomingEvents.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-mono text-xs tracking-widest text-ink-lo text-center">
-            UPCOMING EVENTS
-          </h3>
-          {upcomingEvents.map((event) => (
-            <EventCard key={event.date + event.category} event={event} />
-          ))}
+        <div className="bg-surface-base px-4 py-3.5">
+          <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+            Concerns tracked
+          </dt>
+          <dd className="mt-1.5 font-display text-2xl font-bold tabular-nums text-ink-hi">
+            {monitors.length}{" "}
+            <span className="text-sm font-normal text-ink-lo">{activeMonitors} active</span>
+          </dd>
         </div>
+      </dl>
+
+      {data.yearSummary && (
+        <section aria-labelledby="year-heading" className="mt-10">
+          <h2 id="year-heading" className={SECTION_HEADING}>
+            The year in review
+          </h2>
+          <PeriodSummary>{data.yearSummary.summary}</PeriodSummary>
+        </section>
       )}
 
-      {/* Current month (expanded by default) */}
-      {currentMonthData && (
-        <MonthCard month={currentMonthData} defaultExpanded={true} eventsByMonth={eventsByMonth} />
+      {upcomingEvents.length > 0 && <ComingUp events={upcomingEvents} asOf={asOf} />}
+
+      {currentMonth && (
+        <section aria-labelledby="current-month-heading" className="mt-10">
+          <h2 id="current-month-heading" className={SECTION_HEADING}>
+            <span>
+              {currentMonth.name} {data.year}
+            </span>
+            <span aria-hidden="true">{monthMeta(currentMonth)}</span>
+          </h2>
+          <MonthBody month={currentMonth} {...handlers} />
+        </section>
       )}
 
-      {/* Past months (collapsed by default) */}
       {pastMonths.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-mono text-xs tracking-widest text-ink-min text-center">
-            EARLIER THIS YEAR
-          </h3>
-          {pastMonths.map((month) => (
-            <MonthCard
-              key={month.month}
-              month={month}
-              defaultExpanded={false}
-              eventsByMonth={eventsByMonth}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Future months with only events */}
-      {futureMonthsFromEvents.length > 0 && (
-        <div className="space-y-3">
-          {futureMonthsFromEvents.map((monthNum) => {
-            const monthEvents = eventsByMonth[monthNum];
-            return (
-              <div key={monthNum} className="panel">
-                <details>
-                  <summary className="w-full text-left p-4 sm:p-5 flex items-center justify-between cursor-pointer list-none">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-sm text-ind-purple">
-                        {MONTH_NAMES[monthNum]}
+        <section aria-labelledby="earlier-heading" className="mt-10">
+          <h2 id="earlier-heading" className={SECTION_HEADING}>
+            Earlier this year
+          </h2>
+          <ul>
+            {pastMonths.map((month) => (
+              <li key={month.month} className="border-b border-white/[0.07]">
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-4 py-3.5 [&::-webkit-details-marker]:hidden">
+                    <span>
+                      <span className="block font-display text-lg font-semibold text-ink-hi">
+                        {month.name}
                       </span>
-                      <span className="text-xs font-mono text-ink-lo">
-                        {monthEvents.length} event{monthEvents.length !== 1 ? "s" : ""}
+                      <span className="mt-0.5 block font-mono text-xs tracking-[0.06em] text-ink-min">
+                        {monthMeta(month)}
                       </span>
-                    </div>
-                    <span className="text-ink-min font-mono text-base leading-none">+</span>
+                    </span>
+                    <span
+                      className="mt-1 font-mono text-lg leading-none text-ink-min after:content-['+'] group-open:after:content-['−']"
+                      aria-hidden="true"
+                    />
                   </summary>
-                  <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-white/[0.07] pt-4 space-y-2">
-                    {monthEvents.map((ev) => {
-                      const style = EVENT_STYLES[ev.category] ?? EVENT_STYLES.congress;
-                      return (
-                        <Link
-                          key={ev.date + ev.category}
-                          href={ev.link}
-                          className={`block border-l-2 ${style.border} pl-3 py-2 hover:bg-white/[0.02] transition-colors`}
-                        >
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`w-2 h-2 ${style.dot}`} aria-hidden="true" />
-                            <span className="text-xs text-ink-min font-mono">{ev.date}</span>
-                            <span
-                              className={`text-xs font-mono px-1.5 py-0.5 border ${style.badge}`}
-                            >
-                              {style.badgeText}
-                            </span>
-                          </div>
-                          <span className="text-sm text-ink-hi font-medium">{ev.title}</span>
-                          <p className="text-xs text-ink-lo mt-1">{ev.description}</p>
-                        </Link>
-                      );
-                    })}
+                  <div className="pb-5">
+                    <MonthBody month={month} {...handlers} />
                   </div>
                 </details>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Monitors */}
-      {monitors.length > 0 && (
-        <div className="panel p-4 sm:p-5">
-          <h3 className="font-mono text-sm text-signal-amber mb-3">
-            {">"} ONGOING MONITORS ({data.year})
-          </h3>
-          <div className="space-y-2">
-            {monitors.map((m) => (
-              <Link
-                key={m.slug}
-                href={ACTION_CENTER_MONITORS_HREF}
-                className="flex items-center justify-between text-sm hover:bg-white/[0.02] transition-colors px-2 py-1.5 -mx-2"
-              >
-                <span className="text-ink">{m.title}</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs text-ink-min">
-                    {m.updateCount} update{m.updateCount !== 1 ? "s" : ""}
-                  </span>
-                  <span
-                    className={`w-2 h-2 ${m.status === "active" ? "bg-phos" : "bg-signal-amber/10"}`}
-                    aria-hidden="true"
-                  />
-                </div>
-              </Link>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
     </div>
   );
