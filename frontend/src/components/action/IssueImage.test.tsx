@@ -22,8 +22,6 @@ function issue(overrides: Partial<ActionIssue> = {}): ActionIssue {
     relatedBills: [],
     relatedExploreDocs: [],
     relatedSenators: [],
-    concernedCount: 0,
-    notPriorityCount: 0,
     isTrending: false,
     status: "confirmed",
     ...overrides,

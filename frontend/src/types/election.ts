@@ -443,6 +443,9 @@ export interface PviMap {
    * own cycleYear, included here so the /elections directory page can
    * label its header from this one fetch. */
   cycleYear?: number;
+  /** The next federal Election Day (YYYY-MM-DD), for the page's countdown.
+   * Possibly missing on a response cached before the field existed. */
+  electionDay?: string;
 }
 
 /** One curated town — see backend/app/data/town_directory.json. Not a

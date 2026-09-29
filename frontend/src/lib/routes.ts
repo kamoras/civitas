@@ -23,3 +23,12 @@ export const ACTION_CENTER_HREF = "/action?tab=issues";
 
 /** The Action Center's national-monitors tab. Same reasoning as above. */
 export const ACTION_CENTER_MONITORS_HREF = "/action?tab=monitors";
+
+/**
+ * One national monitor, opened in place on the Action Center's monitors tab.
+ * The tab is named for the same reason as above; `monitor` is read once, when
+ * the tab mounts, to expand and scroll to that row.
+ */
+export function monitorHref(slug: string): string {
+  return `${ACTION_CENTER_MONITORS_HREF}&monitor=${encodeURIComponent(slug)}`;
+}

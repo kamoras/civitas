@@ -21,7 +21,6 @@
     "next": "^16.3.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-globe.gl": "^2.38.0",
     "react-simple-maps": "^5.0.5"
   },
   "devDependencies": {

@@ -106,4 +106,5 @@ is the running one, and remove each from `UNMAPPED_PENDING_DROP`:
 |---|---|
 | Drop `justices.score_consistency`, `score_independence`, `score_bipartisan_agreement`, `score_judicial_restraint` | Unscored since justice v2 / v6.13; images before `0020` still map them. |
 | Drop `candidates.last_coverage_search` | The Bluesky candidate search it paced was removed; images before `0020` still map it. |
+| Drop `action_issues.concerned_count`, `not_priority_count` | The Action Center's pulse vote that wrote them was removed in 2026-09. They are NOT NULL, so they stay mapped (with their default) until the image before that release is gone; then unmap and drop them in one revision. |
 | Rename `score_independent_voting` → `score_constituent_alignment` on `senators` and `representatives` | Every image so far maps `score_constituent_alignment` onto the old column name, so an in-place rename breaks the running one. It needs two releases: add the new column and write both, then drop the old one. |
