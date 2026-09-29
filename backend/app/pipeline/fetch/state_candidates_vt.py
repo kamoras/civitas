@@ -139,7 +139,6 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    BALLOT_FINAL_DAYS_BEFORE,
     ballot_final,
     runoff_threshold,
     SourceRecords,
@@ -162,11 +161,6 @@ _rate_limiter = RateLimiter(rps=1.0)
 _BASE_URL = "https://static.electionresults.vermont.gov"
 _ELECTIONS_URL = f"{_BASE_URL}/elections/elections.json"
 _NON_CANDIDATE_NAMES = {"BLANK", "FLOWERY", "OTHER WRITE-IN", "OTHER WRITE-INS"}
-
-# The federal floor for when a November ballot is final (UOCAVA, 45 days
-# out): shared with every list reader -- see state_candidates_common.
-_BALLOT_FINAL_DAYS_BEFORE = BALLOT_FINAL_DAYS_BEFORE
-
 
 async def _current_primary_guid(client: httpx.AsyncClient, state: str, year: int) -> str | None:
     """The one statewide primary's guid for `year` -- see _current_election_guid."""

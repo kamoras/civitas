@@ -162,7 +162,9 @@ export default function ShareButtons({
           className={`text-xs font-mono px-2 py-1 border transition-colors ${
             copied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
-          aria-label="Copy link to clipboard"
+          // The visible "COPIED!" is the only confirmation; a fixed label hid it
+          // from screen readers.
+          aria-label={copied ? "Link copied" : "Copy link to clipboard"}
         >
           {copied ? "[ COPIED! ]" : "[ COPY LINK ]"}
         </button>

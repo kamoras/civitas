@@ -6,7 +6,7 @@ import { boxedControl } from "@/lib/controlStyles";
 
 export type Branch = "senate" | "house" | "president" | "scotus";
 
-const BRANCHES: { key: Branch; label: string }[] = [
+export const BRANCHES: { key: Branch; label: string }[] = [
   { key: "senate", label: "SENATE" },
   { key: "house", label: "HOUSE" },
   { key: "president", label: "PRESIDENT" },
@@ -36,9 +36,10 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
       }
       e.preventDefault();
       onChange(BRANCHES[next].key);
-      requestAnimationFrame(() => {
-        document.getElementById(`branch-panel-${BRANCHES[next].key}`)?.focus();
-      });
+      // The incoming TAB takes focus, not its panel: this handler lives on
+      // the tablist, so focus moved into the panel would strand the keyboard
+      // and ignore every arrow press after the first (AGENTS.md, Frontend).
+      document.getElementById(`branch-tab-${BRANCHES[next].key}`)?.focus();
     },
     [selected, onChange]
   );

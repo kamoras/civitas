@@ -116,14 +116,6 @@ def _general_section_elements(tree) -> list:
     return elements
 
 
-def _split_by_measure(elements: list) -> dict[str, list]:
-    """{number: [elements between this measure's start heading and the
-    next]} — order-preserving, never re-derives a number that isn't
-    literally printed in a start heading (see split_measures, which
-    also keeps the kind each number was printed with)."""
-    return {number: els for number, (_, els) in split_measures(elements).items()}
-
-
 def split_measures(elements: list) -> dict[str, tuple[str, list]]:
     """{number: (kind, elements)} — "Amendment"/"Proposition" as printed.
     Raises on a measure heading it can't number, or a number printed

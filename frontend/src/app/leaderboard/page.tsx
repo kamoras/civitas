@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import BranchSelector, { type Branch } from "@/components/BranchSelector";
+import BranchSelector, { BRANCHES, type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
@@ -656,7 +656,9 @@ function JusticeLeaderboard({
 function LeaderboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialBranch = (searchParams.get("branch") as Branch) || "senate";
+  // An unknown ?branch= used to select no tab and render an empty page.
+  const requested = searchParams.get("branch");
+  const initialBranch: Branch = BRANCHES.find((b) => b.key === requested)?.key ?? "senate";
   const [branch, setBranchState] = useState<Branch>(initialBranch);
 
   const setBranch = useCallback((b: Branch) => {
