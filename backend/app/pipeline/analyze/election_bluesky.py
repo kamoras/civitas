@@ -1,4 +1,7 @@
-"""Posts race-coverage updates to Bluesky (2026-07, midterm-elections feature).
+"""Publishes race-coverage updates (2026-07, midterm-elections feature): to
+the Atom feed, and to Bluesky when an account is configured
+(app.broadcast.publish). The bsky_* columns on RaceCoverageItem keep their
+names and now mean "published", on any channel.
 
 Same shape as bluesky_poster.py's ActionIssue posting: one grounded,
 LLM-generated sentence per notable coverage item, verified mechanically
@@ -40,7 +43,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Candidate, Race, RaceCoverageItem
-from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags_and_truncate
+from app import broadcast
+from app.pipeline.analyze.bluesky_utils import strip_hashtags_and_truncate
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
@@ -233,15 +237,15 @@ Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
     return None
 
 
-def _publish(text: str, race: Race) -> bool:
+def _publish(db: Session, text: str, race: Race) -> None:
+    """Publish the post: to the feed, then Bluesky if configured."""
     # 2026-08: race detail merged into the state ballot page — old
     # /elections/{race.id} links still redirect here, but new posts go
     # straight to the merged page.
-    url = f"https://civitas-research.org/elections/states/{race.state}#race-{race.id}"
-    return publish_post(
-        text, url,
-        success_msg=f"Posted election coverage update: {race.id}",
-        error_context=f"race {race.id}",
+    url = f"{broadcast.SITE_URL}/elections/states/{race.state}#race-{race.id}"
+    broadcast.publish(
+        db, kind="race", title=f"Update on {_office_label(race)}", text=text,
+        url=url, state=race.state,
     )
 
 
@@ -288,9 +292,8 @@ def _drain_stale_unconsidered(db: Session) -> int:
 
 
 def post_race_coverage_updates(db: Session, *, deadline: float | None = None) -> int:
-    """Post a capped, prioritized batch of not-yet-considered coverage
-    items to Bluesky. No-op if Bluesky credentials aren't configured.
-    Every considered item (posted or not) is marked bsky_posted_at so the
+    """Publish a capped, prioritized batch of not-yet-considered coverage
+    items. Every considered item (posted or not) is marked bsky_posted_at so the
     next run doesn't re-evaluate it; actually-published items additionally
     set bsky_posted (the daily budget counts only those).
 
@@ -302,9 +305,6 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
     time out), so it ends within one item of the deadline — inside the
     lease's stale window, before another pass could start.
     """
-    if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
-        return 0
-
     _drain_stale_unconsidered(db)
 
     budget = min(MAX_POSTS_PER_RUN, MAX_POSTS_PER_DAY - _posts_in_last_day(db))
@@ -371,10 +371,10 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         if not text:
             continue
 
-        if _publish(text, race):
-            item.bsky_posted = True
-            db.commit()
-            cooled_down.add(item.race_id)
-            posted += 1
+        # Marked in the same commit that stores the post (_publish commits).
+        item.bsky_posted = True
+        _publish(db, text, race)
+        cooled_down.add(item.race_id)
+        posted += 1
 
     return posted

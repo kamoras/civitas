@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_OG_IMAGE, absoluteUrl, metaDescription, pageMetadata } from "./site";
+import { DEFAULT_OG_IMAGE, FEED_PATH, absoluteUrl, metaDescription, pageMetadata } from "./site";
 
 describe("metaDescription", () => {
   it("leaves short text alone, collapsing whitespace", () => {
@@ -36,6 +36,13 @@ describe("pageMetadata", () => {
     const m = pageMetadata({ title: "t", description: "d", path: "/x" });
     expect(m.openGraph?.images).toEqual([DEFAULT_OG_IMAGE]);
     expect(m.twitter?.images).toEqual([DEFAULT_OG_IMAGE]);
+  });
+
+  it("advertises the feed on every page — a route's `alternates` replaces the root's", () => {
+    const m = pageMetadata({ title: "t", description: "d", path: "/x" });
+    expect(m.alternates?.types).toEqual({
+      "application/atom+xml": [{ url: FEED_PATH, title: "Civitas" }],
+    });
   });
 
   it("marks missing records noindex", () => {

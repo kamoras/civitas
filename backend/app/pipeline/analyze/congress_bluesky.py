@@ -1,5 +1,7 @@
-"""The Congress posts on Bluesky: one per session day, once its record is
-final, and one per week, once the week is over and every day of it final.
+"""The Congress posts: one per session day, once its record is final, and
+one per week, once the week is over and every day of it final. Published
+to the Atom feed, and to Bluesky when an account is configured
+(app.broadcast.publish).
 
 A day is posted after the Congressional Record's Daily Digest has made
 every chamber's row for it final (usually the next evening), so the post
@@ -11,7 +13,8 @@ site does not repeat one under its own name. The link is the day's page.
 
 Only the last few days are eligible, so the Digest back-fill, which fills
 in months of past days, can never set off a burst of old posts, and a day
-is posted at most once (a marker in api_cache, written only on success).
+is posted at most once: the published post itself is the marker (its
+kind and url), stored in the same commit that publishes it.
 
 The weekly post is the week report's sentence (congress_service.week_report)
 and the bills that became law that week, by number. It replaced a weekly
@@ -23,15 +26,15 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
-from app.models import CongressDay
-from app.pipeline.analyze.bluesky_utils import publish_post
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app import broadcast
+from app.models import BroadcastPost, CongressDay
+from app.pipeline.cache import api_cache_get
 from app.services.congress_service import bill_label, day_report, week_bounds, week_report
 
 logger = logging.getLogger(__name__)
 
-SITE = "https://civitas-research.org"
+# The markers that recorded a Bluesky post before the feed existed. Read so
+# a day posted then isn't posted again; nothing writes them any more.
 _CACHE_TIER = "bsky-congress"
 _WEEK_CACHE_TIER = "bsky-congress-week"
 # A day becomes final the evening after it; two more days of slack cover a
@@ -84,20 +87,22 @@ def _eligible_days(db: Session, today: date) -> list[date]:
     return sorted(out, reverse=True)
 
 
+def _already_published(db: Session, kind: str, url: str, legacy_tier: str, key: str) -> bool:
+    if db.query(BroadcastPost.id).filter(BroadcastPost.kind == kind, BroadcastPost.url == url).first():
+        return True
+    return api_cache_get(db, legacy_tier, key, max_age_hours=24 * 30) is not None
+
+
 def post_daily_congress(db: Session, today: date) -> date | None:
-    """Post the most recent eligible, unposted day. Returns the day posted."""
-    if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
-        return None
+    """Publish the most recent eligible, unpublished day. Returns the day published."""
     for day in _eligible_days(db, today):
         key = day.isoformat()
-        if api_cache_get(db, _CACHE_TIER, key, max_age_hours=24 * 30):
+        url = f"{broadcast.SITE_URL}/congress/{key}"
+        if _already_published(db, "congress_day", url, _CACHE_TIER, key):
             continue
         report = day_report(db, day)
-        url = f"{SITE}/congress/{key}"
-        if not publish_post(compose_post(report), url, success_msg=f"Posted Congress day {key}",
-                            error_context=f"Congress day {key}"):
-            return None  # tried and failed: the next run tries again
-        api_cache_set(db, _CACHE_TIER, key, {"posted": True}, normal_ttl_hours=24 * 30)
+        broadcast.publish(db, kind="congress_day", title=f"Congress, {_day_label(day)}",
+                          text=compose_post(report), url=url)
         return day
     return None
 
@@ -127,18 +132,15 @@ def _week_is_final(db: Session, start: date, end: date) -> bool:
 
 
 def post_weekly_congress(db: Session, today: date) -> date | None:
-    """Post last week (Monday to Sunday) once every day of it is final.
+    """Publish last week (Monday to Sunday) once every day of it is final.
     Only the week just ended is eligible, so no backlog is ever posted.
-    Returns the week's Monday when posted."""
-    if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
-        return None
+    Returns the week's Monday when published."""
     start, end = week_bounds(today - timedelta(days=7))
     key = start.isoformat()
-    if not _week_is_final(db, start, end) or api_cache_get(db, _WEEK_CACHE_TIER, key, max_age_hours=24 * 30):
+    url = f"{broadcast.SITE_URL}/congress/week/{key}"
+    if not _week_is_final(db, start, end) or _already_published(db, "congress_week", url, _WEEK_CACHE_TIER, key):
         return None
     report = week_report(db, start)
-    if not publish_post(compose_week_post(report), f"{SITE}/congress/week/{key}",
-                        success_msg=f"Posted Congress week {key}", error_context=f"Congress week {key}"):
-        return None
-    api_cache_set(db, _WEEK_CACHE_TIER, key, {"posted": True}, normal_ttl_hours=24 * 30)
+    broadcast.publish(db, kind="congress_week", title=f"Congress, week of {_week_label(start, end)}",
+                      text=compose_week_post(report), url=url)
     return start

@@ -1,9 +1,14 @@
 """The daily member spotlight: who is picked, and the fixed text posted."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from app.models import BskySenatorSpotlight, Representative, Senator
-from app.pipeline.analyze.bluesky_spotlight import _pick_politician, _publish_spotlight, compose_spotlight
+from app.models import BroadcastPost, BskySenatorSpotlight, Representative, Senator
+from app.pipeline.analyze.bluesky_spotlight import (
+    _pick_politician,
+    _publish_spotlight,
+    compose_spotlight,
+    post_daily_spotlight,
+)
 
 
 def _senator(id, score=50.0, **overrides):
@@ -122,30 +127,30 @@ class TestComposeSpotlight:
         assert len(text) + 1 + len("https://civitas-research.org/politicians/catherine-cortez-masto") <= 300
 
 
-class TestPublishSpotlightUrl:
+class TestPublishSpotlight:
     """The spotlight post's link previously pointed at the old
     /scorecard?branch=senate&state=..&senator=.. query-param route instead
     of the current /politicians/{id} profile page (reported live via a
     Bluesky post 2026-07-13)."""
 
-    def test_links_to_politicians_profile_not_old_scorecard_route(self):
+    def test_links_to_politicians_profile_not_old_scorecard_route(self, db_session, bluesky_configured):
         senator = Senator(id="chuck-grassley", name="Chuck Grassley", state="IA", party="R")
 
-        # _publish_spotlight delegates to the shared bluesky_utils.publish_post,
-        # which reads its own `settings` import and calls build_link_card
-        # within its own module — patch both there, not on bluesky_spotlight
-        # (which no longer references either directly for this path).
-        with patch("app.pipeline.analyze.bluesky_utils.settings") as mock_settings, \
-             patch("app.pipeline.analyze.bluesky_utils.build_link_card", return_value=None), \
-             patch("atproto.Client") as mock_client_cls:
-            mock_settings.BSKY_HANDLE = "civitas-research.org"
-            mock_settings.BSKY_APP_PASSWORD = "unused-in-test"
-            mock_client = MagicMock()
-            mock_client_cls.return_value = mock_client
+        _publish_spotlight(db_session, "Some spotlight text.", senator, "senate")
 
-            result = _publish_spotlight("Some spotlight text.", senator)
+        post = db_session.query(BroadcastPost).one()
+        assert post.url == "https://civitas-research.org/politicians/chuck-grassley"
+        assert bluesky_configured == [("Some spotlight text.", post.url)]
+        # Filed under the member's state, for that state's feed.
+        assert (post.kind, post.state, post.title) == ("spotlight", "IA", "Member spotlight: Chuck Grassley (R-IA)")
 
-        assert result is True
-        posted_text = mock_client.send_post.call_args.args[0]
-        assert "/politicians/chuck-grassley" in posted_text
-        assert "/scorecard?" not in posted_text
+    def test_published_once_a_day_without_a_bluesky_account(self, db_session, bluesky_outbox):
+        db_session.add(_senator("Chuck Grassley"))
+        db_session.commit()
+
+        post_daily_spotlight(db_session)
+        post_daily_spotlight(db_session)
+
+        assert db_session.query(BroadcastPost).count() == 1
+        assert db_session.query(BskySenatorSpotlight).count() == 1
+        assert bluesky_outbox == []

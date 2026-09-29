@@ -966,7 +966,7 @@ class RaceCoverageItem(Base):
     # Which candidate's name matched this item, and on what evidence:
     # "full_name" (surname + first name both present in the text) or
     # "surname_context" (surname + state-name corroboration). Only
-    # full_name-matched items are eligible for the Bluesky posting path
+    # full_name-matched items are eligible to be published as posts
     # (election_bluesky.py) — the weaker basis is display-only.
     # The state-name corroboration is worthless when the OUTLET is that
     # state's own newsroom, which names the state in nearly every
@@ -974,14 +974,16 @@ class RaceCoverageItem(Base):
     # (election_coverage._corroboration_is_vacuous).
     matched_candidate_id: Mapped[str | None] = mapped_column(String, nullable=True)
     match_basis: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    # NULL = not yet considered for a Civitas Bluesky post about this race
-    # (see analyze/election_bluesky.py) — most coverage items never get
+    # NULL = not yet considered for a Civitas post about this race (the
+    # feed and Bluesky; see analyze/election_bluesky.py) — most coverage items never get
     # posted at all (only a capped, prioritized subset per run), so this
     # also marks "already considered this run, don't re-evaluate" for the
     # ones that were skipped, not just the ones that were actually posted.
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     # True only if a post was actually published (bsky_posted_at alone
     # means "considered") — the daily posting budget counts these.
+    # "Published" is into the feed (BroadcastPost); whether Bluesky also
+    # took it is that row's bsky_status.
     bsky_posted: Mapped[bool] = mapped_column(Boolean, default=False)
     # How much this item is ABOUT its matched race, 0..1 cosine in the
     # similarity-embedding space (analyze/race_relevance.py). Computed at
@@ -1181,11 +1183,12 @@ class ActionIssue(Base):
     full_story: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     bsky_posted_rank: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
-    # Text of the most recent Bluesky post published for this issue. Used to
+    # Text of the most recent post published for this issue (the feed, and
+    # Bluesky when configured — the bsky_* names predate the feed). Used to
     # suppress near-duplicate reposts when a topic gets fresh coverage whose
     # post would say essentially the same thing as the last one.
     bsky_last_post_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
-    # `facts` as of the last time this issue was handed to the Bluesky poster.
+    # `facts` as of the last time this issue was handed to the poster.
     # The repost gate needs "what have we already told readers", and `facts`
     # itself can't answer that: it is overwritten on every hourly refresh
     # whether or not anything was posted, so a development that surfaced on a
@@ -1196,9 +1199,8 @@ class ActionIssue(Base):
     # _apply_matched_issue_update) — not on every hourly touch the way
     # bsky_posted_facts's docstring above warns against for that column.
     # This is a separate baseline, deliberately not reused from
-    # bsky_posted_facts: that one only advances when the Bluesky-specific
-    # repost gate runs (a no-op with no BSKY_* credentials configured, and
-    # gated on Bluesky's own near-duplicate suppression logic, not on
+    # bsky_posted_facts: that one only advances when the repost gate runs
+    # (gated on the poster's own near-duplicate suppression logic, not on
     # whether the reader-facing content changed at all), so it isn't a
     # reliable "what did this issue say last time a reader would have seen
     # it" signal. Read by app/fact_diff.py to mark newly-added facts.
@@ -1800,6 +1802,38 @@ class BskySenatorSpotlight(Base):
     chamber: Mapped[str] = mapped_column(String(10), nullable=False, default="senate")
     posted_at: Mapped[datetime] = mapped_column(default=utcnow)
     post_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class BroadcastPost(Base):
+    """One thing Civitas published: the entry the Atom feed serves, and the
+    record every outbound channel (Bluesky today) delivers from.
+
+    Written by `app/broadcast.publish` and nowhere else, before any channel
+    is tried, so the feed never depends on a third party accepting a post.
+    Channels keep their own delivery state here (`bsky_*`); the feed has
+    none, since readers pull it.
+
+    `id` is never reused (sqlite_autoincrement): it is the entry's Atom id,
+    and a feed reader that saw id 41 once must never see a different post
+    under it.
+    """
+    __tablename__ = "broadcast_posts"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # broadcast.KINDS.
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    # Two-letter state the post is about, when it is about one (a race, a
+    # member) — what the per-state feeds filter on.
+    state: Mapped[str | None] = mapped_column(String(2), nullable=True, index=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow, index=True)
+    # off (no account configured when published) | pending | sending | sent | failed.
+    bsky_status: Mapped[str] = mapped_column(String(10), nullable=False, default="off", server_default="off")
+    bsky_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    bsky_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class SiteVisit(VisitsBase):

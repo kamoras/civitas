@@ -1,5 +1,6 @@
 """
-Posts ActionIssues to Bluesky via the AT Protocol.
+Publishes ActionIssues: to the Atom feed, and to Bluesky when an account
+is configured (both through app.broadcast.publish).
 
 Posting triggers:
   - New issue: bsky_posted_at is None (either brand-new topic or topic with
@@ -13,8 +14,10 @@ The post is the issue's verified lede, verbatim (or its real headline), not
 model prose — see _compose_new_post. When the newest article driving an
 issue is from a prior day, the post opens with "Yesterday:" or "On <date>:".
 
-Credentials: BSKY_HANDLE + BSKY_APP_PASSWORD in .env. If not set, this
-module does nothing (allows running without a Bluesky account configured).
+The bsky_* columns on ActionIssue predate the feed and keep their names;
+they now mean "published", to the feed and whatever channels are set up,
+not "Bluesky accepted it". Bluesky credentials (BSKY_HANDLE +
+BSKY_APP_PASSWORD) decide only whether the post also goes there.
 """
 
 import json
@@ -25,11 +28,11 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app import broadcast
 from app.issue_ids import to_public_id
 from app.models import ActionIssue
 from app.pipeline.analyze import action_metrics
-from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags
+from app.pipeline.analyze.bluesky_utils import strip_hashtags
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -142,27 +145,22 @@ def _compose_new_post(issue, today: str) -> str | None:
     return None
 
 
-def _publish(text: str, issue) -> bool:
-    """Post to Bluesky. Returns True on success."""
-    text = strip_hashtags(text)  # final guard, independent of what ran upstream
-    url = f"https://civitas-research.org/issue/{to_public_id(issue.id)}"
-    return publish_post(
-        text, url,
-        success_msg=f"Posted to Bluesky: {issue.title[:80]}",
-        error_context=f"issue {issue.id}",
+def _publish(db: Session, text: str, issue) -> None:
+    """Publish the post: to the feed, then Bluesky if configured. Once it
+    is in the feed it is published, whatever Bluesky does with it."""
+    broadcast.publish(
+        db, kind="issue", title=issue.title, text=text,
+        url=f"{broadcast.SITE_URL}/issue/{to_public_id(issue.id)}",
     )
 
 
 def process_issues_for_bluesky(issues: list, db: Session) -> int:
-    """Post new/updated issues to Bluesky.
+    """Publish new/updated issues (feed and Bluesky; see module docstring).
 
     The pipeline already decides which issues deserve a post by setting
     bsky_posted_at=None (new topic or topic with genuinely new articles).
     This function just executes those posts.
     """
-    if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
-        return 0  # fast-path: no credentials configured
-
     _US_EAST = ZoneInfo("America/New_York")
     today = datetime.now(tz=_US_EAST).strftime("%Y-%m-%d")
 
@@ -211,17 +209,21 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
             issue.bsky_posted_facts = issue.facts
             continue
 
-        if _publish(text, issue):
-            issue.bsky_posted_at = now
-            issue.bsky_posted_rank = issue.rank
-            issue.bsky_last_post_text = text
-            # Pin what readers have now been told; the repost gate upstream
-            # measures the next run's facts against this, NOT against the
-            # `facts` column, which every refresh overwrites whether or not
-            # anything was posted (see _apply_matched_issue_update).
-            issue.bsky_posted_facts = issue.facts
-            recent_texts.append(text)
-            posted += 1
+        # Marked before publishing, so the mark lands in the same commit
+        # as the stored post (broadcast.publish commits): a crash between
+        # the two can't leave a published issue unmarked, to be published
+        # again next run.
+        issue.bsky_posted_at = now
+        issue.bsky_posted_rank = issue.rank
+        issue.bsky_last_post_text = text
+        # Pin what readers have now been told; the repost gate upstream
+        # measures the next run's facts against this, NOT against the
+        # `facts` column, which every refresh overwrites whether or not
+        # anything was posted (see _apply_matched_issue_update).
+        issue.bsky_posted_facts = issue.facts
+        _publish(db, text, issue)
+        recent_texts.append(text)
+        posted += 1
 
     # Commit unconditionally: a suppressed near-duplicate sets bsky_posted_at
     # without incrementing `posted`, and that state must persist so the issue
