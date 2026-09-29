@@ -150,6 +150,13 @@ describe("the ballot page", () => {
     ).toBeInTheDocument();
   });
 
+  it("says 1 contest and 1 candidate, not 1 contests", () => {
+    render(
+      <StateBallotClient ballot={ballot({ houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })] })} />,
+    );
+    expect(screen.getByText(/^1 contest · 1 federal candidate/)).toBeInTheDocument();
+  });
+
   it("shows a candidate the state certified even with no FEC activity", () => {
     // North Carolina's Libertarian Senate nominee: on the certified
     // ballot, no funds, not a statutory candidate — once filed away under
@@ -316,6 +323,76 @@ describe("U.S. Representative", () => {
     render(<StateBallotClient ballot={ballot()} />);
     const drawer = await openContest(/U\.S\. Representative/);
     expect(drawer.queryByText("(statewide)")).not.toBeInTheDocument();
+  });
+
+  it("never colours a statewide stand-in as the district's own lean", async () => {
+    render(<StateBallotClient ballot={ballot({ houseRaces: [houseRace({ pvi: 6, pviLevel: "state" })] })} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    const lean = drawer.getByText("R+6");
+    expect(lean).not.toHaveClass("text-signal-red");
+    expect(lean).toHaveClass("text-ink-lo");
+  });
+
+  it("colours a district's own lean", async () => {
+    render(<StateBallotClient ballot={ballot({ houseRaces: [houseRace({ pvi: 6 })] })} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.getByText("R+6")).toHaveClass("text-signal-red");
+  });
+
+  const fourDistricts = (overrides: Partial<StateBallot> = {}) =>
+    ballot({
+      houseRaces: [1, 2, 3, 4].map((d) =>
+        houseRace({ id: `d${d}`, district: d, counties: [`County ${d}`], pvi: 6, pviLevel: "state" }),
+      ),
+      ...overrides,
+    });
+
+  it("offers house.gov and a candidate's name where the lines are unchanged", async () => {
+    render(<StateBallotClient ballot={fourDistricts()} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.getByRole("link", { name: /house\.gov/ })).toBeInTheDocument();
+    expect(drawer.getByLabelText("Filter districts by county, candidate, or district number")).toBeInTheDocument();
+  });
+
+  it("never sends a reader on new lines to a lookup by representative", async () => {
+    render(
+      <StateBallotClient
+        ballot={fourDistricts({
+          state: "TX",
+          stateName: "Texas",
+          newDistrictLines: true,
+          officialLookup: {
+            url: "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do",
+            label: "Texas voter portal",
+            sourceName: "Texas Secretary of State",
+            isStateSpecific: true,
+            verifiedAt: null,
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/U\.S\. Representative/);
+    // house.gov answers for the district today's member holds.
+    expect(drawer.queryByRole("link", { name: /house\.gov/ })).not.toBeInTheDocument();
+    expect(drawer.getByText(/new congressional district lines/)).toBeInTheDocument();
+    expect(drawer.getByText(/lookups by representative show today's districts, not these/)).toBeInTheDocument();
+    // The state's own lookup does know the new lines.
+    expect(drawer.getByRole("link", { name: "Texas voter portal (opens in new tab)" })).toHaveAttribute(
+      "href",
+      "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do",
+    );
+    const input = drawer.getByLabelText("Filter districts by county or district number");
+    await userEvent.type(input, "zzz");
+    expect(drawer.getByText(/Try a county name or a district number/)).toBeInTheDocument();
+    expect(drawer.queryByText(/surname/)).not.toBeInTheDocument();
+    // Never an address field.
+    expect(drawer.queryByLabelText(/address|zip/i)).not.toBeInTheDocument();
+  });
+
+  it("links no lookup at all on new lines when the state has none of its own", async () => {
+    render(<StateBallotClient ballot={fourDistricts({ newDistrictLines: true })} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.queryByRole("link", { name: /house\.gov|election office/i })).not.toBeInTheDocument();
   });
 });
 

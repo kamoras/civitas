@@ -49,6 +49,7 @@ const CivicActionWidget = dynamic(() => import("@/components/action/CivicTracker
 import type { ActionIssue } from "@/types/action";
 import { STATES } from "@/data/states";
 import { tabControl } from "@/lib/controlStyles";
+import { ACTION_CENTER_HREF } from "@/lib/routes";
 
 const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
   ssr: false,
@@ -865,7 +866,10 @@ function ActionPageInner() {
 
   const setActiveTab = useCallback(
     (tab: Tab) => {
-      const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
+      // Every tab names itself, issues included (ACTION_CENTER_HREF): a bare
+      // /action entry is what Next's router cache later answers an in-app
+      // <Link href="/action"> with, restoring whatever search it last saw.
+      const url = tab === "issues" ? ACTION_CENTER_HREF : `/action?tab=${tab}`;
       pushUrl(url);
       // Focus the newly selected *tab*, not its panel. The tabs use a roving
       // tabindex, so the incoming tab has to be focused explicitly or the
@@ -884,7 +888,7 @@ function ActionPageInner() {
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
     (id: string | null) => {
-      const url = id ? `/action?issue=${id}` : "/action";
+      const url = id ? `/action?issue=${id}` : ACTION_CENTER_HREF;
       replaceUrl(url);
     },
     [replaceUrl]
@@ -969,7 +973,7 @@ function ActionPageInner() {
                 onNavigate={setActiveTab}
                 initialDate={deepLink.date}
                 onDateChange={(d) => {
-                  const url = d ? `/action?date=${d}` : "/action";
+                  const url = d ? `/action?date=${d}` : ACTION_CENTER_HREF;
                   replaceUrl(url);
                 }}
                 initialIssueId={deepLink.issue}

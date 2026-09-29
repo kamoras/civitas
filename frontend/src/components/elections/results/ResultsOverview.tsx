@@ -94,6 +94,12 @@ export default function ResultsOverview({
   // the races each state's feed lists, not every district in the state.
   const houseCounted = house.filter((r) => r.votesCounted > 0).length;
   const houseStates = new Set(house.filter((r) => r.votesCounted > 0).map((r) => r.state)).size;
+  // States voting on new congressional lines: the live sync gives their
+  // House seats no holder, so none can count as changing party. Said on
+  // the card, or a quiet count there reads as "no flips".
+  const redrawn = [...(results.redrawnStates ?? [])].sort();
+  const redrawnSet = new Set(redrawn);
+  const redrawnCounted = house.filter((r) => redrawnSet.has(r.state) && r.votesCounted > 0).length;
 
   const fill = (state: string) =>
     state === "DC"
@@ -243,6 +249,16 @@ export default function ResultsOverview({
             </Link>
             )
           </p>
+          {redrawn.length > 0 && (
+            <p className="mt-2 text-xs text-ink-min">
+              Not counted: House seats in the{" "}
+              {redrawn.length === 1 ? "state" : `${redrawn.length} states`} voting on new district
+              lines ({redrawn.join(", ")}), which have no previous holder
+              {redrawnCounted > 0 &&
+                ` — ${redrawnCounted} of the districts with a count so far are among them`}
+              .
+            </p>
+          )}
         </div>
       </section>
 

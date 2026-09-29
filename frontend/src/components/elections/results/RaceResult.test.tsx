@@ -85,4 +85,24 @@ describe("RaceResultCard", () => {
     expect(screen.getByText(/Tied, not called/)).toBeInTheDocument();
     expect(screen.queryByText(/Leading, not called/)).not.toBeInTheDocument();
   });
+
+  it("says a House seat on new district lines has no previous holder", () => {
+    render(<RaceResultCard result={race({ state: "TX", heldBy: null })} newLines />);
+    expect(screen.getByText(/new district lines · no previous holder/)).toBeInTheDocument();
+    expect(screen.queryByText(/held by/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing of new lines for a seat with a holder, or a Senate race", () => {
+    render(<RaceResultCard result={race({ heldBy: "DEM" })} newLines />);
+    expect(screen.getByText(/held by D/)).toBeInTheDocument();
+    cleanup();
+    render(
+      <RaceResultCard result={race({ office: "S", district: null, heldBy: null })} newLines />
+    );
+    expect(screen.queryByText(/no previous holder/)).not.toBeInTheDocument();
+    cleanup();
+    // Unknown holder in a state whose lines did not change: no claim either way.
+    render(<RaceResultCard result={race({ heldBy: null })} />);
+    expect(screen.queryByText(/no previous holder|held by/)).not.toBeInTheDocument();
+  });
 });

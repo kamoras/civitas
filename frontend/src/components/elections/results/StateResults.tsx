@@ -81,6 +81,9 @@ export default function StateResults({
   }, [ballot.houseRaces, byDistrict, house]);
   const isLive = !!results?.liveStates.includes(ballot.state);
   const stateName = ballot.stateName ?? ballot.state;
+  // Either response can say so; an older backend sends neither.
+  const newLines =
+    (ballot.newDistrictLines ?? false) || (results?.redrawnStates ?? []).includes(ballot.state);
   const led = seatsLed(house);
   const pollsClose = results?.pollsClose?.[ballot.state];
   const feed = results?.feeds?.[ballot.state];
@@ -216,7 +219,7 @@ export default function StateResults({
         </p>
       )}
       {senate.map((r) => (
-        <RaceResultCard key={r.raceId} result={r} headingLevel={2} />
+        <RaceResultCard key={r.raceId} result={r} headingLevel={2} newLines={newLines} />
       ))}
       {houseRows.length > 0 && races.length > 0 && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_26rem]">
@@ -235,6 +238,15 @@ export default function StateResults({
                 {formatLed(led)} LEADING
               </span>
             </div>
+            {newLines && (
+              // The live sync gives these seats no holder (heldBy null),
+              // so none is ever marked FLIP; say why, or the absence of
+              // flips in a state that redrew reads as none happening.
+              <p className="border-b border-white/[0.09] px-4 py-2 text-xs text-ink-min">
+                New district lines this year: no seat has a previous holder, so none is marked as
+                changing party.
+              </p>
+            )}
             <ol>
               {houseRows.map((row) =>
                 row.result ? (

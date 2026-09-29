@@ -101,8 +101,11 @@ export function districtAreaLabel(
  *
  * Deliberately matches on the three things a reader plausibly knows
  * about themselves without being asked for an address: the county they
- * live in, their sitting representative's name (or any candidate's), and
- * the district number if they happen to know it. Civitas never asks for
+ * live in, a candidate's name (their representative's, when that member
+ * is running again — a retiring member is on no row, and in a state that
+ * redrew for this cycle the member's name finds the candidate's NEW
+ * district, not necessarily the reader's), and the district number if
+ * they happen to know it. Civitas never asks for
  * a street address, so the filter has to work from what a person can
  * recall unprompted — see the House section's own copy.
  *

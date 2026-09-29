@@ -187,4 +187,35 @@ describe("DistrictMap", () => {
     );
     expect(screen.queryByText("no votes counted yet")).not.toBeInTheDocument();
   });
+
+  it("leaves new-map districts unshaded and says why, not red/blue", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    // A redrawn state: every race carries the flagged statewide lean.
+    const statewide = [1, 2, 3, 4, 5].map((d) => ({ ...race(d, 6), pviLevel: "state" as const }));
+    render(<DistrictMap state="CT" newLines races={statewide} picked={null} onPick={vi.fn()} />);
+
+    const shape = await screen.findByRole("button", { name: "CT-2" });
+    expect(screen.getByText(/the new 2026 districts · no per-district lean published here yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/redder = safer R/)).not.toBeInTheDocument();
+    const style = shape.getAttribute("style") ?? "";
+    // Every seat the same neutral, never the state's R+6 red.
+    expect(leanFill(6).fill.toLowerCase()).toBe("#ff8989");
+    expect(style).not.toContain("rgb(255, 137, 137)");
+    expect(style).toBe(screen.getByRole("button", { name: "CT-4" }).getAttribute("style"));
+    // Borders drawn light so thirty-eight same-coloured districts still read.
+    expect(style).toContain("stroke: rgb(217, 211, 199)");
+
+    shape.focus();
+    expect(await screen.findByText("R+6 (statewide)")).toBeInTheDocument();
+  });
+
+  it("keys a lone statewide-only district as grey among shaded ones", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    const mixed = RACES.map((r) => (r.district === 3 ? { ...r, pviLevel: "state" as const } : r));
+    render(<DistrictMap state="CT" races={mixed} picked={null} onPick={vi.fn()} />);
+
+    const three = await screen.findByRole("button", { name: "CT-3" });
+    expect(screen.getByText(/redder = safer R .* grey = no district lean yet/)).toBeInTheDocument();
+    expect(three.getAttribute("style")).not.toBe(screen.getByRole("button", { name: "CT-4" }).getAttribute("style"));
+  });
 });

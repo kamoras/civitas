@@ -46,6 +46,14 @@ import {
  * category: a second classification on the same page would eventually
  * disagree with the first.
  *
+ * A race whose lean is only the statewide stand-in (pviLevel "state" —
+ * every House race in a state voting on new lines, `newLines`) is left
+ * unshaded, in a light neutral: the state's colour on every seat would
+ * claim Dallas leans like the Panhandle. When no drawn district has a
+ * lean of its own the lean legend is replaced by a line saying so, and
+ * the borders are drawn light, since with one fill everywhere they are
+ * the only thing left to point at.
+ *
  * From election day, given `results`, it shades by who LEADS each
  * district's count instead (lib/results resultFill — the same fill the
  * national map uses), and the preview shows the count. Lean says how a
@@ -58,6 +66,14 @@ const DEM = "#82acff";
 const REP = "#ff8989";
 const EVEN = "#cdc7bc";
 const UNKNOWN = "#3a352f";
+/** A district with only a statewide lean: lighter than UNKNOWN so a state
+ * of them is not one dark mass at phone width. */
+const UNSHADED = "#6f685f";
+const UNSHADED_OPACITY = 0.6;
+const BORDER = "#0e0c0a";
+/** Border when every district is UNSHADED: light, or at 390px the lines
+ * between thirty-eight same-coloured districts do not read. */
+const UNSHADED_BORDER = "#d9d3c7";
 const WIDTH = 800;
 
 type Bbox = [number, number, number, number];
@@ -107,8 +123,13 @@ export default function DistrictMap({
   onPick,
   results,
   feedAnswered,
+  newLines = false,
 }: {
   state: string;
+  /** The state votes this cycle on new congressional lines
+   * (StateBallot.newDistrictLines): no district here has a lean of its
+   * own yet, and the caption says why. */
+  newLines?: boolean;
   races: RaceWithCandidates[];
   picked: string | null;
   onPick: (raceId: string) => void;
@@ -160,6 +181,10 @@ export default function DistrictMap({
   const focus = hovered ?? pickedDistrict;
   const focusRace = focus != null ? byDistrict.get(focus) : undefined;
   const answered = feedAnswered ?? (!!results && results.size > 0);
+  const drawn = races.filter((r) => r.district != null);
+  const stateLevel = drawn.filter((r) => r.pviLevel === "state").length;
+  // No drawn district has a lean of its own: nothing to key red/blue by.
+  const unshaded = !results && (newLines || (drawn.length > 0 && stateLevel === drawn.length));
 
   return (
     <div className="mb-4 border border-white/15">
@@ -198,8 +223,15 @@ export default function DistrictMap({
               </li>
             )}
           </ul>
+        ) : unshaded ? (
+          <p className="font-mono text-[10px] text-ink-min">
+            {newLines ? "the new 2026 districts · " : ""}no per-district lean published here yet
+          </p>
         ) : (
-          <p className="font-mono text-[10px] text-ink-min">redder = safer R · bluer = safer D · paler = closer</p>
+          <p className="font-mono text-[10px] text-ink-min">
+            redder = safer R · bluer = safer D · paler = closer
+            {stateLevel > 0 && " · grey = no district lean yet"}
+          </p>
         )}
       </div>
 
@@ -237,7 +269,9 @@ export default function DistrictMap({
                   }
                 : // A statewide stand-in says nothing about one district:
                   // painting every seat the state's colour would.
-                  leanFill(race?.pviLevel === "state" ? null : (race?.pvi ?? null));
+                  unshaded || race?.pviLevel === "state"
+                  ? { fill: UNSHADED, opacity: UNSHADED_OPACITY }
+                  : leanFill(race?.pvi ?? null);
               const isPicked = district === pickedDistrict;
               const isHovered = district === hovered;
               const label = district === 0 ? `${state} at-large` : `${state}-${district}`;
@@ -262,8 +296,8 @@ export default function DistrictMap({
                   style={{
                     fill,
                     fillOpacity: opacity,
-                    stroke: isPicked || isHovered ? "#00ff41" : "#0e0c0a",
-                    strokeWidth: isPicked ? 2 : isHovered ? 1.2 : 0.6,
+                    stroke: isPicked || isHovered ? "#00ff41" : unshaded ? UNSHADED_BORDER : BORDER,
+                    strokeWidth: isPicked ? 2 : isHovered ? 1.2 : unshaded ? 0.8 : 0.6,
                     outline: "none",
                     cursor: race ? "pointer" : "default",
                   }}

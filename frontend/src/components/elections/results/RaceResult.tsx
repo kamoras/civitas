@@ -31,9 +31,14 @@ export function statusTag(r: LiveRaceResult): { text: string; className: string 
 export function RaceResultCard({
   result,
   headingLevel = 3,
+  newLines = false,
 }: {
   result: LiveRaceResult;
   headingLevel?: 2 | 3;
+  /** The race's state votes on new congressional lines this cycle
+   * (LiveResults.redrawnStates): a House seat there has no previous
+   * holder, which the card says rather than leaving "held by" out. */
+  newLines?: boolean;
 }) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
   const tag = statusTag(result);
@@ -64,7 +69,11 @@ export function RaceResultCard({
         {[
           reporting,
           `${result.votesCounted.toLocaleString("en-US")} votes`,
-          result.heldBy ? `held by ${partyLetter(result.heldBy)}` : null,
+          result.heldBy
+            ? `held by ${partyLetter(result.heldBy)}`
+            : result.office === "H" && newLines
+              ? "new district lines · no previous holder"
+              : null,
         ]
           .filter(Boolean)
           .join(" · ")}

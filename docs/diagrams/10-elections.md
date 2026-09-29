@@ -274,7 +274,12 @@ none of which sends anything anywhere:
   `backend/scripts/build_county_district_crosswalk.py`.
 - **County picker** (`DistrictFinder.tsx`) — built from the counties each
   race already lists; a county split between districts offers them.
-- **Text filter** — counties or the sitting representative's name.
+- **Text filter** (`matchesDistrictQuery`) — county names, any
+  candidate's name (the representative's only when they are running
+  again), or a district number. In a state voting on new lines
+  (`newDistrictLines`) the page offers counties and numbers only, and
+  drops the house.gov link: both answer by representative, i.e. for the
+  old map.
 
 On the national map (`RaceMap.tsx`), the eight states too small to tap —
 Rhode Island draws at 4×5 pixels on a phone — also get a labelled box off

@@ -669,8 +669,15 @@ elsewhere. The text filter stays for anyone who prefers it.
 Where a county answers nothing — a county split between districts, or a
 city holding several — a **map of the districts themselves** does. Every
 multi-district state page draws its districts, shaded by the same PVI
-rule as the district list (red R, blue D, paler = closer); hovering or
-tabbing to one previews its race, and clicking narrows the page to it.
+rule as the district list (red R, blue D, paler = closer) wherever a
+district has a lean of its own. In the nine redrawn states it has none
+yet (a district number there names a different place than
+`district_pvi.json`'s value for it), so their races carry the flagged
+statewide lean and the map leaves every district unshaded, in one light
+neutral, with a caption saying these are the new 2026 districts with no
+per-district lean published yet; the district list shows that statewide
+figure in neutral ink, marked "(statewide)". Hovering or
+tabbing to a district previews its race, and clicking narrows the page to it.
 The outlines are the lines each state votes on this cycle, split per
 state and vendored under `frontend/public/data/cd/` (all 50 states, 435
 districts, ~206KB total; a page loads only its own state) by
@@ -689,10 +696,15 @@ enacting act or court order per state; Missouri is listed on its old map on
 purpose (its 2025 map was stayed by the U.S. Supreme Court on 2026-09-25).
 Both files are generated from the Census Bureau's block equivalency files
 (119th Congress, and the 120th-Congress file its Redistricting Data Office
-published 2026-08-31, which every state's own official block file matches):
-the crosswalk by `build_county_district_crosswalk.py`, and the redrawn
-states' outlines by dissolving 2020 Census blocks on those lines (the Census
-publishes no cartographic file for them yet), clipped to the same shoreline.
+published 2026-08-31): the crosswalk by `build_county_district_crosswalk.py`,
+and the redrawn states' outlines by dissolving 2020 Census blocks on those
+lines (the Census publishes no cartographic file for them yet), clipped to
+the same shoreline. The 120th-Congress file was checked against the official
+block assignment files of the redrawn states that publish one: Texas,
+California, Florida, North Carolina and Ohio match it exactly; Louisiana's
+uses block ids other than the 2020 Census's but agrees on every block the
+two share; Alabama, Tennessee and Utah publish no official block file, so
+theirs rest on the Census file alone.
 The crosswalk script refuses to write if a state not on the list differs
 between the two files, so a later redraw can't slip through on stale lines.
 The same list tells the election-night sync that a redrawn seat has no

@@ -425,6 +425,25 @@ describe("the state page in results mode", () => {
     expect(fetchLiveResults).not.toHaveBeenCalled();
   });
 
+  it("says why no House seat in a state on new lines is marked as changing party", async () => {
+    const base = live().races[0];
+    fetchLiveResults.mockResolvedValue(
+      live({ redrawnStates: ["OH", "TX"], races: [{ ...base, heldBy: null, flip: false }] })
+    );
+    render(<StateBallotClient ballot={ballot()} />);
+    const house = await screen.findByRole("region", { name: "U.S. House" });
+    expect(
+      within(house).getByText(/New district lines this year: no seat has a previous holder/)
+    ).toBeInTheDocument();
+  });
+
+  it("adds no new-lines note for a state on its old lines", async () => {
+    fetchLiveResults.mockResolvedValue(live({ redrawnStates: ["TX"] }));
+    render(<StateBallotClient ballot={ballot()} />);
+    const house = await screen.findByRole("region", { name: "U.S. House" });
+    expect(within(house).queryByText(/New district lines/)).not.toBeInTheDocument();
+  });
+
   it("moves focus to the row of a district picked on the results map", async () => {
     fetchLiveResults.mockResolvedValue(live());
     render(<StateBallotClient ballot={ballot()} />);

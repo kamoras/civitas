@@ -337,6 +337,13 @@ export interface StateBallot {
   /** Statewide PVI — null only if the underlying PVI map lacks this
    * state, never a fabricated 0. */
   statePvi: number | null;
+  /** The state votes this cycle on congressional lines other than the
+   * ones its sitting members were elected on (backend
+   * redrawn_congressional_maps.json). A district number then names a
+   * different place than today's member's, so any lookup by
+   * representative (house.gov, a member's name) answers for the old map.
+   * Optional for an older backend: absent reads as false. */
+  newDistrictLines?: boolean;
   senateRaces: RaceWithCandidates[];
   /** Only set (and only meaningful) when senateRaces is empty — the
    * Senate's three-class rotation (U.S. Const. art. I §3) means most
@@ -560,6 +567,10 @@ export interface LiveResults {
   liveStates: string[];
   /** States electing a senator this cycle. */
   senateStates: string[];
+  /** States voting on new congressional lines this cycle: their House
+   * seats have no holder going in (heldBy null), so none can count as a
+   * seat changing party. Optional for an older backend. */
+  redrawnStates?: string[];
   /** When each live state's last polls close (UTC ISO). Nothing of its
    * count is read or shown before then. Optional for an older backend. */
   pollsClose?: Record<string, string>;

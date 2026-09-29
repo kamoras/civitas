@@ -540,6 +540,14 @@ function TownDetail({
   );
 }
 
+/** Text colour for a House race's lean. A statewide stand-in says nothing
+ * about the district (every Texas seat on the new map reads the state's
+ * R+6, Dallas's included), so it is never coloured as that district's
+ * lean. */
+function leanTextClass(race: { pvi: number | null; pviLevel: "district" | "state" | null }): string {
+  return race.pviLevel === "state" ? "text-ink-lo" : pviColor(race.pvi);
+}
+
 /** One district in the House picker: number, area, lean, and — reusing
  * the tierCandidates split — the leading D/R names, so a reader can find
  * their district by the names they know as well as by county. */
@@ -587,7 +595,7 @@ function HouseDistrictOption({
         </span>
       </span>
       <span className="flex flex-col items-end gap-0.5 whitespace-nowrap">
-        <span className={`font-mono text-xs ${pviColor(race.pvi)}`}>
+        <span className={`font-mono text-xs ${leanTextClass(race)}`}>
           {formatPvi(race.pvi)}
           {/* No district-level PVI crosswalk data for this district yet —
               the number shown is this whole state's lean, not this
@@ -603,23 +611,37 @@ function HouseDistrictOption({
  *
  * Civitas never asks a visitor for their address, so finding "your"
  * district is a navigation problem: point at the map, pick your county,
- * or filter by a county, a representative's name or a district number. */
+ * or filter by a county, a candidate's name or a district number.
+ *
+ * In a state voting on new lines (ballot.newDistrictLines) every
+ * representative-based route answers for the OLD map: house.gov's lookup
+ * and "your representative's name" both lead to the district today's
+ * member was elected in, and on the new map that number is a different
+ * place (a Hays County, Texas reader is in TX-35 today; the 2026 TX-35 is
+ * Bexar, Guadalupe, Karnes and Wilson). There the copy offers only the
+ * map, the counties and the state's own lookup. */
 function HouseDetail({
   ballot,
   pickedId,
   onPick,
   results,
   feedAnswered,
+  lookupHref,
 }: {
   ballot: StateBallot;
   pickedId: string | null;
   onPick: (id: string | null) => void;
+  /** The state's official ballot/voter lookup, or the generic election-
+   * office finder when there is no state-specific one. */
+  lookupHref: string;
   /** Live counts by district, from election day — the map shades by them. */
   results?: Map<number, LiveRaceResult>;
   /** The state's feed has given a count for some race (DistrictMap). */
   feedAnswered?: boolean;
 }) {
   const houseRaces = ballot.houseRaces;
+  const newLines = ballot.newDistrictLines ?? false;
+  const stateName = ballot.stateName ?? ballot.state;
   const [filter, setFilter] = useState("");
   const picked = houseRaces.find((r) => r.id === pickedId) ?? (houseRaces.length === 1 ? houseRaces[0] : null);
 
@@ -631,7 +653,7 @@ function HouseDetail({
           <div className="min-w-0">
             <p className="text-[15px] font-bold text-ink-hi">
               {picked.district === 0 ? "At-large seat" : `District ${picked.district}`}
-              <span className={`ml-2 font-mono text-xs font-normal ${pviColor(picked.pvi)}`}>
+              <span className={`ml-2 font-mono text-xs font-normal ${leanTextClass(picked)}`}>
                 {formatPvi(picked.pvi)}
                 {picked.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
               </span>
@@ -662,22 +684,48 @@ function HouseDetail({
   const shown = houseRaces.filter((r) => matchesDistrictQuery({ ...r, areas: r.counties }, filter));
   return (
     <div>
-      <p className="mb-3 text-[13px] text-ink-lo">
-        You vote in exactly one of these. Point at the map, pick your county, or filter by a
-        county, a representative&apos;s name or a district number — or{" "}
-        <a
-          href="https://www.house.gov/representatives/find-your-representative"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Find your representative at house.gov (opens in new tab)"
-          className="text-signal-cyan hover:text-phos"
-        >
-          look it up at house.gov ↗
-        </a>
-        .
-      </p>
+      {newLines ? (
+        <p className="mb-3 text-[13px] text-ink-lo">
+          You vote in exactly one of these. {stateName} votes on{" "}
+          <strong className="font-semibold text-ink-hi">new congressional district lines</strong> this
+          year, so your district may not be the one your current representative was elected in, and
+          lookups by representative show today&apos;s districts, not these. Point at the map, pick
+          your county, or filter by a county or district number
+          {ballot.officialLookup.isStateSpecific ? (
+            <>
+              {" "}— or check{" "}
+              <a
+                href={lookupHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${ballot.officialLookup.label} (opens in new tab)`}
+                className="text-signal-cyan hover:text-phos"
+              >
+                {stateName}&apos;s own ballot lookup ↗
+              </a>
+            </>
+          ) : null}
+          .
+        </p>
+      ) : (
+        <p className="mb-3 text-[13px] text-ink-lo">
+          You vote in exactly one of these. Point at the map, pick your county, or filter by a
+          county, a candidate&apos;s name or a district number — or{" "}
+          <a
+            href="https://www.house.gov/representatives/find-your-representative"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Find your representative at house.gov (opens in new tab)"
+            className="text-signal-cyan hover:text-phos"
+          >
+            look it up at house.gov ↗
+          </a>
+          .
+        </p>
+      )}
       <DistrictMap
         state={ballot.state}
+        newLines={newLines}
         races={houseRaces}
         picked={null}
         onPick={(id) => onPick(id)}
@@ -691,8 +739,12 @@ function HouseDetail({
             type="search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by county, representative, or district number"
-            aria-label="Filter districts by county, representative, or district number"
+            placeholder={newLines ? "Filter by county or district number" : "Filter by county, candidate, or district number"}
+            aria-label={
+              newLines
+                ? "Filter districts by county or district number"
+                : "Filter districts by county, candidate, or district number"
+            }
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
           <p className="mt-1.5 text-[10px] text-ink-min">
@@ -711,8 +763,10 @@ function HouseDetail({
       ))}
       {shown.length === 0 && (
         <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
-          No district matches “{filter}”. Try a county name, your representative&apos;s
-          surname, or a district number — or pick a county above.
+          No district matches “{filter}”.{" "}
+          {newLines
+            ? "Try a county name or a district number — or pick a county above."
+            : "Try a county name, a candidate’s surname, or a district number — or pick a county above."}
         </p>
       )}
     </div>
@@ -1060,6 +1114,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const federalCandidates = federalRaces.flatMap((r) => r.candidates.filter(isActiveCandidate));
   const thirdParty = federalCandidates.filter((c) => majorPartyOf(c) === null).length;
   const withRecords = federalCandidates.filter((c) => c.incumbentRecord).length;
+  const contestCount = countBallotContests(contests, ballot);
 
   function detailFor(contest: BallotContest) {
     switch (contest.kind) {
@@ -1079,6 +1134,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             onPick={(id) => openContest("house", id)}
             results={liveByDistrict}
             feedAnswered={feedAnswered}
+            lookupHref={lookupHref}
           />
         );
       case "statewide":
@@ -1122,7 +1178,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 {resultsFraming ? `${stateName} results` : <>Everyone on {stateName}&apos;s ballot, and who is behind them</>}
               </h1>
               <p className="mt-1.5 text-sm text-ink-lo">
-                {countBallotContests(contests, ballot)} contests · {federalCandidates.length} federal candidates
+                {contestCount} {contestCount === 1 ? "contest" : "contests"} · {federalCandidates.length} federal{" "}
+                {federalCandidates.length === 1 ? "candidate" : "candidates"}
                 {thirdParty > 0 && `, ${thirdParty} outside the two major parties`}
                 {withRecords > 0 && ` · ${withRecords} with a congressional voting record`}
                 {ballot.statePvi !== null && !resultsMode && (

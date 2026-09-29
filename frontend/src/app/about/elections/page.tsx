@@ -96,10 +96,20 @@ export default function ElectionsChapter() {
         <P>
           Pick your county and the page narrows to the district covering it. About 13% of counties
           span more than one district; those offer the two or three as a second tap. Where a county
-          isn&apos;t enough, a map of the districts — from the Census Bureau&apos;s 119th-Congress
-          boundaries, shaded by partisan lean — lets you click yours. A text filter over place names
-          and sitting representatives works too. All of it runs on data already on the page: nothing
-          is typed into a lookup, sent or stored.
+          isn&apos;t enough, a map of the districts lets you click yours. It draws the lines each
+          state votes on this year: the Census Bureau&apos;s 119th-Congress boundaries, and for the
+          nine states that redrew for 2026 their new lines, built from Census blocks. Districts are
+          shaded by partisan lean where the district has one of its own; the redrawn states&apos;
+          new districts are left unshaded, because no per-district lean is published here for them
+          yet. A text filter over county names, candidates&apos; names and district numbers works
+          too. All of it runs on data already on the page: nothing is typed into a lookup, sent or
+          stored.
+        </P>
+        <P>
+          In a state voting on new lines, a lookup by representative — house.gov&apos;s, or your
+          current member&apos;s name — answers for the district you were in at the last election,
+          which on the new map can be a different place under the same number. Those pages point to
+          the map, the counties and the state&apos;s own ballot lookup instead.
         </P>
         <Sub title="The optional town selector">
           <P>
