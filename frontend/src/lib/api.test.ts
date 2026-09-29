@@ -416,6 +416,14 @@ describe("streamExploreDocumentSummary", () => {
     ).rejects.toThrow("404");
   });
 
+  it("releases each refusal's body before waiting", async () => {
+    const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
+    const cancel = vi.spyOn(refused.body!, "cancel");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(done()));
+    await streamExploreDocumentSummary(1, () => {}, undefined, async () => {});
+    expect(cancel).toHaveBeenCalled();
+  });
+
   it("doesn't wait out a refusal the server doesn't mark as a wait", async () => {
     for (const status of [429, 503]) {
       const fetchMock = vi

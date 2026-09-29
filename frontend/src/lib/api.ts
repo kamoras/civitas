@@ -938,6 +938,9 @@ export async function streamExploreDocumentSummary(
   // Only a refusal the server marks as a wait (X-Summary-Wait): nginx's own
   // 503, or a limit on how often a client may ask at all, is not waited out.
   while (res.headers.get("X-Summary-Wait") === "1" && Date.now() < giveUpAt) {
+    // Released now, not at garbage collection: an unread body can hold its
+    // connection, and the page has other requests to make meanwhile.
+    await res.body?.cancel().catch(() => {});
     await wait(
       Math.min(summaryRetryDelayMs(res.headers.get("Retry-After")), Math.max(0, giveUpAt - Date.now())),
       signal

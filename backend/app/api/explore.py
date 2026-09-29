@@ -12,9 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
-from app.api.rate_limit import (
-    SummaryRateLimit, UpstreamRouteLimit, WriteRateLimit, client_ip, retry_after, spend_upstream,
-)
+from app.api import rate_limit
+from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, client_ip, retry_after, spend_upstream
 from app.api.response_helpers import RETRY_SOON_CACHE_CONTROL, retry_soon_json
 from app.database import get_db, off_loop
 from app.models import ExploreDocument
@@ -352,9 +351,13 @@ _HELD_RETRY_AFTER_S = 10
 _SLOW_RETRY_AFTER_S = 60
 # Marks a refusal that is only a wait (another generation, the cap, a
 # recent timeout, the store, the write budget): the page asks again after
-# Retry-After. A refusal without it — nginx's own, SummaryRateLimit's — is
-# not waited out.
+# Retry-After. A refusal without it — nginx's own — is not waited out.
 _WAIT_OUT = {"X-Summary-Wait": "1"}
+# Every summary request not served from the cache: a page waiting out a
+# generation asks every 10-60s, well inside this; a client looping on the
+# endpoint is held to one a second.
+_SUMMARY_REQUESTS_BUCKET = "explore-summary-requests"
+_SUMMARY_REQUESTS_PER_MINUTE = 60
 # How often a stream waiting on the LLM sends an SSE comment: nginx drops a
 # proxied response that sends nothing for proxy_read_timeout (120s), which
 # a busy LLM's prompt processing can exceed before the first delta.
@@ -391,18 +394,18 @@ def _sse(data: dict) -> str:
 async def get_explore_document_summary(
     doc_id: int,
     request: Request,
-    _rl: SummaryRateLimit,
     db: Session = Depends(get_db),
 ):
     """Stream an AI summary of a government document as it generates.
 
     One generation per document at a time and a few in all (_Generation's
     claims). The per-IP write limit, which stops a caller fanning out
-    across many doc_ids (2026-07 audit), is charged up front and given back
-    when no generation starts: a refusal to wait out (held, busy, slow)
-    does no work, and a page waiting on another reader's generation must
-    not spend the reader's budget for votes and comments doing so. Every
-    request, generating or not, counts against SummaryRateLimit.
+    across many doc_ids (2026-07 audit), is charged only when a generation
+    starts: a refusal to wait out (held, busy, slow) does no work, and a
+    page waiting on another reader's generation must not spend the
+    reader's budget for votes and comments doing so. Every request that
+    isn't served from the cache counts against a per-IP limit of its own
+    (_summary_requests), so a loop on the endpoint stays bounded.
 
     Streams Server-Sent Events, each `data:` line a JSON object:
     {"delta": "<text chunk>"} while generating, then a final
@@ -447,10 +450,23 @@ async def get_explore_document_summary(
 
         return StreamingResponse(cached_stream(), media_type="text/event-stream", headers=_STREAM_HEADERS)
 
+    # Not a cached answer: this request may start work, so it counts —
+    # after the cache, so a summary already made is never refused.
+    ip = client_ip(request)
+    counted = await throttle.run(rate_limit.limit_client, ip, _SUMMARY_REQUESTS_BUCKET,
+                                 limit=_SUMMARY_REQUESTS_PER_MINUTE, period=60.0)
+    if not counted.allowed:
+        # A wait: a refused request isn't counted.
+        raise HTTPException(
+            status_code=429,
+            detail="Too many summary requests; please try again shortly.",
+            headers={"Retry-After": rate_limit.retry_after(counted.reset_at), **_WAIT_OUT},
+        )
+
     # Claimed, checked and generated in a task of its own, which the
     # request only waits on: a request cancelled mid-claim (a disconnect)
     # can't leave a claim behind that nothing will give back.
-    generation = _Generation(doc_id, prompt, cache_key, client_ip(request))
+    generation = _Generation(doc_id, prompt, cache_key, ip)
     task = asyncio.create_task(generation.run())
     _generations.add(task)
     task.add_done_callback(_generations.discard)
@@ -591,15 +607,6 @@ class _Generation:
     async def run(self) -> None:
         from app.api import rate_limit, throttle
 
-        # The write limit first, so a client over it takes no claim that
-        # would hold other readers off; given back below when no generation
-        # starts (a refusal to wait out does none of the work it limits).
-        decision = await throttle.run(rate_limit.charge_write, self.client)
-        if not decision.allowed:
-            self._settle(decision)
-            self.events.put_nowait(None)
-            return
-        started = False
         try:
             try:
                 key = self.key
@@ -628,17 +635,19 @@ class _Generation:
             if made is not None:
                 self._settle(made)
                 return
-            started = True
+            # The write limit, charged only now that a generation will start
+            # (a refusal to wait out does none of the work it limits). A
+            # client over it held its claims only this long; they are given
+            # back below.
+            decision = await throttle.run(rate_limit.charge_write, self.client)
+            if not decision.allowed:
+                self._settle(decision)
+                return
             self._settle("go")
             await self._generate()
         finally:
             self._settle("unavailable")  # a no-op once settled
             await self._give_back()  # a no-op once given back
-            if not started:
-                try:
-                    await throttle.run(rate_limit.refund_write, self.client)
-                except Exception:
-                    logger.warning("Explore summary's write charge not refunded", exc_info=True)
             self.events.put_nowait(None)
 
     async def _generate(self) -> None:
@@ -668,11 +677,12 @@ class _Generation:
             # prompt stops at the same place).
             at_limit = True
         except Exception as error:
-            # Out of time: this deadline expired, or the LLM stopped answering
-            # within its client's read timeout (it is busy: the pipeline's
-            # work, another generation). Anything else — the LLM unreachable,
-            # a bad response — is a failure, which may be retried at once.
-            if deadline.expired() or isinstance(error, httpx.TimeoutException):
+            # Out of time: this deadline expired, or the LLM, once connected,
+            # stopped answering within its client's read timeout (it is busy:
+            # the pipeline's work, another generation). Anything else — the
+            # LLM unreachable (a connect timeout included), a bad response —
+            # is a failure, which may be retried at once.
+            if deadline.expired() or isinstance(error, httpx.ReadTimeout):
                 logger.warning("Explore doc summary for doc_id=%s ran out of time", self.doc_id)
                 timed_out = True
             else:
