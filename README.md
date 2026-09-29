@@ -1378,6 +1378,8 @@ npm test         # vitest
 npm run build    # type errors block CI
 ```
 
+The build makes no network requests for fonts. The site's three typefaces (Archivo, Press Start 2P, Share Tech Mono; SIL OFL) are committed under `frontend/src/app/fonts/`, one file per script subset, and loaded with `next/font/local`. `next/font/google` fetched them during every build, and about one build in five failed when Google answered with a URL Turbopack rejects. `backend/scripts/fetch_site_fonts.py` refetches them the way `next/font/google` did and rewrites `manifest.json` and `fallback.css`; `fonts.test.ts` fails if `fonts.ts` drifts from the manifest.
+
 ### Project Structure
 
 ```
