@@ -310,6 +310,26 @@ def test_real_app_leaves_health_uncached(real_client):
     assert "ETag" not in real_client.get("/api/health").headers
 
 
+def test_real_app_responses_vary_on_origin(real_client):
+    """CORS here is an explicit origin list, so Access-Control-Allow-Origin
+    echoes the caller and the response genuinely depends on Origin. nginx's
+    proxy_cache honours Vary, so every response must say so — including one
+    to a request with no Origin, which is what gets cached for same-origin
+    and SSR traffic. Before starlette 1.7 that response carried no
+    `Vary: Origin`, and nginx could hand it (with no ACAO) to a
+    cross-origin caller, whose browser then blocked it."""
+    from app.main import _cors_origins
+
+    plain = real_client.get("/api/health")
+    assert "Origin" in plain.headers["Vary"]
+    assert "access-control-allow-origin" not in plain.headers
+
+    allowed = _cors_origins[0]
+    cross = real_client.get("/api/health", headers={"Origin": allowed})
+    assert "Origin" in cross.headers["Vary"]
+    assert cross.headers["access-control-allow-origin"] == allowed
+
+
 def test_real_app_action_issues_revalidate_after_an_hourly_write(db_session, monkeypatch):
     """End to end on the real app: the Action Center's hourly refresh
     replaces the day's story without any nightly run completing. A browser

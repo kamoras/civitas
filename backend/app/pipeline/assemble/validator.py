@@ -212,7 +212,22 @@ def validate_senator(senator: dict) -> dict:
                 else []
             ),
             "senatorVoteAligned": m.get("senatorVoteAligned"),
+            # Persisted for the score breakdown's on-demand recompute
+            # (models.LobbyingMatch.is_consensus_vote); was dropped here, so
+            # every senator row stored NULL.
+            "isConsensusVote": m.get("isConsensusVote"),
             "description": m.get("description", ""),
+            "lobbiedBills": [
+                b for b in (m.get("lobbiedBills") or [])
+                if isinstance(b, dict) and b.get("billId")
+            ],
+            "lobbyingClients": [
+                c for c in (m.get("lobbyingClients") or [])
+                if isinstance(c, dict) and c.get("client")
+            ],
+            "lobbyingChecked": (
+                m["lobbyingChecked"] if isinstance(m.get("lobbyingChecked"), bool) else None
+            ),
         }
         for m in (senator.get("lobbyingMatches") or [])
     ]
