@@ -146,8 +146,13 @@ export default function NewsChapter() {
         </More>
       </Section>
 
-      <Section id="action-tabs" title="The rest of the Action Center">
+      <Section id="action-tabs" title="The Action Center's tabs">
         <List>
+          <Item label="Today">
+            The day&apos;s issues, each with what you can do about it, and below them the federal
+            documents whose comment period is open, soonest deadline first, each linking to its page
+            in Explore and the comment form there. Recent days can be paged through one at a time.
+          </Item>
           <Item label="Ongoing">
             When a story persists across several days, it becomes a national monitor with its own
             sourced timeline. Separate stories about the same underlying event are merged; a monitor
@@ -156,10 +161,6 @@ export default function NewsChapter() {
           <Item label="Archive">
             Each day&apos;s top issue is kept permanently, building a month-by-month record with a
             summary of each finished week and month, and the civic dates coming up.
-          </Item>
-          <Item label="Open for public comment">
-            Federal documents whose comment period is open, soonest deadline first, each linking to
-            its page in Explore and the comment form there.
           </Item>
         </List>
         <P>

@@ -6,8 +6,8 @@ import { FIPS_TO_STATE } from "@/lib/stateCodes";
 import { ComposableMap, Geographies, Geography, useMapContext } from "react-simple-maps";
 
 // Extracted from the Action Center's old elections tab (2026-07), when it and
-// /elections both drew this map; the tab was removed in 2026-09. Coloring is left entirely to the caller via getFillColor/
-// getHoverFillColor — this component only knows how to render the US map
+// /elections both drew this map; the tab was removed in 2026-09. Coloring is
+// left entirely to the caller via getFillColor/getHoverFillColor — this component only knows how to render the US map
 // and report clicks, not what a given race/state "means" (race type, PVI,
 // results, etc. differ by caller).
 

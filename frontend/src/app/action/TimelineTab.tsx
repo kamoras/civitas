@@ -21,6 +21,11 @@ import type { TimelineEntry, TimelineMonth, TimelineWeek, UpcomingEvent } from "
 interface Handlers {
   onOpenDay: (date: string) => void;
   onOpenMonitor: (slug: string) => void;
+  /** Days the Action Center still has issues for (its pager's list). Older
+   *  unposted issues are deleted after 14 days
+   *  (action_center._cleanup_old_unposted_issues), so an older day would
+   *  open onto nothing; the entry here is its record. */
+  openableDates: string[];
 }
 
 const dayLabel = (d: string) => formatUtcDate(d, { month: "short", day: "2-digit" }).toUpperCase();
@@ -32,22 +37,43 @@ function daysAway(dateStr: string, asOf: number): number {
   return Math.round((target.getTime() - now.getTime()) / 86_400_000);
 }
 
-function DayRow({ entry, onOpenDay, onOpenMonitor }: { entry: TimelineEntry } & Handlers) {
+function DayRow({
+  entry,
+  onOpenDay,
+  onOpenMonitor,
+  openableDates,
+}: { entry: TimelineEntry } & Handlers) {
   const source = safeHref(entry.sourceUrl);
+  const openable = openableDates.includes(entry.date);
   return (
     <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-white/[0.07] py-2.5">
       <span className="font-mono text-xs tracking-[0.08em] tabular-nums text-ink-min">
         {dayLabel(entry.date)}
       </span>
       <span className="min-w-0">
-        <button
-          onClick={() => onOpenDay(entry.date)}
-          className="text-left font-display text-[15px] leading-snug text-ink-hi hover:underline"
-        >
-          {entry.title}
-        </button>
+        {openable ? (
+          <button
+            onClick={() => onOpenDay(entry.date)}
+            className="text-left font-display text-[15px] leading-snug text-ink-hi hover:underline"
+          >
+            {entry.title}
+          </button>
+        ) : (
+          <>
+            <span className="block font-display text-[15px] leading-snug text-ink-hi">
+              {entry.title}
+            </span>
+            {entry.summary && (
+              <span className="mt-0.5 block font-display text-[13px] leading-snug text-ink-lo">
+                {entry.summary.length > 200 ? `${entry.summary.slice(0, 200)}…` : entry.summary}
+              </span>
+            )}
+          </>
+        )}
         <span className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs tracking-[0.06em] text-ink-min">
-          {entry.policyAreas.length > 0 && <span>{entry.policyAreas.slice(0, 2).join(" · ")}</span>}
+          {(entry.policyAreas ?? []).length > 0 && (
+            <span>{entry.policyAreas.slice(0, 2).join(" · ")}</span>
+          )}
           {entry.monitorSlug && (
             <button
               onClick={() => onOpenMonitor(entry.monitorSlug!)}
@@ -101,12 +127,12 @@ function PeriodSummary({ children }: { children: React.ReactNode }) {
 function WeekBlock({ week, ...handlers }: { week: TimelineWeek } & Handlers) {
   return (
     <div className="mt-5">
-      <h4 className="flex flex-wrap items-baseline justify-between gap-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+      <h3 className="flex flex-wrap items-baseline justify-between gap-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
         <span>{week.isCurrent ? "This week" : formatWeekRange(week.startDate, week.endDate)}</span>
         <span className="text-ink-min">
           {week.entryCount} day{week.entryCount !== 1 ? "s" : ""}
         </span>
-      </h4>
+      </h3>
       {week.summary && !week.isCurrent && <PeriodSummary>{week.summary}</PeriodSummary>}
       <DayList entries={week.entries} {...handlers} />
     </div>
@@ -231,7 +257,7 @@ export default function TimelineTab(handlers: Handlers) {
     <div>
       <p className="mb-5 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
         Each day&apos;s top issue since January, with a summary of each finished week and month.
-        Pick a day to open it in Today.
+        Recent days open in Today, with every issue from that day.
       </p>
 
       <dl className="grid grid-cols-1 gap-px border border-white/[0.07] bg-white/[0.07] sm:grid-cols-3">

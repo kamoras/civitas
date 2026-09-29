@@ -23,7 +23,7 @@ from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
 from app.models import (
-    ActionIssue, ExploreDocument, IssueView, MonitorStatus,
+    ActionIssue, ApiCache, ExploreDocument, IssueView, MonitorStatus,
     NationalMonitor, RepSponsoredBill, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
@@ -349,11 +349,8 @@ async def get_action_issues(
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
     issues = _latest_current_issues(db, for_date=date)
 
-    if not issues:
-        return {"date": date, "issues": []}
-
-    issue_date = issues[0].date
-
+    # Computed before the empty-day return: a reader paging onto a day with
+    # nothing left on it still needs the pager's way back.
     available_dates = [
         row[0] for row in
         db.query(ActionIssue.date)
@@ -362,6 +359,28 @@ async def get_action_issues(
         .limit(14)
         .all()
     ]
+    # When the live view was last refreshed: the newest run's metrics row
+    # (action_metrics.py writes one per hourly run, abort paths included).
+    # Only for the live view; a past day's page is not "updated".
+    generated_at = None
+    if date is None:
+        latest_run = (
+            db.query(ApiCache.cached_at)
+            .filter(ApiCache.tier == "action-metrics")
+            .order_by(ApiCache.cached_at.desc())
+            .limit(1)
+            .scalar()
+        )
+        if latest_run is not None:
+            generated_at = latest_run.isoformat() + "Z"
+
+    if not issues:
+        return {
+            "date": date, "issues": [], "availableDates": available_dates,
+            "generatedAt": generated_at,
+        }
+
+    issue_date = issues[0].date
 
     all_explore_ids: list[int] = []
     for i in issues:
@@ -392,6 +411,7 @@ async def get_action_issues(
             for i in issues
         ],
         "availableDates": available_dates,
+        "generatedAt": generated_at,
     }
 
 

@@ -80,6 +80,7 @@ function MonitorRow({
   const ref = useRef<HTMLLIElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const active = monitor.status === "active";
+  const statusLabel = active ? "Active" : monitor.status === "watching" ? "Watching" : "Closed";
   const areas = monitor.policyAreas ?? [];
 
   // Arrived from a "Tracked in …" link: bring this row into view, and move
@@ -110,7 +111,7 @@ function MonitorRow({
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs tracking-[0.08em] text-ink-min">
               <span className={`uppercase tracking-[0.1em] ${active ? "text-phos-mid" : ""}`}>
-                {active ? "Active" : "Watching"}
+                {statusLabel}
               </span>
               <span>Updated {shortDate(monitor.lastArticleDate || monitor.updatedAt)}</span>
               <span>
@@ -161,6 +162,51 @@ function MonitorRow({
   );
 }
 
+/**
+ * A monitor someone was sent to that the live list doesn't carry. The list is
+ * active and watching monitors only; one a month without coverage closes it
+ * (or deletes it, when it never gathered enough), while archive entries and
+ * older issues still name it. The detail endpoint still serves a closed one.
+ */
+function OffListMonitor({ slug }: { slug: string }) {
+  const request = useAsyncData(`action-monitor:${slug}`, () => fetchMonitorDetail(slug));
+  const noteRef = useRef<HTMLParagraphElement>(null);
+  const missing = request.error !== null;
+
+  // The link that brought the reader here is gone from the page; give focus
+  // somewhere that says what happened rather than dropping it on <body>.
+  useEffect(() => {
+    if (missing) noteRef.current?.focus();
+  }, [missing]);
+
+  if (request.loading) return null;
+  if (missing || !request.data) {
+    const gone = request.error?.includes("404");
+    return (
+      <p
+        ref={noteRef}
+        tabIndex={-1}
+        role="status"
+        className="mb-6 border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo"
+      >
+        {gone
+          ? "That concern is no longer tracked, and its record has been removed."
+          : "Could not load that concern right now."}
+      </p>
+    );
+  }
+  return (
+    <section aria-labelledby="off-list-heading" className="mb-10">
+      <h2 id="off-list-heading" className={SECTION_HEADING}>
+        No longer tracked
+      </h2>
+      <ul>
+        <MonitorRow monitor={request.data} initiallyOpen />
+      </ul>
+    </section>
+  );
+}
+
 export default function MonitorsTab({ initialSlug }: { initialSlug?: string | null }) {
   const request = useAsyncData("action-monitors", fetchMonitors);
 
@@ -191,6 +237,7 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
   }
 
   const monitors = request.data?.monitors ?? [];
+  const offList = initialSlug && !monitors.some((m) => m.slug === initialSlug) ? initialSlug : null;
 
   return (
     <div>
@@ -198,6 +245,8 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
         Concerns that keep coming back across days of coverage, detected automatically. Each one
         gathers the dated updates that fed it, with a source for every entry.
       </p>
+
+      {offList && <OffListMonitor slug={offList} />}
 
       <section aria-labelledby="monitors-heading">
         <h2 id="monitors-heading" className={SECTION_HEADING}>

@@ -1568,10 +1568,8 @@ export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
 }
 
 // ── Midterm-elections feature (candidate rosters, race detail, PVI) ──
-// Separate namespace from /action/elections above (that endpoint is the
-// lightweight Action Center teaser; this is the fuller candidate-research
-// feature) — see backend/app/api/elections.py. Race detail is fetched
-// server-side by app/elections/[raceId]/page.tsx, not through this client.
+// See backend/app/api/elections.py. Race detail is fetched server-side by
+// app/elections/[raceId]/page.tsx, not through this client.
 
 export async function fetchPviMap(): Promise<PviMap> {
   // `states` and `districts` are maps, not lists, and callers index into them

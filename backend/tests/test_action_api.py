@@ -765,3 +765,47 @@ def test_timeline_refuses_a_year_it_cannot_build_dates_for(db_session):
     client = TestClient(app)
     assert client.get("/api/action/timeline?year=0").status_code == 422
     assert client.get("/api/action/timeline?year=2026").status_code == 200
+
+
+class TestIssuesListPagerFields:
+    """The day pager and the "Updated" line read these off the list
+    endpoint (2026-09 Action Center redesign)."""
+
+    async def test_an_empty_day_still_lists_the_days_to_page_back_to(self, db_session):
+        # A reader who opens a day whose issues were cleaned up needs the
+        # pager's way back, not a dead end.
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        db_session.add(ActionIssue(date="2026-09-28", rank=1, title="Kept", summary="s"))
+        db_session.commit()
+
+        resp = await get_action_issues(
+            Response(), date="2026-06-01", db=db_session, db_visits=db_session,
+        )
+
+        assert resp["issues"] == []
+        assert resp["availableDates"] == ["2026-09-28"]
+
+    async def test_generated_at_is_the_latest_refresh_and_only_for_the_live_view(self, db_session):
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+        from app.models import ApiCache
+
+        db_session.add(ActionIssue(date="2026-09-29", rank=1, title="Live", summary="s", is_current=True))
+        db_session.add_all([
+            ApiCache(tier="action-metrics", cache_key="a", data_json="{}", cached_at=datetime(2026, 9, 29, 13, 0)),
+            ApiCache(tier="action-metrics", cache_key="b", data_json="{}", cached_at=datetime(2026, 9, 29, 14, 15)),
+            ApiCache(tier="other", cache_key="c", data_json="{}", cached_at=datetime(2026, 9, 29, 15, 0)),
+        ])
+        db_session.commit()
+
+        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        past = await get_action_issues(Response(), date="2026-09-29", db=db_session, db_visits=db_session)
+
+        assert live["generatedAt"] == "2026-09-29T14:15:00Z"
+        assert past["generatedAt"] is None

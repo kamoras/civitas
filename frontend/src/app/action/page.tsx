@@ -12,7 +12,7 @@ import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api
 import { useAsyncData, type AsyncData } from "@/hooks/useAsyncData";
 import { commentPeriodToday, describeDaysLeft, formatUtcDate } from "@/lib/formatting";
 import ShareButtons from "@/components/action/ShareButtons";
-import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { focusTabWhenSelected } from "@/lib/tabFocus";
 import BackToTop from "@/components/BackToTop";
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/components/action/IssueEnrichment";
 import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { tabControl } from "@/lib/controlStyles";
+import { issuesUrl } from "@/lib/routes";
 
 /** Plain status line, the loading state the records pages use: no pulse. */
 function Status({ children }: { children: React.ReactNode }) {
@@ -227,6 +228,7 @@ function SecondaryIssue({
             <span
               className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
               aria-hidden="true"
+              {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             >
               {expanded ? "−" : "+"}
             </span>
@@ -307,11 +309,13 @@ function OpenComments() {
 
 function IssuesTab({
   request,
+  selectedDate,
   initialIssueId,
   onIssueChange,
   onMonitor,
 }: {
   request: AsyncData<ActionIssuesResponse>;
+  selectedDate: string | null;
   initialIssueId?: string | null;
   onIssueChange?: (id: string | null) => void;
   onMonitor: (slug: string) => void;
@@ -340,7 +344,12 @@ function IssuesTab({
         />
       ) : (
         <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo">
-          No issues on the record for this day yet. The Action Center refreshes hourly.
+          {selectedDate
+            ? // Issues are kept for 14 days unless they were posted
+              // (action_center._cleanup_old_unposted_issues); the Archive
+              // keeps every day's top issue.
+              "Nothing from this day is still on the Action Center. Its top issue is kept in the Archive."
+            : "No issues on the record for this day yet. The Action Center refreshes hourly."}
         </p>
       )}
 
@@ -380,13 +389,14 @@ function DayPager({
   selectedDate: string | null;
   onSelect: (d: string | null) => void;
 }) {
+  // Newest first. The first entry is the live view (no ?date=).
   const availableDates = useMemo(() => data?.availableDates ?? [], [data?.availableDates]);
   const currentDate = selectedDate || data?.date || null;
-  const currentIdx = currentDate ? availableDates.indexOf(currentDate) : 0;
-  const prev = currentIdx >= 0 ? availableDates[currentIdx + 1] : undefined;
-  // Index 0 is the newest day, which is the live view (no ?date=).
-  const next = currentIdx > 0 ? availableDates[currentIdx - 1] : undefined;
-  const atNewest = currentIdx <= 0;
+  // By comparison, not by index: a day outside the list (an old ?date= link,
+  // a day whose issues were cleaned up) still has real neighbours on it.
+  const prev = currentDate ? availableDates.find((d) => d < currentDate) : undefined;
+  const next = currentDate ? [...availableDates].reverse().find((d) => d > currentDate) : undefined;
+  const nextIsLive = next !== undefined && next === availableDates[0];
 
   const short = (d: string) => formatUtcDate(d, { month: "short", day: "numeric" });
 
@@ -421,8 +431,8 @@ function DayPager({
             : "—"}
         </span>
         <button
-          onClick={() => (next && currentIdx > 1 ? onSelect(next) : onSelect(null))}
-          disabled={atNewest && !selectedDate}
+          onClick={() => onSelect(next && !nextIsLive ? next : null)}
+          disabled={!next && !selectedDate}
           className={link}
           aria-label={next ? `Next day, ${short(next)}` : "Newest day"}
         >
@@ -516,26 +526,31 @@ function ActionPageInner() {
   const selectDate = useCallback(
     (d: string | null) => {
       setSelectedDate(d);
-      replaceUrl(d ? `/action?date=${d}` : "/action");
+      replaceUrl(issuesUrl(d, null));
     },
     [replaceUrl]
   );
 
+  // The monitor to open on arrival at the Ongoing tab. One-shot: cleared by
+  // any ordinary tab switch, or every return to Ongoing would re-open the row
+  // and pull focus off the tab bar, killing arrow-key navigation.
+  const [monitorSlug, setMonitorSlug] = useState<string | null>(deepLink.monitor);
+
   const setActiveTab = useCallback(
     (tab: Tab) => {
-      const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
-      pushUrl(url);
+      setMonitorSlug(null);
+      // Today keeps the day it was showing, so the address says which.
+      pushUrl(tab === "issues" ? issuesUrl(selectedDate, null) : `/action?tab=${tab}`);
       // The panel stays tabbable (tabIndex=0), so Tab still reaches content.
       focusTabWhenSelected(`tab-${tab}`);
     },
-    [pushUrl]
+    [pushUrl, selectedDate]
   );
 
   // Opening a monitor or a day from inside the page. Both are links out in the
   // wild (?tab=monitors&monitor=, ?date=), but a <Link> to this same route is
   // a soft navigation that the latched deep link above never sees, so the
   // in-page versions set the state directly and write the URL themselves.
-  const [monitorSlug, setMonitorSlug] = useState<string | null>(deepLink.monitor);
   const openMonitor = useCallback(
     (slug: string) => {
       setMonitorSlug(slug);
@@ -546,7 +561,7 @@ function ActionPageInner() {
   const openDay = useCallback(
     (d: string) => {
       setSelectedDate(d);
-      pushUrl(`/action?date=${d}`);
+      pushUrl(issuesUrl(d, null));
       window.scrollTo({ top: 0 });
       focusTabWhenSelected("tab-issues");
     },
@@ -556,10 +571,9 @@ function ActionPageInner() {
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
     (id: string | null) => {
-      const url = id ? `/action?issue=${id}` : "/action";
-      replaceUrl(url);
+      replaceUrl(issuesUrl(selectedDate, id));
     },
-    [replaceUrl]
+    [replaceUrl, selectedDate]
   );
 
   return (
@@ -616,7 +630,9 @@ function ActionPageInner() {
                 role="tab"
                 id={`tab-${tab.id}`}
                 aria-selected={activeTab === tab.id}
-                aria-controls={`tabpanel-${tab.id}`}
+                // Only the selected tab's panel is rendered, so only it can
+                // name one; the others would point at an id that isn't there.
+                aria-controls={activeTab === tab.id ? `tabpanel-${tab.id}` : undefined}
                 tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
                 className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors sm:px-5 ${tabControl(
@@ -638,6 +654,7 @@ function ActionPageInner() {
             {activeTab === "issues" && (
               <IssuesTab
                 request={request}
+                selectedDate={selectedDate}
                 initialIssueId={deepLink.issue}
                 onIssueChange={handleIssueChange}
                 onMonitor={openMonitor}
@@ -647,7 +664,11 @@ function ActionPageInner() {
               <MonitorsTab key={monitorSlug ?? ""} initialSlug={monitorSlug} />
             )}
             {activeTab === "timeline" && (
-              <TimelineTab onOpenDay={openDay} onOpenMonitor={openMonitor} />
+              <TimelineTab
+                onOpenDay={openDay}
+                onOpenMonitor={openMonitor}
+                openableDates={request.data?.availableDates ?? []}
+              />
             )}
           </div>
         </div>
