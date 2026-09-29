@@ -609,7 +609,8 @@ def get_senator_stock_trades(
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
-        query.order_by(StockTrade.transaction_date.desc(), StockTrade.id.desc())
+        # Undated rows (a scan's illegible dates) after the dated ones.
+        query.order_by(StockTrade.transaction_date.desc().nulls_last(), StockTrade.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()

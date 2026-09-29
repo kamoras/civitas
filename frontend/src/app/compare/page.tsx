@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { pacSharePct } from "@/lib/funding";
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -511,7 +512,14 @@ function ComparePageInner() {
           >
             <p>
               Select two legislators to compare their representation scores, funding sources, and
-              voting independence side by side.
+              voting independence side by side. Presidents compare on the{" "}
+              <Link
+                href="/compare/presidents"
+                className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+              >
+                president comparison
+              </Link>
+              .
             </p>
           </PageMasthead>
 

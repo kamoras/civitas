@@ -339,8 +339,8 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
         _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url, filed: fetch_senate_ptr(
             client, db, {"report_url": url, "is_paper": "/view/paper/" in url, "stored_filed_date": filed},
         )),
-        _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url, _filed: fetch_house_ptr(
-            client, db, {"doc_id": fid, "pdf_url": url},
+        _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url, filed: fetch_house_ptr(
+            client, db, {"doc_id": fid, "pdf_url": url, "filing_date": filed},
         )),
         _StoredSource("President", PresidentTrade, "president_id", lambda fid, url, _filed: _read_president_filing(
             db, {"doc_id": fid, "pdf_url": url},

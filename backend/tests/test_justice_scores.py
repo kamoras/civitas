@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
+from app.models import Justice
 from app.pipeline.analyze.justice_loyalty import Vote, fit, label, loyalty_by_justice, president_on, score
 from app.pipeline.fetch.justice_records import fetch_scdb, fjc_appointments, scdb_president_votes
 from app.pipeline.justice_pipeline import (
@@ -20,6 +21,7 @@ from app.pipeline.justice_pipeline import (
     _measure_loyalty,
     run_justice_pipeline,
 )
+from app.services.justice_service import get_justice
 
 TERMS = [("P1", "2000-01-20", "2008-01-20"), ("P2", "2008-01-20", None)]
 
@@ -158,3 +160,17 @@ def test_unmeasured_loyalty_names_every_source_that_was_down(db_session):
         measured, why = asyncio.run(_measure_loyalty(None, db_session))
     assert measured is None
     assert why == "the Supreme Court Database and the presidents table could not be read"
+
+
+def test_agreement_is_served_with_each_justices_name(db_session):
+    """The scorecard showed "Brett M Kavanaugh" by splitting the id
+    "brett_m_kavanaugh" on underscores; the API names each justice itself."""
+    db_session.add_all([
+        Justice(id="samuel_a_alito_jr", name="Samuel A. Alito, Jr.", last_name="Alito", is_active=True,
+                agreement_matrix='{"brett_m_kavanaugh": 88.0, "clarence_thomas": 91.2, "gone": 50.0}'),
+        Justice(id="brett_m_kavanaugh", name="Brett M. Kavanaugh", last_name="Kavanaugh", is_active=True),
+        Justice(id="clarence_thomas", name="Clarence Thomas", last_name="Thomas", is_active=True),
+    ])
+    db_session.commit()
+    agreement = get_justice(db_session, "samuel_a_alito_jr").agreement
+    assert [(a.name, a.share) for a in agreement] == [("Clarence Thomas", 91.2), ("Brett M. Kavanaugh", 88.0)]
