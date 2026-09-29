@@ -103,6 +103,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
     init_db()
     _invalidate_orphaned_pipelines()
+    # Install member scoring's district table as a SeatLines before any
+    # scheduler job or request can read it: score_calculator's own loader
+    # would install a plain dict, which district_pvi.lines_of can't steer.
+    try:
+        from app.pipeline.fetch.district_pvi import lines_congress
+        lines_congress()
+    except Exception:
+        logging.getLogger(__name__).exception("District PVI table load failed (non-fatal)")
     start_scheduler()
     # Pre-build the bills-in-flight collection cache on a background thread
     # so the first /api/bills request after a deploy is a cache hit instead
@@ -149,12 +157,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     )
                     return
                 rescore_stale_legislative_effectiveness(_rescore_session)
-                if "house" in rescore_stale_constituent_alignment(_rescore_session):
-                    # Rescored on the lines in effect now: record them, so
-                    # the breakdown recomputes on the same ones.
-                    from app.pipeline.fetch.district_pvi import stamp_house_lines
+                from app.pipeline.fetch.district_pvi import current_lines, stamp_house_lines
 
-                    stamp_house_lines(_rescore_session)
+                # One read of the district table for the whole rescore, and
+                # its Congress from that same read: the file can be
+                # rewritten meanwhile (another backend, mid-rollout), and
+                # the Congress recorded must be the lines the scores used,
+                # so the breakdown recomputes on the same ones.
+                with current_lines() as lines:
+                    rescored = rescore_stale_constituent_alignment(_rescore_session)
+                if "house" in rescored:
+                    stamp_house_lines(_rescore_session, lines)
         except Exception:
             # Each rescore logs its own failures; this is the lease's.
             logging.getLogger("app.main").exception("Startup rescore failed")

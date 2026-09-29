@@ -374,9 +374,17 @@ The correct pattern, established by `_district_pvi()` /
    skipping — and past that, the nightly chain still goes on to Stock
    trades and Election). Each stored House score records the Congress
    whose lines it used (`Representative.district_lines_congress`), and the
-   score breakdown recomputes on those lines (`district_pvi.lines_of`), so
-   the two agree while a run is part-way through a switch, after one that
-   failed, and for members who left when the lines changed. So the first House run after
+   score breakdown is recomputed on the same district lines
+   (`district_pvi.lines_of`) — while a run is part-way through a switch,
+   after one that failed, and for members who left when the lines changed.
+   That settles the district table and nothing else: the breakdown still
+   reads the Constituent Alignment reference
+   (`/data/constituent_reference.json`) and
+   `/data/member_ideal_points.json` as they are now, and a House run
+   rewrites both before its scoring loop, so for a member it hasn't
+   rescored yet (mid-run, after a failed run, or departed) the breakdown
+   can still differ from the stored score. That drift predates the
+   per-Congress lines and is not fixed by them. So the first House run after
    that noon (with the default 03:00 UTC schedule, the Jan 4 nightly)
    switches member scoring to the new Congress's table from what is
    already on disk — no fetch, no restart — *if* the sources file has an

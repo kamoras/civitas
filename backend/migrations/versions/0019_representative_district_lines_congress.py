@@ -2,8 +2,8 @@
 
 The Congress whose district lines a representative's stored scores were
 computed on (fetch/district_pvi.lines_congress). The score breakdown
-recomputes Constituent Alignment on the same lines, so the two agree
-across a change of Congress.
+recomputes Constituent Alignment on the same district lines across a
+change of Congress.
 
 Expand only: one nullable column. An image without it never reads it.
 

@@ -424,8 +424,6 @@ export interface StateBallot {
 }
 
 
-/** Provenance block on the /pvi response. Optional end to end — older
- * backend responses (and cached ones) may omit it entirely. */
 /** Provenance of the district table /pvi serves — the lines this cycle's
  * House races are fought on (backend fetch/district_pvi.district_pvi_for_congress).
  * Any field may be null when the data file lacks it. */
@@ -450,6 +448,8 @@ export interface DistrictPviMeta {
   omittedRedrawnStates?: string[];
 }
 
+/** Provenance block on the /pvi response. Optional end to end — older
+ * backend responses (and cached ones) may omit it entirely. */
 export interface PviMeta {
   /** Null when state_pvi.json is unavailable. */
   states?: {

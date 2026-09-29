@@ -889,6 +889,54 @@ class TestAHouseRunWaitsForARefresh:
         text = skip_reason_text(result["reason"], who=result["holder"])
         assert text.startswith("District PVI refresh is already running")
 
+    async def test_a_refresh_released_mid_take_is_retried_not_skipped(self, monkeypatch, db_session):
+        """The take fails while the refresh holds the lease, which is gone
+        by the time the refusal reads its holder: REFUSED_BUSY, no holder.
+        The House run takes the now-free lease instead of skipping — which
+        would end the nightly chain."""
+        from app.pipeline import lease
+
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+        token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO)
+        assert token is not None
+        real_holder, reads = lease.holder, []
+
+        def holder_after_release(db, tier):
+            if tier == lease.DISTRICT_LINES and not reads:
+                lease.release(db_session, lease.DISTRICT_LINES, token)
+                reads.append(tier)
+            return real_holder(db, tier)
+
+        monkeypatch.setattr(lease, "holder", holder_after_release)
+
+        async def house():
+            return {"status": "completed"}
+
+        result = await dp.run_house_on_sitting_lines(house, refresh_wait_s=5, poll_s=30)
+        assert result == {"status": "completed"}
+        assert reads == [lease.DISTRICT_LINES]
+
+    async def test_a_lease_that_stays_busy_is_skipped_at_the_deadline(self, monkeypatch):
+        import contextlib
+
+        from app.pipeline import lease
+
+        takes = []
+
+        @contextlib.asynccontextmanager
+        async def busy(tier, *, who=None):
+            takes.append(tier)
+            yield lease.Granted("busy", code=lease.REFUSED_BUSY)
+
+        monkeypatch.setattr(lease, "job_async", busy)
+
+        async def house():
+            raise AssertionError("must not run")
+
+        result = await dp.run_house_on_sitting_lines(house, refresh_wait_s=0.05, poll_s=0.01)
+        assert result == {"status": "skipped", "reason": lease.REFUSED_BUSY, "holder": None}
+        assert len(takes) > 1
+
     async def test_another_house_run_is_not_waited_for(self, db_session):
         import time
 
@@ -936,9 +984,9 @@ class TestTheLeaseSaysWhoHoldsIt:
 
 class TestStoredScoresKeepTheirLines:
     """A House score records the Congress whose lines it used, and the
-    breakdown recomputes on those lines — between a switch and the House
-    run that rescores a member (or after one that failed), and for a member
-    who left when the lines changed."""
+    breakdown recomputes on the same district lines — between a switch and
+    the House run that rescores a member (or after one that failed), and
+    for a member who left when the lines changed."""
 
     def _file(self, monkeypatch, tmp_path, sitting):
         out, base, new = _two_congress_setup(monkeypatch, tmp_path, sitting=sitting)
@@ -1001,10 +1049,68 @@ class TestStoredScoresKeepTheirLines:
                            district_lines_congress=119),
         ])
         db_session.commit()
-        dp.stamp_house_lines(lambda: _Unclosable(db_session))
+        dp.stamp_house_lines(lambda: _Unclosable(db_session), 120)
         db_session.expire_all()
         assert db_session.get(Representative, "cur").district_lines_congress == 120
         assert db_session.get(Representative, "gone").district_lines_congress == 119
+
+    def test_a_reset_during_lines_of_keeps_the_override(self, monkeypatch, tmp_path):
+        """A House run starting (or a refresh writing the file) resets the
+        caches while the API's breakdown is inside lines_of: the breakdown
+        still reads the recorded lines, not the sitting ones."""
+        out, base, new = self._file(monkeypatch, tmp_path, 120)
+        with dp.lines_of(119):
+            assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+            dp._reset_caches()
+            assert isinstance(score_calculator._district_pvi_cache, dp.SeatLines)
+            assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+            dp._write(out, json.loads(out.read_text()))
+            assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+        assert score_calculator._seat_pvi("TN", 9) == new["TN-9"]
+
+    def test_a_reset_in_another_thread_keeps_the_override(self, monkeypatch, tmp_path):
+        import threading
+
+        _, base, _ = self._file(monkeypatch, tmp_path, 120)
+        entered, reset_done, seen = threading.Event(), threading.Event(), {}
+
+        def breakdown():
+            with dp.lines_of(119):
+                entered.set()
+                reset_done.wait(5)
+                seen["tn9"] = score_calculator._seat_pvi("TN", 9)
+
+        t = threading.Thread(target=breakdown)
+        t.start()
+        entered.wait(5)
+        dp._reset_caches()
+        reset_done.set()
+        t.join()
+        assert seen["tn9"] == base["TN-9"]
+
+    def test_current_lines_holds_one_read_and_names_its_congress(self, monkeypatch, tmp_path, db_session):
+        """main's startup rescore: the scores it computes and the Congress it
+        records come from one read, though another backend switches the
+        file (and this process re-reads it) mid-rescore."""
+        from app.models import Representative
+
+        out, base, new = self._file(monkeypatch, tmp_path, 119)
+        db_session.add(Representative(id="cur", name="C", state="TN", district=9, party="D", is_current=True))
+        db_session.commit()
+        seen = []
+        with dp.current_lines() as congress:
+            seen.append(score_calculator._seat_pvi("TN", 9))
+            out.write_text(json.dumps(dp._reselect(json.loads(out.read_text()), 120)))
+            dp._reset_caches()
+            seen.append(score_calculator._seat_pvi("TN", 9))
+        assert congress == 119
+        assert seen == [base["TN-9"], base["TN-9"]]
+        dp.stamp_house_lines(lambda: _Unclosable(db_session), congress)
+        db_session.expire_all()
+        assert db_session.get(Representative, "cur").district_lines_congress == 119
+        # Outside the block, scoring reads the file as it is now.
+        assert dp.lines_congress() == 120
+        assert score_calculator._seat_pvi("TN", 9) == new["TN-9"]
 
     def test_the_breakdown_uses_the_stored_scores_lines(self, monkeypatch, tmp_path):
         """Stored on the 119th's lines; the file has since switched to the

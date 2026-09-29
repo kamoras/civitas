@@ -626,10 +626,16 @@ def _write(path: pathlib.Path, payload: dict) -> None:
 
 
 def _reset_caches() -> None:
+    """Drop this module's cached file, and give member scoring a fresh read
+    of it — installed as a SeatLines in ONE assignment, never None. None
+    would let score_calculator's own loader fill the gap with a plain dict,
+    which a lines_of() block already running in another thread (the API's
+    breakdown, beside a House run's reset) would then read: its override
+    lives only in SeatLines, so it would silently get the sitting lines."""
     global _file_cache
     _file_cache = None
     from app.pipeline.analyze import score_calculator
-    score_calculator._district_pvi_cache = None
+    score_calculator._district_pvi_cache = _load_scoring_lines()
 
 
 # ── Which Congress's lines a stored House score is on ──────────────────
@@ -644,6 +650,13 @@ def _reset_caches() -> None:
 # — and, for a member who left at the change of Congress, for as long as
 # their record stays up, the breakdown's number was on lines their stored
 # score never used.
+#
+# This makes the district table agree and nothing else. The breakdown also
+# reads the Constituent Alignment reference (/data/constituent_reference.json)
+# and /data/member_ideal_points.json as they are now; a House run rewrites
+# both before its scoring loop, so for a member it hasn't rescored (mid-run,
+# after a failed run, or departed) the breakdown can still differ from the
+# stored score. That drift predates the per-Congress lines.
 
 _OTHER_LINES: ContextVar[dict[str, int] | None] = ContextVar("district_pvi_other_lines", default=None)
 
@@ -656,12 +669,18 @@ class SeatLines(dict):
     of the file. So the Congress a House run records for a score is the
     table that score was computed from.
 
-    A plain dict to every reader except inside lines_of(), which, in that
-    call's context only (a ContextVar: other threads and tasks — a House
+    A plain dict to every reader except inside lines_of() or
+    current_lines(), which, in that call's context only (a ContextVar: other threads and tasks — a House
     run scoring beside an API request — never see it), answers for another
-    Congress's table. score_calculator reads it through .get; the other
-    lookups by key ([] and `in`) are covered too; nothing that runs inside
-    lines_of() iterates the table."""
+    Congress's table (or, for current_lines, one read of this one).
+    score_calculator reads it through .get; the other lookups by key ([]
+    and `in`) are covered too; nothing that runs inside either block
+    iterates the table.
+
+    It works only while it IS score_calculator's cache — a plain dict put
+    there instead ignores the override — so nothing outside tests ever
+    sets that cache to None or a plain dict once this module has
+    installed one (see _reset_caches, _scoring_lines)."""
 
     congress: int | None = None
     tables: dict = {}
@@ -682,14 +701,10 @@ class SeatLines(dict):
         return key in other if other is not None else super().__contains__(key)
 
 
-def _scoring_lines() -> SeatLines:
-    """The district table member scoring reads, installed as a SeatLines
-    (see there) when score_calculator's cache is empty or a plain dict."""
+def _load_scoring_lines() -> SeatLines:
+    """One read of the file, as the SeatLines member scoring reads."""
     from app.pipeline.analyze import score_calculator as sc
 
-    cache = sc._district_pvi_cache
-    if isinstance(cache, SeatLines):
-        return cache
     raw = sc._read_pvi_json("district_pvi.json")
     lines = SeatLines({k: int(v) for k, v in (raw.get("districts") or {}).items()})
     if raw.get("congresses") and isinstance(raw.get("congress"), int):
@@ -697,6 +712,25 @@ def _scoring_lines() -> SeatLines:
         lines.tables = raw["congresses"]
     if not lines:
         logger.warning("district_pvi.json unavailable — falling back to state PVI")
+    return lines
+
+
+def _scoring_lines() -> SeatLines:
+    """The district table member scoring reads, installed as a SeatLines
+    (see there) when score_calculator's cache is empty or a plain dict.
+
+    Every assignment of score_calculator._district_pvi_cache outside tests
+    is this one or _reset_caches's, both SeatLines. score_calculator's own
+    loader installs a plain dict only while the cache is None — at process
+    start, before anything here has run; main's lifespan installs one
+    (current_lines) before serving a request, so a lines_of() block never
+    meets that window."""
+    from app.pipeline.analyze import score_calculator as sc
+
+    cache = sc._district_pvi_cache
+    if isinstance(cache, SeatLines):
+        return cache
+    lines = _load_scoring_lines()
     sc._district_pvi_cache = lines
     return lines
 
@@ -734,15 +768,32 @@ def lines_of(congress: int | None) -> Iterator[int | None]:
         _OTHER_LINES.reset(token)
 
 
-def stamp_house_lines(session_factory) -> None:
-    """Record the current lines on every current representative — for a
-    rescore that rewrote their stored Constituent Alignment on the lines in
-    effect (main's startup rescore; constituent_rescore.py). Never raises."""
+@contextmanager
+def current_lines() -> Iterator[int | None]:
+    """Within the block, in this context only, member scoring reads the
+    table in effect as the block opened — one read, whatever the file (or
+    this process's cache) becomes meanwhile. Yields that table's Congress:
+    what to record beside scores computed inside the block (main's startup
+    rescore, then stamp_house_lines). Reading the Congress separately
+    afterwards could name lines another process wrote in between — a Swarm
+    start-first rollout runs two backends on one volume."""
+    lines = _scoring_lines()
+    token = _OTHER_LINES.set(dict(lines))
+    try:
+        yield lines.congress
+    finally:
+        _OTHER_LINES.reset(token)
+
+
+def stamp_house_lines(session_factory, congress: int | None) -> None:
+    """Record `congress` — the lines a rescore read (current_lines) — on
+    every current representative, for a rescore that rewrote their stored
+    Constituent Alignment (main's startup rescore; constituent_rescore.py).
+    Never raises."""
     from app.models import Representative
 
     db = session_factory()
     try:
-        congress = lines_congress()
         db.query(Representative).filter(Representative.is_current.is_(True)).update(
             {Representative.district_lines_congress: congress}, synchronize_session=False,
         )
@@ -823,6 +874,10 @@ HOUSE_RUN_WHO = "House run"
 # and the House run is skipped with a message that says so.
 REFRESH_WAIT_S = 30 * 60
 REFRESH_POLL_S = 30.0
+# A refusal with nobody holding the lease (lease.REFUSED_BUSY: the holder
+# released between the take and the read) is retried this soon, within the
+# same wait.
+BUSY_RETRY_S = 1.0
 
 
 async def refresh_district_pvi() -> bool:
@@ -999,7 +1054,10 @@ async def run_house_on_sitting_lines(
     A District PVI refresh holding the lease is waited for (up to
     `refresh_wait_s`, re-trying every `poll_s`): it is minutes of work, and
     skipping would cost a night of House scores — and, in the nightly
-    chain, used to end the chain before Stock trades and Election.
+    chain, used to end the chain before Stock trades and Election. So is
+    a refusal whose holder had already gone when it was read
+    (lease.REFUSED_BUSY — a refresh releasing mid-take), retried within
+    `BUSY_RETRY_S`.
 
     Returns run_house()'s result, or a skip in the shape the nightly
     chain's skip alert reads ({"status": "skipped", "reason": code,
@@ -1019,7 +1077,16 @@ async def run_house_on_sitting_lines(
         async with lease.job_async(lease.DISTRICT_LINES, who=HOUSE_RUN_WHO) as granted:
             if granted:
                 return await _house_run_holding_the_lines(run_house)
-        if granted.holder != REFRESH_WHO or time.monotonic() >= deadline:
+        if time.monotonic() >= deadline:
+            break
+        if granted.code == lease.REFUSED_BUSY and granted.holder is None:
+            # Refused, but nobody holds it by the time the holder was read:
+            # the refresh released in between (or a writer held SQLite's
+            # lock through the take). Try again at once rather than skip
+            # the House run — and with it the rest of the nightly chain.
+            await asyncio.sleep(min(poll_s, BUSY_RETRY_S))
+            continue
+        if granted.holder != REFRESH_WHO:
             break
         logger.info("House run waiting for the %s that holds the district lines", REFRESH_WHO)
         await asyncio.sleep(poll_s)
