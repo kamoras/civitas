@@ -240,6 +240,9 @@ _INDEX_MODEL = "explore_index_model"
 # whichever finished first would record a partial index as complete.
 _rebuild_lock = threading.Lock()
 
+# Documents a rebuild reads and embeds at a time.
+_REBUILD_BATCH = 500
+
 
 def get_vec_conn() -> sqlite3.Connection:
     """Get or create the sqlite-vec connection (singleton, extension loaded)."""
@@ -365,14 +368,18 @@ def _write_model_version() -> None:
 
 
 def invalidate_on_model_change(db_session=None) -> None:
-    """Wipe model-derived stores after an embedding model change.
+    """Wipe model-derived stores after a classification embedding model
+    change.
 
-    Clears the vector index and the kNN learning store — both hold
-    vectors from the previous model that would silently mis-compare
-    against new-model queries.
+    Clears the bill vectors (the kNN reference corpus) and the kNN learning
+    store — both hold vectors from the previous model that would silently
+    mis-compare against new-model queries. Not the Explore search index:
+    that one is the similarity model's, and rebuilds itself when its own
+    identity changes (ensure_explore_index) — dropping it here threw away a
+    whole rebuild, and waited out a running one first.
     """
     logger.warning("Embedding model change detected — invalidating stored embeddings")
-    reset_vector_db()
+    clear_bills()
 
     if db_session is not None:
         try:
@@ -778,12 +785,14 @@ def collection_stats() -> dict:
         ],
         "indexModelVersion": _get_meta(conn, _INDEX_MODEL) or "",
         "chunksPerDocument": float(_get_meta(conn, "explore_chunks_per_doc") or 0.0),
-        # "running" (in this process, the pipeline's), "incomplete" (holding
-        # vectors that aren't a complete build by this model: search is off
-        # until a rebuild completes), or "" (ready).
+        # "running" (in this process, the pipeline's), "incomplete" (not a
+        # complete build by this model — a rebuild left it partway, empty
+        # or not, or another model built it: search is off until a rebuild
+        # completes), or "" (ready, or never built: nothing to search yet).
         "indexRebuild": (
             "running" if _rebuild_lock.locked()
-            else "incomplete" if explore and _get_meta(conn, _INDEX_MODEL) != index_identity()
+            else "incomplete" if _get_meta(conn, _INDEX_MODEL) == ""
+            or (explore and _get_meta(conn, _INDEX_MODEL) != index_identity())
             else ""
         ),
     }
@@ -841,14 +850,6 @@ def clear_bills() -> int:
         conn.execute("DELETE FROM vec_bills")
         conn.commit()
     return n
-
-
-def clear_explore() -> None:
-    """Delete all explore-document embeddings (pre-reembed reset)."""
-    conn = get_vec_conn()
-    with _vec_lock:
-        conn.execute("DELETE FROM vec_explore")
-        conn.commit()
 
 
 def get_embedded_explore_ids() -> set[int]:
@@ -949,18 +950,22 @@ def rebuild_explore_index(db_session_factory) -> int | None:
         db = db_session_factory()
         try:
             total = 0
-            BATCH = 500
-            offset = 0
+            after = 0
             while True:
+                # By id, not OFFSET: an Explore run may delete documents
+                # meanwhile, and an offset would then skip past ones never
+                # embedded. One deleted after its batch leaves an orphan
+                # vector, which the run's own purge removes.
                 docs = (
                     db.query(ExploreDocument)
+                    .filter(ExploreDocument.id > after)
                     .order_by(ExploreDocument.id)
-                    .offset(offset).limit(BATCH).all()
+                    .limit(_REBUILD_BATCH).all()
                 )
                 if not docs:
                     break
                 total += embed_explore_documents([explore_embed_dict(d) for d in docs])
-                offset += BATCH
+                after = docs[-1].id
         finally:
             db.close()
         _set_meta(conn, _INDEX_MODEL, index_identity())
@@ -968,6 +973,19 @@ def rebuild_explore_index(db_session_factory) -> int | None:
         return total
     finally:
         _rebuild_lock.release()
+
+
+def recalibrate_ranking(db_session_factory) -> None:
+    """Fit Explore's ranking to the index just rebuilt: runs skip it while
+    the index isn't whole (explore_ranking.calibrate_and_store), so the one
+    in force was fitted to the index this rebuild replaced."""
+    from app.pipeline.explore_ranking import calibrate_and_store
+
+    db = db_session_factory()
+    try:
+        calibrate_and_store(db)
+    finally:
+        db.close()
 
 
 def is_rebuilding() -> bool:
@@ -990,31 +1008,27 @@ def ensure_explore_index(db_session_factory) -> None:
 
     Called from app startup (main.py lifespan). Runs in a daemon thread
     because re-embedding thousands of documents takes minutes on the Pi;
-    search correctly reports "not ready" (None) until it finishes. Under the
-    Explore lease, like the Explore run (which rebuilds an incomplete index
-    itself, so a start that finds one running leaves the index to it) and
-    the admin re-embed: a rebuild pages through the documents, which a run
-    deletes from.
+    search correctly reports "not ready" (None) until it finishes. Takes no
+    Explore lease — holding it for twenty minutes would skip an Explore run
+    that starts meanwhile — since the rebuild reads documents by id
+    (rebuild_explore_index) and one rebuild at a time is the lock's job.
     """
     if index_is_whole() or is_rebuilding():
         return
 
     def _reindex() -> None:
         from app.models import ExploreDocument
-        from app.pipeline import lease
 
         try:
-            with lease.job(lease.EXPLORE, who="Explore index rebuild") as held:
-                if not held:
-                    return  # logged by lease.job; the run holding it rebuilds
-                db = db_session_factory()
-                try:
-                    if db.query(ExploreDocument.id).first() is None:
-                        return  # nothing to build yet: the first Explore run builds it
-                finally:
-                    db.close()
-                logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
-                rebuild_explore_index(db_session_factory)
+            db = db_session_factory()
+            try:
+                if db.query(ExploreDocument.id).first() is None:
+                    return  # nothing to build yet: the first Explore run builds it
+            finally:
+                db.close()
+            logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
+            if rebuild_explore_index(db_session_factory) is not None:
+                recalibrate_ranking(db_session_factory)
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
 

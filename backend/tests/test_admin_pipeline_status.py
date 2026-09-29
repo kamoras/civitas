@@ -153,9 +153,9 @@ async def test_check_and_deploy_waits_on_every_busy_flag_the_status_reports(db_s
     from app.api.admin import admin_pipeline_status
 
     status = await admin_pipeline_status(db=db_session)
-    flags = {k for k, v in status.items() if isinstance(v, bool) and re.search(r"Is(Running|Rebuilding)$", k)}
+    flags = {k for k, v in status.items() if isinstance(v, bool) and re.search(r"[iI]s(Running|Rebuilding)$", k)}
     script = (Path(__file__).resolve().parents[2] / "check-and-deploy.sh").read_text()
-    assert flags and all(f'"{flag}"' in script for flag in flags), flags
+    assert "isRunning" in flags and all(f'"{flag}"' in script for flag in flags), flags
 
 
 _FLAGS = [

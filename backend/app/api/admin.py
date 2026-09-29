@@ -1398,7 +1398,12 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     from app.pipeline import lease
     from app.pipeline.analyze.document_authority import update_document_authority
     from app.pipeline.lexical_index import rebuild_index
-    from app.pipeline.vector_store import _rebuild_lock, _write_model_version, rebuild_explore_index
+    from app.pipeline.vector_store import (
+        _rebuild_lock,
+        _write_model_version,
+        rebuild_explore_index,
+        recalibrate_ranking,
+    )
 
     if _rebuild_lock.locked():
         raise HTTPException(status_code=409, detail="Explore re-embed not started: the index is already being rebuilt")
@@ -1433,6 +1438,8 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
                     authority = update_document_authority(db)
                 finally:
                     db.close()
+                # Last, as in an Explore run: it measures the finished indexes.
+                recalibrate_ranking(SessionLocal)
                 logger.info("Explore re-embed complete: %d embedded, %d keyword-indexed, authority %s",
                             count, indexed, authority)
             except Exception:

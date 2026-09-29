@@ -120,14 +120,15 @@ async def lookup(doc_id: int, doc) -> tuple[dict, dict, dict | None]:
 
     prompt = prompt_for(doc)
     key = cache_key(doc_id, prompt)
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import OperationalError, TimeoutError as PoolTimeout
 
     try:
         made = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key, raise_errors=True)
-    except OperationalError:
-        # The database locked or unavailable: a moment's, so a wait. Any
-        # other error is a fault that would recur on every try, and is a
-        # failure the page shows rather than ten minutes of retries.
+    except (OperationalError, PoolTimeout):
+        # The database locked or unavailable, or no connection free: a
+        # moment's, so a wait. Any other error is a fault that would recur on
+        # every try, and is a failure the page shows rather than ten minutes
+        # of retries.
         logger.warning("Explore summary cache unreadable for doc_id=%s — answered as a wait", doc_id, exc_info=True)
         raise _busy() from None
     return prompt, key, made

@@ -628,8 +628,9 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         try:
             whole = await asyncio.to_thread(index_is_whole)
         except Exception:
-            logger.exception("Explore pipeline: could not read the vector index — topping it up as usual")
-            whole = True
+            # Unreadable is not whole: a rebuild recreates what it can't read.
+            logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
+            whole = False
         if not whole:
             logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
             try:

@@ -202,6 +202,15 @@ class _Granted:
         return False
 
 
+@pytest.fixture(autouse=True)
+def recalibrated(monkeypatch):
+    """A rebuild's recalibration, recorded rather than run: fitting the
+    ranking loads the real model and runs past these tests' thread joins."""
+    calls = []
+    monkeypatch.setattr(vector_store, "recalibrate_ranking", lambda factory: calls.append(factory))
+    return calls
+
+
 @pytest.fixture
 def explore_lease(monkeypatch):
     from app.pipeline import lease
@@ -212,14 +221,14 @@ def explore_lease(monkeypatch):
 class TestEnsureExploreIndex:
     def test_noop_when_index_current(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "Anything")])
-        with patch.object(vector_store.threading, "Thread") as thread:
+        with patch.object(vector_store, "start_writer") as thread:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_not_called()
 
     def test_a_rebuild_that_died_partway_is_restarted(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "Anything")])
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
-        with patch.object(vector_store.threading, "Thread") as thread:
+        with patch.object(vector_store, "start_writer") as thread:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()
 
@@ -235,27 +244,40 @@ class TestEnsureExploreIndex:
                 t.join(timeout=10)
         assert started == []
 
-    def test_a_start_leaves_the_rebuild_to_a_run_holding_the_explore_lease(self, vec_env, db_session, monkeypatch):
-        # A rebuild pages through the documents a run deletes from; the run
-        # rebuilds an incomplete index itself.
-        from app.pipeline import lease
-
-        class _Refused(_Granted):
-            def __enter__(self):
-                return False
-
-        monkeypatch.setattr(lease, "job", _Refused)
-        db_session.add(ExploreDocument(doc_type="House Floor Speech", source="congress.gov",
-                                       title="A real doc", summary="s", body="b", date="2026-07-01"))
+    def test_a_rebuild_reads_documents_by_id_so_deletions_skip_none(self, vec_env, db_session, monkeypatch):
+        # An Explore run may delete documents while a start's rebuild pages
+        # through them: paged by OFFSET, the ones after a deletion shifted
+        # back past the next page's start and were never embedded.
+        monkeypatch.setattr(vector_store, "_REBUILD_BATCH", 2)
+        for i in range(5):
+            db_session.add(ExploreDocument(doc_type="House Floor Speech", source="congress.gov",
+                                           title=f"Doc {i}", summary="s", body="b", date="2026-07-01"))
         db_session.commit()
-        started = []
-        monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda f: started.append(1))
-        vector_store.ensure_explore_index(lambda: db_session)
-        import threading as _t
-        for t in _t.enumerate():
-            if t.name == "explore-reindex":
-                t.join(timeout=10)
-        assert started == []
+        ids = [d.id for d in db_session.query(ExploreDocument).order_by(ExploreDocument.id)]
+        real_embed = vector_store.embed_explore_documents
+        seen = []
+
+        def embed_then_delete_the_first(docs):
+            seen.extend(d["id"] for d in docs)
+            if len(seen) == len(docs):  # after the first batch
+                db_session.query(ExploreDocument).filter(ExploreDocument.id == ids[0]).delete()
+                db_session.commit()
+            return real_embed(docs)
+
+        monkeypatch.setattr(vector_store, "embed_explore_documents", embed_then_delete_the_first)
+        vector_store.rebuild_explore_index(lambda: db_session)
+        assert set(ids) <= set(seen)
+
+    def test_a_classification_model_change_leaves_the_search_index(self, vec_env):
+        # The search index is the similarity model's, with its own identity:
+        # dropping it threw away a whole rebuild (and waited one out first).
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        vector_store.invalidate_on_model_change()
+        assert vector_store.index_is_whole()
+
+    def test_an_index_a_rebuild_left_empty_reads_incomplete(self, vec_env):
+        vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
+        assert vector_store.collection_stats()["indexRebuild"] == "incomplete"
 
     def test_a_reset_waits_out_a_running_rebuild(self, vec_env):
         import threading as _t
@@ -272,7 +294,7 @@ class TestEnsureExploreIndex:
         # Two overlapping would each clear what the other built.
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
         with vector_store._rebuild_lock:
-            with patch.object(vector_store.threading, "Thread") as thread:
+            with patch.object(vector_store, "start_writer") as thread:
                 vector_store.ensure_explore_index(lambda: None)
             thread.assert_not_called()
             assert vector_store.rebuild_explore_index(lambda: None) is None
@@ -315,7 +337,7 @@ class TestEnsureExploreIndex:
         assert vector_store._get_meta(conn, vector_store._INDEX_MODEL) == "old-model|v1"
         assert vector_store.search_explore_documents("New") is None
 
-    def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session, explore_lease):
+    def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session, recalibrated):
         db_session.add(ExploreDocument(
             doc_type="House Floor Speech", source="congress.gov",
             title="A real doc", summary="s", body="b", date="2026-07-01",
@@ -331,6 +353,8 @@ class TestEnsureExploreIndex:
                 t.join(timeout=10)
         results = vector_store.search_explore_documents("A real doc", n_results=1)
         assert results is not None and results[0]["title"] == "A real doc"
+        # And the ranking is fitted to it: runs skip that while it isn't whole.
+        assert len(recalibrated) == 1
 
     def test_rebuild_recreates_a_stale_pre_migration_schema(self, vec_env, db_session, explore_lease):
         """Regression for a live 2026-08-30 incident: a prior deploy's
