@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { retryKeepingFocus } from "@/lib/tabFocus";
 import { fetchTimeline } from "@/lib/api";
 import { formatUtcDate, formatWeekRange, safeHref } from "@/lib/formatting";
 import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
@@ -226,7 +227,7 @@ export default function TimelineTab(handlers: Handlers) {
         className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
       >
         <span>Could not load the archive.</span>
-        <button onClick={request.retry} className={TEXT_LINK}>
+        <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
           Try again
         </button>
       </div>

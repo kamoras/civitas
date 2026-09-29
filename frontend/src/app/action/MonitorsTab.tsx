@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchMonitors, fetchMonitorDetail } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { retryKeepingFocus } from "@/lib/tabFocus";
 import { formatUtcDate, safeHref } from "@/lib/formatting";
 import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
 import type { MonitorUpdate, NationalMonitor } from "@/lib/api";
@@ -37,7 +38,7 @@ function MonitorUpdates({ slug }: { slug: string }) {
     return (
       <p role="alert" className="py-3 font-mono text-xs text-signal-red">
         Could not load this monitor&apos;s updates.{" "}
-        <button onClick={request.retry} className={TEXT_LINK}>
+        <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
           Try again
         </button>
       </p>
@@ -194,7 +195,7 @@ function OffListMonitor({ slug }: { slug: string }) {
         ) : (
           <>
             Could not load that concern right now.{" "}
-            <button onClick={request.retry} className={TEXT_LINK}>
+            <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
               Try again
             </button>
           </>
@@ -236,7 +237,7 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
         className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
       >
         <span>Could not load the national monitors.</span>
-        <button onClick={request.retry} className={TEXT_LINK}>
+        <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
           Try again
         </button>
       </div>

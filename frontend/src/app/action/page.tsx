@@ -13,7 +13,7 @@ import { useAsyncData, type AsyncData } from "@/hooks/useAsyncData";
 import { commentPeriodToday, describeDaysLeft, formatUtcDate } from "@/lib/formatting";
 import ShareButtons from "@/components/action/ShareButtons";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
-import { focusTabWhenSelected } from "@/lib/tabFocus";
+import { focusTabWhenSelected, retryKeepingFocus } from "@/lib/tabFocus";
 import BackToTop from "@/components/BackToTop";
 import {
   Coverage,
@@ -52,7 +52,7 @@ function LoadError({ message, onRetry }: { message: string; onRetry?: () => void
     >
       <span>{message}</span>
       {onRetry && (
-        <button onClick={onRetry} className={TEXT_LINK}>
+        <button onClick={retryKeepingFocus(onRetry)} className={TEXT_LINK}>
           Try again
         </button>
       )}
@@ -531,6 +531,10 @@ function ActionPageInner() {
   // can't get out of step with what is on screen.
   const urlDate = searchParams.get("date");
   const [todayDate, setTodayDate] = useState<string | null>(urlDate);
+  // While Today is showing it follows the URL, however the URL got there
+  // (a click, Back, Forward). Adjusted during render, React's pattern for
+  // state derived from a changing input, so no render shows the two apart.
+  if (activeTab === "issues" && todayDate !== urlDate) setTodayDate(urlDate);
   const selectedDate = activeTab === "issues" ? urlDate : todayDate;
   const request = useAsyncData(`action-issues:${selectedDate ?? "latest"}`, () =>
     fetchActionIssues(selectedDate || undefined)
@@ -538,7 +542,6 @@ function ActionPageInner() {
 
   const selectDate = useCallback(
     (d: string | null) => {
-      setTodayDate(d);
       setIssueLink(null);
       replaceUrl(issuesUrl(d, null));
     },
@@ -550,7 +553,6 @@ function ActionPageInner() {
       // Re-selecting the showing tab is not a navigation: no history entry,
       // and nothing it shows is reset.
       if (tab !== activeTab) {
-        if (activeTab === "issues") setTodayDate(urlDate);
         setMonitorSlug(null);
         setIssueLink(null);
         pushUrl(tab === "issues" ? issuesUrl(todayDate, null) : `/action?tab=${tab}`);
@@ -558,7 +560,7 @@ function ActionPageInner() {
       // The panel stays tabbable (tabIndex=0), so Tab still reaches content.
       focusTabWhenSelected(`tab-${tab}`);
     },
-    [pushUrl, activeTab, urlDate, todayDate]
+    [pushUrl, activeTab, todayDate]
   );
 
   // Opening a monitor or a day from inside the page. Both are links out in the
