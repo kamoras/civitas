@@ -211,6 +211,7 @@ class TestNightlyPipelineCascadingSkip:
              patch("app.scheduler.run_election_pipeline", new_callable=AsyncMock) as mock_election, \
              patch("app.ops_alerts.send_ops_alert") as mock_alert, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
+             patch("app.pipeline.fetch.district_pvi.ensure_sitting_lines"), \
              patch("app.services.bill_service.warm_bill_collection_cache"):
             mock_senate.return_value = senate_result
             mock_supp.return_value = supplementary_result or {"status": "completed"}
@@ -221,6 +222,22 @@ class TestNightlyPipelineCascadingSkip:
             scheduler._nightly_pipeline()
 
             return mock_senate, mock_supp, mock_house, mock_stock, mock_election, mock_alert
+
+    def test_sitting_district_lines_are_checked_before_scoring(self):
+        from app import scheduler
+
+        order = []
+        with patch("app.background.threading.Thread", _SyncThread), \
+             patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("senate") or {"status": "skipped", "reason": "busy"}), \
+             patch("app.ops_alerts.send_ops_alert"), \
+             patch("app.ops_alerts.check_current_congress_staleness"), \
+             patch("app.ops_alerts.check_feedback_token_expiration"), \
+             patch("app.ops_alerts.check_state_pvi_staleness"), \
+             patch("app.pipeline.fetch.district_pvi.ensure_sitting_lines",
+                   side_effect=lambda: order.append("pvi")):
+            scheduler._nightly_pipeline()
+        assert order == ["pvi", "senate"]
 
     def test_all_five_run_when_nothing_skips(self):
         senate, supp, house, stock, election, alert = self._run_chain({"status": "completed"})
@@ -549,7 +566,8 @@ def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
          patch("app.ops_alerts.send_ops_alert") as alert, \
          patch("app.ops_alerts.check_current_congress_staleness"), \
          patch("app.ops_alerts.check_feedback_token_expiration"), \
-         patch("app.ops_alerts.check_state_pvi_staleness"):
+         patch("app.ops_alerts.check_state_pvi_staleness"), \
+         patch("app.pipeline.fetch.district_pvi.ensure_sitting_lines"):
         scheduler._nightly_pipeline()
     assert cause in alert.call_args.args[1]
 

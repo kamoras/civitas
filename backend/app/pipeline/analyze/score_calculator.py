@@ -479,12 +479,14 @@ _district_pvi_cache: dict[str, int] | None = None
 def _district_pvi() -> dict[str, int]:
     """Per-district Cook PVI ("ST-N" -> signed int, positive = R lean).
 
-    Ingested from each district's Wikipedia infobox — refreshed
-    automatically (weekly, or immediately if missing) by
-    app/pipeline/fetch/district_pvi.py to /data/district_pvi.json; the
-    bundled app/data/district_pvi.json is only the pre-first-ingest
-    fallback (all 435 seats incl. vacancies; ingestion gates documented in
-    the fetch module). State PVI is the wrong seat expectation for House
+    The SITTING Congress's lines — the districts members were elected on,
+    not whatever map the next election uses. Ingested from a pinned
+    per-Congress source (app/data/district_pvi_sources.json) by
+    app/pipeline/fetch/district_pvi.py to /data/district_pvi.json, which
+    puts the settings.CURRENT_CONGRESS table in "districts"; the bundled
+    app/data/district_pvi.json is only the pre-first-ingest fallback (all
+    435 seats incl. vacancies; ingestion gates documented in the fetch
+    module). State PVI is the wrong seat expectation for House
     members in split states — a D+19 urban district in a red state was
     scored as an "opposed seat" whose member should cross party lines
     ~20% of the time, when the seat actually elected exactly that

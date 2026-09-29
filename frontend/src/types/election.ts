@@ -55,7 +55,8 @@ export interface RaceSummary {
   isSpecial: boolean;
   /** Cook-PVI-equivalent, positive = R lean, negative = D lean. Null only
    * if the underlying PVI data file is unavailable (see backend's
-   * score_calculator.get_state_pvi_map/get_district_pvi_map) — never a
+   * score_calculator.get_state_pvi_map / fetch/district_pvi.district_pvi_for_congress,
+   * the lines this race is fought on) — never a
    * fabricated 0 standing in for "no lean". */
   pvi: number | null;
   /** Which map `pvi` came from: "district" (House with district data),
@@ -376,7 +377,9 @@ export interface StateBallot {
  * backend responses (and cached ones) may omit it entirely. */
 export interface PviMeta {
   states?: { source: string; method: string; window: string; asOf: string };
-  districts?: { source: string; window: string; asOf: string };
+  /** `lines` names the district map the table describes — for /pvi, the
+   * map the current cycle's House races are on. */
+  districts?: { source: string; window: string; asOf: string; lines?: string };
   /** e.g. "Cook-PVI-style partisan lean relative to the national
    * presidential vote. Measures lean, not a race forecast." */
   note?: string;

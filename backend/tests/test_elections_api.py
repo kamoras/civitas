@@ -68,10 +68,27 @@ class TestListRaces:
         db_session.commit()
 
         data = _body(elections.list_races(db_session))
-        assert data[0]["pvi"] == elections.get_district_pvi_map()["CA-12"]
+        assert data[0]["pvi"] == elections._election_district_pvi(2026)[0]["CA-12"]
         # The provenance flag tells the frontend which map the number came
         # from — a district figure, not the statewide fallback.
         assert data[0]["pviLevel"] == "district"
+
+    def test_2026_house_race_uses_the_lines_on_the_ballot(self, db_session):
+        """TN redrew for 2026: the race is on the new TN-9 (R+9), while the
+        sitting member — scored separately — was elected in a D+23 seat."""
+        from app.pipeline.analyze import score_calculator
+
+        _race(db_session, "2026-HOUSE-TN-9", "TN", office="H", district=9)
+        db_session.commit()
+        data = _body(elections.list_races(db_session))
+        assert data[0]["pvi"] == 9
+        assert score_calculator.get_district_pvi_map()["TN-9"] == -23
+
+    def test_pvi_map_serves_and_labels_the_election_lines(self):
+        body = _body(elections.pvi_map())
+        assert body["districts"]["TX-35"] == 4
+        assert "2026" in body["meta"]["districts"]["lines"]
+        assert "revision 1374239063" in body["meta"]["districts"]["source"]
 
     def test_senate_race_pvi_is_flagged_as_state_level(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA")

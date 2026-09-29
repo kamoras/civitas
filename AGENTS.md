@@ -320,15 +320,31 @@ The correct pattern, established by `_district_pvi()` /
    drift) — this is normal, expected maintenance, not a one-time setup
    step to forget about.
 
-   Exception (2026-07): `_district_pvi()` / `district_pvi.json` no longer
-   needs this step — `app/pipeline/fetch/district_pvi.py` refreshes it
-   automatically inside the Supplementary pipeline, since it just scrapes
-   whatever Cook PVI value Wikipedia's infoboxes currently show (no
-   election-year window is hardcoded in the fetch itself, unlike
-   state_pvi.json — see `ops_alerts.check_state_pvi_staleness` for why
-   that one's sources are deliberately pinned and can't self-advance the
-   same way). `scripts/fetch_district_pvi.py` still exists only to
-   regenerate the bundled pre-first-ingest fallback.
+   `district_pvi.json` is fetched by the pipeline, not only by the
+   script, but from **pinned** sources (2026-09):
+   `app/data/district_pvi_sources.json` names, per Congress, one
+   immutable revision of Wikipedia's "Cook Partisan Voting Index"
+   article whose citation states the Cook release and the map it
+   describes. `app/pipeline/fetch/district_pvi.py` fetches exactly those
+   revisions (Supplementary, weekly; `scheduler.py`'s pre-checks when the
+   file lacks the sitting Congress's table), gates them — the revision's
+   own prose counts must match its table, and a redrawn Congress must
+   differ from its base in exactly the redrawn states — and writes every
+   Congress's table under `congresses`, with the sitting Congress's
+   (`settings.CURRENT_CONGRESS`) as the top-level `districts` member
+   scoring reads. Member scoring must use the lines the member was
+   *elected on*; the elections pages use the lines of the Congress the
+   election seats (`district_pvi_for_congress`). Do not go back to
+   scraping each district's live infobox: it did that until 2026-09, and
+   when nine states redrew for 2026 editors swapped in new-map values
+   district by district, leaving member scoring on a silent mix of two
+   maps (TN-9 read R+9 for a member elected in a D+23 seat). The
+   Supplementary run compares the live article with the newest pin and
+   raises an ops alert on a difference; it never ingests it. Adding the
+   next Congress, or advancing a pin after a correction or a court
+   ruling, is an edit to the sources file — the switch on Jan 3 then
+   happens by itself. `scripts/fetch_district_pvi.py` regenerates the
+   bundled pre-first-ingest fallback through the same code.
 
    Better still, when the population a value describes is the one the
    pipeline is scoring, measure it in the run itself. Legislative

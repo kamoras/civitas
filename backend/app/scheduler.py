@@ -83,6 +83,7 @@ def _nightly_pipeline() -> None:
         check_state_pvi_staleness,
         send_ops_alert,
     )
+    from app.pipeline.fetch.district_pvi import ensure_sitting_lines
 
     def _alert_if_skipped(label: str, result: dict) -> bool:
         """Returns True (and alerts) if `result` reports the step was
@@ -127,6 +128,11 @@ def _nightly_pipeline() -> None:
             # self-advance (see the check's own docstring for why), so the
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
+            # Member scoring's district leans must be the sitting
+            # Congress's lines. Switches the table the night a new Congress
+            # is seated (a local copy, no fetch) and replaces a missing or
+            # pre-pinning file with a fetch — see fetch/district_pvi.py.
+            ensure_sitting_lines,
         )
         for check in pre_checks:
             try:

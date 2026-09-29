@@ -221,9 +221,11 @@ def check_state_pvi_staleness() -> None:
     """Alert once a newer presidential election's data should be available
     for state_pvi.json's two-cycle window than what's currently baked in.
 
-    Unlike CURRENT_CONGRESS or the committee-leadership/district-PVI data
-    (app/pipeline/fetch/committee_leadership.py, district_pvi.py), this is
-    NOT something a scheduled refetch can advance automatically:
+    Unlike CURRENT_CONGRESS or the committee-leadership data
+    (app/pipeline/fetch/committee_leadership.py), this is NOT something a
+    scheduled refetch can advance automatically (district PVI is pinned
+    too, per Congress, in app/data/district_pvi_sources.json — see
+    fetch/district_pvi.py):
     scripts/fetch_state_pvi.py deliberately pins its data sources to
     specific immutable GitHub-mirrored commits — "so a regeneration years
     from now fetches the exact same file" — so re-running it forever
@@ -255,8 +257,8 @@ def check_state_pvi_staleness() -> None:
             f"should be available now. Update scripts/fetch_state_pvi.py's "
             f"CYCLES/source URLs to the new cycle, verify the fidelity "
             f"gates pass, and regenerate the file. (district_pvi.json "
-            f"needs no such update — it refreshes automatically from "
-            f"Wikipedia's current Cook PVI figures.)",
+            f"is separate: its sources are pinned per Congress in "
+            f"app/data/district_pvi_sources.json.)",
             dedupe_key=f"stale-state-pvi-{next_cycle}",
         )
 

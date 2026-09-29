@@ -1,0 +1,26 @@
+{
+ "_contract": "Where each Congress's per-district Cook PVI comes from. Read by app/pipeline/fetch/district_pvi.py (and scripts/fetch_district_pvi.py, which regenerates the bundled app/data/district_pvi.json through the same code). One entry per Congress, keyed by its number: the table for settings.CURRENT_CONGRESS is what member scoring reads (district_pvi.json's top-level \"districts\"); the table for the Congress an election seats is what the elections pages show for that cycle's House races. Each entry pins ONE immutable Wikipedia revision (revid) of the \"Cook Partisan Voting Index\" article's per-district table, chosen because that revision's own citation names the Cook release and the map it describes (label). A pinned revision never changes, so editors updating the live article to a later release or a redrawn map cannot leak into a table whose members were elected on the earlier lines -- the failure the infobox scrape this replaced had (2026-09). redrawn_from/redrawn_states: the Congress whose lines this one inherits and the states that drew new ones in between; the ingest refuses a table whose non-redrawn states differ from the base Congress's, or whose redrawn states don't. Adding a Congress or advancing a pin is a data change here, never a code change: pick the article revision, check the label, the stated district counts and a few districts against Cook, and set revid/revision_timestamp. The fetch validates everything else.",
+ "page": "Cook Partisan Voting Index",
+ "congresses": {
+  "119": {
+   "lines": "District lines the 119th Congress's House was elected on (November 2024; seated 2025-01-03)",
+   "cook_release": "2025 Cook PVI, Cook Political Report, April 3, 2025",
+   "window": "2020+2024",
+   "revid": 1345805653,
+   "revision_timestamp": "2026-03-28T08:49:56Z",
+   "label": "2025 Cook PVI℠: District Map and List (119th Congress)",
+   "_why_this_revision": "Last revision before editors began replacing the table with the 2026 Cook PVI on 2026-07-29. Its table is identical, district for district, to the revision of 2025-04-13 that first carried the 2025 release (revid 1285328574), and its prose counts (219 R, 207 D, 9 EVEN; median CA-22 at R+1) match its table."
+  },
+  "120": {
+   "lines": "District lines for the November 2026 election (120th Congress, seated 2027-01-03): new maps in AL, CA, FL, LA, NC, OH, TN, TX and UT; Missouri's 2025 map is stayed (U.S. Supreme Court, 2026-09-25), so Missouri votes on its 2022 map",
+   "cook_release": "2026 Cook PVI, Cook Political Report, July 29, 2026",
+   "window": "2020+2024",
+   "revid": 1374239063,
+   "revision_timestamp": "2026-09-10T19:01:33Z",
+   "label": "Introducing the 2026 Cook PVI",
+   "redrawn_from": "119",
+   "redrawn_states": ["AL", "CA", "FL", "LA", "NC", "OH", "TN", "TX", "UT"],
+   "_why_this_revision": "Carries the 2026 release for all nine redrawn states plus the 2026-09-10 edit putting Missouri back on its 2022 map; prose counts (224 R, 204 D, 7 EVEN) match its table. Its median sentence (PA-10, R+3) predates the Missouri edit and is tagged for update on the page; the table's median is R+2. If a court changes a map before the election, advance this pin."
+  }
+ }
+}

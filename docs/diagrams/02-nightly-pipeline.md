@@ -34,7 +34,7 @@ flowchart TB
         P1 --> P2 --> P2B --> P3 --> P7
     end
 
-    P7 --> SUPP["<b>Supplementary pipeline</b><br/>EXPLORE: speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking → sqlite-vec + FTS5<br/>JUSTICES (weekly, Sunday; duplicate Oyez vote rows collapsed) · committee leadership<br/>district PVI · PRESIDENTS"]
+    P7 --> SUPP["<b>Supplementary pipeline</b><br/>EXPLORE: speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking → sqlite-vec + FTS5<br/>JUSTICES (weekly, Sunday; duplicate Oyez vote rows collapsed) · committee leadership<br/>district PVI (pinned per Congress) · PRESIDENTS"]
     SUPP --> HOUSE["<b>House pipeline</b><br/>the same phases for 435 members<br/>no LLM call"]
     HOUSE --> STOCK["<b>Stock trades pipeline</b><br/>STOCK Act PTR ingestion<br/>House Clerk + Senate eFD + OGE 278-T"]
     STOCK --> ELECT["<b>Election pipeline</b><br/>roster → financials → ballots → coverage"]
