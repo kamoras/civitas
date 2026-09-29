@@ -295,3 +295,40 @@ class TestPartialAnswersAreCachedBriefly:
         outcome["semanticUnavailable"] = False
         resp = await _search(db_session)
         assert resp.headers["cache-control"] == "public, max-age=60, stale-while-revalidate=60"
+
+
+async def test_no_query_with_a_politician_lists_their_documents_newest_first(indexed_db):
+    """A profile's "view all documents" link opens /explore?politician_id=
+    with no query. That has to list the member's record; it used to show an
+    empty search page, since the endpoint required q."""
+    old = _add(indexed_db, title="Old speech", date="2025-02-01", politician_id="S000001",
+               doc_type="Senate Floor Speech", chamber="Senate", summary="first")
+    new = _add(indexed_db, title="New speech", date="2026-03-01", politician_id="S000001",
+               doc_type="Senate Floor Speech", chamber="Senate", summary="second")
+    _add(indexed_db, title="Someone else", date="2026-04-01", politician_id="S000002",
+         doc_type="Senate Floor Speech", chamber="Senate")
+
+    body = json.loads((await _search(indexed_db, q=None, politician_id="S000001")).body)
+
+    assert [r["id"] for r in body["results"]] == [new.id, old.id]
+    assert body["query"] == ""
+    assert body["results"][0]["snippet"] == "second"
+    assert body["results"][0]["matchedBy"] == []
+    assert body["results"][0]["distance"] is None
+    assert not {"_authority", "_bodyHead", "_score"} & set(body["results"][0])
+
+
+async def test_no_query_and_no_politician_is_rejected(indexed_db):
+    with pytest.raises(HTTPException) as exc:
+        await _search(indexed_db, q=None)
+    assert exc.value.status_code == 422
+
+
+async def test_browse_applies_the_chamber_filter(indexed_db):
+    _add(indexed_db, title="Speech", date="2026-01-01", politician_id="P1",
+         doc_type="Senate Floor Speech", chamber="Senate")
+    rule = _add(indexed_db, title="Rule", date="2025-01-01", politician_id="P1")
+
+    body = json.loads((await _search(indexed_db, q=None, politician_id="P1", chamber="regulatory")).body)
+
+    assert [r["id"] for r in body["results"]] == [rule.id]

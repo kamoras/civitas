@@ -811,7 +811,9 @@ export async function searchExplore(
     politicianId?: string;
   }
 ): Promise<ExploreResponse> {
-  const params = new URLSearchParams({ q: query });
+  // No query with a politician lists that member's documents, newest first
+  // (a profile's "view all documents" link).
+  const params = new URLSearchParams(query ? { q: query } : {});
   if (options?.docType) params.set("doc_type", options.docType);
   if (options?.chamber) params.set("chamber", options.chamber);
   if (options?.limit) params.set("limit", String(options.limit));

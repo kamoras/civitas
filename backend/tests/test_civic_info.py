@@ -165,14 +165,14 @@ def test_state_towns_lists_curated_entries_when_configured(monkeypatch):
 @pytest.mark.asyncio
 async def test_town_ballot_404s_on_unknown_state(db_session):
     with pytest.raises(HTTPException) as exc:
-        await elections.town_ballot("ZZ", "Anytown", db=db_session)
+        await elections.town_ballot(None, "ZZ", "Anytown", db=db_session)
     assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_town_ballot_not_yet_covered_without_key(monkeypatch, db_session):
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "")
-    data = _body(await elections.town_ballot("MA", "Cambridge", db=db_session))
+    data = _body(await elections.town_ballot(None, "MA", "Cambridge", db=db_session))
     assert data["status"] == "not_yet_covered"
     assert data["contests"] == []
 
@@ -180,5 +180,51 @@ async def test_town_ballot_not_yet_covered_without_key(monkeypatch, db_session):
 @pytest.mark.asyncio
 async def test_town_ballot_not_yet_covered_for_uncurated_town(monkeypatch, db_session):
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
-    data = _body(await elections.town_ballot("MA", "Nowhereville", db=db_session))
+    data = _body(await elections.town_ballot(None, "MA", "Nowhereville", db=db_session))
     assert data["status"] == "not_yet_covered"
+
+
+# ── upstream budget ──────────────────────────────────────────────────
+
+
+class _OneShotClient:
+    """Answers one voterinfo request; counts how many were made."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def get(self, url, params=None, timeout=None):
+        import httpx
+
+        self.calls += 1
+        return httpx.Response(200, json={"contests": []}, request=httpx.Request("GET", url))
+
+
+@pytest.mark.asyncio
+async def test_a_lookup_the_cache_cant_answer_is_charged_to_the_public_budget(monkeypatch, db_session):
+    """The town ballot is a public GET: a lookup that reaches Google Civic
+    spends the hour's upstream budget (api/rate_limit.py), a cached one
+    doesn't. Without it a failure — never cached — was a fresh request on
+    our API key every time the route was hit."""
+    monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
+    charged: list[int] = []
+    client = _OneShotClient()
+
+    await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=charged.append)
+    await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=charged.append)
+
+    assert client.calls == 1
+    assert charged == [1]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_charge_makes_no_request(monkeypatch, db_session):
+    monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
+    client = _OneShotClient()
+
+    def refuse(_calls):
+        raise HTTPException(status_code=503, detail="budget spent")
+
+    with pytest.raises(HTTPException):
+        await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=refuse)
+    assert client.calls == 0

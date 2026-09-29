@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import BranchSelector, { type Branch } from "@/components/BranchSelector";
+import BranchSelector, { BRANCHES, type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
@@ -329,6 +329,7 @@ function PresidentLeaderboard({
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm font-mono">
+            <caption className="sr-only">Presidents ranked by overall score</caption>
             <thead>
               <tr className="border-b border-white/[0.07] text-ink-lo text-xs uppercase tracking-widest">
                 <th scope="col" className="px-4 py-3 text-left w-14">
@@ -515,6 +516,7 @@ function JusticeLeaderboard({
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm font-mono">
+            <caption className="sr-only">Supreme Court justices ranked by score</caption>
             <thead>
               <tr className="border-b border-white/[0.07] text-ink-lo text-xs uppercase tracking-widest">
                 <th scope="col" className="px-4 py-3 text-left w-14">
@@ -656,7 +658,9 @@ function JusticeLeaderboard({
 function LeaderboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialBranch = (searchParams.get("branch") as Branch) || "senate";
+  // An unknown ?branch= used to select no tab and render an empty page.
+  const requested = searchParams.get("branch");
+  const initialBranch: Branch = BRANCHES.find((b) => b.key === requested)?.key ?? "senate";
   const [branch, setBranchState] = useState<Branch>(initialBranch);
 
   const setBranch = useCallback((b: Branch) => {
@@ -862,7 +866,7 @@ function LeaderboardContent() {
           id={`branch-panel-${branch}`}
           role="tabpanel"
           aria-labelledby={`branch-tab-${branch}`}
-          tabIndex={-1}
+          tabIndex={0}
         >
           {branch === "president" && (
             <>
@@ -975,6 +979,10 @@ function LeaderboardContent() {
                   {/* Desktop table */}
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm font-mono">
+                      <caption className="sr-only">
+                        {branch === "house" ? "Representatives" : "Senators"} ranked by
+                        Representation Score
+                      </caption>
                       <thead>
                         <tr className="border-b border-white/[0.07] text-ink-lo text-xs uppercase tracking-widest">
                           <th scope="col" className="px-4 py-3 text-left w-14">

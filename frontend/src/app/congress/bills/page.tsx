@@ -105,6 +105,7 @@ function BillsPageContent() {
           <div className="flex justify-center gap-2 mb-4">
             <button
               onClick={() => setMode("hot")}
+              aria-pressed={mode === "hot"}
               className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
                 mode === "hot" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
@@ -113,6 +114,7 @@ function BillsPageContent() {
             </button>
             <button
               onClick={() => setMode("all")}
+              aria-pressed={mode === "all"}
               className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
                 mode === "all" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
@@ -129,9 +131,10 @@ function BillsPageContent() {
               <input
                 type="text"
                 placeholder="SEARCH TITLE..."
+                aria-label="Search bill titles"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder-white/15 px-3 py-1.5 outline-none w-48"
+                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-48"
               />
 
               <div className="flex gap-1">
@@ -139,6 +142,7 @@ function BillsPageContent() {
                   <button
                     key={c}
                     onClick={() => setChamber(c)}
+                    aria-pressed={chamber === c}
                     className={`font-mono text-xs px-2 py-1 border transition-colors uppercase ${
                       chamber === c ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}

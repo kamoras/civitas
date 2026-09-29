@@ -229,6 +229,9 @@ export function TrafficDashboard({ token }: { token: string }) {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono">
+                <caption className="sr-only">
+                  Slowest routes by page load, last {range} days
+                </caption>
                 <thead>
                   <tr className="text-ink-lo border-b border-white/[0.07]">
                     <th scope="col" className="text-left py-1 pr-3 font-normal">

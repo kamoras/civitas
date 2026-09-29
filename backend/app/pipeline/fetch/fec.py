@@ -821,12 +821,6 @@ def resolve_connected_orgs(
     }
 
 
-def parse_committee_master(text: str) -> dict[str, dict]:
-    """One cycle's cm.txt -> {committee_id: {"type", "designation",
-    "connectedOrg"}}, resolved within that file (resolve_connected_orgs)."""
-    return resolve_connected_orgs(parse_committee_rows(text))
-
-
 async def fetch_committee_master(
     client: httpx.AsyncClient, db: Session, cycles: list[int],
 ) -> dict[str, dict]:

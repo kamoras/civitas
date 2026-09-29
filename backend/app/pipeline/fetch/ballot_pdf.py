@@ -59,6 +59,7 @@ guess the format" rule this whole module follows — not implemented yet.
 import asyncio
 import logging
 import re
+from collections.abc import Callable
 
 import httpx
 import pdfplumber
@@ -235,6 +236,7 @@ def _parse_column(text: str) -> list[dict]:
 
 async def fetch_town_ballot_pdf(
     client: httpx.AsyncClient, db, town: str,
+    spend: Callable[[int], None] | None = None,
 ) -> dict | None:
     """Contests parsed from `town`'s real official ballot PDF, or None on
     missing config or a fetch/parse failure. Same None-vs-empty-list
@@ -269,6 +271,10 @@ async def fetch_town_ballot_pdf(
             db, "ballot_pdf", failed_key, {"failed": reason}, normal_ttl_hours=_FAILED_TTL_HOURS,
         )
 
+    # A public route's upstream budget (api/rate_limit.py), charged only
+    # for a fetch the cache can't answer; it raises to refuse one.
+    if spend is not None:
+        spend(1)
     try:
         response = await client.get(source["url"], timeout=30.0)
         response.raise_for_status()

@@ -1073,6 +1073,9 @@ the pending list).
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving
   focus into the panel strands the keyboard user and kills every arrow press
   after the first. The panel keeps `tabIndex=0` so Tab still reaches content.
+  Focus through `focusTabWhenSelected` (`src/lib/tabFocus.ts`): it waits for
+  the incoming tab to render as selected (a URL-derived selection can land a
+  frame late) and drops the focus if another tab was selected first.
 
 #### Search metadata (2026-09)
 

@@ -173,7 +173,7 @@ class TestSaveMerges:
         dates.save("GA", 2026, {"primary": "2026-05-19", "runoff": "2026-06-16"})
         dates.save("GA", 2026, {"primary": "2026-05-19"})
         assert dates.primary_date("GA", 2026) == "2026-05-19"
-        assert dates.all_dates()["2026-GA"]["runoff"] == "2026-06-16"
+        assert dates._load()["2026-GA"]["runoff"] == "2026-06-16"
 
     def test_the_states_own_primary_wins_and_neither_source_erases_the_other(self, dates_file):
         """They used to share one key, so whichever wrote last that night
@@ -182,7 +182,7 @@ class TestSaveMerges:
         dates.save_calendar(2026, {"NC": {"primary": "2026-03-10"}}, complete=True, read_on="2026-09-01")
         assert dates.primary_date("NC", 2026) == "2026-03-03"
         dates.save("NC", 2026, {"primary": "2026-03-03"})
-        assert dates.all_dates()["2026-NC"]["fec_primary"] == "2026-03-10"
+        assert dates._load()["2026-NC"]["fec_primary"] == "2026-03-10"
         dates.save_calendar(2026, {"GA": {"primary": "2026-05-19"}}, complete=False, read_on="x")
         assert dates.primary_date("GA", 2026) == "2026-05-19"  # the calendar alone still answers
 
@@ -234,7 +234,7 @@ class TestCalendarRetraction:
         dates.save_calendar(2026, {"GA": {"senate": "2026-11-03", "runoff": "2026-06-16"}},
                             complete=True, read_on="d1")
         dates.save_calendar(2026, {}, complete=True, read_on="d2")
-        assert dates.all_dates()["2026-GA"] == {
+        assert dates._load()["2026-GA"] == {
             "primary": "2026-05-19", "runoff": "2026-06-16", "state_feed": ["primary", "runoff"],
         }
 
@@ -248,7 +248,7 @@ class TestCalendarRetraction:
         assert dates.primary_date("OK", 2026) == "2026-06-16"  # a partial read changes nothing old
         dates.save_calendar(2026, {"OK": {"primary": "2026-06-23"}}, complete=True, read_on="d2")
         assert dates.primary_date("OK", 2026) == "2026-06-23"
-        assert dates.all_dates()["2026-OK"] == {"fec_primary": "2026-06-23"}
+        assert dates._load()["2026-OK"] == {"fec_primary": "2026-06-23"}
 
     def test_a_feed_that_states_only_the_runoff_does_not_vouch_for_a_legacy_primary(self, dates_file):
         import json
@@ -257,4 +257,4 @@ class TestCalendarRetraction:
         dates.save_calendar(2026, {"GA": {"primary": "2026-05-26", "senate": "2026-11-03"}},
                             complete=True, read_on="d1")
         assert dates.primary_date("GA", 2026) == "2026-05-26"
-        assert dates.all_dates()["2026-GA"]["runoff"] == "2026-06-16"  # what the feed did state stays
+        assert dates._load()["2026-GA"]["runoff"] == "2026-06-16"  # what the feed did state stays

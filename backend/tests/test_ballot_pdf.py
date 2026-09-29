@@ -232,12 +232,12 @@ async def test_town_ballot_discloses_which_election_the_pdf_is_for(monkeypatch, 
     Showing those candidates with no disclosure would be actively
     misleading, not just incomplete — election_name/election_date from
     ballot_pdf_sources.json must reach the API response."""
-    async def fake_fetch(client, db, town):
+    async def fake_fetch(client, db, town, spend=None):
         return {"contests": [{"office": "GOVERNOR", "candidates": [{"name": "TEST CANDIDATE"}]}],
                 "sourceUrl": "https://example.com/ballot.pdf"}
 
     monkeypatch.setattr(ballot_pdf, "fetch_town_ballot_pdf", fake_fetch)
-    data = _body(await elections.town_ballot("MA", "Somerville", db=db_session))
+    data = _body(await elections.town_ballot(None, "MA", "Somerville", db=db_session))
     assert data["status"] == "covered"
     assert data["electionName"] == "2026 Massachusetts State Primary (Democratic Party)"
     assert data["electionDate"] == "2026-09-01"

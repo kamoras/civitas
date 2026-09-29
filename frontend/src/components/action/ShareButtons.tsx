@@ -82,7 +82,7 @@ export default function ShareButtons({
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors bg-transparent"
-          aria-label="Share on X (Twitter)"
+          aria-label="Share on X (Twitter) (opens in new tab)"
         >
           [ X ]
         </a>
@@ -93,7 +93,7 @@ export default function ShareButtons({
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors bg-transparent"
-          aria-label="Share on Bluesky"
+          aria-label="Share on Bluesky (opens in new tab)"
         >
           [ BSKY ]
         </a>
@@ -162,7 +162,9 @@ export default function ShareButtons({
           className={`text-xs font-mono px-2 py-1 border transition-colors ${
             copied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
-          aria-label="Copy link to clipboard"
+          // The visible "COPIED!" is the only confirmation; a fixed label hid it
+          // from screen readers.
+          aria-label={copied ? "Link copied" : "Copy link to clipboard"}
         >
           {copied ? "[ COPIED! ]" : "[ COPY LINK ]"}
         </button>

@@ -17,7 +17,7 @@ from app.api.rate_limit import (
 from app.api.response_helpers import RETRY_SOON_CACHE_CONTROL, retry_soon_json
 from app.database import get_db, off_loop
 from app.models import ExploreDocument
-from app.services.explore_search import hybrid_search
+from app.services.explore_search import browse_documents, hybrid_search
 from app.time_utils import comment_period_today
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,10 @@ VALID_SORTS = {"relevance", "date"}
 @router.get("")
 async def search_explore(
     _rl: RateLimit,
-    q: str = Query(..., min_length=2, max_length=200, description="Search query"),
+    q: str | None = Query(
+        None, min_length=2, max_length=200,
+        description="Search query. Optional with politician_id: that member's documents, newest first",
+    ),
     doc_type: str | None = Query(None, description="Filter by document type"),
     chamber: str | None = Query(None, description="Filter by chamber"),
     commentable: bool = Query(False, description="Only show documents open for comment"),
@@ -83,6 +86,21 @@ async def search_explore(
     canonical_chamber = (
         _CHAMBER_CANONICAL.get(chamber.lower(), chamber) if chamber else None
     )
+
+    if q is None:
+        # A profile's "view all documents" link: the member's whole record,
+        # not a search of it.
+        if not politician_id:
+            raise HTTPException(status_code=422, detail="q is required without politician_id")
+        outcome = await off_loop(db, lambda session: browse_documents(
+            session, politician_id, limit=limit, doc_type=doc_type,
+            chamber=canonical_chamber, commentable=commentable,
+        ))
+        return JSONResponse(
+            content={"query": "", "results": outcome["results"], "count": outcome["count"],
+                     "semanticUnavailable": False, "channels": outcome["channels"]},
+            headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
+        )
 
     # Off the loop on a session of its own (database.off_loop): the request's
     # is closed under a thread still using it if the request is cancelled.

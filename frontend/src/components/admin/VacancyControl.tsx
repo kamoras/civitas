@@ -51,8 +51,14 @@ export function VacancyControl({ token }: { token: string }) {
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-ink-lo text-xs font-mono tracking-wider">POLITICIAN ID</label>
+            <label
+              className="text-ink-lo text-xs font-mono tracking-wider"
+              htmlFor="vacancy-politician"
+            >
+              POLITICIAN ID
+            </label>
             <input
+              id="vacancy-politician"
               value={politicianId}
               onChange={(e) => setPoliticianId(e.target.value)}
               placeholder="e.g. lindsey-graham"
@@ -60,8 +66,14 @@ export function VacancyControl({ token }: { token: string }) {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-ink-lo text-xs font-mono tracking-wider">ACTION</label>
+            <label
+              className="text-ink-lo text-xs font-mono tracking-wider"
+              htmlFor="vacancy-action"
+            >
+              ACTION
+            </label>
             <select
+              id="vacancy-action"
               value={action}
               onChange={(e) => setAction(e.target.value as "vacate" | "restore")}
               className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
@@ -73,8 +85,14 @@ export function VacancyControl({ token }: { token: string }) {
           {action === "vacate" && (
             <>
               <div className="flex flex-col gap-1">
-                <label className="text-ink-lo text-xs font-mono tracking-wider">REASON</label>
+                <label
+                  className="text-ink-lo text-xs font-mono tracking-wider"
+                  htmlFor="vacancy-reason"
+                >
+                  REASON
+                </label>
                 <select
+                  id="vacancy-reason"
                   value={reason}
                   onChange={(e) => setReason(e.target.value as (typeof VACANCY_REASONS)[number])}
                   className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
@@ -87,8 +105,14 @@ export function VacancyControl({ token }: { token: string }) {
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-ink-lo text-xs font-mono tracking-wider">LEFT OFFICE</label>
+                <label
+                  className="text-ink-lo text-xs font-mono tracking-wider"
+                  htmlFor="vacancy-left-office"
+                >
+                  LEFT OFFICE
+                </label>
                 <input
+                  id="vacancy-left-office"
                   type="date"
                   value={leftOfficeDate}
                   onChange={(e) => setLeftOfficeDate(e.target.value)}

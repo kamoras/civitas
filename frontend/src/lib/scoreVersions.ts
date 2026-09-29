@@ -2,15 +2,23 @@
  * Scoring algorithm version history — the public methodology changelog.
  *
  * Keep in sync with ALGORITHM_VERSION in
- * backend/app/pipeline/analyze/score_calculator.py. Dates are the first
- * pipeline run that produced scores under each version; trend charts use
- * them to mark methodology changes so a score shift from an algorithm
- * update isn't read as a behavior change.
+ * backend/app/pipeline/analyze/score_calculator.py (and the president and
+ * justice scorers' own versions).
+ *
+ * `date` is the RELEASE date: the UTC day the change reached main, read from
+ * git (`git log -S'ALGORITHM_VERSION = "v6.23"'`). Scores move on the first
+ * nightly run after it. It used to be described as that first run's date, but
+ * entries were written before the run happened, and several ended up dated
+ * before the code existed or in the future; the release date is the one
+ * that can be checked. The trend charts don't read these dates: they mark
+ * version changes from each snapshot's own `algorithm_version`. Versions up
+ * to v5.8 predate the public repository (its first commit, 2026-07-12), so
+ * their dates can't be checked this way.
  */
 
 export interface ScoreVersion {
   version: string;
-  date: string; // YYYY-MM-DD of first pipeline run under this version
+  date: string; // YYYY-MM-DD, UTC, the day this version reached main
   title: string;
   // One or two plain-language, jargon-free sentences stating what changed
   // and why it matters for a score you might be looking at — the bullet
@@ -25,12 +33,12 @@ export interface ScoreVersion {
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "v6.23",
-    date: "2026-10-01",
+    date: "2026-09-29",
     title:
       "Legislative Effectiveness: members who won a special election are compared with the time they have served",
     tldr: "A member sworn in partway through the Congress is now compared with what the typical member achieves in the same share of it, not in the whole Congress so far. It matters only for the 11 House members who arrived late this Congress; everyone else keeps their score.",
     changes: [
-      "Why: bill credit builds up over the time a member has had to sponsor and advance bills, but late arrivals were held to the bar of colleagues with up to 20 more months. One member sworn in on September 1, 2026, dropped from a neutral 50 to 38 on the bill measure by introducing his first bill.",
+      "Why: bill credit builds up over the time a member has had to sponsor and advance bills, but late arrivals were held to the bar of colleagues with up to 20 more months. One member sworn in on September 1, 2026, dropped from a neutral 50 to 38 on the bill measure by introducing a first bill.",
       "Now: each member's sworn-in date comes from the House Clerk's member list, and the bar is scaled by the share of the Congress so far that they have served. The breakdown states the date and the share. Senators are not affected: no source the pipeline reads gives a senator's sworn-in date, and no senator in this Congress was seated late.",
       "Effect on September 2026 data: the 11 late arrivals rise by 0 to 18 points on Legislative Effectiveness (for example, from 23 to 39 for a member seated in April 2026).",
       "Also: a bill whose last recorded action was the chamber rejecting it is no longer counted as having passed, in the rare case its full action history can't be fetched.",
@@ -38,7 +46,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "v6.22",
-    date: "2026-09-30",
+    date: "2026-09-29",
     title: "Funding Independence compares PAC money with campaigns of the same size",
     tldr: "A member's PAC share is now judged against the share campaigns of the same size typically take in their chamber, not against one chamber-wide typical share. A bigger campaign no longer looks independent just for being bigger. Most members move a few points up; senators with large campaigns and above-typical PAC money move down.",
     changes: [
@@ -62,18 +70,6 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     ],
   },
   {
-    version: "v6.20",
-    date: "2026-09-29",
-    title: "Breaks with the party: the whole Congress, toward the other party, each measure once",
-    tldr: "How often a member breaks with their party is now counted over every roll call of the current Congress, not the latest 120. A vote against the party counts only when it goes toward the other party; a vote from the party's own flank is listed but not counted, because how far toward the flank a member sits is already scored. A nomination or bill voted on several times, such as cloture and then confirmation, counts once.",
-    changes: [
-      "A break counts when, on that roll call, the party's members who broke sit on average nearer the other party (DW-NOMINATE) than the party does.",
-      "Tim Burchett (R-TN-2) had 6 breaks in 76 sampled votes (7.9%). Over the whole Congress, counting only breaks toward Democrats and each measure once, it is 2 of 298 (0.7%), the House Republican median; 14 more votes came from the party's right flank.",
-      "Tested against Senate general elections and House primaries (research note, sections 11 and 12): at least as predictive as counting every break, and counting each measure once changes nothing measurable.",
-      "In the 119th Senate 37% of roll calls repeat a measure already voted on, nearly all of them cloture on nominations.",
-    ],
-  },
-  {
     version: "Justice v2",
     date: "2026-09-29",
     title: "Justices scored on independence from the president who appointed them",
@@ -83,6 +79,18 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "Each justice's estimate is pulled toward the average of all 42 justices measured by how uncertain it is, and shown with its standard error. The score is 100 at no favoritism either way and 0 at twice the spread between justices.",
       "Consistency and Independence were removed. On today's Court every Republican appointee sits right of every Democratic appointee, so both ranked justices by distance from the Court's median (Spearman -0.82 and -0.75 against 2024 Martin-Quinn positions). The new measure's correlation with that distance is 0.28.",
       "Martin-Quinn positions and the Oyez voting record are shown, not scored. The short profile written by the site's language model was removed. The study is in docs/research/justice-scores.md.",
+    ],
+  },
+  {
+    version: "v6.20",
+    date: "2026-09-28",
+    title: "Breaks with the party: the whole Congress, toward the other party, each measure once",
+    tldr: "How often a member breaks with their party is now counted over every roll call of the current Congress, not the latest 120. A vote against the party counts only when it goes toward the other party; a vote from the party's own flank is listed but not counted, because how far toward the flank a member sits is already scored. A nomination or bill voted on several times, such as cloture and then confirmation, counts once.",
+    changes: [
+      "A break counts when, on that roll call, the party's members who broke sit on average nearer the other party (DW-NOMINATE) than the party does.",
+      "Tim Burchett (R-TN-2) had 6 breaks in 76 sampled votes (7.9%). Over the whole Congress, counting only breaks toward Democrats and each measure once, it is 2 of 298 (0.7%), the House Republican median; 14 more votes came from the party's right flank.",
+      "Tested against Senate general elections and House primaries (research note, sections 11 and 12): at least as predictive as counting every break, and counting each measure once changes nothing measurable.",
+      "In the 119th Senate 37% of roll calls repeat a measure already voted on, nearly all of them cloture on nominations.",
     ],
   },
   {
@@ -169,7 +177,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "v6.13",
-    date: "2026-09-24",
+    date: "2026-09-25",
     title:
       "Each vote counts once; alignment rebuilt on election evidence; references measured from the current population",
     tldr: "Some senators' votes were being counted twice, and the ones most often doubled were votes against their own party, which made those senators look more independent than they are. Each roll call now counts exactly once, in both chambers. Separately, Legislative Effectiveness used to compare everyone against a typical-member figure measured once in July. Bills pile up over a two-year Congress, so that fixed figure let scores creep up over time and would have dropped them all when the next Congress began. It is now re-measured from the chamber's current members on every update.",
@@ -197,7 +205,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "President v5",
-    date: "2026-09-24",
+    date: "2026-09-25",
     title:
       "Presidents measured against each other, not fixed cut-offs; rule volume no longer scored",
     tldr: "The numbers used to put approval, election margins, historians' rankings, economic growth, jobs and rulemaking on a common scale were typed into the code. They are now measured from the presidents on record on every update. Growth is compared within its era, and the count of rules an administration issued is no longer scored, because it tracks how much an administration wants to regulate, not how well it governs.",
@@ -212,7 +220,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "v6.12",
-    date: "2026-07-23",
+    date: "2026-07-24",
     title: "Funding Independence recalibration — two constants had drifted from live reality",
     tldr: "Two Funding Independence calibration numbers had quietly gone stale. When PAC donations can't be matched to a specific committee, we fall back to scoring the raw dollar total against what a typical member raises — that typical amount used to be $2.0M, but a fresh check found it's actually $662,750 now. And the top-donor-concentration check assumed a typical member's top 10 donors make up 60% of their donor pool — the real number is 28%. Both are refit to match what members actually look like today; nobody's underlying fundraising changed, the yardstick was just outdated.",
     changes: [
@@ -310,7 +318,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "v6.7",
-    date: "2026-07-20",
+    date: "2026-07-21",
     title: "Constituent Alignment: a legible discount for out-of-step loyalists",
     tldr: "v6.6 stopped penalizing party loyalty, but left a gap: a senator who never crosses party lines yet holds a position way more extreme than their state elected couldn't be told apart from a genuinely representative loyalist. This adds that check, using each senator's actual ideological position rather than just how often they vote with their party.",
     changes: [
@@ -321,7 +329,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "v6.6",
-    date: "2026-07-20",
+    date: "2026-07-21",
     title: "Constituent Alignment stops penalizing party loyalty",
     tldr: "Senators used to lose points for voting with their party more than expected for their state — even though that's often exactly what their voters wanted. This stops treating high party loyalty as a strike against a senator by itself.",
     changes: [
@@ -356,7 +364,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "v6.3",
-    date: "2026-07-18",
+    date: "2026-07-19",
     title: "Funding Independence's small-donor share is now state-population-relative",
     changes: [
       "A population audit (prompted by a look at North Dakota's senators) found the small-donor share component — previously a flat 40%-of-receipts cap for every senator regardless of state — systematically scored small-population states lower: senators from the smallest third of states by population averaged 40 on Funding Independence overall vs. 59.5 for the largest third, a ~19-point gap.",
@@ -367,7 +375,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "v6.2",
-    date: "2026-07-16",
+    date: "2026-07-17",
     title: "Legislative Leadership no longer treats every cosponsorship equally",
     changes: [
       "External review, 2026-07: cosponsorship-network centrality alone can't distinguish a substantive bill from a message bill introduced purely for the cosponsor list — a senator who signs onto ten resolutions with zero chance of passing accrued the same PageRank weight as one who cosponsors ten bills that actually became law.",
@@ -388,7 +396,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   },
   {
     version: "v6.0",
-    date: "2026-07-15",
+    date: "2026-07-16",
     title: "Promise Persistence removed as a scored dimension",
     changes: [
       'This is the fourth attempt at fixing Promise Persistence (v5, v5.1/v5.3, v5.4, v5.10) without resolving the underlying gap. A live measurement across all 100 senators found 0 reached even "medium" confidence per the platform\'s own thresholds (3+ evaluable promises) — mean 0.3 evaluable promises per senator, 76% with zero. Real campaign promises are generic platform language ("Expand Medicare coverage"), and semantic matching against specific vote/bill text structurally can\'t bridge that gap: genuinely-related votes for real promises typically score below the match threshold, not above it.',
@@ -562,7 +570,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "PAC dependency now also weighs absolute PAC dollars, so very large campaigns can't dilute millions in PAC money to a near-zero share.",
       "Donor-vote overlap descriptions were reworded: totals are employer-aggregated contributions, not single org-level donations, and overlap does not imply influence. Real registered lobbying totals (Senate LDA filings) now accompany matches where they exist.",
       "Promise evaluations are cleaned before scoring, so the Promise Persistence score is computed from exactly the promises shown.",
-      "A funding-window ordering bug was fixed that gave one senator his 1984 and 2014 campaign totals instead of his most recent race.",
+      "A funding-window ordering bug was fixed that gave one senator the 1984 and 2014 campaign totals instead of the most recent race.",
     ],
   },
   {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { usableRecord } from "@/lib/ssrPayload";
 import { pageMetadata } from "@/lib/site";
 
@@ -64,6 +65,17 @@ export async function generateMetadata({
   });
 }
 
-export default function ExploreDocumentLayout({ children }: { children: React.ReactNode }) {
+/** A missing document is a real 404 (AGENTS.md, Search metadata): the page
+ * is a client component, so the check lives here. The fetch is the one
+ * generateMetadata already made, served from Next's fetch cache. */
+export default async function ExploreDocumentLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  if (!(await fetchDoc(id))) notFound();
   return <>{children}</>;
 }

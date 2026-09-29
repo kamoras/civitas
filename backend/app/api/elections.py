@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
 from app.database import get_db
 from app.office_terms import term_years
@@ -1387,7 +1388,7 @@ def _uncovered_town_ballot(status: str) -> dict:
 
 
 @router.get("/states/{state}/towns/{town}/ballot")
-async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
+async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Session = Depends(get_db)):
     """Contests and measures for `town`.
 
     Two sources, tried in order:
@@ -1421,7 +1422,7 @@ async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
 
     async with make_async_client(timeout=30.0) as client:
         if ballot_pdf.is_configured(town):
-            pdf_result = await ballot_pdf.fetch_town_ballot_pdf(client, db, town)
+            pdf_result = await ballot_pdf.fetch_town_ballot_pdf(client, db, town, spend=spend_upstream)
             if pdf_result is not None:
                 source = ballot_pdf_source_for_town(town) or {}
                 return cached_json({
@@ -1449,7 +1450,7 @@ async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
         if not civic_is_configured() or address_for_town(state, town) is None:
             return cached_json(_uncovered_town_ballot("not_yet_covered"), max_age=CACHE_TTL_DETAIL_S)
 
-        result = await fetch_town_ballot(client, db, state, town)
+        result = await fetch_town_ballot(client, db, state, town, spend=spend_upstream)
 
     if result is None:
         return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
