@@ -442,6 +442,26 @@ class BillDetailSchema(BillInFlightSchema):
     related_issues: list[RelatedIssueSchema] = []
 
 
+class ConstituentApprovalPartySchema(CamelModel):
+    party: Literal["D", "R", "I"]
+    # Share approving, shrunk toward the typical member; None when the
+    # survey can't tell members apart for this group (see
+    # scripts/fetch_ces_approval.py).
+    approve: float | None = None
+    # How much of `approve` is the member's own respondents (0-1).
+    own_weight: float | None = None
+    respondents: int
+
+
+class ConstituentApprovalSchema(CamelModel):
+    """How the member's own constituents rated them in the CES, by the
+    respondent's party (services/constituent_survey.py). Informational."""
+    survey: str
+    fielded: str
+    surveyed_as: str
+    by_party: list[ConstituentApprovalPartySchema]
+
+
 class _PersonDetailBase(CamelModel):
     """Shared detail-response shape for Senators and Representatives.
 
@@ -469,6 +489,7 @@ class _PersonDetailBase(CamelModel):
     bipartisanship_score: float | None = None
     ideology_score: float | None = None
     sponsorship_description: str = ""
+    constituent_approval: ConstituentApprovalSchema | None = None
     website_url: str = ""
     contact_form_url: str = ""
     office_phone: str = ""

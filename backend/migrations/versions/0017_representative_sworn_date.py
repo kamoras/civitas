@@ -6,11 +6,9 @@ mid-Congress (a special election) by the share of the Congress served
 
 Expand only: one nullable column. An image without it never reads it.
 
-Merged as a second "0016" beside 0016_president_financial_disclosures (both
-branches took the next number) and possibly deployed under that number, so
-a database stamped 0016 may hold either change. Each column is added only
-if missing, financial_disclosures.president_id included, so every database
-ends at the same schema whichever 0016 it ran.
+This merged as a second "0016" beside financial_disclosures.president_id,
+so a database may be stamped 0016 having run either one. Both halves are
+added only where missing, and every such database converges here.
 
 Revision ID: 0017
 Revises: 0016
@@ -32,8 +30,9 @@ def _columns(table: str) -> set[str]:
 
 def upgrade() -> None:
     if "sworn_date" not in _columns("representatives"):
-        op.add_column("representatives", sa.Column("sworn_date", sa.String(length=10), nullable=True))
-    # The other 0016's column, for a database that ran this revision as 0016.
+        with op.batch_alter_table("representatives", schema=None) as batch_op:
+            batch_op.add_column(sa.Column("sworn_date", sa.String(length=10), nullable=True))
+    # The other 0016's change, for a database that ran this revision as 0016.
     if "president_id" not in _columns("financial_disclosures"):
         with op.batch_alter_table("financial_disclosures", schema=None) as batch_op:
             batch_op.add_column(sa.Column("president_id", sa.String(), nullable=True))
@@ -44,5 +43,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("representatives") as batch:
-        batch.drop_column("sworn_date")
+    with op.batch_alter_table("representatives", schema=None) as batch_op:
+        batch_op.drop_column("sworn_date")
