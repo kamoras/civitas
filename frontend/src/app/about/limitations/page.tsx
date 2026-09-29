@@ -111,23 +111,6 @@ export default function LimitationsChapter() {
             base; that would take approval data split by party, the same survey data named above.
           </P>
         </Limitation>
-        <Limitation title="Two effectiveness components share a data source">
-          <P>
-            Within Legislative Effectiveness, leadership and bipartisan attraction are both computed
-            from the cosponsorship network — different measures of related data. Their combined
-            weight is capped at 40% for that reason, and their correlation is checked after every
-            run.
-          </P>
-          <More label="How a larger overlap was removed">
-            <P>
-              A 2026-07-21 audit found two parts of Constituent Alignment correlated at r = −0.76
-              (58% shared variance, 99 senators), both projections of the same cosponsorship
-              network. v6.8 reduced the double count; v6.11 moved coalition breadth to Legislative
-              Effectiveness and switched the position measure to roll-call data from Voteview, a
-              genuinely independent source; v6.13 removed the cosponsorship-based discount entirely.
-            </P>
-          </More>
-        </Limitation>
         <Limitation title="Some bills are labelled by content">
           <P>
             Where a bill had no roll call, its party lean comes from comparing it with party

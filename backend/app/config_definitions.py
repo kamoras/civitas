@@ -133,6 +133,10 @@ HOLDING_CATEGORIES: dict[str, dict[str, str]] = {
     "BUSINESS":    {"label": "Business interests",    "color": "#9085e9"},
     "CRYPTO":      {"label": "Crypto",                "color": "#e66767"},
     "OTHER":       {"label": "Other",                 "color": "#8a857d"},
+    # A form with no asset-type column (the president's 278e): its
+    # securities are listed with no type, and none is given one from its
+    # name. A second neutral, lighter than OTHER's.
+    "UNSTATED":    {"label": "Type not stated",       "color": "#b8b1a6"},
 }
 
 # Legislative pipeline stages for the "bills currently moving through

@@ -1,11 +1,11 @@
 """Tests for app.config's computed defaults."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import patch
 
 from app import config
 from app.config import _default_current_congress, sitting_congress
-from app.pipeline.fetch.congress import congress_for_year
+from app.pipeline.fetch.congress import congress_for_year, congress_of_date
 from app.time_utils import congress_in_session
 
 
@@ -15,15 +15,15 @@ class TestDefaultCurrentCongress:
     convened. Now computed from the wall clock so it never needs a manual
     bump — at process start (see sitting_congress for the live reading)."""
 
-    def test_is_the_calendar_years_congress(self):
-        assert _default_current_congress() == congress_for_year(datetime.now().year)
+    def test_is_todays_congress(self):
+        assert _default_current_congress() == congress_of_date(date.today().isoformat())
 
     def test_a_process_started_before_noon_on_jan_3_is_not_stuck_on_the_outgoing_congress(self):
         """The value is fixed for the life of the process and scopes the
         roll-call sessions, bill windows and ideal points. Under the
         noon-ET-Jan-3 rule, a backend started at 11:59 ET on Jan 3, 2027
         would score the dead 119th for the whole 120th Congress until a
-        restart; the calendar rule gives 120, a few hours early at worst."""
+        restart; the date rule gives 120, a few hours early at worst."""
 
         class _Jan3(datetime):
             @classmethod
@@ -44,6 +44,26 @@ class TestDefaultCurrentCongress:
     def test_returns_120_for_2027(self):
         assert congress_for_year(2027) == 120
 
+
+    def test_the_new_congress_starts_when_it_convenes(self):
+        # January 3 of an odd year (20th Amendment), not January 1: a day
+        # early, every scored window would point at a Congress with no bills.
+        assert _default_current_congress(date(2027, 1, 2)) == 119
+        assert _default_current_congress(date(2027, 1, 3)) == 120
+        assert _default_current_congress(date(2026, 1, 1)) == 119
+
+    def test_the_staleness_check_never_calls_the_default_stale(self):
+        """expected_current_congress follows the noon-ET hand-over; the
+        default switches at the date. The default may run a few hours
+        ahead on Jan 3 (not staleness — the alert fires only when it is
+        BEHIND), and the two agree on every other day."""
+        from app.pipeline.fetch.congress import expected_current_congress
+        for day in (date(2027, 1, 2), date(2027, 1, 3), date(2026, 6, 1)):
+            for hour in (0, 12, 16, 17, 23):
+                now = datetime(day.year, day.month, day.day, hour)
+                assert expected_current_congress(now) <= _default_current_congress(day)
+        assert expected_current_congress(datetime(2027, 1, 3, 17)) == _default_current_congress(date(2027, 1, 3))
+        assert expected_current_congress(datetime(2027, 1, 2, 23)) == _default_current_congress(date(2027, 1, 2))
 
 class TestCongressInSession:
     """20th Amendment: the new Congress's members take office at noon

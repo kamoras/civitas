@@ -138,15 +138,15 @@ def _send_ntfy(subject: str, body: str) -> None:
 def check_current_congress_staleness() -> None:
     """Alert if CURRENT_CONGRESS has fallen behind the Congress in office.
 
-    CURRENT_CONGRESS defaults to the calendar year's Congress (see
-    app.config._default_current_congress) — computed once, when the
-    backend process starts. It is compared here with the Congress actually
-    in office (noon ET on Jan 3 of an odd year, the 20th Amendment's
-    hand-over). The calendar rule can run a day or two AHEAD of that (a
-    process started Jan 1-3), which is not staleness; it falls BEHIND in
-    two ways, and the alert says which:
+    CURRENT_CONGRESS defaults to the Congress in session on the date the
+    backend process starts (see app.config._default_current_congress) —
+    computed once. It is compared here with the Congress actually in
+    office (noon ET on Jan 3 of an odd year, the 20th Amendment's
+    hand-over). The date rule can run a few hours AHEAD of that (a
+    process started on the morning of Jan 3), which is not staleness; it
+    falls BEHIND in two ways, and the alert says which:
 
-    - not pinned: the process has been running since before Jan 1 of the
+    - not pinned: the process has been running since before Jan 3 of the
       new Congress's first year. A restart (any redeploy) recomputes it.
       District PVI lines do not wait for that — fetch/district_pvi.py
       reads app.config.sitting_congress(), which follows the clock.
@@ -168,8 +168,8 @@ def check_current_congress_staleness() -> None:
             f"It is pinned in the environment: change it to {expected} (or remove "
             f"the pin so it follows the clock) and restart the backend."
             if pinned else
-            f"It is not pinned — it was computed from the calendar year when the "
-            f"backend process started, before the {ordinal(expected)} Congress's first year. "
+            f"It is not pinned — it was computed from the date the backend "
+            f"process started, before the {ordinal(expected)} Congress convened. "
             f"Restart the backend (a redeploy does it) to pick up {expected}. "
             f"(District PVI lines do not depend on this setting: they "
             f"follow the clock, switched before each House run — "
