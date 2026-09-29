@@ -37,6 +37,11 @@ async function fetchIndex(): Promise<FeedIndex | null> {
   }
 }
 
+/** "Everything", or the topic ("Civitas: Congress" -> "Congress"). */
+function feedName(f: { slug: string; title: string }): string {
+  return f.slug === "all" ? "Everything" : f.title.replace(/^Civitas: /, "");
+}
+
 /* Every claim here is checked against the code (backend/app/broadcast.py,
    backend/app/api/feed.py, nginx/civitas.conf). Change this page with them. */
 export default async function FeedsPage() {
@@ -69,7 +74,7 @@ export default async function FeedsPage() {
               <Point>
                 Every post Civitas publishes goes into these feeds first: Action Center issues, what
                 Congress did each day and week, the daily member spotlight and news about races on
-                the ballot. The Bluesky account posts the same thing.
+                the ballot. The Bluesky account posts the same posts, when Bluesky accepts them.
               </Point>
               <Point>
                 Follow everything, one topic or one state. Choosing a feed is your filter, so there
@@ -90,11 +95,11 @@ export default async function FeedsPage() {
                         href={f.path}
                         className="underline decoration-ink-min/50 underline-offset-2 hover:text-phos"
                       >
-                        {f.slug === "all" ? "Everything" : f.title.replace(/^Civitas: /, "")}
+                        {feedName(f)}
                       </a>
                     </h3>
                     <P>{f.description}</P>
-                    <CopyFeedUrl url={absoluteUrl(f.path)} label={f.title} />
+                    <CopyFeedUrl url={absoluteUrl(f.path)} label={feedName(f)} />
                   </li>
                 ))}
               </ul>
