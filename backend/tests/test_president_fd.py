@@ -82,7 +82,7 @@ async def test_the_annual_report_replaces_its_years_periodic_rows(db_session):
         patch("app.pipeline.stock_pipeline.fetch_annual_transactions", new_callable=AsyncMock,
               return_value=(2025, [_row("2025-03-04", asset="YELP INC"), _row("2025-11-14", asset="Bond")])),
         patch("app.pipeline.stock_pipeline.fetch_president_ptr", new_callable=AsyncMock, return_value=periodic),
-        patch("app.pipeline.stock_pipeline.classify_batch_with_learning", return_value=({}, [])),
+        patch("app.pipeline.stock_pipeline.issuer_industries", new_callable=AsyncMock, return_value=({}, {})),
     ):
         await _ingest_president(db_session, AsyncMock())
 

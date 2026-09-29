@@ -49,6 +49,10 @@ class TradeRow:
     source_url: str = ""
     filing_id: str = ""
     industry: str | None = None
+    # The Senate table's Asset Type cell as printed ("Stock",
+    # "Cryptocurrency"); the House prints its code inside the asset text
+    # instead ("[CT]"). Read for industry classification, not stored.
+    asset_type: str | None = None
     # "periodic" (a PTR / 278-T) or "annual" (a presidential 278e's Part 7,
     # which states no notification date: president_fd).
     report_kind: str = "periodic"
@@ -64,7 +68,10 @@ class TradeRow:
 # undated (ocr_extract_rows, keep_undated).
 # 5: House and Senate scanned rows likewise; a House scan's dates fall on
 # or before its filing date.
-PARSER_VERSION = 5
+# 6: a House row's disclosure date is its report's filing date, and the
+# wrapped "Notification Date" header is read; the Senate's Ticker and Asset
+# Type columns are read.
+PARSER_VERSION = 6
 
 # PTR owner codes -> our owner vocabulary (StockTrade.owner / RepStockTrade.owner).
 OWNER_CODES = {"SP": "spouse", "DC": "dependent", "JT": "joint"}
@@ -114,6 +121,9 @@ TXN_TYPE_PATTERNS = [
 ]
 
 TICKER_RE = re.compile(r"\(([A-Z]{1,5})\)")
+# A ticker column's cell: a symbol, possibly with a share-class suffix
+# ("BRK.B"); "--" and blanks are no ticker.
+TICKER_CELL_RE = re.compile(r"[A-Z]{1,5}(?:[.-][A-Z])?")
 AMOUNT_RE = re.compile(r"\$?([\d,]+)")
 
 # Parenthetical suffixes real company names carry ("Kroger Co (The)",
@@ -194,7 +204,10 @@ def parse_table_rows(table: list[list[str | None]], *, blank_owner: str = "self"
     """
     if not table:
         return []
-    header = [(cell or "").strip().lower() for cell in table[0]]
+    # Whitespace collapsed: the House's PDF headers wrap ("Notification\nDate"),
+    # and until 2026-09 that hid its notification-date column, storing every
+    # House trade as disclosed the day it was made (0 days, all 4,681).
+    header = [" ".join((cell or "").split()).lower() for cell in table[0]]
 
     def _find_col(*keywords: str) -> int | None:
         # Exact header matches win before substring matches, and earlier
@@ -220,6 +233,11 @@ def parse_table_rows(table: list[list[str | None]], *, blank_owner: str = "self"
     col_date = _find_col("transaction date", "date")
     col_notify = _find_col("notification date")
     col_amount = _find_col("amount")
+    # The Senate's eFD table prints the ticker in a column of its own ("--"
+    # when there is none) and rarely in the asset name, so reading only the
+    # name left 971 of 1,316 Senate trades without one (2026-09).
+    col_ticker = _find_col("ticker")
+    col_asset_type = _find_col("asset type")
 
     if col_asset is None or col_type is None or col_date is None or col_amount is None:
         # Not the transactions table (could be a cover page, filer info
@@ -248,8 +266,12 @@ def parse_table_rows(table: list[list[str | None]], *, blank_owner: str = "self"
         notify_cell = (raw_row[col_notify] or "").strip() if col_notify is not None else ""
         notify_date = normalize_date(notify_cell) or txn_date
 
+        def cell(col: int | None) -> str:
+            return (raw_row[col] or "").strip() if col is not None and col < len(raw_row) else ""
+
+        ticker_cell = cell(col_ticker)
         rows.append(TradeRow(
-            ticker=extract_ticker(asset_cell),
+            ticker=ticker_cell if TICKER_CELL_RE.fullmatch(ticker_cell) else extract_ticker(asset_cell),
             asset_name=asset_cell,
             owner=owner_from_cell(owner_cell, blank=blank_owner),
             transaction_type=txn_type,
@@ -257,6 +279,7 @@ def parse_table_rows(table: list[list[str | None]], *, blank_owner: str = "self"
             disclosure_date=notify_date,
             amount_low=amount_range[0],
             amount_high=amount_range[1],
+            asset_type=cell(col_asset_type) or None,
         ))
     return rows
 

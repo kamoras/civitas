@@ -16,6 +16,7 @@ import pytest
 
 from app.models import HousePipelineRun, PipelineRun, PipelineStatus, StockTradesPipelineRun
 from app.pipeline import stock_pipeline
+from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
@@ -258,68 +259,132 @@ class TestIngestHouseYearWindow:
         assert years_requested == {2025, 2026}
 
 
-class TestClassifyRowsIndustryUntickered:
-    """2026-08: untickered-line classification (crypto has no SEC ticker to
-    resolve at all) used to be an opt-in classify_untickered flag, on only
-    for presidential 278-Ts — House/Senate untickered lines silently stayed
-    UNCLASSIFIED, including their genuinely-disclosed crypto holdings. Now
-    unconditional; House/Senate rows get the same treatment as the
-    president's already did."""
+class TestClassifyRowsIndustry:
+    """Trade industry comes from structured metadata only: the filer's own
+    crypto asset type, else the SIC code the SEC assigned the issuer (by
+    ticker, else by exact company name). The donor-name embedding guess it
+    replaced put Broadcom under LOBBYISTS and GitLab under PRIVATE_PRISON
+    (production, 2026-09-29)."""
 
-    @pytest.mark.slow
-    async def test_house_style_untickered_crypto_row_gets_classified(self, db_session):
-        from app.pipeline.fetch.ptr_common import TradeRow
-        from app.pipeline.stock_pipeline import _classify_rows_industry
+    @staticmethod
+    def _row(asset_name, ticker=None, asset_type=None):
+        return TradeRow(
+            ticker=ticker, asset_name=asset_name, owner="self", transaction_type="purchase",
+            transaction_date="2026-01-01", disclosure_date="2026-01-15",
+            amount_low=1001.0, amount_high=15000.0, asset_type=asset_type,
+        )
 
-        rows = [
-            TradeRow(
-                ticker=None, asset_name="Bitcoin", owner="self",
-                transaction_type="purchase", transaction_date="2026-01-01",
-                disclosure_date="2026-01-15", amount_low=1001.0, amount_high=15000.0,
-            ),
-        ]
-
-        await _classify_rows_industry(db_session, AsyncMock(), rows)
-
-        assert rows[0].industry == "CRYPTO"
-
-    async def test_a_confident_other_classification_does_not_overwrite_unclassified(self, db_session):
-        # 2026-08 audit (independent review of #445): classify_batch_with_
-        # learning always returns an entry per name, including the literal
-        # string "OTHER" for names it can't confidently place — it never
-        # returns None/absent. An untickered line's asset_name is often a
-        # non-tradeable holding (rental property, private partnership)
-        # that was never a real classification candidate; writing "OTHER"
-        # for it would surface a spurious industry badge in the UI (which
-        # only hides for exactly "UNCLASSIFIED", not "OTHER") where none
-        # showed before this change made classification unconditional.
-        from unittest.mock import patch
-
-        from app.pipeline.fetch.ptr_common import TradeRow
-        from app.pipeline.stock_pipeline import _classify_rows_industry
-
-        rows = [
-            TradeRow(
-                ticker=None, asset_name="123 Main St Rental LLC", owner="self",
-                transaction_type="purchase", transaction_date="2026-01-01",
-                disclosure_date="2026-01-15", amount_low=1001.0, amount_high=15000.0,
-            ),
-        ]
-
+    async def _classify(self, db_session, rows, by_ticker=None, by_name=None):
         with patch(
-            "app.pipeline.stock_pipeline.classify_batch_with_learning",
-            return_value=({"123 Main St Rental LLC": "OTHER"}, ["123 Main St Rental LLC"]),
-        ):
-            await _classify_rows_industry(db_session, AsyncMock(), rows)
+            "app.pipeline.stock_pipeline.issuer_industries", new_callable=AsyncMock,
+            return_value=(by_ticker or {}, by_name or {}),
+        ) as issuers:
+            await stock_pipeline._classify_rows_industry(db_session, AsyncMock(), rows)
+        return issuers.call_args.args[2:]
 
-        assert rows[0].industry is None  # stays the model default (UNCLASSIFIED at the DB layer)
+    async def test_a_tickered_row_takes_its_issuers_sec_industry(self, db_session):
+        rows = [self._row("Broadcom Inc. - Common Stock\n(AVGO) [ST]", ticker="AVGO")]
+        await self._classify(db_session, rows, by_ticker={"AVGO": "TECH"})
+        assert rows[0].industry == "TECH"
+
+    async def test_an_untickered_row_is_matched_by_its_cleaned_name(self, db_session):
+        # The House code, the ticker parenthetical and the line breaks are
+        # not part of the issuer's name.
+        rows = [self._row("Allstate\nCorp [ST]")]
+        tickers, names = await self._classify(db_session, rows, by_name={"Allstate Corp": "INSURANCE"})
+        assert names == ["Allstate Corp"]
+        assert rows[0].industry == "INSURANCE"
+
+    async def test_a_row_the_sec_does_not_know_stays_unclassified(self, db_session):
+        rows = [self._row("US Treasury Bill [GS]"), self._row("123 Main St Rental LLC")]
+        await self._classify(db_session, rows)
+        assert [r.industry for r in rows] == [None, None]  # UNCLASSIFIED at the DB layer
+
+    async def test_an_sec_code_with_no_category_of_ours_stays_unclassified(self, db_session):
+        rows = [self._row("Waste Management (WM) [ST]", ticker="WM")]
+        await self._classify(db_session, rows, by_ticker={"WM": None})
+        assert rows[0].industry is None
+
+    async def test_declared_crypto_is_crypto(self, db_session):
+        rows = [self._row("Bitcoin [CT]"), self._row("Ethereum", asset_type="Cryptocurrency")]
+        await self._classify(db_session, rows)
+        assert [r.industry for r in rows] == ["CRYPTO", "CRYPTO"]
+
+    async def test_an_undeclared_coin_name_is_not_guessed_crypto(self, db_session):
+        # All 18 Senate CRYPTO rows the name embedding produced were
+        # municipal bonds or ETF options.
+        rows = [self._row("Port of Seattle Washington Revenue Bond", asset_type="Municipal Security")]
+        await self._classify(db_session, rows)
+        assert rows[0].industry is None
+
+
+class TestReclassifyStoredTrades:
+    """Stored trades take the current classification every night, whatever
+    parser read them: the re-read that would otherwise refresh them is
+    rationed and skips filings that don't read."""
+
+    async def test_stored_labels_are_brought_up_to_date(self, db_session):
+        from app.models import Representative, RepStockTrade, Senator, StockTrade
+
+        db_session.add(Senator(id="S1", name="Jane Doe", state="TX", party="R"))
+        db_session.add(Representative(id="R1", name="John Roe", state="IN", district=6, party="R"))
+        common = dict(owner="self", transaction_type="purchase", transaction_date="2026-01-02",
+                      disclosure_date="2026-01-20", filing_id="f")
+        db_session.add_all([
+            # Production labels, 2026-09-29.
+            RepStockTrade(representative_id="R1", ticker="AVGO", industry="LOBBYISTS",
+                          asset_name="Broadcom Inc. - Common Stock\n(AVGO) [ST]", **common),
+            RepStockTrade(representative_id="R1", ticker=None, industry="LOBBYISTS",
+                          asset_name="US Treasury Bill [GS]", **common),
+            RepStockTrade(representative_id="R1", ticker=None, industry="UNCLASSIFIED",
+                          asset_name="Bitcoin [CT]", **common),
+            StockTrade(senator_id="S1", ticker=None, industry="CRYPTO", asset_type="Municipal Security",
+                       asset_name="Port of Seattle Washington Revenue Bond", **common),
+            StockTrade(senator_id="S1", ticker=None, industry="UNCLASSIFIED", asset_type="Cryptocurrency",
+                       asset_name="Ethereum", **common),
+        ])
+        db_session.commit()
+
+        with patch.object(stock_pipeline, "issuer_industries", new_callable=AsyncMock,
+                          return_value=({"AVGO": "TECH"}, {})):
+            changed = await stock_pipeline._reclassify_stored_trades(db_session, AsyncMock())
+
+        assert changed == 5
+        assert {t.asset_name: t.industry for t in db_session.query(RepStockTrade)} == {
+            "Broadcom Inc. - Common Stock\n(AVGO) [ST]": "TECH",
+            "US Treasury Bill [GS]": "UNCLASSIFIED",
+            "Bitcoin [CT]": "CRYPTO",
+        }
+        assert {t.asset_name: t.industry for t in db_session.query(StockTrade)} == {
+            "Port of Seattle Washington Revenue Bond": "UNCLASSIFIED",
+            "Ethereum": "CRYPTO",
+        }
+
+
+    async def test_an_unreadable_sec_changes_no_label(self, db_session):
+        from app.models import Representative, RepStockTrade
+        from app.pipeline.fetch.sec_tickers import SecUnavailable
+
+        db_session.add(Representative(id="R1", name="John Roe", state="IN", district=6, party="R"))
+        db_session.add(RepStockTrade(
+            representative_id="R1", ticker="AVGO", industry="TECH", asset_name="Broadcom (AVGO) [ST]",
+            owner="self", transaction_type="purchase", transaction_date="2026-01-02",
+            disclosure_date="2026-01-20", filing_id="f",
+        ))
+        db_session.commit()
+
+        with patch.object(stock_pipeline, "issuer_industries", new_callable=AsyncMock,
+                          side_effect=SecUnavailable("down")), pytest.raises(SecUnavailable):
+            await stock_pipeline._reclassify_stored_trades(db_session, AsyncMock())
+
+        assert db_session.query(RepStockTrade).one().industry == "TECH"
 
 
 class TestRereadTrades:
     """Stored filings an older PTR parser read are read again from their
     stored URLs; a filing that doesn't read keeps its rows and waits a week."""
 
-    def _stored(self, db_session, filing_id, url, version=1, owner="self"):
+    def _stored(self, db_session, filing_id, url, version=1, owner="self", confidence="text"):
         from app.models import Senator, StockTrade
 
         if db_session.get(Senator, "S1") is None:
@@ -327,14 +392,12 @@ class TestRereadTrades:
         db_session.add(StockTrade(
             senator_id="S1", asset_name="Apple Inc.", owner=owner, transaction_type="purchase",
             transaction_date="2026-01-02", disclosure_date="2026-01-20", amount_low=1001.0, amount_high=15000.0,
-            source_url=url, filing_id=filing_id, parser_version=version,
+            source_url=url, filing_id=filing_id, parser_version=version, parse_confidence=confidence,
         ))
         db_session.commit()
 
     @staticmethod
     def _row(filing_id, url, owner="spouse"):
-        from app.pipeline.fetch.ptr_common import TradeRow
-
         return TradeRow(ticker="AAPL", asset_name="Apple Inc.", owner=owner, transaction_type="purchase",
                         transaction_date="2026-01-02", disclosure_date="2026-01-20",
                         amount_low=1001.0, amount_high=15000.0, source_url=url, filing_id=filing_id)
@@ -368,6 +431,28 @@ class TestRereadTrades:
         by_filing = {t.filing_id: t for t in db_session.query(StockTrade).all()}
         assert (by_filing["a"].owner, by_filing["a"].parser_version, by_filing["a"].senator_id) == ("spouse", PARSER_VERSION, "S1")
         assert (by_filing["b"].owner, by_filing["b"].parser_version) == ("self", 1)
+
+    async def test_a_scan_that_now_reads_nothing_loses_its_older_reading(self, db_session):
+        """Filing 9116328's version-2 OCR rows included a trade "made" on
+        2033-11-15 — a bond's maturity, from an asset text of
+        'S¥ 11/15/33 MN 08/31/26)'. The current reader finds no row it can
+        stand behind; keeping the old reading on that answer kept the
+        fabrication forever. A fetch that fails (None) still keeps it, and so
+        does a text filing that reads nothing (the parser failing)."""
+        from app.models import StockTrade
+
+        base = "https://efdsearch.senate.gov/search/view/paper"
+        self._stored(db_session, "scan-empty", f"{base}/scan-empty/", confidence="ocr")
+        self._stored(db_session, "scan-down", f"{base}/scan-down/", confidence="ocr")
+        self._stored(db_session, "text-empty", f"{base}/text-empty/")
+
+        async def fetch(_client, _db, filing):
+            return None if "scan-down" in filing["report_url"] else []
+
+        count, _ = await self._reread(db_session, fetch)
+
+        assert count == 1
+        assert {t.filing_id for t in db_session.query(StockTrade)} == {"scan-down", "text-empty"}
 
     async def test_a_filing_that_did_not_read_waits_instead_of_starving_the_rest(self, db_session):
         base = "https://efdsearch.senate.gov/search/view/ptr"

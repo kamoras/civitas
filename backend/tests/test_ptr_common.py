@@ -176,6 +176,43 @@ def test_parse_table_rows_asset_type_column_does_not_shadow_type():
     assert rows[0].ticker == "AAPL"
 
 
+def test_parse_table_rows_reads_the_senate_ticker_and_asset_type_columns():
+    """The live eFD table (2026-09-29) prints the ticker in its own column,
+    "--" when there is none, and rarely in the asset name: reading only the
+    name left 971 of 1,316 stored Senate trades without a ticker."""
+    table = [
+        ["#", "Transaction Date", "Owner", "Ticker", "Asset Name", "Asset Type", "Type", "Amount", "Comment"],
+        ["5", "08/27/2026", "Joint", "OTIS", "Otis Worldwide Corporation Common Stock", "Stock", "Purchase",
+         "$1,001 - $15,000", "--"],
+        ["3", "08/04/2026", "Joint", "--", "Electronic Arts Inc. (EA)", "Stock", "Sale (Full)",
+         "$1,001 - $15,000", "--"],
+        ["2", "08/14/2026", "Joint", "--", "AvalonBay Communities, Inc. Common Stock", "Stock", "Exchange",
+         "$1,001 - $15,000", "--"],
+        ["1", "08/19/2026", "Self", "BRK.B", "Berkshire Hathaway Inc. Class B", "Stock", "Purchase",
+         "$1,001 - $15,000", "--"],
+    ]
+    rows = parse_table_rows(table)
+    assert [r.ticker for r in rows] == ["OTIS", "EA", None, "BRK.B"]
+    assert {r.asset_type for r in rows} == {"Stock"}
+
+
+def test_parse_table_rows_reads_the_house_wrapped_notification_date_header():
+    """pdfplumber's header row from House filing 20030387, verbatim: every
+    header wraps. "Notification\nDate" never matched "notification date",
+    so all 4,681 stored House trades were dated disclosed the day they were
+    made. The row is also verbatim, 2015 included: the filer's typo, which
+    is stored as filed."""
+    table = [
+        ["ID", "Owner", "Asset", "Transaction\nType", "Date", "Notification\nDate", "Amount",
+         "Cap.\nGains >\n$200?"],
+        ["", "", "Danaher Corporation Common Stock\n(DHR) [ST]", "P", "05/08/2015", "05/15/2025",
+         "$15,001 -\n$50,000", ""],
+    ]
+    rows = parse_table_rows(table)
+    assert (rows[0].transaction_date, rows[0].disclosure_date) == ("2015-05-08", "2025-05-15")
+    assert rows[0].ticker == "DHR"
+
+
 def test_extract_ticker_finds_a_real_ticker():
     assert extract_ticker("Apple Inc. (AAPL)") == "AAPL"
 

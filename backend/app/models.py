@@ -327,6 +327,11 @@ class StockTrade(Base):
     amount_low: Mapped[float] = mapped_column(Float, default=0.0)
     amount_high: Mapped[float] = mapped_column(Float, default=0.0)
     industry: Mapped[str] = mapped_column(String, default="UNCLASSIFIED")
+    # The eFD table's Asset Type cell as printed ("Stock", "Cryptocurrency"):
+    # the filer's own statement of what the asset is, which the nightly
+    # industry pass reads (stock_pipeline._reclassify_stored_trades). The
+    # House prints its code inside asset_name; the 278-T states none.
+    asset_type: Mapped[str | None] = mapped_column(String, nullable=True)
     source_url: Mapped[str] = mapped_column(String, default="")
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # dedupe key
     # "text" = parsed from a PDF/HTML text layer, "ocr" = OCR fallback on a
