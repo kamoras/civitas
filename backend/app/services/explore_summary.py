@@ -101,12 +101,12 @@ def prompt_for(doc) -> dict:
     from app.pipeline.analyze.prompts import explore_document_summary_prompt
 
     return explore_document_summary_prompt({
-        "title": doc.title,
-        "body": doc.body,
+        "title": doc.title or "",
+        "body": doc.body or "",
         "doc_type": doc.doc_type,
         "chamber": doc.chamber or "",
         "politician_name": doc.politician_name or "",
-        "date": doc.date,
+        "date": doc.date or "",
     })
 
 
@@ -120,9 +120,14 @@ async def lookup(doc_id: int, doc) -> tuple[dict, dict, dict | None]:
 
     prompt = prompt_for(doc)
     key = cache_key(doc_id, prompt)
+    from sqlalchemy.exc import OperationalError
+
     try:
         made = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key, raise_errors=True)
-    except Exception:
+    except OperationalError:
+        # The database locked or unavailable: a moment's, so a wait. Any
+        # other error is a fault that would recur on every try, and is a
+        # failure the page shows rather than ten minutes of retries.
         logger.warning("Explore summary cache unreadable for doc_id=%s — answered as a wait", doc_id, exc_info=True)
         raise _busy() from None
     return prompt, key, made

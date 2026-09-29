@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
-from app.database import get_db, get_visits_db
+from app.database import get_db, get_visits_db, off_loop
 from app.http_client import make_async_client
 from app.models import (
     ActionIssue,
@@ -830,6 +830,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
     from app.pipeline.election_pipeline import is_election_pipeline_running
+    from app.pipeline.vector_store import is_rebuilding as is_explore_index_rebuilding
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
@@ -901,6 +902,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         # out like a pipeline run, since killing it mid-wipe leaves the
         # indexes describing rows that are gone.
         "dataResetIsRunning": _data_reset_running(db),
+        # A rebuild of the Explore vector index (at start, in an Explore
+        # run, or an admin re-embed): twenty-odd minutes that a restart
+        # would throw away, with semantic search off until the next one.
+        "exploreIndexIsRebuilding": is_explore_index_rebuilding(),
     }
 
     if last_supplementary_run:
@@ -1372,7 +1377,7 @@ async def admin_trigger_pipeline(
 
 
 @router.post("/pipeline/reembed-explore", dependencies=[Depends(require_admin)], status_code=202)
-async def admin_reembed_explore():
+async def admin_reembed_explore(db: Session = Depends(get_db)):
     """Rebuild every search structure over the explore corpus.
 
     Use this after changing the embedding model, or any time search results
@@ -1397,6 +1402,18 @@ async def admin_reembed_explore():
 
     if _rebuild_lock.locked():
         raise HTTPException(status_code=409, detail="Explore re-embed not started: the index is already being rebuilt")
+
+    def why_not(session: Session) -> str | None:
+        # Checked here so a refusal is answered, not only logged by the job
+        # (which checks again, taking the lease, should one start between).
+        if lease.held(session, lease.DATA_RESET):
+            return lease.refusal_text(lease.REFUSED_BY_RESET)
+        who = lease.holder(session, lease.EXPLORE)
+        return lease.refusal_text(lease.REFUSED_HELD, lease.EXPLORE, who) if who is not None else None
+
+    refused = await off_loop(db, why_not)
+    if refused is not None:
+        raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {refused}")
 
     def _reembed() -> None:
         # A lease, so a reset or an explore ingest in another process sees

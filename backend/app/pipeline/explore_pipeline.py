@@ -50,8 +50,9 @@ from app.pipeline.lexical_index import rebuild_index
 from app.pipeline.vector_store import (
     delete_explore_vectors,
     embed_explore_documents,
-    ensure_explore_index,
     explore_embed_dict,
+    index_is_whole,
+    rebuild_explore_index,
     get_embedded_explore_ids,
 )
 
@@ -619,44 +620,67 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         _purge_duplicate_floor_speeches(db)
         _purge_orphaned_vectors(db)
 
-        # Only documents not yet in the collection (plus ones whose body
-        # was just backfilled) are encoded — re-encoding the whole corpus
-        # every night is what made the old 72h skip gate look necessary.
-        logger.info("Explore pipeline: embedding documents into vector store...")
-        all_docs = db.query(ExploreDocument).all()
-        try:
-            _already_embedded = get_embedded_explore_ids()
-        except Exception:
-            _already_embedded = set()
-        all_docs = [
-            d for d in all_docs
-            if d.id not in _already_embedded or d.id in refreshed_ids
-        ]
-        doc_dicts = [explore_embed_dict(d) for d in all_docs]
-        # Off the event loop: encoding is pure CPU inside sentence-
-        # transformers and ran for 23 MINUTES in one call against the real
-        # corpus (1,557 documents / 11,022 chunks, measured on the Pi
-        # 2026-09-20). Awaiting it inline froze the whole FastAPI process,
-        # so /api/health stopped answering, Swarm's healthcheck (every 30s,
-        # 5s timeout, 3 retries -- so ~90s of unresponsiveness is fatal)
-        # failed, and the container was SIGKILLed mid-run
-        # (exit 137, "unhealthy container") -- which is what actually
-        # broke every nightly run from 2026-09-02 onward. The killed
-        # process left its run row stuck "active", so the 12h "hang" in
-        # the admin view was the NEXT night's staleness sweep, not real
-        # running time; House/Stock/Election never ran again because they
-        # are chained behind this phase. Same asyncio.to_thread treatment
-        # donor_classifier_ai.py and api/explore.py already give their own
-        # CPU-bound calls.
-        embedded = await asyncio.to_thread(embed_explore_documents, doc_dicts)
         # An index that isn't a complete build by this model (a rebuild that
-        # failed or was cut off, a model change) is rebuilt now, in the
-        # background, rather than waiting for the next start: search is off
-        # until it is.
+        # failed or was cut off, a model change) is rebuilt whole, here and
+        # under this run's lease, rather than topped up: an incremental pass
+        # can't make it whole, and calibration below measures it.
+        rebuilt = None
         try:
-            await asyncio.to_thread(ensure_explore_index, SessionLocal)
+            whole = await asyncio.to_thread(index_is_whole)
         except Exception:
-            logger.exception("Explore pipeline: could not check the explore index")
+            logger.exception("Explore pipeline: could not read the vector index — topping it up as usual")
+            whole = True
+        if not whole:
+            logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
+            try:
+                rebuilt = await asyncio.to_thread(rebuild_explore_index, SessionLocal)
+            except Exception as exc:
+                logger.exception("Explore pipeline: vector index rebuild failed")
+                from app.ops_alerts import send_ops_alert
+                from app.time_utils import utcnow
+
+                await asyncio.to_thread(
+                    send_ops_alert,
+                    "Explore vector index rebuild failed",
+                    f"The Explore run's rebuild of the search vector index raised ({type(exc).__name__}: "
+                    f"{exc}). Semantic search stays off (keyword-only) until a rebuild completes; the next "
+                    "Explore run or pipeline start tries again.",
+                    dedupe_key=f"explore-index-rebuild-{utcnow():%Y-%m-%d}",
+                )
+                rebuilt = 0
+        if rebuilt is not None:
+            embedded = rebuilt
+        else:
+            # Only documents not yet in the collection (plus ones whose body
+            # was just backfilled) are encoded — re-encoding the whole corpus
+            # every night is what made the old 72h skip gate look necessary.
+            logger.info("Explore pipeline: embedding documents into vector store...")
+            all_docs = db.query(ExploreDocument).all()
+            try:
+                _already_embedded = get_embedded_explore_ids()
+            except Exception:
+                _already_embedded = set()
+            all_docs = [
+                d for d in all_docs
+                if d.id not in _already_embedded or d.id in refreshed_ids
+            ]
+            doc_dicts = [explore_embed_dict(d) for d in all_docs]
+            # Off the event loop: encoding is pure CPU inside sentence-
+            # transformers and ran for 23 MINUTES in one call against the real
+            # corpus (1,557 documents / 11,022 chunks, measured on the Pi
+            # 2026-09-20). Awaiting it inline froze the whole FastAPI process,
+            # so /api/health stopped answering, Swarm's healthcheck (every 30s,
+            # 5s timeout, 3 retries -- so ~90s of unresponsiveness is fatal)
+            # failed, and the container was SIGKILLed mid-run
+            # (exit 137, "unhealthy container") -- which is what actually
+            # broke every nightly run from 2026-09-02 onward. The killed
+            # process left its run row stuck "active", so the 12h "hang" in
+            # the admin view was the NEXT night's staleness sweep, not real
+            # running time; House/Stock/Election never ran again because they
+            # are chained behind this phase. Same asyncio.to_thread treatment
+            # donor_classifier_ai.py and api/explore.py already give their own
+            # CPU-bound calls.
+            embedded = await asyncio.to_thread(embed_explore_documents, doc_dicts)
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill

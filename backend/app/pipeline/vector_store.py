@@ -892,9 +892,11 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
 
 
 def reset_vector_db() -> None:
-    """Reset the entire vector index (useful for fresh starts)."""
+    """Reset the entire vector index (useful for fresh starts). Waits out a
+    rebuild running here: one reset under it would lose the recorded
+    identity, and its next batch would record a partial index as built."""
     conn = get_vec_conn()
-    with _vec_lock:
+    with _rebuild_lock, _vec_lock:
         for name in ("vec_explore", "vec_bills"):
             conn.execute(f"DROP TABLE IF EXISTS {name}")
         conn.execute("DELETE FROM vec_meta")
@@ -968,26 +970,51 @@ def rebuild_explore_index(db_session_factory) -> int | None:
         _rebuild_lock.release()
 
 
+def is_rebuilding() -> bool:
+    """Whether a rebuild of the explore index is running in this process
+    (the pipeline's): check-and-deploy.sh waits it out like a run."""
+    return _rebuild_lock.locked()
+
+
+def index_is_whole() -> bool:
+    """Whether the explore index is a complete build by this model."""
+    conn = get_vec_conn()
+    count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+    return _get_meta(conn, _INDEX_MODEL) == index_identity() and count > 0
+
+
 def ensure_explore_index(db_session_factory) -> None:
     """Rebuild the explore index in the background unless it is a complete
     build by this model — the migration/upgrade path, and the recovery from
     a rebuild that failed or was cut off.
 
-    Called from app startup (main.py lifespan) and after the Explore run's
-    embed step. Runs in a daemon thread because re-embedding thousands of
-    documents takes minutes on the Pi; search correctly reports "not ready"
-    (None) until it finishes.
+    Called from app startup (main.py lifespan). Runs in a daemon thread
+    because re-embedding thousands of documents takes minutes on the Pi;
+    search correctly reports "not ready" (None) until it finishes. Under the
+    Explore lease, like the Explore run (which rebuilds an incomplete index
+    itself, so a start that finds one running leaves the index to it) and
+    the admin re-embed: a rebuild pages through the documents, which a run
+    deletes from.
     """
-    conn = get_vec_conn()
-    stored = _get_meta(conn, _INDEX_MODEL)
-    count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    if (stored == index_identity() and count > 0) or _rebuild_lock.locked():
+    if index_is_whole() or is_rebuilding():
         return
-    logger.warning("Explore index not a complete build by %s (recorded: %r) — rebuilding", index_identity(), stored)
 
     def _reindex() -> None:
+        from app.models import ExploreDocument
+        from app.pipeline import lease
+
         try:
-            rebuild_explore_index(db_session_factory)
+            with lease.job(lease.EXPLORE, who="Explore index rebuild") as held:
+                if not held:
+                    return  # logged by lease.job; the run holding it rebuilds
+                db = db_session_factory()
+                try:
+                    if db.query(ExploreDocument.id).first() is None:
+                        return  # nothing to build yet: the first Explore run builds it
+                finally:
+                    db.close()
+                logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
+                rebuild_explore_index(db_session_factory)
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
 

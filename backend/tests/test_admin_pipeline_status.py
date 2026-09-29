@@ -131,6 +131,33 @@ async def test_status_reports_a_data_reset_so_deploys_wait_it_out(db_session):
 
 
 
+
+@pytest.mark.asyncio
+async def test_status_reports_an_explore_index_rebuild_so_deploys_wait_it_out(db_session):
+    from app.api.admin import admin_pipeline_status
+    from app.pipeline import vector_store
+
+    assert (await admin_pipeline_status(db=db_session))["exploreIndexIsRebuilding"] is False
+    with vector_store._rebuild_lock:
+        assert (await admin_pipeline_status(db=db_session))["exploreIndexIsRebuilding"] is True
+
+
+@pytest.mark.asyncio
+async def test_check_and_deploy_waits_on_every_busy_flag_the_status_reports(db_session):
+    # electionIsRunning was once published and not read: a deploy killed an
+    # election run five minutes in. Every top-level boolean named for work
+    # in progress is one the deploy script must read.
+    import re
+    from pathlib import Path
+
+    from app.api.admin import admin_pipeline_status
+
+    status = await admin_pipeline_status(db=db_session)
+    flags = {k for k, v in status.items() if isinstance(v, bool) and re.search(r"Is(Running|Rebuilding)$", k)}
+    script = (Path(__file__).resolve().parents[2] / "check-and-deploy.sh").read_text()
+    assert flags and all(f'"{flag}"' in script for flag in flags), flags
+
+
 _FLAGS = [
     ("app.pipeline.house_pipeline", "is_house_pipeline_running", "houseIsRunning"),
     ("app.pipeline.stock_pipeline", "is_stock_pipeline_running", "stockTradesIsRunning"),

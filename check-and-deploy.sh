@@ -149,6 +149,11 @@ pipeline_is_busy() {
   # their turn — exactly the case this guard exists for. The admin
   # endpoint has always published the field; only this tuple was short.
   #
+  # exploreIndexIsRebuilding: a rebuild of the Explore vector index (at
+  # start, in an Explore run, or an admin re-embed) runs twenty-odd minutes
+  # on the Pi with semantic search off; a restart throws it away and the
+  # next start begins it again.
+  #
   # A killed run's row is swept on the next startup
   # (main._invalidate_orphaned_pipelines, every pipeline's table since
   # 2026-09-27); before that only the Senate's was, and a killed election
@@ -161,10 +166,11 @@ except ValueError:
     sys.exit(1)
 sys.exit(0 if any(d.get(k) for k in
     ("isRunning", "houseIsRunning", "stockTradesIsRunning",
-     "supplementaryIsRunning", "electionIsRunning", "dataResetIsRunning")
+     "supplementaryIsRunning", "electionIsRunning", "dataResetIsRunning",
+     "exploreIndexIsRebuilding")
 ) else 1)
 '; then
-    _busy_reason="a pipeline or data reset is running"
+    _busy_reason="a pipeline, data reset or Explore index rebuild is running"
     return 0
   fi
   # The hourly action refresh is waited for too, but only while it is

@@ -14,7 +14,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -220,7 +220,7 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
              patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking",
                    new_callable=AsyncMock, return_value=[]), \
              patch("app.pipeline.explore_pipeline.embed_explore_documents", blocking_embed), \
-             patch("app.pipeline.explore_pipeline.ensure_explore_index") as ensured, \
+             patch("app.pipeline.explore_pipeline.index_is_whole", return_value=True), \
              patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
              patch("app.pipeline.explore_pipeline.update_document_authority",
                    return_value={"documents": 0, "cited": 0}), \
@@ -234,14 +234,39 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
             after = ticks
             beat.cancel()
 
-        # After the embed step: an index that isn't a complete build is
-        # rebuilt without waiting for a restart.
-        ensured.assert_called_once()
         assert after - before > 5, (
             f"event loop only ticked {after - before} times while the CPU-bound "
             "embed step ran — it is blocking the loop, which is what got the "
             "container healthcheck-killed (exit 137) in production"
         )
+
+
+@pytest.mark.asyncio
+async def test_an_incomplete_index_is_rebuilt_whole_in_the_run_not_topped_up(db_session):
+    # Topped up, it would still not be a complete build — and a background
+    # rebuild started after would throw the top-up away and leave the
+    # calibration below measuring an empty semantic channel.
+    empty = AsyncMock(return_value={})
+    rebuild = MagicMock(return_value=3)
+    embed = MagicMock(return_value=0)
+    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
+         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
+               new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.index_is_whole", return_value=False), \
+         patch("app.pipeline.explore_pipeline.rebuild_explore_index", rebuild), \
+         patch("app.pipeline.explore_pipeline.embed_explore_documents", embed), \
+         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
+         patch("app.pipeline.explore_pipeline.update_document_authority",
+               return_value={"documents": 0, "cited": 0}), \
+         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
+         patch("app.pipeline.explore_pipeline.api_cache_set"):
+        await run_explore_pipeline(days_back=1)
+    rebuild.assert_called_once()
+    embed.assert_not_called()
 
 
 def _floor_doc(doc_id: int, ext_id: str, body: str) -> ExploreDocument:
@@ -386,3 +411,13 @@ class TestOrphanedVectorPurge:
 
         assert explore_pipeline._purge_orphaned_vectors(db_session) == 0
         assert called == [], "must not delete anything when the index is unreadable"
+
+
+def test_ranking_calibration_is_kept_while_the_vector_index_is_not_whole(db_session):
+    # Measured against a semantic channel answering nothing, the priors come
+    # out as if the channels agreed perfectly.
+    from app.pipeline import explore_ranking
+
+    with patch("app.pipeline.vector_store.index_is_whole", return_value=False), \
+         patch("app.pipeline.calibrate_ranking.compute_calibration", side_effect=AssertionError("measured")):
+        assert explore_ranking.calibrate_and_store(db_session) is None

@@ -142,7 +142,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                     <div className="border border-white/[0.07] p-3">
                       <div className="text-xs font-mono text-ink-min mb-1">SEARCH INDEX MODEL</div>
                       <div className="text-sm font-mono text-ink-hi">
-                        {d.system.vectorDb.indexModelVersion || "rebuilding…"}
+                        {d.system.vectorDb.indexModelVersion || "—"}
                       </div>
                       {d.system.vectorDb.indexRebuild && (
                         <div

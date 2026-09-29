@@ -499,6 +499,14 @@ class TestCachedSummaryRead:
         for refusal in (read.value, asked):
             assert refusal.status_code == 503 and refusal.headers["X-Summary-Wait"] == "1"
 
+    async def test_a_document_without_a_body_is_read_not_a_500(self, db_session):
+        from app.api.explore import get_cached_explore_summary
+
+        doc = _make_doc(db_session, body=None)
+        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None):
+            resp = await get_cached_explore_summary(doc.id, db=db_session)
+        assert resp.status_code == 204
+
     async def test_no_such_document_is_a_404(self, db_session):
         from app.api.explore import get_cached_explore_summary
 

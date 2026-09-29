@@ -188,6 +188,27 @@ class TestBillsAndMaintenance:
         assert vector_store.embed_explore_documents([_doc(2, "Fresh")]) == 1
 
 
+class _Granted:
+    """lease.job, granted: a rebuild holds the Explore lease, whose own
+    session these tests' database doesn't back."""
+
+    def __init__(self, *_a, **_k):
+        pass
+
+    def __enter__(self):
+        return True
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.fixture
+def explore_lease(monkeypatch):
+    from app.pipeline import lease
+
+    monkeypatch.setattr(lease, "job", _Granted)
+
+
 class TestEnsureExploreIndex:
     def test_noop_when_index_current(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "Anything")])
@@ -201,6 +222,51 @@ class TestEnsureExploreIndex:
         with patch.object(vector_store.threading, "Thread") as thread:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()
+
+    def test_nothing_is_built_without_documents(self, vec_env, db_session, explore_lease, monkeypatch):
+        # The first Explore run builds it; a start before then has nothing
+        # to rebuild, and mustn't blank and drop the index for nothing.
+        started = []
+        monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda f: started.append(1))
+        vector_store.ensure_explore_index(lambda: db_session)
+        import threading as _t
+        for t in _t.enumerate():
+            if t.name == "explore-reindex":
+                t.join(timeout=10)
+        assert started == []
+
+    def test_a_start_leaves_the_rebuild_to_a_run_holding_the_explore_lease(self, vec_env, db_session, monkeypatch):
+        # A rebuild pages through the documents a run deletes from; the run
+        # rebuilds an incomplete index itself.
+        from app.pipeline import lease
+
+        class _Refused(_Granted):
+            def __enter__(self):
+                return False
+
+        monkeypatch.setattr(lease, "job", _Refused)
+        db_session.add(ExploreDocument(doc_type="House Floor Speech", source="congress.gov",
+                                       title="A real doc", summary="s", body="b", date="2026-07-01"))
+        db_session.commit()
+        started = []
+        monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda f: started.append(1))
+        vector_store.ensure_explore_index(lambda: db_session)
+        import threading as _t
+        for t in _t.enumerate():
+            if t.name == "explore-reindex":
+                t.join(timeout=10)
+        assert started == []
+
+    def test_a_reset_waits_out_a_running_rebuild(self, vec_env):
+        import threading as _t
+
+        with vector_store._rebuild_lock:
+            reset = _t.Thread(target=vector_store.reset_vector_db)
+            reset.start()
+            reset.join(timeout=0.3)
+            assert reset.is_alive()
+        reset.join(timeout=5)
+        assert not reset.is_alive()
 
     def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
         # Two overlapping would each clear what the other built.
@@ -249,7 +315,7 @@ class TestEnsureExploreIndex:
         assert vector_store._get_meta(conn, vector_store._INDEX_MODEL) == "old-model|v1"
         assert vector_store.search_explore_documents("New") is None
 
-    def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session):
+    def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session, explore_lease):
         db_session.add(ExploreDocument(
             doc_type="House Floor Speech", source="congress.gov",
             title="A real doc", summary="s", body="b", date="2026-07-01",
@@ -266,7 +332,7 @@ class TestEnsureExploreIndex:
         results = vector_store.search_explore_documents("A real doc", n_results=1)
         assert results is not None and results[0]["title"] == "A real doc"
 
-    def test_rebuild_recreates_a_stale_pre_migration_schema(self, vec_env, db_session):
+    def test_rebuild_recreates_a_stale_pre_migration_schema(self, vec_env, db_session, explore_lease):
         """Regression for a live 2026-08-30 incident: a prior deploy's
         vec_explore table (created before `doc_id` existed in the schema)
         survived on disk forever because CREATE VIRTUAL TABLE IF NOT
@@ -354,7 +420,7 @@ def test_a_connection_that_failed_to_open_is_closed_not_leaked(vec_env, monkeypa
     assert vector_store._vec_conn is None
 
 
-async def test_the_admin_re_embed_runs_in_the_background_and_refuses_while_one_runs(monkeypatch):
+async def test_the_admin_re_embed_runs_in_the_background_and_refuses_when_it_cant(monkeypatch, db_session):
     # Over twenty minutes on the Pi: tied to its request, nginx's timeout
     # dropped it partway and let its lease go under writes still running.
     import threading as _t
@@ -369,19 +435,17 @@ async def test_the_admin_re_embed_runs_in_the_background_and_refuses_while_one_r
     monkeypatch.setattr(vector_store, "_write_model_version", lambda: None)
     monkeypatch.setattr("app.pipeline.lexical_index.rebuild_index", lambda db: 0)
     monkeypatch.setattr("app.pipeline.analyze.document_authority.update_document_authority", lambda db: {})
-
-    class _Held:
-        def __enter__(self):
-            return True
-
-        def __exit__(self, *exc):
-            return False
-
-    monkeypatch.setattr(lease, "job", lambda *a, **k: _Held())
-    assert await admin_reembed_explore() == {"started": True}
+    monkeypatch.setattr(lease, "job", _Granted)
+    assert await admin_reembed_explore(db=db_session) == {"started": True}
     assert done.wait(5)
 
     with vector_store._rebuild_lock:
         with pytest.raises(HTTPException) as refused:
-            await admin_reembed_explore()
+            await admin_reembed_explore(db=db_session)
     assert refused.value.status_code == 409
+
+    # Held by an Explore run: refused with the reason, not started to skip.
+    monkeypatch.setattr(lease, "holder", lambda session, tier: "Explore ingest" if tier == lease.EXPLORE else None)
+    with pytest.raises(HTTPException) as refused:
+        await admin_reembed_explore(db=db_session)
+    assert refused.value.status_code == 409 and "Explore ingest" in refused.value.detail
