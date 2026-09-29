@@ -80,6 +80,11 @@ describe("JusticeScorecard", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
+  it("renders a response cached before agreement replaced agreementMatrix", () => {
+    render(<JusticeScorecard justice={{ ...justice, agreement: undefined }} />);
+    expect(screen.queryByRole("heading", { name: /agree/i })).not.toBeInTheDocument();
+  });
+
   it("has no structural accessibility violations", async () => {
     render(
       <main>

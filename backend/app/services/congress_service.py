@@ -274,7 +274,8 @@ def chamber_day(row: CongressDay | None, events: list[CongressEvent], votes: lis
     return out
 
 
-def _session_days(db: Session) -> list[str]:
+def session_days(db: Session) -> list[str]:
+    """Every day either chamber met (in session, or held a roll call), oldest first."""
     days = {d for (d,) in db.query(CongressDay.date).filter(CongressDay.in_session.is_(True))}
     days |= {d for (d,) in db.query(RollCall.date).distinct()}
     return sorted(d for d in days if d)
@@ -282,7 +283,7 @@ def _session_days(db: Session) -> list[str]:
 
 def latest_day(db: Session) -> date | None:
     today = eastern_today().isoformat()
-    past = [d for d in _session_days(db) if d <= today]
+    past = [d for d in session_days(db) if d <= today]
     return date.fromisoformat(past[-1]) if past else None
 
 
@@ -298,9 +299,9 @@ def day_report(db: Session, day: date) -> dict:
                        [v for v in votes if v.chamber == c], run, iso, c, no_record_published=unpublished)
         for c in CHAMBERS
     }
-    session_days = _session_days(db)
-    earlier = [d for d in session_days if d < iso]
-    later = [d for d in session_days if d > iso]
+    met = session_days(db)
+    earlier = [d for d in met if d < iso]
+    later = [d for d in met if d > iso]
     return {
         "date": iso,
         "sentence": (

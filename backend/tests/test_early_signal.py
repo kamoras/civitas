@@ -5,8 +5,11 @@ import json
 from datetime import timedelta
 from unittest.mock import patch
 
+import numpy as np
+
 from app.models import ActionIssue, ActionIssueStatus, Senator, SponsoredBill
 from app.pipeline.analyze import early_signal as es
+from app.pipeline.analyze.action_center import mark_recent_duplicates
 from app.time_utils import utcnow
 
 
@@ -294,6 +297,37 @@ class TestCoveredVotes:
         _reported(db_session, "The Senate passes the Protect College Sports Act")
         assert es.retire_covered_developing_issues(db_session) == 1
 
+    def test_a_retired_draft_stays_off_the_homepage_record(self, db_session):
+        # Issue 762 (2026-09-29): retiring flipped is_current, which the
+        # homepage's record ignores by design, so the draft stayed listed
+        # beside 761. It is marked a duplicate of the covering issue, even
+        # once that issue has left the Action Center too.
+        self._bill(db_session)
+        draft = ActionIssue(
+            date="2026-09-28", rank=3, title="Senate vote on S. 4668", summary="The Senate voted 77 in favor.",
+            facts="[]", source_urls="[]", source_names="[]", is_current=False,
+            status=ActionIssueStatus.DEVELOPING, source_type="senate_roll_call_vote",
+        )
+        db_session.add(draft)
+        news = _reported(db_session, "The Senate passes the Protect College Sports Act, but the bill's future is unclear")
+        news.is_current = False
+        db_session.commit()
+        with patch("app.pipeline.analyze.action_center._embed_texts_sim", return_value=np.eye(2)):
+            assert mark_recent_duplicates(db_session) == 1
+        assert (draft.duplicate_of_id, news.duplicate_of_id) == (news.id, None)
+
+    def test_a_draft_no_issue_covers_stays_on_the_record(self, db_session):
+        self._bill(db_session)
+        draft = ActionIssue(
+            date="2026-09-28", rank=3, title="Senate vote on S. 4668", summary="", facts="[]", source_urls="[]",
+            source_names="[]", is_current=True, status=ActionIssueStatus.DEVELOPING, source_type="senate_roll_call_vote",
+        )
+        db_session.add(draft)
+        _reported(db_session, "US, China agree to cut tariffs on $60B worth of products")
+        with patch("app.pipeline.analyze.action_center._embed_texts_sim", return_value=np.eye(2)):
+            assert mark_recent_duplicates(db_session) == 0
+        assert draft.duplicate_of_id is None
+
 
 class TestCheckFederalRegisterSignals:
     def test_qualifying_rule_creates_a_developing_issue(self, db_session):
@@ -392,3 +426,32 @@ class TestExpireStaleDevelopingIssues:
         expired = es.expire_stale_developing_issues(db_session, utcnow())
         assert expired == 0
         assert row.is_current is True
+
+
+class TestRuleAbstractSentences:
+    """The summary quotes the abstract by whole sentences: a period inside
+    "U.S." or after an initial is not the end of one."""
+
+    def test_a_dotted_abbreviation_does_not_end_the_quote(self):
+        # The only ". " inside the limit is the one in "U.S.": quoting up to
+        # it would present "The rule applies across the U.S." as a sentence.
+        abstract = "The rule applies across the U.S. Fish and Wildlife Service " + "lands and waters " * 30 + "alike."
+        assert es._first_sentences(abstract, 400) == ""
+
+    def test_an_initial_or_a_title_does_not_end_the_quote(self):
+        abstract = "Rules by John Q. Public and Acme Inc. Holdings take effect. " + "More text " * 60
+        assert es._first_sentences(abstract, 400) == (
+            "Rules by John Q. Public and Acme Inc. Holdings take effect."
+        )
+
+    def test_a_citation_before_a_number_is_not_a_sentence_end(self):
+        abstract = "It implements 42 U.S.C. 7401 as amended. " + "More text " * 60
+        assert es._first_sentences(abstract, 400) == "It implements 42 U.S.C. 7401 as amended."
+
+    def test_no_whole_sentence_within_the_limit_quotes_nothing(self):
+        assert es._first_sentences("word " * 200, 400) == ""
+
+
+def test_a_rule_record_missing_its_number_and_date_leaves_them_out():
+    _, _, facts = es._compose_developing_rule_issue(_rule(document_number="", publication_date=""))
+    assert facts[1] == "Federal Register document."

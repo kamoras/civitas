@@ -20,6 +20,7 @@ PresidentTrade's docstring.
 """
 
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -339,8 +340,8 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
         _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url, filed: fetch_senate_ptr(
             client, db, {"report_url": url, "is_paper": "/view/paper/" in url, "stored_filed_date": filed},
         )),
-        _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url, filed: fetch_house_ptr(
-            client, db, {"doc_id": fid, "pdf_url": url, "filing_date": filed},
+        _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url, _filed: _reread_house_filing(
+            client, db, fid, url,
         )),
         _StoredSource("President", PresidentTrade, "president_id", lambda fid, url, _filed: _read_president_filing(
             db, {"doc_id": fid, "pdf_url": url},
@@ -412,6 +413,21 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
         if time.monotonic() >= deadline:
             break
     return reread
+
+
+async def _reread_house_filing(client: httpx.AsyncClient, db: Session, doc_id: str, url: str) -> list[TradeRow]:
+    """A stored House filing read again, with its filing date from the
+    Clerk's yearly index (cached; the year is in the PDF's path). The stored
+    rows can't supply it: a scan read before PARSER_VERSION 5 stored each
+    row's transaction date as its disclosure date. Without it a scan's dates
+    have no upper bound, and a row whose date isn't legible has no date at
+    all to show."""
+    match = re.search(r"/ptr-pdfs/(\d{4})/", url)
+    filed = None
+    if match:
+        index = await fetch_ptr_filing_index(client, db, int(match.group(1)))
+        filed = next((f["filing_date"] for f in index if f["doc_id"] == doc_id), None)
+    return await fetch_house_ptr(client, db, {"doc_id": doc_id, "pdf_url": url, "filing_date": filed})
 
 
 def _annual_covered_through(db: Session, president_id: str) -> str | None:

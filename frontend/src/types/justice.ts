@@ -42,8 +42,10 @@ export interface Justice {
   authoredConcurrence: number;
   closeCaseMajorityPct: number;
   /** Agreement with each sitting justice, most first: the share of the
-   *  cases both decided that they decided the same way. */
-  agreement: { id: string; name: string; share: number }[];
+   *  cases both decided that they decided the same way. Optional only
+   *  because a response cached before this field shipped can still be
+   *  served; every live response carries it. */
+  agreement?: { id: string; name: string; share: number }[];
   loyalty: JusticeLoyalty | null;
   /** Martin-Quinn position per term, [[term, position], ...], oldest first:
    *  shown, not scored. Negative is liberal, positive conservative. */

@@ -6,4 +6,4 @@ User-agent: *
 Allow: /
 Disallow: /admin
 
-Sitemap: https://civitas-research.org/sitemap.xml
+Sitemap: https://civitas-research.org/sitemap-index.xml

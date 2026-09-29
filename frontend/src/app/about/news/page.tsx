@@ -121,7 +121,8 @@ export default function NewsChapter() {
           or a rule&apos;s agency, title, abstract and publication date. It carries a note that
           broader coverage hasn&apos;t confirmed it yet, and isn&apos;t posted anywhere else until
           press coverage does. A vote the news already covers isn&apos;t drafted, and a draft gives
-          way once the reporting on its bill appears.
+          way once the reporting on its bill appears: it leaves the Action Center, and the
+          homepage&apos;s record of recent issues lists the reporting in its place.
         </P>
         <P>
           Recommended actions are procedural — contact your representatives, attend a public

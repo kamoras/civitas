@@ -51,8 +51,10 @@ from app.pipeline.analyze import action_thresholds
 from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
 from app.pipeline.analyze.early_signal import (
     CONFIRMATION_WINDOW_HOURS,
+    ROLL_CALL_SOURCES,
     check_federal_register_signals,
     check_roll_call_signals,
+    covering_issue,
     expire_stale_developing_issues,
     retire_covered_developing_issues,
 )
@@ -794,7 +796,17 @@ def mark_recent_duplicates(db: "Session") -> int:
     for idx, issue in enumerate(pool):
         rep = representative[idx]
         issue.duplicate_of_id = None if rep == idx else pool[rep].id
-        marked += rep != idx
+        # A vote draft whose bill a reported issue covers duplicates that
+        # issue, though the titles differ too much to cluster ("Senate vote
+        # on S. 4668" / "The Senate passes the Protect College Sports Act").
+        # Decided here, from the pool, not stored by the retirement pass:
+        # this loop resets every mark each run, and a covering issue that
+        # has since left the Action Center still covers the vote.
+        if issue.duplicate_of_id is None and issue.status == ActionIssueStatus.DEVELOPING \
+                and issue.source_type in ROLL_CALL_SOURCES:
+            covering = covering_issue(db, issue, pool)
+            issue.duplicate_of_id = covering.id if covering else None
+        marked += issue.duplicate_of_id is not None
     db.commit()
     return marked
 

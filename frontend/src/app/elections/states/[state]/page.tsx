@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { StateBallot } from "@/types/election";
-import { usableRecord } from "@/lib/ssrPayload";
+import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import StateBallotClient from "./StateBallotClient";
@@ -13,16 +13,14 @@ const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 // "reference data" tier its shape might suggest.
 const REVALIDATE_S = 120;
 
-async function fetchStateBallot(state: string): Promise<StateBallot | null> {
-  try {
-    const res = await fetch(`${BACKEND}/api/elections/states/${encodeURIComponent(state)}`, {
-      next: { revalidate: REVALIDATE_S },
-    });
-    if (!res.ok) return null;
-    return usableRecord<StateBallot>(await res.json(), "state", "senateRaces");
-  } catch {
-    return null;
-  }
+/** Null only for a state with no ballot page; an outage throws (fetchRecord). */
+function fetchStateBallot(state: string): Promise<StateBallot | null> {
+  return fetchRecord<StateBallot>(
+    `${BACKEND}/api/elections/states/${encodeURIComponent(state)}`,
+    { next: { revalidate: REVALIDATE_S } },
+    "state",
+    "senateRaces"
+  );
 }
 
 // Per-state metadata, not inherited from the elections layout — otherwise
