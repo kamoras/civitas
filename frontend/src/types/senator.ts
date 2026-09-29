@@ -140,8 +140,11 @@ export interface StockTrade {
   transactionType: "purchase" | "sale_full" | "sale_partial" | "exchange";
   transactionDate: string;
   disclosureDate: string;
-  daysToDisclose: number;
-  late: boolean;
+  /** Null (both) where the row can't support a timeliness figure: a date
+   * read by OCR from a scan, or a transaction from a president's annual
+   * report, which doesn't say when it was first reported. */
+  daysToDisclose: number | null;
+  late: boolean | null;
   amountLow: number;
   amountHigh: number;
   /** The filing used the open-ended top bracket ("Over $50,000,000") — it
@@ -151,6 +154,8 @@ export interface StockTrade {
   industry: string;
   sourceUrl: string;
   parseConfidence: "text" | "ocr";
+  /** "annual": from a president's annual report (OGE Form 278e). */
+  reportKind: "periodic" | "annual";
 }
 
 export interface PaginatedStockTrades {

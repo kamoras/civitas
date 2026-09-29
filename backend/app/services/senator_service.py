@@ -602,7 +602,10 @@ def get_senator_stock_trades(
 
     query = db.query(StockTrade).filter(StockTrade.senator_id == senator_id)
     total = query.count()
-    late_count = query.filter(StockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
+    # Only trades whose timeliness is known (StockTradeSchema).
+    late_count = query.filter(
+        StockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS, StockTrade.parse_confidence == "text",
+    ).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (

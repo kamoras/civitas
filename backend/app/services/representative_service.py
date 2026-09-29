@@ -699,7 +699,10 @@ def get_rep_stock_trades(
 
     query = db.query(RepStockTrade).filter(RepStockTrade.representative_id == rep_id)
     total = query.count()
-    late_count = query.filter(RepStockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
+    # Only trades whose timeliness is known (StockTradeSchema).
+    late_count = query.filter(
+        RepStockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS, RepStockTrade.parse_confidence == "text",
+    ).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
