@@ -24,7 +24,7 @@ import { getScoreColor, getScoreBgColor } from "@/lib/representation";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { BOXED_CONTROL, boxedControl } from "@/lib/controlStyles";
-import { competitionRanks, displayScore, formatCurrency } from "@/lib/formatting";
+import { asLabel, competitionRanks, displayScore, formatCurrency } from "@/lib/formatting";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry, JusticeLoyalty } from "@/types/justice";
@@ -155,7 +155,7 @@ function IdeologyIndicator({ score, label }: { score: number | null; label: stri
           style={{ left: `${score * 100}%` }}
         />
       </div>
-      {label && <span className="text-xs text-ink-lo truncate max-w-[7rem]">{label}</span>}
+      {label && <span className="text-xs text-ink-lo truncate max-w-[7rem]">{asLabel(label)}</span>}
     </div>
   );
 }
