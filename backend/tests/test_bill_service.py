@@ -10,7 +10,9 @@ import pytest
 
 from app.config import settings
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
-from app.services.bill_service import clear_bill_collection_cache, get_bill_detail, get_bills_in_flight
+from app.services.bill_service import (
+    clear_bill_collection_cache, get_bill_detail, get_bills_in_flight, short_title_index,
+)
 
 CURRENT = settings.CURRENT_CONGRESS
 
@@ -496,3 +498,17 @@ class TestMalformedRelatedBillIds:
 
         assert [b.bill_id for b in result.bills] == ["S.4967"]
         assert get_bill_detail(db_session, "S.4967").mention_count == 1
+
+
+def test_short_title_index_keeps_names_news_uses(db_session):
+    db_session.add(Senator(id="S1", name="A", state="TX", party="R", is_current=True))
+    db_session.add(Representative(id="R1", name="B", state="TX", district=1, party="R", is_current=True))
+    for model, owner, bill_id, title in (
+        (SponsoredBill, {"senator_id": "S1"}, "S.4668", "Protect College Sports Act of 2026"),
+        (SponsoredBill, {"senator_id": "S1"}, "S.10", "Energy Act"),  # too short to name one bill
+        (SponsoredBill, {"senator_id": "S1"}, "S.11", "A bill to amend title 38, United States Code"),
+        (RepSponsoredBill, {"representative_id": "R1"}, "HR.20", "Protect College Sports Act"),  # companion
+    ):
+        db_session.add(model(bill_id=bill_id, title=title, congress=settings.CURRENT_CONGRESS, **owner))
+    db_session.commit()
+    assert short_title_index(db_session) == {"protect college sports act": {"S.4668", "HR.20"}}

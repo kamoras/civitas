@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  asLabel,
   commentDaysLeft,
   competitionRanks,
   displayScore,
@@ -272,5 +273,13 @@ describe("displayScore and competitionRanks", () => {
 
   it("continues numbering across pages", () => {
     expect(competitionRanks([{ s: 5 }, { s: 4 }], (r) => r.s, 50)).toEqual([51, 52]);
+  });
+});
+
+describe("asLabel", () => {
+  it("raises the first letter of a phrase shown on its own", () => {
+    expect(asLabel("progressive Democrat leader")).toBe("Progressive Democrat leader");
+    expect(asLabel("centrist Independent")).toBe("Centrist Independent");
+    expect(asLabel("")).toBe("");
   });
 });

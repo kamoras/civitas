@@ -198,9 +198,10 @@ export default function DataChapter() {
               the same, and short summaries of each period on the year-in-review timeline.
             </Item>
             <Item label="Developing issues">
-              A hedged draft about a bill&apos;s final passage or a significant new federal rule,
-              written from the roll-call record or the Federal Register before the news covers it,
-              checked against that record and labelled as developing.
+              A hedged draft about a significant new federal rule, written from the Federal Register
+              before the news covers it, checked against it and labelled as developing. A
+              bill&apos;s final passage is drafted from the roll-call record by a template, with no
+              model.
             </Item>
             <Item label="Explore">A summary of a document, only when you ask for one.</Item>
             <Item label="Bluesky">

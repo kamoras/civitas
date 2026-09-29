@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 
 import { boxedControl } from "@/lib/controlStyles";
+import { focusTabWhenSelected } from "@/lib/tabFocus";
 
 export type Branch = "senate" | "house" | "president" | "scotus";
 
@@ -36,10 +37,7 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
       }
       e.preventDefault();
       onChange(BRANCHES[next].key);
-      // The incoming TAB takes focus, not its panel: this handler lives on
-      // the tablist, so focus moved into the panel would strand the keyboard
-      // and ignore every arrow press after the first (AGENTS.md, Frontend).
-      document.getElementById(`branch-tab-${BRANCHES[next].key}`)?.focus();
+      focusTabWhenSelected(`branch-tab-${BRANCHES[next].key}`);
     },
     [selected, onChange]
   );

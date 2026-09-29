@@ -54,6 +54,7 @@ from app.pipeline.analyze.early_signal import (
     check_federal_register_signals,
     check_roll_call_signals,
     expire_stale_developing_issues,
+    retire_covered_developing_issues,
 )
 from app.pipeline.analyze.grounding import (
     grounding_violations,
@@ -75,6 +76,7 @@ from app.pipeline.vector_store import (
     get_embedding_model,
     search_explore_documents,
 )
+from app.services.bill_service import names_phrase, short_title_index
 from app.time_utils import utcnow
 
 _US_EAST = ZoneInfo("America/New_York")
@@ -2403,12 +2405,18 @@ def _congress_gov_bill_url(congress: int, url_type: str, number: str | int) -> s
     return congress_gov_bill_url(congress, url_type, number)
 
 
-def _resolve_bills(raw_bills: list, article_texts: list[str]) -> list[dict]:
+def _resolve_bills(
+    raw_bills: list, article_texts: list[str], titles: dict[str, set[str]] | None = None,
+) -> list[dict]:
     """Resolve bill names from LLM output + article text to Congress.gov URLs.
 
     Regex-extracted bill IDs (e.g. "H.R. 22") are resolved first since they
-    map directly to URLs.  LLM-extracted names without IDs fall back to API
-    search only if no regex match already covers that bill.
+    map directly to URLs, then any bill the articles name by its short
+    title (`titles`, bill_service.short_title_index) — news names a bill
+    that way far more often than by number ("the Protect College Sports
+    Act", 2026-09-28, never "S. 4668"). A title two bills share (House and
+    Senate companions) names neither. LLM-extracted names without IDs fall
+    back to API search only if no regex match already covers that bill.
 
     Returns list of {"name": str, "id": str, "url": str} dicts.
     """
@@ -2434,6 +2442,14 @@ def _resolve_bills(raw_bills: list, article_texts: list[str]) -> list[dict]:
             seen_raw.add(raw_id)
             id_refs.append({"name": raw_id, "id": raw_id})
 
+    combined_text_lower = combined_text.lower()
+    for name, ids in (titles or {}).items():
+        if len(ids) == 1 and names_phrase(combined_text_lower, name):
+            (bill_id,) = ids
+            if bill_id not in seen_raw:
+                seen_raw.add(bill_id)
+                id_refs.append({"name": bill_id, "id": bill_id})
+
     # Collect LLM-extracted bills — always search by name, never trust LLM IDs.
     # LLMs frequently hallucinate bill numbers (e.g. "S.2026" when the year is 2026).
     # Regex extraction from article text above is the only source of trusted IDs.
@@ -2445,7 +2461,6 @@ def _resolve_bills(raw_bills: list, article_texts: list[str]) -> list[dict]:
     # confirmation hearing) that never mentioned any bill at all. Article
     # text is the only source of truth for what was actually named, same
     # principle as the ID-regex extraction above.
-    combined_text_lower = combined_text.lower()
     for b in raw_bills:
         if isinstance(b, dict) and b.get("name"):
             name = b["name"].strip()
@@ -3934,11 +3949,11 @@ def _run_refresh(db: Session) -> int:
     # fatally: a bug in one must never take down the whole hourly refresh
     # or block the other source.
     try:
-        check_roll_call_signals(db)
+        check_roll_call_signals(db, today)
     except Exception:
         logger.exception("check_roll_call_signals failed (non-fatal)")
     try:
-        check_federal_register_signals(db)
+        check_federal_register_signals(db, today)
     except Exception:
         logger.exception("check_federal_register_signals failed (non-fatal)")
     # Expiry must run on every exit path (mirrors _persist_metrics's own
@@ -3947,6 +3962,7 @@ def _run_refresh(db: Session) -> int:
     # not just the runs that make it to the main flush/retire stage.
     try:
         expire_stale_developing_issues(db, utcnow())
+        retire_covered_developing_issues(db)
     except Exception:
         logger.exception("expire_stale_developing_issues failed (non-fatal)")
     # Own try/except so this always fires regardless of which call above
@@ -4043,6 +4059,8 @@ def _run_refresh(db: Session) -> int:
     # (title, embedding) pairs for post-LLM dedup within a single run
     generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
+    # The Congress's bills by short title, read once per run (_resolve_bills).
+    bill_titles = short_title_index(db)
     for rank, cluster in enumerate(top_clusters, start=1):
         if issues_created >= MAX_ISSUES:
             break
@@ -4282,7 +4300,7 @@ def _run_refresh(db: Session) -> int:
         # unchanged; only the model's guesses are gone.
         raw_bills: list = []
         article_texts = [f"{a.title} {a.summary}" for a in cluster]
-        resolved_bills = _resolve_bills(raw_bills, article_texts)
+        resolved_bills = _resolve_bills(raw_bills, article_texts, bill_titles)
         if resolved_bills:
             logger.info("  Resolved %d bill(s): %s",
                         len(resolved_bills),
@@ -4445,6 +4463,10 @@ def _run_refresh(db: Session) -> int:
         .all()
     )
     n_retired, n_graced = _retire_untouched_issues(all_current, _matched_issue_ids, _grace_cutoff)
+    # A vote draft whose bill this run's reporting covers as its own issue
+    # gives way to it now, not an hour from now (early_signal).
+    db.flush()
+    retire_covered_developing_issues(db)
     if n_retired:
         logger.info("Retired %d stale issues not in current clusters", n_retired)
     if n_graced:
