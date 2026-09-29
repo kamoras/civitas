@@ -69,6 +69,15 @@ export default function ShareSectionButton({
     setHasSection(!!buttonRef.current?.closest(`[${SHARE_SECTION_ATTR}]`));
   }, []);
 
+  // Unmounting drops the pending status timer and any capture still running,
+  // the same way closing the dialog does.
+  useEffect(
+    () => () => {
+      generation.current += 1;
+    },
+    []
+  );
+
   useEffect(() => {
     if (capture.state !== "ready") return;
     return () => URL.revokeObjectURL(capture.previewUrl);
