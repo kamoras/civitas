@@ -260,7 +260,10 @@ def get_president_trades(
 
     query = db.query(PresidentTrade).filter(PresidentTrade.president_id == president_id)
     total = query.count()
-    late_count = query.filter(PresidentTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
+    # Only trades whose timeliness is known (StockTradeSchema).
+    late_count = query.filter(
+        PresidentTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS, PresidentTrade.parse_confidence == "text", PresidentTrade.report_kind == "periodic",
+    ).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
@@ -285,6 +288,7 @@ def get_president_trades(
                 industry=t.industry,
                 source_url=t.source_url,
                 parse_confidence=t.parse_confidence,
+                report_kind=t.report_kind,
             )
             for t in trades_db
         ],
