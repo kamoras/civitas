@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import PresidentScorecard from "./PresidentScorecard";
+import PresidentSummary from "./PresidentSummary";
 import type { President } from "@/types/president";
 import type { PresidentScoreBreakdown } from "@/types/scoreBreakdown";
 
@@ -150,5 +151,16 @@ describe("PresidentScorecard", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+
+  it("the leaderboard's summary states the scores and links to the full scorecard", () => {
+    render(<PresidentSummary president={president} />);
+    expect(screen.getByRole("heading", { level: 2, name: "Donald J. Trump" })).toBeInTheDocument();
+    expect(screen.getByText("51")).toBeInTheDocument();
+    expect(screen.getByText("Not rated yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open the full scorecard/ })).toHaveAttribute(
+      "href",
+      "/politicians/trump-47"
+    );
   });
 });
