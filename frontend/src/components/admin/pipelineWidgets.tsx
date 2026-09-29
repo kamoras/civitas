@@ -397,6 +397,7 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs font-mono">
+        <caption className="sr-only">Pipeline run history</caption>
         <thead>
           <tr className="text-ink-lo border-b border-white/[0.07]">
             <th scope="col" className="text-left py-1 pr-3">
