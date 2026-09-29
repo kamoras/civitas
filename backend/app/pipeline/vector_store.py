@@ -268,7 +268,7 @@ def _load_vec(conn: sqlite3.Connection) -> None:
     conn.enable_load_extension(False)
 
 
-def _swap_tables(ddl: dict[str, str], *, clear_meta: bool = False) -> None:
+def _swap_tables(ddl: dict[str, str], *, clear_meta: bool = False, meta: dict[str, str] | None = None) -> None:
     """DROP and recreate each of `ddl`'s tables (name -> CREATE statement)
     in one transaction on a connection of its own, so every other
     connection — the shared one, whose users commit without _vec_lock, and
@@ -283,6 +283,14 @@ def _swap_tables(ddl: dict[str, str], *, clear_meta: bool = False) -> None:
             swap.execute(create)
         if clear_meta:
             swap.execute("DELETE FROM vec_meta")
+        for key, value in (meta or {}).items():
+            # With the tables: a swap that fails leaves what it would have
+            # recorded unrecorded too.
+            swap.execute(
+                "INSERT INTO vec_meta (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
         swap.commit()
     finally:
         swap.close()
@@ -1001,9 +1009,10 @@ def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | No
                 return None
 
         conn = get_vec_conn()
-        # Not ready from here until the last batch is in (_INDEX_MODEL).
-        _set_meta(conn, _INDEX_MODEL, "")
-        _swap_tables({"vec_explore": _EXPLORE_DDL.format(if_not_exists="")})
+        # Not ready from here until the last batch is in (_INDEX_MODEL):
+        # blanked with the swap, so a swap that fails leaves a whole index
+        # whole.
+        _swap_tables({"vec_explore": _EXPLORE_DDL.format(if_not_exists="")}, meta={_INDEX_MODEL: ""})
 
         db = db_session_factory()
         try:
@@ -1046,6 +1055,17 @@ def recalibrate_ranking(db_session_factory) -> None:
         db.close()
 
 
+# How often, and how many times, a start's index check waits out a lock.
+_BUSY_CHECKS = 10
+_BUSY_CHECK_EVERY_S = 30.0
+
+
+def wait_for_rebuild() -> None:
+    """Return once no rebuild is running in this process."""
+    with _rebuild_lock:
+        pass
+
+
 def _refit_after_a_start_rebuild(db_session_factory) -> None:
     """The fit in force was measured against the index a start's rebuild
     replaced. Under the Explore lease — a run holding it is mid-ingest (the
@@ -1054,17 +1074,21 @@ def _refit_after_a_start_rebuild(db_session_factory) -> None:
     refits anyway rather than leave the old fit in force for a day."""
     from app.pipeline import lease
 
-    with lease.job(lease.EXPLORE, who="Explore ranking refit") as held:
-        if held:
-            recalibrate_ranking(db_session_factory)
-            return
-    db = db_session_factory()
     try:
-        running = lease.holder(db, lease.EXPLORE) is not None or lease.held(db, lease.DATA_RESET)
+        with lease.job(lease.EXPLORE, who="Explore ranking refit") as held:
+            if held:
+                recalibrate_ranking(db_session_factory)
+                return
+        db = db_session_factory()
+        try:
+            running = lease.holder(db, lease.EXPLORE) is not None or lease.held(db, lease.DATA_RESET)
+        finally:
+            db.close()
     except Exception:
-        running = False
-    finally:
-        db.close()
+        # Can't tell whether a run is mid-ingest: no fit taken under it. The
+        # next Explore run refits.
+        logger.warning("Explore ranking refit skipped — the lease couldn't be read", exc_info=True)
+        return
     if not running:
         recalibrate_ranking(db_session_factory)
 
@@ -1094,17 +1118,24 @@ def ensure_explore_index(db_session_factory) -> None:
     that starts meanwhile — since the rebuild reads documents by id
     (rebuild_explore_index) and one rebuild at a time is the lock's job.
     """
-    try:
-        whole = index_is_whole()
-    except Exception as error:
-        if is_busy_error(error):
+    for attempt in range(_BUSY_CHECKS):
+        try:
+            whole = index_is_whole()
+            break
+        except Exception as error:
+            if not is_busy_error(error):
+                # Unreadable is not whole: the rebuild recreates it.
+                logger.warning("Explore index unreadable — rebuilding it", exc_info=True)
+                whole = False
+                break
             # Locked a moment (a rollout's overlap): no reason to drop an
-            # index that may well be whole. The next Explore run looks again.
-            logger.warning("Explore index busy at start — not checked (%s)", error)
-            return
-        # Unreadable is not whole: the rebuild recreates it.
-        logger.warning("Explore index unreadable — rebuilding it", exc_info=True)
-        whole = False
+            # index that may well be whole — nor to leave one that isn't for
+            # a day. Looked at again shortly (main runs this on a thread).
+            logger.warning("Explore index busy at start (%s) — checking again", error)
+            time.sleep(_BUSY_CHECK_EVERY_S)
+    else:
+        logger.warning("Explore index stayed busy at start — the next Explore run checks it")
+        return
     if whole or is_rebuilding():
         return
 

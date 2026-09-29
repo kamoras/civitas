@@ -443,6 +443,39 @@ async def test_a_run_that_waited_out_a_rebuild_purges_again_and_resolves_the_ale
     resolve.assert_called_once_with("explore-index-rebuild")
 
 
+@pytest.mark.asyncio
+async def test_a_run_facing_a_locked_index_neither_rebuilds_nor_tops_it_up(db_session):
+    # It may well be whole (no reason to drop it), and it may not be (a
+    # top-up beside a rebuild inserts chunks twice); nor does a look that
+    # never answered resolve a failed rebuild's alert.
+    import sqlite3
+
+    empty = AsyncMock(return_value={})
+    rebuild, embed, resolve = MagicMock(), MagicMock(return_value=0), MagicMock()
+    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
+         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
+               new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.index_is_whole",
+               side_effect=sqlite3.OperationalError("database is locked")), \
+         patch("app.pipeline.explore_pipeline.rebuild_explore_index", rebuild), \
+         patch("app.pipeline.explore_pipeline.embed_explore_documents", embed), \
+         patch("app.pipeline.explore_pipeline._purge_orphaned_vectors", return_value=0), \
+         patch("app.ops_alerts.resolve_ops_alert", resolve), \
+         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
+         patch("app.pipeline.explore_pipeline.update_document_authority",
+               return_value={"documents": 0, "cited": 0}), \
+         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
+         patch("app.pipeline.explore_pipeline.api_cache_set"):
+        await run_explore_pipeline(days_back=1)
+    rebuild.assert_not_called()
+    embed.assert_not_called()
+    resolve.assert_not_called()
+
+
 def test_ranking_calibration_is_kept_while_the_vector_index_is_not_whole(db_session):
     # Measured against a semantic channel answering nothing, the priors come
     # out as if the channels agreed perfectly.

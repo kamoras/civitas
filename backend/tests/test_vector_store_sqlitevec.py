@@ -330,16 +330,56 @@ class TestEnsureExploreIndex:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()
 
-    def test_a_start_leaves_an_index_it_found_only_locked(self, vec_env, monkeypatch):
+    def test_a_start_waits_out_a_lock_rather_than_rebuild_or_give_up(self, vec_env, monkeypatch):
         # A rollout's overlap holding the file a moment is no reason to drop
-        # an index that may well be whole and spend twenty minutes on it.
+        # an index that may well be whole — nor to leave one that isn't
+        # until the next night.
+        monkeypatch.setattr(vector_store, "_BUSY_CHECK_EVERY_S", 0)
+        answers = iter([sqlite3.OperationalError("database is locked")] * 3 + [False])
+
+        def check():
+            answer = next(answers)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        monkeypatch.setattr(vector_store, "index_is_whole", check)
+        with patch.object(vector_store, "start_writer") as thread:
+            vector_store.ensure_explore_index(lambda: None)
+        thread.assert_called_once()
+
         def locked():
             raise sqlite3.OperationalError("database is locked")
 
         monkeypatch.setattr(vector_store, "index_is_whole", locked)
         with patch.object(vector_store, "start_writer") as thread:
             vector_store.ensure_explore_index(lambda: None)
-        thread.assert_not_called()
+        thread.assert_not_called()  # stayed locked: left to the next run
+
+    def test_a_swap_that_fails_leaves_a_whole_index_whole(self, vec_env, monkeypatch):
+        # The identity is blanked in the swap's own transaction.
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        real_open = vector_store._open_vec_conn
+
+        def refusing(timeout, **kw):
+            conn = real_open(timeout, **kw)
+            real_execute = conn.execute
+
+            class _Conn:
+                def __getattr__(self, name):
+                    return getattr(conn, name)
+
+                def execute(self, sql, *a):
+                    if sql.startswith("DROP"):
+                        raise sqlite3.OperationalError("database is locked")
+                    return real_execute(sql, *a)
+
+            return _Conn()
+
+        monkeypatch.setattr(vector_store, "_open_vec_conn", refusing)
+        with pytest.raises(sqlite3.OperationalError):
+            vector_store.rebuild_explore_index(lambda: None)
+        assert vector_store.index_is_whole()
 
     def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
         # Two overlapping would each clear what the other built.

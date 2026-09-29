@@ -54,6 +54,7 @@ from app.pipeline.vector_store import (
     index_is_whole,
     is_busy_error,
     rebuild_explore_index,
+    wait_for_rebuild,
     get_embedded_explore_ids,
 )
 
@@ -370,6 +371,22 @@ def _purge_duplicate_floor_speeches(db: Session) -> list[int]:
     return doomed
 
 
+async def _index_is_whole_or_none() -> bool | None:
+    """Whether the vector index is a complete build: False when it can't be
+    read (a rebuild recreates it), None when it is only locked — after
+    waiting out any rebuild in this process and looking once more."""
+    for attempt in (1, 2):
+        try:
+            return await asyncio.to_thread(index_is_whole)
+        except Exception as error:
+            if not is_busy_error(error):
+                logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
+                return False
+            if attempt == 1:
+                await asyncio.to_thread(wait_for_rebuild)
+    return None
+
+
 def _purge_orphaned_vectors(db: Session) -> int:
     """Drop vectors whose ExploreDocument no longer exists.
 
@@ -628,19 +645,14 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # under this run's lease, rather than topped up: an incremental pass
         # can't make it whole, and calibration below measures it.
         rebuilt = None
-        try:
-            whole = await asyncio.to_thread(index_is_whole)
-        except Exception as error:
-            if is_busy_error(error):
-                # Locked a moment: no reason to drop an index that may well
-                # be whole. Topped up as usual; the next run looks again.
-                logger.warning("Explore pipeline: vector index busy — not checked (%s)", error)
-                whole = True
-            else:
-                # Unreadable is not whole: a rebuild recreates what it can't read.
-                logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
-                whole = False
-        if not whole:
+        whole = await _index_is_whole_or_none()
+        if whole is None:
+            # Busy even after waiting out any rebuild here: neither rebuilt
+            # (it may well be whole) nor topped up (it may not be, and a
+            # rebuild could start beside it). The next run looks again.
+            logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
+            rebuilt = 0
+        elif not whole:
             logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
             try:
                 # Waiting out one already running (a start's): embedding beside
@@ -666,11 +678,8 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                 # without this run's lease: one this run deleted meanwhile
                 # may have been embedded after the purge above.
                 await asyncio.to_thread(_purge_orphaned_vectors, db)
-        try:
-            whole_now = whole or await asyncio.to_thread(index_is_whole)
-        except Exception:
-            whole_now = False
-        if whole_now:
+        # Resolved only on a look that answered: a busy one says nothing.
+        if whole or await _index_is_whole_or_none():
             from app.ops_alerts import resolve_ops_alert
 
             await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")

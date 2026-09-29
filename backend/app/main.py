@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
@@ -131,14 +132,18 @@ def _start_pipeline_side_startup_jobs() -> None:
     read-only API process."""
     # Rebuild the sqlite-vec explore index when missing or built by a
     # different model (the 2026-07 chroma->sqlite-vec migration path, and
-    # any future index-model change). Spawns its own daemon thread;
-    # search reports "not ready" until it completes.
-    try:
-        from app.database import SessionLocal
-        from app.pipeline.vector_store import ensure_explore_index
-        ensure_explore_index(SessionLocal)
-    except Exception:
-        logging.getLogger(__name__).exception("Explore index check failed (non-fatal)")
+    # any future index-model change); search reports "not ready" until it
+    # completes. The check itself on a thread too: it reads the vector store,
+    # and waits out a lock another writer holds rather than guess.
+    def _check_explore_index() -> None:
+        try:
+            from app.database import SessionLocal
+            from app.pipeline.vector_store import ensure_explore_index
+            ensure_explore_index(SessionLocal)
+        except Exception:
+            logging.getLogger(__name__).exception("Explore index check failed (non-fatal)")
+
+    threading.Thread(target=_check_explore_index, daemon=True, name="explore-index-check").start()
 
     # A release that rescales Legislative Effectiveness or Constituent
     # Alignment leaves the stored scores and reference on the old scale until
