@@ -29,6 +29,7 @@ from app.schemas import (
     StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
+from app.services._scorecard_common import score_breakdown
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
@@ -257,8 +258,6 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
     rather than build_rep_response()'s display-oriented dict (which only
     has vote counts, not per-vote votedWithParty).
     """
-    from app.pipeline.analyze.score_calculator import explain_scores
-    from app.services._scorecard_common import build_score_breakdown_entity
 
     rep = (
         db.query(Representative)
@@ -269,8 +268,7 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
     if rep is None:
         return None
 
-    entity = build_score_breakdown_entity(rep, lobbying_donation_attr="donation_to_representative")
-    return explain_scores(entity)
+    return score_breakdown(db, rep, lobbying_donation_attr="donation_to_representative")
 
 
 def get_rep_states_with_counts(db: Session) -> list[dict]:
@@ -473,6 +471,8 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_contributions = funding.get("totalContributions")
     existing.caucus_party = (rep_data.get("votingRecord") or {}).get("effectiveParty")
+    record = (rep_data.get("votingRecord") or {}).get("partyLineRecord")
+    existing.party_line_record = json.dumps(record) if record else None
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
     voting_record = rep_data.get("votingRecord", {})

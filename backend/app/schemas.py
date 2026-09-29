@@ -33,7 +33,7 @@ class DonorSchema(CamelModel):
     pac_analysis: str | None = None
     # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified,
     # ...) for this donor's own committee, when the donor is one. Reported,
-    # not scored (the PAC-utilization signal that read it left in v6.20).
+    # not scored (the PAC-utilization signal that read it left in v6.22).
     committee_type: str | None = None
 
 

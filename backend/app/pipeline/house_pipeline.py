@@ -22,6 +22,7 @@ from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
 from app.pipeline.analyze.bill_stage import is_enacted
+from app.pipeline.analyze.party_line_record import party_line_records
 from app.pipeline.member_lifecycle import (
     CHAMBER_HOUSE,
     purge_departed_members,
@@ -829,6 +830,11 @@ async def run_house_pipeline() -> dict:
                     fail_count += 1
 
             alert_if_lda_down(lda_totals, "house")
+
+            # Each rep's party-line record over the whole Congress (v6.20),
+            # before the reference is measured on it.
+            for (rep, _), record in zip(prepared_reps, party_line_records(db, "house", [r for r, _ in prepared_reps])):
+                rep["votingRecord"]["partyLineRecord"] = record
 
             # Scoring is a second pass so each chamber-relative reference is
             # measured from the whole population BEFORE anyone is scored

@@ -44,7 +44,7 @@ targets below are this platform's own live empirical audits, not
 numbers reproduced from either paper — see _calc_funding_independence's
 own "Academic rationale" note for the fuller account. The PAC share is
 scored per chamber against the share campaigns of the same size typically
-take there (v6.20, _pac_size_fit, measured every run —
+take there (v6.22, _pac_size_fit, measured every run —
 compute_funding_reference), with the chamber median as the fallback
 before a chamber has a fit. Top-donor
 concentration is scored against the chamber's measured median, saturating
@@ -193,7 +193,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.20"
+ALGORITHM_VERSION = "v6.22"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -855,14 +855,14 @@ def _calc_funding_independence(
 
       1. PAC dependency (20/53): PAC share of contributions against the
          share campaigns of the same size typically take in the chamber
-         (v6.20, _pac_size_fit): at that share it scores 50, with none 100,
+         (v6.22, _pac_size_fit): at that share it scores 50, with none 100,
          at twice it 0. Per chamber because House members rely on PAC money
          far more than senators, a structural difference, not a choice. Per
          size because PAC checks are capped by law and individual money is
          not, so a larger campaign dilutes the same PAC dollars to a smaller
          share: scored against one chamber median, FI tracked campaign size
          (r=+0.58 Senate, +0.15 House, 2026-09-28), and the PAC-cap
-         utilization factor meant to correct that (before v6.20) measured how
+         utilization factor meant to correct that (before v6.22) measured how
          close each contributing PAC came to a one-election cap, over
          totals spanning a primary and a general, rather than how much the
          campaign depended on PACs. With the size fit, r=+0.05 / -0.06.
@@ -979,7 +979,7 @@ def _pac_size_fit(sized: list[tuple[float, float]]) -> dict | None:
     Measured 2026-09-28 from the live breakdowns: slope -1.03 Senate
     (n=91; PAC dollars barely grow with campaign size, so the share mostly
     measures size), -0.48 House (n=390). See docs/methodology/member-score/
-    v6.20.md. None below _MIN_FUNDING_REFERENCE_MEMBERS usable members."""
+    v6.22.md. None below _MIN_FUNDING_REFERENCE_MEMBERS usable members."""
     logs = sorted(math.log(base) for base, _ in sized if base > 0)
     if len(logs) < _MIN_FUNDING_REFERENCE_MEMBERS:
         return None
@@ -1086,7 +1086,7 @@ def _funding_independence_core(
     pac_ratio = pac_total / total_raised
 
     # Scored against the share campaigns of the member's size typically take
-    # in their chamber (v6.20, _pac_size_fit, measured every run): the member
+    # in their chamber (v6.22, _pac_size_fit, measured every run): the member
     # at that share scores 50, none scores 100, twice it scores 0. PAC
     # checks are capped by law and individual money is not, so a larger
     # campaign dilutes the same PAC dollars to a smaller share. Scored
@@ -1096,7 +1096,7 @@ def _funding_independence_core(
     # gave, not how much the campaign depended on PACs, against a
     # one-election cap applied to totals that span a primary and a general.
     # Before a chamber has a fit, its median share is the reference, as
-    # before v6.20.
+    # before v6.22.
     chamber = _chamber_of(district)
     ref = {
         **(FUNDING_REFERENCE.load().get(chamber) or {}),
@@ -1171,6 +1171,20 @@ def _funding_independence_core(
     )
     return {
         "score": score,
+        # The numbers the scorecard's sentence states, as numbers: the page
+        # writes "11% of $1.21M in contributions came from PACs" from these,
+        # never re-deriving a share itself.
+        "facts": {
+            "contributions": round(total_raised),
+            "pacShare": round(pac_ratio, 4),
+            "smallDonorShare": round(small_pct / 100, 4),
+            "smallDonorExpectedShare": (
+                round(small_expected_pct / 100, 4) if small_expected_pct is not None else None
+            ),
+            # The House compares with the chamber median; a senator with what
+            # a state of that size is expected to raise in small gifts.
+            "smallDonorComparison": "house-median" if district is not None else "state-size",
+        },
         "components": [
             {
                 "label": "PAC dependency",
@@ -1438,8 +1452,20 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     research note validated (party-unity votes, unweighted). It used to be
     weighted by partyAlignmentWeight, the bill's CONTENT lean, with 0.0
     read as 1.0; a content-bipartisan bill that split on party lines then
-    counted a hundred times more than one with a 0.01 lean."""
+    counted a hundred times more than one with a 0.01 lean.
+
+    Since v6.20 the rate is the member's party-line record over the whole
+    Congress when the pipeline has measured it (partyLineRecord,
+    party_line_record.py): breaks toward the other party only, each measure
+    once. The stored votes are read only when it hasn't."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
+
+    record = voting_record.get("partyLineRecord")
+    if isinstance(record, dict) and isinstance(record.get("votes"), int):
+        n = record["votes"]
+        if n < CONSTITUENT_MIN_VOTES:
+            return None, n
+        return len(record.get("breaks") or []) / n, n
 
     votes = dedupe_votes([
         v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
@@ -2028,7 +2054,25 @@ def _constituent_alignment_core(
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
         })
-    return {"score": score, "components": components, "vote_part_status": vote_part_status}
+    record = voting_record.get("partyLineRecord")
+    return {
+        "score": score,
+        "components": components,
+        "vote_part_status": vote_part_status,
+        # The scorecard's sentence and scale, as numbers: how many
+        # party-labeled votes, how many were breaks, and the rate same-party
+        # members of seats like this one break at (None where not measured).
+        "facts": {
+            "party": eval_party,
+            "partyVotes": n_party,
+            "breaks": round(break_rate * n_party) if break_rate is not None else None,
+            "breakRate": round(break_rate, 4) if break_rate is not None else None,
+            "expectedBreakRate": round(expected, 4) if expected is not None else None,
+            # Votes against the party from its flank (party_line_record):
+            # shown beside the breaks, not counted. None without a record.
+            "flankBreaks": len(record.get("flankBreaks") or []) if record else None,
+        },
+    }
 
 
 def _calc_funding_diversity(funding: dict) -> int:
@@ -2896,6 +2940,17 @@ def _calc_legislative_effectiveness(
     )["score"]
 
 
+def _bills_by_stage(sponsored_bills: list[dict] | None) -> list[int]:
+    """How many of a member's sponsored bills got furthest to each of the
+    five V&W stages (introduced, action in committee, action beyond
+    committee, passed a chamber, became law), by the same stage mapping
+    the score uses (_les_bill_stage)."""
+    counts = [0] * _LES_MAX_STAGE
+    for bill in sponsored_bills or []:
+        counts[_les_bill_stage(bill) - 1] += 1
+    return counts
+
+
 def _legislative_effectiveness_core(
     sponsored_bills: list[dict],
     leadership_score: float | None = None,
@@ -2996,4 +3051,4 @@ def _legislative_effectiveness_core(
                 "(median attractor = 50)"
             ),
         })
-    return {"score": score, "components": components}
+    return {"score": score, "components": components, "facts": {"billsByStage": _bills_by_stage(sponsored_bills)}}

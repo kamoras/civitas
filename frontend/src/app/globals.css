@@ -424,3 +424,20 @@ a[target="_blank"] {
     transform: none;
   }
 }
+
+/* Share-image capture (lib/shareImage.ts). For the moment a section is
+   measured and cloned, it is laid out as the picture should look: controls
+   that are only useful clicked are taken out of the flow rather than left as
+   holes, and a column stretched to its row's height shrinks to its own
+   content (and one with a height cap or its own scrollbar shows all of it).
+   The dialog is already over the page, and the attribute is off
+   again as soon as the clone exists. */
+[data-share-capturing] {
+  align-self: start !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+[data-share-capturing] [data-share-exclude] {
+  display: none !important;
+}

@@ -339,7 +339,7 @@ The correct pattern, established by `_district_pvi()` /
    `/data/les_reference.json` for the API's breakdowns, with
    `app/data/les_reference.json` (`scripts/calibrate_les_credit_scale.py`)
    as the pre-first-run fallback. Funding Independence's PAC-share
-   reference (the chamber's size fit, v6.20) works the same way (`compute_funding_reference`,
+   reference (the chamber's size fit, v6.22) works the same way (`compute_funding_reference`,
    `funding_reference.json`, `scripts/audit_pac_ratio.py`), and so does
    Constituent Alignment's per-party expected break rate by seat lean
    (`compute_constituent_reference`, `constituent_reference.json`,
@@ -924,6 +924,7 @@ the pending list).
 | Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
+| Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/`, `frontend/src/app/photo/bioguide/[id]/route.ts` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
@@ -980,6 +981,21 @@ the pending list).
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from
   client-side TTL caching.
+- **Sharing a section as an image** is opt-in per section: mark the section
+  element `data-share-section="<anchor-id>"`, put a `ShareSectionButton`
+  inside it, and wrap the page in a `ShareSubjectProvider` naming what it is
+  about (the image's title strip and link come from there). Mark controls
+  that mean nothing in a picture (toggles, "open" buttons, votes) with
+  `data-share-exclude`. The capture is client-side, from the live DOM, and
+  never requests a third-party host from the visitor's browser (§8): images
+  that aren't same-origin are left blank unfetched, so mark them excluded.
+  The guard covers images only (`<img>`, SVG `<image>`, CSS image urls) —
+  fonts, stylesheets and an external `<use href>` inside a captured section
+  are fetched as-is, which is fine only while they stay self-hosted.
+  Member photos are the exception, read through the same-origin
+  `/photo/bioguide/[id]` route (cached and rate-limited in nginx) — add a
+  route like it (taking an id, never a URL) rather than proxying arbitrary
+  URLs.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving
@@ -1080,6 +1096,11 @@ state in the query string is exposed to them.
   and runs the stack-deploy command above. There's no separate
   frontend-only/backend-only deploy anymore; Swarm only rolls the services
   whose image tag actually changed.
+- nginx's security headers (nosniff, X-Frame-Options, Referrer-Policy,
+  Permissions-Policy) live in `nginx/security-headers.conf`. nginx drops the
+  server-level `add_header`s from any location that sets one of its own, so
+  **every location that adds a header must also include that file**;
+  `backend/tests/test_nginx_config.py` fails when one doesn't.
 - Docker images built from `backend/Dockerfile`, `frontend/Dockerfile`,
   `nginx/Dockerfile`
 - Data persists in the `civitas_app_data` Docker named volume, which survives

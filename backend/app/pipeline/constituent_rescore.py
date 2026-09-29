@@ -24,6 +24,8 @@ import json
 import logging
 from collections import defaultdict
 
+from app.pipeline.analyze.party_line_record import load_record
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,6 +53,7 @@ def _member_dict(row, votes: list[dict], chamber: str) -> dict:
             "keyVotes": votes,
             "recentVotes": [],
             "effectiveParty": row.caucus_party or row.party,
+            "partyLineRecord": load_record(row.party_line_record),
         },
     }
 

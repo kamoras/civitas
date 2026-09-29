@@ -66,6 +66,7 @@ from collections import Counter, defaultdict
 
 from scipy import stats as scipy_stats
 
+from app.pipeline.analyze.party_line_record import load_record
 from app.pipeline.transform.normalize_votes import stored_vote
 from app.pipeline.analyze.score_calculator import (
     ALGORITHM_VERSION,
@@ -120,7 +121,7 @@ _DIM_LABEL = {
 _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
     ("pac_ratio", "score_funding_independence", -1,
      "PAC share of receipts (FEC)"),
-    # Raw PAC dollars as well as the share: since v6.20 the share is judged
+    # Raw PAC dollars as well as the share: since v6.22 the share is judged
     # against campaigns of the same size, which leaves the dollars as what
     # it mostly measures (Spearman -0.88 Senate, -0.79 House, 2026-09-28).
     ("pac_dollars", "score_funding_independence", -1,
@@ -505,7 +506,9 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
         # direction-of-effect check against a different ratio than the one
         # scored would weaken for reasons unrelated to the scores.
         base = getattr(m, "total_contributions", None) or raised
-        rate, labeled = party_break_rate({"keyVotes": votes[m.id]})
+        rate, labeled = party_break_rate(
+            {"keyVotes": votes[m.id], "partyLineRecord": load_record(m.party_line_record)},
+        )
         constituent = constituent_metrics(
             rate, labeled, m.state or "", m.party or "I",
             effective_party=getattr(m, "caucus_party", None),
