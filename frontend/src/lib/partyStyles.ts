@@ -26,12 +26,6 @@ export const PARTY_BORDER: Record<string, string> = {
   I: "border-ind-purple/40",
 };
 
-export const PARTY_BG: Record<string, string> = {
-  D: "bg-dem-blue/5",
-  R: "bg-signal-red/5",
-  I: "bg-ind-purple/5",
-};
-
 export const PARTY_LABELS: Record<string, string> = {
   D: "DEMOCRAT",
   R: "REPUBLICAN",

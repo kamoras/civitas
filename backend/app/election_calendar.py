@@ -18,6 +18,8 @@ label specials instead of trusting any single upstream field.
 
 from datetime import date
 
+from app.time_utils import utcnow
+
 CLASS_I_STATES = frozenset({
     "AZ", "CA", "CT", "DE", "FL", "HI", "IN", "ME", "MD", "MA",
     "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NJ", "NM", "NY",
@@ -108,3 +110,21 @@ def next_senate_election_year(state: str, after_year: int) -> int | None:
             year += 6
         candidates.append(year)
     return min(candidates)
+
+
+ELECTION_SEASON_WINDOW_DAYS = 60
+
+
+def days_until_next_election(today: date | None = None) -> int:
+    """Days remaining until the next federal Election Day (0 = today)."""
+    today = today or utcnow().date()
+    return (next_election_day(today) - today).days
+
+
+def is_election_season(today: date | None = None) -> bool:
+    """True within ELECTION_SEASON_WINDOW_DAYS of the next federal election
+    — the window the midterm-elections pipeline (election_pipeline.py) uses
+    to switch its coverage-ingestion phase from nightly to a tighter cadence
+    (see scheduler.py). Moved here from api/action.py (2026-09), where it
+    had outlived the Action Center elections tab it was written beside."""
+    return days_until_next_election(today) <= ELECTION_SEASON_WINDOW_DAYS

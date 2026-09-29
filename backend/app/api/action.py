@@ -3,11 +3,8 @@
 import asyncio
 import json
 import logging
-import re
-import time
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session, selectinload
 
@@ -16,20 +13,18 @@ from datetime import date, timedelta
 from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
-from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db, get_visits_db
-from app.election_calendar import next_election_day, seats_up_for_year
+from app.election_calendar import next_election_day
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
-from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline.fetch.congress import expected_current_congress
 from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
 from app.models import (
-    ActionIssue, ExploreDocument, IssueView, MonitorStatus,
-    NationalMonitor, Race, RepSponsoredBill, SponsoredBill,
+    ActionIssue, ApiCache, ExploreDocument, IssueView, MonitorStatus,
+    NationalMonitor, RepSponsoredBill, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
@@ -302,8 +297,6 @@ def _build_issue_response(
         related_explore_docs=related_docs,
         related_senators=related_senators,
         related_monitor_slugs=monitor_slugs,
-        concerned_count=getattr(issue, "concerned_count", 0) or 0,
-        not_priority_count=getattr(issue, "not_priority_count", 0) or 0,
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
@@ -345,6 +338,31 @@ def _trending_ids_for(issues: list[ActionIssue], db_visits: Session) -> set[str]
     return compute_trending_issue_ids(view_counts)
 
 
+# Runs to look back through for one that wrote issues: two days of hourly
+# refreshes. Past that the line is omitted rather than naming a stale time.
+_REFRESH_LOOKBACK_RUNS = 48
+
+
+def _last_refresh_with_issues(db: Session) -> str | None:
+    """ISO time (UTC, "Z") of the newest Action Center run that published or
+    re-matched at least one issue, or None if none did recently."""
+    rows = (
+        db.query(ApiCache.cached_at, ApiCache.data_json)
+        .filter(ApiCache.tier == "action-metrics")
+        .order_by(ApiCache.cached_at.desc())
+        .limit(_REFRESH_LOOKBACK_RUNS)
+        .all()
+    )
+    for cached_at, data_json in rows:
+        try:
+            counts = json.loads(data_json).get("counts", {})
+        except (ValueError, TypeError, AttributeError):
+            continue
+        if counts.get("issues_new_topic", 0) + counts.get("issues_matched_existing", 0) > 0:
+            return cached_at.isoformat() + "Z"
+    return None
+
+
 @router.get("/issues")
 async def get_action_issues(
     response: Response,
@@ -356,11 +374,8 @@ async def get_action_issues(
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
     issues = _latest_current_issues(db, for_date=date)
 
-    if not issues:
-        return {"date": date, "issues": []}
-
-    issue_date = issues[0].date
-
+    # Computed before the empty-day return: a reader paging onto a day with
+    # nothing left on it still needs the pager's way back.
     available_dates = [
         row[0] for row in
         db.query(ActionIssue.date)
@@ -369,6 +384,20 @@ async def get_action_issues(
         .limit(14)
         .all()
     ]
+    # When the live view was last refreshed: the newest run that wrote
+    # issues. Every run leaves an action-metrics row (action_metrics.py),
+    # aborted ones included, so the newest row alone would read "updated
+    # just now" over issues hours old exactly when the feeds are down.
+    # Only for the live view; a past day's page is not "updated".
+    generated_at = _last_refresh_with_issues(db) if date is None else None
+
+    if not issues:
+        return {
+            "date": date, "issues": [], "availableDates": available_dates,
+            "generatedAt": generated_at,
+        }
+
+    issue_date = issues[0].date
 
     all_explore_ids: list[int] = []
     for i in issues:
@@ -399,6 +428,7 @@ async def get_action_issues(
             for i in issues
         ],
         "availableDates": available_dates,
+        "generatedAt": generated_at,
     }
 
 
@@ -491,387 +521,6 @@ async def get_action_issue(issue_id: str, response: Response, db: Session = Depe
     return _build_issue_response(issue, db, None)
 
 
-class PulseVoteRequest(BaseModel):
-    issue_id: int
-    stance: str
-
-    @field_validator("stance")
-    @classmethod
-    def validate_stance(cls, v: str) -> str:
-        if v not in ("concerned", "not_priority"):
-            raise ValueError("stance must be 'concerned' or 'not_priority'")
-        return v
-
-
-# Keyed on the same daily-salted HMAC of the IP that visit counting uses
-# (api/visits.py), never the IP itself: a raw address held for a day is
-# exactly the per-visitor identifier §8 of AGENTS.md rules out, and the
-# salt is deleted when the UTC day ends, so yesterday's keys cannot be
-# turned back into addresses. A new salt also means a new key, which makes
-# the dedup "one stance per issue per UTC day" — what the 429 says.
-_pulse_voted: dict[tuple[str, int], float] = {}
-_PULSE_DEDUP_WINDOW = 60.0 * 60 * 24
-
-
-@router.post("/pulse")
-async def record_pulse_vote(
-    request: Request,
-    body: PulseVoteRequest,
-    _rl: WriteRateLimit,
-    db: Session = Depends(get_db),
-):
-    """Record an anonymous stance vote on an issue and return updated counts.
-
-    No login system exists on this platform, so "anonymous" here can only
-    ever mean IP-based — not a durable identity. The per-IP rate limit
-    stops scripted ballot-stuffing at volume; the per-(IP, issue) dedup
-    below stops a single caller from repeatedly voting on the same issue,
-    which a generic rate limit alone wouldn't (2026-07 audit found this
-    endpoint had neither).
-    """
-    from app.api.visits import _daily_salt, _visitor_hash
-
-    salt = await _daily_salt(utcnow().date().isoformat())
-    now = time.monotonic()
-    key = (_visitor_hash(client_ip(request), salt), body.issue_id)
-    last = _pulse_voted.get(key)
-    if last is not None and now - last < _PULSE_DEDUP_WINDOW:
-        raise HTTPException(
-            status_code=429,
-            detail="You've already registered a stance on this issue today.",
-        )
-
-    issue = db.query(ActionIssue).filter(ActionIssue.id == body.issue_id).first()
-    if not issue:
-        raise HTTPException(status_code=404, detail="Issue not found")
-
-    if body.stance == "concerned":
-        issue.concerned_count = (issue.concerned_count or 0) + 1
-    else:
-        issue.not_priority_count = (issue.not_priority_count or 0) + 1
-    db.commit()
-    db.refresh(issue)
-
-    _pulse_voted[key] = now
-    if len(_pulse_voted) > 20_000:
-        cutoff = now - _PULSE_DEDUP_WINDOW
-        stale = [k for k, v in _pulse_voted.items() if v < cutoff]
-        for k in stale:
-            del _pulse_voted[k]
-
-    return {
-        "issueId": issue.id,
-        "concernedCount": issue.concerned_count or 0,
-        "notPriorityCount": issue.not_priority_count or 0,
-    }
-
-
-# The globe's answer, held in process: (monotonic time, payload). The one
-# uvicorn worker (backend/Dockerfile) makes this the only copy.
-_COUNTRY_NEWS_TTL_S = 600.0
-_country_news: tuple[float, dict] | None = None
-_country_news_lock = asyncio.Lock()
-
-
-@router.get("/country-news")
-async def get_country_news(response: Response):
-    """Return recent news articles grouped by country mentioned."""
-    # Backed by a live fetch of every RSS feed (fetch_news_articles), ~50
-    # outlets one after another, not a DB read. nginx caches the response,
-    # but its key includes the query string, so `?anything` reached here
-    # every time: a request loop was a loop of 50 outbound fetches, each
-    # holding a worker thread that search and the rest of the API share,
-    # and a way to get this server rate-limited by the outlets. So the
-    # answer is also held here, and concurrent misses share one fetch.
-    global _country_news
-    response.headers["Cache-Control"] = "public, max-age=600"
-    async with _country_news_lock:
-        if _country_news is None or time.monotonic() - _country_news[0] >= _COUNTRY_NEWS_TTL_S:
-            from app.pipeline.fetch.news_feeds import fetch_news_articles
-
-            articles = await asyncio.to_thread(fetch_news_articles)
-            _country_news = (time.monotonic(), {"countries": _extract_country_mentions(articles)})
-        return _country_news[1]
-
-
-_COUNTRIES: dict[str, dict] = {
-    "China": {"lat": 35.86, "lng": 104.19},
-    "Russia": {"lat": 61.52, "lng": 105.32},
-    "Ukraine": {"lat": 48.38, "lng": 31.17},
-    "Iran": {"lat": 32.43, "lng": 53.69},
-    "Israel": {"lat": 31.05, "lng": 34.85},
-    "North Korea": {"lat": 40.34, "lng": 127.51},
-    "South Korea": {"lat": 35.91, "lng": 127.77},
-    "Taiwan": {"lat": 23.70, "lng": 120.96},
-    "Japan": {"lat": 36.20, "lng": 138.25},
-    "India": {"lat": 20.59, "lng": 78.96},
-    "Mexico": {"lat": 23.63, "lng": -102.55},
-    "Canada": {"lat": 56.13, "lng": -106.35},
-    "United Kingdom": {"lat": 55.38, "lng": -3.44},
-    "Germany": {"lat": 51.17, "lng": 10.45},
-    "France": {"lat": 46.23, "lng": 2.21},
-    "Brazil": {"lat": -14.24, "lng": -51.93},
-    "Saudi Arabia": {"lat": 23.89, "lng": 45.08},
-    "Turkey": {"lat": 38.96, "lng": 35.24},
-    "Australia": {"lat": -25.27, "lng": 133.78},
-    "Iraq": {"lat": 33.22, "lng": 43.68},
-    "Syria": {"lat": 34.80, "lng": 38.99},
-    "Afghanistan": {"lat": 33.94, "lng": 67.71},
-    "Pakistan": {"lat": 30.38, "lng": 69.35},
-    "Cuba": {"lat": 21.52, "lng": -77.78},
-    "Venezuela": {"lat": 6.42, "lng": -66.59},
-    "Poland": {"lat": 51.92, "lng": 19.15},
-    "Italy": {"lat": 41.87, "lng": 12.57},
-    "Spain": {"lat": 40.46, "lng": -3.75},
-    "Nigeria": {"lat": 9.08, "lng": 8.68},
-    "Egypt": {"lat": 26.82, "lng": 30.80},
-    "South Africa": {"lat": -30.56, "lng": 22.94},
-    "Colombia": {"lat": 4.57, "lng": -74.30},
-    "Philippines": {"lat": 12.88, "lng": 121.77},
-    "Vietnam": {"lat": 14.06, "lng": 108.28},
-    "Indonesia": {"lat": -0.79, "lng": 113.92},
-    "Thailand": {"lat": 15.87, "lng": 100.99},
-    "Myanmar": {"lat": 21.91, "lng": 95.96},
-    "Ethiopia": {"lat": 9.15, "lng": 40.49},
-    "Kenya": {"lat": -0.02, "lng": 37.91},
-    "Argentina": {"lat": -38.42, "lng": -63.62},
-    "Chile": {"lat": -35.68, "lng": -71.54},
-    "Peru": {"lat": -9.19, "lng": -75.02},
-    "Palestine": {"lat": 31.95, "lng": 35.23},
-    "Lebanon": {"lat": 33.85, "lng": 35.86},
-    "Yemen": {"lat": 15.55, "lng": 48.52},
-    "Somalia": {"lat": 5.15, "lng": 46.20},
-    "Sudan": {"lat": 12.86, "lng": 30.22},
-    "Libya": {"lat": 26.34, "lng": 17.23},
-    "Haiti": {"lat": 18.97, "lng": -72.29},
-    "Honduras": {"lat": 15.20, "lng": -86.24},
-    "Guatemala": {"lat": 15.78, "lng": -90.23},
-    "El Salvador": {"lat": 13.79, "lng": -88.90},
-}
-
-_ALIASES: dict[str, str] = {
-    "UK": "United Kingdom", "Britain": "United Kingdom",
-    "DPRK": "North Korea", "Pyongyang": "North Korea",
-    "ROK": "South Korea", "Seoul": "South Korea",
-    "Beijing": "China", "Chinese": "China",
-    "Russian": "Russia", "Moscow": "Russia", "Kremlin": "Russia",
-    "Iranian": "Iran", "Tehran": "Iran",
-    "Israeli": "Israel", "Gaza": "Palestine", "West Bank": "Palestine",
-    "Palestinian": "Palestine", "Taipei": "Taiwan", "Taiwanese": "Taiwan",
-    "Kyiv": "Ukraine", "Ukrainian": "Ukraine",
-    "Mexican": "Mexico",
-}
-
-
-def _whole_word(name: str) -> re.Pattern:
-    # Whole words: as a substring, "India" matched every Indiana story,
-    # "Iran" matched "Iranian" (an alias of its own) and "UK" any word
-    # spelled in capitals that contains it.
-    return re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")
-
-
-_COUNTRY_PATTERNS = {name: _whole_word(name) for name in _COUNTRIES}
-_ALIAS_PATTERNS = {alias: _whole_word(alias) for alias in _ALIASES}
-
-
-def _extract_country_mentions(articles: list) -> list[dict]:
-    """Group articles by country mentions using simple name matching."""
-    from collections import defaultdict
-    country_articles: dict[str, list[dict]] = defaultdict(list)
-
-    for article in articles:
-        text = f"{article.title} {article.summary}"
-        for name, pattern in _COUNTRY_PATTERNS.items():
-            if pattern.search(text):
-                country_articles[name].append({
-                    "title": article.title,
-                    "url": article.url,
-                    "source": article.source_name,
-                    "date": article.published.isoformat() if article.published else "",
-                })
-        for alias, canonical in _ALIASES.items():
-            # A country matched via both its name and an alias (e.g. "Russia"
-            # and "Moscow") is de-duplicated by title in the pass below.
-            if _ALIAS_PATTERNS[alias].search(text):
-                country_articles[canonical].append({
-                    "title": article.title,
-                    "url": article.url,
-                    "source": article.source_name,
-                    "date": article.published.isoformat() if article.published else "",
-                })
-
-    results: list[dict] = []
-    for name, arts in country_articles.items():
-        seen: set[str] = set()
-        unique = []
-        for a in arts:
-            if a["title"] not in seen:
-                seen.add(a["title"])
-                unique.append(a)
-        coords = _COUNTRIES[name]
-        results.append({
-            "country": name,
-            "lat": coords["lat"],
-            "lng": coords["lng"],
-            "articleCount": len(unique),
-            "articles": unique[:5],
-        })
-
-    results.sort(key=lambda c: c["articleCount"], reverse=True)
-    return results
-
-
-# Election-day rule and Senate class rotation live in app.election_calendar
-# (2026-07: extracted so election_pipeline.py can share them without a
-# pipeline->api import). Aliased to the original private names so this
-# module's call sites and tests stay unchanged.
-_next_election_day = next_election_day
-_seats_up_for_year = seats_up_for_year
-
-
-_house_districts_cache: dict[str, int] | None = None
-
-
-def _house_districts() -> dict[str, int]:
-    """Per-state House district count, derived by counting district_pvi.json's
-    own "ST-N" keys (2026-07 data-hygiene fix) — this used to be a second,
-    independent hand-typed copy of the same 50-state apportionment table
-    district_pvi.json already encodes, with no mechanism keeping the two in
-    sync. Verified identical to the prior hardcoded dict before replacing it."""
-    global _house_districts_cache
-    if _house_districts_cache is None:
-        from collections import Counter
-        from app.pipeline.analyze.score_calculator import get_district_pvi_map
-        _house_districts_cache = dict(
-            Counter(k.rsplit("-", 1)[0] for k in get_district_pvi_map()),
-        )
-    return _house_districts_cache
-
-
-@router.get("/my-reps")
-async def get_my_reps(
-    response: Response,
-    state: str = Query(..., min_length=2, max_length=2),
-    db: Session = Depends(get_db),
-):
-    """Return senators for a state with their connections to today's issues."""
-    # Ties to "today's issues", which only change on the next Action
-    # Center refresh — a few minutes of staleness is invisible in practice.
-    response.headers["Cache-Control"] = "public, max-age=300"
-    state_upper = state.upper()
-
-    senators = (
-        db.query(
-            Senator.id, Senator.name, Senator.state, Senator.party,
-            Senator.score_funding_independence, Senator.score_promise_persistence,
-            Senator.score_constituent_alignment, Senator.score_funding_diversity,
-            Senator.score_legislative_effectiveness,
-            Senator.leadership_score, Senator.ideology_score,
-            Senator.years_in_office, Senator.initials,
-            Senator.contact_form_url, Senator.office_phone, Senator.website_url,
-        )
-        .filter(Senator.state == state_upper)
-        .all()
-    )
-
-    representatives = (
-        db.query(
-            Representative.id, Representative.name, Representative.state, Representative.party,
-            Representative.district,
-            Representative.score_funding_independence, Representative.score_promise_persistence,
-            Representative.score_constituent_alignment, Representative.score_funding_diversity,
-            Representative.score_legislative_effectiveness,
-            Representative.leadership_score, Representative.ideology_score,
-            Representative.years_in_office, Representative.initials,
-            Representative.contact_form_url, Representative.office_phone, Representative.website_url,
-        )
-        .filter(Representative.state == state_upper)
-        .order_by(Representative.district)
-        .all()
-    )
-
-    today_str = utcnow().date().isoformat()
-    issues = _latest_current_issues(db, for_date=today_str)
-
-    member_ids = {s.id for s in senators} | {r.id for r in representatives}
-    senator_issues: dict[str, list[dict]] = {sid: [] for sid in member_ids}
-
-    for issue in issues:
-        rel_sens = _parse_json_field(getattr(issue, "related_senators", "[]"))
-        for rs in rel_sens:
-            if isinstance(rs, dict) and rs.get("id") in member_ids:
-                senator_issues[rs["id"]].append({
-                    "id": issue.id,
-                    "rank": issue.rank,
-                    "title": issue.title,
-                    "policyAreas": _parse_json_field(issue.policy_areas),
-                })
-
-    result_senators = []
-    for s in senators:
-        overall = compute_overall_score(s)
-        result_senators.append({
-            "id": s.id,
-            "name": s.name,
-            "state": s.state,
-            "party": s.party,
-            "initials": s.initials,
-            "scores": {
-                "fundingIndependence": round(s.score_funding_independence, 1),
-                "promisePersistence": round(s.score_promise_persistence, 1),
-                "constituentAlignment": round(s.score_constituent_alignment, 1),
-                "fundingDiversity": round(s.score_funding_diversity, 1),
-                "legislativeEffectiveness": round(s.score_legislative_effectiveness, 1),
-                "overall": overall,
-            },
-            # `is not None`, not truthiness: ideology_score is SVD-rescaled to
-            # [0,1] where 0.0 is the most-progressive member, and leadership is
-            # log-rescaled centrality where 0.0 is the lowest — both legitimate
-            # computed values. `if x else None` hid those extremes as "no data".
-            "leadershipScore": round(s.leadership_score, 1) if s.leadership_score is not None else None,
-            "ideologyScore": round(s.ideology_score, 1) if s.ideology_score is not None else None,
-            "yearsInOffice": s.years_in_office,
-            "contactFormUrl": s.contact_form_url or None,
-            "officePhone": s.office_phone or None,
-            "websiteUrl": s.website_url or None,
-            "connectedIssues": senator_issues.get(s.id, []),
-        })
-
-    result_reps = []
-    for r in representatives:
-        overall = compute_overall_score(r)
-        result_reps.append({
-            "id": r.id,
-            "name": r.name,
-            "state": r.state,
-            "party": r.party,
-            "district": r.district,
-            "initials": r.initials,
-            "scores": {
-                "fundingIndependence": round(r.score_funding_independence, 1),
-                "promisePersistence": round(r.score_promise_persistence, 1),
-                "constituentAlignment": round(r.score_constituent_alignment, 1),
-                "fundingDiversity": round(r.score_funding_diversity, 1),
-                "legislativeEffectiveness": round(r.score_legislative_effectiveness, 1),
-                "overall": overall,
-            },
-            "leadershipScore": round(r.leadership_score, 1) if r.leadership_score is not None else None,
-            "ideologyScore": round(r.ideology_score, 1) if r.ideology_score is not None else None,
-            "yearsInOffice": r.years_in_office,
-            "contactFormUrl": r.contact_form_url or None,
-            "officePhone": r.office_phone or None,
-            "websiteUrl": r.website_url or None,
-            "connectedIssues": senator_issues.get(r.id, []),
-        })
-
-    return {
-        "state": state_upper,
-        "senators": result_senators,
-        "representatives": result_reps,
-        "issueDate": issues[0].date if issues else None,
-    }
-
-
 @router.get("/open-comments")
 def get_open_comments(response: Response, db: Session = Depends(get_db)):
     """Return Federal Register documents with open public comment periods, sorted by deadline."""
@@ -909,108 +558,6 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
             "summary": (d.summary or "")[:200],
         })
     return result
-
-
-ELECTION_SEASON_WINDOW_DAYS = 60
-
-
-def days_until_next_election(today: date | None = None) -> int:
-    """Days remaining until the next federal Election Day (0 = today)."""
-    today = today or utcnow().date()
-    return (_next_election_day(today) - today).days
-
-
-def is_election_season(today: date | None = None) -> bool:
-    """True within ELECTION_SEASON_WINDOW_DAYS of the next federal election
-    — the window the midterm-elections pipeline (election_pipeline.py) uses
-    to switch its coverage-ingestion phase from nightly to a tighter cadence
-    (see scheduler.py). Public so scheduler.py doesn't need its own copy of
-    this date arithmetic."""
-    return days_until_next_election(today) <= ELECTION_SEASON_WINDOW_DAYS
-
-
-@router.get("/elections")
-async def get_election_info(response: Response, db: Session = Depends(get_db)):
-    """Return upcoming election info: dates, senate races, state data."""
-    # Election dates and race rosters change on the order of days, not
-    # minutes — same reasoning as /open-comments above.
-    response.headers["Cache-Control"] = "public, max-age=3600"
-    today = utcnow().date()
-    election_day = _next_election_day(today)
-    days_until = days_until_next_election(today)
-    el_year = election_day.year
-    is_presidential = el_year % 4 == 0
-    is_election_day = days_until == 0
-    is_election_season_flag = is_election_season(today)
-
-    seats_up = _seats_up_for_year(el_year)
-    # Special elections are additional to the class calendar and only
-    # knowable from data — merge in any special Senate races the election
-    # pipeline's FEC roster sync has on file for this cycle (e.g. 2026's
-    # FL and OH Class 3 specials), so this teaser and /api/elections don't
-    # disagree about which states have a Senate race (2026-07 review F16).
-    # Kept OUT of the per-senator upForElection flag below: that flag is
-    # per-member, and in a special-election state only the appointed
-    # incumbent's seat is up — flagging both of the state's senators would
-    # mislabel one of them, and seat class per member isn't stored.
-    special_states = {
-        s for (s,) in db.query(Race.state).filter(
-            Race.cycle_year == el_year,
-            Race.office == "S",
-            Race.is_special.is_(True),
-        ).all()
-    }
-
-    senators = (
-        db.query(Senator.id, Senator.name, Senator.state, Senator.party,
-                 Senator.score_funding_independence, Senator.score_promise_persistence,
-                 Senator.score_constituent_alignment, Senator.score_funding_diversity,
-                 Senator.score_legislative_effectiveness,
-                 Senator.leadership_score, Senator.years_in_office)
-        .all()
-    )
-
-    by_state: dict[str, list[dict]] = {}
-    for s in senators:
-        overall = compute_overall_score(s)
-        entry = {
-            "id": s.id, "name": s.name, "state": s.state, "party": s.party,
-            "overallScore": overall,
-            "leadershipScore": round(s.leadership_score, 1) if s.leadership_score is not None else None,
-            "yearsInOffice": s.years_in_office,
-            "upForElection": s.state in seats_up,
-        }
-        by_state.setdefault(s.state, []).append(entry)
-
-    house_districts = _house_districts()
-    all_state_codes = set(by_state.keys()) | set(house_districts.keys())
-    states: list[dict] = []
-    for code in sorted(all_state_codes):
-        sens = by_state.get(code, [])
-        has_race = code in seats_up or code in special_states
-        districts = house_districts.get(code, 0)
-        states.append({
-            "state": code,
-            "hasSenateRace": has_race,
-            "hasHouseRace": districts > 0,
-            "houseDistricts": districts,
-            "senators": sens,
-        })
-
-    return {
-        "nextElection": {
-            "date": election_day.isoformat(),
-            "type": "Presidential General Election" if is_presidential
-                    else "Midterm General Election",
-            "year": el_year,
-            "daysUntil": days_until,
-            "isElectionDay": is_election_day,
-            "isElectionSeason": is_election_season_flag,
-        },
-        "senateSeatsUp": len(seats_up) + len(special_states),
-        "houseSeatsUp": 435,
-        "states": states,
-    }
 
 
 @router.post("/refresh", dependencies=[Depends(require_admin)])
@@ -1114,7 +661,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
     """Return known upcoming civic events for the given year."""
     events: list[dict] = []
 
-    election_day = _next_election_day(today)
+    election_day = next_election_day(today)
     if election_day.year == year and election_day >= today:
         is_presidential = year % 4 == 0
         label = "Presidential & Congressional" if is_presidential else "Midterm Congressional"
@@ -1125,7 +672,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
                            f"{', 33-34 Senate seats' if not is_presidential else ', 33-34 Senate seats, and the presidency'}"
                            " are on the ballot.",
             "category": "election",
-            "link": "/action?tab=elections",
+            "link": "/elections",
             "linkLabel": "View races & state info",
         })
 
