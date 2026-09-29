@@ -468,3 +468,31 @@ class TestRereadTrades:
 
         await self._reread(db_session, fetch)
         assert seen == [None]
+
+
+class TestRereadHouseFiling:
+    """A stored House filing is read again with its filing date from the
+    Clerk's yearly index: a scan read before PTR PARSER_VERSION 5 stored each
+    row's transaction date as its disclosure date, so the rows can't say when
+    the filing was filed, and an undated row would have no date to show."""
+
+    async def test_the_filing_date_comes_from_that_years_index(self):
+        url = "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/20012345.pdf"
+        index = [
+            {"doc_id": "20099999", "filing_date": "2025-02-01"},
+            {"doc_id": "20012345", "filing_date": "2025-06-30"},
+        ]
+        with patch.object(stock_pipeline, "fetch_ptr_filing_index", new_callable=AsyncMock, return_value=index) as idx, \
+             patch.object(stock_pipeline, "fetch_house_ptr", new_callable=AsyncMock, return_value=[]) as fetch:
+            await stock_pipeline._reread_house_filing(None, None, "20012345", url)
+
+        assert idx.await_args.args[2] == 2025
+        assert fetch.await_args.args[2] == {"doc_id": "20012345", "pdf_url": url, "filing_date": "2025-06-30"}
+
+    async def test_a_filing_missing_from_the_index_is_still_read(self):
+        url = "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/20012345.pdf"
+        with patch.object(stock_pipeline, "fetch_ptr_filing_index", new_callable=AsyncMock, return_value=[]), \
+             patch.object(stock_pipeline, "fetch_house_ptr", new_callable=AsyncMock, return_value=[]) as fetch:
+            await stock_pipeline._reread_house_filing(None, None, "20012345", url)
+
+        assert fetch.await_args.args[2]["filing_date"] is None

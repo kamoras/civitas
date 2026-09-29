@@ -181,8 +181,10 @@ export default function JusticeScorecard({
   const party = (j.appointingParty && PARTY[j.appointingParty]) || NO_PARTY;
   const overall = j.score.overall == null ? null : displayScore(j.score.overall);
   const since = formatDate(j.dateStart);
-  // Named and ordered by the API (most agreement first).
-  const agreement = j.agreement;
+  // Named and ordered by the API (most agreement first). Absent from a
+  // response cached before the field replaced agreementMatrix (nginx and the
+  // browser both hold these), which must not take the page down.
+  const agreement = j.agreement ?? [];
   // What every section's share image says it is from, as on the member and
   // president scorecards.
   const shareSubject: ShareSubject = {

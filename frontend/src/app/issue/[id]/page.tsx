@@ -36,22 +36,21 @@ interface Retraction {
 async function fetchIssueOrRetraction(
   id: string
 ): Promise<{ issue: ActionIssue | null; retraction: Retraction | null }> {
-  try {
-    const res = await fetch(`${BACKEND}/api/action/issues/${encodeURIComponent(id)}`, {
-      next: { revalidate: 300 },
-    });
-    if (res.status === 410) {
-      const detail = (await res.json())?.detail;
-      return {
-        issue: null,
-        retraction: detail?.reason ? { date: detail.date, reason: detail.reason } : null,
-      };
-    }
-    if (!res.ok) return { issue: null, retraction: null };
-    return { issue: usableRecord<ActionIssue>(await res.json(), "id", "title"), retraction: null };
-  } catch {
-    return { issue: null, retraction: null };
+  const res = await fetch(`${BACKEND}/api/action/issues/${encodeURIComponent(id)}`, {
+    next: { revalidate: 300 },
+  });
+  if (res.status === 410) {
+    const detail = (await res.json())?.detail;
+    return {
+      issue: null,
+      retraction: detail?.reason ? { date: detail.date, reason: detail.reason } : null,
+    };
   }
+  if (res.status === 404) return { issue: null, retraction: null };
+  // An outage is not a missing issue: a 404 marked noindex would drop a real
+  // page from search for as long as the backend was down (fetchRecord).
+  if (!res.ok) throw new Error(`issue ${id}: HTTP ${res.status}`);
+  return { issue: usableRecord<ActionIssue>(await res.json(), "id", "title"), retraction: null };
 }
 
 function Withdrawn({ retraction }: { retraction: Retraction }) {

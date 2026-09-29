@@ -35,18 +35,25 @@ describe("RaceDetailRedirect", () => {
   });
 
   it("404s when the race no longer exists", async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 404 });
 
     await expect(
       RaceDetailRedirect({ params: Promise.resolve({ raceId: "gone" }) })
     ).rejects.toThrow("NOT_FOUND");
   });
 
-  it("404s rather than throws when the backend fetch itself fails", async () => {
+  it("is an error, not a 404, when the backend can't be reached", async () => {
+    // A 404 would tell a crawler (and a reader following a published link)
+    // that the race is gone, for as long as the backend was down.
     (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("network down"));
-
     await expect(RaceDetailRedirect({ params: Promise.resolve({ raceId: "x" }) })).rejects.toThrow(
-      "NOT_FOUND"
+      "network down"
     );
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 502 });
+    await expect(RaceDetailRedirect({ params: Promise.resolve({ raceId: "x" }) })).rejects.toThrow(
+      "HTTP 502"
+    );
+    expect(notFound).not.toHaveBeenCalled();
   });
 });

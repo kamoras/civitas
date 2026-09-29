@@ -28,6 +28,17 @@ const nextConfig = {
         source: "/api/:path*",
         destination: `${backendUrl}/api/:path*`,
       },
+      // The Atom feeds (backend/app/api/feed.py). In production nginx maps
+      // these itself and caches them; this is the same mapping for
+      // `next dev` and anything else not behind nginx.
+      {
+        source: "/feed.xml",
+        destination: `${backendUrl}/api/feed/all.xml`,
+      },
+      {
+        source: "/feed/:path*",
+        destination: `${backendUrl}/api/feed/:path*`,
+      },
     ];
   },
 };

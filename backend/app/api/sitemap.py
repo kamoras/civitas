@@ -11,15 +11,16 @@ Read path only: plain column selects, no ORM hydration, no model inference.
 """
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_REFERENCE_S, cached_json
 from app.database import get_db
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ActionIssueStatus, Justice, President, Representative, Senator
+from app.models import ActionIssue, ActionIssueStatus, ExploreDocument, Justice, President, Representative, Senator
 from app.services.bill_service import _collect_bills
+from app.services.congress_service import session_days
 
 router = APIRouter()
 
@@ -83,7 +84,43 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
         .all()
     ]
 
+    # The Congress reports: each day either chamber met, whose page is its
+    # own record (/congress/{date}); the week and month pages are built
+    # from the same days.
+    congress_days = session_days(db)
+
     return cached_json(
-        {"politicians": politicians, "bills": bills, "issues": issues},
+        {
+            "politicians": politicians, "bills": bills, "issues": issues,
+            "congressDays": congress_days,
+            # Explore documents are listed separately, a page at a time
+            # (/sitemap/explore): the corpus has no upper bound, and one
+            # sitemap file holds at most 50,000 URLs.
+            "exploreDocuments": db.query(ExploreDocument.id).count(),
+            "explorePageSize": EXPLORE_SITEMAP_PAGE,
+        },
+        max_age=CACHE_TTL_REFERENCE_S,
+    )
+
+
+# Explore documents per sitemap file: well under the protocol's
+# 50,000-URL cap, and small enough (~400 KB of JSON) for Next's fetch
+# cache, which skips anything over 2 MB.
+EXPLORE_SITEMAP_PAGE = 10_000
+
+
+@router.get("/sitemap/explore")
+def sitemap_explore(page: int = Query(0, ge=0, le=10_000), db: Session = Depends(get_db)) -> JSONResponse:
+    """One page of Explore document ids and dates, oldest id first, so a
+    page's contents only grow at the end and existing pages stay stable."""
+    rows = (
+        db.query(ExploreDocument.id, ExploreDocument.date)
+        .order_by(ExploreDocument.id)
+        .offset(page * EXPLORE_SITEMAP_PAGE)
+        .limit(EXPLORE_SITEMAP_PAGE)
+        .all()
+    )
+    return cached_json(
+        {"documents": [{"id": str(doc_id), "lastmod": _iso_date(day)} for doc_id, day in rows]},
         max_age=CACHE_TTL_REFERENCE_S,
     )

@@ -213,7 +213,7 @@ not for scoring.
 Fetches and scores Supreme Court justices, weekly on Sunday UTC (or whenever the table is empty — the uncached Oyez per-case crawl takes hours):
 - Pulls each justice's votes in the Court's decided cases. Oyez sometimes lists one justice twice in a decision (Ketanji Brown Jackson in two 2025-term cases, with Barrett and Gorsuch missing): identical rows count once, conflicting ones leave that vote out, and a missing justice's vote is never filled in. The duplicate had broken the one-vote-per-case key, so every Sunday refresh rolled back and the scorecards went stale with no alert. Now any pipeline step that fails and is carried past (`ProgressTracker.fail`) sends an ops alert, deduplicated per pipeline, step and day.
 - The voting record from Oyez (`justice_analyzer.py`): majority, dissent and unanimous shares, opinions written, agreement with each sitting justice. Shown, not scored.
-- The score is independence from the appointing president (`justice_loyalty.py`, Epstein & Posner 2016): whether a justice sides with the federal government more often while that president is in office than under others, fit per justice with the government's side of the case held fixed, shrunk across every justice since 1937 (DerSimonian-Laird). Votes through 2014 are Epstein & Posner's, bundled; later terms come from the newest Supreme Court Database release, with each appointing president taken from the Federal Judicial Center's nomination dates (`fetch/justice_records.py`). 100 is no favoritism either way, 0 is two between-justice sds; each estimate is stored with its standard error. A source that can't be read leaves the stored scores standing.
+- The score is independence from the appointing president (`justice_loyalty.py`, Epstein & Posner 2016): whether a justice sides with the federal government more often while that president is in office than under others, fit per justice with the government's side of the case held fixed, shrunk across every justice since 1937 (DerSimonian-Laird). Votes through 2014 are Epstein & Posner's, bundled; later terms come from the newest Supreme Court Database release, with each appointing president taken from the Federal Judicial Center's nomination dates (`fetch/justice_records.py`). 100 is no favoritism either way, 0 is two between-justice sds; each estimate is stored with its standard error. A source that can't be read leaves the stored scores standing, and the run's justice step says "loyalty not measured" and which source couldn't be read, in its progress detail and in an ops alert, rather than only a count. The backend image is Debian trixie because the Database's host refuses httpx's TLS handshake under bookworm's OpenSSL 3.0 (a 403 that left every justice unscored on 2026-09-29; see `backend/Dockerfile`).
 - Martin-Quinn positions per term, shown beside the score, not scored. No LLM step.
 
 ### Phase 6 — PRESIDENTS
@@ -512,7 +512,7 @@ Every hour at :15
 
 **What makes a repost?** A newer article date is necessary but not sufficient — recap coverage rewords the same story under a fresher timestamp, which used to repost with nothing new to say. The new facts must also introduce either a named entity/figure or a story development (a veto, a court blocking an order, a failed override) that the facts *as of the last post* lacked. The baseline is `bsky_posted_facts`, not the live `facts` column: `facts` is rewritten on every hourly refresh whether or not anything was posted, so baselining on it let a development that surfaced between posts be absorbed and never read as new again. Rows that predate the column are backfilled from `facts` at startup — the poster is the only writer of `bsky_posted_facts` and it only ever sees issues the repost gate has already released, so a NULL baseline on an already-posted row could never resolve itself. The backfill is unconditional rather than fired once on the migration: the poster writes `bsky_posted_at` and `bsky_posted_facts` in the same commit, so a row with the first set and the second NULL can only predate the column, and a seeded row stops matching.
 
-**Developing issues.** Before the news fetch, each refresh reads the latest final-passage roll calls and significant Federal Register rules (`early_signal.py`) and drafts a **Developing** issue, not posted anywhere, for one the news hasn't covered yet. A draft is a template filled from its record, with no model: a vote's measure, question, result, tally and date; a rule's agency, title, abstract (quoted whole in the facts, by whole sentences in the summary), publication date and document number. The model's drafts had characterized the record ("a narrow 77-22" for S. 4668, 2026-09-28). A vote on a bill that a current reported issue already covers, by recording the bill or naming it by number or short title, isn't drafted, and a draft whose bill later reporting covers as its own issue is retired, at the start of a run and again once the run's issues are written. News issues resolve their bills by short title as well as by number (`bill_service.short_title_index`: the current Congress's "... Act" titles of three words or more, a title two companion bills share naming neither), since outlets name a bill that way far more than by number. Every issue carries the refresh's own date: a Senate draft once carried the vote's raw date string, which sorted after every ISO date, so the Action Center (which lists the latest date's issues) showed that one draft alone (migration 0021 rewrote the stored dates).
+**Developing issues.** Before the news fetch, each refresh reads the latest final-passage roll calls and significant Federal Register rules (`early_signal.py`) and drafts a **Developing** issue, not posted anywhere, for one the news hasn't covered yet. A draft is a template filled from its record, with no model: a vote's measure, question, result, tally and date; a rule's agency, title, abstract (quoted whole in the facts, by whole sentences in the summary), publication date and document number. The model's drafts had characterized the record ("a narrow 77-22" for S. 4668, 2026-09-28). A vote on a bill that a current reported issue already covers, by recording the bill or naming it by number or short title, isn't drafted, and a draft whose bill later reporting covers as its own issue is retired, at the start of a run and again once the run's issues are written. Retiring only takes a draft off the Action Center: the homepage's record lists retired rows too, so `mark_recent_duplicates` also marks such a draft a duplicate of the covering issue, decided afresh each run from the record's own rows, so it holds after the covering issue retires as well (the S. 4668 draft stayed listed beside the reporting on 2026-09-29 until this). News issues resolve their bills by short title as well as by number (`bill_service.short_title_index`: the current Congress's "... Act" titles of three words or more, a title two companion bills share naming neither), since outlets name a bill that way far more than by number. Every issue carries the refresh's own date: a Senate draft once carried the vote's raw date string, which sorted after every ISO date, so the Action Center (which lists the latest date's issues) showed that one draft alone (migration 0021 rewrote the stored dates).
 
 **How do you tell a quiet news day from an over-suppressing gate?** Both look the same from outside: nothing on the Action Center, nothing on Bluesky. Roughly ten independent checks in this pipeline fail closed — the right default when the platform publishes under its own name, but it means silence is the shared failure mode of all of them. Every refresh records what came in (`articles_fetched`, `articles_policy_relevant`, `clusters_considered`), what published (`issues_new_topic`, `issues_matched_existing`, `bsky_reposts_allowed`), and what each gate dropped, including on the two abort paths that publish nothing at all. `GET /api/admin/action-metrics` reads the window back with those three groups totalled: healthy intake against near-zero output is a suppression problem, near-zero intake is a quiet cycle or a broken feed. Runs are hourly, so a gap in the series is itself a signal — a refresh that crashed or was still holding the lock leaves no row.
 
@@ -906,9 +906,19 @@ From election day the elections pages stop being a ballot-research tool first an
 
 ---
 
-## Bluesky Integration
+## Publishing: feeds and Bluesky
 
-The Civitas Bluesky account (`@civitas-research.org`) is updated automatically by the hourly pipeline:
+Every post goes through one function, `app/broadcast.publish`, which stores it as a `BroadcastPost` row and only then delivers it to Bluesky (when `BSKY_HANDLE`/`BSKY_APP_PASSWORD` are set). The rows are the Atom feeds, listed on `/feeds`:
+
+| Feed | Holds |
+|------|-------|
+| `/feed.xml` | Everything |
+| `/feed/issues.xml`, `/feed/congress.xml`, `/feed/members.xml`, `/feed/elections.xml` | One topic (`broadcast.FEEDS`) |
+| `/feed/states/<ST>.xml` | One state's race posts and member spotlights |
+
+Anyone can follow a feed with a reader, a Discord or Slack bot, or their own program, and Civitas keeps no list of who does (AGENTS.md §8). The feeds are served by `app/api/feed.py` (50 newest entries, ETag/304) and cached by nginx for 5 minutes. A post is in the feed whatever Bluesky does with it. A send Bluesky refuses is retried hourly (`broadcast.deliver_pending`), for at most three tries in all and only on the Eastern day it was written, since a post can say "Yesterday: …". A send interrupted by a crash is never retried, so nothing is posted twice. The table survives an admin data reset (`RESET_KEEPS`): it is what the posting modules check (by each post's `subject`, e.g. `race:2026-SEN-GA`) before publishing again, so a reset neither empties the feeds nor re-posts the last few days.
+
+The posting modules below decide what to publish and when. The Civitas Bluesky account (`@civitas-research.org`) carries the same posts as the feeds, except any Bluesky still hadn't taken by the end of that day:
 
 | Post type | Trigger | Content |
 |-----------|---------|---------|
@@ -1255,6 +1265,18 @@ curl -X POST http://localhost:8000/api/admin/pipeline/trigger \
 ```
 
 ## Deployment
+
+### Operator alerts
+
+Pipeline problems (a failed step in a run that carries on, a skipped phase of
+the nightly chain, an overrun, stale data) go through
+`app/ops_alerts.py:send_ops_alert`. Each alert is logged at ERROR, listed in the
+admin Overview's **Ops alerts** panel (the ten newest), and pushed to
+[ntfy](https://ntfy.sh) when `ALERT_NTFY_URL` is set, which is the only channel
+that reaches a phone. Container logs rotate at 30 MB, about a day, so the panel
+or ntfy is where an overnight alert is still found the next afternoon. Each
+alert carries a dedupe key (per day, per run or per cycle), so a recurring
+problem notifies once for that span.
 
 ### Docker Swarm Architecture
 

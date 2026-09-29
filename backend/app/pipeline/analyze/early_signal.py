@@ -25,6 +25,7 @@ news coverage has since reached as a separate issue is retired
 import asyncio
 import json
 import logging
+import re
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -179,15 +180,20 @@ def _issue_bill_ids(issue: ActionIssue) -> set[str]:
     return {e["id"].upper() for e in entries if isinstance(e, dict) and e.get("id")}
 
 
-def _covering_issue(db: Session, bill_id: str, names: list[str], exclude_id: int | None = None) -> ActionIssue | None:
-    """A current, reported (not developing) issue about the bill: one that
-    records it among its related bills, or names it in its title, summary
-    or facts."""
-    issues = db.query(ActionIssue).filter(
+def _covering_issue(
+    db: Session, bill_id: str, names: list[str], exclude_id: int | None = None,
+    candidates: list[ActionIssue] | None = None,
+) -> ActionIssue | None:
+    """A reported (not developing) issue about the bill, among `candidates`
+    (by default the current issues): one that records it among its related
+    bills, or names it in its title, summary or facts."""
+    issues = candidates if candidates is not None else db.query(ActionIssue).filter(
         ActionIssue.is_current == True,  # noqa: E712
         ActionIssue.status != ActionIssueStatus.DEVELOPING,
     ).all()
     for issue in issues:
+        if issue.status == ActionIssueStatus.DEVELOPING:
+            continue
         if issue.id == exclude_id:
             continue
         if bill_id in _issue_bill_ids(issue):
@@ -347,29 +353,40 @@ def expire_stale_developing_issues(db: Session, now) -> int:
     return len(stale)
 
 
+ROLL_CALL_SOURCES = ("senate_roll_call_vote", "house_roll_call_vote")
+
+
+def covering_issue(db: Session, draft: ActionIssue, candidates: list[ActionIssue] | None = None) -> ActionIssue | None:
+    """The reported issue that covers a vote draft's bill, or None. The
+    draft's bill is the one it recorded, or for a draft from before it
+    recorded one, the first bill its text names."""
+    bill_id = next(iter(_issue_bill_ids(draft)), None) or first_bill_id(f"{draft.title} {draft.summary}")
+    if not bill_id:
+        return None
+    return _covering_issue(db, bill_id, _bill_names(db, bill_id), exclude_id=draft.id, candidates=candidates)
+
+
 def retire_covered_developing_issues(db: Session) -> int:
     """Retire a current vote draft whose bill a reported issue now covers.
     News that the matching pass didn't join to the draft (it reads as its
     own story) otherwise leaves two issues about one vote, the draft's the
-    thinner. The draft's bill is the one it recorded, or for a draft from
-    before it recorded one, the first bill its text names."""
+    thinner. Retiring only takes the draft off the Action Center; the
+    homepage's record keeps retired rows, and leaves the draft out as a
+    duplicate of the covering issue (action_center.mark_recent_duplicates)."""
     retired = 0
     drafts = db.query(ActionIssue).filter(
         ActionIssue.status == ActionIssueStatus.DEVELOPING,
         ActionIssue.is_current == True,  # noqa: E712
-        ActionIssue.source_type.in_(("senate_roll_call_vote", "house_roll_call_vote")),
+        ActionIssue.source_type.in_(ROLL_CALL_SOURCES),
     ).all()
     for draft in drafts:
-        bill_id = next(iter(_issue_bill_ids(draft)), None) or first_bill_id(f"{draft.title} {draft.summary}")
-        if not bill_id:
-            continue
-        covering = _covering_issue(db, bill_id, _bill_names(db, bill_id), exclude_id=draft.id)
+        covering = covering_issue(db, draft)
         if covering is None:
             continue
         draft.is_current = False
         retired += 1
         action_metrics.increment("early_signal_retired_covered")
-        logger.info("Retired developing issue %d: issue %d covers %s", draft.id, covering.id, bill_id)
+        logger.info("Retired developing issue %d: issue %d covers its bill", draft.id, covering.id)
     return retired
 
 
@@ -378,14 +395,33 @@ def retire_covered_developing_issues(db: Session) -> int:
 _ABSTRACT_SUMMARY_CHARS = 400
 
 
+# A period that ends a word like these doesn't end the sentence. The dotted
+# forms ("U.S.", "U.S.C.") and initials are caught by shape in _ends_sentence.
+_ABBREVIATIONS = frozenset({
+    "mr", "mrs", "ms", "dr", "st", "jr", "sr", "inc", "co", "corp", "ltd",
+    "no", "nos", "sec", "secs", "pub", "vol", "fig", "dept", "gov", "gen",
+})
+_SENTENCE_END = re.compile(r"[.?!](?=\s+[\"“(]?[A-Z])")
+
+
+def _ends_sentence(text: str, at: int) -> bool:
+    """Whether the mark at `at` (followed by a capitalised word) ends a
+    sentence: not the period of an initial ("John Q. Public"), a dotted
+    abbreviation ("the U.S. Fish and Wildlife Service") or a title."""
+    if text[at] != ".":
+        return True
+    word = text[:at].rsplit(" ", 1)[-1].lstrip("(\"“")
+    return not ("." in word or len(word) == 1 or word.lower() in _ABBREVIATIONS)
+
+
 def _first_sentences(text: str, limit: int) -> str:
     """The abstract's opening sentences, whole, within `limit` characters;
     empty when even the first is longer."""
     text = " ".join((text or "").split())
     if len(text) <= limit:
         return text
-    cut = max(text.rfind(". ", 0, limit), text.rfind("? ", 0, limit))
-    return text[:cut + 1] if cut > 0 else ""
+    ends = [m.start() for m in _SENTENCE_END.finditer(text, 0, limit) if _ends_sentence(text, m.start())]
+    return text[:ends[-1] + 1] if ends else ""
 
 
 def _compose_developing_rule_issue(rule: dict) -> tuple[str, str, list[str]]:
@@ -407,7 +443,11 @@ def _compose_developing_rule_issue(rule: dict) -> tuple[str, str, list[str]]:
         f"{f' on {day}' if day else ''}. {opening + ' ' if opening else ''}"
         "This is from the Federal Register; news coverage of the rule has not appeared yet."
     )
-    facts = [f"Agency: {agencies}.", f"Federal Register document {number}, published {day}."]
+    # A record missing its number or date says less, not "document , published ."
+    where = ["Federal Register document" + (f" {number}" if number else "")]
+    if day:
+        where.append(f"published {day}")
+    facts = [f"Agency: {agencies}.", ", ".join(where) + "."]
     if abstract:
         facts.append(f"Abstract: {abstract}")
     return title[:500], summary, facts

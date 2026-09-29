@@ -3,7 +3,7 @@ import { Archivo, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import NavigationBeacon from "@/components/NavigationBeacon";
-import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
+import { FEED_ALTERNATES, HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 // Display and prose. 400 for body, 600 for headings, 800 for the blunt
@@ -44,6 +44,8 @@ export const metadata: Metadata = {
   },
   description: HOME_DESCRIPTION,
   applicationName: SITE_NAME,
+  // The feed only — never a canonical here (see above).
+  alternates: { types: FEED_ALTERNATES },
   openGraph: {
     siteName: SITE_NAME,
     locale: "en_US",

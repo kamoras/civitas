@@ -8,7 +8,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { STATES } from "@/data/states";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_BG } from "@/lib/partyStyles";
 import { getScoreBgColor } from "@/lib/representation";
-import { useCopyFeedback } from "@/hooks/useCopyFeedback";
+import { CopyStatus, useCopyFeedback } from "@/hooks/useCopyFeedback";
 import type { ActionIssue, MyRepSenator } from "@/types/action";
 
 function ContactScript({
@@ -23,7 +23,10 @@ function ContactScript({
   contactFormUrl?: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [copied, copy] = useCopyFeedback(2000);
+  const [copied, copy, copyFeedback] = useCopyFeedback(2000, {
+    copied: "Script copied.",
+    failed: "This browser wouldn't copy the script. Select it and copy it instead.",
+  });
 
   // One source for both the copyable plain text and the highlighted JSX, so
   // the two can't drift. `fill` segments are the user-replaceable placeholders.
@@ -99,6 +102,7 @@ function ContactScript({
           >
             {copied ? "COPIED!" : "COPY SCRIPT"}
           </button>
+          <CopyStatus feedback={copyFeedback} />
           <p className="text-xs text-ink-min italic">
             Replace bracketed text with your own words before calling.
           </p>

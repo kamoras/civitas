@@ -8,6 +8,7 @@ import {
   List,
   Item,
   More,
+  A,
 } from "@/components/about/AboutPage";
 
 export const metadata = pageMetadata({
@@ -121,7 +122,8 @@ export default function NewsChapter() {
           or a rule&apos;s agency, title, abstract and publication date. It carries a note that
           broader coverage hasn&apos;t confirmed it yet, and isn&apos;t posted anywhere else until
           press coverage does. A vote the news already covers isn&apos;t drafted, and a draft gives
-          way once the reporting on its bill appears.
+          way once the reporting on its bill appears: it leaves the Action Center, and the
+          homepage&apos;s record of recent issues lists the reporting in its place.
         </P>
         <P>
           Recommended actions are procedural — contact your representatives, attend a public
@@ -190,9 +192,10 @@ export default function NewsChapter() {
           left.
         </P>
         <P>
-          Once a day&apos;s Record is final, the Civitas Bluesky account posts that day&apos;s count
-          summary and the numbers of bills passed — never their titles, since an official short
-          title can read as advocacy — and each week, the bills that became law.
+          Once a day&apos;s Record is final, Civitas posts that day&apos;s count summary and the
+          numbers of bills passed — never their titles, since an official short title can read as
+          advocacy — and each week, the bills that became law. Posts go to the{" "}
+          <A href="/feeds">feeds</A> and the Bluesky account.
         </P>
       </Section>
 
