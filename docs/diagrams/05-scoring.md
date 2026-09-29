@@ -115,12 +115,16 @@ historian rating for a top-10 placement.
 
 ```mermaid
 flowchart LR
-    JC["Consistency — 0.35/0.80"] --> JOVR["<b>Justice score</b>"]
-    JI["Independence — 0.45/0.80"] --> JOVR
+    SCDB["Supreme Court Database<br/>votes in federal-government cases"] --> FIT["per-justice fit:<br/>for the government ~ appointer in office<br/>+ government petitioner (HC1)"]
+    FJC["FJC nominations<br/>+ presidents' terms"] --> FIT
+    FIT --> SHR["shrunk across justices<br/>(DerSimonian-Laird)"]
+    SHR --> JOVR["<b>Justice score</b><br/>100 × (1 − |loyalty| / 2 sd)"]
 ```
 
-Judicial Restraint and Bipartisan Agreement were removed in v6.13; see
-`docs/research/justice-scores.md`.
+One measure since justice v2: independence from the appointing president
+(Epstein & Posner 2016). Consistency and Independence from the appointing
+party's bloc, and before them Judicial Restraint and Bipartisan Agreement,
+were removed; see `docs/research/justice-scores.md`.
 
 Single source of truth in `JUSTICE_SCORE_WEIGHTS` — shared by the scorer, the
 directory's overall calculation, and the public weights endpoint. These were
