@@ -763,6 +763,12 @@ export default function ExploreDetailPage() {
                       </p>
                     </div>
                   )}
+
+                  {summary?.partial && (
+                    <p className="text-xs text-ink-lo">
+                      This analysis was cut short before it finished. Try again later for the whole of it.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

@@ -66,8 +66,8 @@ def parse_explore_document_summary(text: str, *, cut_off: bool = False) -> dict:
     old JSON-based cache entries used, so cache rows before and after this
     format change stay compatible).
     """
-    summary_part, _, rest = text.partition(SUMMARY_KEY_POINTS_MARKER)
-    key_points_part, _, impact_part = rest.partition(SUMMARY_IMPACT_MARKER)
+    summary_part, key_points_marker, rest = text.partition(SUMMARY_KEY_POINTS_MARKER)
+    key_points_part, impact_marker, impact_part = rest.partition(SUMMARY_IMPACT_MARKER)
 
     summary = summary_part.split("SUMMARY:", 1)[-1].strip()
 
@@ -80,12 +80,15 @@ def parse_explore_document_summary(text: str, *, cut_off: bool = False) -> dict:
     impact = impact_part.strip()
 
     if cut_off:
-        # The generation stopped at its token limit: the section it was
-        # writing ends mid-sentence, so it is dropped — the impact, else the
-        # last key point, else the summary itself (nothing usable).
-        if SUMMARY_IMPACT_MARKER in text:
+        # The generation stopped before its end: the section it was writing
+        # ends mid-sentence, so it is dropped — decided by the sections as
+        # parsed above, not by where a marker appears in the text (an
+        # "IMPACT:" before "KEY POINTS:", or with none, is still summary).
+        # The impact, else the last key point, else the summary itself
+        # (nothing usable).
+        if impact_marker:
             impact = ""
-        elif SUMMARY_KEY_POINTS_MARKER in text:
+        elif key_points_marker:
             key_points = key_points[:-1]
         else:
             summary = ""

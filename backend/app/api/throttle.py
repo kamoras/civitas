@@ -53,9 +53,11 @@ public API, Explore search and /api/qa (public.RateLimit), and the two
 live-lookup routes, bills/{id}/record and explore/{id}/comments
 (UpstreamRouteLimit, plus the shared hourly budget on a cache miss).
 
-Every function fails open. A limiter that can't reach its store lets the
+The limits fail open: a limiter that can't reach its store lets the
 request through and logs it, rather than turning a locked database into an
-outage of every endpoint behind it.
+outage of every endpoint behind it. The exceptions say so and raise
+Unavailable instead — claim(fail_open=False), hold and held — for work that
+must not start unchecked (a pulse vote's dedup, an LLM generation).
 """
 
 import hashlib

@@ -854,6 +854,9 @@ export interface ExploreDocumentSummary {
   summary: string;
   keyPoints: string[];
   impact: string;
+  /** The generation stopped before its end (the LLM failed or ran out of
+   *  time): what it wrote, less the sentence it stopped in. */
+  partial?: boolean;
 }
 
 // Mirrors backend/app/pipeline/analyze/prompts.py's parse_explore_document_summary —
@@ -970,6 +973,7 @@ export async function streamExploreDocumentSummary(
           summary: parsed.summary ?? "",
           keyPoints: parsed.keyPoints ?? [],
           impact: parsed.impact ?? "",
+          partial: parsed.partial === true,
         };
       }
       if (typeof parsed.delta === "string") {

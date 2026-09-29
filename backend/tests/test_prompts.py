@@ -73,3 +73,11 @@ class TestCutOff:
 
     def test_in_the_summary_leaves_nothing_usable(self):
         assert parse_explore_document_summary("SUMMARY: Half a", cut_off=True)["summary"] == ""
+
+    def test_decided_by_the_sections_as_parsed_not_by_marker_order(self):
+        # No KEY POINTS: everything is summary, so the summary was cut.
+        text = "SUMMARY: foo. IMPACT: bar ba"
+        assert parse_explore_document_summary(text, cut_off=True)["summary"] == ""
+        # An IMPACT: inside the summary doesn't make the key points whole.
+        text = "SUMMARY: see IMPACT: x.\nKEY POINTS:\n- One\n- Tw"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One"]

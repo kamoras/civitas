@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
 from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
-from app.api.response_helpers import FAILURE_RETRY_S, retry_soon_json
+from app.api.response_helpers import RETRY_SOON_CACHE_CONTROL, retry_soon_json
 from app.database import get_db, off_loop
 from app.models import ExploreDocument
 from app.services.explore_search import hybrid_search
@@ -124,7 +124,7 @@ async def search_explore(
         # back within a rebuild, and a whole answer shouldn't wait out a
         # success's lifetime behind it.
         headers={"Cache-Control": (
-            f"public, max-age={FAILURE_RETRY_S}" if outcome["semanticUnavailable"]
+            RETRY_SOON_CACHE_CONTROL if outcome["semanticUnavailable"]
             else "public, max-age=60, stale-while-revalidate=60"
         )},
     )
@@ -332,12 +332,15 @@ async def post_document_comment(
 # mid-generation.
 _SUMMARY_BUCKET = "explore-summary"
 _SLOT_BUCKET = "explore-summary-slot"
-# A document whose output couldn't be used, or whose generation ran out of
-# time, is not generated again for a while: the same prompt at temperature 0
-# comes out the same way, and takes as long. (A generation that failed —
-# the LLM unreachable, say — may be tried again at once.)
+# A document whose output couldn't be used is not generated again for a
+# while: the same prompt at temperature 0 comes out the same way. One whose
+# generation ran out of time is held off for less: its prompt may be one the
+# device can't finish in time, or the LLM may just have been busy. (One
+# that failed — the LLM unreachable, say — may be tried again at once.)
 _UNUSABLE_BUCKET = "explore-summary-unusable"
 _UNUSABLE_FOR_S = 30 * 60.0
+_SLOW_BUCKET = "explore-summary-slow"
+_SLOW_FOR_S = 5 * 60.0
 _MAX_GENERATIONS = 2
 _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
@@ -422,7 +425,7 @@ async def get_explore_document_summary(
     # request only waits on: a request cancelled mid-claim (a disconnect)
     # can't leave a claim behind that nothing will give back.
     generation = _Generation(doc_id, prompt, cache_key, get_cached_llm_result, set_cached_llm_result, stream_llm,
-                             parse_explore_document_summary)
+                             parse_explore_document_summary, db.get_bind(), (doc.title, doc.body))
     task = asyncio.create_task(generation.run())
     _generations.add(task)
     task.add_done_callback(_generations.discard)
@@ -485,8 +488,13 @@ class _Generation:
     stand between repeated POSTs and the device's one LLM), or the summary
     itself when another request made it meanwhile."""
 
-    def __init__(self, doc_id, prompt, cache_key, get_cached, set_cached, stream, parse):
+    def __init__(self, doc_id, prompt, cache_key, get_cached, set_cached, stream, parse, bind, content):
         self.doc_id = doc_id
+        # The database the document was read from, and what it said: the
+        # summary is kept only if the document still says it when the
+        # generation ends (_still_current).
+        self._bind = bind
+        self._content = content
         self.prompt = prompt
         self.cache_key = cache_key
         self._get_cached = get_cached
@@ -507,11 +515,39 @@ class _Generation:
         answer)."""
         from app.api import throttle
 
-        held = await throttle.run(throttle.hold, bucket, keys, period=_SUMMARY_CLAIM_S)
+        claiming = asyncio.ensure_future(throttle.run(throttle.hold, bucket, keys, period=_SUMMARY_CLAIM_S))
+        try:
+            held = await asyncio.shield(claiming)
+        except asyncio.CancelledError:
+            # Stopped (shutdown) mid-claim: the claim may have been made on
+            # its thread all the same. Recorded, it is given back with the
+            # rest (run's finally) rather than holding its key for its period.
+            try:
+                held = await claiming
+            except Exception:
+                held = None
+            if held is not None:
+                self._held.append((bucket, *held))
+            raise
         if held is None:
             return False
         self._held.append((bucket, *held))
         return True
+
+    def _still_current(self) -> bool:
+        """Whether the document still reads as it did when the generation
+        began — not replaced by a data reset (in the pipeline process, which
+        this generation, in the API's, can outlast) or re-ingested with new
+        text. A summary of a document that has changed is not kept."""
+        from app.database import SessionLocal
+
+        with SessionLocal(bind=self._bind) as session:
+            row = (
+                session.query(ExploreDocument.title, ExploreDocument.body)
+                .filter(ExploreDocument.id == self.doc_id)
+                .first()
+            )
+        return row is not None and (row.title, row.body) == self._content
 
     async def _give_back(self) -> None:
         from app.api import throttle
@@ -528,9 +564,10 @@ class _Generation:
 
         try:
             try:
-                if await throttle.run(throttle.held, _UNUSABLE_BUCKET, str(self.doc_id), period=_UNUSABLE_FOR_S):
-                    self._settle("unusable")
-                    return
+                for bucket, period in ((_UNUSABLE_BUCKET, _UNUSABLE_FOR_S), (_SLOW_BUCKET, _SLOW_FOR_S)):
+                    if await throttle.run(throttle.held, bucket, str(self.doc_id), period=period):
+                        self._settle("unusable")
+                        return
                 if not await self._claim(_SUMMARY_BUCKET, [str(self.doc_id)]):
                     self._settle("held")
                     return
@@ -563,8 +600,9 @@ class _Generation:
 
         text = ""
         finished = at_limit = timed_out = False
+        deadline = asyncio.timeout(_SUMMARY_GENERATION_LIMIT_S)
         try:
-            async with asyncio.timeout(_SUMMARY_GENERATION_LIMIT_S):
+            async with deadline:
                 async for delta in self._stream(
                     system_prompt=self.prompt["systemPrompt"],
                     user_prompt=self.prompt["userPrompt"],
@@ -577,28 +615,38 @@ class _Generation:
             # At the token limit: as far as it will ever get (the same
             # prompt stops at the same place).
             at_limit = True
-        except TimeoutError:
-            logger.warning("Explore doc summary for doc_id=%s ran out of time", self.doc_id)
-            timed_out = True
         except Exception:
-            logger.exception("Explore doc summary streaming failed for doc_id=%s", self.doc_id)
+            # Out of time only if this deadline expired: a TimeoutError from
+            # inside the stream (a socket's) is a failure like any other.
+            if deadline.expired():
+                logger.warning("Explore doc summary for doc_id=%s ran out of time", self.doc_id)
+                timed_out = True
+            else:
+                logger.exception("Explore doc summary streaming failed for doc_id=%s", self.doc_id)
 
         # Anything but a natural end stopped mid-sentence: the section it was
         # writing is dropped, for its reader as for the cache.
         parsed = self._parse(text, cut_off=not finished) if text else {"summary": "", "keyPoints": [], "impact": ""}
         # A generation that ended, naturally or at its limit, is the
-        # document's summary. One that failed or ran out of time is shown to
-        # its reader but not kept; one that ran out of time (or made nothing
-        # usable) holds the document off for a while (_UNUSABLE_BUCKET).
-        if (finished or at_limit) and parsed["summary"]:
-            await asyncio.to_thread(self._set_cached, self.prompt["promptVersion"], self.cache_key, parsed)
-        elif finished or at_limit or timed_out:
+        # document's summary — kept if the document hasn't changed under it.
+        # One that failed or ran out of time is shown to its reader, marked
+        # partial, and not kept; one that ran out of time (or made nothing
+        # usable) holds the document off for a while.
+        ended = finished or at_limit
+        if ended and parsed["summary"]:
+            if await asyncio.to_thread(self._still_current):
+                await asyncio.to_thread(self._set_cached, self.prompt["promptVersion"], self.cache_key, parsed)
+        elif ended or timed_out:
+            bucket, period = (_SLOW_BUCKET, _SLOW_FOR_S) if timed_out else (_UNUSABLE_BUCKET, _UNUSABLE_FOR_S)
             try:
-                await throttle.run(throttle.hold, _UNUSABLE_BUCKET, [str(self.doc_id)], period=_UNUSABLE_FOR_S)
+                await throttle.run(throttle.hold, bucket, [str(self.doc_id)], period=period)
             except Exception:
-                logger.warning("Explore summary for doc_id=%s not marked unusable", self.doc_id, exc_info=True)
+                logger.warning("Explore summary for doc_id=%s not held off", self.doc_id, exc_info=True)
         await self._give_back()
-        self.events.put_nowait(_sse({"done": True, **parsed}))
+        last = {"done": True, **parsed}
+        if not ended and parsed["summary"]:
+            last["partial"] = True
+        self.events.put_nowait(_sse(last))
 
 
 @router.post("/pipeline/trigger")

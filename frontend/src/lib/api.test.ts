@@ -437,3 +437,13 @@ describe("abortableSleep", () => {
     await expect(waiting).rejects.toBeDefined();
   });
 });
+
+describe("streamExploreDocumentSummary's result", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("says when the summary was cut short", async () => {
+    const body = 'data: {"done": true, "summary": "S", "keyPoints": [], "impact": "", "partial": true}\n\n';
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+    expect((await streamExploreDocumentSummary(1, () => {})).partial).toBe(true);
+  });
+});

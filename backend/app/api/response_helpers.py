@@ -44,11 +44,17 @@ def cached_json(data, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
 FAILURE_RETRY_S = 30
 
 
+# The Cache-Control of an answer that is only good until the next try: a
+# failed live fetch, or a partial answer (Explore search without its vector
+# index).
+RETRY_SOON_CACHE_CONTROL = f"public, max-age={FAILURE_RETRY_S}"
+
+
 def retry_soon_json(data) -> JSONResponse:
     """A response that reports a failed live fetch — part of an upstream
     record missing, a ballot that couldn't be read, news feeds down: cached
     for FAILURE_RETRY_S only, never for a success's lifetime."""
-    return JSONResponse(content=data, headers={"Cache-Control": f"public, max-age={FAILURE_RETRY_S}"})
+    return JSONResponse(content=data, headers={"Cache-Control": RETRY_SOON_CACHE_CONTROL})
 
 
 # Default score_1..score_5 -> dimension-name mapping (senators/reps share

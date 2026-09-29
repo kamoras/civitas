@@ -312,7 +312,7 @@ class TestSummaryEndpointGuards:
             events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
             # Shown without the sentence it stopped in.
             assert events[-1] == {"done": True, "summary": "The rule would apply.", "keyPoints": ["One"],
-                                  "impact": ""}
+                                  "impact": "", "partial": True}
             assert not mock_set_cache.called
             again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
         if ending == "fails":
@@ -343,6 +343,77 @@ class TestSummaryEndpointGuards:
         kept = {"summary": "Whole.", "keyPoints": ["One"], "impact": ""}
         assert events[-1] == {"done": True, **kept}
         assert mock_set_cache.call_args.args[2] == kept
+
+    async def test_a_timeout_from_inside_the_stream_is_a_failure_not_the_deadline(self, db_session):
+        # Only this generation's own deadline means "ran out of time" (and
+        # holds the document off); a socket's TimeoutError may be retried.
+        doc = _make_doc(db_session)
+
+        async def _socket_timeout(*_args, **_kwargs):
+            yield "SUMMARY: s.\nKEY POINTS:\n- a"
+            raise TimeoutError("socket")
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _socket_timeout),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+        assert any("delta" in event for event in again)
+
+    async def test_a_summary_of_a_document_that_changed_meanwhile_is_not_kept(self, db_session):
+        # A data reset (or a re-ingest) replaced the document while the
+        # generation ran: its summary would describe another text.
+        import asyncio
+
+        doc = _make_doc(db_session)
+        replaced = asyncio.Event()
+
+        async def _meanwhile(*_args, **_kwargs):
+            yield "SUMMARY: Old text.\n"
+            await replaced.wait()
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _meanwhile),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
+        ):
+            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            doc.body = "A different document now."
+            db_session.commit()
+            replaced.set()
+            events = await _collect_sse_events(response)
+        assert events[-1]["summary"] == "Old text."  # its reader still sees it
+        assert not mock_set_cache.called
+
+    async def test_a_claim_made_as_the_generation_is_stopped_is_still_given_back(self, db_session, monkeypatch):
+        import asyncio
+        import threading
+
+        from app.api import explore, throttle
+
+        doc = _make_doc(db_session)
+        entered, go_on = threading.Event(), threading.Event()
+        real_hold = throttle.hold
+
+        def slow_hold(*args, **kwargs):
+            entered.set()
+            go_on.wait(5)
+            return real_hold(*args, **kwargs)
+
+        monkeypatch.setattr(throttle, "hold", slow_hold)
+        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None):
+            request = asyncio.create_task(get_explore_document_summary(doc.id, None, db=db_session))
+            await asyncio.to_thread(entered.wait, 5)
+            stopping = asyncio.create_task(explore.stop_generations())
+            await asyncio.sleep(0)
+            go_on.set()
+            await stopping
+            request.cancel()
+            await asyncio.gather(request, return_exceptions=True)
+        monkeypatch.setattr(throttle, "hold", real_hold)
+        assert throttle.hold("explore-summary", [str(doc.id)], period=300) is not None
 
     async def test_a_lapsed_claim_is_given_back_only_by_its_holder(self, db_session):
         # Once lapsed it may be another generation's: the late holder's
