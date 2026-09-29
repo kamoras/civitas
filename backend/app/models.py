@@ -1862,6 +1862,13 @@ class BroadcastPost(Base):
     # When the last send was started, so retries are spaced (broadcast.RETRY_AFTER).
     bsky_last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     bsky_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # The linked page's card (its Open Graph tags, bluesky_utils.og_card):
+    # the same image and description the Bluesky link card shows, kept for
+    # the feed entry. card_image is NULL until the page has been read, ""
+    # when it was read and sets no image.
+    card_image: Mapped[str | None] = mapped_column(Text, nullable=True)
+    card_image_alt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    card_description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class SiteVisit(VisitsBase):
