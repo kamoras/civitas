@@ -628,10 +628,11 @@ def claim(bucket: str, key: str | None, *, period: float, fail_open: bool = True
 
 class Blocked:
     """hold's answer when one of its `blocked_by` claims is held: `bucket`
-    is that claim's."""
+    is that claim's, `lifts_in` the seconds until it lapses."""
 
-    def __init__(self, bucket: str):
+    def __init__(self, bucket: str, lifts_in: float = 0.0):
         self.bucket = bucket
+        self.lifts_in = lifts_in
 
 
 def hold(
@@ -656,11 +657,12 @@ def hold(
     try:
         with _Txn() as conn:
             for other_bucket, other_key, other_period in blocked_by:
-                if conn.execute(
-                    "SELECT 1 FROM claims WHERE bucket = ? AND key = ? AND claimed_at > ?",
+                row = conn.execute(
+                    "SELECT claimed_at FROM claims WHERE bucket = ? AND key = ? AND claimed_at > ?",
                     (other_bucket, other_key, now - other_period),
-                ).fetchone() is not None:
-                    return Blocked(other_bucket)
+                ).fetchone()
+                if row is not None:
+                    return Blocked(other_bucket, max(0.0, row[0] + other_period - now))
             for key in keys:
                 won = conn.execute(
                     "INSERT INTO claims (bucket, key, claimed_at, expires_at) VALUES (?, ?, ?, ?) "

@@ -467,41 +467,47 @@ class TestSummaryEndpointGuards:
         assert events[-1] == {"done": True, **kept}
         assert mock_set_cache.call_args.args[2] == kept
 
-    @pytest.mark.parametrize("error,held_off", [
-        (ConnectionError("unreachable"), False),
-        (httpx.ConnectTimeout("unreachable"), False),
-        (httpx.ReadTimeout("no answer"), True),
+    @pytest.mark.parametrize("error,held_off,retry_after", [
+        (ConnectionError("unreachable"), False, None),
+        (httpx.ConnectTimeout("unreachable"), False, None),
+        (httpx.ReadTimeout("no answer"), True, 120),
+        # Busy is the LLM's state, not the document's: nothing held off,
+        # and this reader asks again at the busy wait.
         (httpx.HTTPStatusError("busy", request=httpx.Request("POST", "http://llm"),
-                               response=httpx.Response(503)), True),
+                               response=httpx.Response(503)), False, 30),
         (httpx.HTTPStatusError("bad", request=httpx.Request("POST", "http://llm"),
-                               response=httpx.Response(400)), False),
+                               response=httpx.Response(400)), False, None),
     ], ids=["unreachable", "connect-timeout", "llm-read-timeout", "llm-busy-503", "llm-400"])
-    async def test_an_llm_that_stops_answering_is_slow_one_unreachable_a_failure(self, db_session, error, held_off):
-        # A read timeout means the LLM is busy: held off briefly, like the
-        # deadline, so waiting readers don't each start a generation that
-        # queues behind it. An unreachable one may be tried again at once.
+    async def test_an_llm_that_stops_answering_is_slow_one_unreachable_a_failure(
+        self, db_session, error, held_off, retry_after,
+    ):
+        # A read timeout means the LLM is taking too long on this text:
+        # held off briefly, so waiting readers don't each start a generation
+        # that queues behind it. Anything else may be tried again at once.
         from fastapi import HTTPException
 
         doc = _make_doc(db_session)
 
         async def _stops(*_args, **_kwargs):
-            yield "SUMMARY: s.\nKEY POINTS:\n- a"
             raise error
+            yield  # pragma: no cover
 
         with (
             patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
             patch("app.pipeline.analyze.ollama_client.stream_llm", _stops),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
-            await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+            first = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+            assert first[-1].get("retryAfter") == retry_after
             if held_off:
                 with pytest.raises(HTTPException) as exc_info:
                     await get_explore_document_summary(doc.id, _READER, db=db_session)
                 assert exc_info.value.status_code == 503
+                assert 110 <= int(exc_info.value.headers["Retry-After"]) <= 120  # what the hold has left
             else:
                 again = await _collect_sse_events(
                     await get_explore_document_summary(doc.id, _READER, db=db_session))
-                assert any("delta" in event for event in again)
+                assert again[-1]["done"]  # generated again, not refused
 
     async def test_a_summary_is_filed_under_the_text_it_was_made_from(self, db_session):
         # A document changed in place (a body backfilled, a data reset

@@ -423,21 +423,36 @@ class TestPipelineServiceLiveness:
         check_pipeline_service_alive()
         assert sent == ["Pipeline service is not running"]
 
-    def test_no_heartbeat_yet_is_a_service_still_starting(self, sent, monkeypatch):
+    def test_no_heartbeat_yet_is_a_service_still_starting(self, sent):
         # Its first deploy (or a fresh volume): pulling, migrating. Not a
-        # page until it has been missing as long as silence is allowed.
-        from app import ops_alerts
-        from app.time_utils import utcnow
+        # page until it has been missing as long as silence is allowed —
+        # counted from a record on the volume, so an API restarted by each
+        # deploy doesn't start the wait over.
+        import os
+        import time
 
-        monkeypatch.setattr(ops_alerts, "_heartbeat_missing_since", None)
+        from app import ops_alerts
+        from app.shared_state import record_path
+
         ops_alerts.check_pipeline_service_alive()
         assert sent == []
-        monkeypatch.setattr(
-            ops_alerts, "_heartbeat_missing_since",
-            utcnow() - ops_alerts.PIPELINE_SERVICE_SILENT_AFTER - timedelta(minutes=1),
-        )
+        path = record_path(ops_alerts._HEARTBEAT_MISSING_RECORD)
+        noticed = time.time() - ops_alerts.PIPELINE_SERVICE_SILENT_AFTER.total_seconds() - 60
+        os.utime(path, (noticed, noticed))
         ops_alerts.check_pipeline_service_alive()
         assert sent == ["Pipeline service is not running"]
+
+    def test_a_heartbeat_clears_the_missing_record(self, sent):
+        import os
+
+        from app import ops_alerts
+        from app.shared_state import record_path
+
+        ops_alerts.check_pipeline_service_alive()
+        assert os.path.exists(record_path(ops_alerts._HEARTBEAT_MISSING_RECORD))
+        self._beat(timedelta(minutes=1))
+        ops_alerts.check_pipeline_service_alive()
+        assert not os.path.exists(record_path(ops_alerts._HEARTBEAT_MISSING_RECORD))
 
     def test_an_unreadable_database_is_not_evidence(self, sent, monkeypatch):
         from app.ops_alerts import check_pipeline_service_alive

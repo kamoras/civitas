@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import math
 
 import httpx
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
@@ -354,7 +355,6 @@ _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
 _BUSY_RETRY_AFTER_S = 30
 _HELD_RETRY_AFTER_S = 10
-_SLOW_RETRY_AFTER_S = int(_SLOW_FOR_S)  # the whole hold-off: sooner is refused again
 # Marks a refusal that is only a wait (another generation, the cap, a
 # recent timeout, the store, the write budget): the page asks again after
 # Retry-After. A refusal without it — nginx's own — is not waited out.
@@ -424,18 +424,22 @@ async def get_explore_document_summary(
     from app.pipeline.analyze.ollama_client import get_cached_llm_result
     from app.pipeline.analyze.prompts import explore_document_summary_prompt
 
-    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+    def read(session):
+        doc = session.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+        if doc is None:
+            return None
+        return {
+            "title": doc.title,
+            "body": doc.body,
+            "doc_type": doc.doc_type,
+            "chamber": doc.chamber or "",
+            "politician_name": doc.politician_name or "",
+            "date": doc.date,
+        }
 
-    doc_dict = {
-        "title": doc.title,
-        "body": doc.body,
-        "doc_type": doc.doc_type,
-        "chamber": doc.chamber or "",
-        "politician_name": doc.politician_name or "",
-        "date": doc.date,
-    }
+    doc_dict = await off_loop(db, read)
+    if doc_dict is None:
+        raise HTTPException(status_code=404, detail="Document not found")
     prompt = explore_document_summary_prompt(doc_dict)
     # Keyed on what the LLM is given, not the document's id alone: a
     # document whose text or metadata changes in place (a body backfilled,
@@ -457,9 +461,18 @@ async def get_explore_document_summary(
 
     # Not a cached answer: this request may start work, so it counts —
     # after the cache, so a summary already made is never refused.
+    # One hop for the count and the client's keys. The generation outlives
+    # the request: it keeps the keys (an HMAC of the address, AGENTS.md §8),
+    # never the address itself.
     ip = client_ip(request)
-    counted = await throttle.run(limit_client, ip, _SUMMARY_REQUESTS_BUCKET,
-                                 limit=_SUMMARY_REQUESTS_PER_MINUTE, period=60.0)
+
+    def count_and_key():
+        counted = limit_client(ip, _SUMMARY_REQUESTS_BUCKET, limit=_SUMMARY_REQUESTS_PER_MINUTE, period=60.0)
+        if not counted.allowed:
+            return counted, None, None
+        return counted, throttle.client_key(ip, rate_limit.WRITE_BUCKET), throttle.client_key(ip, _CLIENT_BUCKET)
+
+    counted, write_key, client_key = await throttle.run(count_and_key)
     if not counted.allowed:
         # A wait: a refused request isn't counted.
         raise HTTPException(
@@ -471,11 +484,6 @@ async def get_explore_document_summary(
     # Claimed, checked and generated in a task of its own, which the
     # request only waits on: a request cancelled mid-claim (a disconnect)
     # can't leave a claim behind that nothing will give back.
-    # The generation outlives the request: it keeps the client's keys (an
-    # HMAC of the address, AGENTS.md §8), never the address itself.
-    write_key, client_key = await throttle.run(
-        lambda: (throttle.client_key(ip, rate_limit.WRITE_BUCKET), throttle.client_key(ip, _CLIENT_BUCKET)),
-    )
     generation = _Generation(doc_id, prompt, cache_key, write_key, client_key)
     task = asyncio.create_task(generation.run())
     _generations.add(task)
@@ -510,13 +518,14 @@ async def get_explore_document_summary(
             detail="Summaries are busy right now; please try again shortly.",
             headers={"Retry-After": str(_BUSY_RETRY_AFTER_S), **_WAIT_OUT},
         )
-    if outcome == "slow":
+    if isinstance(outcome, tuple) and outcome[0] == "slow":
         # Its last generation ran out of time — perhaps only because the
-        # LLM was busy: a refusal to wait out, not an answer.
+        # LLM was busy: a refusal to wait out, not an answer, for as long
+        # as the hold-off has left.
         raise HTTPException(
             status_code=503,
             detail="This summary took too long a moment ago; please try again shortly.",
-            headers={"Retry-After": str(_SLOW_RETRY_AFTER_S), **_WAIT_OUT},
+            headers={"Retry-After": str(max(1, math.ceil(outcome[1]))), **_WAIT_OUT},
         )
     if outcome == "unusable":
         # Nothing is being written and nothing will come of retrying soon:
@@ -550,8 +559,8 @@ class _Generation:
     given back. `outcome` settles once the claims are decided — "go" (the
     events follow on `events`, None last), "held" (another generation of
     the document is under way), "busy" (the cap is reached), "unusable"
-    (its last output couldn't be used, recently), "slow" (its last
-    generation ran out of time, recently), "unavailable" (the claim store
+    (its last output couldn't be used, recently), ("slow", seconds left)
+    (its last generation ran out of time, recently), "unavailable" (the claim store
     can't answer: fails closed, since the claims are what stand between
     repeated POSTs and the device's one LLM), or the summary itself when
     another request made it meanwhile.
@@ -622,7 +631,7 @@ class _Generation:
                     blocked_by=((_UNUSABLE_BUCKET, key, _UNUSABLE_FOR_S), (_SLOW_BUCKET, key, _SLOW_FOR_S)),
                 )
                 if isinstance(claimed, throttle.Blocked):
-                    self._settle("slow" if claimed.bucket == _SLOW_BUCKET else "unusable")
+                    self._settle(("slow", claimed.lifts_in) if claimed.bucket == _SLOW_BUCKET else "unusable")
                     return
                 if not claimed:
                     self._settle("held")
@@ -679,7 +688,7 @@ class _Generation:
         from app.pipeline.analyze.prompts import parse_explore_document_summary
 
         text = ""
-        finished = at_limit = timed_out = False
+        finished = at_limit = timed_out = llm_busy = False
         deadline = asyncio.timeout(_SUMMARY_GENERATION_LIMIT_S)
         try:
             async with deadline:
@@ -697,12 +706,15 @@ class _Generation:
             at_limit = True
         except Exception as error:
             # Out of time: this deadline expired, or the LLM, once connected,
-            # stopped answering within its client's read timeout, or said it
-            # was busy (429/503) — the pipeline's work, another generation.
-            # Anything else — the LLM unreachable (a connect timeout
-            # included), a bad response — is a failure, retried at once.
-            busy = isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (429, 503)
-            if deadline.expired() or isinstance(error, httpx.ReadTimeout) or busy:
+            # stopped answering within its client's read timeout. Busy: it
+            # said so (429/503) — a fact about the LLM, not this document,
+            # so it holds nothing off. Anything else — the LLM unreachable
+            # (a connect timeout included), a bad response — is a failure,
+            # retried at once.
+            if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (429, 503):
+                logger.warning("Explore doc summary for doc_id=%s: the LLM is busy", self.doc_id)
+                llm_busy = True
+            elif deadline.expired() or isinstance(error, httpx.ReadTimeout):
                 logger.warning("Explore doc summary for doc_id=%s ran out of time", self.doc_id)
                 timed_out = True
             else:
@@ -743,11 +755,11 @@ class _Generation:
         last = {"done": True, **parsed}
         if not ended and parsed["summary"]:
             last["partial"] = True
-        elif held_slow:
-            # Nothing usable came of it, and the document is held off only
-            # briefly: this reader is told when to ask again, as a waiting
+        elif held_slow or llm_busy:
+            # Nothing usable came of it, and nothing holds the document off
+            # for long: this reader is told when to ask again, as a waiting
             # reader is (the page's retry), not that there is no summary.
-            last["retryAfter"] = int(_SLOW_FOR_S)
+            last["retryAfter"] = int(_SLOW_FOR_S) if held_slow else _BUSY_RETRY_AFTER_S
         self.events.put_nowait(_sse(last))
 
 
