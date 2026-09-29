@@ -316,3 +316,17 @@ def test_skip_pending_leaves_finished_steps_alone(db_session):
 
     statuses = {s["key"]: s["status"] for s in json.loads(run.progress_detail)}
     assert statuses == {"fetch_a": "done", "fetch_b": "done", "analyze_a": "skipped", "finalize": "skipped"}
+
+
+def test_a_failed_step_is_resolved_when_it_next_completes(monkeypatch, db_session):
+    """The step's alert is open until the step succeeds again."""
+    sent, resolved = [], []
+    monkeypatch.setattr(progress_tracker, "send_ops_alert", lambda subject, body, **kw: sent.append(kw["condition"]))
+    monkeypatch.setattr(progress_tracker, "resolve_ops_alert", resolved.append)
+    tracker = _tracker(db_session, PipelineRun(status="running"))
+    tracker.begin("fetch_a")
+    tracker.fail("fetch_a")
+    tracker.begin("fetch_a")
+    tracker.complete("fetch_a")
+    assert sent == ["step-failed-PipelineRun-fetch_a"]
+    assert resolved == sent

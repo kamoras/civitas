@@ -210,7 +210,7 @@ def test_a_short_slate_alarms_once_ballots_are_final(monkeypatch, window, alerts
     import app.ops_alerts as ops
     sent = []
     monkeypatch.setattr(ct, "in_ballot_window", lambda year, today=None: window)
-    monkeypatch.setattr(ops, "send_ops_alert", lambda subject, body, dedupe_key=None: sent.append(dedupe_key))
+    monkeypatch.setattr(ops, "send_ops_alert", lambda subject, body, dedupe_key=None, condition=None: sent.append(dedupe_key))
     records = ct._records("MI", _short_slate(), SOURCE["format"], True, 2026)
     assert records.state_offices_incomplete is True
     assert len(sent) == alerts

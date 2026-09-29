@@ -137,10 +137,12 @@ def record_signal_overlap(db, chamber: str) -> dict | None:
         flagged = [(k, v) for k, v in result.items() if v["band"] == "action"]
         for key, v in result.items():
             logger.info("Signal overlap %s %s: r=%s n=%d [%s]", chamber, key, v["r"], v["n"], v["band"])
-        if flagged:
-            from app.ops_alerts import send_ops_alert
-            from app.time_utils import utcnow
+        from app.ops_alerts import resolve_ops_alert, send_ops_alert
+        from app.time_utils import utcnow
 
+        if not flagged:
+            resolve_ops_alert(f"signal-overlap-{chamber}")
+        else:
             lines = "\n".join(
                 f"- {v['labels'][0]} vs {v['labels'][1]}: r={v['r']:+.3f} (n={v['n']})" for _, v in flagged
             )
@@ -150,6 +152,7 @@ def record_signal_overlap(db, chamber: str) -> dict | None:
                 "The established fix is to cut the redundant weight or restructure "
                 "(score_calculator's v6.8/v6.11 notes), not to recalibrate around it.",
                 dedupe_key=f"signal-overlap-{chamber}-{utcnow().date().isoformat()}",
+                condition=f"signal-overlap-{chamber}",
             )
         return result
     except Exception:

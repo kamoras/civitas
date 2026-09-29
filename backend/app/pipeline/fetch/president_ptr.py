@@ -127,12 +127,12 @@ _OFFICE_CELL_VALUES = {
 _rate_limiter = RateLimiter(settings.PRESIDENT_PTR_RPS)
 
 
-def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
+def _alert(subject: str, body: str, *, dedupe_key: str, condition: str) -> None:
     """Best-effort ops alert — lazily imported and never allowed to raise,
     the same pattern member_lifecycle.py uses for mid-pipeline alerting."""
     try:
         from app.ops_alerts import send_ops_alert
-        send_ops_alert(subject, body, dedupe_key=dedupe_key)
+        send_ops_alert(subject, body, dedupe_key=dedupe_key, condition=condition)
     except Exception:
         logger.exception("Failed to send ops alert: %s", subject)
 
@@ -346,10 +346,14 @@ async def fetch_ptr_filing_index(db: Session, president_name: str) -> list[dict]
             f"president_ptr.py's LIVE-VERIFIED note) or this president has genuinely "
             f"filed none yet — the parser cannot tell these apart. Check the live page.",
             dedupe_key=f"president-ptr-empty-index-{president_name.lower().replace(' ', '-')}",
+            condition=f"president-ptr-empty-index-{president_name.lower().replace(' ', '-')}",
         )
         return []
 
     api_cache_set(db, _CACHE_TIER, cache_key, filings, normal_ttl_hours=_INDEX_MAX_AGE_HOURS)
+    from app.ops_alerts import resolve_ops_alert
+
+    resolve_ops_alert(f"president-ptr-empty-index-{president_name.lower().replace(' ', '-')}")
     return filings
 
 

@@ -12,12 +12,18 @@ from app.models import (
     ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus,
     StockTradesPipelineRun, SupplementaryPipelineRun,
 )
-from app.ops_alerts import check_pipeline_overrun, check_pipeline_staleness
+from app.ops_alerts import (
+    check_pipeline_overrun,
+    check_pipeline_staleness,
+    recent_alerts,
+    resolve_ops_alert,
+    send_ops_alert,
+)
 from app.time_utils import utcnow
 
 
 def _check(db_session):
-    with patch("app.database.SessionLocal", return_value=db_session), \
+    with patch("app.ops_alerts.SessionLocal", return_value=db_session), \
          patch("app.ops_alerts.send_ops_alert") as mock_alert:
         check_pipeline_overrun()
     return mock_alert
@@ -195,7 +201,7 @@ class TestCheckStatePviStaleness:
 
 
 def _check_stale(db_session):
-    with patch("app.database.SessionLocal", return_value=db_session), \
+    with patch("app.ops_alerts.SessionLocal", return_value=db_session), \
          patch("app.ops_alerts.send_ops_alert") as mock_alert:
         check_pipeline_staleness()
     return mock_alert
@@ -311,3 +317,112 @@ class TestCheckPipelineStaleness:
         ))
         db_session.commit()
         assert _labels(_check_stale(db_session)) == {"Supplementary pipeline is stale"}
+
+
+class TestOpenAndResolved:
+    """An alert about a condition stays open until the code that detects
+    it sees it gone (2026-09-29: the dashboard listed ten newest alerts
+    with no way to tell a fixed problem from a live one)."""
+
+    def _alerts(self, db_session):
+        with patch("app.ops_alerts.SessionLocal", return_value=db_session):
+            return recent_alerts()
+
+    def _send(self, db_session, subject, **kw):
+        with patch("app.ops_alerts.SessionLocal", return_value=db_session):
+            return send_ops_alert(subject, "body", **kw)
+
+    def _resolve(self, db_session, condition):
+        with patch("app.ops_alerts.SessionLocal", return_value=db_session):
+            return resolve_ops_alert(condition)
+
+    def test_a_condition_alert_is_open_until_resolved(self, db_session):
+        self._send(db_session, "Justice loyalty not measured", dedupe_key="j-1", condition="justice")
+        [alert] = self._alerts(db_session)
+        assert (alert["condition"], alert["resolvedAt"], alert["open"]) == ("justice", None, True)
+        assert self._resolve(db_session, "justice") == 1
+        [alert] = self._alerts(db_session)
+        assert alert["resolvedAt"] is not None and alert["open"] is False
+        assert self._resolve(db_session, "justice") == 0  # nothing left open
+
+    def test_resolving_frees_the_dedupe_key_so_a_recurrence_alerts_again(self, db_session):
+        assert self._send(db_session, "Down", dedupe_key="day-1", condition="c")
+        assert not self._send(db_session, "Down", dedupe_key="day-1", condition="c")
+        self._resolve(db_session, "c")
+        assert self._send(db_session, "Down again", dedupe_key="day-1", condition="c")
+
+    def test_a_newer_alert_for_the_condition_supersedes_the_older(self, db_session):
+        self._send(db_session, "3 states failed", dedupe_key="a", condition="ingest")
+        self._send(db_session, "1 state failed", dedupe_key="b", condition="ingest")
+        open_ = [a["subject"] for a in self._alerts(db_session) if a["open"]]
+        assert open_ == ["1 state failed"]
+
+    def test_an_event_alert_has_no_open_state(self, db_session):
+        self._send(db_session, "Something happened once")
+        [alert] = self._alerts(db_session)
+        assert (alert["condition"], alert["open"]) == (None, False)
+
+    def test_an_open_alert_is_never_pushed_off_by_newer_history(self, db_session):
+        self._send(db_session, "Still broken", condition="old")
+        for i in range(12):
+            self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
+        alerts = self._alerts(db_session)
+        assert alerts[0]["subject"] == "Still broken"
+        assert len(alerts) == 11  # the open one, then the ten newest others
+
+    def test_the_overrun_watchdog_resolves_once_the_run_is_over(self, db_session):
+        self._send(db_session, "House pipeline overrun", condition="overrun-house")
+        _check(db_session)  # no House run is running any more
+        assert self._alerts(db_session)[0]["resolvedAt"] is not None
+
+    def test_the_staleness_watchdog_resolves_a_pipeline_that_completed_again(self, db_session):
+        self._send(db_session, "House pipeline is stale", condition="stale-pipeline-house")
+        db_session.add(HousePipelineRun(
+            started_at=utcnow() - timedelta(hours=3), completed_at=utcnow() - timedelta(hours=1),
+            status=PipelineStatus.COMPLETED,
+        ))
+        db_session.commit()
+        _check_stale(db_session)
+        assert self._alerts(db_session)[0]["resolvedAt"] is not None
+
+
+class TestEachAlertResolves:
+    """Where a condition is seen gone, its alert is resolved with the same
+    key it was raised under. resolve_ops_alert never raises, so a wrong
+    key would fail silently; these pin the keys."""
+
+    def test_a_clean_problem_report_resolves_its_key(self):
+        from app.pipeline.fetch.state_candidates import report_file_problems
+
+        with patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            report_file_problems("Election source crawl failed", "lead", [], "election-source-crawl")
+        resolve.assert_called_once_with("election-source-crawl")
+
+    def test_lda_lookups_that_mostly_work_resolve_and_none_says_nothing(self):
+        from app.pipeline.fetch.lda import alert_if_lda_down
+
+        with patch("app.ops_alerts.resolve_ops_alert") as resolve, \
+             patch("app.ops_alerts.send_ops_alert") as send:
+            alert_if_lda_down({"lookups": 3, "failed": 1}, "house")
+            alert_if_lda_down({"lookups": 0, "failed": 0}, "senate")
+        resolve.assert_called_once_with("lda-down-house")
+        send.assert_not_called()
+
+    def test_a_night_with_no_failing_state_resolves_the_ingest_alert(self):
+        from app.pipeline.election_pipeline import _alert_ingest_failures
+
+        with patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            _alert_ingest_failures([], "2026-11-03")
+        resolve.assert_called_once_with("ballot-measure-ingest-2026-11-03")
+
+    def test_a_clean_ground_truth_gate_resolves_its_chamber(self):
+        from app.pipeline import run_checks
+
+        run, db = MagicMock(), MagicMock()
+        with patch.object(run_checks, "resolve_ops_alert") as resolve, \
+             patch.object(run_checks, "send_ops_alert") as send:
+            run_checks.persist_ground_truth_failures(
+                db, run, [], alert_title="t", alert_body="b", dedupe_key="k", condition="ground-truth-house",
+            )
+        resolve.assert_called_once_with("ground-truth-house")
+        send.assert_not_called()
