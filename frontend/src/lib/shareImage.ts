@@ -336,9 +336,13 @@ export async function captureSection(
   ctx.drawImage(shot, pad, y);
   y += shot.height;
 
-  // Footer: a hairline, then the link and the capture date.
-  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  // Footer: a hairline, then the link and the capture date. Drawn in the
+  // theme's own ink at low opacity: a fixed white one vanished on the light
+  // theme's background.
+  ctx.fillStyle = inkMin;
+  ctx.globalAlpha = 0.35;
   ctx.fillRect(pad, y + 12 * scale, innerW, Math.max(1, scale / 2));
+  ctx.globalAlpha = 1;
   let baseline = y + 34 * scale;
   ctx.font = footFont;
   ctx.fillStyle = inkLo;

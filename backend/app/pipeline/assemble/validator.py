@@ -144,13 +144,9 @@ def validate_senator(senator: dict) -> dict:
                 "pacSponsor": d.get("pacSponsor"),
                 "pacIndustry": d.get("pacIndustry"),
                 "pacAnalysis": d.get("pacAnalysis"),
-                # FEC committee_type ("Q"/"N" = capped PAC) feeds the
-                # PAC-utilization signal in _funding_independence_core.
-                # Dropping it here silently NULLed Donor.committee_type for
-                # every senator (the House path bypasses this validator and
-                # kept it), so the score-breakdown endpoint recomputed FI
-                # via the dollar-based fallback while the stored score used
-                # the utilization path.
+                # FEC committee_type, stored on Donor.committee_type.
+                # Dropping it here once NULLed it for every senator while
+                # the House path (which bypasses this validator) kept it.
                 "committeeType": d.get("committeeType"),
             }
             for d in (f.get("topDonors") or [])
@@ -212,7 +208,22 @@ def validate_senator(senator: dict) -> dict:
                 else []
             ),
             "senatorVoteAligned": m.get("senatorVoteAligned"),
+            # Persisted for the score breakdown's on-demand recompute
+            # (models.LobbyingMatch.is_consensus_vote); was dropped here, so
+            # every senator row stored NULL.
+            "isConsensusVote": m.get("isConsensusVote"),
             "description": m.get("description", ""),
+            "lobbiedBills": [
+                b for b in (m.get("lobbiedBills") or [])
+                if isinstance(b, dict) and b.get("billId")
+            ],
+            "lobbyingClients": [
+                c for c in (m.get("lobbyingClients") or [])
+                if isinstance(c, dict) and c.get("client")
+            ],
+            "lobbyingChecked": (
+                m["lobbyingChecked"] if isinstance(m.get("lobbyingChecked"), bool) else None
+            ),
         }
         for m in (senator.get("lobbyingMatches") or [])
     ]

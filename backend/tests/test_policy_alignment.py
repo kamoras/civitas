@@ -44,3 +44,32 @@ class TestPolicyAnchorCoverage:
             assert matches[0]["similarity"] >= 0.75
         finally:
             clear_alignment_cache()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("donor_extra", "client", "is_committee"),
+    [
+        # A PAC with a separate sponsor is searched under the sponsor.
+        ({"isCommittee": True, "connectedOrg": "LOCKHEED MARTIN CORPORATION"}, "LOCKHEED MARTIN CORPORATION", False),
+        # With none, only its own name is left, where a miss proves nothing.
+        ({"isCommittee": True}, "Lockheed Martin PAC", True),
+        # An organization's employees: its own name is how the registry lists it.
+        ({}, "Lockheed Martin PAC", False),
+    ],
+)
+def test_lobbying_client_says_whether_it_is_a_committees_own_name(donor_extra, client, is_committee):
+    clear_alignment_cache()
+    try:
+        matches = detect_donor_vote_connections(
+            donors=[{"type": "Org/Employees", "industry": "DEFENSE",
+                     "name": "Lockheed Martin PAC", "total": 50_000, **donor_extra}],
+            votes=[{"vote": "Yea", "policyArea": "FOREIGN_POLICY",
+                    "billId": "s123-118", "billName": "Foreign Military Sales Authorization Act",
+                    "totalYeas": 60, "totalNays": 40}],
+            industry_breakdown=[{"industry": "DEFENSE", "total": 50_000}],
+        )
+        assert matches[0]["lobbyingClient"] == client
+        assert matches[0]["lobbyingClientIsCommittee"] is is_committee
+    finally:
+        clear_alignment_cache()

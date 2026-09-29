@@ -70,6 +70,21 @@ def test_breaks_toward_the_other_party_count_once_per_measure(db_session, monkey
     assert party_break_rate({"partyLineRecord": r4}) == (0.0, 3)
 
 
+def test_a_member_of_neither_party_never_stops_the_run(db_session, monkeypatch):
+    # A roll-call position whose party is neither R nor D (and not resolved
+    # to a caucus) used to reach toward[party] and raise KeyError, which
+    # took the whole chamber's scoring down.
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": DIM1})
+    _roll_call(db_session, "house", 20, "On Passage", "HR.3", {})
+    db_session.add(RollCallPosition(roll_call_id=db_session.query(RollCall).one().id, member_id="X1",
+                                    last_name="Lx", first_name="X", party="L", state="TN", position="Nay"))
+    db_session.commit()
+    members = _members() + [{"bioguideId": "X1", "party": "L", "votingRecord": {"effectiveParty": "L"}}]
+    records = party_line_records(db_session, "house", members)
+    assert records[0]["votes"] == 1
+    assert records[-1] == {"congress": 119, "votes": 0, "breaks": [], "flankBreaks": []}
+
+
 def test_senators_are_found_by_name_and_state_and_the_leaders_switch_is_not_a_break(db_session, monkeypatch):
     monkeypatch.setattr(party_line_record, "_member_ideal_points",
                         lambda chamber: {"members": {f"bio-{m}": d for m, d in DIM1.items()}})

@@ -2,10 +2,8 @@ import type { VoteRollCall } from "./senator";
 
 // Shapes returned by the /{entityType}/{id}/score-breakdown endpoints —
 // the "click a score, see the math" panel's data source. Senator,
-// representative, and president dimensions share the same shape;
-// justice dimensions carry different fields entirely (see
-// JusticeScoreBreakdown below), since analyze_justice_votes' math
-// doesn't decompose into weighted components the same way.
+// representative, and president dimensions share the same shape. A
+// justice's scorecard reads its loyalty figures off the justice itself.
 
 export interface ScoreBreakdownComponent {
   label: string;
@@ -71,19 +69,6 @@ export interface PresidentScoreBreakdown {
   effectiveness: ScoreBreakdownDimension;
   agencyAlignment: ScoreBreakdownDimension;
   historicalLegacy: ScoreBreakdownDimension;
-}
-
-export interface JusticeDimensionBreakdown {
-  detail: string;
-  [key: string]: unknown;
-}
-
-export interface JusticeScoreBreakdown {
-  breakdown: {
-    consistency: JusticeDimensionBreakdown;
-    independence: JusticeDimensionBreakdown;
-  };
-  [key: string]: unknown;
 }
 
 /** GET /api/signal-overlap: how closely two related score components moved
