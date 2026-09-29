@@ -60,6 +60,7 @@ from app.pipeline.fetch.senate_ptr import (
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_tracked_run, run_in_progress, skip_reason_text
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
+from app.services.president_service import current_president
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -413,19 +414,6 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     return reread
 
 
-def _current_president(db: Session) -> President | None:
-    # Ordered, not just .first(): during a transition the roster can briefly
-    # carry two is_current rows, and an unordered pick would attribute the
-    # filings to whichever one the query happened to return — different
-    # answers on different runs. Highest number is the later presidency.
-    return (
-        db.query(President)
-        .filter(President.is_current == True)  # noqa: E712
-        .order_by(President.number.desc())
-        .first()
-    )
-
-
 def _annual_covered_through(db: Session, president_id: str) -> str | None:
     """The last day of the latest year the president's stored annual report
     covers (YYYY-12-31), or None when none is stored."""
@@ -442,7 +430,7 @@ async def _read_president_filing(db: Session, filing: dict) -> list[TradeRow]:
     filing's date, from OGE's index when the caller holds only its URL, as
     a re-read does) and without the transactions of a year an annual report
     covers: that report is their record (president_fd)."""
-    president = _current_president(db)
+    president = current_president(db)
     if president is None:
         return []
     if not filing.get("filing_date"):
@@ -497,7 +485,7 @@ async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
     indexes these filings under the office, and president_ptr.py already
     requires the row to name this president before returning it.
     """
-    president = _current_president(db)
+    president = current_president(db)
     if president is None:
         logger.info("No current president row — skipping presidential PTR ingestion")
         return 0
@@ -610,9 +598,10 @@ async def run_stock_trades_pipeline() -> dict:
         elapsed = round(time.time() - start_time, 1)
         logger.info(
             "Stock trades pipeline: %d House rows, %d Senate rows, %d presidential rows; "
-            "%d House / %d Senate holdings",
+            "%d House / %d Senate / %d presidential holdings",
             house_count, senate_count, president_count,
             holdings_counts["house_holdings"], holdings_counts["senate_holdings"],
+            holdings_counts["president_holdings"],
         )
 
         # FAILED only when every trade phase failed — one source being down
@@ -637,6 +626,7 @@ async def run_stock_trades_pipeline() -> dict:
             "president_trades": president_count,
             "house_holdings": holdings_counts["house_holdings"],
             "senate_holdings": holdings_counts["senate_holdings"],
+            "president_holdings": holdings_counts["president_holdings"],
             "elapsed_seconds": elapsed,
         }
     finally:
