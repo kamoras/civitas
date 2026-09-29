@@ -83,35 +83,44 @@ def _nightly_pipeline() -> None:
         check_state_pvi_staleness,
         send_ops_alert,
     )
+    from app.pipeline.fetch.district_pvi import REFRESH_WHO as DISTRICT_PVI_REFRESH
     from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
 
-    def _alert_if_skipped(label: str, result: dict) -> bool:
+    _CHAIN = ["Senate", "Supplementary", "House", "Stock trades", "Election"]
+
+    def _alert_if_skipped(label: str, result: dict, *, chain_continues: bool = False) -> bool:
         """Returns True (and alerts) if `result` reports the step was
         skipped. Every step in the nightly chain shares the same DB-row
         lock, and a skip anywhere silently takes the rest of the chain
         down with it — this alert exists so a skip is never silent,
         since downstream data can otherwise go stale for days with no
-        signal that anything is wrong.
+        signal that anything is wrong. `chain_continues`: this skip does
+        not end the chain (the alert says so).
         """
         if result.get("status") != "skipped":
             return False
         logger.info("%s pipeline skipped — %s", label, result.get("reason", "unknown reason"))
+        rest = _CHAIN[_CHAIN.index(label) + 1:] if label in _CHAIN else []
+        after = (
+            "" if not rest else
+            f"The rest of tonight's chain ({', '.join(rest)}) still runs." if chain_continues else
+            f"The chain stops here — {', '.join(rest)} did not run tonight either."
+        )
         send_ops_alert(
             f"Nightly {label} run skipped",
-            f"The scheduled {label} pipeline did not start because {_skip_cause(result.get('reason'))}. {label} data will be a "
-            "day stale unless triggered manually. If this was Senate, "
-            "note that Supplementary/House/Stock never ran either tonight "
-            "— the chain stops here, it does not skip just this one step.",
+            f"The scheduled {label} pipeline did not start because {_skip_cause(result)}. {label} data will be a "
+            f"day stale unless triggered manually. {after}".rstrip(),
             dedupe_key=f"skipped-{label.lower()}-{utcnow():%Y-%m-%d}",
         )
         return True
 
-    def _skip_cause(reason: str | None) -> str:
+    def _skip_cause(result: dict) -> str:
         """What held the run off: the skip's own reason (every pipeline's
-        lock refusal carries one — run_tracker.acquire_pipeline_lock_why)."""
+        lock refusal carries one — run_tracker.acquire_pipeline_lock_why),
+        naming the lease's holder when the skip recorded it."""
         from app.pipeline.run_tracker import skip_reason_text
 
-        return skip_reason_text(reason)
+        return skip_reason_text(result.get("reason"), who=result.get("holder"))
 
     def _run():
         # Loud, deduped alerts before another night's scoring. Each is a
@@ -158,7 +167,11 @@ def _nightly_pipeline() -> None:
             # fetched the next run. Triggered House runs go through it too.
             house_result = loop.run_until_complete(run_house_on_sitting_lines(run_house_pipeline))
             logger.info("House pipeline: %s", house_result)
-            if _alert_if_skipped("House", house_result):
+            # A District PVI refresh is waited for; one that outlasts the
+            # wait (stuck) costs tonight's House scores but not Stock
+            # trades or Election, which don't read them.
+            held_by_refresh = house_result.get("holder") == DISTRICT_PVI_REFRESH
+            if _alert_if_skipped("House", house_result, chain_continues=held_by_refresh) and not held_by_refresh:
                 return
 
             # Both chambers' sponsored-bill rows were just rewritten —

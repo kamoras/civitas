@@ -87,8 +87,11 @@ STALE_S = 10 * 60
 # (run_tracker._proven_dead): a live run's beats can stall behind a writer
 # for minutes, and calling it dead then would let a deploy, a data reset or
 # a second run proceed under it — so its window is an hour, and a lease
-# that has missed ten beats still counts as held until then.
-_STALE_S_BY_TIER = {DATA_RESET: 30 * 60, SENATE_RUN: 60 * 60}
+# that has missed ten beats still counts as held until then. DISTRICT_LINES
+# is held for a whole House run, whose beats stall the same way: taken over
+# after ten minutes, a refresh could rewrite the lines under a House run
+# that is still scoring.
+_STALE_S_BY_TIER = {DATA_RESET: 30 * 60, SENATE_RUN: 60 * 60, DISTRICT_LINES: 60 * 60}
 
 
 def stale_after(tier: str) -> timedelta:
@@ -417,6 +420,14 @@ def refusal(db: Session, tier: str) -> str:
     return code_and_refusal(db, tier)[1]
 
 
+def refused(db: Session, tier: str) -> "Granted":
+    """A refusal read once, just after acquire refused: its words, its
+    code, and the holder (for REFUSED_HELD) all from the same read, so a
+    caller acting on one can't be told another."""
+    code, who = _refused(db, tier)
+    return Granted(refusal_text(code, tier, who), code=code, holder=who)
+
+
 def code_and_refusal(db: Session, tier: str) -> tuple[str, str]:
     """(refusal_code, refusal) from one read, for a caller that acts on the
     code too."""
@@ -426,10 +437,14 @@ def code_and_refusal(db: Session, tier: str) -> tuple[str, str]:
 
 class Granted:
     """What job() and job_async() yield: true while the lease is held; when
-    it isn't, `why` says so (refusal)."""
+    it isn't, `why` says so (refusal), and for a refusal read from the
+    lease row (refused), `code` is its refusal_code and `holder` who holds
+    the lease (REFUSED_HELD only) — from the same read as `why`."""
 
-    def __init__(self, why: str | None) -> None:
+    def __init__(self, why: str | None, *, code: str | None = None, holder: str | None = None) -> None:
         self.why = why
+        self.code = code
+        self.holder = holder
 
     def __bool__(self) -> bool:
         return self.why is None
@@ -452,7 +467,7 @@ def job(tier: str, *, who: str | None = None) -> Iterator[Granted]:
     db = SessionLocal()
     try:
         with holding(db, tier, yield_to=DATA_RESET, who=who) as token:
-            granted = Granted(None if token is not None else refusal(db, tier))
+            granted = Granted(None) if token is not None else refused(db, tier)
             _log_skip(tier, who, granted)
             yield granted
     finally:
@@ -468,15 +483,15 @@ class _Taking:
         self.tier, self.who = tier, who
         self.lock = threading.Lock()
         self.abandoned = False
-        self.result: "tuple[Session, _Held | None, str | None] | None" = None
+        self.result: "tuple[Session, _Held | None, Granted | None] | None" = None
 
-    def take(self) -> "tuple[Session, _Held | None, str | None]":
+    def take(self) -> "tuple[Session, _Held | None, Granted | None]":
         from app.database import SessionLocal
 
         db = SessionLocal()
         try:
             held_lease = _take(db, self.tier, DATA_RESET, self.who)
-            result = (db, held_lease, None if held_lease is not None else refusal(db, self.tier))
+            result = (db, held_lease, None if held_lease is not None else refused(db, self.tier))
         except BaseException:
             db.close()
             raise
@@ -512,12 +527,12 @@ async def job_async(tier: str, *, who: str | None = None) -> AsyncIterator[Grant
 
     taking = _Taking(tier, who)
     try:
-        db, held_lease, refused = await asyncio.shield(asyncio.to_thread(taking.take))
+        db, held_lease, refusal_ = await asyncio.shield(asyncio.to_thread(taking.take))
     except asyncio.CancelledError:
         taking.abandon()
         raise
     try:
-        granted = Granted(refused if held_lease is None else None)
+        granted = Granted(None) if held_lease is not None else refusal_
         _log_skip(tier, who, granted)
         yield granted
     finally:

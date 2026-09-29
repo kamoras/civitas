@@ -17,12 +17,17 @@ reads — "ST-N" -> signed int, positive = R lean, at-large seats "ST-0");
 "congresses" holds every configured Congress's table with its provenance.
 
 Run from the repo (network required):
-    python3 backend/scripts/fetch_district_pvi.py [output.json] [--congress N]
+    python3 backend/scripts/fetch_district_pvi.py --congress N [output.json]
 
---congress picks the sitting Congress to put in "districts" (default: the
-Congress in office now, app.config.sitting_congress — the newest pinned
-table at or below it when it has none of its own). Exits 1 if any gate
-fails, writing nothing.
+--congress (required) names the Congress whose table goes in the top-level
+"districts" (the newest pinned table at or below it when it has none of
+its own). It is explicit, not read from the clock, so the checked-in file
+does not change meaning with the day someone happens to regenerate it:
+the fallback's top level is only read before a deployment's first ingest,
+every House run re-selects the sitting Congress's table from "congresses"
+(fetch/district_pvi._reselect), and the tests check the file against the
+Congress it names. Give it the Congress in office when you regenerate
+(app.config.sitting_congress). Exits 1 if any gate fails, writing nothing.
 """
 
 import argparse
@@ -33,7 +38,6 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.config import sitting_congress  # noqa: E402
 from app.ordinals import ordinal  # noqa: E402
 from app.pipeline.fetch import district_pvi as dp  # noqa: E402
 
@@ -47,7 +51,10 @@ async def _build(congress: int) -> tuple[dict | None, list[str]]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("output", nargs="?", default=str(DEFAULT_OUTPUT))
-    ap.add_argument("--congress", type=int, default=sitting_congress())
+    ap.add_argument(
+        "--congress", type=int, required=True,
+        help="the Congress whose table goes in the top-level \"districts\" (the one in office)",
+    )
     args = ap.parse_args()
 
     payload, failures = asyncio.run(_build(args.congress))

@@ -64,7 +64,11 @@ import json
 import logging
 import pathlib
 import re
+import time
 import urllib.parse
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date
 
 from app.atomic_write import write_text_atomic
@@ -628,13 +632,134 @@ def _reset_caches() -> None:
     score_calculator._district_pvi_cache = None
 
 
+# ── Which Congress's lines a stored House score is on ──────────────────
+#
+# Every House score is stored with the Congress whose lines it was computed
+# on (Representative.district_lines_congress, written by
+# upsert_representative from lines_congress()), and the API's "show the
+# math" breakdown recomputes Constituent Alignment on THOSE lines
+# (lines_of). Without it the breakdown read whatever the file's top-level
+# table was: from the moment a House run switched the lines until it had
+# rescored a member — hours, or until the next successful run if it failed
+# — and, for a member who left at the change of Congress, for as long as
+# their record stays up, the breakdown's number was on lines their stored
+# score never used.
+
+_OTHER_LINES: ContextVar[dict[str, int] | None] = ContextVar("district_pvi_other_lines", default=None)
+
+
+class SeatLines(dict):
+    """score_calculator's district table (its _district_pvi_cache) as this
+    module installs it (_scoring_lines): the file's top-level table, plus
+    `congress` — the Congress whose pinned table it is, None for a
+    pre-pinning file — and every pinned table (`tables`), all from one read
+    of the file. So the Congress a House run records for a score is the
+    table that score was computed from.
+
+    A plain dict to every reader except inside lines_of(), which, in that
+    call's context only (a ContextVar: other threads and tasks — a House
+    run scoring beside an API request — never see it), answers for another
+    Congress's table. score_calculator reads it through .get; the other
+    lookups by key ([] and `in`) are covered too; nothing that runs inside
+    lines_of() iterates the table."""
+
+    congress: int | None = None
+    tables: dict = {}
+
+    def _table(self) -> dict | None:
+        return _OTHER_LINES.get()
+
+    def get(self, key, default=None):
+        other = self._table()
+        return other.get(key, default) if other is not None else super().get(key, default)
+
+    def __getitem__(self, key):
+        other = self._table()
+        return other[key] if other is not None else super().__getitem__(key)
+
+    def __contains__(self, key) -> bool:
+        other = self._table()
+        return key in other if other is not None else super().__contains__(key)
+
+
+def _scoring_lines() -> SeatLines:
+    """The district table member scoring reads, installed as a SeatLines
+    (see there) when score_calculator's cache is empty or a plain dict."""
+    from app.pipeline.analyze import score_calculator as sc
+
+    cache = sc._district_pvi_cache
+    if isinstance(cache, SeatLines):
+        return cache
+    raw = sc._read_pvi_json("district_pvi.json")
+    lines = SeatLines({k: int(v) for k, v in (raw.get("districts") or {}).items()})
+    if raw.get("congresses") and isinstance(raw.get("congress"), int):
+        lines.congress = raw["congress"]
+        lines.tables = raw["congresses"]
+    if not lines:
+        logger.warning("district_pvi.json unavailable — falling back to state PVI")
+    sc._district_pvi_cache = lines
+    return lines
+
+
+def lines_congress() -> int | None:
+    """The Congress whose district lines member scoring reads now — what a
+    House run records beside each score it stores (upsert_representative).
+    None for a pre-pinning file, whose one table is of unknown lines."""
+    return _scoring_lines().congress
+
+
+@contextmanager
+def lines_of(congress: int | None) -> Iterator[int | None]:
+    """Within the block, in this context only, member scoring reads
+    `congress`'s pinned table instead of the sitting one — for recomputing
+    a stored score (the API's breakdown) on the lines it was computed on.
+    Yields the Congress whose lines are in effect. A score with no recorded
+    Congress (stored before it was recorded), or one whose table is no
+    longer on file, is read on the current lines, as it always was."""
+    lines = _scoring_lines()
+    table = None
+    if congress is not None and lines.congress is not None and congress != lines.congress:
+        block = (lines.tables or {}).get(str(congress))
+        if block and block.get("districts"):
+            table = {k: int(v) for k, v in block["districts"].items()}
+        else:
+            logger.info(
+                "district-pvi: no %s-Congress table on file for a score stored on its lines — "
+                "reading the current lines", ordinal(congress),
+            )
+    token = _OTHER_LINES.set(table)
+    try:
+        yield congress if table is not None else lines.congress
+    finally:
+        _OTHER_LINES.reset(token)
+
+
+def stamp_house_lines(session_factory) -> None:
+    """Record the current lines on every current representative — for a
+    rescore that rewrote their stored Constituent Alignment on the lines in
+    effect (main's startup rescore; constituent_rescore.py). Never raises."""
+    from app.models import Representative
+
+    db = session_factory()
+    try:
+        congress = lines_congress()
+        db.query(Representative).filter(Representative.is_current.is_(True)).update(
+            {Representative.district_lines_congress: congress}, synchronize_session=False,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("district-pvi: recording the rescored members' lines failed")
+    finally:
+        db.close()
+
+
 def _sitting_congress() -> int:
     """The Congress in office now, read from the clock on every call (noon
     ET on Jan 3 of an odd year starts the next one) unless CURRENT_CONGRESS
     is pinned in the environment — see app.config.sitting_congress. NOT
     settings.CURRENT_CONGRESS's default, which is fixed at process start
-    (on the calendar-year rule) and would hold the old Congress's lines
-    until a restart."""
+    and would hold the old Congress's lines until a restart."""
     from app.config import sitting_congress
     return sitting_congress()
 
@@ -685,6 +810,21 @@ async def _check_live_drift(sources: dict, payload: dict) -> list[str]:
     return changed
 
 
+# What each DISTRICT_LINES holder calls itself on the lease row
+# (lease.holder): skip messages name it, and a House run tells a refresh
+# (worth waiting for) from another House run (not).
+REFRESH_WHO = "District PVI refresh"
+HOUSE_RUN_WHO = "House run"
+
+# How long a House run waits for a District PVI refresh that holds the
+# lines. A refresh is a handful of requests (one per pinned Congress, plus
+# the live revision), each retried with backoff (_RETRIES, _BACKOFF_S) —
+# minutes, not hours; a refresh still holding the lease after this is stuck,
+# and the House run is skipped with a message that says so.
+REFRESH_WAIT_S = 30 * 60
+REFRESH_POLL_S = 30.0
+
+
 async def refresh_district_pvi() -> bool:
     """Fetch, gate, and persist every configured Congress's table. Returns
     True on a successful write, False otherwise.
@@ -701,7 +841,7 @@ async def refresh_district_pvi() -> bool:
     from app.pipeline import lease
 
     try:
-        async with lease.job_async(lease.DISTRICT_LINES, who="District PVI refresh") as granted:
+        async with lease.job_async(lease.DISTRICT_LINES, who=REFRESH_WHO) as granted:
             if not granted:
                 return False
             return await _refresh()
@@ -844,7 +984,9 @@ def _ensure_sitting_lines() -> str:
     return "refresh failed"
 
 
-async def run_house_on_sitting_lines(run_house) -> dict:
+async def run_house_on_sitting_lines(
+    run_house, *, refresh_wait_s: float = REFRESH_WAIT_S, poll_s: float = REFRESH_POLL_S,
+) -> dict:
     """Every House run, nightly or triggered: take the DISTRICT_LINES
     lease, settle the sitting Congress's district lines
     (_ensure_sitting_lines), then run `run_house()` (run_house_pipeline,
@@ -854,18 +996,47 @@ async def run_house_on_sitting_lines(run_house) -> dict:
     trigger's check), and a second House trigger is refused at once
     instead of waiting out a first one's network refresh.
 
+    A District PVI refresh holding the lease is waited for (up to
+    `refresh_wait_s`, re-trying every `poll_s`): it is minutes of work, and
+    skipping would cost a night of House scores — and, in the nightly
+    chain, used to end the chain before Stock trades and Election.
+
     Returns run_house()'s result, or a skip in the shape the nightly
-    chain's skip alert reads ({"status": "skipped", "reason": code}):
-    the lease held elsewhere or a data reset (lease refusal codes), or a
-    House run already going (run_tracker.ALREADY_RUNNING) — one a process
-    started without this lease, e.g. an older image mid-rollout; its
-    lines are left alone. A failing check is logged and the run goes
-    ahead on whatever lines the file holds, as it always could."""
+    chain's skip alert reads ({"status": "skipped", "reason": code,
+    "holder": who}): the lease held elsewhere (by another House run, or a
+    refresh past the wait — `holder` names which, from the same read as
+    the code) or a data reset (lease refusal codes), or a House run already
+    going (run_tracker.ALREADY_RUNNING) — one a process started without
+    this lease, e.g. an older image mid-rollout; its lines are left alone.
+    A failing check is logged and the run goes ahead on whatever lines the
+    file holds, as it always could."""
+    import asyncio
+
+    from app.pipeline import lease
+
+    deadline = time.monotonic() + refresh_wait_s
+    while True:
+        async with lease.job_async(lease.DISTRICT_LINES, who=HOUSE_RUN_WHO) as granted:
+            if granted:
+                return await _house_run_holding_the_lines(run_house)
+        if granted.holder != REFRESH_WHO or time.monotonic() >= deadline:
+            break
+        logger.info("House run waiting for the %s that holds the district lines", REFRESH_WHO)
+        await asyncio.sleep(poll_s)
+    if granted.holder == REFRESH_WHO:
+        logger.warning(
+            "House pipeline not started: the %s has held the district lines for over %d minutes",
+            REFRESH_WHO, refresh_wait_s // 60,
+        )
+    return {"status": "skipped", "reason": granted.code, "holder": granted.holder}
+
+
+async def _house_run_holding_the_lines(run_house) -> dict:
+    """run_house_on_sitting_lines's work, under the DISTRICT_LINES lease."""
     import asyncio
 
     from app.database import SessionLocal
     from app.models import HousePipelineRun
-    from app.pipeline import lease
     from app.pipeline.run_tracker import ALREADY_RUNNING, run_in_progress
 
     def _read(fn):
@@ -875,19 +1046,27 @@ async def run_house_on_sitting_lines(run_house) -> dict:
         finally:
             db.close()
 
-    async with lease.job_async(lease.DISTRICT_LINES, who="House run") as granted:
-        if not granted:
-            code = await asyncio.to_thread(_read, lambda db: lease.refusal_code(db, lease.DISTRICT_LINES))
-            return {"status": "skipped", "reason": code}
-        if await asyncio.to_thread(_read, lambda db: run_in_progress(db, HousePipelineRun)):
-            logger.warning("House pipeline not started: a House run is already going; its district lines left alone")
-            return {"status": "skipped", "reason": ALREADY_RUNNING}
-        try:
-            outcome = await asyncio.to_thread(_ensure_sitting_lines)
-            logger.info("district-pvi before the House run: %s", outcome)
-        except Exception:
-            logger.exception("district-pvi: sitting-lines check before the House run failed; running on the file as it is")
-        return await run_house()
+    if await asyncio.to_thread(_read, lambda db: run_in_progress(db, HousePipelineRun)):
+        logger.warning("House pipeline not started: a House run is already going; its district lines left alone")
+        return {"status": "skipped", "reason": ALREADY_RUNNING}
+    try:
+        outcome = await asyncio.to_thread(_ensure_sitting_lines)
+        logger.info("district-pvi before the House run: %s", outcome)
+    except Exception:
+        logger.exception("district-pvi: sitting-lines check before the House run failed; running on the file as it is")
+    # Re-read the file now, under the lease: the run scores on it, and
+    # records its Congress beside each score (lines_congress). Another
+    # process may have switched the lines since this one last read them.
+    _reset_caches()
+    try:
+        congress = lines_congress()
+        logger.info(
+            "House run scoring on %s", f"the {ordinal(congress)} Congress's district lines"
+            if congress else "a pre-pinning district table (lines unknown)",
+        )
+    except Exception:
+        logger.exception("district-pvi: reading the lines before the House run failed")
+    return await run_house()
 
 
 def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources: dict) -> str:

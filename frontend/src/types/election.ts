@@ -411,12 +411,42 @@ export interface StateBallot {
 
 /** Provenance block on the /pvi response. Optional end to end — older
  * backend responses (and cached ones) may omit it entirely. */
+/** Provenance of the district table /pvi serves — the lines this cycle's
+ * House races are fought on (backend fetch/district_pvi.district_pvi_for_congress).
+ * Any field may be null when the data file lacks it. */
+export interface DistrictPviMeta {
+  source: string | null;
+  /** Only in the older shape, served for a district file that predates
+   * per-Congress pinning (no lines/congress fields then). */
+  method?: string | null;
+  lines?: string | null;
+  window: string | null;
+  /** The Congress whose pinned table this is. */
+  congress?: number;
+  /** The Congress the table was asked for (the one this cycle seats). */
+  forCongress?: number;
+  /** The pinned source revision's timestamp (what the table is as of),
+   * not the day it was fetched — that is `fetchedOn`. */
+  asOf: string | null;
+  revision?: { page: string; revid: number; timestamp: string } | null;
+  fetchedOn?: string | null;
+  /** States that redrew since `congress`'s table: their seats are left
+   * out (they fall back to the state lean, labelled as such). */
+  omittedRedrawnStates?: string[];
+}
+
 export interface PviMeta {
-  states?: { source: string; method: string; window: string; asOf: string };
-  /** Not rendered: the /elections page draws state leans only. For /pvi,
-   * `asOf` is the pinned source revision's timestamp (what the table is
-   * as of), not the day it was fetched. */
-  districts?: { source: string; window: string; asOf: string };
+  /** Null when state_pvi.json is unavailable. */
+  states?: {
+    source: string | null;
+    method: string | null;
+    window: string | null;
+    asOf: string | null;
+  } | null;
+  /** Not rendered: the /elections page draws state leans only. Null when
+   * no district table is served for this cycle (a Congress older than
+   * every pinned table, or no district file at all). */
+  districts?: DistrictPviMeta | null;
   /** e.g. "Cook-PVI-style partisan lean relative to the national
    * presidential vote. Measures lean, not a race forecast." */
   note?: string;

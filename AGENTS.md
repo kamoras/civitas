@@ -352,18 +352,31 @@ The correct pattern, established by `_district_pvi()` /
    "Sitting" is read from the clock on every call
    (`app.config.sitting_congress`: noon ET on Jan 3 of an odd year, the
    20th Amendment's hand-over), not from `settings.CURRENT_CONGRESS`,
-   whose default is the calendar year's Congress, fixed when the process
-   starts (it scopes roll-call sessions and bill windows; computed at
-   startup the calendar rule can be a day or two early but never behind —
-   only a process running across New Year, or an environment pin, falls
-   behind, and `check_current_congress_staleness` says which). Every House run — the nightly
+   whose default is the Congress in session on the date the process
+   starts, fixed from then on (it scopes roll-call sessions and bill
+   windows; computed at startup it can be a few hours early on Jan 3 but
+   never behind — only a process running across Jan 3, or an environment
+   pin, falls behind, and `check_current_congress_staleness` says which).
+   An environment pin is the one thing that stops the switch:
+   `sitting_congress()` returns it, so it freezes the district lines as
+   well as the windows. It exists only for re-running an archived
+   database; **the production `.env` must not set `CURRENT_CONGRESS`**
+   (`.env.example` leaves it commented out, and a test keeps it that
+   way). Every House run — the nightly
    chain's and each triggered one (`/api/admin/pipeline/trigger`,
    `/trigger-house`, the token trigger) — goes through
    `run_house_on_sitting_lines`, which takes the `DISTRICT_LINES` lease,
    settles the lines (`_ensure_sitting_lines`), and holds the lease until
    the House run returns; the weekly refresh takes the same lease, so the
    lines never change under a House run and a second House trigger is
-   refused rather than refreshing twice. So the first House run after
+   refused rather than refreshing twice (a House run that finds a refresh
+   holding the lease waits for it, up to `REFRESH_WAIT_S`, rather than
+   skipping — and past that, the nightly chain still goes on to Stock
+   trades and Election). Each stored House score records the Congress
+   whose lines it used (`Representative.district_lines_congress`), and the
+   score breakdown recomputes on those lines (`district_pvi.lines_of`), so
+   the two agree while a run is part-way through a switch, after one that
+   failed, and for members who left when the lines changed. So the first House run after
    that noon (with the default 03:00 UTC schedule, the Jan 4 nightly)
    switches member scoring to the new Congress's table from what is
    already on disk — no fetch, no restart — *if* the sources file has an
@@ -372,7 +385,7 @@ The correct pattern, established by `_district_pvi()` /
    since the check compares each table's pinned `revid` with the file.
    Without an entry for the sitting Congress, scoring stays on the newest
    pinned lines, nothing is fetched for it, and one ops alert per
-   Congress asks for the entry. `scripts/fetch_district_pvi.py`
+   Congress asks for the entry. `scripts/fetch_district_pvi.py --congress N`
    regenerates the bundled pre-first-ingest fallback through the same
    code.
 
@@ -896,6 +909,7 @@ See `.env.example` for all options. Key variables:
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
+| `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
 "CI/CD" below for why — no GitHub Actions job ever touches the Pi
@@ -903,7 +917,11 @@ anymore, so there's no automated sync). To change a value: SSH in, edit
 `.env` directly, then redeploy. `.env.example` stays the source of truth
 for which variables exist and what they do; local development
 (`docker compose up -d`) uses its own real `.env` file the same way it
-always has.
+always has. **The production `.env` must not set `CURRENT_CONGRESS`**:
+an `.env` copied from a template that once set it (`CURRENT_CONGRESS=119`,
+before 2026-09) pins the scored windows and the district lines on the
+119th Congress for good — check for the line and delete it
+(`check_current_congress_staleness` alerts once it has gone stale).
 
 ### Database
 

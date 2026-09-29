@@ -152,7 +152,9 @@ def check_current_congress_staleness() -> None:
       reads app.config.sitting_congress(), which follows the clock.
     - pinned: an operator set CURRENT_CONGRESS in the environment (an
       archived-DB re-run's reproducibility) and left the pin in place past
-      the next Congress. Only editing the environment fixes that.
+      the next Congress — or copied an old .env.example that set it. Only
+      editing the environment fixes that. A pin freezes the district lines
+      too (sitting_congress() returns it), and the alert says so.
 
     The round-4 audit's original "silent time bomb" finding was that the
     default was a hardcoded literal nobody would remember to bump.
@@ -165,8 +167,14 @@ def check_current_congress_staleness() -> None:
     if expected > configured:
         pinned = settings.current_congress_pinned
         fix = (
-            f"It is pinned in the environment: change it to {expected} (or remove "
-            f"the pin so it follows the clock) and restart the backend."
+            f"It is pinned in the environment (.env or the container's environment): "
+            f"remove the pin so it follows the clock — production should never set it; "
+            f"a pin is only for re-running an archived database — and restart the backend. "
+            f"The pin also freezes House members' district lines: member scoring stays on "
+            f"the {ordinal(configured)} Congress's lines (fetch/district_pvi.py reads "
+            f"app.config.sitting_congress(), which returns the pin), so the "
+            f"{ordinal(expected)} Congress's members are scored on districts they were "
+            f"not elected in until it is removed."
             if pinned else
             f"It is not pinned — it was computed from the date the backend "
             f"process started, before the {ordinal(expected)} Congress convened. "

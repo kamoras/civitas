@@ -149,7 +149,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     )
                     return
                 rescore_stale_legislative_effectiveness(_rescore_session)
-                rescore_stale_constituent_alignment(_rescore_session)
+                if "house" in rescore_stale_constituent_alignment(_rescore_session):
+                    # Rescored on the lines in effect now: record them, so
+                    # the breakdown recomputes on the same ones.
+                    from app.pipeline.fetch.district_pvi import stamp_house_lines
+
+                    stamp_house_lines(_rescore_session)
         except Exception:
             # Each rescore logs its own failures; this is the lease's.
             logging.getLogger("app.main").exception("Startup rescore failed")

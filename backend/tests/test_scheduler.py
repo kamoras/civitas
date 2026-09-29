@@ -279,7 +279,7 @@ class TestNightlyPipelineCascadingSkip:
         alert.assert_called_once()
         subject, body = alert.call_args[0][0], alert.call_args[0][1]
         assert "Senate" in subject
-        assert "Supplementary/House/Stock never ran either" in body
+        assert "Supplementary, House, Stock trades, Election did not run tonight either" in body
 
     def test_supplementary_skip_stops_house_and_stock_but_senate_already_ran(self):
         senate, supp, house, stock, election, alert = self._run_chain(
@@ -324,6 +324,35 @@ class TestNightlyPipelineCascadingSkip:
         election.assert_called_once()
         alert.assert_called_once()
         assert "Election" in alert.call_args[0][0]
+        assert "did not run tonight either" not in alert.call_args[0][1]
+
+    def test_a_house_skip_behind_a_stuck_district_pvi_refresh_does_not_end_the_chain(self):
+        """run_house_on_sitting_lines waits for a refresh holding the lines;
+        one that outlasts the wait costs the House scores, not Stock trades
+        and Election, which don't read them. The alert names the refresh —
+        not "another run of it" — and says the chain went on."""
+        senate, supp, house, stock, election, alert = self._run_chain(
+            {"status": "completed"},
+            house_result={"status": "skipped", "reason": "held_elsewhere", "holder": "District PVI refresh"},
+        )
+        stock.assert_called_once()
+        election.assert_called_once()
+        alert.assert_called_once()
+        subject, body = alert.call_args[0][0], alert.call_args[0][1]
+        assert "House" in subject
+        assert "District PVI refresh is already running" in body
+        assert "another run of it" not in body
+        assert "The rest of tonight's chain (Stock trades, Election) still runs" in body
+
+    def test_a_house_skip_behind_another_house_run_names_it_and_ends_the_chain(self):
+        senate, supp, house, stock, election, alert = self._run_chain(
+            {"status": "completed"},
+            house_result={"status": "skipped", "reason": "held_elsewhere", "holder": "House run"},
+        )
+        stock.assert_not_called()
+        election.assert_not_called()
+        body = alert.call_args[0][1]
+        assert "House run is already running" in body and "another run of it" not in body
 
 
 class TestElectionCoverageRefresh:

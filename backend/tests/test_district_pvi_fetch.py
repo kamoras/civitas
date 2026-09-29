@@ -725,11 +725,24 @@ class TestBundledTablesAreOnTheRightLines:
     def bundled(self):
         return json.loads(BUNDLED.read_text())
 
-    def test_member_scoring_reads_the_119th_congress_lines(self, bundled):
-        assert bundled["congress"] == 119
-        assert bundled["districts"] == bundled["congresses"]["119"]["districts"]
-        d = bundled["districts"]
+    def test_the_top_level_is_the_table_of_the_congress_it_names(self, bundled):
+        """scripts/fetch_district_pvi.py --congress N puts N's table (the
+        newest at or below N) at the top level and says so in "congress" —
+        whenever it is regenerated, not only while the 119th sits."""
+        blocks = bundled["congresses"]
+        assert str(bundled["congress"]) in blocks
+        assert bundled["districts"] == blocks[str(bundled["congress"])]["districts"]
+        assert bundled["_lines"] == blocks[str(bundled["congress"])]["_lines"]
+
+    def test_119th_congress_members_are_scored_on_the_lines_they_were_elected_on(self, bundled):
+        """The 2026-09 regression, on the 119th's own table and on what a
+        House run selects from the bundle while the 119th sits (_reselect,
+        the "restored from bundle" path) — neither depends on which
+        Congress sat when the bundle was regenerated."""
+        d = bundled["congresses"]["119"]["districts"]
         assert (d["TX-35"], d["MO-5"], d["UT-1"], d["TN-9"]) == (-19, -12, 10, -23)
+        selected = dp._reselect(bundled, 119)
+        assert selected["congress"] == 119 and selected["districts"] == d
 
     def test_2026_election_reads_the_new_lines(self, bundled):
         d = bundled["congresses"]["120"]["districts"]
@@ -757,11 +770,22 @@ class TestBundledTablesAreOnTheRightLines:
         failures = dp.cross_congress_gates(half, t119, redrawn)
         assert any("mean district lean" in f and "TN +3.56" in f for f in failures)
 
-    def test_scoring_reads_the_bundled_sitting_table(self, bundled, monkeypatch, tmp_path):
+    def test_scoring_reads_the_bundled_top_level_table(self, bundled, monkeypatch, tmp_path):
         monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path / "none"))
         monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
-        assert score_calculator._seat_pvi("TN", 9) == -23
-        assert score_calculator._seat_pvi("TX", 35) == -19
+        top = bundled["districts"]
+        assert score_calculator._seat_pvi("TN", 9) == top["TN-9"]
+        assert score_calculator._seat_pvi("TX", 35) == top["TX-35"]
+
+    def test_the_regeneration_script_names_its_congress_explicitly(self):
+        """Not the clock: a default of sitting_congress() made the bundle's
+        top level — and these tests — depend on the day it was run."""
+        import subprocess
+        import sys
+
+        script = dp.SOURCES_PATH.parents[2] / "scripts" / "fetch_district_pvi.py"
+        out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+        assert out.returncode != 0 and "--congress" in out.stderr
 
 
 # ── Every House run settles the lines under a lease it holds throughout ──
@@ -795,7 +819,8 @@ class TestHouseRunsHoldTheLines:
 
         await dp.run_house_on_sitting_lines(house)
         assert seen["refresh"] is False and not out.exists()
-        assert seen["second"] == {"status": "skipped", "reason": "held_elsewhere"}
+        # The skip names its holder, from the same read as the code.
+        assert seen["second"] == {"status": "skipped", "reason": "held_elsewhere", "holder": "House run"}
         # Released afterwards.
         assert await dp.refresh_district_pvi() is True
 
@@ -822,6 +847,202 @@ class TestHouseRunsHoldTheLines:
             return {"status": "completed"}
 
         assert await dp.run_house_on_sitting_lines(house) == {"status": "completed"}
+
+
+class TestAHouseRunWaitsForARefresh:
+    """A District PVI refresh holding the lines is minutes of work: a House
+    run waits for it (bounded) instead of skipping — which in the nightly
+    chain also ended the chain before Stock trades and Election."""
+
+    async def test_waits_for_the_refresh_then_runs(self, monkeypatch, db_session):
+        import asyncio
+
+        from app.pipeline import lease
+
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+        token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO)
+        assert token is not None
+
+        async def finish_refresh():
+            await asyncio.sleep(0.05)
+            lease.release(db_session, lease.DISTRICT_LINES, token)
+
+        async def house():
+            return {"status": "completed"}
+
+        releaser = asyncio.create_task(finish_refresh())
+        result = await dp.run_house_on_sitting_lines(house, refresh_wait_s=5, poll_s=0.01)
+        await releaser
+        assert result == {"status": "completed"}
+
+    async def test_a_refresh_that_outlasts_the_wait_is_named_in_the_skip(self, db_session):
+        from app.pipeline import lease
+        from app.pipeline.run_tracker import skip_reason_text
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO) is not None
+
+        async def house():
+            raise AssertionError("must not run")
+
+        result = await dp.run_house_on_sitting_lines(house, refresh_wait_s=0.03, poll_s=0.01)
+        assert result == {"status": "skipped", "reason": "held_elsewhere", "holder": dp.REFRESH_WHO}
+        text = skip_reason_text(result["reason"], who=result["holder"])
+        assert text.startswith("District PVI refresh is already running")
+
+    async def test_another_house_run_is_not_waited_for(self, db_session):
+        import time
+
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None
+
+        async def house():
+            raise AssertionError("must not run")
+
+        started = time.monotonic()
+        result = await dp.run_house_on_sitting_lines(house, refresh_wait_s=5, poll_s=0.5)
+        assert time.monotonic() - started < 0.5
+        assert result == {"status": "skipped", "reason": "held_elsewhere", "holder": "House run"}
+
+
+class TestTheLeaseSaysWhoHoldsIt:
+    def test_a_refusal_carries_its_code_and_holder_from_one_read(self, db_session):
+        from app.pipeline import lease
+
+        lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO)
+        with lease.job(lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) as granted:
+            assert not granted
+            assert (granted.code, granted.holder) == (lease.REFUSED_HELD, dp.REFRESH_WHO)
+            assert granted.why.startswith("District PVI refresh is already running")
+
+    async def test_job_async_too(self, db_session):
+        from app.pipeline import lease
+
+        lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO)
+        async with lease.job_async(lease.DISTRICT_LINES, who=dp.REFRESH_WHO) as granted:
+            assert (granted.code, granted.holder) == (lease.REFUSED_HELD, "House run")
+
+    def test_the_district_lines_lease_goes_stale_after_an_hour_like_the_senate_runs(self):
+        """Held for a whole House run, whose beats stall behind SQLite
+        writers like the Senate run's: taken over at ten minutes, a refresh
+        could rewrite the lines under a run still scoring."""
+        from datetime import timedelta
+
+        from app.pipeline import lease
+
+        assert lease.stale_after(lease.DISTRICT_LINES) == timedelta(minutes=60) == lease.stale_after(lease.SENATE_RUN)
+        assert lease.max_hold(lease.DISTRICT_LINES) > timedelta(0)
+
+
+class TestStoredScoresKeepTheirLines:
+    """A House score records the Congress whose lines it used, and the
+    breakdown recomputes on those lines — between a switch and the House
+    run that rescores a member (or after one that failed), and for a member
+    who left when the lines changed."""
+
+    def _file(self, monkeypatch, tmp_path, sitting):
+        out, base, new = _two_congress_setup(monkeypatch, tmp_path, sitting=sitting)
+        blocks = {
+            "119": {"_source": "s", "_lines": "old", "_window": "w", "districts": base},
+            "120": {"_source": "s", "_lines": "new", "_window": "w", "districts": new},
+        }
+        out.write_text(json.dumps(dp._payload(blocks, sitting)))
+        dp._reset_caches()
+        return out, base, new
+
+    def test_lines_of_reads_another_congress_in_this_context_only(self, monkeypatch, tmp_path):
+        import threading
+
+        _, base, new = self._file(monkeypatch, tmp_path, 120)
+        assert base["TN-9"] != new["TN-9"]
+        assert dp.lines_congress() == 120
+        assert score_calculator._seat_pvi("TN", 9) == new["TN-9"]
+        seen = {}
+        with dp.lines_of(119) as congress:
+            assert congress == 119
+            assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+            # A House run scoring in another thread meanwhile is unaffected.
+            t = threading.Thread(target=lambda: seen.setdefault("other", score_calculator._seat_pvi("TN", 9)))
+            t.start()
+            t.join()
+        assert seen["other"] == new["TN-9"]
+        assert score_calculator._seat_pvi("TN", 9) == new["TN-9"]
+        # States that didn't redraw read the same either way.
+        with dp.lines_of(119):
+            assert score_calculator._seat_pvi("CA", 12) == new["CA-12"] == base["CA-12"]
+
+    def test_unrecorded_or_missing_lines_read_the_current_table(self, monkeypatch, tmp_path):
+        _, _, new = self._file(monkeypatch, tmp_path, 120)
+        for congress in (None, 120, 117):
+            with dp.lines_of(congress) as used:
+                assert used == 120
+                assert score_calculator._seat_pvi("TN", 9) == new["TN-9"]
+
+    def test_the_house_run_records_the_lines_it_scored_on(self, monkeypatch, tmp_path, db_session):
+        from app.models import Representative
+        from app.services.representative_service import upsert_representative
+
+        self._file(monkeypatch, tmp_path, 119)
+        upsert_representative(db_session, {"id": "tn9", "name": "M", "state": "TN", "district": 9, "party": "D"})
+        db_session.commit()
+        assert db_session.get(Representative, "tn9").district_lines_congress == 119
+
+    def test_a_startup_rescore_records_the_lines_it_rescored_on(self, monkeypatch, tmp_path, db_session):
+        """main's startup Constituent Alignment rescore rewrites current
+        members' scores on the lines in effect; a former member keeps the
+        lines their score was stored on."""
+        from app.models import Representative
+
+        self._file(monkeypatch, tmp_path, 120)
+        db_session.add_all([
+            Representative(id="cur", name="C", state="TN", district=9, party="D", is_current=True,
+                           district_lines_congress=119),
+            Representative(id="gone", name="G", state="TN", district=8, party="R", is_current=False,
+                           district_lines_congress=119),
+        ])
+        db_session.commit()
+        dp.stamp_house_lines(lambda: _Unclosable(db_session))
+        db_session.expire_all()
+        assert db_session.get(Representative, "cur").district_lines_congress == 120
+        assert db_session.get(Representative, "gone").district_lines_congress == 119
+
+    def test_the_breakdown_uses_the_stored_scores_lines(self, monkeypatch, tmp_path):
+        """Stored on the 119th's lines; the file has since switched to the
+        120th: the breakdown's Constituent Alignment reads the 119th's."""
+        from types import SimpleNamespace
+
+        from app.services import _scorecard_common
+
+        _, base, new = self._file(monkeypatch, tmp_path, 120)
+        seen = []
+        monkeypatch.setattr(_scorecard_common, "build_score_breakdown_entity", lambda e, **kw: {
+            "district": e.district, "state": e.state, "votingRecord": {"partyLineRecord": None},
+        })
+        monkeypatch.setattr(_scorecard_common, "explain_scores", lambda d: seen.append(
+            score_calculator._seat_pvi(d["state"], d["district"])) or {})
+        for recorded in (119, 120, None):
+            rep = SimpleNamespace(state="TN", district=9, district_lines_congress=recorded)
+            _scorecard_common.score_breakdown(None, rep, lobbying_donation_attr="donation_to_representative")
+        assert seen == [base["TN-9"], new["TN-9"], new["TN-9"]]
+
+    async def test_the_house_run_rereads_the_lines_under_its_lease(self, monkeypatch, tmp_path):
+        """Another process may have switched the file since this one cached
+        it: the run scores (and records) what the file holds now."""
+        out, _, new = self._file(monkeypatch, tmp_path, 119)
+        assert dp.lines_congress() == 119
+        # Another process writes the 120th's lines (under the lease, before
+        # this run takes it) — this process's caches never hear of it.
+        out.write_text(json.dumps(dp._reselect(json.loads(out.read_text()), 120)))
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+        seen = {}
+
+        async def house():
+            seen["congress"] = dp.lines_congress()
+            seen["tn9"] = score_calculator._seat_pvi("TN", 9)
+            return {"status": "completed"}
+
+        await dp.run_house_on_sitting_lines(house)
+        assert seen == {"congress": 120, "tn9": new["TN-9"]}
 
 
 class TestTriggeredRunsCheckTheSittingLines:
@@ -868,7 +1089,18 @@ class TestTriggeredRunsCheckTheSittingLines:
         with pytest.raises(HTTPException) as err:
             await admin.admin_trigger_house_pipeline(db=db_session)
         assert err.value.status_code == 409
+        assert err.value.detail.startswith("House run is already running")
         assert "run" not in recorded[1]
+
+    async def test_house_trigger_waits_for_a_refresh_rather_than_refusing(self, recorded, db_session):
+        """A refresh holding the lines is not "the House pipeline is already
+        running": the run is started, and waits for it."""
+        from app.api import admin
+        from app.pipeline import lease
+
+        lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO)
+        answer = await admin.admin_trigger_house_pipeline(db=db_session)
+        assert "District PVI refresh" in answer["message"] and "run" in recorded[1]
 
     async def test_admin_trigger(self, recorded, db_session):
         """The lines are settled right before the House run, under its lease

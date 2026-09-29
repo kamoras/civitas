@@ -134,5 +134,25 @@ class TestCongressStalenessMessage:
         from app.config import Settings
 
         text = self._alert_text(Settings(CURRENT_CONGRESS=119))
-        assert "pinned in the environment" in text and "change it to 120" in text
-        assert "District PVI" not in text
+        assert "pinned in the environment" in text and "remove the pin" in text
+        # sitting_congress() returns the pin, so the district lines are
+        # frozen with it — the alert must not leave that out.
+        assert "freezes House members' district lines" in text
+        assert "the 119th Congress's lines" in text and "120th Congress's members" in text
+
+
+def test_env_example_does_not_pin_current_congress():
+    """docker compose passes .env to the backend, and any CURRENT_CONGRESS
+    there is an operator pin (Settings.current_congress_pinned): it freezes
+    the scored windows AND the district lines (sitting_congress) past the
+    next Jan 3. The template must leave it unset — a commented-out example
+    only."""
+    import pathlib
+    import re
+
+    from dotenv import dotenv_values
+
+    example = pathlib.Path(__file__).resolve().parents[2] / ".env.example"
+    assert "CURRENT_CONGRESS" not in dotenv_values(example)
+    text = example.read_text()
+    assert re.search(r"(?m)^#\s*CURRENT_CONGRESS=", text), "keep the documented, commented-out example"
