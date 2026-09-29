@@ -232,17 +232,17 @@ class TestSyncRoster:
         assert cand.race_id == "2026-SEN-GA"
 
     def test_a_house_candidate_is_placed_in_this_cycles_district(self, db_session):
-        """FEC's district_number is the candidate's LATEST election's
-        (H2TX35144 reads 37 once a 2026 filing moved him there): the year's
-        own election_districts entry decides."""
-
+        """FEC's district_number is the candidate's LATEST election's (a
+        real record, H2TX35144, reads 35, 35, 37 for 2022, 2024, 2026, with
+        district_number 37): the year's own election_districts entry
+        decides. A made-up candidate who files for 2028 in a new district."""
         raw = self._raw(
-            candidate_id="H2TX35144", state="TX", office="H", name="CASAR, GREG",
-            candidate_election_year=2028, district_number=37,
+            candidate_id="H0TX99001", state="TX", office="H", name="EXAMPLE, PAT",
+            district_number=37,
             election_years=[2022, 2024, 2026, 2028], election_districts=["35", "35", "35", "37"],
         )
         assert election_pipeline._sync_roster(db_session, 2026, [raw]) == 1
-        assert db_session.query(Candidate).filter(Candidate.id == "H2TX35144").one().race_id == "2026-HOUSE-TX-35"
+        assert db_session.query(Candidate).filter(Candidate.id == "H0TX99001").one().race_id == "2026-HOUSE-TX-35"
 
     def test_an_at_large_district_reads_as_zero(self, db_session):
         raw = self._raw(

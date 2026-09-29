@@ -905,6 +905,40 @@ def test_a_developing_issue_names_what_it_was_drafted_from(db_session):
     assert resp["status"] == "developing" and resp["sourceType"] == "election_results"
 
 
+class TestElectionNightPager:
+    """A seat flip is restamped with the Eastern date on every five-minute
+    count sync, so past midnight it carries a day no confirmed issue has
+    reached yet. The pager must not offer that day as a view of its own."""
+
+    def _seed(self, db_session):
+        confirmed = ActionIssue(date="2026-11-03", rank=1, title="Polls close across the East", is_current=True,
+                                source_type="rss")
+        flip = ActionIssue(date="2026-11-04", rank=999, title="Republican leads Georgia's 2nd", is_current=True,
+                           source_type="election_results", status=ActionIssueStatus.DEVELOPING)
+        db_session.add_all([confirmed, flip])
+        db_session.commit()
+
+    async def test_the_landing_day_is_the_newest_day_the_pager_offers(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        self._seed(db_session)
+        resp = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        assert resp["date"] == "2026-11-03"
+        assert resp["availableDates"][0] == "2026-11-03"
+        assert {i["title"] for i in resp["issues"]} == {"Polls close across the East", "Republican leads Georgia's 2nd"}
+
+    async def test_asking_for_the_newest_day_by_date_shows_the_same_view(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        self._seed(db_session)
+        by_date = await get_action_issues(Response(), date="2026-11-03", db=db_session, db_visits=db_session)
+        assert {i["title"] for i in by_date["issues"]} == {"Polls close across the East", "Republican leads Georgia's 2nd"}
+
+
 class TestRecentFeedAndSeatFlips:
     """The refresh's duplicate pass reads every seat flip in a state as one
     story (their titles differ only by the district, their source is the

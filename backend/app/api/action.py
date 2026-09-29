@@ -90,6 +90,31 @@ def _renumber_for_display(issues: list[ActionIssue]) -> list[ActionIssue]:
     return ordered
 
 
+_NOT_DEVELOPING = or_(ActionIssue.status.is_(None), ActionIssue.status != ActionIssueStatus.DEVELOPING)
+
+
+def _latest_issue_date(db: Session) -> str | None:
+    """The newest day of CONFIRMED current issues (any current issue's, if
+    there is none). Keyed to the newest date of any current row, a draft
+    dated before midnight Eastern dropped off the list at the first refresh
+    after it -- and one dated just after (a seat flip restamped by the
+    five-minute count sync) hid every confirmed story until that refresh
+    ran."""
+    return (
+        db.query(ActionIssue.date)
+        .filter(ActionIssue.is_current == True, _NOT_DEVELOPING)  # noqa: E712
+        .order_by(ActionIssue.date.desc())
+        .limit(1)
+        .scalar()
+    ) or (
+        db.query(ActionIssue.date)
+        .filter(ActionIssue.is_current == True)  # noqa: E712
+        .order_by(ActionIssue.date.desc())
+        .limit(1)
+        .scalar()
+    )
+
+
 def _latest_current_issues(db: Session, for_date: str | None = None) -> list[ActionIssue]:
     """Return the most recent day's action issues, tolerating a wedged refresh.
 
@@ -104,7 +129,8 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
     blank. Fall back to the most recent date with ANY rows, is_current or
     not, only when the strict query comes up empty.
     """
-    if for_date:
+    latest_date = _latest_issue_date(db)
+    if for_date and for_date != latest_date:
         issues = (
             db.query(ActionIssue)
             .filter(ActionIssue.date == for_date, ActionIssue.is_current == True)  # noqa: E712
@@ -122,26 +148,9 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
             .all()
         )
 
-    # The newest day is the newest day of CONFIRMED issues, and a current
-    # DEVELOPING draft is listed beside it whatever its own date (it still
-    # ranks last). Keyed to the newest date of any current row, a draft
-    # dated before midnight Eastern dropped off the list at the first
-    # refresh after it — and one dated just after hid every confirmed story
-    # until that refresh ran.
-    not_developing = or_(ActionIssue.status.is_(None), ActionIssue.status != ActionIssueStatus.DEVELOPING)
-    latest_date = (
-        db.query(ActionIssue.date)
-        .filter(ActionIssue.is_current == True, not_developing)  # noqa: E712
-        .order_by(ActionIssue.date.desc())
-        .limit(1)
-        .scalar()
-    ) or (
-        db.query(ActionIssue.date)
-        .filter(ActionIssue.is_current == True)  # noqa: E712
-        .order_by(ActionIssue.date.desc())
-        .limit(1)
-        .scalar()
-    )
+    # The newest day (_latest_issue_date) lists every current DEVELOPING
+    # draft beside it whatever its own date (it still ranks last) -- asked
+    # for by date or not, so the pager's newest day is the landing view.
     if latest_date:
         return (
             db.query(ActionIssue)
@@ -390,16 +399,23 @@ async def get_action_issues(
     if not issues:
         return {"date": date, "issues": []}
 
-    issue_date = issues[0].date
+    issue_date = date or _latest_issue_date(db) or issues[0].date
 
+    # Days of confirmed issues only: a developing draft is listed beside the
+    # newest day, not on a day of its own, so a day holding nothing but a
+    # draft (a seat flip restamped past midnight before the next refresh)
+    # would page to a view the landing view already shows.
     available_dates = [
         row[0] for row in
         db.query(ActionIssue.date)
+        .filter(_NOT_DEVELOPING)
         .distinct()
         .order_by(ActionIssue.date.desc())
         .limit(14)
         .all()
     ]
+    if issue_date not in available_dates:
+        available_dates = sorted({issue_date, *available_dates}, reverse=True)[:14]
 
     all_explore_ids: list[int] = []
     for i in issues:
