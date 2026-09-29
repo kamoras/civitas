@@ -1,5 +1,9 @@
-"""Election-night Bluesky posts, from the live count's own events
-(live_results/sync.py).
+"""Election-night posts, from the live count's own events
+(live_results/sync.py). Each is published like every other Civitas post
+(app/broadcast.publish): stored first, as an entry in the Elections feed,
+then sent to Bluesky when an account is configured. The bsky_posted /
+bsky_posted_at columns on ElectionResultEvent keep their names and mean
+"published", on any channel.
 
 Election night is the one time Civitas should be louder than usual, so
 these posts have their own budget and the routine race-coverage poster
@@ -30,16 +34,16 @@ from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app import broadcast
 from app.models import ElectionResultEvent, Race, RaceResult
 from app.live_results import sync as er
-from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, publish_post, strip_hashtags
+from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, strip_hashtags
 from app.live_results.signals import holders_word, party_letter, race_label
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-SITE = "https://civitas-research.org"
+SITE = broadcast.SITE_URL
 MAX_POST_CHARS = 240
 
 # The budget. Six an hour is one every ten minutes at the busiest point of
@@ -60,6 +64,14 @@ MAX_EVENT_AGE_HOURS = 2
 MAX_CORRECTION_AGE_HOURS = 24
 
 CORRECTION = "correction"
+# The feed entry's title for each kind of post.
+_TITLES = {
+    CORRECTION: "no longer shows a change of party",
+    er.FLIP: "the count shows a change of party, not final",
+    er.OFFICIAL: "count listed as official",
+    er.LEAD_CHANGE: "lead changes",
+    er.ALL_REPORTING: "every unit reporting",
+}
 _PRIORITY = {CORRECTION: 0, er.FLIP: 1, er.OFFICIAL: 2, er.LEAD_CHANGE: 3, er.ALL_REPORTING: 4}
 
 
@@ -206,10 +218,13 @@ def post_result_updates(db: Session, election_date: str) -> int:
     settled — posted, not worth a post, overtaken, or too old. One the
     budget or a race's cooldown holds back stays pending for a later pass:
     throwing it away lost the lowest-ranked flips of a busy hour for good.
-    A failed publish ends the pass, and what it didn't reach waits too.
-    Every post is worded from the count as it stands (_as_of_now)."""
-    if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
-        return 0
+    Every post is worded from the count as it stands (_as_of_now).
+
+    Posts are published whether or not Bluesky is configured: the feed is
+    the record. A send Bluesky refuses is retried by broadcast.deliver_pending,
+    so a refusal here neither holds the post back from the feed nor makes
+    this pass try again — the budget bounds how many sends (each a login)
+    a pass can make."""
     now = utcnow()
     pending = (
         db.query(ElectionResultEvent)
@@ -275,30 +290,25 @@ def post_result_updates(db: Session, election_date: str) -> int:
             event.bsky_posted_at = now
             db.commit()
             continue
-        if not publish_post(text, url, success_msg=f"Posted result update: {race.id} {kind}",
-                            error_context=f"result event {event.id}"):
-            # Posting is down or refusing us: stop the pass. Every attempt
-            # is a fresh login, and retrying the whole queue every five
-            # minutes ran into Bluesky's session limits (about 30 logins
-            # per 5 minutes) — which would lock out the routine poster too.
-            # The events stay pending for the next pass.
-            break
         event.bsky_posted = True
         event.bsky_posted_at = now
+        # The race's post says where it stands; its older, lesser events
+        # waiting behind it would repeat that, stale, after the cooldown.
+        for p2, c2, _, other, _, _ in queue:
+            if other.race_id == race.id and other.bsky_posted_at is None and p2 >= priority and c2 <= created:
+                other.bsky_posted_at = now
+        # publish() commits these marks in the same transaction that stores
+        # the post, before any network call: a crash can't publish an event
+        # twice, or mark one published that never was.
+        broadcast.publish(
+            db, kind="result", subject=f"result:{event.id}",
+            title=f"{race_label(race)}: {_TITLES[kind]}", text=text, url=url, state=race.state,
+        )
         posted += 1
         recent_races.add(race.id)
         if not correction:
             hour_left -= 1
             election_left -= 1
-        # The race's post just now says where it stands; its older, lesser
-        # events waiting behind it would repeat that, stale, after the
-        # cooldown.
-        for p2, c2, _, other, _, _ in queue:
-            if other.race_id == race.id and other.bsky_posted_at is None and p2 >= priority and c2 <= created:
-                other.bsky_posted_at = now
-        # Committed per post: a failure later in the pass rolled back
-        # posts already published, and the next pass sent them again.
-        db.commit()
     db.commit()
     return posted
 

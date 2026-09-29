@@ -50,6 +50,7 @@ KINDS: dict[str, str] = {
     "congress_week": "What Congress did in a week, and the bills that became law",
     "spotlight": "One member of Congress a day, with their scores",
     "race": "News about a race on the November ballot",
+    "result": "Election-night counts, in each state's own figures",
 }
 
 MAX_BSKY_ATTEMPTS = 3
@@ -83,7 +84,9 @@ FEEDS: dict[str, Feed] = {
              "What Congress did each session day and each week, from the official record.",
              ("congress_day", "congress_week")),
         Feed("members", "Civitas: Member spotlight", KINDS["spotlight"] + ".", ("spotlight",)),
-        Feed("elections", "Civitas: Elections", KINDS["race"] + ".", ("race",)),
+        Feed("elections", "Civitas: Elections",
+             "News about races on the November ballot, and the count on election night.",
+             ("race", "result")),
     )
 }
 

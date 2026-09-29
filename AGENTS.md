@@ -764,7 +764,8 @@ wrong number on election night is worse than none:
 - Civitas never calls a race. A count is "leading" until the source itself
   says official, and every sentence about it — the live-updates feed, the
   DEVELOPING Action Center issue a seat flip opens (`live_results/signals.py`),
-  the election-night Bluesky posts (`live_results/bluesky.py`) — is
+  the election-night posts (`live_results/bluesky.py`, published through
+  `broadcast.publish` to the Elections feed and Bluesky) — is
   a fixed template around the source's figures, never model text. A flip needs
   half the reporting units in. Where the units are places (counties, cities
   and towns), which "report" on their first batch, it needs every place in and
@@ -955,7 +956,7 @@ the pending list).
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
-| Seat-flip DEVELOPING issues + election-night Bluesky posts | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
+| Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |

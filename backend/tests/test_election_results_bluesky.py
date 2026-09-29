@@ -6,7 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app.models import ElectionResultEvent, Race, RaceResult
+from app import broadcast
+from app.models import BroadcastPost, ElectionResultEvent, Race, RaceResult
 from app.live_results import sync as er
 from app.live_results import bluesky as rb
 from app.time_utils import utcnow
@@ -16,8 +17,8 @@ DAY = "2026-11-03"
 
 @pytest.fixture(autouse=True)
 def _credentials(monkeypatch):
-    monkeypatch.setattr(rb.settings, "BSKY_HANDLE", "civitas.test", raising=False)
-    monkeypatch.setattr(rb.settings, "BSKY_APP_PASSWORD", "x", raising=False)
+    monkeypatch.setattr(broadcast.settings, "BSKY_HANDLE", "civitas.test", raising=False)
+    monkeypatch.setattr(broadcast.settings, "BSKY_APP_PASSWORD", "x", raising=False)
 
 
 def _detail(leader_party="REP", held="DEM", reporting=60, total=100, official=False, **extra):
@@ -56,7 +57,7 @@ def _run(db):
         sent.append((text, url))
         return True
 
-    with patch.object(rb, "publish_post", fake_publish):
+    with patch.object(broadcast, "publish_post", fake_publish):
         rb.post_result_updates(db, DAY)
     return sent
 
@@ -159,13 +160,18 @@ class TestBudget:
             [(text, _)] = _run(db_session)
         assert "lists its count as official" in text
 
-    def test_a_failed_publish_is_retried(self, db_session):
+    def test_a_refused_send_is_in_the_feed_and_left_to_the_retry(self, db_session):
+        """Bluesky refusing a send doesn't hold the post back: it is stored
+        (the feed entry), and broadcast.deliver_pending retries the send."""
         _race(db_session, "2026-SEN-GA")
         e = _event(db_session, "2026-SEN-GA", er.FLIP)
-        with patch.object(rb, "publish_post", return_value=False):
-            rb.post_result_updates(db_session, DAY)
-        assert e.bsky_posted_at is None
-        assert len(_run(db_session)) == 1
+        with patch.object(broadcast, "publish_post", return_value=False):
+            assert rb.post_result_updates(db_session, DAY) == 1
+        assert e.bsky_posted is True
+        [post] = db_session.query(BroadcastPost).all()
+        assert (post.kind, post.subject, post.state, post.bsky_status) == ("result", f"result:{e.id}", "GA", "failed")
+        assert "leads in a seat" in post.text
+        assert _run(db_session) == []  # this pass won't send it again
 
     def test_a_post_overtakes_its_races_older_lesser_events(self, db_session):
         _race(db_session, "2026-SEN-GA")
@@ -229,11 +235,23 @@ class TestComposeFits:
         assert text.startswith("Update on North Carolina's 13th Congressional District: the count is now tied")
 
 
-def test_no_credentials_no_posts(db_session, monkeypatch):
-    monkeypatch.setattr(rb.settings, "BSKY_HANDLE", "", raising=False)
+def test_without_bluesky_the_post_still_goes_to_the_feed(db_session, monkeypatch):
+    monkeypatch.setattr(broadcast.settings, "BSKY_HANDLE", "", raising=False)
     _race(db_session, "2026-SEN-GA")
     _event(db_session, "2026-SEN-GA", er.FLIP)
-    assert rb.post_result_updates(db_session, DAY) == 0
+    with patch.object(broadcast, "publish_post") as send:
+        assert rb.post_result_updates(db_session, DAY) == 1
+    send.assert_not_called()
+    [post] = db_session.query(BroadcastPost).all()
+    assert (post.kind, post.bsky_status) == ("result", "off")
+    assert post.url.endswith("/elections/states/GA#race-2026-SEN-GA")
+
+
+def test_result_posts_are_in_the_elections_feed_and_not_the_race_budget():
+    """The routine race-coverage poster counts `race` posts against its own
+    daily budget; election-night posts are their own kind."""
+    assert "result" in broadcast.FEEDS["elections"].kinds
+    assert "result" in broadcast.FEEDS["all"].kinds
 
 
 def test_counting_is_live_only_while_totals_move(db_session):
@@ -248,16 +266,17 @@ def test_counting_is_live_only_while_totals_move(db_session):
 
 
 class TestRoundTwo:
-    def test_a_failed_publish_ends_the_pass(self, db_session):
-        """Every attempt is a login; retrying the whole queue every pass ran
-        into Bluesky's session limits."""
+    def test_a_refused_send_does_not_hold_the_rest_back_from_the_feed(self, db_session):
+        """Each send is one login, once; the budget bounds a pass, and the
+        hourly retry (not this pass) tries the refused ones again."""
         calls = []
         for i in range(3):
             _race(db_session, f"2026-HOUSE-GA-{i}", office="H", district=i)
             _event(db_session, f"2026-HOUSE-GA-{i}", er.FLIP)
-        with patch.object(rb, "publish_post", side_effect=lambda *a, **k: calls.append(a) or False):
-            rb.post_result_updates(db_session, DAY)
-        assert len(calls) == 1
+        with patch.object(broadcast, "publish_post", side_effect=lambda *a, **k: calls.append(a) or False):
+            assert rb.post_result_updates(db_session, DAY) == 3
+        assert len(calls) == 3
+        assert db_session.query(BroadcastPost).filter_by(kind="result").count() == 3
 
     def test_a_published_post_survives_a_later_failure_in_the_pass(self, db_session):
         _race(db_session, "2026-HOUSE-GA-1", office="H", district=1)
@@ -272,7 +291,7 @@ class TestRoundTwo:
             sent.append(text)
             return True
 
-        with patch.object(rb, "publish_post", publish), pytest.raises(RuntimeError):
+        with patch.object(broadcast, "publish_post", publish), pytest.raises(RuntimeError):
             rb.post_result_updates(db_session, DAY)
         db_session.rollback()
         db_session.refresh(first)

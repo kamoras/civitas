@@ -319,7 +319,7 @@ flowchart TD
     READ & REFUSE & STORE --> FEED["LiveResultRead:<br/>how each state's read went"]
     STORE --> FLIP{"leader's party ≠ seat holder's,<br/>enough of the count in?"}
     FLIP -- yes --> ISSUE["DEVELOPING Action Center issue<br/>(fixed template)"]
-    STORE --> POST["Bluesky: flips, official counts,<br/>Senate moves — within budget"]
+    STORE --> POST["Feed, then Bluesky: flips, official counts,<br/>Senate moves — within budget"]
     STORE & FEED --> API["GET /api/elections/results<br/>(30 s cache)"] --> PAGE["/elections map shaded by the count,<br/>state page leads with it"]
 ```
 
@@ -409,13 +409,15 @@ is a fixed template around the source's figures, never model text. The
 Action Center lists it beside the newest day's confirmed issues whatever its
 own date.
 
-**Bluesky** (`bluesky.py`): a flip, an official count (Senate, or a flip),
+**Posts** (`bluesky.py`, published through `broadcast.publish`: the
+Elections feed first, then Bluesky): a flip, an official count (Senate, or a flip),
 a Senate lead change with most of the count in, and every unit reporting in
 a Senate race. Six posts an hour and forty an election; one post per race
 per 20 minutes. A post the budget or cooldown holds back waits for a later
 pass (up to two hours), and a later post about the same race supersedes it;
-every post is worded from the count as it stands when it goes out. A failed
-publish ends that pass, and the rest wait for the next one.
+every post is worded from the count as it stands when it goes out. A send
+Bluesky refuses is retried hourly by `broadcast.deliver_pending`; the post is
+in the feed either way.
 A correction (a posted flip that reverted) is outside every cap and owed for
 up to a day. Posts are composed to fit — figures are dropped before the
 "Not final." qualifier, never the reverse — and the routine race-coverage
