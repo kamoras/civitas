@@ -1,8 +1,8 @@
 """Colorado's ballot-measure PDF strategy — parses the Legislative
 Council's "Blue Book", "Quick Ballot Reference Guide" section (one of
 potentially many per-state strategies in ballot_measures_pdf.py; see
-that module and ballot_measures_ca.py for the shared contract and
-geometry helpers this reuses).
+that module and ballot_measure_pdf_geometry.py for the shared contract
+and geometry helpers this reuses).
 
 Each measure: a large decorative letter/number badge (29pt+, e.g. "G",
 "KK", "127" — filtered out by font size, not content, since the badge
@@ -20,11 +20,20 @@ legislature-referred constitutional amendments use a materially
 different sub-format with no "Ballot Title" label at all ("Amendment D
 proposes amending the Colorado Constitution to: ..."), while citizen-
 initiative measures that same year DO match 2024's shape. A future
-year that resembles 2022 will have its odd-format measures safely
-dropped (no official_summary found) rather than parsed wrong — this
-module never ships a guess — but won't be complete. Extending to that
+year that resembles 2022 fails the whole document (ingest_failed): a
+measure whose Ballot Title / What Your Vote Means sections can't be
+found raises rather than being dropped, because a Blue Book published
+one measure short would read as the complete ballot. Extending to that
 second sub-format needs a real 2022-shaped document to build against,
-not a guess at what "probably" changed.
+not a guess at what "probably" changed. A document with no measure found
+at all raises too — never [].
+
+Drafters: the 22pt title is the Blue Book's own headline (the
+Legislative Council's), not a ballot title, so no official_title is
+claimed. What the Blue Book quotes under "Ballot Title" (stored as
+official_summary) was written by the General Assembly for a referred
+measure and by the Title Board for a citizen initiative, read from the
+measure's own "Placed on the ballot by ..." line.
 """
 
 import re
@@ -118,7 +127,11 @@ def parse_page(page) -> list[dict]:
         ballot_title_row = next((rid for rid in title_rows if placed_row < rid < (block_end or float("inf"))), None)
         what_row = next((rid for rid in what_rows if placed_row < rid < (block_end or float("inf"))), None)
         if ballot_title_row is None or what_row is None:
-            continue
+            # A measure ("Placed on the ballot by ...") whose Ballot Title or
+            # What Your Vote Means section this reader can't find — the
+            # 2022 sub-format for referred amendments is one. Dropping it
+            # would publish the Blue Book one measure short, as "covered".
+            raise ValueError("CO: a measure without its Ballot Title / What Your Vote Means sections")
 
         official_summary = _zone_text(page_rows, row_ids, ballot_title_row, what_row)
 
@@ -156,19 +169,41 @@ def parse_page(page) -> list[dict]:
                 yes_means = no_means = None
 
         if not official_summary or not number:
-            continue
+            raise ValueError(f"CO measure {number!r}: no ballot title text or no number")
 
+        # `title` is the Blue Book's own headline for the measure (the
+        # Legislative Council's), not the ballot's; the ballot title is
+        # what the Blue Book quotes under "Ballot Title", stored as
+        # official_summary — so its drafter is who wrote THAT text.
         results.append({
             "number": number, "title": title, "origin": origin,
             "official_summary": official_summary, "fiscal_impact": None,
             "yes_means": yes_means, "no_means": no_means,
-            "title_authority": TITLE_AUTHORITY, "fiscal_authority": None,
+            "title_authority": _ballot_title_drafter(origin), "fiscal_authority": None,
         })
     return results
+
+
+def _ballot_title_drafter(origin: str | None) -> str | None:
+    """Who wrote the quoted ballot title, from the Blue Book's own
+    "Placed on the ballot by ..." line: the General Assembly writes a
+    referred measure's ballot title into the referring bill or resolution;
+    the Title Board (C.R.S. 1-40-106) sets a citizen initiative's. Neither
+    is the Legislative Council, which only publishes the Blue Book."""
+    lowered = (origin or "").lower()
+    if "legislature" in lowered or "general assembly" in lowered:
+        return "Colorado General Assembly"
+    if "initiative" in lowered or "citizen" in lowered:
+        return "Colorado Title Board"
+    return None
 
 
 def parse_document(pages) -> list[dict]:
     results = []
     for page in pages:
         results.extend(parse_page(page))
+    if not results:
+        # Every general-election Blue Book carries measures; one this
+        # reader finds none in is a document it can't read, never "none".
+        raise ValueError("CO Blue Book: no measure found")
     return results

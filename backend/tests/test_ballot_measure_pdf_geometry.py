@@ -1,7 +1,7 @@
 """Tests for the word-geometry/text-sanity helpers shared by every
-state's ballot-measure PDF strategy (see ballot_measures_ca.py for the
-one real strategy currently registered, and ballot_measures_pdf.py for
-the registry these helpers are built to serve more than one of)."""
+state's ballot-measure PDF strategy (Massachusetts, Colorado, Alaska,
+Idaho ...; see ballot_measures_pdf.py for the registry these helpers
+serve)."""
 
 from app.pipeline.fetch import ballot_measure_pdf_geometry as geo
 

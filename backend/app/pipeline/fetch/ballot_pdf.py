@@ -3,8 +3,8 @@ sample-ballot PDF, for jurisdictions confirmed to publish one as a plain,
 freely-fetchable static file (see ballot_pdf_sources.py). No API key, no
 approval-gated signup, no address lookup: the PDF is public.
 
-This is a NARROWER, harder-won alternative to ballot_measures.py (Vote
-Smart) and civic_info.py (Google Civic representative-address): most
+This is a NARROWER, harder-won source than civic_info.py (Google Civic,
+representative address): most
 jurisdictions gate their sample ballot behind an address/voter-registration
 lookup and have no static file to fetch at all (confirmed during research:
 Cambridge MA, Ann Arbor MI). Only jurisdictions in ballot_pdf_sources.json
@@ -117,7 +117,7 @@ _BOILERPLATE_ALLCAPS = {
 
 def is_configured(town: str) -> bool:
     """Whether `town` has a verified, hand-curated PDF source. Unlike
-    ballot_measures.py/civic_info.py this isn't gated on an API key —
+    civic_info.py this isn't gated on an API key —
     there is none — it's gated on a human having confirmed the town
     publishes a plain, address-free ballot PDF at all."""
     return source_for_town(town) is not None
@@ -230,7 +230,7 @@ async def fetch_town_ballot_pdf(
 ) -> dict | None:
     """Contests parsed from `town`'s real official ballot PDF, or None on
     missing config or a fetch/parse failure. Same None-vs-empty-list
-    discipline as ballot_measures.fetch_state_measures: a genuinely empty
+    discipline as ballot_measures_pdf.fetch_state_measures_pdf: a genuinely empty
     ballot is different from a PDF we couldn't read, and only the second
     one should ever say so."""
     source = source_for_town(town)

@@ -80,7 +80,7 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     houseRaces: [houseRace()],
     coverage: [],
     measures: [],
-    measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
+    measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null, lastAttemptAt: null },
     statewideRaces: [],
     statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
     stateLegRaces: [],
@@ -733,8 +733,271 @@ describe("ballot measures", () => {
   it("never implies zero measures for a state not loaded yet", async () => {
     render(<StateBallotClient ballot={ballot()} />);
     const drawer = await openContest(/Statewide ballot measures/);
-    expect(drawer.getByText(/does not have OH's statewide ballot measures yet/)).toBeInTheDocument();
+    expect(drawer.getByText(/OH's statewide ballot measures are not yet covered/)).toBeInTheDocument();
     expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
+    expect(drawer.getByText(/we have not checked this state yet/)).toBeInTheDocument();
+  });
+
+  it("gives an unread state's own reason, with the official lookup", async () => {
+    const reason = "Civitas does not read Ohio's official measure list automatically yet.";
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: null, checkedAt: null,
+            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: reason,
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/OH's statewide ballot measures are not yet covered/)).toBeInTheDocument();
+    expect(drawer.getByText(/does not read Ohio's official measure list automatically yet/)).toBeInTheDocument();
+    expect(drawer.queryByText(/no measures|none on the ballot/i)).not.toBeInTheDocument();
+    expect(drawer.getByRole("link", { name: /official lookup/ })).toHaveAttribute("href", expect.stringMatching(/^https:/));
+    // Nothing is attempted for an unread state; a nightly bookkeeping
+    // timestamp must not read as one.
+    expect(drawer.queryByText(/Last attempt/)).not.toBeInTheDocument();
+  });
+
+  it("words a de-registered state's leftover measures from its reason, not as a failed check", async () => {
+    const reason = "Civitas does not read Ohio's official measure list automatically yet.";
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, sourceName: "Ohio SoS" }],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS", checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: reason,
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("Civitas has stopped reading OH's measures automatically");
+    // The registry's "does not read … automatically yet" reason would
+    // contradict "has stopped reading" — the leftover notice never repeats it.
+    expect(notice).not.toHaveTextContent("automatically yet");
+    expect(notice).toHaveTextContent("from our last read, 2026-09-20");
+    expect(notice).not.toHaveTextContent(/latest check|attempt|2026-09-28/);
+  });
+
+  it("does not describe an unread state's removed measures as a fresh list", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, sourceName: "Ohio SoS", status: "removed" }],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS", checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
+            unreadReason: "Civitas does not read Ohio's official measure list automatically yet.",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.queryByText(/latest list no longer includes/)).not.toBeInTheDocument();
+    expect(drawer.getByText(/Civitas has stopped reading OH's measures automatically/)).toBeInTheDocument();
+  });
+
+  it("says a registered state's list is not published yet, not that it was never read", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Maine SoS", checkedAt: null,
+            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: null,
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/has not published its list for this election yet/)).toBeInTheDocument();
+  });
+
+  const measure = {
+    id: "OH-2026-11-03-1", state: "OH", electionDate: "2026-11-03", electionType: "general",
+    number: "1", title: "Issue 1", measureType: null, origin: null, status: "certified",
+    officialTitle: null, officialSummary: "Summary.", fiscalImpact: null, yesMeans: null, noMeans: null,
+    titleAuthority: null, fiscalAuthority: null, sourceName: "Ohio SoS", sourceUrl: null, asOf: null,
+  };
+
+  it("says when the measures shown are from the last successful read after a failure", async () => {
+    // The regression: with any measures on file the section showed them as
+    // current and hid the coverage status, so a failed re-read (a measure
+    // struck since, say) was invisible to the reader.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "ingest_failed", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("latest attempt to re-read OH's measures failed (2026-09-28)");
+    expect(notice).toHaveTextContent("last successful read, 2026-09-20");
+    expect(drawer.getByText("Summary.")).toBeInTheDocument();
+  });
+
+  it("carries the stale notice and removed marks into the ballot box, which is shared on its own", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure, { ...measure, id: "OH-2", number: "2", title: "Issue 2", status: "removed" }],
+          measureCoverage: {
+            status: "ingest_failed", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const box = within(screen.getByTestId("ballot-columns"));
+    expect(box.getByText(/From our last successful read — may be out of date/)).toBeInTheDocument();
+    expect(box.getByText("removed")).toBeInTheDocument();
+    expect(box.getByText("1 measure")).toBeInTheDocument();
+  });
+
+  it("says whose determination an operator's none is in the ballot box, rows and all", () => {
+    // An operator's accepted absence marks every row removed, so the box
+    // takes its list branch; without the line, the shared image read as
+    // the state having struck the measures.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, status: "removed" }],
+          measureCoverage: {
+            status: "confirmed_none", sourceName: "Ohio SoS", basis: "operator",
+            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const box = within(screen.getByTestId("ballot-columns"));
+    expect(box.getByText(/our determination, not a list from the state/)).toBeInTheDocument();
+    expect(box.getByText("removed")).toBeInTheDocument();
+  });
+
+  it("keeps the stale notice when the latest check found the document missing", async () => {
+    // Round 3: a status other than ingest_failed (not_yet_covered, after a
+    // document that was read goes missing) hid the notice while the
+    // measures still rendered as current.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("latest check could not find OH's published list (2026-09-28)");
+    expect(notice).toHaveTextContent("last successful read, 2026-09-20");
+  });
+
+  it("credits the measures to their own source, not the coverage row's", async () => {
+    // Round 4: during a switch of source the coverage row named the new
+    // office while every card was the previous source's, and the footer
+    // credited the new office — with the previous source's read date.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, sourceName: "Ohio Legislative Service Commission" }],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/on record from Ohio Legislative Service Commission/)).toBeInTheDocument();
+    expect(drawer.queryByText(/Ohio SoS/)).not.toBeInTheDocument();
+    expect(drawer.queryByText(/2026-09-20/)).not.toBeInTheDocument();
+  });
+
+  it("words a list the source itself dropped accurately, not as a missing list", async () => {
+    // Round 5: Oklahoma's register was read and no longer dates its only
+    // State Question for this ballot; "could not find the published list"
+    // was false.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, status: "removed" }],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("OH's latest list no longer includes the measures below");
+    expect(notice).not.toHaveTextContent("could not find");
+  });
+
+  it("says a failed read failed, even when every card shown is removed", async () => {
+    // Round 6: the "latest list no longer includes" copy described a read
+    // that worked; on a night whose fetch failed it misdescribed it.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, status: "removed" }],
+          measureCoverage: {
+            status: "ingest_failed", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("latest attempt to re-read OH's measures failed (2026-09-28)");
+    expect(notice).not.toHaveTextContent("no longer includes");
+  });
+
+  it("presents an operator's none as ours, never as the state's", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measureCoverage: {
+            status: "confirmed_none", sourceName: "Ohio SoS", basis: "operator",
+            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/This is our operator's determination/)).toBeInTheDocument();
+    expect(drawer.getByText(/not a list published by the state/)).toBeInTheDocument();
+    expect(drawer.queryByText(/Per Ohio SoS/)).not.toBeInTheDocument();
+  });
+
+  it("shows no stale notice when the latest read worked", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "covered", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.queryByRole("status")).not.toBeInTheDocument();
+    expect(drawer.getByText(/last read successfully 2026-09-28/)).toBeInTheDocument();
   });
 });
 

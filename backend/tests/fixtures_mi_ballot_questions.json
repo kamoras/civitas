@@ -1,0 +1,138 @@
+{
+ "_source": "Real: the '2026 November ballot questions' link from michigan.gov/sos/elections, and ballot_measures_mi.pdf_lines() of the linked PDF (text + whether each line is set in a bold face), fetched live 2026-09-28.",
+ "landing": "<html><body>\n<a  class=' ' href='/sos/-/media/Project/Websites/sos/Elections/Home/Documents/2026-November-ballot-questions.pdf?rev=9cb813b93d8842138b551fc49d76b9cd' target='_blank' rel='noopener noreferrer'>2026 November ballot questions   \n                                                </a>\n</body></html>\n",
+ "pdf_lines": [
+  [
+   [
+    "July 24, 2026",
+    false
+   ],
+   [
+    "Proposal 2026-1",
+    true
+   ],
+   [
+    "A proposal to convene a constitutional convention for the purpose of drafting a",
+    true
+   ],
+   [
+    "general revision of the state constitution",
+    true
+   ],
+   [
+    "Shall a convention of elected delegates be convened in 2027 to draft a general revision of",
+    false
+   ],
+   [
+    "the State Constitution for presentation to the state\u2019s voters for their approval or rejection?",
+    false
+   ],
+   [
+    "[ ] Yes",
+    false
+   ],
+   [
+    "[ ] No",
+    false
+   ],
+   [
+    "BUREAU OF ELECTIONS",
+    false
+   ],
+   [
+    "RICHARD H. AUSTIN BUILDING \uf068 1ST FLOOR \uf068 430 W. ALLEGAN \uf068 LANSING, MICHIGAN 48918",
+    false
+   ],
+   [
+    "Michigan.gov/Elections \uf068 800-292-5973",
+    false
+   ]
+  ],
+  [
+   [
+    "August 17, 2026",
+    false
+   ],
+   [
+    "Proposal 2026-2",
+    true
+   ],
+   [
+    "A proposed initiated law to prohibit campaign contributions from certain regulated",
+    true
+   ],
+   [
+    "utilities and government contractors and apply campaign finance laws and",
+    true
+   ],
+   [
+    "regulations to additional types of political communications",
+    true
+   ],
+   [
+    "The proposal would:",
+    false
+   ],
+   [
+    "\u2022 Prohibit regulated electric and gas utilities, contractors with over $250,000 annually in",
+    false
+   ],
+   [
+    "government contracts, and people and organizations with substantial connections to",
+    false
+   ],
+   [
+    "these utilities/contractors from making direct or indirect campaign contributions to",
+    false
+   ],
+   [
+    "those who run for or hold offices that impact them.",
+    false
+   ],
+   [
+    "\u2022 Expand laws regulating spending on political communications, including those requiring",
+    false
+   ],
+   [
+    "disclosing donor information, to apply to communications clearly identifying candidates",
+    false
+   ],
+   [
+    "or ballot questions, even if they do not expressly advocate voting for/against them.",
+    false
+   ],
+   [
+    "\u2022 Expressly apply the law requiring disclosure of who paid for political communications to",
+    false
+   ],
+   [
+    "internet political communications.",
+    false
+   ],
+   [
+    "Should this proposal be adopted?",
+    false
+   ],
+   [
+    "[ ] Yes",
+    false
+   ],
+   [
+    "[ ] No",
+    false
+   ],
+   [
+    "BUREAU OF ELECTIONS",
+    false
+   ],
+   [
+    "RICHARD H. AUSTIN BUILDING \uf068 1ST FLOOR \uf068 430 W. ALLEGAN \uf068 LANSING, MICHIGAN 48918",
+    false
+   ],
+   [
+    "Michigan.gov/Elections \uf068 800-292-5973",
+    false
+   ]
+  ]
+ ]
+}
