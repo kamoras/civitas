@@ -44,7 +44,25 @@ def _make_doc(db_session, **overrides) -> ExploreDocument:
 
 
 # The summary endpoint reads only the caller's address from its request.
-_READER = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"), headers={})
+def _reader(host: str) -> SimpleNamespace:
+    return SimpleNamespace(client=SimpleNamespace(host=host), headers={})
+
+
+_READER = _reader("203.0.113.7")
+
+
+def _document_claimed(doc) -> bool:
+    """Whether any generation claim is live for `doc` (keyed on the
+    document and the text it read)."""
+    import time
+
+    from app.api import throttle
+
+    with throttle._using() as conn:
+        return conn.execute(
+            "SELECT 1 FROM claims WHERE bucket = 'explore-summary' AND key LIKE ? AND expires_at > ?",
+            (f"{doc.id}:%", time.time()),
+        ).fetchone() is not None
 
 
 async def _collect_sse_events(response) -> list[dict]:
@@ -184,7 +202,7 @@ class TestSummaryEndpointGuards:
 
         from fastapi import HTTPException
 
-        from app.api import explore, throttle
+        from app.api import explore
 
         docs = [_make_doc(db_session) for _ in range(explore._MAX_GENERATIONS + 1)]
         finish = asyncio.Event()
@@ -198,20 +216,51 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _held_stream),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
-            for doc in docs[:-1]:
-                await get_explore_document_summary(doc.id, _READER, db=db_session)
+            for i, doc in enumerate(docs[:-1]):
+                await get_explore_document_summary(doc.id, _reader(f"198.51.100.{i}"), db=db_session)
             with pytest.raises(HTTPException) as exc_info:
-                await get_explore_document_summary(docs[-1].id, _READER, db=db_session)
+                await get_explore_document_summary(docs[-1].id, _reader("198.51.100.99"), db=db_session)
             assert exc_info.value.status_code == 503
             # Refused before it started: its claim was given back.
-            assert throttle.claim("explore-summary", str(docs[-1].id), period=30)
+            assert not _document_claimed(docs[-1])
             finish.set()
+            await asyncio.gather(*list(explore._generations))
+
+    async def test_one_client_holds_one_generation_not_every_slot(self, db_session):
+        # A generation outlives its reader: one address starting and
+        # leaving generations must not hold the whole site's slots.
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from app.api import explore
+
+        first, second = _make_doc(db_session), _make_doc(db_session)
+        finish = asyncio.Event()
+
+        async def _held_stream(*_args, **_kwargs):
+            await finish.wait()
+            yield "SUMMARY: s\n"
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _held_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            await get_explore_document_summary(first.id, _READER, db=db_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await get_explore_document_summary(second.id, _READER, db=db_session)
+            assert exc_info.value.status_code == 503
+            # Another reader still gets the free slot.
+            response = await get_explore_document_summary(second.id, _reader("198.51.100.1"), db=db_session)
+            finish.set()
+            assert any("delta" in e for e in await _collect_sse_events(response))
             await asyncio.gather(*list(explore._generations))
 
     async def test_shutdown_stops_generations_and_gives_their_claims_back(self, db_session):
         import asyncio
 
-        from app.api import explore, throttle
+        from app.api import explore
 
         doc = _make_doc(db_session)
 
@@ -230,7 +279,7 @@ class TestSummaryEndpointGuards:
             events = await _collect_sse_events(response)
         assert not explore._generations and not mock_set_cache.called
         assert events == [{"delta": "SUMMARY: partial"}]  # the stream ends
-        assert throttle.claim("explore-summary", str(doc.id), period=30)
+        assert not _document_claimed(doc)
 
     async def test_a_summary_already_made_is_never_held_off(self, db_session):
         doc = _make_doc(db_session)
@@ -350,7 +399,9 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
             events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
-        kept = {"summary": "Whole.", "keyPoints": ["One"], "impact": ""}
+        # Said to be truncated — to this reader and, through the cache, to
+        # every later one.
+        kept = {"summary": "Whole.", "keyPoints": ["One"], "impact": "", "truncated": True}
         assert events[-1] == {"done": True, **kept}
         assert mock_set_cache.call_args.args[2] == kept
 
@@ -440,7 +491,7 @@ class TestSummaryEndpointGuards:
             request.cancel()
             await asyncio.gather(request, return_exceptions=True)
         monkeypatch.setattr(throttle, "hold", real_hold)
-        assert throttle.hold("explore-summary", [str(doc.id)], period=300) is not None
+        assert not _document_claimed(doc)
 
     async def test_waiting_out_a_generation_spends_none_of_the_write_budget(self, db_session, monkeypatch):
         # A page waiting on another reader's generation must not spend the
@@ -502,6 +553,24 @@ class TestSummaryEndpointGuards:
         with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=cached):
             for _ in range(5):
                 assert await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+
+    async def test_a_reader_whose_own_generation_timed_out_is_told_when_to_ask_again(self, db_session):
+        # Not "no summary": the document is held off only briefly, and every
+        # other reader is told to wait it out — so is this one.
+        import httpx
+
+        doc = _make_doc(db_session)
+
+        async def _no_answer(*_args, **_kwargs):
+            raise httpx.ReadTimeout("busy")
+            yield  # pragma: no cover
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _no_answer),
+        ):
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+        assert events == [{"done": True, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 120}]
 
     async def test_a_hold_off_is_on_the_text_not_the_document(self, db_session):
         # An unusable output from an empty body doesn't hold off the
@@ -586,7 +655,7 @@ class TestSummaryEndpointGuards:
                 await request
             await asyncio.gather(*list(explore._generations))
         mock_set_cache.assert_called_once()  # finished without its reader
-        assert throttle.claim("explore-summary", str(doc.id), period=30)
+        assert not _document_claimed(doc)
         assert throttle.claim("explore-summary-slot", "0", period=30)
 
     async def test_a_stream_waiting_on_the_llm_keeps_the_connection_alive(self, db_session, monkeypatch):

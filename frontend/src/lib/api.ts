@@ -848,6 +848,8 @@ export interface ExploreDocumentSummary {
   /** The generation stopped before its end (the LLM failed or ran out of
    *  time): what it wrote, less the sentence it stopped in. */
   partial?: boolean;
+  /** It reached its length limit: kept, less the section it was writing. */
+  truncated?: boolean;
 }
 
 // Mirrors backend/app/pipeline/analyze/prompts.py's parse_explore_document_summary —
@@ -933,23 +935,37 @@ export async function streamExploreDocumentSummary(
   wait: (ms: number, signal?: AbortSignal) => Promise<void> = abortableSleep
 ): Promise<ExploreDocumentSummary> {
   const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
-  const ask = () => fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
-  let res = await ask();
-  // Only a refusal the server marks as a wait (X-Summary-Wait): nginx's own
-  // 503, or a limit on how often a client may ask at all, is not waited out.
-  while (res.headers.get("X-Summary-Wait") === "1" && Date.now() < giveUpAt) {
-    // Released now, not at garbage collection: an unread body can hold its
-    // connection, and the page has other requests to make meanwhile.
-    await res.body?.cancel().catch(() => {});
-    await wait(
-      Math.min(summaryRetryDelayMs(res.headers.get("Retry-After")), Math.max(0, giveUpAt - Date.now())),
-      signal
-    );
-    res = await ask();
+  const waitFor = (retryAfter: string | null) =>
+    wait(Math.min(summaryRetryDelayMs(retryAfter), Math.max(0, giveUpAt - Date.now())), signal);
+  for (;;) {
+    const res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
+    // Only a refusal the server marks as a wait (X-Summary-Wait): nginx's
+    // own 503 is not waited out.
+    if (res.headers.get("X-Summary-Wait") === "1" && Date.now() < giveUpAt) {
+      // Released now, not at garbage collection: an unread body can hold
+      // its connection, and the page has other requests to make meanwhile.
+      await res.body?.cancel().catch(() => {});
+      await waitFor(res.headers.get("Retry-After"));
+      continue;
+    }
+    if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
+    const result = await readSummaryStream(res.body, onDelta);
+    // This reader's own generation ran out of time before writing anything
+    // usable: asked again after the brief hold-off, as a waiting reader is.
+    if (result.retryAfter !== undefined && !result.summary && Date.now() < giveUpAt) {
+      onDelta("");
+      await waitFor(String(result.retryAfter));
+      continue;
+    }
+    return result;
   }
-  if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
+}
 
-  const reader = res.body.getReader();
+async function readSummaryStream(
+  body: ReadableStream<Uint8Array>,
+  onDelta: (fullTextSoFar: string) => void
+): Promise<ExploreDocumentSummary & { retryAfter?: number }> {
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let fullText = "";
@@ -972,6 +988,8 @@ export async function streamExploreDocumentSummary(
           keyPoints: parsed.keyPoints ?? [],
           impact: parsed.impact ?? "",
           partial: parsed.partial === true,
+          truncated: parsed.truncated === true,
+          ...(typeof parsed.retryAfter === "number" ? { retryAfter: parsed.retryAfter } : {}),
         };
       }
       if (typeof parsed.delta === "string") {

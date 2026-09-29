@@ -973,7 +973,14 @@ the pending list).
     and nginx sends `/api/admin/` and every trigger endpoint to `pipeline`
     ("Background work" in `nginx/civitas.conf`). A new POST, PUT, PATCH or DELETE route must be
     either routed there or listed in `tests/test_nginx_routing.py`'s
-    `SERVED_BY_API` — that test fails otherwise.
+    `SERVED_BY_API` — that test fails otherwise. One exception, on
+    purpose: an Explore summary's LLM generation runs in the API process
+    (it streams to the reader there) and finishes after its reader leaves,
+    so an abandoned stream can't hold a document's summary off for everyone
+    (`api/explore.py`, `_Generation`). It is capped — a few in all, one per
+    client — and writes only its own cache row and claims, keyed on the
+    text it read, so a data reset can't be undone by it. It is not a
+    writer in `app.background`'s sense; don't add one there.
   - **No per-client state in module globals.** With several API workers each
     has its own copy, so a limit stretches to its value times the worker
     count and a once-per-day dedup lets a second vote through on the other

@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
-from app.api import rate_limit
-from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, client_ip, retry_after, spend_upstream
+from app.api import rate_limit, throttle
+from app.api.rate_limit import (
+    UpstreamRouteLimit, WriteRateLimit, client_ip, limit_client, retry_after, spend_upstream,
+)
 from app.api.response_helpers import RETRY_SOON_CACHE_CONTROL, retry_soon_json
 from app.database import get_db, off_loop
 from app.models import ExploreDocument
@@ -334,6 +336,7 @@ async def post_document_comment(
 # mid-generation.
 _SUMMARY_BUCKET = "explore-summary"
 _SLOT_BUCKET = "explore-summary-slot"
+_CLIENT_BUCKET = "explore-summary-client"
 # A document whose output couldn't be used is not generated again for a
 # while: the same prompt at temperature 0 comes out the same way. One whose
 # generation ran out of time is held off for less: its prompt may be one the
@@ -415,7 +418,6 @@ async def get_explore_document_summary(
     """
     import hashlib
 
-    from app.api import throttle
     from app.pipeline.analyze.ollama_client import get_cached_llm_result
     from app.pipeline.analyze.prompts import explore_document_summary_prompt
 
@@ -453,14 +455,14 @@ async def get_explore_document_summary(
     # Not a cached answer: this request may start work, so it counts —
     # after the cache, so a summary already made is never refused.
     ip = client_ip(request)
-    counted = await throttle.run(rate_limit.limit_client, ip, _SUMMARY_REQUESTS_BUCKET,
+    counted = await throttle.run(limit_client, ip, _SUMMARY_REQUESTS_BUCKET,
                                  limit=_SUMMARY_REQUESTS_PER_MINUTE, period=60.0)
     if not counted.allowed:
         # A wait: a refused request isn't counted.
         raise HTTPException(
             status_code=429,
             detail="Too many summary requests; please try again shortly.",
-            headers={"Retry-After": rate_limit.retry_after(counted.reset_at), **_WAIT_OUT},
+            headers={"Retry-After": retry_after(counted.reset_at), **_WAIT_OUT},
         )
 
     # Claimed, checked and generated in a task of its own, which the
@@ -571,8 +573,6 @@ class _Generation:
         """The first free one of `keys`: True, False when all are held, or
         throttle.Blocked (hold's blocked_by). Unavailable when the store
         can't answer."""
-        from app.api import throttle
-
         claiming = asyncio.ensure_future(
             throttle.run(throttle.hold, bucket, keys, period=_SUMMARY_CLAIM_S, blocked_by=blocked_by)
         )
@@ -595,8 +595,6 @@ class _Generation:
         return True
 
     async def _give_back(self) -> None:
-        from app.api import throttle
-
         for bucket, key, token in self._held:
             try:
                 await throttle.run(throttle.release, bucket, key, token=token)
@@ -605,8 +603,6 @@ class _Generation:
         self._held.clear()
 
     async def run(self) -> None:
-        from app.api import rate_limit, throttle
-
         try:
             try:
                 key = self.key
@@ -619,6 +615,15 @@ class _Generation:
                     return
                 if not claimed:
                     self._settle("held")
+                    return
+                # One in flight per client: the slots are the whole site's,
+                # and a generation outlives its reader, so one address must
+                # not be able to hold them all.
+                client = throttle.client_key(self.client, _CLIENT_BUCKET)
+                if client is None:
+                    raise throttle.Unavailable(_CLIENT_BUCKET)
+                if not await self._claim(_CLIENT_BUCKET, [str(client)]):
+                    self._settle("busy")
                     return
                 if not await self._claim(_SLOT_BUCKET, [str(slot) for slot in range(_MAX_GENERATIONS)]):
                     self._settle("busy")
@@ -655,7 +660,6 @@ class _Generation:
         once the summary is cached and the claims are given back, so a
         reader asking again the moment it arrives is served or may start
         one."""
-        from app.api import throttle
         from app.pipeline.analyze import ollama_client
         from app.pipeline.analyze.prompts import parse_explore_document_summary
 
@@ -697,6 +701,10 @@ class _Generation:
         # partial, and not kept; one that ran out of time (or made nothing
         # usable) holds the document off for a while.
         ended = finished or at_limit
+        # Kept at its token limit, but less the section it stopped in: said
+        # so, to this reader and every later one (the cached copy says it).
+        if at_limit and parsed != parse_explore_document_summary(text):
+            parsed["truncated"] = True
         if ended and parsed["summary"]:
             await asyncio.to_thread(ollama_client.set_cached_llm_result, self.prompt["promptVersion"],
                                     self.cache_key, parsed)
@@ -710,6 +718,11 @@ class _Generation:
         last = {"done": True, **parsed}
         if not ended and parsed["summary"]:
             last["partial"] = True
+        elif timed_out:
+            # Nothing usable came of it, and the document is held off only
+            # briefly: this reader is told when to ask again, as a waiting
+            # reader is (the page's retry), not that there is no summary.
+            last["retryAfter"] = int(_SLOW_FOR_S)
         self.events.put_nowait(_sse(last))
 
 

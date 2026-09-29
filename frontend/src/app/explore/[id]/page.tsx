@@ -769,6 +769,11 @@ export default function ExploreDetailPage() {
                       This analysis was cut short before it finished. Try again later for the whole of it.
                     </p>
                   )}
+                  {summary?.truncated && (
+                    <p className="text-xs text-ink-lo">
+                      This analysis reached its length limit; the section it was writing is left out.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

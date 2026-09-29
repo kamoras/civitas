@@ -494,3 +494,24 @@ describe("streamExploreDocumentSummary's result", () => {
     expect((await streamExploreDocumentSummary(1, () => {})).partial).toBe(true);
   });
 });
+
+describe("streamExploreDocumentSummary after its own generation timed out", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks again after the hold-off rather than reporting no summary", async () => {
+    const sse = (body: string) => new Response(`data: ${body}\n\n`, { status: 200 });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(sse('{"done": true, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 120}'))
+      .mockResolvedValueOnce(sse('{"done": true, "summary": "S", "keyPoints": [], "impact": "", "truncated": true}'));
+    vi.stubGlobal("fetch", fetchMock);
+    const waits: number[] = [];
+    const result = await streamExploreDocumentSummary(1, () => {}, undefined, async (ms) => {
+      waits.push(ms);
+    });
+    expect(result.summary).toBe("S");
+    expect(result.truncated).toBe(true);
+    expect(waits).toEqual([60_000]); // Retry-After's ceiling
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
