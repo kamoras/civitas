@@ -24,6 +24,7 @@ import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
 import ShareButtons from "@/components/action/ShareButtons";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { focusTabWhenSelected } from "@/lib/tabFocus";
 import BackToTop from "@/components/BackToTop";
 import {
   PolicyBadge,
@@ -890,16 +891,8 @@ function ActionPageInner() {
     (tab: Tab) => {
       const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
       pushUrl(url);
-      // Focus the newly selected *tab*, not its panel. The tabs use a roving
-      // tabindex, so the incoming tab has to be focused explicitly or the
-      // keyboard user is stranded on an element that just became tabindex=-1.
-      // Focusing the panel instead moved focus out of the tablist entirely,
-      // which meant the Arrow/Home/End handler below stopped receiving keys —
-      // one arrow press worked and every one after it did nothing. The panel
-      // stays tabbable (tabIndex=0), so Tab still reaches the content next.
-      requestAnimationFrame(() => {
-        document.getElementById(`tab-${tab}`)?.focus();
-      });
+      // The panel stays tabbable (tabIndex=0), so Tab still reaches content.
+      focusTabWhenSelected(`tab-${tab}`);
     },
     [pushUrl]
   );

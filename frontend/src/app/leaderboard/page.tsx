@@ -862,7 +862,7 @@ function LeaderboardContent() {
           id={`branch-panel-${branch}`}
           role="tabpanel"
           aria-labelledby={`branch-tab-${branch}`}
-          tabIndex={-1}
+          tabIndex={0}
         >
           {branch === "president" && (
             <>
