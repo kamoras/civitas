@@ -4,7 +4,7 @@ funnels through."""
 
 from unittest.mock import MagicMock, patch
 
-from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, publish_post
+from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, fetch_og_card, og_card, publish_post
 
 
 def _post(text: str, url: str = "https://civitas-research.org/issue/i9e3779b1") -> str:
@@ -87,3 +87,27 @@ class TestMissingCredentials:
 
         assert result is False
         mock_client_cls.assert_not_called()
+
+
+def test_og_card_reads_the_card_both_attribute_orders_and_entities():
+    html = (
+        '<meta property="og:title" content="Maine Ballot 2026 &amp; More — Civitas"/>'
+        '<meta content="What&#x27;s on the ballot." property="og:description"/>'
+        '<meta property="og:image" content="https://civitas-research.org/api/og?state=ME"/>'
+        '<meta property="og:image:alt" content="Maine Ballot 2026"/>'
+    )
+    assert og_card(html) == {
+        "title": "Maine Ballot 2026 & More — Civitas",
+        "description": "What's on the ballot.",
+        "image": "https://civitas-research.org/api/og?state=ME",
+        "image_alt": "Maine Ballot 2026",
+    }
+    assert og_card("<html></html>") == {"title": "", "description": "", "image": "", "image_alt": ""}
+
+
+def test_fetch_og_card_reads_the_page_or_says_it_couldnt():
+    page = MagicMock(text='<meta property="og:image" content="https://civitas-research.org/api/og?issue=x"/>')
+    with patch("app.pipeline.analyze.bluesky_utils.httpx.get", return_value=page):
+        assert fetch_og_card("https://civitas-research.org/issue/x")["image"] == "https://civitas-research.org/api/og?issue=x"
+    with patch("app.pipeline.analyze.bluesky_utils.httpx.get", side_effect=OSError("down")):
+        assert fetch_og_card("https://civitas-research.org/issue/x") is None

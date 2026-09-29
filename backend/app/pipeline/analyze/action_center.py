@@ -3873,6 +3873,13 @@ def _run_periodic_bluesky_posts(db: Session) -> None:
         deliver_pending(db)
     except Exception:
         logger.exception("Retrying undelivered Bluesky posts failed (non-fatal)")
+    # Also hourly: the feed's picture and description for a post whose page
+    # couldn't be read when it was published.
+    try:
+        from app.broadcast import fill_missing_cards
+        fill_missing_cards(db)
+    except Exception:
+        logger.exception("Filling feed entries' cards failed (non-fatal)")
 
 
 def _persist_metrics(db: Session) -> dict[str, int]:
