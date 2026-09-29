@@ -233,7 +233,7 @@ string constants (prototypes, prompts) and thresholds do. A short, tested
 exemption list covers what cannot affect classification or scoring:
 `_NOT_ANALYSIS_PATHS` (the holdings ingest, filer matching, the run-coordination
 modules, the election run's orchestration, the LDA bill-name matcher
-`analyze/lobbying_records.py`) and
+`analyze/lobbying_records.py`, the modules that word and publish posts) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
 both in `senate_pipeline.py`. This fingerprint is
 compared to the stored hash from the last pipeline run:
@@ -590,6 +590,11 @@ What this rules in and out:
   crosswalk is real work — `scripts/fetch_state_leg_crosswalk.py`
   documents why three obvious sources give wrong answers — and doing it
   is the price of not asking.
+- **In:** following Civitas without an account. The Atom feeds (`/feeds`)
+  are pulled, and a topic or state is chosen by which URL a reader
+  subscribes to, so there is no subscriber list to keep. A push channel
+  that would need one (email, web push, per-server webhooks) is out, for
+  the same reason as an address box.
 - **In, server-side only:** the Census geocoder and Google Civic's
   `voterInfoQuery`, called from the pipeline (and, for the town selector,
   from the API, cached 12 hours) with **our own** fixed,
@@ -927,6 +932,7 @@ the pending list).
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
 | Action Center API | `backend/app/api/action.py` |
+| Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`) decide what and when |
 | Representative API routes | `backend/app/api/representatives.py` |
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
 | Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
@@ -1045,10 +1051,16 @@ the pending list).
   " — Civitas". Search-facing wording lives in `src/lib/seo.ts`, not in
   `page.tsx` (Next rejects extra exports there).
 - A missing record is a real 404 via `notFound()` plus `noindex`, never a
-  200 page that says "not found".
+  200 page that says "not found". The converse holds too: an unreachable
+  backend or a 5xx is an error page (`app/error.tsx`), never a 404 — fetch
+  detail records through `fetchRecord` (`src/lib/ssrPayload.ts`), which
+  returns null only for a 404.
 - `sitemap.xml` is rendered per request from `GET /api/sitemap` — never
   prerendered, since `next build` can't reach the backend. Add a new
   detail-page type there, or search engines have no way to find it.
+  Explore documents have no upper bound, so they are listed a page at a
+  time (`/sitemaps/explore/{n}`, from `GET /api/sitemap/explore`), and
+  `robots.txt` names `/sitemap-index.xml`, which lists both.
 - `robots.txt` must not disallow `/api/`: Googlebot's renderer honours it for
   the XHRs the client-rendered pages make, and would index them empty.
 

@@ -8,6 +8,7 @@ import {
   List,
   Item,
   More,
+  A,
 } from "@/components/about/AboutPage";
 
 export const metadata = pageMetadata({
@@ -116,13 +117,13 @@ export default function NewsChapter() {
         <P>
           One exception, labelled on the page as <strong className="text-ink-hi">Developing</strong>
           : when the Senate or House passes a bill, or an agency publishes a significant rule,
-          before the news has covered it, a short draft is made from the primary record itself. A
-          vote&apos;s draft is the roll-call record in a fixed template — the measure, the result,
-          the tally and the date, nothing characterized; a rule&apos;s is written from the Federal
-          Register and checked against it. It carries a note that broader coverage hasn&apos;t
-          confirmed it yet, and isn&apos;t posted anywhere else until press coverage does. A vote
-          the news already covers isn&apos;t drafted, and a draft gives way once the reporting on
-          its bill appears.
+          before the news has covered it, a short draft is made from the primary record itself, in a
+          fixed template with nothing characterized: a vote&apos;s measure, result, tally and date,
+          or a rule&apos;s agency, title, abstract and publication date. It carries a note that
+          broader coverage hasn&apos;t confirmed it yet, and isn&apos;t posted anywhere else until
+          press coverage does. A vote the news already covers isn&apos;t drafted, and a draft gives
+          way once the reporting on its bill appears: it leaves the Action Center, and the
+          homepage&apos;s record of recent issues lists the reporting in its place.
         </P>
         <P>
           Recommended actions are procedural — contact your representatives, attend a public
@@ -191,9 +192,10 @@ export default function NewsChapter() {
           left.
         </P>
         <P>
-          Once a day&apos;s Record is final, the Civitas Bluesky account posts that day&apos;s count
-          summary and the numbers of bills passed — never their titles, since an official short
-          title can read as advocacy — and each week, the bills that became law.
+          Once a day&apos;s Record is final, Civitas posts that day&apos;s count summary and the
+          numbers of bills passed — never their titles, since an official short title can read as
+          advocacy — and each week, the bills that became law. Posts go to the{" "}
+          <A href="/feeds">feeds</A> and the Bluesky account.
         </P>
       </Section>
 

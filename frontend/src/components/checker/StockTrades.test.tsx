@@ -42,6 +42,14 @@ vi.mock("@/lib/api", () => ({
       },
       {
         ...base,
+        assetName: "MICROSOFT CORP",
+        reportKind: "periodic",
+        parseConfidence: "ocr",
+        transactionDate: null,
+        disclosureDate: "",
+      },
+      {
+        ...base,
         assetName: "APPLE INC",
         reportKind: "periodic",
         daysToDisclose: 60,
@@ -49,7 +57,7 @@ vi.mock("@/lib/api", () => ({
         transactionDate: "2026-02-01",
       },
     ],
-    total: 4,
+    total: 5,
     page: 1,
     perPage: 15,
     totalPages: 1,
@@ -62,9 +70,11 @@ describe("StockTrades", () => {
     render(<StockTrades politicianId="trump-47" filer="president" />);
     await userEvent.click(await screen.findByRole("button", { name: /STOCK & CRYPTO TRADES/ }));
     expect(screen.getByText("ANNUAL REPORT")).toBeInTheDocument();
-    expect(screen.getAllByText("READ FROM A SCAN")).toHaveLength(2);
+    expect(screen.getAllByText("READ FROM A SCAN")).toHaveLength(3);
     // A scanned row whose date isn't legible says so, with its filing date.
     expect(screen.getByText("date not legible in the scan · filed 2026-05-14")).toBeInTheDocument();
+    // ...and never an empty "filed" when the filing date is unknown.
+    expect(screen.getByText("date not legible in the scan")).toBeInTheDocument();
     // One timeliness badge: the text-read periodic trade. Neither the
     // annual report's row nor the scan's asserts on-time or late.
     expect(screen.getAllByText(/LATE DISCLOSURE|ON TIME/)).toHaveLength(1);

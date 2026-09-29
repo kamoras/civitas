@@ -268,13 +268,10 @@ class TestProcessIssuesMetrics:
         defaults.update(overrides)
         return ActionIssue(**defaults)
 
-    def test_near_duplicate_suppression_increments_counter(self, db_session, monkeypatch):
+    def test_near_duplicate_suppression_increments_counter(self, db_session, bluesky_configured):
         from datetime import datetime, timezone
 
         from app.pipeline.analyze import action_metrics, bluesky_poster
-
-        monkeypatch.setattr(bluesky_poster.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_poster.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
 
         prior_text = "The House passed the defense bill 216-212 on Thursday afternoon."
         prior = self._issue(
@@ -293,6 +290,7 @@ class TestProcessIssuesMetrics:
 
         assert posted == 0
         assert fresh.bsky_posted_at is not None  # marked handled, not published
+        assert bluesky_configured == []
         assert action_metrics.snapshot().get("bsky_posts_suppressed_near_duplicate") == 1
         # These facts were judged to have nothing new to say, so they become
         # the baseline the repost gate measures against — otherwise the same
@@ -300,51 +298,94 @@ class TestProcessIssuesMetrics:
         # article-date advance.
         assert fresh.bsky_posted_facts == fresh.facts
 
-    def test_publishing_pins_the_repost_baseline_to_what_was_posted(self, db_session, monkeypatch):
+    def test_publishing_pins_the_repost_baseline_to_what_was_posted(self, db_session, bluesky_configured):
         """The upstream repost gate needs "what have readers been told", and
         the `facts` column can't answer it — every hourly refresh overwrites
         it whether or not anything was posted."""
+        from app.models import BroadcastPost
         from app.pipeline.analyze import bluesky_poster
-
-        monkeypatch.setattr(bluesky_poster.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_poster.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
 
         issue = self._issue()
         db_session.add(issue)
         db_session.commit()
 
         text = "The House passed the defense bill 216-212."
-        with patch.object(bluesky_poster, "_compose_new_post", return_value=text), \
-                patch.object(bluesky_poster, "_publish", return_value=True):
+        with patch.object(bluesky_poster, "_compose_new_post", return_value=text):
             posted = bluesky_poster.process_issues_for_bluesky([issue], db_session)
 
         assert posted == 1
         assert issue.bsky_last_post_text == text
         assert issue.bsky_posted_facts == issue.facts
+        post = db_session.query(BroadcastPost).one()
+        assert (post.kind, post.title, post.text, post.bsky_status) == (
+            "issue", "House passes defense bill", text, "sent")
+        assert post.url.startswith("https://civitas-research.org/issue/")
+        assert bluesky_configured == [(text, post.url)]
 
-    def test_failed_publish_does_not_pin_the_repost_baseline(self, db_session, monkeypatch):
-        # Nothing was told to readers, so the next run must still see these
-        # facts as unposted rather than as an already-published baseline.
+    def test_bluesky_refusing_the_post_still_publishes_it(self, db_session, bluesky_configured):
+        """Feed readers have been told, so the baseline is pinned and the
+        issue isn't published a second time; the Bluesky send is retried by
+        app.broadcast, not by republishing the issue."""
+        from app.models import BroadcastPost
         from app.pipeline.analyze import bluesky_poster
 
-        monkeypatch.setattr(bluesky_poster.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_poster.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+        bluesky_configured.ok = False
+        issue = self._issue()
+        db_session.add(issue)
+        db_session.commit()
+
+        with patch.object(bluesky_poster, "_compose_new_post", return_value="Some post text."):
+            posted = bluesky_poster.process_issues_for_bluesky([issue], db_session)
+
+        assert posted == 1
+        assert issue.bsky_posted_at is not None
+        assert issue.bsky_posted_facts == issue.facts
+        assert db_session.query(BroadcastPost).one().bsky_status == "failed"
+
+    def test_published_to_the_feed_without_a_bluesky_account(self, db_session, bluesky_outbox):
+        from app.models import BroadcastPost
+        from app.pipeline.analyze import bluesky_poster
 
         issue = self._issue()
         db_session.add(issue)
         db_session.commit()
 
-        with patch.object(bluesky_poster, "_compose_new_post", return_value="Some post text."), \
-                patch.object(bluesky_poster, "_publish", return_value=False):
-            posted = bluesky_poster.process_issues_for_bluesky([issue], db_session)
+        with patch.object(bluesky_poster, "_compose_new_post", return_value="Some post text."):
+            assert bluesky_poster.process_issues_for_bluesky([issue], db_session) == 1
 
-        assert posted == 0
-        assert issue.bsky_posted_at is None
-        assert issue.bsky_posted_facts is None
+        assert db_session.query(BroadcastPost).one().bsky_status == "off"
+        assert bluesky_outbox == []
+
+    def test_the_mark_and_the_post_are_committed_together(self, db_session):
+        """A crash right after publishing must not leave the issue unmarked,
+        or the next run publishes it again."""
+        from app.models import ActionIssue, BroadcastPost
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue()
+        db_session.add(issue)
+        db_session.commit()
+
+        seen = {}
+        real_publish = bluesky_poster.broadcast.publish
+
+        def publish_then_crash(db, **kw):
+            real_publish(db, **kw)
+            db.expire_all()
+            seen["marked"] = db.get(ActionIssue, issue.id).bsky_posted_at is not None
+            raise RuntimeError("crash after the commit")
+
+        with patch.object(bluesky_poster, "_compose_new_post", return_value="Some post text."), \
+                patch.object(bluesky_poster.broadcast, "publish", publish_then_crash):
+            with pytest.raises(RuntimeError):
+                bluesky_poster.process_issues_for_bluesky([issue], db_session)
+
+        assert seen["marked"] is True
+        assert db_session.query(BroadcastPost).count() == 1
 
     @pytest.mark.parametrize("publishes", [True, False])
     def test_every_path_that_sets_posted_at_also_sets_posted_facts(
-        self, db_session, monkeypatch, publishes,
+        self, db_session, bluesky_configured, publishes,
     ):
         """bsky_posted_at set with bsky_posted_facts still NULL must only
         ever mean "row predates the column".
@@ -361,9 +402,6 @@ class TestProcessIssuesMetrics:
 
         from app.pipeline.analyze import bluesky_poster
 
-        monkeypatch.setattr(bluesky_poster.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_poster.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
-
         issue = self._issue()
         db_session.add(issue)
         db_session.commit()
@@ -378,8 +416,7 @@ class TestProcessIssuesMetrics:
             ))
             db_session.commit()
 
-        with patch.object(bluesky_poster, "_compose_new_post", return_value=prior), \
-                patch.object(bluesky_poster, "_publish", return_value=True):
+        with patch.object(bluesky_poster, "_compose_new_post", return_value=prior):
             bluesky_poster.process_issues_for_bluesky([issue], db_session)
 
         if issue.bsky_posted_at is not None:

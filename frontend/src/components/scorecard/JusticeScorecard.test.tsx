@@ -25,7 +25,10 @@ const justice: Justice = {
   authoredDissent: 7,
   authoredConcurrence: 6,
   closeCaseMajorityPct: 46.2,
-  agreementMatrix: { clarence_thomas: 91.2, sonia_sotomayor: 52.1 },
+  agreement: [
+    { id: "clarence_thomas", name: "Clarence Thomas", share: 91.2 },
+    { id: "brett_m_kavanaugh", name: "Brett M. Kavanaugh", share: 88.0 },
+  ],
   loyalty: {
     estimate: 0.1434,
     se: 0.0501,
@@ -61,6 +64,8 @@ describe("JusticeScorecard", () => {
     expect(screen.getByText(/through the 2025 term/)).toBeInTheDocument();
     expect(screen.getByText(/\+2\.50 in the 2024 term/)).toBeInTheDocument();
     expect(screen.getByText("Clarence Thomas")).toBeInTheDocument();
+    // The API's names, punctuation included; never rebuilt from an id.
+    expect(screen.getByText("Brett M. Kavanaugh")).toBeInTheDocument();
   });
 
   it("an unmeasured justice is not given a score", () => {
@@ -73,6 +78,11 @@ describe("JusticeScorecard", () => {
     );
     expect(screen.getAllByText(/Not yet measured/).length).toBe(2);
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("renders a response cached before agreement replaced agreementMatrix", () => {
+    render(<JusticeScorecard justice={{ ...justice, agreement: undefined }} />);
+    expect(screen.queryByRole("heading", { name: /agree/i })).not.toBeInTheDocument();
   });
 
   it("has no structural accessibility violations", async () => {

@@ -368,10 +368,11 @@ export default function PresidentScorecard({
                   <a href="https://www.c-span.org/presidentsurvey2021/" className={LINK}>
                     C-SPAN survey
                   </a>
-                  {/* /compare pairs members of Congress only; every president's
-                      scores sit side by side on the leaderboard. */}
-                  <Link href="/leaderboard?branch=president" className={LINK}>
-                    Compare with every president
+                  <Link
+                    href={`/compare/presidents?left=${encodeURIComponent(president.id)}`}
+                    className={LINK}
+                  >
+                    Compare with another president
                   </Link>
                 </p>
               </div>
