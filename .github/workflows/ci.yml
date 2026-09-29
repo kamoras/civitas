@@ -39,6 +39,12 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Format check
+        # .prettierrc and the format/format:check scripts existed, but
+        # nothing ran them: by 2026-09-29, 93 files had drifted, so every
+        # `npm run format` in an unrelated change would have dragged dozens
+        # of files of pure reformatting into its diff.
+        run: npm run format:check
       - name: Unused code check
         # tsc's noUnusedLocals/noUnusedParameters (tsconfig.json) catches
         # dead locals/params at build time; knip catches the category those
