@@ -116,10 +116,13 @@ export default function NewsChapter() {
         <P>
           One exception, labelled on the page as <strong className="text-ink-hi">Developing</strong>
           : when the Senate or House passes a bill, or an agency publishes a significant rule,
-          before the news has covered it, a short, hedged draft is written from the roll-call record
-          or the Federal Register itself — a primary record, not an interpretation — and checked
-          against it. It carries a note that broader coverage hasn&apos;t confirmed it yet, and
-          isn&apos;t posted anywhere else until press coverage does.
+          before the news has covered it, a short draft is made from the primary record itself. A
+          vote&apos;s draft is the roll-call record in a fixed template — the measure, the result,
+          the tally and the date, nothing characterized; a rule&apos;s is written from the Federal
+          Register and checked against it. It carries a note that broader coverage hasn&apos;t
+          confirmed it yet, and isn&apos;t posted anywhere else until press coverage does. A vote
+          the news already covers isn&apos;t drafted, and a draft gives way once the reporting on
+          its bill appears.
         </P>
         <P>
           Recommended actions are procedural — contact your representatives, attend a public

@@ -495,7 +495,7 @@ export default function ScoresChapter() {
             within their own party — or &ldquo;cross-cutting&rdquo; when more than 30% of their
             positions sit with the other party — so a fixed cut-off can&apos;t make one party look
             more extreme just because the two parties sit on different ranges. The one-line
-            description on a profile (say, &ldquo;progressive Democratic leader&rdquo;) combines
+            description on a profile (say, &ldquo;Progressive Democrat leader&rdquo;) combines
             ideology, party and a leadership tier.
           </P>
         </Sub>
