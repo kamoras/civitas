@@ -1,3 +1,5 @@
+import datetime
+
 from pydantic import Field, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -5,29 +7,39 @@ from app.time_utils import congress_in_session
 
 
 def _default_current_congress() -> int:
-    """The Congress in session given the wall clock, computed rather than
-    hardcoded so this never needs a manual bump after Jan 3 of an odd year
-    (previously a hardcoded literal that could only be caught by a separate
-    staleness alert an unattended operator might never see — see
-    ops_alerts.check_current_congress_staleness, kept as a defensive check
-    for the rare case an operator pins this via env for archived-DB
-    reproducibility and that pin itself goes stale).
+    """The Congress for the current calendar year, computed rather than
+    hardcoded so this never needs a manual bump (previously a hardcoded
+    literal that could only be caught by a separate staleness alert an
+    unattended operator might never see — see
+    ops_alerts.check_current_congress_staleness, kept for an operator's
+    environment pin going stale and for a process running across New
+    Year).
 
-    Uses app.time_utils.congress_in_session (the 20th Amendment's noon-ET
-    Jan 3 boundary; a clock helper, not pipeline code). Evaluated ONCE,
-    when the settings object is built at process start: a backend that
-    keeps running across Jan 3 keeps the old value until it restarts,
-    which is what check_current_congress_staleness reports. Code that must
-    follow the clock without a restart reads app.config.sitting_congress().
+    Deliberately the CALENDAR-YEAR rule (a process started Jan 1-3 of an
+    odd year gets the incoming Congress a day or two early), not the
+    20th Amendment's noon-ET-Jan-3 hand-over that sitting_congress() uses.
+    This value is fixed for the life of the process, and it scopes the
+    roll-call sessions, bill windows and Voteview ideal points: under the
+    noon rule, a process started in the last hours of the outgoing
+    Congress would keep scoring that dead Congress for its whole run,
+    until a restart. The calendar rule can only be early, never stuck
+    behind, and is what these consumers always used. Mirrors
+    app.pipeline.fetch.congress.congress_for_year inline to avoid
+    importing pipeline code at settings-module load time.
+
+    Code that needs the Congress actually in office at this moment (the
+    district lines members were elected on) reads sitting_congress().
     """
-    return congress_in_session()
+    return 1 + (datetime.date.today().year - 1789) // 2
 
 
 def sitting_congress() -> int:
     """The Congress in office NOW: CURRENT_CONGRESS when an operator pinned
     it in the environment (an archived-DB re-run), otherwise the clock —
-    re-read on every call, so it moves at noon ET on Jan 3 with no restart.
-    settings.CURRENT_CONGRESS itself is computed once at process start."""
+    re-read on every call, so it moves at noon ET on Jan 3 of an odd year
+    (app.time_utils.congress_in_session) with no restart. Not
+    settings.CURRENT_CONGRESS's default, which is the calendar year's
+    Congress as of process start (see _default_current_congress)."""
     if settings.current_congress_pinned:
         return settings.CURRENT_CONGRESS
     return congress_in_session()

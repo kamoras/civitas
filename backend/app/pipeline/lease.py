@@ -52,6 +52,11 @@ BILL_REFRESH = "bill-refresh-lock"
 BALLOT_SYNC = "ballot-sync-lock"
 COVERAGE_REFRESH = "coverage-refresh-lock"
 CONGRESS_SYNC = "congress-sync-lock"
+# /data/district_pvi.json's writers, and every House run: a House run holds
+# it from settling the sitting Congress's district lines until its scoring
+# is done (fetch/district_pvi.run_house_on_sitting_lines), so the lines can
+# neither change under a House run nor be refreshed twice at once.
+DISTRICT_LINES = "district-lines-lock"
 # Every lease, which the data reset's wipe leaves in api_cache — its own, and
 # any other that may be live — with what each one's holder is.
 TIERS = {
@@ -66,6 +71,7 @@ TIERS = {
     BALLOT_SYNC: "Ballot sync",
     COVERAGE_REFRESH: "Election coverage refresh",
     CONGRESS_SYNC: "Congress record sync",
+    DISTRICT_LINES: "House run or district PVI refresh",
 }
 
 # Ten missed beats ride out a SQLite writer holding the database for
@@ -119,6 +125,8 @@ HUNG_AFTER = {
     BALLOT_SYNC: timedelta(hours=2),
     COVERAGE_REFRESH: timedelta(hours=2),
     CONGRESS_SYNC: timedelta(hours=2),
+    # Held for a whole House run, whose run lock goes stale at this too.
+    DISTRICT_LINES: _pipeline_timeout(),
 }
 
 

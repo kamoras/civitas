@@ -186,6 +186,12 @@ class TestSupplementaryOverlapGuard:
         mock_refresh.assert_called_once()
 
 
+
+async def _passthrough(run_house):
+    """run_house_on_sitting_lines without its lease and lines check."""
+    return await run_house()
+
+
 class TestNightlyPipelineCascadingSkip:
     """_nightly_pipeline's chain (Senate -> Supplementary -> House ->
     Stock) runs each step only if the previous one didn't report
@@ -211,7 +217,7 @@ class TestNightlyPipelineCascadingSkip:
              patch("app.scheduler.run_election_pipeline", new_callable=AsyncMock) as mock_election, \
              patch("app.ops_alerts.send_ops_alert") as mock_alert, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
-             patch("app.pipeline.fetch.district_pvi.ensure_sitting_lines"), \
+             patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", _passthrough), \
              patch("app.services.bill_service.warm_bill_collection_cache"):
             mock_senate.return_value = senate_result
             mock_supp.return_value = supplementary_result or {"status": "completed"}
@@ -223,21 +229,34 @@ class TestNightlyPipelineCascadingSkip:
 
             return mock_senate, mock_supp, mock_house, mock_stock, mock_election, mock_alert
 
-    def test_sitting_district_lines_are_checked_before_scoring(self):
+    def test_the_house_run_goes_through_the_sitting_lines_check(self):
+        """The nightly House run settles the district lines under the lease
+        it holds for the run (fetch/district_pvi.run_house_on_sitting_lines)
+        — after the Senate and Supplementary runs, which don't score on
+        them — and a skip from it is alerted like any House skip."""
         from app import scheduler
 
         order = []
+
+        async def wrapper(run_house):
+            order.append("pvi")
+            return await run_house()
+
         with patch("app.background.threading.Thread", _SyncThread), \
              patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock,
-                   side_effect=lambda: order.append("senate") or {"status": "skipped", "reason": "busy"}), \
-             patch("app.ops_alerts.send_ops_alert"), \
+                   side_effect=lambda: order.append("senate") or {"status": "completed"}), \
+             patch("app.scheduler.run_supplementary_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("supplementary") or {"status": "completed"}), \
+             patch("app.scheduler.run_house_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("house") or {"status": "skipped", "reason": "held_elsewhere"}), \
+             patch("app.ops_alerts.send_ops_alert") as alert, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
              patch("app.ops_alerts.check_feedback_token_expiration"), \
              patch("app.ops_alerts.check_state_pvi_staleness"), \
-             patch("app.pipeline.fetch.district_pvi.ensure_sitting_lines",
-                   side_effect=lambda: order.append("pvi")):
+             patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", wrapper):
             scheduler._nightly_pipeline()
-        assert order == ["pvi", "senate"]
+        assert order == ["senate", "supplementary", "pvi", "house"]
+        assert "Nightly House run skipped" in alert.call_args.args[0]
 
     def test_all_five_run_when_nothing_skips(self):
         senate, supp, house, stock, election, alert = self._run_chain({"status": "completed"})
@@ -566,8 +585,7 @@ def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
          patch("app.ops_alerts.send_ops_alert") as alert, \
          patch("app.ops_alerts.check_current_congress_staleness"), \
          patch("app.ops_alerts.check_feedback_token_expiration"), \
-         patch("app.ops_alerts.check_state_pvi_staleness"), \
-         patch("app.pipeline.fetch.district_pvi.ensure_sitting_lines"):
+         patch("app.ops_alerts.check_state_pvi_staleness"):
         scheduler._nightly_pipeline()
     assert cause in alert.call_args.args[1]
 

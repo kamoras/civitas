@@ -15,8 +15,24 @@ class TestDefaultCurrentCongress:
     convened. Now computed from the wall clock so it never needs a manual
     bump — at process start (see sitting_congress for the live reading)."""
 
-    def test_is_the_congress_in_session_now(self):
-        assert _default_current_congress() == congress_in_session()
+    def test_is_the_calendar_years_congress(self):
+        assert _default_current_congress() == congress_for_year(datetime.now().year)
+
+    def test_a_process_started_before_noon_on_jan_3_is_not_stuck_on_the_outgoing_congress(self):
+        """The value is fixed for the life of the process and scopes the
+        roll-call sessions, bill windows and ideal points. Under the
+        noon-ET-Jan-3 rule, a backend started at 11:59 ET on Jan 3, 2027
+        would score the dead 119th for the whole 120th Congress until a
+        restart; the calendar rule gives 120, a few hours early at worst."""
+
+        class _Jan3(datetime):
+            @classmethod
+            def today(cls):
+                return cls(2027, 1, 3, 11, 59)
+
+        with patch("app.config.datetime.date", _Jan3):
+            assert _default_current_congress() == 120
+        assert congress_in_session(datetime(2027, 1, 3, 16, 59)) == 119  # sitting_congress's rule differs
 
     def test_matches_pipeline_formula_across_years(self):
         for year in (2025, 2026, 2027, 2028, 2033):

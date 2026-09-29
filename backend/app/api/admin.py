@@ -1299,16 +1299,15 @@ async def admin_trigger_pipeline(
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
     async def _run_pipelines():
-        from app.pipeline.fetch.district_pvi import ensure_sitting_lines_before_run
+        from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
         from app.pipeline.house_pipeline import run_house_pipeline
         from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
-        await ensure_sitting_lines_before_run()
         result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
         if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
             logger.info("Senate pipeline done — starting supplementary pipeline")
             await run_supplementary_pipeline()
             logger.info("Supplementary pipeline done — starting House pipeline")
-            await run_house_pipeline()
+            await run_house_on_sitting_lines(run_house_pipeline)
 
     run_pipeline_in_thread(
         _run_pipelines, name="pipeline-run", error_label="Admin-triggered pipeline run failed",
@@ -1384,20 +1383,28 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])
-async def admin_trigger_house_pipeline():
+async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     """Trigger a House representative pipeline run.
 
-    No pre-check here (unlike /pipeline/trigger's senate check) — run_house_pipeline
-    acquires its own DB lock and safely no-ops if already running.
+    409 when a House run is already going (or the district-lines lease
+    every House run holds is taken), like /pipeline/trigger's Senate check.
+    Neither check is the lock — the run's own lease and run lock are
+    (fetch/district_pvi.run_house_on_sitting_lines, run_house_pipeline),
+    and a trigger that slips past both checks is refused by them — but
+    they turn the common double click into an answer instead of a silent
+    skip.
     """
-    from app.pipeline.fetch.district_pvi import ensure_sitting_lines_before_run
+    from app.models import HousePipelineRun
+    from app.pipeline import lease
+    from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
     from app.pipeline.house_pipeline import run_house_pipeline
+    from app.pipeline.run_tracker import run_in_progress
+
+    if run_in_progress(db, HousePipelineRun) or lease.held(db, lease.DISTRICT_LINES):
+        raise HTTPException(status_code=409, detail="House pipeline is already running")
 
     async def _run():
-        # The nightly pre-checks don't run for a triggered run; the House
-        # is the chamber scored on district lines.
-        await ensure_sitting_lines_before_run()
-        return await run_house_pipeline()
+        return await run_house_on_sitting_lines(run_house_pipeline)
 
     run_pipeline_in_thread(
         _run, name="house-pipeline-run", error_label="House pipeline run failed",

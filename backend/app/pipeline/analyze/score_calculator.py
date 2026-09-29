@@ -484,7 +484,11 @@ def _district_pvi() -> dict[str, int]:
     not whatever map the next election uses. Ingested from a pinned
     per-Congress source (app/data/district_pvi_sources.json) by
     app/pipeline/fetch/district_pvi.py to /data/district_pvi.json, which
-    puts the settings.CURRENT_CONGRESS table in "districts"; the bundled
+    puts the sitting Congress's table in "districts" (app.config.
+    sitting_congress: the clock's Congress, from noon ET on Jan 3 of an
+    odd year, or CURRENT_CONGRESS only when an operator pins it in the
+    environment; with no pinned table for it, the newest one before it —
+    switched before each House run scores); the bundled
     app/data/district_pvi.json is only the pre-first-ingest fallback (all
     435 seats incl. vacancies; ingestion gates documented in the fetch
     module). State PVI is the wrong seat expectation for House

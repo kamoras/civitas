@@ -24,6 +24,26 @@ PAGE = "Cook Partisan Voting Index"
 BUNDLED = dp.SOURCES_PATH.parent / "district_pvi.json"
 
 
+class _Unclosable:
+    """The test's one session, handed to code that closes what it opens."""
+
+    def __init__(self, session):
+        self._session = session
+
+    def close(self):
+        pass
+
+    def __getattr__(self, name):
+        return getattr(self._session, name)
+
+
+@pytest.fixture(autouse=True)
+def _leases_on_the_test_database(db_session, monkeypatch):
+    """The refresh and every House run take the DISTRICT_LINES lease (a
+    row in api_cache): give them the test's database."""
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+
+
 def _pairs():
     out = []
     for st, n in sorted(dp.SEATS.items()):
@@ -286,6 +306,35 @@ class TestCrossCongress:
         ]
 
 
+class TestCookWindow:
+    def test_a_redraw_on_a_different_cook_window_is_refused_with_its_own_message(self):
+        """A new window moves every district, so the "states that did not
+        redraw" check would list hundreds of seats — say what is wrong."""
+        base = _synthetic_result()
+        failures = dp.cross_congress_gates(
+            {k: v + 1 for k, v in base.items()}, base, ["TN"], window="2024+2028", base_window="2020+2024",
+        )
+        assert len(failures) == 1 and "Cook window 2024+2028 differs" in failures[0]
+        assert "drop redrawn_from" in failures[0]
+
+    def test_check_table_reads_the_base_entrys_window(self):
+        base = _synthetic_result()
+        new = _redraw(base, ["TN"])
+        src = _source(202, "2026 Cook PVI", redrawn_from="119", redrawn_states=["TN"], window="2024+2028")
+        _, failures = dp.check_table(src, _revision(new, "2026 Cook PVI", 202), PAGE, base, _source(101, "x"))
+        assert any("Cook window 2024+2028 differs from the base Congress's 2020+2024" in f for f in failures)
+        _, failures = dp.check_table(
+            dict(src, window="2020+2024"), _revision(new, "2026 Cook PVI", 202), PAGE, base, _source(101, "x"),
+        )
+        assert failures == []
+
+    def test_the_real_pins_share_one_window(self):
+        sources = dp.load_sources()["congresses"]
+        for c, src in sources.items():
+            if src.get("redrawn_from"):
+                assert src["window"] == sources[src["redrawn_from"]]["window"], c
+
+
 class TestProvenance:
     def test_label_must_be_on_the_revision(self):
         src = _source(5, "2025 Cook PVI (119th Congress)")
@@ -429,8 +478,8 @@ class TestEnsureSittingLines:
     async def test_current_is_a_no_op(self, monkeypatch, tmp_path):
         out, _, _ = await self._written(monkeypatch, tmp_path)
         before = out.read_text()
-        with patch.object(dp, "refresh_district_pvi", new_callable=AsyncMock) as refresh:
-            assert await _in_thread(dp.ensure_sitting_lines) == "current"
+        with patch.object(dp, "_refresh", new_callable=AsyncMock) as refresh:
+            assert await _in_thread(dp._ensure_sitting_lines) == "current"
         refresh.assert_not_called()
         assert out.read_text() == before
 
@@ -444,15 +493,15 @@ class TestEnsureSittingLines:
         out, base, new = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
         assert await dp.refresh_district_pvi() is True
         assert json.loads(out.read_text())["congress"] == 119
-        with patch.object(dp, "refresh_district_pvi", new_callable=AsyncMock) as refresh:
+        with patch.object(dp, "_refresh", new_callable=AsyncMock) as refresh:
             clock["now"] = datetime(2027, 1, 1, 8)  # Jan 1: still the 119th
-            assert await _in_thread(dp.ensure_sitting_lines) == "current"
+            assert await _in_thread(dp._ensure_sitting_lines) == "current"
             clock["now"] = datetime(2027, 1, 3, 16, 59)  # 11:59 ET
-            assert await _in_thread(dp.ensure_sitting_lines) == "current"
+            assert await _in_thread(dp._ensure_sitting_lines) == "current"
             assert score_calculator._district_pvi()["TN-9"] == base["TN-9"]
             clock["now"] = datetime(2027, 1, 3, 17, 0)  # noon ET
-            assert await _in_thread(dp.ensure_sitting_lines) == "reselected"
-            assert await _in_thread(dp.ensure_sitting_lines) == "current"
+            assert await _in_thread(dp._ensure_sitting_lines) == "reselected"
+            assert await _in_thread(dp._ensure_sitting_lines) == "current"
         refresh.assert_not_called()
         written = json.loads(out.read_text())
         assert written["congress"] == 120 and written["districts"] == new
@@ -467,13 +516,13 @@ class TestEnsureSittingLines:
         out, base, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
         assert await dp.refresh_district_pvi() is True
         assert json.loads(out.read_text())["districts"] == base
-        with patch.object(dp, "refresh_district_pvi", new_callable=AsyncMock):
-            assert await _in_thread(dp.ensure_sitting_lines) == "current"
+        with patch.object(dp, "_refresh", new_callable=AsyncMock):
+            assert await _in_thread(dp._ensure_sitting_lines) == "current"
 
     async def test_pre_pinning_file_triggers_a_refresh(self, monkeypatch, tmp_path):
         out, base, _ = _two_congress_setup(monkeypatch, tmp_path)
         out.write_text(json.dumps({"_source": "Wikipedia district infoboxes", "districts": {"TN-9": 9}}))
-        assert await _in_thread(dp.ensure_sitting_lines) == "refreshed"
+        assert await _in_thread(dp._ensure_sitting_lines) == "refreshed"
         assert json.loads(out.read_text())["districts"]["TN-9"] == base["TN-9"]
 
     async def test_pre_pinning_file_is_replaced_from_the_bundle_when_offline(self, monkeypatch, tmp_path):
@@ -481,8 +530,8 @@ class TestEnsureSittingLines:
         checked-in pinned tables replace it rather than it staying live."""
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path)
         out.write_text(json.dumps({"districts": {"TN-9": 9, "MO-5": 9}}))
-        with patch.object(dp, "refresh_district_pvi", new_callable=AsyncMock, return_value=False):
-            assert await _in_thread(dp.ensure_sitting_lines) == "restored from bundle"
+        with patch.object(dp, "_refresh", new_callable=AsyncMock, return_value=False):
+            assert await _in_thread(dp._ensure_sitting_lines) == "restored from bundle"
         written = json.loads(out.read_text())
         assert written["congress"] == 119
         assert (written["districts"]["TN-9"], written["districts"]["MO-5"]) == (-23, -12)
@@ -496,7 +545,7 @@ class TestEnsureSittingLines:
         monkeypatch.setattr(dp, "_fetch_revision", down)
         monkeypatch.setattr(dp, "BUNDLED_PATH", tmp_path / "no-bundle.json")
         with patch("app.ops_alerts.send_ops_alert") as alert:
-            assert await _in_thread(dp.ensure_sitting_lines) == "refresh failed"
+            assert await _in_thread(dp._ensure_sitting_lines) == "refresh failed"
         assert "120th Congress" in alert.call_args.args[1]
 
     async def test_unconfigured_congress_alerts_once_per_congress_and_never_fetches(self, monkeypatch, tmp_path):
@@ -505,10 +554,10 @@ class TestEnsureSittingLines:
         the Congress, not the day. Members stay on the newest pinned lines."""
         out, _, new = await self._written(monkeypatch, tmp_path)
         monkeypatch.setattr(dp, "_sitting_congress", lambda: 121)
-        with patch.object(dp, "refresh_district_pvi", new_callable=AsyncMock) as refresh, \
+        with patch.object(dp, "_refresh", new_callable=AsyncMock) as refresh, \
              patch("app.ops_alerts.send_ops_alert") as alert:
-            assert await _in_thread(dp.ensure_sitting_lines) == "no source configured"
-            assert await _in_thread(dp.ensure_sitting_lines) == "no source configured"
+            assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
+            assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
         refresh.assert_not_called()
         assert {c.kwargs["dedupe_key"] for c in alert.call_args_list} == {"district-pvi-no-source-121"}
         assert "121st Congress" in alert.call_args.args[1]
@@ -522,9 +571,83 @@ class TestEnsureSittingLines:
         out, _, new = _two_congress_setup(monkeypatch, tmp_path, sitting=121)
         out.write_text(json.dumps({"districts": {"TN-9": 9, "MO-5": 9}}))
         with patch("app.ops_alerts.send_ops_alert"):
-            assert await _in_thread(dp.ensure_sitting_lines) == "no source configured"
+            assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
         written = json.loads(out.read_text())
         assert written["congress"] == 120 and written["districts"] == new
+
+    async def test_an_advanced_pin_is_fetched_before_the_next_run_not_next_sunday(self, monkeypatch, tmp_path):
+        """The file holds the sitting Congress's table, but the sources file
+        now pins a different revision for a Congress (a correction, a court
+        ruling): that is not "current"."""
+        out, _, _ = await self._written(monkeypatch, tmp_path)
+        data = json.loads(out.read_text())
+        data["congresses"]["120"]["_revision"]["revid"] = 199  # written from an older pin
+        out.write_text(json.dumps(data))
+        assert await _in_thread(dp._ensure_sitting_lines) == "refreshed"
+        assert json.loads(out.read_text())["congresses"]["120"]["_revision"]["revid"] == 202
+        assert await _in_thread(dp._ensure_sitting_lines) == "current"
+
+    async def test_a_congress_added_to_the_sources_file_is_fetched(self, monkeypatch, tmp_path):
+        out, _, _ = await self._written(monkeypatch, tmp_path)
+        data = json.loads(out.read_text())
+        del data["congresses"]["120"]
+        out.write_text(json.dumps(data))
+        with patch.object(dp, "_refresh", new_callable=AsyncMock, return_value=True) as refresh:
+            assert await _in_thread(dp._ensure_sitting_lines) == "refreshed"
+        refresh.assert_awaited_once()
+
+    async def test_a_stale_pin_does_not_reselect_at_the_switch(self, monkeypatch, tmp_path):
+        """Jan 3 with a stale 120th pin on file: fetch the pinned table, don't
+        copy the stale one up."""
+        out, _, _ = await self._written(monkeypatch, tmp_path)
+        data = json.loads(out.read_text())
+        data["congresses"]["120"]["_revision"]["revid"] = 199
+        out.write_text(json.dumps(data))
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: 120)
+        with patch.object(dp, "_refresh", new_callable=AsyncMock, return_value=True) as refresh:
+            assert await _in_thread(dp._ensure_sitting_lines) == "refreshed"
+        refresh.assert_awaited_once()
+
+    async def test_a_stale_pin_falls_back_to_the_bundle_when_offline(self, monkeypatch, tmp_path):
+        out, _, _ = await self._written(monkeypatch, tmp_path)
+        data = json.loads(out.read_text())
+        data["congresses"]["119"]["_revision"]["revid"] = 99
+        out.write_text(json.dumps(data))
+        with patch.object(dp, "_refresh", new_callable=AsyncMock, return_value=False):
+            assert await _in_thread(dp._ensure_sitting_lines) == "restored from bundle"
+        assert json.loads(out.read_text())["congress"] == 119
+
+    async def test_unconfigured_congress_with_a_stale_pin_on_file_refreshes_the_configured_ones(
+        self, monkeypatch, tmp_path,
+    ):
+        out, _, _ = await self._written(monkeypatch, tmp_path)
+        data = json.loads(out.read_text())
+        data["congresses"]["120"]["_revision"]["revid"] = 199
+        out.write_text(json.dumps(data))
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: 121)
+        with patch("app.ops_alerts.send_ops_alert") as alert:
+            assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
+        written = json.loads(out.read_text())
+        assert written["congresses"]["120"]["_revision"]["revid"] == 202 and written["congress"] == 120
+        assert "120th Congress's lines" in alert.call_args.args[1]
+
+    async def test_an_environment_pin_older_than_every_pinned_table_says_so(self, monkeypatch, tmp_path):
+        """CURRENT_CONGRESS=118 pinned for an archived re-run: no table
+        describes the 118th's lines, and the alert must not call the file's
+        119th table "the latest pinned" lines for it."""
+        from app import config
+
+        out, _, _ = await self._written(monkeypatch, tmp_path)
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118))
+        monkeypatch.setattr(dp, "_sitting_congress", config.sitting_congress)
+        before = out.read_text()
+        with patch("app.ops_alerts.send_ops_alert") as alert:
+            assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
+        text = alert.call_args.args[1]
+        assert "CURRENT_CONGRESS is pinned in the environment to 118" in text
+        assert "the earliest is the 119th" in text
+        assert "which are NOT the 118th's" in text and "latest pinned" not in text
+        assert out.read_text() == before
 
 
 async def _in_thread(fn):
@@ -641,13 +764,71 @@ class TestBundledTablesAreOnTheRightLines:
         assert score_calculator._seat_pvi("TX", 35) == -19
 
 
-# ── Triggered runs skip the nightly pre-checks, so they check first ─────
+# ── Every House run settles the lines under a lease it holds throughout ──
+
+class TestHouseRunsHoldTheLines:
+    async def test_the_lines_are_settled_before_the_house_scores(self, monkeypatch):
+        order = []
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: order.append("pvi") or "current")
+
+        async def house():
+            order.append("house")
+            return {"status": "completed"}
+
+        assert await dp.run_house_on_sitting_lines(house) == {"status": "completed"}
+        assert order == ["pvi", "house"]
+
+    async def test_nothing_rewrites_the_lines_while_a_house_run_scores(self, monkeypatch, tmp_path):
+        """While a House run holds the lease, a refresh writes nothing and a
+        second House run is refused without touching the file."""
+        out, _, _ = _two_congress_setup(monkeypatch, tmp_path)
+        seen = {}
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+
+        async def second_house():
+            raise AssertionError("must not run")
+
+        async def house():
+            seen["refresh"] = await dp.refresh_district_pvi()
+            seen["second"] = await dp.run_house_on_sitting_lines(second_house)
+            return {"status": "completed"}
+
+        await dp.run_house_on_sitting_lines(house)
+        assert seen["refresh"] is False and not out.exists()
+        assert seen["second"] == {"status": "skipped", "reason": "held_elsewhere"}
+        # Released afterwards.
+        assert await dp.refresh_district_pvi() is True
+
+    async def test_a_house_run_started_without_the_lease_is_left_alone(self, monkeypatch):
+        """A House run another process started without this lease (an older
+        image mid-rollout): skip, and don't touch its lines."""
+        monkeypatch.setattr("app.pipeline.run_tracker.run_in_progress", lambda db, model, *a: True)
+        called = []
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: called.append(1))
+
+        async def house():
+            raise AssertionError("must not run")
+
+        assert await dp.run_house_on_sitting_lines(house) == {"status": "skipped", "reason": "already_running"}
+        assert called == []
+
+    async def test_a_failing_check_does_not_stop_the_run(self, monkeypatch):
+        def boom():
+            raise RuntimeError("disk")
+
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", boom)
+
+        async def house():
+            return {"status": "completed"}
+
+        assert await dp.run_house_on_sitting_lines(house) == {"status": "completed"}
+
 
 class TestTriggeredRunsCheckTheSittingLines:
     @pytest.fixture()
     def recorded(self, monkeypatch):
         order, captured = [], {}
-        monkeypatch.setattr(dp, "ensure_sitting_lines", lambda: order.append("pvi"))
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: order.append("pvi"))
 
         async def house():
             order.append("house")
@@ -669,21 +850,36 @@ class TestTriggeredRunsCheckTheSittingLines:
             monkeypatch.setattr(f"{mod}.run_pipeline_in_thread", lambda f, **kw: captured.setdefault("run", f))
         return order, captured
 
-    async def test_house_trigger(self, recorded):
+    async def test_house_trigger(self, recorded, db_session):
         from app.api import admin
 
         order, captured = recorded
-        await admin.admin_trigger_house_pipeline()
+        await admin.admin_trigger_house_pipeline(db=db_session)
         await captured["run"]()
         assert order == ["pvi", "house"]
 
+    async def test_house_trigger_refuses_while_a_house_run_holds_the_lines(self, recorded, db_session):
+        from fastapi import HTTPException
+
+        from app.api import admin
+        from app.pipeline import lease
+
+        lease.acquire(db_session, lease.DISTRICT_LINES, who="House run")
+        with pytest.raises(HTTPException) as err:
+            await admin.admin_trigger_house_pipeline(db=db_session)
+        assert err.value.status_code == 409
+        assert "run" not in recorded[1]
+
     async def test_admin_trigger(self, recorded, db_session):
+        """The lines are settled right before the House run, under its lease
+        — not before the Senate run takes its lock, where a network refresh
+        would widen the double-trigger window."""
         from app.api import admin
 
         order, captured = recorded
         await admin.admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
         await captured["run"]()
-        assert order == ["pvi", "senate", "supplementary", "house"]
+        assert order == ["senate", "supplementary", "pvi", "house"]
 
     async def test_token_trigger(self, recorded, db_session, monkeypatch):
         from app.api import pipeline
@@ -693,17 +889,4 @@ class TestTriggeredRunsCheckTheSittingLines:
         monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "t")
         await pipeline.trigger_pipeline(authorization="Bearer t", senator=None, fetch_only=False, db=db_session)
         await captured["run"]()
-        assert order == ["pvi", "senate", "house"]
-
-    async def test_a_failing_check_does_not_stop_the_run(self, recorded, monkeypatch):
-        from app.api import admin
-
-        order, captured = recorded
-
-        def boom():
-            raise RuntimeError("disk")
-
-        monkeypatch.setattr(dp, "ensure_sitting_lines", boom)
-        await admin.admin_trigger_house_pipeline()
-        await captured["run"]()
-        assert order == ["house"]
+        assert order == ["senate", "pvi", "house"]

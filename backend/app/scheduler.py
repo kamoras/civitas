@@ -83,7 +83,7 @@ def _nightly_pipeline() -> None:
         check_state_pvi_staleness,
         send_ops_alert,
     )
-    from app.pipeline.fetch.district_pvi import ensure_sitting_lines
+    from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
 
     def _alert_if_skipped(label: str, result: dict) -> bool:
         """Returns True (and alerts) if `result` reports the step was
@@ -128,18 +128,6 @@ def _nightly_pipeline() -> None:
             # self-advance (see the check's own docstring for why), so the
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
-            # Member scoring's district leans must be the sitting
-            # Congress's lines. The sitting Congress is read from the clock
-            # here, not from CURRENT_CONGRESS (fixed at process start): the
-            # first nightly run after noon ET on Jan 3 of an odd year — with
-            # the default 03:00 UTC schedule, the Jan 4 run — copies the new
-            # Congress's table up locally (no fetch, no restart), provided
-            # app/data/district_pvi_sources.json has an entry for it; with
-            # none, scoring stays on the newest pinned lines and one alert
-            # per Congress asks for the entry. Also replaces a missing or
-            # pre-pinning file with a fetch — see fetch/district_pvi.py.
-            # Triggered runs (admin/token endpoints) call it too.
-            ensure_sitting_lines,
         )
         for check in pre_checks:
             try:
@@ -159,7 +147,16 @@ def _nightly_pipeline() -> None:
                 return
 
             logger.info("Supplementary pipeline done — starting House pipeline")
-            house_result = loop.run_until_complete(run_house_pipeline())
+            # The House run settles the sitting Congress's district lines
+            # first, under a lease it holds until its scoring is done
+            # (fetch/district_pvi.run_house_on_sitting_lines): the sitting
+            # Congress is read from the clock, not CURRENT_CONGRESS, so the
+            # first House run after noon ET on Jan 3 of an odd year (with
+            # the default 03:00 UTC schedule, the Jan 4 nightly) switches
+            # to the new Congress's pinned table from disk — no fetch, no
+            # restart — and a pin advanced in district_pvi_sources.json is
+            # fetched the next run. Triggered House runs go through it too.
+            house_result = loop.run_until_complete(run_house_on_sitting_lines(run_house_pipeline))
             logger.info("House pipeline: %s", house_result)
             if _alert_if_skipped("House", house_result):
                 return

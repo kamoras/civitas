@@ -327,8 +327,8 @@ The correct pattern, established by `_district_pvi()` /
    immutable revision of Wikipedia's "Cook Partisan Voting Index"
    article whose citation states the Cook release and the map it
    describes. `app/pipeline/fetch/district_pvi.py` fetches exactly those
-   revisions (Supplementary, weekly; `ensure_sitting_lines` when the file
-   is missing or predates pinning), gates them — the revision's own prose
+   revisions (Supplementary, weekly; before a House run when the file is
+   missing, predates pinning, or is not at the current pins), gates them — the revision's own prose
    counts must match its table and its stated median must be the table's
    exactly (a pin may declare a `median_tolerance` only with a written
    `_why_median_tolerance`); a redrawn Congress must be identical to its
@@ -352,19 +352,29 @@ The correct pattern, established by `_district_pvi()` /
    "Sitting" is read from the clock on every call
    (`app.config.sitting_congress`: noon ET on Jan 3 of an odd year, the
    20th Amendment's hand-over), not from `settings.CURRENT_CONGRESS`,
-   which is computed once when the process starts and so holds the old
-   Congress until a restart (`check_current_congress_staleness` says
-   which of the two — a restart, or an environment pin — is holding it).
-   `ensure_sitting_lines` runs in the nightly pre-checks and before every
-   triggered run, so the first run after that noon (with the default
-   03:00 UTC schedule, the Jan 4 nightly) switches member scoring to the
-   new Congress's table from what is already on disk — no fetch, no
-   restart — *if* the sources file has an entry for it. Adding that entry
-   (or advancing a pin after a correction or a court ruling) is an edit to
-   the sources file. Without one, scoring stays on the newest pinned lines,
-   nothing is fetched for it, and one ops alert per Congress asks for the
-   entry. `scripts/fetch_district_pvi.py` regenerates the bundled
-   pre-first-ingest fallback through the same code.
+   whose default is the calendar year's Congress, fixed when the process
+   starts (it scopes roll-call sessions and bill windows; computed at
+   startup the calendar rule can be a day or two early but never behind —
+   only a process running across New Year, or an environment pin, falls
+   behind, and `check_current_congress_staleness` says which). Every House run — the nightly
+   chain's and each triggered one (`/api/admin/pipeline/trigger`,
+   `/trigger-house`, the token trigger) — goes through
+   `run_house_on_sitting_lines`, which takes the `DISTRICT_LINES` lease,
+   settles the lines (`_ensure_sitting_lines`), and holds the lease until
+   the House run returns; the weekly refresh takes the same lease, so the
+   lines never change under a House run and a second House trigger is
+   refused rather than refreshing twice. So the first House run after
+   that noon (with the default 03:00 UTC schedule, the Jan 4 nightly)
+   switches member scoring to the new Congress's table from what is
+   already on disk — no fetch, no restart — *if* the sources file has an
+   entry for it, and a pin advanced or a Congress added in the sources
+   file (a correction, a court ruling) is fetched by the next House run,
+   since the check compares each table's pinned `revid` with the file.
+   Without an entry for the sitting Congress, scoring stays on the newest
+   pinned lines, nothing is fetched for it, and one ops alert per
+   Congress asks for the entry. `scripts/fetch_district_pvi.py`
+   regenerates the bundled pre-first-ingest fallback through the same
+   code.
 
    Better still, when the population a value describes is the one the
    pipeline is scoring, measure it in the run itself. Legislative

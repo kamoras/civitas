@@ -138,16 +138,18 @@ def _send_ntfy(subject: str, body: str) -> None:
 def check_current_congress_staleness() -> None:
     """Alert if CURRENT_CONGRESS has fallen behind the Congress in office.
 
-    CURRENT_CONGRESS defaults to a value computed from the wall clock
-    (see app.config._default_current_congress) — but computed once, when
-    the backend process starts. So it goes stale in two ways, and the
-    alert says which:
+    CURRENT_CONGRESS defaults to the calendar year's Congress (see
+    app.config._default_current_congress) — computed once, when the
+    backend process starts. It is compared here with the Congress actually
+    in office (noon ET on Jan 3 of an odd year, the 20th Amendment's
+    hand-over). The calendar rule can run a day or two AHEAD of that (a
+    process started Jan 1-3), which is not staleness; it falls BEHIND in
+    two ways, and the alert says which:
 
-    - not pinned: the process has been running since before noon ET on
-      Jan 3 of an odd year, when the new Congress took office. A restart
-      (any redeploy) recomputes it. District PVI lines do not wait for
-      that — fetch/district_pvi.py reads app.config.sitting_congress(),
-      which follows the clock.
+    - not pinned: the process has been running since before Jan 1 of the
+      new Congress's first year. A restart (any redeploy) recomputes it.
+      District PVI lines do not wait for that — fetch/district_pvi.py
+      reads app.config.sitting_congress(), which follows the clock.
     - pinned: an operator set CURRENT_CONGRESS in the environment (an
       archived-DB re-run's reproducibility) and left the pin in place past
       the next Congress. Only editing the environment fixes that.
@@ -155,6 +157,7 @@ def check_current_congress_staleness() -> None:
     The round-4 audit's original "silent time bomb" finding was that the
     default was a hardcoded literal nobody would remember to bump.
     """
+    from app.ordinals import ordinal
     from app.pipeline.fetch.congress import expected_current_congress
 
     configured = settings.CURRENT_CONGRESS
@@ -165,15 +168,16 @@ def check_current_congress_staleness() -> None:
             f"It is pinned in the environment: change it to {expected} (or remove "
             f"the pin so it follows the clock) and restart the backend."
             if pinned else
-            f"It is not pinned — it was computed when the backend process started, "
-            f"before the {expected}th Congress took office (noon ET, Jan 3). "
+            f"It is not pinned — it was computed from the calendar year when the "
+            f"backend process started, before the {ordinal(expected)} Congress's first year. "
             f"Restart the backend (a redeploy does it) to pick up {expected}. "
             f"(District PVI lines do not depend on this setting: they "
-            f"follow the clock — fetch/district_pvi.ensure_sitting_lines.)"
+            f"follow the clock, switched before each House run — "
+            f"fetch/district_pvi.run_house_on_sitting_lines.)"
         )
         send_ops_alert(
             "CURRENT_CONGRESS is stale",
-            f"CURRENT_CONGRESS is {configured}, but the {expected}th "
+            f"CURRENT_CONGRESS is {configured}, but the {ordinal(expected)} "
             f"Congress is now in session. The Senate pipeline pins its "
             f"roll-call window to CURRENT_CONGRESS while the House derives "
             f"its window from the calendar year, so they are now scoring "

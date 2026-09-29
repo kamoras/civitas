@@ -80,13 +80,12 @@ async def trigger_pipeline(
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
     async def _run_pipelines():
-        from app.pipeline.fetch.district_pvi import ensure_sitting_lines_before_run
+        from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
         from app.pipeline.house_pipeline import run_house_pipeline
-        await ensure_sitting_lines_before_run()
         result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
         if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
             logger.info("Senate pipeline done — starting House pipeline")
-            await run_house_pipeline()
+            await run_house_on_sitting_lines(run_house_pipeline)
 
     run_pipeline_in_thread(_run_pipelines, name="pipeline-run", error_label="Pipeline run failed")
     return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}
