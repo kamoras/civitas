@@ -16,6 +16,8 @@ Read path only: one indexed query, no model.
 import hashlib
 import re
 from datetime import datetime
+from html import escape
+from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -32,6 +34,10 @@ router = APIRouter()
 
 ATOM_NS = "http://www.w3.org/2005/Atom"
 ATOM_MEDIA_TYPE = "application/atom+xml; charset=utf-8"
+# Media RSS: the picture most feed readers and chat bots show with an entry
+# (media:thumbnail), the way a Bluesky link card shows it.
+MEDIA_NS = "http://search.yahoo.com/mrss/"
+ET.register_namespace("media", MEDIA_NS)
 
 # Entries per feed. A reader polling every few minutes never misses one: the
 # busiest day on record was well under this across every kind combined.
@@ -71,6 +77,22 @@ def _sub(parent: ET.Element, tag: str, text: str | None = None, **attrs: str) ->
     return el
 
 
+def _content_html(post: BroadcastPost) -> str:
+    """The entry as a reader shows it, like the Bluesky post with its card:
+    the card's picture, the post's words, a link to the page on Civitas,
+    and the source it restates, when it restates one."""
+    parts = []
+    if post.card_image:
+        alt = escape(post.card_image_alt or post.title)
+        parts.append(f'<p><a href="{escape(post.url)}"><img src="{escape(post.card_image)}" alt="{alt}"></a></p>')
+    parts += [f"<p>{escape(p)}</p>" for p in post.text.split("\n") if p.strip()]
+    parts.append(f'<p><a href="{escape(post.url)}">Read on Civitas</a></p>')
+    if post.source_url:
+        host = urlsplit(post.source_url).hostname or post.source_url
+        parts.append(f'<p>Source: <a href="{escape(post.source_url)}">{escape(host.removeprefix("www."))}</a></p>')
+    return "".join(parts)
+
+
 def render_atom(*, title: str, subtitle: str, path: str, posts: list[BroadcastPost]) -> bytes:
     """An Atom 1.0 document (RFC 4287) for `posts`, newest first."""
     self_url = f"{SITE_URL}{path}"
@@ -96,7 +118,19 @@ def render_atom(*, title: str, subtitle: str, path: str, posts: list[BroadcastPo
         _sub(entry, "published", stamp)
         _sub(entry, "updated", stamp)
         _sub(entry, "category", term=post.kind, label=KINDS.get(post.kind, post.kind))
-        _sub(entry, "content", post.text, type="text")
+        if post.source_url:
+            _sub(entry, "link", rel="related", type="text/html", href=post.source_url)
+        if post.card_description:
+            _sub(entry, "summary", post.card_description, type="text")
+        _sub(entry, "content", _content_html(post), type="html")
+        if post.card_image:
+            # The card's picture, for readers that show one beside the entry.
+            # No type: the page names the image, not its format.
+            _sub(entry, "link", rel="enclosure", href=post.card_image)
+            _sub(entry, f"{{{MEDIA_NS}}}thumbnail", url=post.card_image)
+            media = _sub(entry, f"{{{MEDIA_NS}}}content", url=post.card_image, medium="image")
+            if post.card_image_alt:
+                _sub(media, f"{{{MEDIA_NS}}}description", post.card_image_alt, type="plain")
     return b'<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(feed, encoding="utf-8")
 
 

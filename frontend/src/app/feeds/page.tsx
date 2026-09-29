@@ -137,15 +137,18 @@ export default async function FeedsPage() {
                 <Item label="Discord">
                   Discord doesn&apos;t read feeds itself. Add a feed bot to your server (MonitoRSS
                   is one) and give it a feed&apos;s address and the channel to post in. Each new
-                  entry arrives as a message with its link.
+                  entry arrives as a message with its link and picture.
                 </Item>
                 <Item label="Slack">
                   Slack&apos;s RSS app takes a feed&apos;s address the same way.
                 </Item>
                 <Item label="Your own program">
-                  The feeds are Atom 1.0. Each entry has a permanent id, a title, the text of the
-                  post, a link to the page it is about, when it was published, and its kind as a
-                  category.
+                  The feeds are Atom 1.0. Each entry has a permanent id, a title, the post as HTML
+                  (its picture, its text, a link to read it on Civitas, and the source it restates,
+                  if any), the page&apos;s description as a summary, a link to the page it is about,
+                  when it was published, and its kind as a category. The picture is also an
+                  enclosure and a Media RSS thumbnail, the same picture a Bluesky post&apos;s link
+                  card shows.
                 </Item>
               </List>
               <More label="Details for anyone polling a feed">
@@ -155,9 +158,11 @@ export default async function FeedsPage() {
                   were given and an unchanged feed answers 304 with no body.
                 </p>
                 <p>
-                  An entry is never edited after it is published, and its id is never reused. The
-                  text is the post in full; on Bluesky a long post can be cut short to fit, but not
-                  here.
+                  An entry&apos;s words are never edited after it is published, and its id is never
+                  reused. Its picture and summary come from the page it links to; if that page
+                  couldn&apos;t be read at the moment of publishing, they arrive within the hour.
+                  The text is the post in full; on Bluesky a long post can be cut short to fit, but
+                  not here.
                 </p>
               </More>
             </Section>
