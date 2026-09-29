@@ -371,7 +371,12 @@ async def get_cached_explore_summary(doc_id: int, db: Session = Depends(get_db))
     doc = await _load_document(db, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    _prompt, _key, cached = await explore_summary.lookup(doc_id, doc)
+    try:
+        _prompt, _key, cached = await explore_summary.lookup(doc_id, doc)
+    except explore_summary.Refusal as refusal:
+        # Unreadable, not absent: never kept (an error has no Cache-Control
+        # nginx would store); the page goes on to ask the pipeline.
+        raise refusal.error() from None
     if cached is None:
         # Not made yet — and may be made any moment: never kept.
         return Response(status_code=204, headers={"Cache-Control": "no-store"})
@@ -417,7 +422,10 @@ async def get_explore_document_summary(
     doc = await _load_document(db, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    prompt, key, made = await explore_summary.lookup(doc_id, doc)
+    try:
+        prompt, key, made = await explore_summary.lookup(doc_id, doc)
+    except explore_summary.Refusal as refusal:
+        raise refusal.error() from None
     if made is not None:  # a summary already made is never limited
         return StreamingResponse(explore_summary.once({"done": True, **made}), media_type="text/event-stream",
                                  headers=_STREAM_HEADERS)

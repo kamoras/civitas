@@ -315,18 +315,25 @@ async def _stream_ollama(
                     break
 
 
-def get_cached_llm_result(prompt_version: str, cache_key: Any, model: str | None = None) -> Any | None:
+def get_cached_llm_result(
+    prompt_version: str, cache_key: Any, model: str | None = None, *, raise_errors: bool = False,
+) -> Any | None:
     """Public read side of call_llm's cache, for callers (stream_llm's
     users) that need to check/write the same cache rows without going
     through call_llm's own retry/JSON-extraction loop — streaming callers
     parse their own output and handle retries differently, since a retry
     after partial output is already visible to the user isn't a silent
-    do-over the way it is for a one-shot JSON call."""
+    do-over the way it is for a one-shot JSON call.
+
+    A read that fails is None ("not cached") unless `raise_errors`: for a
+    caller that would otherwise make again what may well be stored."""
     use_model = model or settings.OLLAMA_MODEL
     input_hash = _make_input_hash(prompt_version, cache_key, use_model)
     try:
         return _cache_get_with_own_session(prompt_version, input_hash)
     except Exception:
+        if raise_errors:
+            raise
         logger.debug("LLM cache lookup failed", exc_info=True)
         return None
 

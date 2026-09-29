@@ -113,12 +113,18 @@ def prompt_for(doc) -> dict:
 async def lookup(doc_id: int, doc) -> tuple[dict, dict, dict | None]:
     """(the prompt, its cache key, the summary already made or None) for an
     ExploreDocument — the one derivation both the API's read and the
-    pipeline's making go through."""
+    pipeline's making go through. Raises a busy Refusal when the cache
+    can't be read (the database locked past its timeout): "not made yet"
+    there would start a generation of a summary that may well be stored."""
     from app.pipeline.analyze.ollama_client import get_cached_llm_result
 
     prompt = prompt_for(doc)
     key = cache_key(doc_id, prompt)
-    made = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key)
+    try:
+        made = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key, raise_errors=True)
+    except Exception:
+        logger.warning("Explore summary cache unreadable for doc_id=%s — answered as a wait", doc_id, exc_info=True)
+        raise _busy() from None
     return prompt, key, made
 
 

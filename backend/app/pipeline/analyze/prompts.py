@@ -66,19 +66,22 @@ def _before_a_partial_marker(text: str) -> str | None:
     """`text` whole up to where it stopped — without a section marker it
     ends partway through ("...\nKEY POI"), or all of it when it stopped just
     after a finished line — or None when the part it was writing may go on."""
-    head, newline, last = text.rstrip(" ").rpartition("\n")
-    if not newline:
-        return None
-    if not last:
-        # Stopped right after a newline. The format asked for
+    stopped = text.rstrip(" \t")
+    if stopped.endswith("\n"):
+        # Stopped after a line break (or a blank line). The format asked for
         # (explore_document_summary_prompt) is a line per part, but a small
-        # model can wrap a sentence onto the next line; so the line counts
-        # as finished only where nothing can follow it in the same part: a
-        # key point (one line each), the KEY POINTS: marker line, or a line
-        # that ends a sentence.
+        # model can wrap a sentence, or a key point, onto the next line; so
+        # the line counts as finished only where nothing can follow it in
+        # the same part: the KEY POINTS: marker line, or a line that ends a
+        # sentence. A key point without one may be the first half of two
+        # lines, and is dropped with the part it was writing.
+        head = stopped.rstrip()
         line = head.rsplit("\n", 1)[-1].strip()
-        if line.startswith("-") or line == SUMMARY_KEY_POINTS_MARKER or line.endswith(_SENTENCE_ENDS):
+        if line == SUMMARY_KEY_POINTS_MARKER or line.endswith(_SENTENCE_ENDS):
             return head
+        return None
+    head, newline, last = stopped.rpartition("\n")
+    if not newline:
         return None
     for marker in (SUMMARY_KEY_POINTS_MARKER, SUMMARY_IMPACT_MARKER):
         if marker != last and marker.startswith(last):

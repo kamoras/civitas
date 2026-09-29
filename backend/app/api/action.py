@@ -656,7 +656,11 @@ async def get_country_news(response: Response):
             # last answer the feeds gave meanwhile, if there is one.
             return retry_soon_json(_country_news[1] if _country_news else {"countries": []})
         # Its lifetime counts from the fetch, not from this request, so a
-        # held answer isn't cached for ten minutes more.
+        # held answer isn't cached for ten minutes more. The stale window
+        # stays the whole ten minutes: a refresh here is a fetch of every
+        # feed, which readers shouldn't queue behind, and whatever
+        # `remaining` is the copy is never served past twice its lifetime
+        # from the fetch — the same bound a fresh answer has.
         remaining = max(1, int(_COUNTRY_NEWS_TTL_S - (time.monotonic() - _country_news[0])))
         response.headers["Cache-Control"] = (
             f"public, max-age={remaining}, stale-while-revalidate={int(_COUNTRY_NEWS_TTL_S)}"
@@ -825,7 +829,7 @@ async def get_my_reps(
     """Return senators for a state with their connections to today's issues."""
     # Ties to "today's issues", which only change on the next Action
     # Center refresh — a few minutes of staleness is invisible in practice.
-    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
+    response.headers["Cache-Control"] = "public, max-age=300"
     state_upper = state.upper()
 
     senators = (
@@ -945,7 +949,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     """Return Federal Register documents with open public comment periods, sorted by deadline."""
     # Comment-period deadlines move in days, not minutes — an hour of
     # staleness has no real effect on this list.
-    response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=3600"
+    response.headers["Cache-Control"] = "public, max-age=3600"
     today = comment_period_today()
     docs = (
         db.query(ExploreDocument)
@@ -1002,7 +1006,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
     """Return upcoming election info: dates, senate races, state data."""
     # Election dates and race rosters change on the order of days, not
     # minutes — same reasoning as /open-comments above.
-    response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=3600"
+    response.headers["Cache-Control"] = "public, max-age=3600"
     today = utcnow().date()
     election_day = _next_election_day(today)
     days_until = days_until_next_election(today)
@@ -1144,7 +1148,7 @@ async def list_monitors(response: Response, db: Session = Depends(get_db)):
     """List all active and watching national monitors."""
     # Monitor creation/status changes on the pipeline's hourly cadence, not
     # continuously — matches the other Action Center list endpoints.
-    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
+    response.headers["Cache-Control"] = "public, max-age=300"
     monitors = (
         db.query(NationalMonitor)
         .options(selectinload(NationalMonitor.updates))
@@ -1160,7 +1164,7 @@ async def get_monitor(response: Response, slug: str, db: Session = Depends(get_d
     """Get full detail for a national monitor including timeline."""
     # Same cadence as the monitors list above — a single monitor's
     # timeline only grows on the same hourly refresh.
-    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
+    response.headers["Cache-Control"] = "public, max-age=300"
     monitor = (
         db.query(NationalMonitor)
         .options(selectinload(NationalMonitor.updates))
@@ -1255,7 +1259,7 @@ async def get_timeline(
 ):
     """Return the year's timeline with hierarchical week/month/year structure."""
     # Same reasoning as the other Action Center aggregate views above.
-    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
+    response.headers["Cache-Control"] = "public, max-age=300"
     if year is None:
         year = utcnow().date().year
 

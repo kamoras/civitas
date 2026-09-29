@@ -236,6 +236,19 @@ class TestEnsureExploreIndex:
         assert vector_store.collection_stats()["indexRebuild"] == ""
         assert vector_store.search_explore_documents("A real doc", n_results=1) is not None
 
+    def test_every_rebuild_from_scratch_is_marked_while_it_runs(self, vec_env):
+        # An admin re-embed as much as a start's rebuild: each batch is
+        # committed as it goes.
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        with vector_store.rebuilding_explore_index():
+            assert vector_store.collection_stats()["indexRebuild"] == "running"
+            assert vector_store.search_explore_documents("Anything") is None
+        assert vector_store.collection_stats()["indexRebuild"] == ""
+        with pytest.raises(RuntimeError), vector_store.rebuilding_explore_index():
+            raise RuntimeError("encode failed")
+        assert vector_store.collection_stats()["indexRebuild"] == "failed"
+        assert vector_store.search_explore_documents("Anything") is None
+
     def test_clearing_a_failed_rebuild_leaves_a_running_one_marked(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "Anything")])
         conn = vector_store.get_vec_conn()

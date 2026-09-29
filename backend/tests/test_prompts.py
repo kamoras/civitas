@@ -91,8 +91,12 @@ class TestCutOff:
         assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One", "Two"]
 
     def test_cut_just_after_a_key_point_ended_keeps_that_point(self):
-        text = "SUMMARY: s.\nKEY POINTS:\n- a\n- b\n"
-        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a", "b"]
+        text = "SUMMARY: s.\nKEY POINTS:\n- a.\n- b.\n"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a.", "b."]
+        # Nothing says an unpunctuated point isn't the first half of two
+        # lines: it goes with the part being written.
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\n- The rule requires employers to\n"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a"]
         text = "SUMMARY: s.\nKEY POINTS:\n"
         assert parse_explore_document_summary(text, cut_off=True) == {
             "summary": "s.", "keyPoints": [], "impact": "",
@@ -108,6 +112,13 @@ class TestCutOff:
         assert parse_explore_document_summary(text, cut_off=True) == {
             "summary": "s.", "keyPoints": ["a"], "impact": "It matters.",
         }
+
+    def test_a_blank_line_after_a_finished_part_keeps_it(self):
+        assert parse_explore_document_summary("SUMMARY: The bill does X.\n\n", cut_off=True)["summary"] == (
+            "The bill does X."
+        )
+        text = "SUMMARY: s.\nKEY POINTS:\n- a.\n- b.\n\n"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a.", "b."]
 
     def test_a_sentence_wrapped_onto_the_next_line_is_not_taken_as_finished(self):
         text = "SUMMARY: The rule sets new limits on\n"

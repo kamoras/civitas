@@ -1389,8 +1389,8 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     from app.pipeline.vector_store import (
         _write_model_version,
         clear_explore,
-        clear_failed_rebuild,
         embed_explore_documents,
+        rebuilding_explore_index,
     )
 
     from app.pipeline import lease
@@ -1402,35 +1402,38 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         async with lease.job_async(lease.EXPLORE) as held:
             if not held:
                 raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {held.why}")
-            try:
-                clear_explore()
-            except Exception:
-                logger.warning("Explore re-embed: clearing the old vectors failed", exc_info=True)
+            # Search reports the index not ready from the clear until the
+            # last batch is in (and after a failure partway, until the next
+            # Explore run or start completes it).
+            with rebuilding_explore_index():
+                try:
+                    clear_explore()
+                except Exception:
+                    logger.warning("Explore re-embed: clearing the old vectors failed", exc_info=True)
 
-            all_docs = db.query(ExploreDocument).all()
-            doc_dicts = [
-                {
-                    "id": d.id,
-                    "title": d.title,
-                    "summary": d.summary,
-                    "body": d.body,
-                    "doc_type": d.doc_type,
-                    "source": d.source,
-                    "date": d.date,
-                    "politician_name": d.politician_name,
-                    "politician_id": d.politician_id,
-                    "chamber": d.chamber,
-                }
-                for d in all_docs
-            ]
+                all_docs = db.query(ExploreDocument).all()
+                doc_dicts = [
+                    {
+                        "id": d.id,
+                        "title": d.title,
+                        "summary": d.summary,
+                        "body": d.body,
+                        "doc_type": d.doc_type,
+                        "source": d.source,
+                        "date": d.date,
+                        "politician_name": d.politician_name,
+                        "politician_id": d.politician_id,
+                        "chamber": d.chamber,
+                    }
+                    for d in all_docs
+                ]
 
-            def _run():
-                count = embed_explore_documents(doc_dicts)
-                _write_model_version()
-                clear_failed_rebuild()
-                return count
+                def _run():
+                    count = embed_explore_documents(doc_dicts)
+                    _write_model_version()
+                    return count
 
-            count = await asyncio.to_thread(_run)
+                count = await asyncio.to_thread(_run)
             indexed = await off_loop(db, rebuild_index)
             authority = await off_loop(db, update_document_authority)
     return {"embedded": count, "keywordIndexed": indexed, "authority": authority}

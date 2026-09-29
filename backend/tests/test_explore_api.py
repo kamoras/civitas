@@ -10,6 +10,7 @@ only the caller's address from it.
 
 import asyncio
 import json
+import sqlite3
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -90,7 +91,7 @@ def _llm(stream, cached=None):
     unless `cached` says so; returns the patches and the cache writes."""
     written = {}
 
-    def lookup(version, key):
+    def lookup(version, key, **_kw):
         return (cached or {}).get("value") or written.get(json.dumps(key, sort_keys=True))
 
     def remember(version, key, data):
@@ -475,6 +476,21 @@ class TestCachedSummaryRead:
         with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None):
             resp = await get_cached_explore_summary(doc.id, db=db_session)
         assert resp.status_code == 204 and resp.headers["Cache-Control"] == "no-store"
+
+    async def test_an_unreadable_cache_is_a_wait_not_none_yet(self, db_session):
+        # "Not made yet" would have the pipeline make again a summary that
+        # may well be stored: both ends answer a wait instead.
+        from app.api.explore import get_cached_explore_summary
+
+        doc = _make_doc(db_session)
+        locked = sqlite3.OperationalError("database is locked")
+        with patch("app.pipeline.analyze.ollama_client._cache_get_with_own_session", side_effect=locked), \
+                patch("app.pipeline.analyze.ollama_client.stream_llm", side_effect=AssertionError("generated")):
+            with pytest.raises(HTTPException) as read:
+                await get_cached_explore_summary(doc.id, db=db_session)
+            asked = await _refused(doc, db_session)
+        for refusal in (read.value, asked):
+            assert refusal.status_code == 503 and refusal.headers["X-Summary-Wait"] == "1"
 
     async def test_no_such_document_is_a_404(self, db_session):
         from app.api.explore import get_cached_explore_summary
