@@ -83,7 +83,7 @@ describe("DistrictMap", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const { container } = render(
-      <DistrictMap state="WY" races={[race(0)]} picked={null} onPick={vi.fn()} />,
+      <DistrictMap state="WY" races={[race(0)]} picked={null} onPick={vi.fn()} />
     );
     expect(container).toBeEmptyDOMElement();
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe("DistrictMap", () => {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: false, status: 404 });
     vi.stubGlobal("fetch", fetchSpy);
     const { container } = render(
-      <DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} />,
+      <DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} />
     );
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
@@ -198,7 +198,9 @@ describe("DistrictMap", () => {
     render(<DistrictMap state="CT" newLines races={statewide} picked={null} onPick={vi.fn()} />);
 
     const shape = await screen.findByRole("button", { name: "CT-2" });
-    expect(screen.getByText(/the new 2026 districts · no per-district lean published here yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/the new 2026 districts · no per-district lean published here yet/)
+    ).toBeInTheDocument();
     expect(screen.queryByText(/redder = safer R/)).not.toBeInTheDocument();
     const style = shape.getAttribute("style") ?? "";
     // Every seat the same neutral, never the state's R+6 red.
@@ -216,18 +218,24 @@ describe("DistrictMap", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
     render(<DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} />);
     await screen.findByRole("button", { name: "CT-2" });
-    expect(screen.getByText(/redder = safer R · bluer = safer D · fainter = closer/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/redder = safer R · bluer = safer D · fainter = closer/)
+    ).toBeInTheDocument();
     expect(screen.queryByText(/paler/)).not.toBeInTheDocument();
   });
 
   it("shows no lean from election day, even with no count to shade by", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
-    render(<DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} showLean={false} />);
+    render(
+      <DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} showLean={false} />
+    );
     const two = await screen.findByRole("button", { name: "CT-2" });
     expect(screen.getByText("no lean shown from election day")).toBeInTheDocument();
     expect(screen.queryByText(/redder = safer R/)).not.toBeInTheDocument();
     // CT-2 (D+3) and CT-4 (D+10) are drawn alike: no lean in the fill.
-    expect(two.getAttribute("style")).toBe(screen.getByRole("button", { name: "CT-4" }).getAttribute("style"));
+    expect(two.getAttribute("style")).toBe(
+      screen.getByRole("button", { name: "CT-4" }).getAttribute("style")
+    );
     two.focus();
     expect(await screen.findByText(/click to show this race/)).toBeInTheDocument();
     expect(screen.queryByText("D+3")).not.toBeInTheDocument();
@@ -240,6 +248,8 @@ describe("DistrictMap", () => {
 
     const three = await screen.findByRole("button", { name: "CT-3" });
     expect(screen.getByText(/redder = safer R .* grey = no district lean yet/)).toBeInTheDocument();
-    expect(three.getAttribute("style")).not.toBe(screen.getByRole("button", { name: "CT-4" }).getAttribute("style"));
+    expect(three.getAttribute("style")).not.toBe(
+      screen.getByRole("button", { name: "CT-4" }).getAttribute("style")
+    );
   });
 });

@@ -18,6 +18,9 @@ app/data/justice_president_votes_1937_2014.csv.gz, the hand-coded votes the
 pipeline reads for the terms before the Database's lead parties take over
 (pipeline/analyze/justice_loyalty.py): the one source here it can't fetch,
 since Epstein & Posner publish it as a Stata file.
+
+Research-only dependencies (scripts/requirements-research.txt):
+    pip install -r requirements.txt -r scripts/requirements-research.txt
 """
 
 import gzip

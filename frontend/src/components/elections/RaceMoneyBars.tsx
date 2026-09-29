@@ -37,9 +37,7 @@ export default function RaceMoneyBars({
   showUnconfirmed?: boolean;
   redrawnSeat?: boolean;
 }) {
-  const ranked = [...candidates].sort(
-    (a, b) => (b.contributions ?? 0) - (a.contributions ?? 0),
-  );
+  const ranked = [...candidates].sort((a, b) => (b.contributions ?? 0) - (a.contributions ?? 0));
   const leader = ranked[0]?.contributions ?? 0;
 
   return (
@@ -51,7 +49,10 @@ export default function RaceMoneyBars({
         // must not divide — every bar is simply empty, which is the
         // truthful picture of a race where no money exists yet.
         const pct = leader > 0 ? Math.round((raised / leader) * 100) : 0;
-        const incumbent = c.incumbentChallenge === "I" ? incumbencyLabel("I", redrawnSeat, c.incumbentRecord?.seat) : null;
+        const incumbent =
+          c.incumbentChallenge === "I"
+            ? incumbencyLabel("I", redrawnSeat, c.incumbentRecord?.seat)
+            : null;
         const cash = cashOnHandDisplay(c.cashOnHand);
 
         return (

@@ -1,4 +1,9 @@
-import type { RaceCoverageItem, RaceWithCandidates, StateBallot, StatewideRace } from "@/types/election";
+import type {
+  RaceCoverageItem,
+  RaceWithCandidates,
+  StateBallot,
+  StatewideRace,
+} from "@/types/election";
 import { candidateName, isActiveCandidate, majorPartyOf } from "@/lib/elections";
 
 /** One contest as the ballot page lays it out: a box in one of three
@@ -60,7 +65,9 @@ const SPECIAL_TERM = "fills the rest of the term";
 function seatLine(race: RaceWithCandidates): string {
   const incumbent = race.candidates.find((c) => c.incumbentChallenge === "I");
   const seat = incumbent ? `${candidateName(incumbent)} running again` : "Open seat";
-  return race.isSpecial ? `Special election · ${seat} · ${SPECIAL_TERM}` : `${seat} · ${SENATE_TERM}`;
+  return race.isSpecial
+    ? `Special election · ${seat} · ${SPECIAL_TERM}`
+    : `${seat} · ${SENATE_TERM}`;
 }
 
 export type StatewideGroup = { key: string; race?: StatewideRace; seats?: StatewideRace[] };
@@ -101,7 +108,7 @@ export function groupStatewideRaces(races: StatewideRace[]): StatewideGroup[] {
 export function countStatewideContests(races: StatewideRace[]): number {
   return groupStatewideRaces(races).reduce(
     (n, g) => n + (g.seats ? (g.seats[0].electedBy === "district" ? 1 : g.seats.length) : 1),
-    0,
+    0
   );
 }
 
@@ -111,7 +118,7 @@ export function countStatewideContests(races: StatewideRace[]): number {
 export function buildBallotContests(
   ballot: StateBallot,
   hasTowns: boolean,
-  { resultsMode = false }: { resultsMode?: boolean } = {},
+  { resultsMode = false }: { resultsMode?: boolean } = {}
 ): BallotContest[] {
   const contests: BallotContest[] = [];
 
@@ -121,7 +128,10 @@ export function buildBallotContests(
       key: `senate-${race.id}`,
       kind: "senate",
       column: "federal",
-      title: ballot.senateRaces.length > 1 && race.isSpecial ? "U.S. Senator (special election)" : "U.S. Senator",
+      title:
+        ballot.senateRaces.length > 1 && race.isSpecial
+          ? "U.S. Senator (special election)"
+          : "U.S. Senator",
       subtitle: seatLine(race),
       instruction: "Vote for one",
       summary: `${plural(race.candidates.filter(isActiveCandidate).length, "candidate")} · ${plural(stories, "story", "stories")}`,
@@ -141,7 +151,10 @@ export function buildBallotContests(
           ? `One statewide seat · ${HOUSE_TERM}`
           : `${n} districts · ${resultsMode ? "one per voter" : "you vote in one"} · ${HOUSE_TERM}`,
       instruction: "Vote for one",
-      summary: n === 1 ? plural(ballot.houseRaces[0].candidates.filter(isActiveCandidate).length, "candidate") : `${n} districts · pick yours`,
+      summary:
+        n === 1
+          ? plural(ballot.houseRaces[0].candidates.filter(isActiveCandidate).length, "candidate")
+          : `${n} districts · pick yours`,
     });
   }
 
@@ -163,7 +176,10 @@ export function buildBallotContests(
       // Not where one contest fills several seats (North Dakota's PSC lists
       // two nominees per party, and a voter marks two): the API carries no
       // seat count per contest, so the box can't say how many to mark.
-      instruction: n === 0 || (ballot.statewideRaces ?? []).some(fillsSeveralSeats) ? null : "Vote for one in each",
+      instruction:
+        n === 0 || (ballot.statewideRaces ?? []).some(fillsSeveralSeats)
+          ? null
+          : "Vote for one in each",
       summary: n === 0 ? "None on this ballot" : offices,
     });
   }
@@ -214,7 +230,9 @@ export function buildBallotContests(
 
   // Measures still on the ballot: one removed or withdrawn is shown (marked)
   // for a grace window, but is not something a voter marks.
-  const measures = ballot.measures.filter((m) => m.status !== "removed" && m.status !== "withdrawn").length;
+  const measures = ballot.measures.filter(
+    (m) => m.status !== "removed" && m.status !== "withdrawn"
+  ).length;
   const listed = ballot.measures.length;
   const none = ballot.measureCoverage.status === "confirmed_none";
   // "None on this ballot" is the state's own answer. After measures were
@@ -235,7 +253,11 @@ export function buildBallotContests(
     column: "local",
     title: "Statewide ballot measures",
     subtitle:
-      measures > 0 ? plural(measures, "measure") : none ? noneLine : `${noneLine} — check the official lookup`,
+      measures > 0
+        ? plural(measures, "measure")
+        : none
+          ? noneLine
+          : `${noneLine} — check the official lookup`,
     instruction: measures > 0 ? "Yes or no on each" : null,
     summary: measures > 0 ? plural(measures, "measure") : noneLine,
   });
@@ -279,7 +301,7 @@ export function contestHash(contest: BallotContest, houseRaceId: string | null =
 export function contestForHash(
   hash: string,
   contests: BallotContest[],
-  ballot: StateBallot,
+  ballot: StateBallot
 ): { key: string; houseRaceId: string | null } | null {
   const race = hash.match(/^#race-(.+)$/)?.[1];
   if (race) {

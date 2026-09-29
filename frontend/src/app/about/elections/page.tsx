@@ -70,14 +70,14 @@ export default function ElectionsChapter() {
           Candidates appear under the name their state prints on its ballot. Each contest states the
           term it is for — two years for the House, six for the Senate, and for state offices, the
           term set by that state&apos;s constitution or statute (none is shown where we haven&apos;t
-          confirmed it). Where a state&apos;s own results or candidate list name them, the page
-          also covers statewide executive offices, state legislative seats and elected judgeships;
-          where they aren&apos;t covered yet, it says so rather than showing an empty section that
-          would read as &ldquo;no governor&apos;s race&rdquo;. A state whose governor isn&apos;t up this year says that
-          too, with the calendar that decides it. A minor party is shown as the state printed it,
-          and where the names come from primary results rather than the state&apos;s November list,
-          the section says what primary results can&apos;t show: an unopposed nominee is often not
-          itemised, and independents never are.
+          confirmed it). Where a state&apos;s own results or candidate list name them, the page also
+          covers statewide executive offices, state legislative seats and elected judgeships; where
+          they aren&apos;t covered yet, it says so rather than showing an empty section that would
+          read as &ldquo;no governor&apos;s race&rdquo;. A state whose governor isn&apos;t up this
+          year says that too, with the calendar that decides it. A minor party is shown as the state
+          printed it, and where the names come from primary results rather than the state&apos;s
+          November list, the section says what primary results can&apos;t show: an unopposed nominee
+          is often not itemised, and independents never are.
         </P>
       </Section>
 
@@ -197,10 +197,10 @@ export default function ElectionsChapter() {
             Arkansas and Connecticut leave unseen — districts whose primary was uncontested —
             Google&apos;s election index fills in once it publishes the general election, and only
             for those races. Michigan, Ohio and Oklahoma are read from lists the states publish
-            themselves (Oklahoma&apos;s results API requires a login, so its State Election Board&apos;s
-            published list of November ballots is read instead). Nevada and New York answer every
-            request with a bot challenge, so Google&apos;s election index is their only source until
-            that changes.
+            themselves (Oklahoma&apos;s results API requires a login, so its State Election
+            Board&apos;s published list of November ballots is read instead). Nevada and New York
+            answer every request with a bot challenge, so Google&apos;s election index is their only
+            source until that changes.
           </P>
           <P>
             Where a state&apos;s results are reached through a link on its own site, each linked
@@ -219,12 +219,12 @@ export default function ElectionsChapter() {
         <P>
           From election day, <span className="font-mono text-ink-hi">/elections</span> and each
           state page put results first. The national map is shaded by who is leading each race
-          instead of by how the state usually leans — fainter while fewer than half its reporting areas
-          (usually precincts) are in, solid once the state calls its count official. Each state page
-          shows its Senate race, every House district and a district map shaded the same way, above
-          the ballot research, and a live-updates feed tells each change as it happens: first
-          returns, a new leader, every reporting area in, a count called official, a seat changing
-          party. A district the state&apos;s results feed gives no count for — a contest it
+          instead of by how the state usually leans — fainter while fewer than half its reporting
+          areas (usually precincts) are in, solid once the state calls its count official. Each
+          state page shows its Senate race, every House district and a district map shaded the same
+          way, above the ballot research, and a live-updates feed tells each change as it happens:
+          first returns, a new leader, every reporting area in, a count called official, a seat
+          changing party. A district the state&apos;s results feed gives no count for — a contest it
           doesn&apos;t list, an uncontested seat — is listed and marked as exactly that, not as
           &ldquo;no votes yet&rdquo;. While a state&apos;s polls are still open, its page stays a
           ballot-research page and the national map marks it &ldquo;polls open&rdquo;: nothing is
@@ -266,8 +266,8 @@ export default function ElectionsChapter() {
           <P>
             A seat changing party opens a <em>developing</em> story in the{" "}
             <A href={ACTION_CENTER_HREF}>Action Center</A>, marked as not yet confirmed by the
-            press; it follows the count, and if the lead reverts it comes off the Action Center and is
-            rewritten to say the count no longer shows a change of party. Civitas&apos;s Bluesky
+            press; it follows the count, and if the lead reverts it comes off the Action Center and
+            is rewritten to say the count no longer shows a change of party. Civitas&apos;s Bluesky
             account posts fewer moments than the feed shows: a seat changing party, a count called
             official (a Senate race, or a seat changing party), and the big moves in a Senate race —
             a new leader with most of the count in, every reporting area in. A few an hour at most;
@@ -308,9 +308,8 @@ export default function ElectionsChapter() {
             about a state with seventeen amendments pending. So a state is shown as having no
             statewide measures only when its official source establishes it, and a state we
             haven&apos;t covered, or whose ingest failed, says <em>that</em> and points to the
-            official lookup. Measures removed from the
-            ballot — courts have struck about 2.3% since 1995 — are marked removed and kept for a
-            while, not silently deleted.
+            official lookup. Measures removed from the ballot — courts have struck about 2.3% since
+            1995 — are marked removed and kept for a while, not silently deleted.
           </P>
         </Sub>
         <Sub title="Why there’s no plain-language summary">
@@ -326,11 +325,11 @@ export default function ElectionsChapter() {
         </Sub>
         <P>
           Every measure is read directly from the state itself — its Secretary of State, elections
-          board or legislature — through its certified list, voter guide or ballot notice. We use
-          no third-party source for measures. A state we don&apos;t read automatically yet, or which
-          publishes no official list, says it isn&apos;t covered and which of the two it is; a
-          guide not yet published reads the same way, never as &ldquo;none&rdquo;. The
-          state&apos;s official source is linked from every measure. See{" "}
+          board or legislature — through its certified list, voter guide or ballot notice. We use no
+          third-party source for measures. A state we don&apos;t read automatically yet, or which
+          publishes no official list, says it isn&apos;t covered and which of the two it is; a guide
+          not yet published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s
+          official source is linked from every measure. See{" "}
           <A href="/about/limitations#ballot-coverage">known limitations</A> for where coverage is
           still incomplete.
         </P>

@@ -1,5 +1,11 @@
 import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
-import { candidateName, incumbencyLabel, isActiveCandidate, isRedrawnSeat, tierCandidates } from "@/lib/elections";
+import {
+  candidateName,
+  incumbencyLabel,
+  isActiveCandidate,
+  isRedrawnSeat,
+  tierCandidates,
+} from "@/lib/elections";
 import { formatCurrency } from "@/lib/formatting";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 
@@ -24,7 +30,13 @@ function raisedLabel(c: BallotCandidate): string {
  *
  * `newLines` is StateBallot.newDistrictLines: on a redrawn House seat a
  * sitting member reads SITTING MEMBER, not INCUMBENT (incumbencyLabel). */
-export default function BallotRaceRows({ race, newLines = false }: { race: RaceWithCandidates; newLines?: boolean }) {
+export default function BallotRaceRows({
+  race,
+  newLines = false,
+}: {
+  race: RaceWithCandidates;
+  newLines?: boolean;
+}) {
   const redrawn = isRedrawnSeat(race, newLines);
   const active = race.candidates.filter(isActiveCandidate);
   const tiered = race.candidateSource === "filers" || race.candidateSource === "primary";
@@ -33,7 +45,11 @@ export default function BallotRaceRows({ race, newLines = false }: { race: RaceW
   const leader = rows[0]?.contributions ?? 0;
 
   if (active.length === 0) {
-    return <p className="px-4 py-3 text-[13px] text-ink-lo">No candidates on record for this race yet.</p>;
+    return (
+      <p className="px-4 py-3 text-[13px] text-ink-lo">
+        No candidates on record for this race yet.
+      </p>
+    );
   }
 
   return (
@@ -53,9 +69,13 @@ export default function BallotRaceRows({ race, newLines = false }: { race: RaceW
                     </span>
                   )}
                 </span>
-                <span className={`font-mono text-[11px] tracking-[0.08em] ${party.color}`}>{party.label}</span>
+                <span className={`font-mono text-[11px] tracking-[0.08em] ${party.color}`}>
+                  {party.label}
+                </span>
               </span>
-              <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">{raisedLabel(c)}</span>
+              <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
+                {raisedLabel(c)}
+              </span>
             </div>
             <div className="mt-1.5 h-1 bg-white/[0.07]" aria-hidden="true">
               <div className={`h-1 ${party.rule}`} style={{ width: `${pct}%` }} />

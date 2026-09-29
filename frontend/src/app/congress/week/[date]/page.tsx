@@ -5,9 +5,19 @@ import { ISO_DATE, fetchWeek } from "@/lib/congressServer";
 import { longDate } from "@/lib/congress";
 import PeriodReportView from "@/components/congress/PeriodReportView";
 
-export async function generateMetadata({ params }: { params: Promise<{ date: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ date: string }>;
+}): Promise<Metadata> {
   const { date } = await params;
-  if (!ISO_DATE.test(date)) return pageMetadata({ title: "Not found", description: "", path: `/congress/week/${date}`, noindex: true });
+  if (!ISO_DATE.test(date))
+    return pageMetadata({
+      title: "Not found",
+      description: "",
+      path: `/congress/week/${date}`,
+      noindex: true,
+    });
   const report = await fetchWeek(date);
   const start = report?.start ?? date;
   return pageMetadata({

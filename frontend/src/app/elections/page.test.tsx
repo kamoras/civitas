@@ -10,7 +10,12 @@ vi.mock("@/lib/api", () => ({ fetchPviMap, fetchLiveResults }));
 
 const CAMPAIGN = {
   cycleYear: 2026,
-  phase: { phase: "campaign", electionDate: "2026-11-03", resultsUntil: null, lastResultChange: null },
+  phase: {
+    phase: "campaign",
+    electionDate: "2026-11-03",
+    resultsUntil: null,
+    lastResultChange: null,
+  },
   liveStates: ["GA"],
   senateStates: ["GA"],
   races: [],
@@ -27,10 +32,23 @@ const RESULTS = {
   },
   races: [
     {
-      raceId: "2026-SEN-GA", state: "GA", office: "S", district: null, isSpecial: false, heldBy: "DEM",
-      official: false, votesCounted: 1900, reportingUnits: 2103, totalUnits: 2653, unitLabel: "precincts",
-      sourceName: "Georgia Secretary of State", sourceUrl: "https://results.example/ga",
-      fetchedAt: "2026-11-04T02:44:00Z", lastChangeAt: "2026-11-04T02:42:00Z", leaderParty: "REP", flip: true,
+      raceId: "2026-SEN-GA",
+      state: "GA",
+      office: "S",
+      district: null,
+      isSpecial: false,
+      heldBy: "DEM",
+      official: false,
+      votesCounted: 1900,
+      reportingUnits: 2103,
+      totalUnits: 2653,
+      unitLabel: "precincts",
+      sourceName: "Georgia Secretary of State",
+      sourceUrl: "https://results.example/ga",
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: "REP",
+      flip: true,
       candidates: [
         { name: "Ray Jones", party: "REP", votes: 1000, pct: 52.6, candidateId: null },
         { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
@@ -39,12 +57,21 @@ const RESULTS = {
   ],
   updates: [
     {
-      id: 1, raceId: "2026-SEN-GA", state: "GA", office: "S", district: null, isSpecial: false, kind: "flip",
+      id: 1,
+      raceId: "2026-SEN-GA",
+      state: "GA",
+      office: "S",
+      district: null,
+      isSpecial: false,
+      kind: "flip",
       at: "2026-11-04T02:42:00Z",
       detail: {
         leader: { name: "Ray Jones", party: "REP", votes: 1000, pct: 52.6 },
         runnerUp: { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4 },
-        reportingUnits: 2103, totalUnits: 2653, unitLabel: "precincts", heldBy: "DEM",
+        reportingUnits: 2103,
+        totalUnits: 2653,
+        unitLabel: "precincts",
+        heldBy: "DEM",
       },
     },
   ],
@@ -132,7 +159,9 @@ describe("ElectionsPage", () => {
     fetchLiveResults.mockResolvedValue(RESULTS);
     render(<ElectionsPage />);
 
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("2026 midterm results");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "2026 midterm results"
+    );
     expect(screen.getByText(/leads in a seat Democrats hold/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "SENATE" })).toHaveAttribute("aria-pressed", "true");
     // The lean key is gone: the map now shades by the count.
@@ -145,7 +174,9 @@ describe("ElectionsPage", () => {
     fetchLiveResults.mockRejectedValue(new Error("404"));
     render(<ElectionsPage />);
 
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("2026 midterm ballot");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "2026 midterm ballot"
+    );
   });
 
   it("holds the lean map back until it knows whether results are on", async () => {
@@ -191,7 +222,11 @@ describe("ElectionsPage", () => {
     fetchLiveResults.mockResolvedValue({
       ...RESULTS,
       feeds: {
-        GA: { status: "stale", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T02:44:00Z" },
+        GA: {
+          status: "stale",
+          checkedAt: "2026-11-04T03:00:00Z",
+          lastOkAt: "2026-11-04T02:44:00Z",
+        },
       },
     });
     render(<ElectionsPage />);
@@ -291,7 +326,9 @@ describe("ElectionsPage", () => {
     expect(mapFill.current?.("GA")).toMatch(/^rgba\(201,149,255/);
     // Districts with a count so far — not every district "read live".
     const totals = screen.getByRole("region", { name: "Totals" });
-    expect(totals).toHaveTextContent("2 districts with a count so far, in 1 state, of 2 states read live");
+    expect(totals).toHaveTextContent(
+      "2 districts with a count so far, in 1 state, of 2 states read live"
+    );
     expect(totals).not.toHaveTextContent(/districts in \d+ states read live/);
   });
 
@@ -319,7 +356,9 @@ describe("ElectionsPage", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("2026 midterm results");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "2026 midterm results"
+    );
   });
 
   it("says how often it is really retrying", async () => {

@@ -23,15 +23,18 @@ function passedTag(e: CongressEvent): string | null {
 
 function ChamberHead({ day }: { day: ChamberDay }) {
   const live = day.status === "live";
-  const times = day.convenedAt && day.adjournedAt
-    ? `${day.convenedAt}–${day.adjournedAt}`
-    : day.convenedAt
-      ? `from ${day.convenedAt}`
-      : null;
+  const times =
+    day.convenedAt && day.adjournedAt
+      ? `${day.convenedAt}–${day.adjournedAt}`
+      : day.convenedAt
+        ? `from ${day.convenedAt}`
+        : null;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-3xl font-extrabold text-ink-hi">{CHAMBER_NAME[day.chamber]}</h2>
+        <h2 className="font-display text-3xl font-extrabold text-ink-hi">
+          {CHAMBER_NAME[day.chamber]}
+        </h2>
         <span
           className={`border px-2 py-1 font-mono text-xs uppercase tracking-[0.12em] ${
             live ? "border-phos-mid text-phos-mid" : "border-white/20 text-ink-lo"
@@ -147,7 +150,8 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
         <Section title="Floor log" count={day.floorLog.length}>
           <details open={day.status === "live"} className="group">
             <summary className="cursor-pointer font-mono text-sm text-ink-lo hover:text-ink-hi">
-              {day.status === "live" ? "Hide" : "Show"} the {CHAMBER_NAME[day.chamber]}&apos;s floor log
+              {day.status === "live" ? "Hide" : "Show"} the {CHAMBER_NAME[day.chamber]}&apos;s floor
+              log
             </summary>
             <ol className="mt-2 flex flex-col">
               {day.floorLog.map((e, i) => (
@@ -172,34 +176,84 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
 
 export default function DayReportView({ report }: { report: DayReport }) {
   const { senate, house } = report.chambers;
-  const sources = (["senate", "house"] as const).map((c) => report.chambers[c]).filter((d) => d.sourceUrl);
+  const sources = (["senate", "house"] as const)
+    .map((c) => report.chambers[c])
+    .filter((d) => d.sourceUrl);
   return (
     <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
           <CongressTabs active="reports" />
-          <PageMasthead className="mb-6" eyebrow="What happened in Congress" title={longDate(report.date)}>
+          <PageMasthead
+            className="mb-6"
+            eyebrow="What happened in Congress"
+            title={longDate(report.date)}
+          >
             <p>{report.sentence}</p>
           </PageMasthead>
           <PeriodNav
             active="day"
-            hrefs={{ day: dayHref(report.date), week: weekHref(report.date), month: monthHref(report.date) }}
-            previous={report.previousDay ? { href: dayHref(report.previousDay), label: shortDate(report.previousDay) } : null}
-            next={report.nextDay ? { href: dayHref(report.nextDay), label: shortDate(report.nextDay) } : null}
+            hrefs={{
+              day: dayHref(report.date),
+              week: weekHref(report.date),
+              month: monthHref(report.date),
+            }}
+            previous={
+              report.previousDay
+                ? { href: dayHref(report.previousDay), label: shortDate(report.previousDay) }
+                : null
+            }
+            next={
+              report.nextDay
+                ? { href: dayHref(report.nextDay), label: shortDate(report.nextDay) }
+                : null
+            }
           />
           <div className="mt-8 grid gap-8 md:grid-cols-2">
             <FigureGroup name="Senate">
-              <Figure value={senate.counts.recordVotes} label="Record votes" muted={!senate.counts.recordVotes} />
-              <Figure value={senate.counts.billsPassed} label="Bills passed" muted={!senate.counts.billsPassed} />
-              <Figure value={senate.counts.resolutionsPassed} label="Resolutions" muted={!senate.counts.resolutionsPassed} />
-              <Figure value={senate.counts.confirmed} label="Confirmed" muted={!senate.counts.confirmed} />
+              <Figure
+                value={senate.counts.recordVotes}
+                label="Record votes"
+                muted={!senate.counts.recordVotes}
+              />
+              <Figure
+                value={senate.counts.billsPassed}
+                label="Bills passed"
+                muted={!senate.counts.billsPassed}
+              />
+              <Figure
+                value={senate.counts.resolutionsPassed}
+                label="Resolutions"
+                muted={!senate.counts.resolutionsPassed}
+              />
+              <Figure
+                value={senate.counts.confirmed}
+                label="Confirmed"
+                muted={!senate.counts.confirmed}
+              />
             </FigureGroup>
             <FigureGroup name="House">
-              <Figure value={house.counts.recordVotes} label="Record votes" muted={!house.counts.recordVotes} />
-              <Figure value={house.counts.billsPassed} label="Bills passed" muted={!house.counts.billsPassed} />
-              <Figure value={house.counts.resolutionsPassed} label="Resolutions" muted={!house.counts.resolutionsPassed} />
-              <Figure value={house.counts.reported} label="Reported" muted={!house.counts.reported} />
+              <Figure
+                value={house.counts.recordVotes}
+                label="Record votes"
+                muted={!house.counts.recordVotes}
+              />
+              <Figure
+                value={house.counts.billsPassed}
+                label="Bills passed"
+                muted={!house.counts.billsPassed}
+              />
+              <Figure
+                value={house.counts.resolutionsPassed}
+                label="Resolutions"
+                muted={!house.counts.resolutionsPassed}
+              />
+              <Figure
+                value={house.counts.reported}
+                label="Reported"
+                muted={!house.counts.reported}
+              />
             </FigureGroup>
           </div>
           <div className="mt-10 grid gap-12 md:grid-cols-2">
@@ -215,7 +269,10 @@ export default function DayReportView({ report }: { report: DayReport }) {
               {sources.map((d, i) => (
                 <span key={d.chamber}>
                   {i > 0 && " · "}
-                  <Link href={d.sourceUrl as string} className="underline decoration-white/30 underline-offset-4 hover:text-phos">
+                  <Link
+                    href={d.sourceUrl as string}
+                    className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                  >
                     {CHAMBER_NAME[d.chamber]} source
                   </Link>
                 </span>

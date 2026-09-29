@@ -114,7 +114,12 @@ export default function StateResults({
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
           This page retries {describeInterval(retryMs ?? RETRY_BACKOFF_MS[0])}.{" "}
-          <OfficeLink href={lookupHref} stateName={stateName} stateSpecific={lookupIsStateSpecific} what="the count" />
+          <OfficeLink
+            href={lookupHref}
+            stateName={stateName}
+            stateSpecific={lookupIsStateSpecific}
+            what="the count"
+          />
         </p>
       </section>
     );
@@ -139,7 +144,12 @@ export default function StateResults({
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
           This election&apos;s results are no longer followed live on this page.{" "}
-          <OfficeLink href={lookupHref} stateName={stateName} stateSpecific={lookupIsStateSpecific} what="the final count" />
+          <OfficeLink
+            href={lookupHref}
+            stateName={stateName}
+            stateSpecific={lookupIsStateSpecific}
+            what="the final count"
+          />
         </p>
       </section>
     );
@@ -154,7 +164,12 @@ export default function StateResults({
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
           {stateName}&apos;s election office doesn&apos;t publish a results feed this page can read,
           so its count isn&apos;t shown or coloured here.{" "}
-          <OfficeLink href={lookupHref} stateName={stateName} stateSpecific={lookupIsStateSpecific} what="it" />
+          <OfficeLink
+            href={lookupHref}
+            stateName={stateName}
+            stateSpecific={lookupIsStateSpecific}
+            what="it"
+          />
         </p>
       </section>
     );
@@ -179,7 +194,12 @@ export default function StateResults({
             Civitas couldn&apos;t read {stateName}&apos;s results feed (last tried{" "}
             {formatEasternTime(feed.checkedAt)}), so no count is shown here yet. This page keeps
             trying.{" "}
-            <OfficeLink href={lookupHref} stateName={stateName} stateSpecific={lookupIsStateSpecific} what="the count" />
+            <OfficeLink
+              href={lookupHref}
+              stateName={stateName}
+              stateSpecific={lookupIsStateSpecific}
+              what="the count"
+            />
           </p>
         ) : (
           <p className="border border-white/[0.09] bg-surface p-4 text-sm text-ink-lo">

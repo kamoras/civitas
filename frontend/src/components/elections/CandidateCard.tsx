@@ -21,7 +21,7 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
     Object.entries(DEM_AFFILIATE_PARTIES).map(([code, suffix]) => [
       code,
       { label: `DEMOCRAT (${suffix})`, color: "text-dem-blue", rule: "bg-dem-blue" },
-    ]),
+    ])
   ),
   LIB: { label: "LIBERTARIAN", color: "text-ink-lo", rule: "bg-ink-min" },
   GRE: { label: "GREEN", color: "text-phos-mid", rule: "bg-phos-mid" },
@@ -64,7 +64,11 @@ export default function CandidateCard({
   redrawnSeat?: boolean;
 }) {
   const pm = getPartyMeta(candidate);
-  const incumbency = incumbencyLabel(candidate.incumbentChallenge, redrawnSeat, candidate.incumbentRecord?.seat);
+  const incumbency = incumbencyLabel(
+    candidate.incumbentChallenge,
+    redrawnSeat,
+    candidate.incumbentRecord?.seat
+  );
   const cash = cashOnHandDisplay(candidate.cashOnHand);
   // UTC date only, sliced from the ISO string — deterministic across
   // server and client renders, so no locale/hydration hazard.

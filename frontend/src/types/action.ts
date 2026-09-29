@@ -74,7 +74,7 @@ export interface ActionIssue {
   /** "developing" is a primary-source-only draft awaiting press
    *  corroboration (see backend early_signal.py) — shown with a
    *  disclosure badge and ranked after every "confirmed" issue. */
-  status: 'developing' | 'confirmed';
+  status: "developing" | "confirmed";
   /** What a developing issue was drafted from — "senate_roll_call_vote",
    *  "house_roll_call_vote", "federal_register_significant_rule",
    *  "election_results" — null for news-derived issues. Optional for an

@@ -80,10 +80,15 @@ export default function ElectionsPage() {
   // The clock is only read on election day before any count: any other
   // time, subscribing would re-render the whole page once a second.
   const beforeAnyCount =
-    resultsMode && !!results && results.phase.phase === "election_day" && results.races.length === 0;
+    resultsMode &&
+    !!results &&
+    results.phase.phase === "election_day" &&
+    results.races.length === 0;
   const now = useNow(beforeAnyCount);
   const stillVoting =
-    beforeAnyCount && !!results && results.liveStates.every((st) => pollsStillOpen(results, st, now));
+    beforeAnyCount &&
+    !!results &&
+    results.liveStates.every((st) => pollsStillOpen(results, st, now));
   const firstClose = stillVoting
     ? Object.values(results?.pollsClose ?? {})
         .filter((t) => Date.parse(t) > now)
@@ -149,9 +154,10 @@ export default function ElectionsPage() {
                 </p>
               }
             >
-              Voting is under way. Counts appear here as each state&apos;s polls close, as the state&apos;s own
-              election office publishes them — nothing of a state&apos;s count is shown before its last polls
-              close. Every state&apos;s ballot research is one click away.
+              Voting is under way. Counts appear here as each state&apos;s polls close, as the
+              state&apos;s own election office publishes them — nothing of a state&apos;s count is
+              shown before its last polls close. Every state&apos;s ballot research is one click
+              away.
             </PageMasthead>
           ) : resultsMode && results ? (
             <PageMasthead
@@ -174,8 +180,9 @@ export default function ElectionsPage() {
                 </p>
               }
             >
-              Counts as each state&apos;s own election office publishes them, refreshed every minute. A race is
-              leading until the state calls its count official; Civitas does not call races.
+              Counts as each state&apos;s own election office publishes them, refreshed every
+              minute. A race is leading until the state calls its count official; Civitas does not
+              call races.
             </PageMasthead>
           ) : campaignMode ? (
             <PageMasthead
@@ -187,7 +194,10 @@ export default function ElectionsPage() {
             </PageMasthead>
           ) : (
             // Phase not known yet: say nothing either mode would contradict.
-            <PageMasthead eyebrow="Elections" title={pvi?.cycleYear ? `${pvi.cycleYear} midterm elections` : "Midterm elections"} />
+            <PageMasthead
+              eyebrow="Elections"
+              title={pvi?.cycleYear ? `${pvi.cycleYear} midterm elections` : "Midterm elections"}
+            />
           )}
 
           {resultsMode && results && <ResultsOverview results={results} states={STATES} />}

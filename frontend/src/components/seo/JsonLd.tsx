@@ -6,7 +6,11 @@
  * title containing `</script>` would close the tag and inject markup. The
  * `<` escape is still valid JSON, so parsers read the same string.
  */
-export default function JsonLd({ data }: { data: Record<string, unknown> | Record<string, unknown>[] }) {
+export default function JsonLd({
+  data,
+}: {
+  data: Record<string, unknown> | Record<string, unknown>[];
+}) {
   return (
     <script
       type="application/ld+json"

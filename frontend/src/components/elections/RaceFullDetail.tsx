@@ -18,7 +18,8 @@ const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
   nominees:
     "Nominees confirmed by this state's primary results. Candidates who reach the general election without running in a primary — Libertarian, Green or independent — aren't covered for this state yet, so this list may be short.",
   primary: "Ranked by money raised — the nominee isn't decided until this state's primary.",
-  filers: "Ranked by money raised — this state's nominees aren't confirmed yet, so this is every FEC filer.",
+  filers:
+    "Ranked by money raised — this state's nominees aren't confirmed yet, so this is every FEC filer.",
 };
 
 /** The `filers` note above says nominees "aren't confirmed YET", which is
@@ -40,10 +41,7 @@ function TailRow({ candidate }: { candidate: BallotCandidate }) {
   const cash = cashOnHandDisplay(candidate.cashOnHand);
   return (
     <div className="flex items-center gap-2.5 border-b border-white/[0.05] py-1.5 text-sm last:border-b-0">
-      <span
-        className={`h-2 w-2 shrink-0 ${getPartyMeta(candidate).rule}`}
-        aria-hidden="true"
-      />
+      <span className={`h-2 w-2 shrink-0 ${getPartyMeta(candidate).rule}`} aria-hidden="true" />
       <span className="flex-1 truncate text-ink-lo">{candidateName(candidate)}</span>
       <span className="shrink-0 font-mono text-xs text-ink-min">
         {cash == null ? "—" : cash.label === "Debt" ? `debt ${cash.amount}` : cash.amount}
@@ -104,7 +102,8 @@ export default function RaceFullDetail({
               {supersededByPrimary && race.candidateSource === "filers"
                 ? SUPERSEDED_NOTE
                 : SOURCE_NOTE[race.candidateSource]}
-              {hasUnconfirmed && " Candidates marked UNCONFIRMED drew no primary opponent, so this state held no primary for them and its results file doesn't list them — they're shown from their FEC filing."}
+              {hasUnconfirmed &&
+                " Candidates marked UNCONFIRMED drew no primary opponent, so this state held no primary for them and its results file doesn't list them — they're shown from their FEC filing."}
             </p>
             {tiered && (
               <span className="shrink-0 border border-white/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-min">
@@ -128,7 +127,9 @@ export default function RaceFullDetail({
                 aria-expanded={tailOpen}
                 className="mt-3 flex w-full items-center gap-2 border border-dashed border-white/15 px-3 py-2 font-mono text-xs text-ink-lo transition-colors hover:border-white/30 hover:text-ink-hi"
               >
-                <span className={`inline-block transition-transform ${tailOpen ? "rotate-90" : ""}`}>
+                <span
+                  className={`inline-block transition-transform ${tailOpen ? "rotate-90" : ""}`}
+                >
                   ▸
                 </span>
                 {tail.length} more filed
@@ -176,7 +177,6 @@ export default function RaceFullDetail({
           </p>
         </div>
       )}
-
     </div>
   );
 }

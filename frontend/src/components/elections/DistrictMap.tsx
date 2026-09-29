@@ -186,14 +186,15 @@ export default function DistrictMap({
 
   if (!multiDistrict || failed || !topo || !fit) return null;
 
-  const pickedDistrict = picked ? races.find((r) => r.id === picked)?.district ?? null : null;
+  const pickedDistrict = picked ? (races.find((r) => r.id === picked)?.district ?? null) : null;
   const focus = hovered ?? pickedDistrict;
   const focusRace = focus != null ? byDistrict.get(focus) : undefined;
   const answered = feedAnswered ?? (!!results && results.size > 0);
   const drawn = races.filter((r) => r.district != null);
   const stateLevel = drawn.filter((r) => r.pviLevel === "state").length;
   // No drawn district has a lean of its own: nothing to key red/blue by.
-  const unshaded = !results && (!showLean || newLines || (drawn.length > 0 && stateLevel === drawn.length));
+  const unshaded =
+    !results && (!showLean || newLines || (drawn.length > 0 && stateLevel === drawn.length));
 
   return (
     <div className="mb-4 border border-white/15">
@@ -210,7 +211,11 @@ export default function DistrictMap({
             <li>red = R leads · blue = D leads · purple = other party leads</li>
             <li>fainter = under half in · solid = official</li>
             <li className="flex items-center gap-1">
-              <span aria-hidden="true" className="inline-block h-2 w-3" style={{ backgroundColor: TIED_FILL }} />
+              <span
+                aria-hidden="true"
+                className="inline-block h-2 w-3"
+                style={{ backgroundColor: TIED_FILL }}
+              />
               tied
             </li>
             <li className="flex items-center gap-1">
@@ -235,7 +240,9 @@ export default function DistrictMap({
         ) : unshaded ? (
           <p className="font-mono text-[10px] text-ink-min">
             {newLines ? "the new 2026 districts · " : ""}
-            {showLean ? "no per-district lean published here yet" : "no lean shown from election day"}
+            {showLean
+              ? "no per-district lean published here yet"
+              : "no lean shown from election day"}
           </p>
         ) : (
           <p className="font-mono text-[10px] text-ink-min">
@@ -255,7 +262,13 @@ export default function DistrictMap({
       >
         {results && (
           <defs>
-            <pattern id={hatchId} patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+            <pattern
+              id={hatchId}
+              patternUnits="userSpaceOnUse"
+              width="6"
+              height="6"
+              patternTransform="rotate(45)"
+            >
               <rect width="6" height="6" fill={AWAITING_FILL} />
               <rect width="2" height="6" fill={NO_COUNT_STRIPE} />
             </pattern>
@@ -369,7 +382,9 @@ function DistrictPreview({
         return (
           <span
             key={c.id}
-            className={major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink-lo"}
+            className={
+              major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink-lo"
+            }
           >
             {candidateName(c)}
           </span>
@@ -396,7 +411,9 @@ function DistrictResultPreview({
   const tied = !!result && isTied(result);
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="text-ink-hi">{district === 0 ? `${state} at-large` : `${state}-${district}`}</span>
+      <span className="text-ink-hi">
+        {district === 0 ? `${state} at-large` : `${state}-${district}`}
+      </span>
       {tied && <span className="text-ink-hi">TIED</span>}
       {!result && feedAnswered ? (
         <span className="text-ink-min">no count from the state&apos;s feed</span>
@@ -405,8 +422,12 @@ function DistrictResultPreview({
       ) : (
         <>
           {[first, second].filter(Boolean).map((c) => (
-            <span key={c.candidateId ?? c.name} className={tied ? "text-ink-hi" : partyTextClass(c.party)}>
-              {c.name} ({partyLetter(c.party) || "other"}) {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
+            <span
+              key={c.candidateId ?? c.name}
+              className={tied ? "text-ink-hi" : partyTextClass(c.party)}
+            >
+              {c.name} ({partyLetter(c.party) || "other"}){" "}
+              {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
             </span>
           ))}
           <span className="text-ink-min">{reportingText(result)}</span>

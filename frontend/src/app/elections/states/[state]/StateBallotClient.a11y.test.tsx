@@ -21,39 +21,92 @@ vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/BackToTop", () => ({ default: () => null }));
 vi.mock("@/components/elections/DistrictMap", () => ({ default: () => null }));
 
-function candidate(id: string, name: string, party: string, extra: Partial<RaceWithCandidates["candidates"][number]> = {}) {
+function candidate(
+  id: string,
+  name: string,
+  party: string,
+  extra: Partial<RaceWithCandidates["candidates"][number]> = {}
+) {
   return {
-    id, name, party, confirmed: true, incumbentChallenge: null, candidateStatus: "C", hasRaisedFunds: true,
-    contributions: 1000, cashOnHand: 500, lastFinancialsSync: "2026-09-20T00:00:00Z", incumbentRecord: null,
+    id,
+    name,
+    party,
+    confirmed: true,
+    incumbentChallenge: null,
+    candidateStatus: "C",
+    hasRaisedFunds: true,
+    contributions: 1000,
+    cashOnHand: 500,
+    lastFinancialsSync: "2026-09-20T00:00:00Z",
+    incumbentRecord: null,
     ...extra,
   };
 }
 
 function race(id: string, office: "S" | "H", district: number | null): RaceWithCandidates {
   return {
-    id, cycleYear: 2026, office, state: "NC", district, isSpecial: false, pvi: 2, pviLevel: "district",
-    candidateSource: "confirmed", counties: office === "H" ? ["Wake County (part)"] : null,
+    id,
+    cycleYear: 2026,
+    office,
+    state: "NC",
+    district,
+    isSpecial: false,
+    pvi: 2,
+    pviLevel: "district",
+    candidateSource: "confirmed",
+    counties: office === "H" ? ["Wake County (part)"] : null,
     candidates: [
-      candidate(`${id}-d`, "A Democrat", "DEM", { incumbentRecord: { id: "M000001", score: 70.5 } }),
+      candidate(`${id}-d`, "A Democrat", "DEM", {
+        incumbentRecord: { id: "M000001", score: 70.5 },
+      }),
       candidate(`${id}-r`, "A Republican", "REP"),
     ],
   };
 }
 
 const ballot: StateBallot = {
-  state: "NC", stateName: "North Carolina", cycleYear: 2026, electionDate: "2026-11-03", electionType: "general",
-  primaryDate: "2026-03-03", statePvi: 2, nextSenateElection: null,
+  state: "NC",
+  stateName: "North Carolina",
+  cycleYear: 2026,
+  electionDate: "2026-11-03",
+  electionType: "general",
+  primaryDate: "2026-03-03",
+  statePvi: 2,
+  nextSenateElection: null,
   senateRaces: [race("2026-SEN-NC", "S", null)],
   houseRaces: [race("2026-HOUSE-NC-1", "H", 1), race("2026-HOUSE-NC-2", "H", 2)],
-  coverage: [{
-    id: 1, sourceType: "news", sourceName: "A Paper", title: "A story", url: "https://example.org/a",
-    summary: "What happened.", author: null, publishedAt: "2026-09-20T00:00:00Z",
-    race: { id: "2026-SEN-NC", office: "S", district: null },
-  }],
-  measures: [], measureCoverage: { status: "confirmed_none", sourceName: "NC SBE", checkedAt: null, lastAttemptAt: null },
-  statewideRaces: [], statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
-  stateLegRaces: [], judicialRaces: [], judicialCoverage: { status: "not_yet_covered", checkedAt: null, sourceName: null },
-  officialLookup: { url: "https://www.usa.gov/election-office", label: "Find your election office", sourceName: "USA.gov", isStateSpecific: false, verifiedAt: null },
+  coverage: [
+    {
+      id: 1,
+      sourceType: "news",
+      sourceName: "A Paper",
+      title: "A story",
+      url: "https://example.org/a",
+      summary: "What happened.",
+      author: null,
+      publishedAt: "2026-09-20T00:00:00Z",
+      race: { id: "2026-SEN-NC", office: "S", district: null },
+    },
+  ],
+  measures: [],
+  measureCoverage: {
+    status: "confirmed_none",
+    sourceName: "NC SBE",
+    checkedAt: null,
+    lastAttemptAt: null,
+  },
+  statewideRaces: [],
+  statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
+  stateLegRaces: [],
+  judicialRaces: [],
+  judicialCoverage: { status: "not_yet_covered", checkedAt: null, sourceName: null },
+  officialLookup: {
+    url: "https://www.usa.gov/election-office",
+    label: "Find your election office",
+    sourceName: "USA.gov",
+    isStateSpecific: false,
+    verifiedAt: null,
+  },
   omits: ["County and municipal offices"],
 };
 
@@ -99,24 +152,65 @@ describe("ballot page accessibility", () => {
 
 describe("results mode accessibility", () => {
   it("has no structural violations with the live count on the page", async () => {
-    const phase = { phase: "results" as const, electionDate: "2026-11-03", resultsUntil: "2026-11-20", lastResultChange: "2026-11-04T02:42:00Z" };
+    const phase = {
+      phase: "results" as const,
+      electionDate: "2026-11-03",
+      resultsUntil: "2026-11-20",
+      lastResultChange: "2026-11-04T02:42:00Z",
+    };
     const result = (raceId: string, office: "S" | "H", district: number | null) => ({
-      raceId, state: "NC", office, district, isSpecial: false, heldBy: "REP", official: false, votesCounted: 1000,
-      reportingUnits: 60, totalUnits: 100, unitLabel: "precincts", sourceName: "NC SBE", sourceUrl: "https://example.org/r",
-      fetchedAt: "2026-11-04T02:44:00Z", lastChangeAt: "2026-11-04T02:42:00Z", leaderParty: "DEM", flip: true,
+      raceId,
+      state: "NC",
+      office,
+      district,
+      isSpecial: false,
+      heldBy: "REP",
+      official: false,
+      votesCounted: 1000,
+      reportingUnits: 60,
+      totalUnits: 100,
+      unitLabel: "precincts",
+      sourceName: "NC SBE",
+      sourceUrl: "https://example.org/r",
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: "DEM",
+      flip: true,
       candidates: [
         { name: "A Democrat", party: "DEM", votes: 560, pct: 56, candidateId: null },
         { name: "A Republican", party: "REP", votes: 440, pct: 44, candidateId: null },
       ],
     });
     fetchLiveResults.mockResolvedValue({
-      cycleYear: 2026, phase, liveStates: ["NC"], senateStates: ["NC"], pollsClose: {},
-      races: [result("2026-SEN-NC", "S", null), result("2026-HOUSE-NC-1", "H", 1), result("2026-HOUSE-NC-2", "H", 2)],
-      updates: [{
-        id: 1, raceId: "2026-SEN-NC", state: "NC", office: "S", district: null, isSpecial: false, kind: "flip",
-        at: "2026-11-04T02:42:00Z",
-        detail: { leader: { name: "A Democrat", party: "DEM", votes: 560, pct: 56 }, heldBy: "REP", reportingUnits: 60, totalUnits: 100, unitLabel: "precincts" },
-      }],
+      cycleYear: 2026,
+      phase,
+      liveStates: ["NC"],
+      senateStates: ["NC"],
+      pollsClose: {},
+      races: [
+        result("2026-SEN-NC", "S", null),
+        result("2026-HOUSE-NC-1", "H", 1),
+        result("2026-HOUSE-NC-2", "H", 2),
+      ],
+      updates: [
+        {
+          id: 1,
+          raceId: "2026-SEN-NC",
+          state: "NC",
+          office: "S",
+          district: null,
+          isSpecial: false,
+          kind: "flip",
+          at: "2026-11-04T02:42:00Z",
+          detail: {
+            leader: { name: "A Democrat", party: "DEM", votes: 560, pct: 56 },
+            heldBy: "REP",
+            reportingUnits: 60,
+            totalUnits: 100,
+            unitLabel: "precincts",
+          },
+        },
+      ],
     });
     render(<StateBallotClient ballot={{ ...ballot, phase }} />);
     await screen.findByRole("region", { name: "U.S. House" });

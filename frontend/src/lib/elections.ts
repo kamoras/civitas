@@ -130,8 +130,7 @@ export function matchesDistrictQuery(
   if (!q) return true;
   // "AL" is what an at-large district renders as, so it must also be
   // what an at-large district is searchable by.
-  const districtLabel =
-    race.district === 0 ? "al" : String(race.district ?? "").toLowerCase();
+  const districtLabel = race.district === 0 ? "al" : String(race.district ?? "").toLowerCase();
   // A multi-member district renders as "1a"/"1b" (Idaho) or "5-1"/"5-2"
   // (Washington), but a voter there knows they are in district 1 — and
   // typing it must not come back empty. The numeric part matches both
@@ -142,7 +141,7 @@ export function matchesDistrictQuery(
     (districtNumber !== "" && districtNumber !== districtLabel && districtNumber === q) ||
     (race.areas ?? []).some((a) => a.toLowerCase().includes(q)) ||
     race.candidates.some(
-      (c) => c.name.toLowerCase().includes(q) || (c.ballotName ?? "").toLowerCase().includes(q),
+      (c) => c.name.toLowerCase().includes(q) || (c.ballotName ?? "").toLowerCase().includes(q)
     )
   );
 }
@@ -200,7 +199,9 @@ export function measureStatusLabel(status: string): string {
  * "other filers" on a ballot she is printed on.
  */
 export function isActiveCandidate(c: CandidateSummary): boolean {
-  return c.confirmed || c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I";
+  return (
+    c.confirmed || c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I"
+  );
 }
 
 /** FEC's incumbency codes, in words. */
@@ -213,7 +214,10 @@ const FEC_INCUMBENCY: Record<string, string> = {
 /** Whether `race` is a House seat on lines other than the ones today's
  * members were elected on (StateBallot.newDistrictLines). Senate seats are
  * statewide and never redrawn. */
-export function isRedrawnSeat(race: { office: string }, newDistrictLines: boolean | undefined): boolean {
+export function isRedrawnSeat(
+  race: { office: string },
+  newDistrictLines: boolean | undefined
+): boolean {
   return !!newDistrictLines && race.office === "H";
 }
 
@@ -229,9 +233,14 @@ export function isRedrawnSeat(race: { office: string }, newDistrictLines: boolea
  * the old seat, are not said at all. Where the payload names the seat the
  * member holds today (incumbentRecord.seat), it is said too:
  * "SITTING MEMBER, TX-35". */
-export function incumbencyLabel(code: string | null, redrawnSeat: boolean, heldSeat?: string | null): string | null {
+export function incumbencyLabel(
+  code: string | null,
+  redrawnSeat: boolean,
+  heldSeat?: string | null
+): string | null {
   if (!code) return null;
-  if (redrawnSeat) return code === "I" ? (heldSeat ? `SITTING MEMBER, ${heldSeat}` : "SITTING MEMBER") : null;
+  if (redrawnSeat)
+    return code === "I" ? (heldSeat ? `SITTING MEMBER, ${heldSeat}` : "SITTING MEMBER") : null;
   return FEC_INCUMBENCY[code] ?? code;
 }
 
@@ -247,7 +256,10 @@ export const DEM_AFFILIATE_PARTIES: Record<string, string> = { DFL: "DFL", DNL: 
  * read from the backend's `partyGroup` (a DFL nominee's is "DEM"), so a
  * real DFL/DNL nominee reads as the major-party candidate everywhere on
  * the page. A statewide nominee's `party` is already that group. */
-export function majorPartyOf(c: { party: string; partyGroup?: string | null }): "DEM" | "REP" | null {
+export function majorPartyOf(c: {
+  party: string;
+  partyGroup?: string | null;
+}): "DEM" | "REP" | null {
   const group = c.partyGroup ?? c.party;
   if (group === "DEM") return "DEM";
   if (group === "REP") return "REP";
@@ -293,9 +305,7 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
   const topOf = (party: "DEM" | "REP") =>
     active.filter((c) => majorPartyOf(c) === party).sort((a, b) => byRaised(b) - byRaised(a))[0] ??
     null;
-  const majorLeaders = [topOf("DEM"), topOf("REP")].filter(
-    (c): c is BallotCandidate => c != null,
-  );
+  const majorLeaders = [topOf("DEM"), topOf("REP")].filter((c): c is BallotCandidate => c != null);
   // Debt (negative cash on hand) floors at 0 rather than going negative:
   // a leader in debt still means "no real minor-party threat", not "any
   // non-negative minor candidate counts as one" (the >0 guard below).

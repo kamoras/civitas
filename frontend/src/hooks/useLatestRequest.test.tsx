@@ -30,7 +30,12 @@ describe("useLatestRequest", () => {
     act(() => result.current.request("nay", () => Promise.reject(new Error("boom"))));
     expect(result.current.requested).toBe("nay");
     await waitFor(() => expect(result.current.error).toBe("boom"));
-    expect(result.current).toMatchObject({ data: "ALL", shown: "all", requested: "all", loading: false });
+    expect(result.current).toMatchObject({
+      data: "ALL",
+      shown: "all",
+      requested: "all",
+      loading: false,
+    });
   });
 
   it("reports a fetcher that throws synchronously as an error", async () => {

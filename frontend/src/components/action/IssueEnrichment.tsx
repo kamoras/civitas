@@ -48,7 +48,13 @@ import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
  *  Design: font-mono/tracked-uppercase/text-ink-min matches every other
  *  small label on this page (SOURCES:, MEDIA COVERAGE) — this is that same
  *  register, not a one-off caption style. */
-export function IssueImage({ issue, size = "full" }: { issue: ActionIssue; size?: "full" | "thumbnail" }) {
+export function IssueImage({
+  issue,
+  size = "full",
+}: {
+  issue: ActionIssue;
+  size?: "full" | "thumbnail";
+}) {
   if (!issue.imageUrl) return null;
   const alt = issue.imageAlt || issue.title;
 
@@ -314,7 +320,8 @@ export function trackableActions(issue: ActionIssue): ActionItem[] {
  * these, and anything else is not one of them. */
 export function followResultsActions(issue: ActionIssue): ActionItem[] {
   return issue.actions.filter(
-    (a) => a.type === "follow_results" && typeof a.url === "string" && a.url.startsWith("/elections/")
+    (a) =>
+      a.type === "follow_results" && typeof a.url === "string" && a.url.startsWith("/elections/")
   );
 }
 
@@ -330,7 +337,9 @@ export function FollowResults({ issue }: { issue: ActionIssue }) {
           className="flex items-center gap-3 border border-signal-amber/40 bg-signal-amber/10 p-3 transition-all hover:border-signal-amber/70 group"
         >
           <span className="flex-1 text-sm text-ink group-hover:text-phos">{action.text}</span>
-          <span className="shrink-0 font-mono text-xs tracking-wide text-signal-amber">LIVE COUNT →</span>
+          <span className="shrink-0 font-mono text-xs tracking-wide text-signal-amber">
+            LIVE COUNT →
+          </span>
         </Link>
       ))}
     </div>

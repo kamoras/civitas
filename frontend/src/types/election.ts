@@ -438,7 +438,6 @@ export interface StateBallot {
   omits: string[];
 }
 
-
 /** Provenance block on the /pvi response. Optional end to end — older
  * backend responses (and cached ones) may omit it entirely. */
 export interface PviMeta {
@@ -523,7 +522,6 @@ export interface TownBallot {
   contests: TownBallotItem[];
 }
 
-
 // ── Live results (GET /elections/results) ──────────────────────────────
 
 /** campaign: ballot research, lean maps. election_day / results: the page
@@ -578,12 +576,7 @@ export interface LiveRaceResult {
 }
 
 export type ResultEventKind =
-  | "first_returns"
-  | "lead_change"
-  | "all_reporting"
-  | "official"
-  | "flip"
-  | "flip_reversed";
+  "first_returns" | "lead_change" | "all_reporting" | "official" | "flip" | "flip_reversed";
 
 export interface ResultEventPerson {
   name: string;

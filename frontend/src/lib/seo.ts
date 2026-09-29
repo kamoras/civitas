@@ -9,7 +9,11 @@ import type { PoliticianProfile } from "@/types/politicians";
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 import { billCanonicalPath } from "./congress";
 
-const PARTY_ADJECTIVES: Record<string, string> = { D: "Democratic", R: "Republican", I: "independent" };
+const PARTY_ADJECTIVES: Record<string, string> = {
+  D: "Democratic",
+  R: "Republican",
+  I: "independent",
+};
 // No entry for "I": an independent has no party to be affiliated with.
 const PARTY_ORGS: Record<string, string> = { D: "Democratic Party", R: "Republican Party" };
 
@@ -30,7 +34,10 @@ const BODY_NAMES: Record<string, string> = {
  * `party` is the APPOINTING president's party, not the justice's own, and
  * historical presidents carry Whig/Federalist codes a reader wouldn't parse.
  */
-export function describeProfile(profile: PoliticianProfile): { title: string; description: string } {
+export function describeProfile(profile: PoliticianProfile): {
+  title: string;
+  description: string;
+} {
   const { identity, branch } = profile;
   const { name, party, state, stateName, role, district } = identity;
   const former = identity.isCurrent === false || identity.isActive === false;
@@ -87,17 +94,21 @@ export function personJsonLd(id: string, profile: PoliticianProfile) {
   };
 }
 
-
 const CHAMBER_NAMES: Record<string, string> = { senate: "Senate", house: "House" };
 
 /** "S.4967, the Foo Act: sponsor, status, and votes" — the bill number is
  * what people paste into a search box, so it leads. */
 export function describeBill(bill: BillDetail): { title: string; description: string } {
   const sponsor = `${bill.sponsorName} (${bill.sponsorParty}-${bill.sponsorState})`;
-  const status = bill.isLaw ? "Became law." : bill.latestAction ? `Latest action: ${bill.latestAction}` : "";
+  const status = bill.isLaw
+    ? "Became law."
+    : bill.latestAction
+      ? `Latest action: ${bill.latestAction}`
+      : "";
   return {
     title: `${bill.billId}: ${bill.title}`,
-    description: `${bill.billId} (${ordinal(bill.congress)} Congress, ${CHAMBER_NAMES[bill.chamber] ?? bill.chamber}), sponsored by ${sponsor}. ${status}`.trim(),
+    description:
+      `${bill.billId} (${ordinal(bill.congress)} Congress, ${CHAMBER_NAMES[bill.chamber] ?? bill.chamber}), sponsored by ${sponsor}. ${status}`.trim(),
   };
 }
 

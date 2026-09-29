@@ -55,11 +55,7 @@ export default function PageFallback({
           <div aria-busy="true" aria-live="polite" className="space-y-4">
             <span className="sr-only">Loading…</span>
             {Array.from({ length: rows }).map((_, i) => (
-              <div
-                key={i}
-                className="border border-ink-lo/20 p-4 animate-pulse"
-                aria-hidden="true"
-              >
+              <div key={i} className="border border-ink-lo/20 p-4 animate-pulse" aria-hidden="true">
                 <div className="h-4 w-2/3 bg-ink-lo/20 mb-3" />
                 <div className="h-3 w-full bg-ink-lo/10 mb-2" />
                 <div className="h-3 w-5/6 bg-ink-lo/10" />

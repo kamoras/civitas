@@ -2,10 +2,20 @@ import Link from "next/link";
 import type { CongressEvent, RollCallSummary } from "@/types/congress";
 import { billHref, resultTone } from "@/lib/congress";
 
-export function Figure({ value, label, muted = false }: { value: number | string; label: string; muted?: boolean }) {
+export function Figure({
+  value,
+  label,
+  muted = false,
+}: {
+  value: number | string;
+  label: string;
+  muted?: boolean;
+}) {
   return (
     <div className="flex flex-col gap-1.5 border-l border-white/[0.09] px-4 py-3">
-      <span className={`font-mono text-3xl leading-none tabular-nums ${muted ? "text-ink-min" : "text-ink-hi"}`}>
+      <span
+        className={`font-mono text-3xl leading-none tabular-nums ${muted ? "text-ink-min" : "text-ink-hi"}`}
+      >
         {value}
       </span>
       <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">{label}</span>
@@ -52,7 +62,9 @@ const TONE_CLASS = { yes: "text-phos-mid", no: "text-signal-red", neutral: "text
 
 export function ResultLabel({ result, rejected }: { result: string; rejected: boolean | null }) {
   return (
-    <span className={`font-mono text-xs uppercase tracking-[0.12em] ${TONE_CLASS[resultTone(rejected)]}`}>
+    <span
+      className={`font-mono text-xs uppercase tracking-[0.12em] ${TONE_CLASS[resultTone(rejected)]}`}
+    >
       {result || "Recorded"}
     </span>
   );
@@ -70,8 +82,16 @@ function TallyBar({ yeas, nays }: { yeas: number; nays: number }) {
   );
 }
 
-export function voteHref(v: { chamber: string; congress: number; session: number; number: number; billId: string | null }) {
-  return v.billId ? `${billHref(v.billId, v.congress)}#vote-${v.chamber}-${v.session}-${v.number}` : null;
+export function voteHref(v: {
+  chamber: string;
+  congress: number;
+  session: number;
+  number: number;
+  billId: string | null;
+}) {
+  return v.billId
+    ? `${billHref(v.billId, v.congress)}#vote-${v.chamber}-${v.session}-${v.number}`
+    : null;
 }
 
 export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; showDate?: boolean }) {
@@ -88,7 +108,10 @@ export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; sho
           <p className="text-sm leading-snug text-ink-lo">{vote.title}</p>
         )}
         {href && vote.billLabel && (
-          <Link href={href} className="w-fit font-mono text-sm text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos">
+          <Link
+            href={href}
+            className="w-fit font-mono text-sm text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+          >
             {vote.billLabel}
           </Link>
         )}

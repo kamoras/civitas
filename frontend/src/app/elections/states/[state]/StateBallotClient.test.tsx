@@ -54,7 +54,13 @@ function houseRace(overrides: Partial<RaceWithCandidates> = {}): RaceWithCandida
     candidateSource: "filers",
     counties: ["Hamilton County (part)"],
     candidates: [
-      candidate({ id: "dem1", name: "Greg Landsman", party: "DEM", incumbentChallenge: "I", cashOnHand: 3_610_213 }),
+      candidate({
+        id: "dem1",
+        name: "Greg Landsman",
+        party: "DEM",
+        incumbentChallenge: "I",
+        cashOnHand: 3_610_213,
+      }),
       candidate({ id: "rep1", name: "Eric Conroy", party: "REP", cashOnHand: 474_156 }),
     ],
     ...overrides,
@@ -80,7 +86,12 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     houseRaces: [houseRace()],
     coverage: [],
     measures: [],
-    measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null, lastAttemptAt: null },
+    measureCoverage: {
+      status: "not_yet_covered",
+      sourceName: null,
+      checkedAt: null,
+      lastAttemptAt: null,
+    },
     statewideRaces: [],
     statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
     stateLegRaces: [],
@@ -111,7 +122,9 @@ describe("the ballot page", () => {
   it("lays the ballot out as contests, federal first, with no drawer open", () => {
     render(<StateBallotClient ballot={ballot()} />);
     const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    const titles = within(index).getAllByRole("button").map((b) => b.textContent);
+    const titles = within(index)
+      .getAllByRole("button")
+      .map((b) => b.textContent);
     expect(titles[0]).toContain("U.S. Representative");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -120,9 +133,11 @@ describe("the ballot page", () => {
     render(
       <StateBallotClient
         ballot={ballot({
-          senateRaces: [houseRace({ id: "2026-SEN-OH", office: "S", district: null, counties: null })],
+          senateRaces: [
+            houseRace({ id: "2026-SEN-OH", office: "S", district: null, counties: null }),
+          ],
         })}
-      />,
+      />
     );
     expect(screen.getAllByText("U.S. Senator").length).toBeGreaterThan(0);
     expect(screen.getAllByText("U.S. Representative").length).toBeGreaterThan(0);
@@ -136,23 +151,32 @@ describe("the ballot page", () => {
           houseRaces: [
             houseRace({
               candidates: [
-                candidate({ id: "d", name: "A Dem", party: "DEM", incumbentRecord: { id: "L000001", score: 71.2 } }),
+                candidate({
+                  id: "d",
+                  name: "A Dem",
+                  party: "DEM",
+                  incumbentRecord: { id: "L000001", score: 71.2 },
+                }),
                 candidate({ id: "r", name: "A Rep", party: "REP" }),
                 candidate({ id: "l", name: "A Lib", party: "LIB" }),
               ],
             }),
           ],
         })}
-      />,
+      />
     );
     expect(
-      screen.getByText(/3 federal candidates, 1 outside the two major parties · 1 with a congressional voting record/),
+      screen.getByText(
+        /3 federal candidates, 1 outside the two major parties · 1 with a congressional voting record/
+      )
     ).toBeInTheDocument();
   });
 
   it("says 1 contest and 1 candidate, not 1 contests", () => {
     render(
-      <StateBallotClient ballot={ballot({ houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })] })} />,
+      <StateBallotClient
+        ballot={ballot({ houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })] })}
+      />
     );
     expect(screen.getByText(/^1 contest · 1 federal candidate/)).toBeInTheDocument();
   });
@@ -170,14 +194,18 @@ describe("the ballot page", () => {
               candidates: [
                 candidate({ id: "d", name: "A Dem", party: "DEM" }),
                 candidate({
-                  id: "l", name: "Shannon Bray", party: "LIB", confirmed: true,
-                  candidateStatus: "N", hasRaisedFunds: false,
+                  id: "l",
+                  name: "Shannon Bray",
+                  party: "LIB",
+                  confirmed: true,
+                  candidateStatus: "N",
+                  hasRaisedFunds: false,
                 }),
               ],
             }),
           ],
         })}
-      />,
+      />
     );
     const box = screen.getByTestId("ballot-columns");
     expect(within(box).getByText("Shannon Bray")).toBeInTheDocument();
@@ -209,9 +237,15 @@ describe("the contest drawer", () => {
     const drawer = await openContest(/U\.S\. Senator/);
     expect(drawer.getByText(/CONTEST 1 OF/)).toBeInTheDocument();
     await userEvent.click(drawer.getByRole("button", { name: "U.S. Representative\u00a0→" }));
-    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "U.S. Representative" })).toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "←\u00a0U.S. Senator" }));
-    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "U.S. Senator" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("dialog")).getByRole("heading", { name: "U.S. Representative" })
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "←\u00a0U.S. Senator" })
+    );
+    expect(
+      within(screen.getByRole("dialog")).getByRole("heading", { name: "U.S. Senator" })
+    ).toBeInTheDocument();
   });
 
   it("switches a race's research with the arrow keys", async () => {
@@ -276,7 +310,13 @@ describe("U.S. Representative", () => {
         houseRace({
           id: "d2",
           district: 2,
-          counties: ["Hamilton County (part)", "Butler County", "Warren County", "Clermont County", "Clinton County"],
+          counties: [
+            "Hamilton County (part)",
+            "Butler County",
+            "Warren County",
+            "Clermont County",
+            "Clinton County",
+          ],
           candidates: [
             candidate({ id: "dem2", name: "Second District Dem", party: "DEM", cashOnHand: 1000 }),
             candidate({ id: "rep2", name: "Second District Rep", party: "REP", cashOnHand: 900 }),
@@ -340,7 +380,9 @@ describe("U.S. Representative", () => {
     await userEvent.click(within(box).getByRole("button", { name: "District 2" }));
     const drawer = within(screen.getByRole("dialog"));
     expect(
-      drawer.getByText("Covers: Hamilton County (part), Butler County, Warren County, Clermont County, Clinton County"),
+      drawer.getByText(
+        "Covers: Hamilton County (part), Butler County, Warren County, Clermont County, Clinton County"
+      )
     ).toBeInTheDocument();
     expect(window.location.hash).toBe("#race-d2");
     await userEvent.click(drawer.getByRole("button", { name: "← PICK ANOTHER DISTRICT" }));
@@ -349,7 +391,9 @@ describe("U.S. Representative", () => {
   });
 
   it("flags a district's PVI as statewide when no district-level crosswalk data exists", async () => {
-    render(<StateBallotClient ballot={ballot({ houseRaces: [houseRace({ pviLevel: "state" })] })} />);
+    render(
+      <StateBallotClient ballot={ballot({ houseRaces: [houseRace({ pviLevel: "state" })] })} />
+    );
     const drawer = await openContest(/U\.S\. Representative/);
     expect(drawer.getByText("(statewide)")).toBeInTheDocument();
   });
@@ -361,7 +405,11 @@ describe("U.S. Representative", () => {
   });
 
   it("never colours a statewide stand-in as the district's own lean", async () => {
-    render(<StateBallotClient ballot={ballot({ houseRaces: [houseRace({ pvi: 6, pviLevel: "state" })] })} />);
+    render(
+      <StateBallotClient
+        ballot={ballot({ houseRaces: [houseRace({ pvi: 6, pviLevel: "state" })] })}
+      />
+    );
     const drawer = await openContest(/U\.S\. Representative/);
     const lean = drawer.getByText("R+6");
     expect(lean).not.toHaveClass("text-signal-red");
@@ -377,7 +425,13 @@ describe("U.S. Representative", () => {
   const fourDistricts = (overrides: Partial<StateBallot> = {}) =>
     ballot({
       houseRaces: [1, 2, 3, 4].map((d) =>
-        houseRace({ id: `d${d}`, district: d, counties: [`County ${d}`], pvi: 6, pviLevel: "state" }),
+        houseRace({
+          id: `d${d}`,
+          district: d,
+          counties: [`County ${d}`],
+          pvi: 6,
+          pviLevel: "state",
+        })
       ),
       ...overrides,
     });
@@ -386,7 +440,9 @@ describe("U.S. Representative", () => {
     render(<StateBallotClient ballot={fourDistricts()} />);
     const drawer = await openContest(/U\.S\. Representative/);
     expect(drawer.getByRole("link", { name: /house\.gov/ })).toBeInTheDocument();
-    expect(drawer.getByLabelText("Filter districts by county, candidate, or district number")).toBeInTheDocument();
+    expect(
+      drawer.getByLabelText("Filter districts by county, candidate, or district number")
+    ).toBeInTheDocument();
   });
 
   it("never sends a reader on new lines to a lookup by representative", async () => {
@@ -404,7 +460,7 @@ describe("U.S. Representative", () => {
             verifiedAt: null,
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/U\.S\. Representative/);
     // house.gov answers for the district today's member holds.
@@ -412,14 +468,15 @@ describe("U.S. Representative", () => {
     expect(drawer.getByText(/new congressional district lines/)).toBeInTheDocument();
     // Campaign wording, addressed to someone who is about to vote.
     expect(drawer.getByText(/new congressional district lines/).closest("p")).toHaveTextContent(
-      /^You vote in exactly one of these\. Texas votes on new congressional district lines this year, so your district/,
+      /^You vote in exactly one of these\. Texas votes on new congressional district lines this year, so your district/
     );
-    expect(drawer.getByText(/lookups by representative show today's districts, not these/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/lookups by representative show today's districts, not these/)
+    ).toBeInTheDocument();
     // The state's own lookup does know the new lines.
-    expect(drawer.getByRole("link", { name: "Texas voter portal (opens in new tab)" })).toHaveAttribute(
-      "href",
-      "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do",
-    );
+    expect(
+      drawer.getByRole("link", { name: "Texas voter portal (opens in new tab)" })
+    ).toHaveAttribute("href", "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do");
     const input = drawer.getByLabelText("Filter districts by county or district number");
     await userEvent.type(input, "zzz");
     expect(drawer.getByText(/Try a county name or a district number/)).toBeInTheDocument();
@@ -431,7 +488,9 @@ describe("U.S. Representative", () => {
   it("links no lookup at all on new lines when the state has none of its own", async () => {
     render(<StateBallotClient ballot={fourDistricts({ newDistrictLines: true })} />);
     const drawer = await openContest(/U\.S\. Representative/);
-    expect(drawer.queryByRole("link", { name: /house\.gov|election office/i })).not.toBeInTheDocument();
+    expect(
+      drawer.queryByRole("link", { name: /house\.gov|election office/i })
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -471,7 +530,9 @@ describe("statewide executive offices", () => {
   it("names the source and the date it was checked", async () => {
     render(<StateBallotClient ballot={ballot(covered)} />);
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/Rhode Island Board of Elections · last checked 2026-09-21/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/Rhode Island Board of Elections · last checked 2026-09-21/)
+    ).toBeInTheDocument();
   });
 
   it("says names from primary results may be incomplete, office by office", async () => {
@@ -481,7 +542,9 @@ describe("statewide executive offices", () => {
     // offices nor the names under one may read as exhaustive.
     render(<StateBallotClient ballot={ballot(covered)} />);
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/an office may be missing, or missing a party's nominee/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/an office may be missing, or missing a party's nominee/)
+    ).toBeInTheDocument();
   });
 
   it("says what primary results can omit without claiming minor parties never appear", async () => {
@@ -517,27 +580,45 @@ describe("statewide executive offices", () => {
       council("3", ["Atkinson"], "Janet Stevens"),
       council("4", ["Allenstown", "Auburn"], "John Stephen"),
     ];
-    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })} />);
+    render(
+      <StateBallotClient
+        ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })}
+      />
+    );
     const drawer = await openContest(/Statewide offices/);
     expect(drawer.getByText(/EXECUTIVE COUNCIL — 4 SEATS/)).toBeInTheDocument();
     expect(drawer.getByText(/Each voter votes in one district's seat only/)).toBeInTheDocument();
-    fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), { target: { value: "concord" } });
+    fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), {
+      target: { value: "concord" },
+    });
     expect(drawer.getByText("Tobin Menard")).toBeInTheDocument();
     expect(drawer.queryByText("John Stephen")).not.toBeInTheDocument();
   });
 
   it("offers the town filter it tells the reader to use, however few the seats", async () => {
-    const seats = [council("1", ["Albany"], "Joseph D. Kenney"), council("2", ["Concord"], "Tobin Menard")];
+    const seats = [
+      council("1", ["Albany"], "Joseph D. Kenney"),
+      council("2", ["Concord"], "Tobin Menard"),
+    ];
     render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: seats })} />);
     const drawer = await openContest(/Statewide offices/);
     expect(drawer.getByText(/Filter by your town to find yours/)).toBeInTheDocument();
-    fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), { target: { value: "concord" } });
+    fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), {
+      target: { value: "concord" },
+    });
     expect(drawer.queryByText("Joseph D. Kenney")).not.toBeInTheDocument();
   });
 
   it("groups a body's seats in the ballot box, which is shared as an image on its own", () => {
-    const seats = [council("1", ["Albany"], "Joseph D. Kenney"), council("2", ["Concord"], "Tobin Menard")];
-    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })} />);
+    const seats = [
+      council("1", ["Albany"], "Joseph D. Kenney"),
+      council("2", ["Concord"], "Tobin Menard"),
+    ];
+    render(
+      <StateBallotClient
+        ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })}
+      />
+    );
     const box = within(screen.getByTestId("ballot-columns"));
     // Governor, Secretary of State and the Council: three offices, not four rows.
     expect(box.getByText(/^3 offices · from primary results$/)).toBeInTheDocument();
@@ -548,9 +629,13 @@ describe("statewide executive offices", () => {
   });
 
   it("points a district seat with no published towns to the official lookup", async () => {
-    const seat = { ...council("2", [], "Dennis McCann"), office: "public_service_commission-2",
-      label: "Public Service Commission, District 2", officeCode: "public_service_commission",
-      officeLabel: "Public Service Commission" };
+    const seat = {
+      ...council("2", [], "Dennis McCann"),
+      office: "public_service_commission-2",
+      label: "Public Service Commission, District 2",
+      officeCode: "public_service_commission",
+      officeLabel: "Public Service Commission",
+    };
     render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [seat] })} />);
     const drawer = await openContest(/Statewide offices/);
     expect(drawer.getByText(/Find yours with/)).toBeInTheDocument();
@@ -558,9 +643,14 @@ describe("statewide executive offices", () => {
   });
 
   it("says every voter votes for each seat of a statewide-elected body", async () => {
-    const seat = { ...council("3", [], "Tim Echols"), office: "public_service_commission-3",
-      label: "Public Service Commission, District 3", officeCode: "public_service_commission",
-      officeLabel: "Public Service Commission", electedBy: "statewide" as const };
+    const seat = {
+      ...council("3", [], "Tim Echols"),
+      office: "public_service_commission-3",
+      label: "Public Service Commission, District 3",
+      officeCode: "public_service_commission",
+      officeLabel: "Public Service Commission",
+      electedBy: "statewide" as const,
+    };
     render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [seat] })} />);
     const drawer = await openContest(/Statewide offices/);
     expect(drawer.getByText(/Every voter in the state votes for each seat/)).toBeInTheDocument();
@@ -568,9 +658,18 @@ describe("statewide executive offices", () => {
   });
 
   it("says a certified ballot list is the whole list", async () => {
-    render(<StateBallotClient ballot={ballot({ ...covered, statewideCoverage: { ...covered.statewideCoverage, ballotList: true } })} />);
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          ...covered,
+          statewideCoverage: { ...covered.statewideCoverage, ballotList: true },
+        })}
+      />
+    );
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/Every candidate on the state's list for the November ballot/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/Every candidate on the state's list for the November ballot/)
+    ).toBeInTheDocument();
     expect(drawer.queryByText(/missing a party's nominee/)).not.toBeInTheDocument();
   });
 
@@ -591,10 +690,12 @@ describe("statewide executive offices", () => {
             checkedAt: "2026-09-21T04:08:00Z",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/No statewide executive offices are on OH's 2026-11-03 ballot/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/No statewide executive offices are on OH's 2026-11-03 ballot/)
+    ).toBeInTheDocument();
     expect(drawer.queryByText(/no federal campaign-finance filings/)).not.toBeInTheDocument();
   });
 
@@ -628,10 +729,14 @@ describe("statewide executive offices", () => {
         ballot={ballot({
           statewideCoverage: covered.statewideCoverage,
           statewideRaces: [
-            { office: "governor", label: "Governor", nominees: [{ party: "IND", name: "Someone Unaffiliated" }] },
+            {
+              office: "governor",
+              label: "Governor",
+              nominees: [{ party: "IND", name: "Someone Unaffiliated" }],
+            },
           ],
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide offices/);
     const el = drawer.getByText("Someone Unaffiliated");
@@ -656,7 +761,7 @@ describe("statewide executive offices", () => {
             },
           ],
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide offices/);
     const roy = drawer.getByText("DEAN ROY").closest("span")!.parentElement!;
@@ -680,7 +785,7 @@ describe("statewide executive offices", () => {
             },
           ],
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide offices/);
     const row = drawer.getByText("Levi Bachmeier").closest("span")!.parentElement!;
@@ -696,17 +801,37 @@ describe("state legislature", () => {
         chamber: "upper",
         label: "State Senate",
         districts: [
-          { district: "5", towns: ["Providence city"], nominees: [{ party: "DEM", name: "Samuel W. Bell" }] },
+          {
+            district: "5",
+            towns: ["Providence city"],
+            nominees: [{ party: "DEM", name: "Samuel W. Bell" }],
+          },
         ],
       },
       {
         chamber: "lower",
         label: "State House",
         districts: [
-          { district: "9", towns: ["Cranston city"], nominees: [{ party: "DEM", name: "Nine Dem" }] },
-          { district: "13", towns: ["Foster town", "Glocester town"], nominees: [{ party: "REP", name: "Derick A. Reels" }] },
-          { district: "74", towns: ["Jamestown town"], nominees: [{ party: "DEM", name: "Island Dem" }] },
-          { district: "75", towns: ["Newport city"], nominees: [{ party: "REP", name: "Newport Rep" }] },
+          {
+            district: "9",
+            towns: ["Cranston city"],
+            nominees: [{ party: "DEM", name: "Nine Dem" }],
+          },
+          {
+            district: "13",
+            towns: ["Foster town", "Glocester town"],
+            nominees: [{ party: "REP", name: "Derick A. Reels" }],
+          },
+          {
+            district: "74",
+            towns: ["Jamestown town"],
+            nominees: [{ party: "DEM", name: "Island Dem" }],
+          },
+          {
+            district: "75",
+            towns: ["Newport city"],
+            nominees: [{ party: "REP", name: "Newport Rep" }],
+          },
         ],
       },
     ],
@@ -772,14 +897,26 @@ describe("state legislature", () => {
               label: "State House",
               districts: [
                 { district: "1", towns: many, nominees: [{ party: "DEM", name: "Rural Rep" }] },
-                { district: "2", towns: ["Elsewhere city"], nominees: [{ party: "REP", name: "Other Rep" }] },
-                { district: "3", towns: ["Third city"], nominees: [{ party: "REP", name: "Third Rep" }] },
-                { district: "4", towns: ["Fourth city"], nominees: [{ party: "REP", name: "Fourth Rep" }] },
+                {
+                  district: "2",
+                  towns: ["Elsewhere city"],
+                  nominees: [{ party: "REP", name: "Other Rep" }],
+                },
+                {
+                  district: "3",
+                  towns: ["Third city"],
+                  nominees: [{ party: "REP", name: "Third Rep" }],
+                },
+                {
+                  district: "4",
+                  towns: ["Fourth city"],
+                  nominees: [{ party: "REP", name: "Fourth Rep" }],
+                },
               ],
             },
           ],
         })}
-      />,
+      />
     );
     const drawer = await openContest(/State House/);
     expect(drawer.getByText(/& 37 more/)).toBeInTheDocument();
@@ -830,14 +967,20 @@ describe("judges", () => {
     render(
       <StateBallotClient
         ballot={withJudicial([
-          { court: "appeals", label: "Court of Appeals", seats: [{ seat: "Seat 4", nominees: [{ party: "R", name: "Michael C. Byrne" }] }] },
+          {
+            court: "appeals",
+            label: "Court of Appeals",
+            seats: [{ seat: "Seat 4", nominees: [{ party: "R", name: "Michael C. Byrne" }] }],
+          },
           {
             court: "district",
             label: "District Court",
-            seats: [{ seat: "District 14, Seat 3", nominees: [{ party: "D", name: "Sherry Miller" }] }],
+            seats: [
+              { seat: "District 14, Seat 3", nominees: [{ party: "D", name: "Sherry Miller" }] },
+            ],
           },
         ])}
-      />,
+      />
     );
     const drawer = await openContest(/Judges/);
     expect(drawer.getByText("COURT OF APPEALS")).toBeInTheDocument();
@@ -851,9 +994,13 @@ describe("judges", () => {
     render(
       <StateBallotClient
         ballot={withJudicial([
-          { court: "district", label: "District Court", seats: [{ seat: "Seat 1", nominees: [{ party: "R", name: "A Judge" }] }] },
+          {
+            court: "district",
+            label: "District Court",
+            seats: [{ seat: "Seat 1", nominees: [{ party: "R", name: "A Judge" }] }],
+          },
         ])}
-      />,
+      />
     );
     const drawer = await openContest(/Judges/);
     expect(drawer.getByText(/Retention questions are a separate ballot item/i)).toBeInTheDocument();
@@ -865,9 +1012,13 @@ describe("judges", () => {
         ballot={ballot({
           state: "ID",
           judicialRaces: [],
-          judicialCoverage: { status: "confirmed_none", checkedAt: "2026-09-22T00:00:00Z", sourceName: "Idaho Secretary of State" },
+          judicialCoverage: {
+            status: "confirmed_none",
+            checkedAt: "2026-09-22T00:00:00Z",
+            sourceName: "Idaho Secretary of State",
+          },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Judges/);
     expect(drawer.getByText(/No judicial contests are on ID/i)).toBeInTheDocument();
@@ -879,7 +1030,9 @@ describe("ballot measures", () => {
   it("never implies zero measures for a state not loaded yet", async () => {
     render(<StateBallotClient ballot={ballot()} />);
     const drawer = await openContest(/Statewide ballot measures/);
-    expect(drawer.getByText(/OH's statewide ballot measures are not yet covered/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/OH's statewide ballot measures are not yet covered/)
+    ).toBeInTheDocument();
     expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
     expect(drawer.getByText(/we have not checked this state yet/)).toBeInTheDocument();
   });
@@ -890,17 +1043,27 @@ describe("ballot measures", () => {
       <StateBallotClient
         ballot={ballot({
           measureCoverage: {
-            status: "not_yet_covered", sourceName: null, checkedAt: null,
-            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: reason,
+            status: "not_yet_covered",
+            sourceName: null,
+            checkedAt: null,
+            lastAttemptAt: "2026-09-28T00:00:00Z",
+            unreadReason: reason,
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
-    expect(drawer.getByText(/OH's statewide ballot measures are not yet covered/)).toBeInTheDocument();
-    expect(drawer.getByText(/does not read Ohio's official measure list automatically yet/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/OH's statewide ballot measures are not yet covered/)
+    ).toBeInTheDocument();
+    expect(
+      drawer.getByText(/does not read Ohio's official measure list automatically yet/)
+    ).toBeInTheDocument();
     expect(drawer.queryByText(/no measures|none on the ballot/i)).not.toBeInTheDocument();
-    expect(drawer.getByRole("link", { name: /official lookup/ })).toHaveAttribute("href", expect.stringMatching(/^https:/));
+    expect(drawer.getByRole("link", { name: /official lookup/ })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/^https:/)
+    );
     // Nothing is attempted for an unread state; a nightly bookkeeping
     // timestamp must not read as one.
     expect(drawer.queryByText(/Last attempt/)).not.toBeInTheDocument();
@@ -913,11 +1076,14 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [{ ...measure, sourceName: "Ohio SoS" }],
           measureCoverage: {
-            status: "not_yet_covered", sourceName: "Ohio SoS", checkedAt: "2026-09-20T00:00:00Z",
-            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: reason,
+            status: "not_yet_covered",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
+            unreadReason: reason,
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
     const notice = drawer.getByRole("status");
@@ -935,16 +1101,20 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [{ ...measure, sourceName: "Ohio SoS", status: "removed" }],
           measureCoverage: {
-            status: "not_yet_covered", sourceName: "Ohio SoS", checkedAt: "2026-09-20T00:00:00Z",
+            status: "not_yet_covered",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z",
             lastAttemptAt: "2026-09-28T00:00:00Z",
             unreadReason: "Civitas does not read Ohio's official measure list automatically yet.",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
     expect(drawer.queryByText(/latest list no longer includes/)).not.toBeInTheDocument();
-    expect(drawer.getByText(/Civitas has stopped reading OH's measures automatically/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/Civitas has stopped reading OH's measures automatically/)
+    ).toBeInTheDocument();
   });
 
   it("says a registered state's list is not published yet, not that it was never read", async () => {
@@ -952,21 +1122,41 @@ describe("ballot measures", () => {
       <StateBallotClient
         ballot={ballot({
           measureCoverage: {
-            status: "not_yet_covered", sourceName: "Maine SoS", checkedAt: null,
-            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: null,
+            status: "not_yet_covered",
+            sourceName: "Maine SoS",
+            checkedAt: null,
+            lastAttemptAt: "2026-09-28T00:00:00Z",
+            unreadReason: null,
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
-    expect(drawer.getByText(/has not published its list for this election yet/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/has not published its list for this election yet/)
+    ).toBeInTheDocument();
   });
 
   const measure = {
-    id: "OH-2026-11-03-1", state: "OH", electionDate: "2026-11-03", electionType: "general",
-    number: "1", title: "Issue 1", measureType: null, origin: null, status: "certified",
-    officialTitle: null, officialSummary: "Summary.", fiscalImpact: null, yesMeans: null, noMeans: null,
-    titleAuthority: null, fiscalAuthority: null, sourceName: "Ohio SoS", sourceUrl: null, asOf: null,
+    id: "OH-2026-11-03-1",
+    state: "OH",
+    electionDate: "2026-11-03",
+    electionType: "general",
+    number: "1",
+    title: "Issue 1",
+    measureType: null,
+    origin: null,
+    status: "certified",
+    officialTitle: null,
+    officialSummary: "Summary.",
+    fiscalImpact: null,
+    yesMeans: null,
+    noMeans: null,
+    titleAuthority: null,
+    fiscalAuthority: null,
+    sourceName: "Ohio SoS",
+    sourceUrl: null,
+    asOf: null,
   };
 
   it("says when the measures shown are from the last successful read after a failure", async () => {
@@ -978,11 +1168,13 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [measure],
           measureCoverage: {
-            status: "ingest_failed", sourceName: "Ohio SoS",
-            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "ingest_failed",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
     const notice = drawer.getByRole("status");
@@ -995,13 +1187,18 @@ describe("ballot measures", () => {
     render(
       <StateBallotClient
         ballot={ballot({
-          measures: [measure, { ...measure, id: "OH-2", number: "2", title: "Issue 2", status: "removed" }],
+          measures: [
+            measure,
+            { ...measure, id: "OH-2", number: "2", title: "Issue 2", status: "removed" },
+          ],
           measureCoverage: {
-            status: "ingest_failed", sourceName: "Ohio SoS",
-            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "ingest_failed",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const box = within(screen.getByTestId("ballot-columns"));
     expect(box.getByText(/From our last successful read — may be out of date/)).toBeInTheDocument();
@@ -1018,11 +1215,14 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [{ ...measure, status: "removed" }],
           measureCoverage: {
-            status: "confirmed_none", sourceName: "Ohio SoS", basis: "operator",
-            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "confirmed_none",
+            sourceName: "Ohio SoS",
+            basis: "operator",
+            checkedAt: "2026-09-28T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const box = within(screen.getByTestId("ballot-columns"));
     expect(box.getByText(/our determination, not a list from the state/)).toBeInTheDocument();
@@ -1038,15 +1238,19 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [measure],
           measureCoverage: {
-            status: "not_yet_covered", sourceName: "Ohio SoS",
-            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "not_yet_covered",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
     const notice = drawer.getByRole("status");
-    expect(notice).toHaveTextContent("latest check could not find OH's published list (2026-09-28)");
+    expect(notice).toHaveTextContent(
+      "latest check could not find OH's published list (2026-09-28)"
+    );
     expect(notice).toHaveTextContent("last successful read, 2026-09-20");
   });
 
@@ -1059,14 +1263,18 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [{ ...measure, sourceName: "Ohio Legislative Service Commission" }],
           measureCoverage: {
-            status: "not_yet_covered", sourceName: "Ohio SoS",
-            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "not_yet_covered",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
-    expect(drawer.getByText(/on record from Ohio Legislative Service Commission/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(/on record from Ohio Legislative Service Commission/)
+    ).toBeInTheDocument();
     expect(drawer.queryByText(/Ohio SoS/)).not.toBeInTheDocument();
     expect(drawer.queryByText(/2026-09-20/)).not.toBeInTheDocument();
   });
@@ -1080,11 +1288,13 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [{ ...measure, status: "removed" }],
           measureCoverage: {
-            status: "not_yet_covered", sourceName: "Ohio SoS",
-            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "not_yet_covered",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
     const notice = drawer.getByRole("status");
@@ -1100,11 +1310,13 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [{ ...measure, status: "removed" }],
           measureCoverage: {
-            status: "ingest_failed", sourceName: "Ohio SoS",
-            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "ingest_failed",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
     const notice = drawer.getByRole("status");
@@ -1117,11 +1329,14 @@ describe("ballot measures", () => {
       <StateBallotClient
         ballot={ballot({
           measureCoverage: {
-            status: "confirmed_none", sourceName: "Ohio SoS", basis: "operator",
-            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "confirmed_none",
+            sourceName: "Ohio SoS",
+            basis: "operator",
+            checkedAt: "2026-09-28T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
     expect(drawer.getByText(/This is our operator's determination/)).toBeInTheDocument();
@@ -1135,11 +1350,13 @@ describe("ballot measures", () => {
         ballot={ballot({
           measures: [measure],
           measureCoverage: {
-            status: "covered", sourceName: "Ohio SoS",
-            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+            status: "covered",
+            sourceName: "Ohio SoS",
+            checkedAt: "2026-09-28T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
           },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide ballot measures/);
     expect(drawer.queryByRole("status")).not.toBeInTheDocument();
@@ -1162,9 +1379,13 @@ describe("state offices not loaded", () => {
       <StateBallotClient
         ballot={ballot({
           statewideRaces: [],
-          statewideCoverage: { status: "confirmed_none", sourceName: "Ohio Secretary of State", checkedAt: null },
+          statewideCoverage: {
+            status: "confirmed_none",
+            sourceName: "Ohio Secretary of State",
+            checkedAt: null,
+          },
         })}
-      />,
+      />
     );
     expect(screen.queryByText("State offices")).not.toBeInTheDocument();
   });
@@ -1175,12 +1396,16 @@ describe("term lengths", () => {
     render(
       <StateBallotClient
         ballot={ballot({
-          senateRaces: [houseRace({ id: "2026-SEN-OH", office: "S", district: null, counties: null })],
+          senateRaces: [
+            houseRace({ id: "2026-SEN-OH", office: "S", district: null, counties: null }),
+          ],
         })}
-      />,
+      />
     );
     const box = screen.getByTestId("ballot-columns");
-    expect(within(box).getByText(/you vote in one · 2-year term|One statewide seat · 2-year term/)).toBeInTheDocument();
+    expect(
+      within(box).getByText(/you vote in one · 2-year term|One statewide seat · 2-year term/)
+    ).toBeInTheDocument();
     expect(within(box).getByText(/6-year term/)).toBeInTheDocument();
   });
 
@@ -1188,12 +1413,22 @@ describe("term lengths", () => {
     render(
       <StateBallotClient
         ballot={ballot({
-          senateRaces: [houseRace({ id: "2026-SEN-OH-S", office: "S", district: null, counties: null, isSpecial: true })],
+          senateRaces: [
+            houseRace({
+              id: "2026-SEN-OH-S",
+              office: "S",
+              district: null,
+              counties: null,
+              isSpecial: true,
+            }),
+          ],
         })}
-      />,
+      />
     );
     const box = screen.getByTestId("ballot-columns");
-    expect(within(box).getByText(/Special election · .* · fills the rest of the term/)).toBeInTheDocument();
+    expect(
+      within(box).getByText(/Special election · .* · fills the rest of the term/)
+    ).toBeInTheDocument();
     expect(within(box).queryByText(/6-year term/)).not.toBeInTheDocument();
   });
 });
@@ -1205,12 +1440,27 @@ describe("state office terms", () => {
         ballot={ballot({
           statewideCoverage: { status: "covered", sourceName: "GA SoS", checkedAt: null },
           statewideRaces: [
-            { office: "governor", label: "Governor", nominees: [{ party: "DEM", name: "A Dem" }], termYears: 4 },
-            { office: "public_service_commission-3", label: "Public Service Commission, District 3", nominees: [{ party: "REP", name: "A Rep" }], termYears: 6 },
-            { office: "labor_commissioner", label: "Labor Commissioner", nominees: [{ party: "REP", name: "Another Rep" }], termYears: null },
+            {
+              office: "governor",
+              label: "Governor",
+              nominees: [{ party: "DEM", name: "A Dem" }],
+              termYears: 4,
+            },
+            {
+              office: "public_service_commission-3",
+              label: "Public Service Commission, District 3",
+              nominees: [{ party: "REP", name: "A Rep" }],
+              termYears: 6,
+            },
+            {
+              office: "labor_commissioner",
+              label: "Labor Commissioner",
+              nominees: [{ party: "REP", name: "Another Rep" }],
+              termYears: null,
+            },
           ],
         })}
-      />,
+      />
     );
     const box = screen.getByTestId("ballot-columns");
     expect(within(box).getByText(/· 4-year terms/)).toBeInTheDocument();
@@ -1223,28 +1473,46 @@ describe("state office terms", () => {
       <StateBallotClient
         ballot={ballot({
           stateLegRaces: [
-            { chamber: "upper", label: "State Senate", termYears: 4,
-              districts: [{ district: "5", towns: ["Providence city"], nominees: [{ party: "DEM", name: "A Senator" }] }] },
+            {
+              chamber: "upper",
+              label: "State Senate",
+              termYears: 4,
+              districts: [
+                {
+                  district: "5",
+                  towns: ["Providence city"],
+                  nominees: [{ party: "DEM", name: "A Senator" }],
+                },
+              ],
+            },
           ],
         })}
-      />,
+      />
     );
     const drawer = await openContest(/State Senate/);
-    expect(drawer.getByText(/STATE SENATE — 1 SEAT CONTESTED/).textContent).toContain("4-YEAR TERMS");
+    expect(drawer.getByText(/STATE SENATE — 1 SEAT CONTESTED/).textContent).toContain(
+      "4-YEAR TERMS"
+    );
   });
 });
 
 describe("a state with no executive offices up this cycle", () => {
-  const basis = "Virginia elects its Governor in odd-numbered years (next in 2029), so none is on a 2026 ballot.";
+  const basis =
+    "Virginia elects its Governor in odd-numbered years (next in 2029), so none is on a 2026 ballot.";
 
   it("says why it knows, instead of crediting a feed nobody read for these offices", async () => {
     render(
       <StateBallotClient
         ballot={ballot({
           statewideRaces: [],
-          statewideCoverage: { status: "confirmed_none", sourceName: "Virginia Department of Elections", checkedAt: null, basis },
+          statewideCoverage: {
+            status: "confirmed_none",
+            sourceName: "Virginia Department of Elections",
+            checkedAt: null,
+            basis,
+          },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide offices/);
     expect(drawer.getByText(basis)).toBeInTheDocument();
@@ -1257,9 +1525,13 @@ describe("a state with no executive offices up this cycle", () => {
       <StateBallotClient
         ballot={ballot({
           statewideRaces: [],
-          statewideCoverage: { status: "confirmed_none", sourceName: "Ohio Secretary of State", checkedAt: null },
+          statewideCoverage: {
+            status: "confirmed_none",
+            sourceName: "Ohio Secretary of State",
+            checkedAt: null,
+          },
         })}
-      />,
+      />
     );
     const drawer = await openContest(/Statewide offices/);
     expect(drawer.getByText(/as published by Ohio Secretary of State/)).toBeInTheDocument();
