@@ -106,6 +106,13 @@ async def write_rate_limit(request: Request) -> None:
 WriteRateLimit = Annotated[None, Depends(write_rate_limit)]
 
 
+def charge_write(ip: str) -> throttle.Decision:
+    """Count one mutation for `ip` against the same limit as WriteRateLimit,
+    for a route that charges only the requests that do the work (the
+    Explore summary: a refusal to wait out a generation costs nothing)."""
+    return limit_client(ip, _write_limiter.bucket, limit=_write_limiter.limit, period=_write_limiter.period)
+
+
 # ── Public routes that fetch from the shared api.data.gov key ─────
 #
 # A few read routes answer from an upstream API on a cache miss: a bill's

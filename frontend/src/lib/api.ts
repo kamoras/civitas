@@ -881,9 +881,10 @@ export async function fetchExploreDocument(id: number): Promise<ExploreDocumentD
   return requestJson(`${API_BASE}/explore/${id}`, "Document not found");
 }
 
-// How long a summary request keeps retrying a refusal: a generation's own
-// limit on the server (api/explore.py), plus a margin.
-const SUMMARY_RETRY_WITHIN_MS = 5 * 60 * 1000;
+// How long a summary request keeps retrying a refusal: long enough to wait
+// out another reader's generation that runs its full time (4 minutes on the
+// server, api/explore.py) and the hold-off after it (2), with a margin.
+const SUMMARY_RETRY_WITHIN_MS = 10 * 60 * 1000;
 
 /** Milliseconds to wait before asking again, from a Retry-After in seconds
  *  (nginx's own 503 carries none: a short default), kept within reason. */
@@ -919,9 +920,10 @@ export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> 
 // this file only forwards bytes, it doesn't parse the marker format.
 //
 // A refusal that says to come back (429: another reader's generation of this
-// document is under way; 503: the site's few generations are all busy) is
-// retried after its Retry-After, for as long as a generation can take — by
-// then the other reader's summary is usually cached and comes straight back.
+// document is under way; 503: the site's few generations are all busy, or
+// this one ran out of time a moment ago) is retried after its Retry-After —
+// by then the other reader's summary is usually cached and comes straight
+// back.
 // `signal` stops it all — the request, the stream, and any wait between
 // retries — when the reader leaves, so nothing goes on asking for them.
 export async function streamExploreDocumentSummary(
@@ -933,7 +935,9 @@ export async function streamExploreDocumentSummary(
   const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
   const ask = () => fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
   let res = await ask();
-  while ((res.status === 429 || res.status === 503) && Date.now() < giveUpAt) {
+  // Only a refusal the server marks as a wait (X-Summary-Wait): the write
+  // limit's 429 and nginx's own 503 are not waited out.
+  while (res.headers.get("X-Summary-Wait") === "1" && Date.now() < giveUpAt) {
     await wait(
       Math.min(summaryRetryDelayMs(res.headers.get("Retry-After")), Math.max(0, giveUpAt - Date.now())),
       signal

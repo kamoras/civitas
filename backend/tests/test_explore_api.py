@@ -3,13 +3,13 @@ the SSE endpoint added to stream the AI document summary instead of
 blocking on the full generation (issue #258).
 
 Calls get_explore_document_summary directly rather than through a full
-ASGI TestClient: WriteRateLimit (_rl) is Annotated[None, Depends(...)],
-so passing None bypasses the dependency the same way FastAPI would after
-resolving it, without standing up app-level test infrastructure this
-repo doesn't otherwise have.
+ASGI TestClient, with a stand-in request (_READER) — the endpoint reads
+only the caller's address from it, for the write limit it charges when a
+generation starts.
 """
 
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -42,6 +42,10 @@ def _make_doc(db_session, **overrides) -> ExploreDocument:
     return doc
 
 
+# The summary endpoint reads only the caller's address from its request.
+_READER = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"), headers={})
+
+
 async def _collect_sse_events(response) -> list[dict]:
     events = []
     async for chunk in response.body_iterator:
@@ -64,7 +68,7 @@ class TestSummaryEndpointCacheHit:
             patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=cached),
             patch("app.pipeline.analyze.ollama_client.stream_llm", side_effect=AssertionError("must not stream on a cache hit")),
         ):
-            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            response = await get_explore_document_summary(doc.id, _READER, db=db_session)
             events = await _collect_sse_events(response)
         assert events == [{"done": True, **cached}]
 
@@ -77,7 +81,7 @@ class TestSummaryEndpointStreaming:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
-            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            response = await get_explore_document_summary(doc.id, _READER, db=db_session)
             events = await _collect_sse_events(response)
 
         delta_events = [e for e in events if "delta" in e]
@@ -104,7 +108,7 @@ class TestSummaryEndpointStreaming:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _raising_stream),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
-            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            response = await get_explore_document_summary(doc.id, _READER, db=db_session)
             events = await _collect_sse_events(response)
 
         assert events == [{"done": True, "summary": "", "keyPoints": [], "impact": ""}]
@@ -116,7 +120,7 @@ class TestSummaryEndpointGuards:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_explore_document_summary(999999, None, db=db_session)
+            await get_explore_document_summary(999999, _READER, db=db_session)
         assert exc_info.value.status_code == 404
 
     async def test_a_generation_under_way_holds_off_another_for_the_same_doc(self, db_session):
@@ -138,16 +142,16 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _held_stream),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
-            first = await get_explore_document_summary(doc.id, None, db=db_session)
+            first = await get_explore_document_summary(doc.id, _READER, db=db_session)
             with pytest.raises(HTTPException) as exc_info:
-                await get_explore_document_summary(doc.id, None, db=db_session)
+                await get_explore_document_summary(doc.id, _READER, db=db_session)
             assert exc_info.value.status_code == 429
             assert exc_info.value.headers["Retry-After"] == "10"  # the page asks again
             finish.set()
             await _collect_sse_events(first)
             await asyncio.gather(*list(explore._generations))
             # Over and cached: the claim is given back.
-            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
 
     async def test_an_unusable_output_is_the_answer_for_a_while(self, db_session):
         # The same prompt at temperature 0 would come out the same way: not
@@ -163,12 +167,12 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _garbled),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
-            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
         with (
             patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
             patch("app.pipeline.analyze.ollama_client.stream_llm") as stream,
         ):
-            events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
         assert events == [{"done": True, "summary": "", "keyPoints": [], "impact": ""}]
         stream.assert_not_called()
 
@@ -194,9 +198,9 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
             for doc in docs[:-1]:
-                await get_explore_document_summary(doc.id, None, db=db_session)
+                await get_explore_document_summary(doc.id, _READER, db=db_session)
             with pytest.raises(HTTPException) as exc_info:
-                await get_explore_document_summary(docs[-1].id, None, db=db_session)
+                await get_explore_document_summary(docs[-1].id, _READER, db=db_session)
             assert exc_info.value.status_code == 503
             # Refused before it started: its claim was given back.
             assert throttle.claim("explore-summary", str(docs[-1].id), period=30)
@@ -219,7 +223,7 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _endless),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
-            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            response = await get_explore_document_summary(doc.id, _READER, db=db_session)
             await asyncio.sleep(0)
             await explore.stop_generations()
             events = await _collect_sse_events(response)
@@ -232,7 +236,7 @@ class TestSummaryEndpointGuards:
         cached = {"summary": "s", "keyPoints": [], "impact": ""}
         with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=cached):
             for _ in range(3):
-                events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+                events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
                 assert events == [{"done": True, **cached}]
 
     async def test_a_missing_document_takes_no_cooldown(self, db_session):
@@ -241,7 +245,7 @@ class TestSummaryEndpointGuards:
         from app.api import throttle
 
         with pytest.raises(HTTPException):
-            await get_explore_document_summary(999999, None, db=db_session)
+            await get_explore_document_summary(999999, _READER, db=db_session)
         assert throttle.claim("explore-summary", "999999", period=30)
 
     async def test_a_failed_generation_gives_the_cooldown_back(self, db_session):
@@ -255,9 +259,9 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
             patch("app.pipeline.analyze.ollama_client.stream_llm", _raising_stream),
         ):
-            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
             # The next reader may try at once rather than meet a 429.
-            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
 
     async def test_a_reader_who_leaves_mid_stream_still_gets_the_summary_made(self, db_session):
         """Stopped with its reader, a generation cached nothing while its
@@ -280,7 +284,7 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _slow_stream),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
-            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            response = await get_explore_document_summary(doc.id, _READER, db=db_session)
             body = response.body_iterator
             assert "delta" in await body.__anext__()
             await body.aclose()  # the reader leaves
@@ -309,14 +313,14 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _cut_off),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
-            events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
             # Shown without the sentence it stopped in.
             assert events[-1] == {"done": True, "summary": "The rule would apply.", "keyPoints": ["One"],
                                   "impact": "", "partial": True}
             assert not mock_set_cache.called
             if ending == "fails":
                 # The LLM may be back: the next reader may make it afresh at once.
-                again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+                again = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
                 assert any("delta" in event for event in again)
             else:
                 # Held off for a while rather than generated over and over —
@@ -325,7 +329,7 @@ class TestSummaryEndpointGuards:
                 from fastapi import HTTPException
 
                 with pytest.raises(HTTPException) as exc_info:
-                    await get_explore_document_summary(doc.id, None, db=db_session)
+                    await get_explore_document_summary(doc.id, _READER, db=db_session)
                 assert exc_info.value.status_code == 503 and exc_info.value.headers["Retry-After"] == "60"
 
     async def test_a_generation_at_its_token_limit_is_cached_without_the_cut_section(self, db_session):
@@ -344,7 +348,7 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _at_limit),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
-            events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
         kept = {"summary": "Whole.", "keyPoints": ["One"], "impact": ""}
         assert events[-1] == {"done": True, **kept}
         assert mock_set_cache.call_args.args[2] == kept
@@ -363,8 +367,8 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _socket_timeout),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
-            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
-            again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+            again = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
         assert any("delta" in event for event in again)
 
     async def test_a_summary_is_filed_under_the_text_it_was_made_from(self, db_session):
@@ -385,13 +389,13 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result", side_effect=remember),
         ):
-            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
             first = dict(written)
-            again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            again = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
             assert again == [{"done": True, **next(iter(first.values()))}]  # unchanged: served
             doc.body = "A different document now."
             db_session.commit()
-            changed = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            changed = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
         assert any("delta" in event for event in changed)  # made afresh
         assert len(written) == 2
 
@@ -412,7 +416,7 @@ class TestSummaryEndpointGuards:
 
         monkeypatch.setattr(throttle, "hold", slow_hold)
         with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None):
-            request = asyncio.create_task(get_explore_document_summary(doc.id, None, db=db_session))
+            request = asyncio.create_task(get_explore_document_summary(doc.id, _READER, db=db_session))
             await asyncio.to_thread(entered.wait, 5)
             stopping = asyncio.create_task(explore.stop_generations())
             await asyncio.sleep(0)
@@ -422,6 +426,74 @@ class TestSummaryEndpointGuards:
             await asyncio.gather(request, return_exceptions=True)
         monkeypatch.setattr(throttle, "hold", real_hold)
         assert throttle.hold("explore-summary", [str(doc.id)], period=300) is not None
+
+    async def test_waiting_out_a_generation_spends_none_of_the_write_budget(self, db_session, monkeypatch):
+        # A page waiting on another reader's generation must not spend the
+        # reader's budget for votes and comments; only a generation that
+        # starts is charged — and a write-limit refusal is not a wait.
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from app.api import explore, rate_limit
+
+        doc = _make_doc(db_session)
+        charged = []
+        real = rate_limit.charge_write
+        monkeypatch.setattr(rate_limit, "charge_write", lambda ip: charged.append(ip) or real(ip))
+        finish = asyncio.Event()
+
+        async def _held_stream(*_args, **_kwargs):
+            yield "SUMMARY: s\n"
+            await finish.wait()
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _held_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            first = await get_explore_document_summary(doc.id, _READER, db=db_session)
+            for _ in range(5):
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_explore_document_summary(doc.id, _READER, db=db_session)
+                assert exc_info.value.headers["X-Summary-Wait"] == "1"
+            finish.set()
+            await _collect_sse_events(first)
+            await asyncio.gather(*list(explore._generations))
+        assert charged == ["203.0.113.7"]
+
+        from app.api.throttle import Decision
+
+        monkeypatch.setattr(rate_limit, "charge_write", lambda ip: Decision(False, 0, 9e9))
+        other = _make_doc(db_session)
+        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_explore_document_summary(other.id, _READER, db=db_session)
+        assert exc_info.value.status_code == 429 and "X-Summary-Wait" not in exc_info.value.headers
+
+    async def test_a_hold_off_is_on_the_text_not_the_document(self, db_session):
+        # An unusable output from an empty body doesn't hold off the
+        # document once its body is backfilled.
+        doc = _make_doc(db_session)
+
+        async def _garbled(*_args, **_kwargs):
+            yield ""
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _garbled),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+        doc.body = "The real text, backfilled."
+        db_session.commit()
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
+        assert any("delta" in event for event in events)
 
     async def test_a_lapsed_claim_is_given_back_only_by_its_holder(self, db_session):
         # Once lapsed it may be another generation's: the late holder's
@@ -458,7 +530,7 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", side_effect=[None, made]),
             patch("app.pipeline.analyze.ollama_client.stream_llm") as stream,
         ):
-            events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, _READER, db=db_session))
         assert events == [{"done": True, **made}]
         stream.assert_not_called()
 
@@ -474,7 +546,7 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
-            request = asyncio.create_task(get_explore_document_summary(doc.id, None, db=db_session))
+            request = asyncio.create_task(get_explore_document_summary(doc.id, _READER, db=db_session))
             await asyncio.sleep(0)
             request.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -502,7 +574,7 @@ class TestSummaryEndpointGuards:
             patch("app.pipeline.analyze.ollama_client.stream_llm", _slow_first_token),
             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
         ):
-            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            response = await get_explore_document_summary(doc.id, _READER, db=db_session)
             chunks = [chunk async for chunk in response.body_iterator]
         assert chunks[0].startswith(":") and chunks[-1].startswith("data:")
 
@@ -517,7 +589,7 @@ class TestSummaryEndpointGuards:
         throttle.use_path(str(tmp_path / "missing-dir" / "throttle.db"))
         with patch("app.pipeline.analyze.ollama_client.stream_llm") as stream:
             with pytest.raises(HTTPException) as exc_info:
-                await get_explore_document_summary(doc.id, None, db=db_session)
+                await get_explore_document_summary(doc.id, _READER, db=db_session)
         assert exc_info.value.status_code == 503
         stream.assert_not_called()
 

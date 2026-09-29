@@ -16,10 +16,15 @@ import pytest
 
 CONF = Path(__file__).resolve().parents[2] / "nginx" / "civitas.conf"
 
-# Mutating routes (POST, PUT, PATCH, DELETE) that do their work inside the
-# request, in the API process.
+# Mutating routes (POST, PUT, PATCH, DELETE) served by the API process.
 # Adding a route here is a claim that it starts no background writer
 # (app.background.start_writer / writing) — the API process would refuse it.
+# The Explore summary is the one that outlives its request: its LLM
+# generation finishes after a reader leaves (api/explore.py, _Generation).
+# It is not a writer in that sense — it writes only its own cache row and
+# claims, keyed on the text it read, so a data reset in the pipeline process
+# can't be undone by it — and it must stream from the process serving the
+# reader.
 SERVED_BY_API = {
     "/api/action/pulse",
     "/api/explore/{doc_id}/comments",

@@ -4,14 +4,14 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
-from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
+from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, client_ip, retry_after, spend_upstream
 from app.api.response_helpers import RETRY_SOON_CACHE_CONTROL, retry_soon_json
 from app.database import get_db, off_loop
 from app.models import ExploreDocument
@@ -340,18 +340,24 @@ _SLOT_BUCKET = "explore-summary-slot"
 _UNUSABLE_BUCKET = "explore-summary-unusable"
 _UNUSABLE_FOR_S = 30 * 60.0
 _SLOW_BUCKET = "explore-summary-slow"
-_SLOW_FOR_S = 5 * 60.0
+_SLOW_FOR_S = 2 * 60.0
 _MAX_GENERATIONS = 2
 _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
 _BUSY_RETRY_AFTER_S = 30
 _HELD_RETRY_AFTER_S = 10
 _SLOW_RETRY_AFTER_S = 60
+# Marks a refusal that is only a wait (another generation, the cap, a
+# recent timeout, the store): the page asks again after Retry-After. A
+# refusal without it — the write limit, nginx's own — is not waited out.
+_WAIT_OUT = {"X-Summary-Wait": "1"}
 # How often a stream waiting on the LLM sends an SSE comment: nginx drops a
 # proxied response that sends nothing for proxy_read_timeout (120s), which
 # a busy LLM's prompt processing can exceed before the first delta.
 _KEEPALIVE_S = 15.0
-_SUMMARY_CACHE_KEY_VERSION = 4  # bump alongside explore_document_summary_prompt's promptVersion
+# Bump alongside explore_document_summary_prompt's promptVersion. 5: keyed on
+# the prompt's hash too.
+_SUMMARY_CACHE_KEY_VERSION = 5
 # Generations under way in this process, held so the event loop doesn't
 # collect a task whose reader has gone, and so shutdown can stop them.
 _generations: set[asyncio.Task] = set()
@@ -380,14 +386,17 @@ def _sse(data: dict) -> str:
 @router.post("/{doc_id}/summary")
 async def get_explore_document_summary(
     doc_id: int,
-    _rl: WriteRateLimit,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Stream an AI summary of a government document as it generates.
 
     One generation per document at a time and a few in all (_Generation's
-    claims); the per-IP WriteRateLimit dependency stops a caller fanning
-    out across many doc_ids (2026-07 audit).
+    claims). The per-IP write limit, which stops a caller fanning out
+    across many doc_ids (2026-07 audit), is charged only when a generation
+    starts: a refusal to wait out (held, busy, slow) does no work, and a
+    page waiting on another reader's generation must not spend the
+    reader's budget for votes and comments doing so.
 
     Streams Server-Sent Events, each `data:` line a JSON object:
     {"delta": "<text chunk>"} while generating, then a final
@@ -435,17 +444,23 @@ async def get_explore_document_summary(
     # Claimed, checked and generated in a task of its own, which the
     # request only waits on: a request cancelled mid-claim (a disconnect)
     # can't leave a claim behind that nothing will give back.
-    generation = _Generation(doc_id, prompt, cache_key)
+    generation = _Generation(doc_id, prompt, cache_key, client_ip(request))
     task = asyncio.create_task(generation.run())
     _generations.add(task)
     task.add_done_callback(_generations.discard)
     outcome = await asyncio.shield(generation.outcome)
 
+    if isinstance(outcome, throttle.Decision):  # the write limit refused it
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded — too many requests per minute per IP.",
+            headers={"Retry-After": retry_after(outcome.reset_at)},
+        )
     if outcome == "unavailable":
         raise HTTPException(
             status_code=503,
             detail="Summaries are unavailable right now; please try again shortly.",
-            headers={"Retry-After": str(throttle.UNAVAILABLE_RETRY_AFTER_S)},
+            headers={"Retry-After": str(throttle.UNAVAILABLE_RETRY_AFTER_S), **_WAIT_OUT},
         )
     if outcome == "held":
         # Another reader's generation of this document: cached when it
@@ -453,13 +468,13 @@ async def get_explore_document_summary(
         raise HTTPException(
             status_code=429,
             detail="This summary is being written; please try again shortly.",
-            headers={"Retry-After": str(_HELD_RETRY_AFTER_S)},
+            headers={"Retry-After": str(_HELD_RETRY_AFTER_S), **_WAIT_OUT},
         )
     if outcome == "busy":
         raise HTTPException(
             status_code=503,
             detail="Summaries are busy right now; please try again shortly.",
-            headers={"Retry-After": str(_BUSY_RETRY_AFTER_S)},
+            headers={"Retry-After": str(_BUSY_RETRY_AFTER_S), **_WAIT_OUT},
         )
     if outcome == "slow":
         # Its last generation ran out of time — perhaps only because the
@@ -467,7 +482,7 @@ async def get_explore_document_summary(
         raise HTTPException(
             status_code=503,
             detail="This summary took too long a moment ago; please try again shortly.",
-            headers={"Retry-After": str(_SLOW_RETRY_AFTER_S)},
+            headers={"Retry-After": str(_SLOW_RETRY_AFTER_S), **_WAIT_OUT},
         )
     if outcome == "unusable":
         # Nothing is being written and nothing will come of retrying soon:
@@ -510,10 +525,15 @@ class _Generation:
     The LLM calls are looked up on ollama_client when used, not bound at
     import, as the endpoint's are."""
 
-    def __init__(self, doc_id: int, prompt: dict, cache_key: dict):
+    def __init__(self, doc_id: int, prompt: dict, cache_key: dict, client: str):
         self.doc_id = doc_id
         self.prompt = prompt
         self.cache_key = cache_key
+        # The claims are on the text being summarised, as the cache is: a
+        # document changed in place is a new generation, not held off by
+        # the old text's.
+        self.key = f"{doc_id}:{cache_key['prompt']}"
+        self.client = client
         self.outcome: asyncio.Future = asyncio.get_running_loop().create_future()
         self.events: asyncio.Queue[str | None] = asyncio.Queue()
         # (bucket, key, token) for each claim held.
@@ -565,7 +585,7 @@ class _Generation:
 
         try:
             try:
-                key = str(self.doc_id)
+                key = self.key
                 claimed = await self._claim(
                     _SUMMARY_BUCKET, [key],
                     blocked_by=((_UNUSABLE_BUCKET, key, _UNUSABLE_FOR_S), (_SLOW_BUCKET, key, _SLOW_FOR_S)),
@@ -590,6 +610,13 @@ class _Generation:
                                            self.cache_key)
             if made is not None:
                 self._settle(made)
+                return
+            # Charged only now that a generation will start (see the endpoint).
+            from app.api.rate_limit import charge_write
+
+            decision = await throttle.run(charge_write, self.client)
+            if not decision.allowed:
+                self._settle(decision)
                 return
             self._settle("go")
             await self._generate()
@@ -648,7 +675,7 @@ class _Generation:
         elif ended or timed_out:
             bucket, period = (_SLOW_BUCKET, _SLOW_FOR_S) if timed_out else (_UNUSABLE_BUCKET, _UNUSABLE_FOR_S)
             try:
-                await throttle.run(throttle.hold, bucket, [str(self.doc_id)], period=period)
+                await throttle.run(throttle.hold, bucket, [self.key], period=period)
             except Exception:
                 logger.warning("Explore summary for doc_id=%s not held off", self.doc_id, exc_info=True)
         await self._give_back()
