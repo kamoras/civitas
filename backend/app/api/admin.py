@@ -1398,12 +1398,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     from app.pipeline import lease
     from app.pipeline.analyze.document_authority import update_document_authority
     from app.pipeline.lexical_index import rebuild_index
-    from app.pipeline.vector_store import (
-        _rebuild_lock,
-        _write_model_version,
-        rebuild_explore_index,
-        recalibrate_ranking,
-    )
+    from app.pipeline.vector_store import _rebuild_lock, rebuild_explore_index, recalibrate_ranking
 
     if _rebuild_lock.locked():
         raise HTTPException(status_code=409, detail="Explore re-embed not started: the index is already being rebuilt")
@@ -1431,7 +1426,8 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
                 if count is None:
                     logger.warning("Explore re-embed skipped: the index is already being rebuilt")
                     return
-                _write_model_version()
+                # Not _write_model_version: that records the classification
+                # model's vectors as current, which this doesn't touch.
                 db = SessionLocal()
                 try:
                     indexed = rebuild_index(db)

@@ -275,6 +275,24 @@ class TestEnsureExploreIndex:
         vector_store.invalidate_on_model_change()
         assert vector_store.index_is_whole()
 
+    def test_a_model_change_recreates_the_bill_table(self, vec_env):
+        # A vec0 table's width is fixed at creation: emptied in place, a
+        # new model's wider vectors would never fit it.
+        conn = vector_store.get_vec_conn()
+        conn.execute("DROP TABLE vec_bills")
+        conn.execute("CREATE VIRTUAL TABLE vec_bills USING vec0(embedding float[8], policy_area text, +meta_json text)")
+        conn.commit()
+        vector_store.invalidate_on_model_change()
+        sql = conn.execute("SELECT sql FROM sqlite_master WHERE name = 'vec_bills'").fetchone()[0]
+        assert f"float[{vector_store.EMBEDDING_DIMENSIONS}]" in sql
+
+    def test_a_run_waiting_on_a_rebuild_does_not_rebuild_what_it_left_whole(self, vec_env, monkeypatch):
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        embed = MagicMock()
+        monkeypatch.setattr(vector_store, "embed_explore_documents", embed)
+        assert vector_store.rebuild_explore_index(lambda: None, wait=True) is None
+        embed.assert_not_called()
+
     def test_an_index_a_rebuild_left_empty_reads_incomplete(self, vec_env):
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
         assert vector_store.collection_stats()["indexRebuild"] == "incomplete"
@@ -353,8 +371,9 @@ class TestEnsureExploreIndex:
                 t.join(timeout=10)
         results = vector_store.search_explore_documents("A real doc", n_results=1)
         assert results is not None and results[0]["title"] == "A real doc"
-        # And the ranking is fitted to it: runs skip that while it isn't whole.
-        assert len(recalibrated) == 1
+        # Not fitted here: the fit measures the keyword index too, which only
+        # an Explore run (or a re-embed) rebuilds in step with this one.
+        assert recalibrated == []
 
     def test_rebuild_recreates_a_stale_pre_migration_schema(self, vec_env, db_session, explore_lease):
         """Regression for a live 2026-08-30 incident: a prior deploy's

@@ -242,20 +242,22 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
     # the LLM.
     if _llm_busy_until > now:
         raise _busy(_llm_busy_until - now)
-    if client is None:
-        raise Refusal(503, "Summaries are unavailable right now; please try again shortly.",
-                      throttle.UNAVAILABLE_RETRY_AFTER_S)
     # Under yesterday's key too, so the rule doesn't reset at midnight.
     # Only runs still generating count: one whose last event is out is only
-    # writing its cache.
-    if any(k in _by_client and not _runs[_by_client[k]].done for k in (str(client), client.previous) if k):
+    # writing its cache. With no key (the throttle store unreadable) the
+    # rule fails open, as throttle's limits do; MAX_GENERATIONS still bounds
+    # what the LLM is asked for.
+    if client is None:
+        logger.warning("Explore summary: no client key (throttle store unavailable) — per-client rule skipped")
+    elif any(k in _by_client and not _runs[_by_client[k]].done for k in (str(client), client.previous) if k):
         raise _busy()
     if sum(not r.done for r in _runs.values()) >= MAX_GENERATIONS:
         raise _busy()
 
-    run = _Run(key, doc_id, prompt, key_, str(client))
+    run = _Run(key, doc_id, prompt, key_, str(client) if client is not None else None)
     _runs[key] = run
-    _by_client[run.client] = key
+    if run.client is not None:
+        _by_client[run.client] = key
     run.task = asyncio.create_task(_generate(run))
     run.task.add_done_callback(lambda _t: _forget(run))
     return run.follow()
@@ -264,7 +266,7 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
 def _forget(run: _Run) -> None:
     if _runs.get(run.key) is run:
         del _runs[run.key]
-    if _by_client.get(run.client) == run.key:
+    if run.client is not None and _by_client.get(run.client) == run.key:
         del _by_client[run.client]
     if not run.done:  # cancelled before its last event: its readers' streams end
         run.publish(None)

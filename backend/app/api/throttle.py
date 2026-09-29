@@ -588,13 +588,6 @@ async def run(fn, *args, **kwargs):
     return await asyncio.get_running_loop().run_in_executor(_executor, functools.partial(fn, *args, **kwargs))
 
 
-# Retry-After for a refusal because the store couldn't answer. Unlike a
-# limit's refusal there is no reset time to compute (rate_limit.retry_after):
-# this is how often the store's own maintenance comes round, the soonest a
-# stuck store is likely to have recovered.
-UNAVAILABLE_RETRY_AFTER_S = int(_PURGE_INTERVAL_S)
-
-
 def claim(bucket: str, key: str | None, *, period: float) -> bool:
     """Claim `key` unless it was claimed less than `period` seconds ago.
     True when this caller got it, and when the store can't answer (or `key`

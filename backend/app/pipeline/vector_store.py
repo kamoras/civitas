@@ -379,7 +379,13 @@ def invalidate_on_model_change(db_session=None) -> None:
     whole rebuild, and waited out a running one first.
     """
     logger.warning("Embedding model change detected — invalidating stored embeddings")
-    clear_bills()
+    # DROP + recreate, not DELETE: a vec0 table's vector width is fixed at
+    # creation, and a new model may have a different one.
+    conn = get_vec_conn()
+    with _vec_lock:
+        conn.execute("DROP TABLE IF EXISTS vec_bills")
+        _ensure_schema(conn)
+        conn.commit()
 
     if db_session is not None:
         try:
@@ -772,6 +778,7 @@ def collection_stats() -> dict:
     conn = get_vec_conn()
     explore = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
     bills = conn.execute("SELECT COUNT(*) FROM vec_bills").fetchone()[0]
+    recorded = _get_meta(conn, _INDEX_MODEL)  # once: a rebuild may be changing it
     try:
         size = os.path.getsize(_VECTOR_DB_PATH)
     except OSError:
@@ -783,7 +790,7 @@ def collection_stats() -> dict:
             {"name": "explore_documents", "count": explore, "metadata": {}},
             {"name": "bills", "count": bills, "metadata": {}},
         ],
-        "indexModelVersion": _get_meta(conn, _INDEX_MODEL) or "",
+        "indexModelVersion": recorded or "",
         "chunksPerDocument": float(_get_meta(conn, "explore_chunks_per_doc") or 0.0),
         # "running" (in this process, the pipeline's), "incomplete" (not a
         # complete build by this model — a rebuild left it partway, empty
@@ -791,8 +798,7 @@ def collection_stats() -> dict:
         # completes), or "" (ready, or never built: nothing to search yet).
         "indexRebuild": (
             "running" if _rebuild_lock.locked()
-            else "incomplete" if _get_meta(conn, _INDEX_MODEL) == ""
-            or (explore and _get_meta(conn, _INDEX_MODEL) != index_identity())
+            else "incomplete" if recorded == "" or (explore and recorded != index_identity())
             else ""
         ),
     }
@@ -921,9 +927,11 @@ def explore_embed_dict(d) -> dict:
     }
 
 
-def rebuild_explore_index(db_session_factory) -> int | None:
+def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | None:
     """Rebuild the explore index from scratch, in the calling thread: the
-    documents embedded, or None when a rebuild is already running here.
+    documents embedded, or None when a rebuild is already running here — or,
+    with `wait`, None once that one has finished and left the index whole
+    (an Explore run then tops it up, rather than embedding beside it).
 
     DROP + recreate, not DELETE FROM: INDEX_SCHEMA_VERSION signals a COLUMN
     LAYOUT change (e.g. adding doc_id when chunking landed), and a vec0
@@ -934,10 +942,13 @@ def rebuild_explore_index(db_session_factory) -> int | None:
     _ensure_schema currently defines, so this is correct for a pure
     model-version bump or a plain re-embed too (identical schema either way).
     """
-    if not _rebuild_lock.acquire(blocking=False):
+    if not _rebuild_lock.acquire(blocking=wait):
         return None
     try:
         from app.models import ExploreDocument
+
+        if wait and index_is_whole():
+            return None
 
         conn = get_vec_conn()
         # Not ready from here until the last batch is in (_INDEX_MODEL).
@@ -1027,8 +1038,10 @@ def ensure_explore_index(db_session_factory) -> None:
             finally:
                 db.close()
             logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
-            if rebuild_explore_index(db_session_factory) is not None:
-                recalibrate_ranking(db_session_factory)
+            # Not recalibrated here: the ranking fit measures the keyword
+            # index too, which only an Explore run (or a re-embed) rebuilds in
+            # step with this one. The next run fits it, now that this is whole.
+            rebuild_explore_index(db_session_factory)
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
 

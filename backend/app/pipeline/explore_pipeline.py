@@ -634,7 +634,9 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         if not whole:
             logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
             try:
-                rebuilt = await asyncio.to_thread(rebuild_explore_index, SessionLocal)
+                # Waiting out one already running (a start's): embedding beside
+                # it would insert every missing document's chunks twice.
+                rebuilt = await asyncio.to_thread(rebuild_explore_index, SessionLocal, wait=True)
             except Exception as exc:
                 logger.exception("Explore pipeline: vector index rebuild failed")
                 from app.ops_alerts import send_ops_alert

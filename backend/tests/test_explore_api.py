@@ -515,6 +515,21 @@ class TestCachedSummaryRead:
         assert exc_info.value.status_code == 404
 
 
+class TestNoClientKey:
+    async def test_the_per_client_rule_fails_open_like_every_throttle_limit(self, db_session, monkeypatch):
+        # The throttle store unreadable: a summary still starts (the global
+        # cap still bounds the LLM), rather than every page waiting it out.
+        from app.api import throttle
+
+        monkeypatch.setattr(throttle, "client_key", lambda ip, purpose: None)
+        doc = _make_doc(db_session)
+        patches, _ = _llm(_fake_stream)
+        with patches[0], patches[1], patches[2]:
+            events = await _events(doc, db_session)
+            await _settled()
+        assert events[-1]["summary"] == "A test summary."
+
+
 class TestJoining:
     async def test_joining_counts_against_the_request_limit(self, db_session, monkeypatch):
         # A join starts nothing, but holds a stream open on the one pipeline
