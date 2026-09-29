@@ -377,15 +377,6 @@ class TestOpenAndResolved:
         assert self._resolve(db_session, "ingest") == 1
         assert self._send(db_session, "A failed", dedupe_key="day-A", condition="ingest")
 
-    def test_pruning_never_deletes_an_open_alert(self, db_session, monkeypatch):
-        monkeypatch.setattr("app.ops_alerts._HISTORY_KEEP", 5)
-        self._send(db_session, "Still broken", condition="old")
-        for i in range(8):
-            self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
-        subjects = [a["subject"] for a in self._alerts(db_session)]
-        assert subjects[0] == "Still broken"
-        assert len(subjects) == 6  # kept open, plus the five newest
-
     def test_an_event_alert_has_no_open_state(self, db_session):
         self._send(db_session, "Something happened once")
         [alert] = self._alerts(db_session)
@@ -398,6 +389,27 @@ class TestOpenAndResolved:
         alerts = self._alerts(db_session)
         assert alerts[0]["subject"] == "Still broken"
         assert len(alerts) == 11  # the open one, then the ten newest others
+
+    def test_history_ages_out_after_a_week_but_an_open_alert_never_does(self, db_session):
+        long_ago = utcnow() - timedelta(days=8)
+        with patch("app.ops_alerts.utcnow", return_value=long_ago):
+            self._send(db_session, "Old event")
+            self._send(db_session, "Old but still broken", condition="still")
+            self._send(db_session, "Old and fixed", condition="fixed")
+            self._resolve(db_session, "fixed")
+        self._send(db_session, "Recent event")
+        assert [a["subject"] for a in self._alerts(db_session)] == ["Old but still broken", "Recent event"]
+
+    def test_pruning_keeps_every_open_alert(self, db_session):
+        from app import ops_alerts
+
+        with patch.object(ops_alerts, "_HISTORY_KEEP", 3):
+            self._send(db_session, "Open", condition="open")
+            for i in range(5):
+                self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
+            subjects = [a["subject"] for a in self._alerts(db_session)]
+        # The newest three, plus the open one the cap would have dropped.
+        assert subjects == ["Open", "event 4", "event 3", "event 2"]
 
     def test_the_overrun_watchdog_resolves_once_the_run_is_over(self, db_session):
         self._send(db_session, "House pipeline overrun", condition="overrun-house")

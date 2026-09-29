@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models import BroadcastPost
 
 A = "{http://www.w3.org/2005/Atom}"
+M = "{http://search.yahoo.com/mrss/}"
 
 
 @pytest.fixture
@@ -64,8 +65,10 @@ def test_entries_newest_first_with_everything_a_reader_needs(client, db_session)
     assert root.findtext(f"{A}updated") == "2026-09-28T13:05:09Z"
     last = entries[1]
     assert last.findtext(f"{A}title") == "Congress, Friday"
-    assert last.findtext(f"{A}content") == "The Senate met."
-    assert last.find(f"{A}content").get("type") == "text"
+    assert last.find(f"{A}content").get("type") == "html"
+    assert last.findtext(f"{A}content") == (
+        '<p>The Senate met.</p><p><a href="https://civitas-research.org/congress/2026-09-26">Read on Civitas</a></p>'
+    )
     assert last.find(f"{A}link").get("href") == "https://civitas-research.org/congress/2026-09-26"
     assert last.findtext(f"{A}published") == "2026-09-27T22:00:00Z"
     assert last.find(f"{A}category").get("term") == "congress_day"
@@ -102,7 +105,7 @@ def test_unknown_feeds_are_404(client, path):
 def test_text_xml_cannot_carry_is_dropped_not_fatal(client, db_session):
     _post(db_session, text="A vote\x0b on <S. 1> & more.")
     entry = _feed(client.get("/api/feed/all.xml")).find(f"{A}entry")
-    assert entry.findtext(f"{A}content") == "A vote on <S. 1> & more."
+    assert entry.findtext(f"{A}content").startswith("<p>A vote on &lt;S. 1&gt; &amp; more.</p>")
 
 
 def test_the_length_is_capped(client, db_session, monkeypatch):
@@ -156,3 +159,42 @@ def test_a_withdrawn_issue_is_left_out_of_every_feed(client, db_session, monkeyp
     for path in ("/api/feed/all.xml", "/api/feed/issues.xml"):
         titles = [e.findtext(f"{A}title") for e in _feed(client.get(path)).findall(f"{A}entry")]
         assert titles == ["Standing"], path
+
+
+def test_an_entry_carries_the_pages_card_like_the_bluesky_post(client, db_session):
+    """The picture, description and links a Bluesky link card shows."""
+    _post(
+        db_session, "race", title="Georgia's Senate race",
+        text="Ossoff leads in new polling.\nThe race is rated a toss-up.",
+        url="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA",
+        source_url="https://www.ajc.com/politics/poll-ossoff/",
+        card_image="https://civitas-research.org/api/og?state=GA",
+        card_image_alt="Georgia Ballot 2026", card_description="What's on the 2026 Georgia ballot.",
+    )
+    entry = _feed(client.get("/api/feed/all.xml")).find(f"{A}entry")
+    assert entry.findtext(f"{A}summary") == "What's on the 2026 Georgia ballot."
+    html = entry.findtext(f"{A}content")
+    assert html == (
+        '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">'
+        '<img src="https://civitas-research.org/api/og?state=GA" alt="Georgia Ballot 2026"></a></p>'
+        "<p>Ossoff leads in new polling.</p><p>The race is rated a toss-up.</p>"
+        '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">Read on Civitas</a></p>'
+        '<p>Source: <a href="https://www.ajc.com/politics/poll-ossoff/">ajc.com</a></p>'
+    )
+    links = {link.get("rel"): link.get("href") for link in entry.findall(f"{A}link")}
+    assert links["enclosure"] == "https://civitas-research.org/api/og?state=GA"
+    assert links["related"] == "https://www.ajc.com/politics/poll-ossoff/"
+    assert entry.find(f"{M}thumbnail").get("url") == "https://civitas-research.org/api/og?state=GA"
+    media = entry.find(f"{M}content")
+    assert (media.get("url"), media.get("medium")) == ("https://civitas-research.org/api/og?state=GA", "image")
+    assert media.findtext(f"{M}description") == "Georgia Ballot 2026"
+
+
+def test_a_post_whose_page_has_no_card_yet_has_no_picture(client, db_session):
+    _post(db_session)  # card_image NULL: not read yet
+    _post(db_session, when="2026-09-28T13:00:00", subject="issue:y", card_image="")  # read, no image
+    for entry in _feed(client.get("/api/feed/all.xml")).findall(f"{A}entry"):
+        assert entry.find(f"{M}thumbnail") is None
+        assert entry.find(f"{A}link[@rel='enclosure']") is None
+        assert "<img" not in entry.findtext(f"{A}content")
+        assert entry.find(f"{A}summary") is None

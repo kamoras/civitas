@@ -180,3 +180,45 @@ def test_withdrawn_subjects_come_from_the_retraction_log():
 
     ids = [pid for e in entries() for pid in e["publicIds"]]
     assert ids and broadcast.withdrawn_subjects() == {f"issue:{pid}" for pid in ids}
+
+
+_CARD = {"title": "A page", "description": "What the page is.", "image": "https://civitas-research.org/api/og?issue=x",
+         "image_alt": "A page"}
+
+
+def test_the_pages_card_is_kept_for_the_feed(db_session, link_cards):
+    link_cards["https://civitas-research.org/issue/x"] = _CARD
+    post = _publish(db_session)
+    assert (post.card_image, post.card_image_alt, post.card_description) == (
+        "https://civitas-research.org/api/og?issue=x", "A page", "What the page is.",
+    )
+
+
+def test_a_page_that_sets_no_image_is_read_once_not_every_hour(db_session, link_cards):
+    link_cards["https://civitas-research.org/issue/x"] = {**_CARD, "image": "", "image_alt": "", "description": ""}
+    post = _publish(db_session)
+    assert (post.card_image, post.card_image_alt, post.card_description) == ("", None, None)
+    assert broadcast.fill_missing_cards(db_session) == 0
+
+
+def test_an_unreadable_page_never_holds_the_post_and_is_filled_in_later(db_session, link_cards):
+    post = _publish(db_session)  # the page can't be read yet
+    assert db_session.query(BroadcastPost).one() is post
+    assert post.card_image is None
+    link_cards["https://civitas-research.org/issue/x"] = _CARD
+    assert broadcast.fill_missing_cards(db_session) == 1
+    assert post.card_image == "https://civitas-research.org/api/og?issue=x"
+
+
+def test_the_backfill_leaves_old_and_withdrawn_posts_alone(db_session, link_cards, monkeypatch):
+    from app import retractions
+
+    old = _publish(db_session, subject="issue:old", url="https://civitas-research.org/issue/old")
+    old.published_at = utcnow() - broadcast.CARD_BACKFILL_WINDOW - timedelta(hours=1)
+    withdrawn = _publish(db_session, subject="issue:i00000bad", url="https://civitas-research.org/issue/bad")
+    db_session.commit()
+    monkeypatch.setattr(retractions, "entries", lambda: [{"publicIds": ["i00000bad"], "issueIds": []}])
+    for url in ("https://civitas-research.org/issue/old", "https://civitas-research.org/issue/bad"):
+        link_cards[url] = _CARD
+    assert broadcast.fill_missing_cards(db_session) == 0
+    assert old.card_image is None and withdrawn.card_image is None

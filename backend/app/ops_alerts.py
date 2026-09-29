@@ -23,6 +23,7 @@ history from the start.
 
 import json
 import logging
+import uuid
 from datetime import date, datetime, timedelta
 
 import httpx
@@ -44,6 +45,10 @@ logger = logging.getLogger(__name__)
 
 _HISTORY_TIER = "_ops_alerts"
 _HISTORY_KEEP = 50
+# How far back the dashboard lists alerts that are no longer open. A week
+# spans one cycle of the slowest regular jobs (the Sunday justice and
+# committee refreshes), so every job's latest outcome stays in view.
+HISTORY_SHOWN_FOR = timedelta(days=7)
 
 
 def send_ops_alert(
@@ -73,10 +78,10 @@ def send_ops_alert(
 
 
 def recent_alerts(limit: int = 10) -> list[dict]:
-    """Every open alert, then the newest ``limit`` others, each newest
-    first — consumed by the admin API. An open alert is never pushed off
-    by newer resolved ones. Each is {subject, body, at, condition,
-    resolvedAt, supersededAt, open}: open while its condition is
+    """Every open alert, then the newest ``limit`` others from the last
+    HISTORY_SHOWN_FOR, each newest first — consumed by the admin API. An
+    open alert is never pushed off, however old. Each is {subject, body, at,
+    condition, resolvedAt, supersededAt, open}: open while its condition is
     unresolved and no newer alert has replaced it."""
     db = SessionLocal()
     try:
@@ -92,7 +97,12 @@ def recent_alerts(limit: int = 10) -> list[dict]:
         ]
         for a in alerts:
             a["open"] = _is_open(a)
-        return [a for a in alerts if a["open"]] + [a for a in alerts if not a["open"]][:limit]
+        since = (utcnow() - HISTORY_SHOWN_FOR).isoformat()
+        history = [
+            a for a in alerts
+            if not a["open"] and (a["resolvedAt"] or a["supersededAt"] or a["at"]) >= since
+        ]
+        return [a for a in alerts if a["open"]] + history[:limit]
     except Exception:
         logger.exception("Failed to read ops alert history")
         return []
@@ -183,12 +193,13 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
             # Superseded by this one: the condition is still open, and one
             # alert for it says so.
             _supersede_open(db, condition, now)
-        key = f"dedupe-{dedupe_key}" if dedupe_key else f"alert-{now.isoformat()}"
+        # An event without a dedupe key is unique by its own id: a timestamp
+        # alone collided when two alerts landed in the same microsecond.
+        key = f"dedupe-{dedupe_key}" if dedupe_key else f"alert-{now.isoformat()}-{uuid.uuid4().hex[:12]}"
         db.add(ApiCache(tier=_HISTORY_TIER, cache_key=key, data_json=payload, cached_at=now))
-        db.flush()  # the session doesn't autoflush; count this one in the prune
         # Prune old history so the table stays bounded — never an open
-        # alert, which stays until its condition is resolved (or a newer
-        # alert for it replaces it), however much history piles up after.
+        # alert, which would silently drop a live problem off the panel.
+        db.flush()  # the session doesn't autoflush; count this one in the prune
         cutoff_rows = (
             db.query(ApiCache)
             .filter(ApiCache.tier == _HISTORY_TIER)

@@ -107,26 +107,11 @@ def publish_post(text: str, url: str, *, success_msg: str, error_context: str) -
         return False
 
 
-def build_link_card(client, url: str):
-    """Fetch OG metadata from url and build a Bluesky external embed (link card).
-
-    Returns None on any failure so callers can post without an embed.
-    """
-    from atproto import models as bsky_models
-
-    try:
-        resp = httpx.get(
-            url,
-            timeout=10,
-            follow_redirects=True,
-            headers={"User-Agent": "Civitas-Bot/1.0"},
-        )
-        resp.raise_for_status()
-        html = resp.text
-    except Exception:
-        logger.debug("Link card fetch failed for %s", url)
-        return None
-
+def og_card(html: str) -> dict[str, str]:
+    """A page's link card from its Open Graph tags: {title, description,
+    image, image_alt}, each "" when the page doesn't set it. The one reading
+    of a card: the Bluesky embed and the feed entry (app/broadcast.py) both
+    come from it, so they can't disagree."""
     def _og(prop: str) -> str:
         m = re.search(
             rf'<meta[^>]+property=["\']og:{prop}["\'][^>]+content=["\']([^"\']+)["\']',
@@ -137,25 +122,51 @@ def build_link_card(client, url: str):
         )
         return unescape(m.group(1)) if m else ""
 
-    title = _og("title") or "Civitas // Public Record"
-    description = _og("description") or ""
-    image_url = _og("image")
+    return {
+        "title": _og("title"),
+        "description": _og("description"),
+        "image": _og("image"),
+        "image_alt": _og("image:alt"),
+    }
+
+
+def fetch_og_card(url: str) -> dict[str, str] | None:
+    """`url`'s link card (og_card), or None when the page can't be read."""
+    try:
+        resp = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": "Civitas-Bot/1.0"})
+        resp.raise_for_status()
+    except Exception:
+        logger.debug("Link card fetch failed for %s", url)
+        return None
+    return og_card(resp.text)
+
+
+def build_link_card(client, url: str):
+    """Fetch OG metadata from url and build a Bluesky external embed (link card).
+
+    Returns None on any failure so callers can post without an embed.
+    """
+    from atproto import models as bsky_models
+
+    card = fetch_og_card(url)
+    if card is None:
+        return None
 
     thumb = None
-    if image_url:
+    if card["image"]:
         try:
-            img_resp = httpx.get(image_url, timeout=10, follow_redirects=True)
+            img_resp = httpx.get(card["image"], timeout=10, follow_redirects=True)
             img_resp.raise_for_status()
             blob = client.upload_blob(img_resp.content)
             thumb = blob.blob
         except Exception:
-            logger.debug("Thumbnail upload failed for %s", image_url)
+            logger.debug("Thumbnail upload failed for %s", card["image"])
 
     return bsky_models.AppBskyEmbedExternal.Main(
         external=bsky_models.AppBskyEmbedExternal.External(
             uri=url,
-            title=title,
-            description=description,
+            title=card["title"] or "Civitas // Public Record",
+            description=card["description"],
             thumb=thumb,
         )
     )

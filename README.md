@@ -869,7 +869,7 @@ Every post goes through one function, `app/broadcast.publish`, which stores it a
 | `/feed/issues.xml`, `/feed/congress.xml`, `/feed/members.xml`, `/feed/elections.xml` | One topic (`broadcast.FEEDS`) |
 | `/feed/states/<ST>.xml` | One state's race posts and member spotlights |
 
-Anyone can follow a feed with a reader, a Discord or Slack bot, or their own program, and Civitas keeps no list of who does (AGENTS.md §8). The feeds are served by `app/api/feed.py` (50 newest entries, ETag/304) and cached by nginx for 5 minutes. A post is in the feed whatever Bluesky does with it. A send Bluesky refuses is retried hourly (`broadcast.deliver_pending`), for at most three tries in all and only on the Eastern day it was written, since a post can say "Yesterday: …". A send interrupted by a crash is never retried, so nothing is posted twice. The table survives an admin data reset (`RESET_KEEPS`): it is what the posting modules check (by each post's `subject`, e.g. `race:2026-SEN-GA`) before publishing again, so a reset neither empties the feeds nor re-posts the last few days.
+Anyone can follow a feed with a reader, a Discord or Slack bot, or their own program, and Civitas keeps no list of who does (AGENTS.md §8). The feeds are served by `app/api/feed.py` (50 newest entries, ETag/304) and cached by nginx for 5 minutes. Each entry carries what the Bluesky post's link card shows: the linked page's picture and description, read once from its Open Graph tags (`bluesky_utils.og_card`, the same reading the Bluesky card uses) and kept on the row (`card_image`, `card_image_alt`, `card_description`). The entry's content is HTML (the picture, the post, a "Read on Civitas" link, and the source article when the post restates one), with the description as its summary, the picture as an enclosure and a Media RSS thumbnail for readers and chat bots, and the source as a `related` link. The card is read right after the post is stored, so an unreadable page never holds a post back; the hourly pass (`broadcast.fill_missing_cards`) fills in any it missed from the last week. The feed itself never fetches anything. A post is in the feed whatever Bluesky does with it. A send Bluesky refuses is retried hourly (`broadcast.deliver_pending`), for at most three tries in all and only on the Eastern day it was written, since a post can say "Yesterday: …". A send interrupted by a crash is never retried, so nothing is posted twice. The table survives an admin data reset (`RESET_KEEPS`): it is what the posting modules check (by each post's `subject`, e.g. `race:2026-SEN-GA`) before publishing again, so a reset neither empties the feeds nor re-posts the last few days.
 
 The posting modules below decide what to publish and when. The Civitas Bluesky account (`@civitas-research.org`) carries the same posts as the feeds, except any Bluesky still hadn't taken by the end of that day:
 
@@ -1242,7 +1242,9 @@ replaced, not resolved) and leaves its dedupe key held, so details that swing
 back and forth (failing states A, then B, then A) don't notify on every swing.
 Resolving frees the keys of every alert for the condition, so a recurrence
 alerts again. Open alerts are never pushed off the panel by newer history, and
-never pruned from the 50 kept.
+never pruned from storage. Resolved, replaced and one-off alerts stay listed
+for seven days (the slowest regular jobs run weekly, so every job's latest
+outcome stays in view), at most ten.
 
 ### Docker Swarm Architecture
 
