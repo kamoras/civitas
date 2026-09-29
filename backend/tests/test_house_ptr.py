@@ -140,3 +140,21 @@ async def test_a_failed_index_download_is_not_cached_as_empty(db_session):
     with patch("app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock, return_value=None) as get:
         assert await fetch_filing_index(None, db_session, 2026, filing_types={"O"}, pdf_dir="x") is None
     get.assert_awaited_once()  # asked again, not answered from a cached []
+
+
+async def test_a_scan_row_without_a_legible_date_carries_the_filing_date(db_session):
+    """A scanned House PTR row whose date alone didn't read is kept undated
+    (ptr_common.ocr_extract_rows); its disclosure date is the filing's, and
+    the scan's dates are bounded by it."""
+    filing = {"doc_id": "8220001", "pdf_url": "https://example.com/8220001.pdf", "filing_date": "2026-05-14"}
+    undated = TradeRow(
+        ticker=None, asset_name="COMCAST CORP", owner="unknown", transaction_type="purchase",
+        transaction_date=None, disclosure_date="", amount_low=1001.0, amount_high=15000.0,
+    )
+    with patch("app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock) as mock_fetch, \
+            patch("app.pipeline.fetch.house_ptr.parse_pdf_bytes") as mock_parse:
+        mock_fetch.return_value = b"%PDF-fake-bytes"
+        mock_parse.return_value = ([undated], "ocr")
+        rows = await fetch_and_parse_ptr(None, db_session, filing)
+    assert mock_parse.call_args.kwargs == {"not_after": "2026-05-14", "keep_undated": True}
+    assert (rows[0].transaction_date, rows[0].disclosure_date) == (None, "2026-05-14")
