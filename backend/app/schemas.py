@@ -295,6 +295,38 @@ class CommitteeSchema(CamelModel):
     title: str | None = None  # "Chairman" / "Ranking Member", else None
 
 
+class LobbiedBillSchema(CamelModel):
+    """A bill the member voted on that an LDA filing for a client of the
+    donor's name names, one entry per client (fetch/lda.lobbied_bills_for).
+    `client` is the registry's name for that client, which can be a separate
+    company sharing the name."""
+    bill_id: str
+    label: str = ""
+    bill_name: str = ""
+    vote: str | None = None
+    # What the vote shown decided ("passage", "cloture", "amendment" ...).
+    motion_type: str | None = None
+    # How the page says which vote is shown; "" for the vote on passage
+    # (lda.vote_context). A row without one must not read as passage.
+    vote_context: str = "on a motion, not necessarily passage"
+    filing_year: int | None = None
+    filing_url: str | None = None
+    registrant: str | None = None
+    # The registry's name for the filing's client (lda.is_same_client).
+    client: str | None = None
+    # The registrant when it isn't the client or named in it (lda._filed_by).
+    filed_by: str | None = None
+    filing_count: int = 1
+
+
+class LobbyingClientSchema(CamelModel):
+    """One registry client counted in a match's lobbying spend."""
+    client: str
+    amount: float
+    # False when the year's filings ran past the page cap: amount is a floor.
+    complete: bool = True
+
+
 class LobbyingMatchSchema(CamelModel):
     lobbyist_org: str
     industry: str
@@ -303,6 +335,11 @@ class LobbyingMatchSchema(CamelModel):
     bills_influenced: list[str]
     senator_vote_aligned: bool | None = None
     description: str
+    lobbied_bills: list[LobbiedBillSchema] = []
+    # lobbying_spend's parts by the registry's client names.
+    lobbying_clients: list[LobbyingClientSchema] = []
+    # False: the LDA lookup failed, so lobbying_spend is unknown, not zero.
+    lobbying_checked: bool | None = None
 
 
 class PolicyAlignmentSchema(CamelModel):
