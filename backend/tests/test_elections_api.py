@@ -290,6 +290,16 @@ class TestPviMap:
         data = _body(elections.pvi_map())
         assert data["cycleYear"] == current_election_cycle()
 
+    def test_includes_next_election_day(self):
+        """The /elections masthead's countdown. A date, not a day count:
+        the response is cached, and a count would go stale with it."""
+        from datetime import datetime
+        from unittest.mock import patch
+
+        with patch("app.api.elections.utcnow", return_value=datetime(2026, 9, 29)):
+            data = _body(elections.pvi_map())
+        assert data["electionDay"] == "2026-11-03"
+
 
 class TestUnopposedNomineesAreNotTreatedAsLosers:
     """A state that cancels an uncontested primary publishes no row for a

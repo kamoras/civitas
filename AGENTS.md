@@ -62,7 +62,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
-- **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab
+- **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
 All services, models, and data run on-device. No data leaves the server.
@@ -99,7 +99,7 @@ civitas/
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline/elections/branches/globe],
+│   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline tabs, labelled Today/Ongoing/Archive],
 │   │   │                        #   elections [state index, states/[ST] ballot, [raceId] detail],
 │   │   │                        #   politicians [directory + per-member profile], bills, compare, explore, leaderboard,
 │   │   │                        #   about, changelog, accessibility, environmental, feedback, admin)
@@ -683,6 +683,14 @@ bucket) — no hash, no User-Agent, no exact duration. The endpoint reads nothin
 about the caller at all. Keep it that way: a timing row that could be joined to
 a `SiteVisit` would turn a performance histogram into a per-visitor log.
 
+The same line covers the visitor's own browser. The Action Center used to
+remember a "your state" pick in `localStorage` (also read by the compare
+page), a "log my action" diary with streaks, and which issues the browser had
+voted on; all three were removed in 2026-09, and `ForgetLegacyStorage` clears
+what earlier visits left behind. Browser storage is for a per-tab convenience
+at most (`sessionStorage`, as the admin token uses), never a record of the
+visitor.
+
 A feature that can only work by asking where the visitor lives is a feature
 this project doesn't ship. State the resulting limitation as content (see
 §7's `omits`) rather than closing the gap by collecting an address.
@@ -1006,7 +1014,7 @@ the pending list).
 | Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`) decide what and when |
 | Representative API routes | `backend/app/api/representatives.py` |
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
-| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
+| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline tabs], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/`, `frontend/src/app/photo/bioguide/[id]/route.ts` |
@@ -1014,7 +1022,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Interactive globe component | `frontend/src/components/action/GlobeTab.tsx` |
+| Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Homepage (masthead, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `RecordIndex.tsx`, `Holdings.tsx` |
 
 ## Conventions
@@ -1058,7 +1066,7 @@ the pending list).
   - Set `Cache-Control` headers on relatively static endpoints (config,
     leaderboards, action issues) to enable browser and nginx proxy caching
   - Backend runs **one** uvicorn worker (`backend/Dockerfile`'s `CMD`); it
-    always has. The write rate limiter, the pulse dedup and the summary
+    always has. The write rate limiter and the summary
     cooldown are in-process state that assumes this. Two backend
     *processes* still meet during a Swarm start-first rollout, when the
     old and new tasks overlap on the same database, which is what the

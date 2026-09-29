@@ -6,7 +6,7 @@ import { fetchRecentActionIssues, fetchBillsInFlight, fetchMonitors } from "@/li
 import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import type { BillInFlight } from "@/types/bill";
-import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
+import { monitorHref } from "@/lib/routes";
 import { issueRef, parseUtc } from "@/lib/formatting";
 import { billHref } from "@/lib/congress";
 
@@ -100,7 +100,7 @@ export function buildRecordEntries(
         date: m.lastArticleDate || m.updatedAt,
         title: m.title,
         detail: `${m.updateCount} update${m.updateCount === 1 ? "" : "s"} tracked`,
-        href: ACTION_CENTER_MONITORS_HREF,
+        href: monitorHref(m.slug),
         tone: "text-signal-orange",
       })),
     ...bills.map((b) => ({

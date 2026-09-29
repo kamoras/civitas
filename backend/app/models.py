@@ -1191,6 +1191,10 @@ class ActionIssue(Base):
     # guesses.
     fact_sources: Mapped[str] = mapped_column(Text, default="[]")
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
+    # Unused: the "This concerns me / Not a priority" vote that counted into
+    # these was removed in 2026-09. Still mapped, with their default, because
+    # they are NOT NULL and the image before this one still reads them; the
+    # drop is listed under "Pending contract" in backend/migrations/README.md.
     concerned_count: Mapped[int] = mapped_column(Integer, default=0)
     not_priority_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)

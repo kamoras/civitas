@@ -412,7 +412,7 @@ def _election_coverage_refresh() -> None:
     within is_election_season's window — a no-op the rest of the year,
     same shape as _hourly_action_refresh's existing running-pipeline guards.
     """
-    from app.api.action import is_election_season
+    from app.election_calendar import is_election_season
 
     if not is_election_season():
         return
@@ -480,7 +480,7 @@ def _election_ballot_sync() -> None:
     the cadence is cheap; the roster and financial refresh stay nightly.
     A no-op outside is_election_season's window, like the coverage refresh.
     """
-    from app.api.action import is_election_season
+    from app.election_calendar import is_election_season
 
     if not is_election_season():
         return

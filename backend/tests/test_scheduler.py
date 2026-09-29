@@ -367,7 +367,7 @@ class TestElectionCoverageRefresh:
         from app import scheduler
 
         with patch("app.background.threading.Thread", _SyncThread), \
-             patch("app.api.action.is_election_season", return_value=in_season), \
+             patch("app.election_calendar.is_election_season", return_value=in_season), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
              _tracker_running(coverage_tracker(), coverage_running, coverage_age), \
@@ -439,7 +439,7 @@ class TestElectionCoverageRefreshExceptionHandling:
         from app import scheduler
 
         with patch("app.background.threading.Thread", _SyncThread), \
-             patch("app.api.action.is_election_season", return_value=True), \
+             patch("app.election_calendar.is_election_season", return_value=True), \
              patch("app.scheduler.is_election_pipeline_running", return_value=False), \
              patch("app.database.SessionLocal", return_value=MagicMock()), \
              patch(
@@ -465,7 +465,7 @@ class TestElectionBallotSync:
             "status": "ok", "confirmed": 5, "statesOk": ["AK"], "statesFailed": [], "filings": {},
         }, side_effect=error)
         with patch("app.background.threading.Thread", _SyncThread), \
-             patch("app.api.action.is_election_season", return_value=in_season), \
+             patch("app.election_calendar.is_election_season", return_value=in_season), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
              _tracker_running(ballot_tracker(), sync_running, sync_age), \
@@ -542,7 +542,7 @@ class TestLeasedJobs:
         for target, kw in [
             ("app.background.threading.Thread", {"new": _SyncThread}),
             ("app.pipeline.lease.job", {"new": _refused_leases(taken)}),
-            ("app.api.action.is_election_season", {"return_value": True}),
+            ("app.election_calendar.is_election_season", {"return_value": True}),
             ("app.scheduler.is_election_pipeline_running", {"return_value": pipeline_running}),
             ("app.scheduler.election_pipeline_age", {"return_value": timedelta(minutes=5)}),
             ("app.scheduler.is_house_pipeline_running", {"return_value": False}),
@@ -670,7 +670,7 @@ def test_an_election_season_job_is_cut_off_where_its_guards_stop_holding(monkeyp
             raise
 
     with patch("app.background.threading.Thread", _SyncThread), \
-         patch("app.api.action.is_election_season", return_value=True), \
+         patch("app.election_calendar.is_election_season", return_value=True), \
          patch("app.scheduler.is_election_pipeline_running", return_value=False), \
          patch("app.database.SessionLocal", return_value=MagicMock()), \
          patch(target, hangs):
