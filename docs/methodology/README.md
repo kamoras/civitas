@@ -17,7 +17,7 @@ and superseded ones sat side by side, and stale claims survived in both.
 **When you change a score:**
 - Bump the version.
 - Add a record here named for the new version.
-- Add the public summary to `scoreVersions.ts`.
+- Add the public summary to `scoreVersions.ts`, dated the day it reaches main (UTC), at the top of the list. Its test fails on a future date or an out-of-order entry.
 - Leave the code comment describing only what the code now does.
 
 The moved records are kept as they were written, in `text` blocks. Words like

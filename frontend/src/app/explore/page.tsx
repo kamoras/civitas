@@ -184,7 +184,9 @@ export default function ExplorePage() {
   );
 }
 
-/** A search as submitted — the four inputs that define one set of results. */
+/** A search as submitted — the four inputs that define one set of results.
+ * An empty query is a member's whole record (browse), only ever with a
+ * politician filter. */
 type SubmittedSearch = {
   query: string;
   chamber: ChamberFilter;
@@ -194,6 +196,8 @@ type SubmittedSearch = {
 
 const searchKey = (s: SubmittedSearch) =>
   `explore:${s.query}|${s.chamber}|${s.commentableOnly ? 1 : 0}|${s.sort}`;
+
+const RESULT_LIMIT = 30;
 
 const INDEX_BUILDING_MESSAGE =
   "The search index is still being built. This happens right after a data refresh — please check back in a few minutes.";
@@ -209,7 +213,10 @@ function ExplorePageInner() {
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [chamber, setChamber] = useState<ChamberFilter>("all");
   const [commentableOnly, setCommentableOnly] = useState(false);
-  const [sortOrder, setSortOrder] = useState<"relevance" | "date">("relevance");
+  // A member's record with no query is listed newest first; the toggle says so.
+  const [sortOrder, setSortOrder] = useState<"relevance" | "date">(() =>
+    !searchParams.get("q")?.trim() && searchParams.get("politician_id") ? "date" : "relevance"
+  );
   const [stats, setStats] = useState<ExploreStats | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -217,10 +224,18 @@ function ExplorePageInner() {
   // just this state's initial value, which is why there is no mount effect
   // firing a search — and no window in which the URL says one thing and the
   // results pane shows another.
+  // Latched at mount, like the query: a profile's "view all documents" link
+  // opens ?politician_id= with no query, which lists that member's record.
+  const [politicianId, setPoliticianId] = useState<string | undefined>(
+    () => searchParams.get("politician_id") || undefined
+  );
   const [submitted, setSubmitted] = useState<SubmittedSearch | null>(() => {
     const initialQ = searchParams.get("q")?.trim();
-    return initialQ
-      ? { query: initialQ, chamber: "all", commentableOnly: false, sort: "relevance" }
+    if (initialQ) {
+      return { query: initialQ, chamber: "all", commentableOnly: false, sort: "relevance" };
+    }
+    return searchParams.get("politician_id")
+      ? { query: "", chamber: "all", commentableOnly: false, sort: "date" }
       : null;
   });
 
@@ -230,14 +245,13 @@ function ExplorePageInner() {
       .catch(() => {});
   }, []);
 
-  const politicianId = searchParams.get("politician_id") || undefined;
   const request = useAsyncData(
     submitted ? `${searchKey(submitted)}|${politicianId ?? ""}` : "",
     submitted
       ? () =>
           searchExplore(submitted.query, {
             chamber: submitted.chamber === "all" ? undefined : submitted.chamber,
-            limit: 30,
+            limit: RESULT_LIMIT,
             commentableOnly: submitted.commentableOnly || undefined,
             sort: submitted.sort,
             politicianId,
@@ -260,15 +274,43 @@ function ExplorePageInner() {
   // What the results are *of*, which is not what is in the box: typing a new
   // term must not silently relabel the results still showing from the old one.
   const resultsFor = submitted?.query ?? "";
+  // Whose record the results are limited to. The name comes from the results
+  // themselves; the filter is shown either way.
+  const politicianName = politicianId
+    ? results.find((r) => r.politicianId === politicianId)?.politicianName || "one member"
+    : "";
+
+  // The address names the search on screen, so a refresh or a shared link
+  // shows the same thing. History API, not router.replace(): on this
+  // statically prerendered route a same-route replace() is a no-op once the
+  // page was opened with a query string (AGENTS.md, "Client-side URL state").
+  const writeUrl = useCallback((q: string, member: string | undefined) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (member) params.set("politician_id", member);
+    const search = params.toString();
+    window.history.replaceState(null, "", search ? `?${search}` : window.location.pathname);
+  }, []);
 
   const runSearch = useCallback(
     (q: string, ch: ChamberFilter, commentOnly: boolean, sort: "relevance" | "date") => {
       const trimmed = q.trim();
-      if (!trimmed) return;
+      // An empty box lists the filtered member's record; with no member it
+      // asks for nothing.
+      if (!trimmed && !politicianId) return;
       setSubmitted({ query: trimmed, chamber: ch, commentableOnly: commentOnly, sort });
+      writeUrl(trimmed, politicianId);
     },
-    []
+    [politicianId, writeUrl]
   );
+
+  const clearPolitician = () => {
+    setPoliticianId(undefined);
+    const trimmed = submitted?.query ?? "";
+    writeUrl(trimmed, undefined);
+    // A browse has nothing left to show without its member.
+    if (!trimmed) setSubmitted(null);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,7 +324,7 @@ function ExplorePageInner() {
 
   const handleChamberChange = (ch: ChamberFilter) => {
     setChamber(ch);
-    if (searched && query.trim()) {
+    if (searched && (query.trim() || politicianId)) {
       runSearch(query, ch, commentableOnly, sortOrder);
     }
   };
@@ -290,14 +332,14 @@ function ExplorePageInner() {
   const handleCommentToggle = () => {
     const next = !commentableOnly;
     setCommentableOnly(next);
-    if (searched && query.trim()) {
+    if (searched && (query.trim() || politicianId)) {
       runSearch(query, chamber, next, sortOrder);
     }
   };
 
   const handleSortChange = (s: "relevance" | "date") => {
     setSortOrder(s);
-    if (searched && query.trim()) {
+    if (searched && (query.trim() || politicianId)) {
       runSearch(query, chamber, commentableOnly, s);
     }
   };
@@ -358,7 +400,7 @@ function ExplorePageInner() {
                   />
                   <button
                     type="submit"
-                    disabled={loading || !query.trim()}
+                    disabled={loading || (!query.trim() && !politicianId)}
                     aria-busy={loading}
                     aria-label={loading ? "Searching" : "Search"}
                     className="text-xs font-mono tracking-widest text-signal-cyan hover:text-phos disabled:text-ink-min transition-colors shrink-0 px-2 py-1
@@ -449,6 +491,24 @@ function ExplorePageInner() {
             </div>
           </div>
 
+          {politicianId && (
+            <div
+              role="status"
+              className="mb-6 flex flex-wrap items-center justify-center gap-3 text-xs"
+            >
+              <span className="text-ink-lo">
+                Only documents from <span className="text-ink-hi">{politicianName}</span>
+              </span>
+              <button
+                type="button"
+                onClick={clearPolitician}
+                className="font-mono tracking-widest text-signal-cyan hover:text-phos transition-colors"
+              >
+                SEARCH EVERYONE
+              </button>
+            </div>
+          )}
+
           {/* Suggested queries (shown before search) */}
           {!searched && (
             <div className="mb-8">
@@ -513,13 +573,23 @@ function ExplorePageInner() {
                   outline going h1 -> h2 -> h3 instead of jumping to the
                   result titles. */}
               <h2 className="text-ink-lo text-xs mb-4 font-normal">
-                {results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{resultsFor}
-                &rdquo;
+                {resultsFor ? (
+                  <>
+                    {results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;
+                    {resultsFor}&rdquo;
+                  </>
+                ) : (
+                  <>
+                    {results.length === RESULT_LIMIT ? "The most recent " : ""}
+                    {results.length} document{results.length !== 1 ? "s" : ""} from {politicianName}
+                  </>
+                )}
                 {commentableOnly && (
                   <span className="text-phos-mid ml-2">— open for comment only</span>
                 )}
                 <span className="text-ink-min ml-2">
-                  — sorted by {sortOrder === "date" ? "newest first" : "relevance"}
+                  — sorted by{" "}
+                  {!resultsFor || submitted?.sort === "date" ? "newest first" : "relevance"}
                 </span>
               </h2>
               <div className="space-y-3">
@@ -534,7 +604,11 @@ function ExplorePageInner() {
           {!loading && searched && !error && results.length === 0 && (
             <div className="text-center py-12">
               <p className="text-ink-lo text-base mb-2">
-                No results found for &ldquo;{resultsFor}&rdquo;
+                {resultsFor ? (
+                  <>No results found for &ldquo;{resultsFor}&rdquo;</>
+                ) : (
+                  <>No documents on record for this member</>
+                )}
               </p>
               <p className="text-ink-lo text-xs">
                 Try a broader search term or adjust your filters.

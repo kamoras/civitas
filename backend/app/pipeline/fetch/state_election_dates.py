@@ -159,11 +159,6 @@ def senate_election_known(state: str, cycle: int) -> bool | None:
     return bool((known.get(f"{cycle}-{state.upper()}") or {}).get("senate"))
 
 
-def all_dates() -> dict[str, Any]:
-    """Every date known, keyed "{cycle}-{STATE}"."""
-    return dict(_load())
-
-
 def _disagreement(state: str, entry: dict) -> None:
     ours, fec = entry.get("primary"), entry.get("fec_primary")
     if ours and fec and ours != fec:

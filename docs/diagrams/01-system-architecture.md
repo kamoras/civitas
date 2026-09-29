@@ -36,7 +36,7 @@ flowchart TB
     end
 
     subgraph SERVE["Serving"]
-        API["FastAPI :8000<br/>/api/... · /api/public/v1 · /api/health"]
+        API["FastAPI :8000<br/>/api/... · /api/public/v1 · /api/health · /api/live"]
         WEB["Next.js 16 :3000<br/>App Router, RSC"]
         NGINX["nginx :8081<br/>reverse proxy + cache"]
     end

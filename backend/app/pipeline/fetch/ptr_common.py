@@ -62,7 +62,9 @@ class TradeRow:
 # form's ranges, dates only inside the filing's window.
 # 4: a presidential scanned row whose date alone is illegible is kept
 # undated (ocr_extract_rows, keep_undated).
-PARSER_VERSION = 4
+# 5: House and Senate scanned rows likewise; a House scan's dates fall on
+# or before its filing date.
+PARSER_VERSION = 5
 
 # PTR owner codes -> our owner vocabulary (StockTrade.owner / RepStockTrade.owner).
 OWNER_CODES = {"SP": "spouse", "DC": "dependent", "JT": "joint"}
@@ -533,7 +535,8 @@ def ocr_extract_rows(
     by OCR supports no timeliness figure (schemas.StockTradeSchema).
 
     `keep_undated`: keep a table row whose asset, type and amount read but
-    whose date didn't, with transaction_date None. One presidential 278-T
+    whose date didn't, with transaction_date None (every filer's fetcher
+    asks, since PARSER_VERSION 5). One presidential 278-T
     (May 8, 2026) was scanned at 150 dpi and printed at half size: its dates
     are ~6 px tall, and no reading of them was reliable (the best, matching
     rendered candidates, was right 38% of the time with no usable

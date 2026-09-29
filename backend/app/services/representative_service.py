@@ -717,7 +717,8 @@ def get_rep_stock_trades(
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
-        query.order_by(RepStockTrade.transaction_date.desc(), RepStockTrade.id.desc())
+        # Undated rows (a scan's illegible dates) after the dated ones.
+        query.order_by(RepStockTrade.transaction_date.desc().nulls_last(), RepStockTrade.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()

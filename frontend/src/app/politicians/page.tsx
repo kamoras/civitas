@@ -248,6 +248,7 @@ function PoliticiansPageContent() {
                     setState("");
                     setParty("ALL");
                   }}
+                  aria-pressed={branch === key}
                   className={`font-mono text-xs tracking-widest px-3 py-1 border transition-colors ${
                     branch === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
@@ -269,9 +270,10 @@ function PoliticiansPageContent() {
                 ref={searchRef}
                 type="text"
                 placeholder="SEARCH NAME..."
+                aria-label="Search politicians by name"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder-white/15 px-3 py-1.5 outline-none w-48"
+                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-48"
               />
 
               {/* Party filter */}
@@ -280,6 +282,7 @@ function PoliticiansPageContent() {
                   <button
                     key={key}
                     onClick={() => setParty(key)}
+                    aria-pressed={party === key}
                     className={`font-mono text-xs px-2 py-1 border transition-colors ${
                       party === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}

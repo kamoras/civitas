@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { pacSharePct } from "@/lib/funding";
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -115,6 +116,7 @@ function SenatorSelector({
       <div className="flex gap-2">
         <button
           onClick={() => handleChamberToggle("senate")}
+          aria-pressed={chamber === "senate"}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "senate" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
@@ -123,6 +125,7 @@ function SenatorSelector({
         </button>
         <button
           onClick={() => handleChamberToggle("house")}
+          aria-pressed={chamber === "house"}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "house" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
@@ -167,6 +170,7 @@ function SenatorSelector({
             <button
               key={s.id}
               onClick={() => onSelect(s, chamber)}
+              aria-pressed={s.id === selectedId}
               className={`w-full text-left px-3 py-2 border transition-colors font-mono text-xs ${
                 s.id === selectedId ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
@@ -508,7 +512,14 @@ function ComparePageInner() {
           >
             <p>
               Select two legislators to compare their representation scores, funding sources, and
-              voting independence side by side.
+              voting independence side by side. Presidents compare on the{" "}
+              <Link
+                href="/compare/presidents"
+                className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+              >
+                president comparison
+              </Link>
+              .
             </p>
           </PageMasthead>
 

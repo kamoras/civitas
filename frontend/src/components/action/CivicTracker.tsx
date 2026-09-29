@@ -144,6 +144,7 @@ export function LogActionButton({
           if (e.key === "Escape") setShowForm(false);
         }}
         placeholder="What did you do? (optional)"
+        aria-label="What did you do? (optional)"
         maxLength={120}
         className="text-xs bg-surface-base border border-white/15 text-ink-hi px-2 py-1 focus:outline-none focus:border-signal-cyan/40 transition-colors
                    placeholder:text-ink-min w-48"
