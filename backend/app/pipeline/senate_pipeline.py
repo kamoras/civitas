@@ -1417,9 +1417,10 @@ async def run_senate_pipeline(
             )
             progress.complete("fetch_fec", detail=f"{len(fec_data)}/{len(senators)} matched")
 
-            # 1e-2. Resolve PAC committee types (multicandidate vs not) once per
-            # unique contributing PAC across the whole run — feeds the
-            # PAC-utilization signal in _funding_independence_core. A single
+            # 1e-2. Resolve contributing committees' FEC registrations (type,
+            # designation, connected organization) once per unique committee
+            # across the whole run — the tier-1 political-committee rule and
+            # the lobbying client name in normalize_finance. A single
             # global pass here (rather than a per-senator lookup) means a PAC
             # that gives to 30 different senators is looked up exactly once,
             # not 30 times, on top of the committee master's weekly cache.

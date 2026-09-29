@@ -189,10 +189,9 @@ class Donor(Base):
     pac_industry: Mapped[str | None] = mapped_column(String, nullable=True)
     pac_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
     # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified,
-    # etc.) for the donor's own committee, when this donor is a PAC — used to
-    # compute its per-election contribution cap for the PAC-utilization
-    # signal in score_calculator._funding_independence_core. None for
-    # non-PAC donors or when the lookup couldn't resolve a committee ID.
+    # etc.) for the donor's own committee, when this donor is one (FEC
+    # committee master). Reported, not scored since v6.22. None for
+    # non-committee donors or when no registration resolved.
     committee_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     senator: Mapped["Senator"] = relationship(back_populates="donors")
@@ -445,10 +444,9 @@ class RepDonor(Base):
     pac_industry: Mapped[str | None] = mapped_column(String, nullable=True)
     pac_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
     # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified,
-    # etc.) for the donor's own committee, when this donor is a PAC — used to
-    # compute its per-election contribution cap for the PAC-utilization
-    # signal in score_calculator._funding_independence_core. None for
-    # non-PAC donors or when the lookup couldn't resolve a committee ID.
+    # etc.) for the donor's own committee, when this donor is one (FEC
+    # committee master). Reported, not scored since v6.22. None for
+    # non-committee donors or when no registration resolved.
     committee_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     representative: Mapped["Representative"] = relationship(back_populates="donors")
@@ -1198,6 +1196,10 @@ class ActionIssue(Base):
     # it" signal. Read by app/fact_diff.py to mark newly-added facts.
     previous_facts: Mapped[str] = mapped_column(Text, default="[]")
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
+    # The row this one is a near-identical duplicate of, among the newest
+    # rows the homepage feed reads (action_center.mark_recent_duplicates);
+    # None for a representative, or a row never compared.
+    duplicate_of_id: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
     # Only ever set from a source article whose feed explicitly granted
     # redistribution rights (see pipeline/fetch/news_feeds.py's
