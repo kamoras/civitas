@@ -675,6 +675,12 @@ class JusticeLoyaltySchema(CamelModel):
     through_term: int | None = None
 
 
+class JusticeAgreementSchema(CamelModel):
+    id: str
+    name: str
+    share: float
+
+
 class JusticeSchema(CamelModel):
     id: str
     name: str
@@ -694,7 +700,9 @@ class JusticeSchema(CamelModel):
     authored_dissent: int = 0
     authored_concurrence: int = 0
     close_case_majority_pct: float = 0.0
-    agreement_matrix: dict[str, float] = {}
+    # Agreement with each sitting justice, most first: the share of cases
+    # both decided that they decided the same way.
+    agreement: list[JusticeAgreementSchema] = []
     loyalty: JusticeLoyaltySchema | None = None
     # Martin-Quinn position per term, [[term, position], ...]: shown, not scored.
     ideal_points: list[tuple[int, float]] = []
