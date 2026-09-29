@@ -71,10 +71,15 @@ function TradeRow({ trade }: { trade: StockTrade }) {
           {trade.ticker ? `${trade.ticker} — ${trade.assetName}` : trade.assetName}
         </span>
         {trade.parseConfidence === "ocr" && (
-          <MetricTooltip text="Extracted via OCR because the underlying filing is a scanned paper form with no digital text layer to parse directly (this is the norm for presidential disclosures — the White House files on paper — and rare for Congress, which mostly files electronically). Not a sign of a data error; verify exact figures against the source.">
+          <MetricTooltip text="Read by OCR from a scanned filing. The amount is one of the form's own ranges, but a digit of the date may be misread, so no timeliness is shown. A president's scanned periodic reports are replaced by the annual report, which lists the year's transactions as text, once it is filed.">
             <span className="text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40">
-              LOW CONFIDENCE
+              READ FROM A SCAN
             </span>
+          </MetricTooltip>
+        )}
+        {trade.reportKind === "annual" && (
+          <MetricTooltip text="From the annual report (OGE Form 278e), which lists every transaction of the year. It does not say when each was first reported, so no timeliness is shown.">
+            <span className="text-xs px-1 py-0.5 border text-ink-lo border-white/15">ANNUAL REPORT</span>
           </MetricTooltip>
         )}
       </div>
@@ -91,7 +96,9 @@ function TradeRow({ trade }: { trade: StockTrade }) {
         </span>
         {trade.industry !== "UNCLASSIFIED" && <span>{trade.industry}</span>}
         <span>{trade.transactionDate}</span>
-        <TimelinessBadge late={trade.late} daysToDisclose={trade.daysToDisclose} />
+        {trade.late !== null && trade.daysToDisclose !== null && (
+          <TimelinessBadge late={trade.late} daysToDisclose={trade.daysToDisclose} />
+        )}
         <a
           href={trade.sourceUrl}
           target="_blank"
@@ -114,14 +121,14 @@ const FETCHER = {
 const SOURCE_LABEL = {
   senate: "efdsearch.senate.gov",
   house: "disclosures-clerk.house.gov",
-  president: "oge.gov (OGE Form 278-T)",
+  president: "oge.gov (OGE Forms 278-T and 278e)",
 } as const;
 
 const ABOUT_DATA = {
   congress:
     "Disclosed under the STOCK Act (2012), which requires members of Congress to report stock transactions within 45 days. Informational only — not part of the overall score, since disclosure completeness varies widely per member.",
   president:
-    "Every securities and virtual-currency purchase, sale, or exchange over $1,000 the president disclosed on OGE Form 278-T, which the STOCK Act requires within 45 days of the transaction. Amounts are the value ranges the form reports — it carries no cost basis or share count, so no profit or gain figure is shown or derived. Informational only, not part of the overall score.",
+    "Every securities and virtual-currency purchase, sale, or exchange over $1,000 the president disclosed. For a year the annual report (OGE Form 278e) covers, its list of the year's transactions is the record; after it, the periodic reports (OGE Form 278-T) the STOCK Act requires within 45 days, which the White House files as scans. Amounts are the value ranges the forms report — they carry no cost basis or share count, so no profit or gain figure is shown or derived. Informational only, not part of the overall score.",
 } as const;
 
 export default function StockTrades({ politicianId, filer = "senate" }: StockTradesProps) {
