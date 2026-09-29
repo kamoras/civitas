@@ -141,34 +141,48 @@ _holds: dict[str, tuple[str, float]] = {}
 # before then makes it unusable.
 _strikes: dict[str, float] = {}
 _llm_busy_until = 0.0
+# Text key -> (monotonic time it's forgotten, its final event): a run just
+# over, kept briefly — a reader whose cache read raced its cache write (and
+# missed it) gets this rather than generating the same text again.
+_finished: dict[str, tuple[float, dict]] = {}
+FINISHED_KEPT_S = 60.0
 
 
 def _prune(now: float) -> None:
-    for table in (_holds, _strikes):
-        for key in [k for k, v in table.items() if (v[1] if isinstance(v, tuple) else v) <= now]:
-            del table[key]
+    for key in [k for k, (_why, until) in _holds.items() if until <= now]:
+        del _holds[key]
+    for key in [k for k, until in _strikes.items() if until <= now]:
+        del _strikes[key]
+    for key in [k for k, (until, _event) in _finished.items() if until <= now]:
+        del _finished[key]
 
 
-async def request(doc_id: int, prompt: dict, key_: dict, ip: str) -> AsyncIterator[str]:
-    """The event stream for this text's summary: a generation joined, one
-    started, or the answer that none can be made for now. Raises Refusal."""
+async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None) -> AsyncIterator[str]:
+    """The event stream for this text's summary: the cached one, a
+    generation joined, one started, or the answer that none can be made for
+    now. `limit()` — awaited once the answer isn't a cached one, so a summary
+    already made is never limited — raises to refuse. Raises Refusal."""
     from app.api import throttle
     from app.pipeline.analyze.ollama_client import get_cached_llm_result
 
     # The awaits first; everything after them decides and registers without
     # yielding to another request, so two can't both pass the same check.
-    client = await throttle.run(throttle.client_key, ip, "explore-summary-client")
     made = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key_)
-    if made is not None:  # finished by another reader a moment ago
-        return _once({"done": True, **made})
+    if made is not None:
+        return once({"done": True, **made})
+    if limit is not None:
+        await limit()
+    client = await throttle.run(throttle.client_key, ip, "explore-summary-client")
 
     key = f"{doc_id}:{key_['prompt']}"
     run = _runs.get(key)
     if run is not None:
         return run.follow()
-
     now = time.monotonic()
     _prune(now)
+    finished = _finished.get(key)
+    if finished is not None:  # over a moment ago; its cache write raced our read
+        return once(finished[1])
     if _llm_busy_until > now:
         raise _busy(_llm_busy_until - now)
     held = _holds.get(key)
@@ -176,14 +190,16 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str) -> AsyncIterat
         why, until = held
         if why == "slow":
             raise Refusal(503, "This summary took too long a moment ago; please try again shortly.", until - now)
-        return _once({"done": True, **_NOTHING})  # unusable: the answer, not a wait
+        return once({"done": True, **_NOTHING})  # unusable: the answer, not a wait
     if client is None:
         raise Refusal(503, "Summaries are unavailable right now; please try again shortly.",
                       throttle.UNAVAILABLE_RETRY_AFTER_S)
     # Under yesterday's key too, so the rule doesn't reset at midnight.
-    if any(k in _by_client for k in (str(client), client.previous) if k):
+    # Only runs still generating count: one whose last event is out is only
+    # writing its cache.
+    if any(k in _by_client and not _runs[_by_client[k]].done for k in (str(client), client.previous) if k):
         raise _busy()
-    if len(_runs) >= MAX_GENERATIONS:
+    if sum(not r.done for r in _runs.values()) >= MAX_GENERATIONS:
         raise _busy()
 
     run = _Run(key, doc_id, prompt, key_, str(client))
@@ -203,15 +219,13 @@ def _forget(run: _Run) -> None:
         run.publish(None)
 
 
-async def _once(event: dict) -> AsyncIterator[str]:
+async def once(event: dict) -> AsyncIterator[str]:
+    """A stream of one event."""
     yield sse(event)
 
 
 async def _generate(run: _Run) -> None:
-    global _llm_busy_until
-    from app.background import WritesHeld, writing
     from app.pipeline.analyze import ollama_client
-    from app.pipeline.analyze.prompts import parse_explore_document_summary
 
     text = ""
     finished = at_limit = timed_out = llm_busy = False
@@ -245,6 +259,25 @@ async def _generate(run: _Run) -> None:
         else:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", run.doc_id)
 
+    try:
+        await _finish(run, text, finished=finished, at_limit=at_limit, timed_out=timed_out, llm_busy=llm_busy)
+    except Exception:
+        # Whatever went wrong after the stream, its readers still hear it is
+        # over — never a stream that just stops, which the page would ask
+        # again about over and over.
+        logger.exception("Explore doc summary for doc_id=%s failed after its stream", run.doc_id)
+        if not run.done:
+            run.publish(sse({"done": True, **_NOTHING}))
+            run.publish(None)
+
+
+async def _finish(run: _Run, text: str, *, finished: bool, at_limit: bool, timed_out: bool,
+                  llm_busy: bool) -> None:
+    global _llm_busy_until
+    from app.background import WritesHeld, writing
+    from app.pipeline.analyze import ollama_client
+    from app.pipeline.analyze.prompts import parse_explore_document_summary
+
     # Anything but a natural end stopped mid-sentence: the section it was
     # writing is dropped, for its readers as for the cache.
     parsed = parse_explore_document_summary(text, cut_off=not finished) if text else dict(_NOTHING)
@@ -253,16 +286,8 @@ async def _generate(run: _Run) -> None:
     ended = finished or at_limit
     now = time.monotonic()
     last = {"done": True, **parsed}
-    if ended and parsed["summary"]:
-        # Registered as a writer for the write, so a data reset in progress
-        # holds it off (not cached then; the next reader makes it afresh).
-        try:
-            with writing("explore-summary"):
-                await asyncio.to_thread(ollama_client.set_cached_llm_result, run.prompt["promptVersion"],
-                                        run.cache_key, parsed)
-        except WritesHeld:
-            logger.info("Explore summary for doc_id=%s not cached: a data reset holds writes", run.doc_id)
-    elif ended:
+    keep = ended and bool(parsed["summary"])
+    if ended and not keep:
         # An output that couldn't be used: asked again soon, the same text
         # would most likely come out the same way.
         _holds[run.key] = ("unusable", now + UNUSABLE_FOR_S)
@@ -279,8 +304,21 @@ async def _generate(run: _Run) -> None:
         last["retryAfter"] = BUSY_RETRY_AFTER_S
     if not ended and parsed["summary"]:
         last["partial"] = True
+    # The readers hear it is over before the cache write, which can wait on
+    # the pipeline's own write lock: their page isn't held on it, and the
+    # run no longer counts toward the cap or its client's one.
     run.publish(sse(last))
     run.publish(None)
+    if keep:
+        _finished[run.key] = (now + FINISHED_KEPT_S, last)
+        # Registered as a writer for the write, so a data reset in progress
+        # holds it off (not cached then; the next reader makes it afresh).
+        try:
+            with writing("explore-summary"):
+                await asyncio.to_thread(ollama_client.set_cached_llm_result, run.prompt["promptVersion"],
+                                        run.cache_key, parsed)
+        except WritesHeld:
+            logger.info("Explore summary for doc_id=%s not cached: a data reset holds writes", run.doc_id)
 
 
 async def stop() -> None:
@@ -299,4 +337,10 @@ def reset() -> None:
     _by_client.clear()
     _holds.clear()
     _strikes.clear()
+    _finished.clear()
     _llm_busy_until = 0.0
+# Text key -> (monotonic time it's forgotten, its final event): a run just
+# over, kept briefly — a reader whose cache read raced its cache write (and
+# missed it) gets this rather than generating the same text again.
+_finished: dict[str, tuple[float, dict]] = {}
+FINISHED_KEPT_S = 60.0

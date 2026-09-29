@@ -1,6 +1,5 @@
 """Explore API — semantic search over government activity documents."""
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
@@ -377,7 +376,6 @@ async def get_explore_document_summary(
     immediately, as a single event, with no intermediate deltas).
     """
     from app.background import writers_allowed
-    from app.pipeline.analyze.ollama_client import get_cached_llm_result
     from app.pipeline.analyze.prompts import explore_document_summary_prompt
     from app.services import explore_summary
 
@@ -399,27 +397,23 @@ async def get_explore_document_summary(
     })
     key = explore_summary.cache_key(doc_id, prompt)
 
-    # A summary already made costs nothing to hand out: never limited.
-    cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], key)
-    if cached is not None:
-        async def cached_stream():
-            yield explore_summary.sse({"done": True, **cached})
-
-        return StreamingResponse(cached_stream(), media_type="text/event-stream", headers=_STREAM_HEADERS)
-
-    # Not a cached answer: this request may start work, so it counts. A
-    # refused request isn't counted, so it is a wait too.
     ip = client_ip(request)
-    counted = await throttle.run(limit_client, ip, _SUMMARY_REQUESTS_BUCKET,
-                                 limit=_SUMMARY_REQUESTS_PER_MINUTE, period=60.0)
-    if not counted.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many summary requests; please try again shortly.",
-            headers={"Retry-After": retry_after(counted.reset_at), **explore_summary.WAIT_OUT},
-        )
+
+    async def limit():
+        # Only once the answer isn't a cached one: a summary already made
+        # costs nothing to hand out. A refused request isn't counted, so it
+        # is a wait too.
+        counted = await throttle.run(limit_client, ip, _SUMMARY_REQUESTS_BUCKET,
+                                     limit=_SUMMARY_REQUESTS_PER_MINUTE, period=60.0)
+        if not counted.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many summary requests; please try again shortly.",
+                headers={"Retry-After": retry_after(counted.reset_at), **explore_summary.WAIT_OUT},
+            )
+
     try:
-        stream = await explore_summary.request(doc_id, prompt, key, ip)
+        stream = await explore_summary.request(doc_id, prompt, key, ip, limit=limit)
     except explore_summary.Refusal as refusal:
         raise refusal.error() from None
     return StreamingResponse(stream, media_type="text/event-stream", headers=_STREAM_HEADERS)

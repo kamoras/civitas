@@ -902,12 +902,13 @@ export async function fetchExploreDocument(id: number): Promise<ExploreDocumentD
 }
 
 // How long a summary request keeps retrying a refusal: long enough to wait
-// out another reader's generation that runs its full time (4 minutes on the
-// server, api/explore.py) and the hold-off after it (2), with a margin.
+// out a generation that runs its full time (4 minutes on the server,
+// backend/app/services/explore_summary.py) and the hold-off after it (2),
+// with a margin.
 const SUMMARY_RETRY_WITHIN_MS = 10 * 60 * 1000;
 
 /** Milliseconds to wait before asking again, from a Retry-After in seconds
- *  (nginx's own 503 carries none: a short default), kept within reason. */
+ *  (a short default when there is none), kept within reason. */
 export function summaryRetryDelayMs(retryAfter: string | null): number {
   const seconds = Number(retryAfter);
   const ms =
@@ -943,11 +944,12 @@ export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> 
 // {summary, keyPoints, impact} from partial text as it streams in —
 // this file only forwards bytes, it doesn't parse the marker format.
 //
-// A refusal that says to come back (429: another reader's generation of this
-// document is under way; 503: the site's few generations are all busy, or
-// this one ran out of time a moment ago) is retried after its Retry-After —
-// by then the other reader's summary is usually cached and comes straight
-// back.
+// A reader of a document already being summarised joins that generation's
+// stream. A refusal the server marks as a wait (X-Summary-Wait: 503 when the
+// site's few generations or this reader's one are busy, the LLM said it was
+// busy, or this text ran out of time a moment ago, or the pipeline service
+// is restarting; 429 when this reader asks too often) is retried after its
+// Retry-After.
 // `signal` stops it all — the request, the stream, and any wait between
 // retries — when the reader leaves, so nothing goes on asking for them.
 export async function streamExploreDocumentSummary(

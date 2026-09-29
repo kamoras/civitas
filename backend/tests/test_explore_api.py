@@ -138,6 +138,7 @@ class TestStreaming:
         patches, written = _llm(_fake_stream)
         with patches[0], patches[1], patches[2]:
             events = await _events(doc, db_session)
+            await _settled()
         assert "".join(e["delta"] for e in events if "delta" in e) == (
             "SUMMARY: A test summary.\nKEY POINTS:\n- Point one\nIMPACT: Matters."
         )
@@ -211,6 +212,7 @@ class TestOneGenerationPerText:
             second = await _ask(doc, _reader("198.51.100.2"), db_session)
             release.set()
             a, b = await first_events, await _collect_sse_events(second)
+            await _settled()
         assert calls == [1] and a == b and a[-1]["summary"] == "A test summary."
         assert len(written) == 1
 
@@ -236,10 +238,12 @@ class TestOneGenerationPerText:
         patches, written = _llm(_fake_stream)
         with patches[0], patches[1], patches[2]:
             await _events(doc, db_session)
+            await _settled()
             assert len(await _events(doc, db_session)) == 1  # unchanged: served
             doc.body = "A different document now."
             db_session.commit()
             assert any("delta" in e for e in await _events(doc, db_session))  # made afresh
+            await _settled()
         assert len(written) == 2
 
 
@@ -318,6 +322,7 @@ class TestEndings:
         patches, written = _llm(_at_limit)
         with patches[0], patches[1], patches[2]:
             events = await _events(doc, db_session)
+            await _settled()
         kept = {"summary": "Whole.", "keyPoints": ["One"], "impact": "", "truncated": True}
         assert events[-1] == {"done": True, **kept} and list(written.values()) == [kept]
 
@@ -426,6 +431,59 @@ class TestEndings:
         with patches[0], patches[1], patches[2], exclusive("data-reset"):
             events = await _events(doc, db_session)
         assert events[-1]["summary"] == "A test summary." and written == {}
+
+
+class TestAfterTheStream:
+    async def test_readers_hear_it_is_over_before_the_cache_write(self, db_session):
+        # The write can wait on the pipeline's own write lock: the page
+        # isn't held on it, and the run no longer counts toward the cap.
+        import threading
+
+        doc, other = _make_doc(db_session, title="A"), _make_doc(db_session, title="B")
+        writing, release = threading.Event(), threading.Event()
+
+        def slow_write(version, key, data):
+            writing.set()
+            release.wait(5)
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result", side_effect=slow_write),
+        ):
+            events = await _events(doc, db_session)
+            assert events[-1]["summary"] == "A test summary."
+            await asyncio.to_thread(writing.wait, 5)
+            # Still writing: the same client may start another.
+            second = await _ask(other, db=db_session)
+            release.set()
+            await _collect_sse_events(second)
+            await _settled()
+
+    async def test_a_failure_after_the_stream_still_ends_it_properly(self, db_session):
+        doc = _make_doc(db_session)
+        patches, _ = _llm(_fake_stream)
+        with patches[0], patches[1], patches[2], \
+                patch("app.pipeline.analyze.prompts.parse_explore_document_summary",
+                      side_effect=ValueError("unexpected output")):
+            events = await _events(doc, db_session)
+        assert events[-1] == _NONE
+
+    async def test_a_reader_whose_cache_read_raced_the_write_is_served_the_run(self, db_session):
+        # Its read missed; by the time it looks, the run is over and gone
+        # from the running ones: served its result, not a second generation.
+        doc = _make_doc(db_session)
+        patches, _ = _llm(_fake_stream)
+        with patches[0], patches[1], patches[2]:
+            await _events(doc, db_session)
+            await _settled()
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", side_effect=AssertionError("regenerated")),
+        ):
+            events = await _events(doc, db_session, _reader("198.51.100.8"))
+        assert events == [{"done": True, "summary": "A test summary.", "keyPoints": ["Point one"],
+                           "impact": "Matters."}]
 
 
 class TestShutdown:
