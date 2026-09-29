@@ -15,7 +15,7 @@ from datetime import timedelta
 
 from app.database import SessionLocal
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
-from app.ops_alerts import send_ops_alert
+from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import lease
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
@@ -141,7 +141,10 @@ async def run_supplementary_pipeline() -> dict:
                                 f"The justice step refreshed the voting record but not the score: {why}. "
                                 "The stored scores stand until a later run can read it.",
                                 dedupe_key=f"justice-loyalty-unmeasured-{utcnow():%Y-%m-%d}",
+                                condition="justice-loyalty-unmeasured",
                             )
+                        else:
+                            resolve_ops_alert("justice-loyalty-unmeasured")
                         progress.complete("justice_scorecards", detail=detail)
             except Exception:
                 db.rollback()  # drop partial justice upserts before the next commit

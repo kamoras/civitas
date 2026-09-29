@@ -800,6 +800,10 @@ def _records(
         state, len(federal), len(records) - len(federal),
     )
     missing = _slate_gaps(records, fmt) if state_offices else []
+    if year is not None and not (missing and in_ballot_window(year)):
+        from app.ops_alerts import resolve_ops_alert
+
+        resolve_ops_alert(f"slate-incomplete-{state}-{year}")
     if missing:
         if year is not None and in_ballot_window(year):
             # The ballot is mailed and a party's slate is still short: not a
@@ -816,6 +820,7 @@ def _records(
                     "so the statewide and legislative sections stay unpublished until the list is complete "
                     "or format.slate_complete is revisited.",
                     dedupe_key=f"slate-incomplete-{state}-{year}-{utcnow().date().isoformat()}",
+                    condition=f"slate-incomplete-{state}-{year}",
                 )
             except Exception:
                 logger.exception("Could not send the %s slate-incomplete ops alert", state)

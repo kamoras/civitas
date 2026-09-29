@@ -529,3 +529,24 @@ def test_an_article_already_published_about_is_never_published_again(db_session,
         assert election_bluesky.post_race_coverage_updates(db_session) == 1
     assert db_session.query(BroadcastPost).order_by(BroadcastPost.id.desc()).first().source_url == (
         "https://apnews.com/a2")
+
+
+class TestGeneratePostText:
+    """The composed sentence is published whole or not at all."""
+
+    def _generate(self, monkeypatch, predicate):
+        monkeypatch.setattr(eb, "call_llm", lambda **k: {"actor": "Jon Ossoff", "predicate": predicate})
+        race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
+        item = RaceCoverageItem(race_id=race.id, title=f"Jon Ossoff {predicate}", summary="", url="https://apnews.com/a1")
+        return eb._generate_post_text(item, race, "FEC filings list OSSOFF, JON as a candidate in the GA Senate race.")
+
+    def test_a_post_that_fits_is_returned_whole(self, monkeypatch):
+        assert self._generate(monkeypatch, "leads the race") == "Jon Ossoff leads the race."
+
+    def test_a_post_too_long_for_bluesky_beside_its_link_is_not_cut(self, monkeypatch):
+        # Cut at a word boundary, this read "...said Sens." or stopped before
+        # the object its verb needs, and the feed stored the cut text.
+        clause = "said Sens. Warnock and Ossoff " + "would fund rural hospitals and roads " * 7 + "this year"
+        race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
+        assert len(f"Jon Ossoff {clause}.") > eb._post_budget(race)
+        assert self._generate(monkeypatch, clause) is None

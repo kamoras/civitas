@@ -629,17 +629,20 @@ async def _title_pool(client: httpx.AsyncClient, db: Session, congress: int) -> 
     pool = TitlePool({k: [v] for k, v in titles.items()}) if titles else None
     _pools[congress] = (pool, now)
     _verdicts.clear()
-    if pool is None:
+    from app.ops_alerts import resolve_ops_alert, send_ops_alert
+
+    if pool is not None:
+        resolve_ops_alert(f"lda-title-pool-{congress}")
+    else:
         # Without the pool no filing is linked to any bill, which reads on
         # the page exactly like "no filing names one". Say so once a day.
-        from app.ops_alerts import send_ops_alert
-
         send_ops_alert(
             "Lobbying bill links paused: bill list unavailable",
             f"The Congress.gov bill list for congress {congress} could not be read in full, so "
             "no donor-vote connection can link a bill named in a lobbying filing until it can "
             "(fetch_congress_bill_titles; see the server logs).",
             dedupe_key=f"lda-title-pool-{congress}-{now:%Y-%m-%d}",
+            condition=f"lda-title-pool-{congress}",
         )
     return pool
 
@@ -890,9 +893,13 @@ def alert_if_lda_down(stats: dict, chamber: str) -> None:
     """One ops alert when every organization's lookups failed in part or
     whole — the signature of the 2026 host move, which read as "no
     lobbying" for months."""
-    if stats.get("lookups", 0) and stats.get("failed", 0) >= stats["lookups"]:
-        from app.ops_alerts import send_ops_alert
+    from app.ops_alerts import resolve_ops_alert, send_ops_alert
 
+    if not stats.get("lookups", 0):
+        return  # nothing looked up: no evidence either way
+    if stats.get("failed", 0) < stats["lookups"]:
+        resolve_ops_alert(f"lda-down-{chamber}")
+    else:
         send_ops_alert(
             "LDA lobbying lookups all failed",
             f"Every organization's Lobbying Disclosure Act lookups failed in whole or in "
@@ -902,4 +909,5 @@ def alert_if_lda_down(stats: dict, chamber: str) -> None:
             "See the server logs for the cause (a moved host, a changed API, a block, or "
             f"rate limiting). Base URL: {LDA_API_BASE}.",
             dedupe_key=f"lda-down-{chamber}-{utcnow():%Y-%m-%d}",
+            condition=f"lda-down-{chamber}",
         )

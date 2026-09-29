@@ -61,6 +61,7 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
                 f"{held}. Nothing ran tonight; trigger the pipeline once the reset has finished, or the "
                 "database stays empty until tomorrow night's run.",
                 dedupe_key=f"nightly-skipped-reset-{utcnow():%Y-%m-%d}",
+                condition="nightly-skipped-reset",
             )
 
 
@@ -80,6 +81,7 @@ def _nightly_pipeline() -> None:
         check_current_congress_staleness,
         check_feedback_token_expiration,
         check_state_pvi_staleness,
+        resolve_ops_alert,
         send_ops_alert,
     )
     from app.pipeline.fetch.district_pvi import REFRESH_WHO as DISTRICT_PVI_REFRESH
@@ -96,7 +98,9 @@ def _nightly_pipeline() -> None:
         signal that anything is wrong. `chain_continues`: this skip does
         not end the chain (the alert says so).
         """
+        condition = f"nightly-skipped-{label.lower().replace(' ', '-')}"
         if result.get("status") != "skipped":
+            resolve_ops_alert(condition)  # it ran tonight
             return False
         logger.info("%s pipeline skipped — %s", label, result.get("reason", "unknown reason"))
         rest = _CHAIN[_CHAIN.index(label) + 1:] if label in _CHAIN else []
@@ -110,6 +114,7 @@ def _nightly_pipeline() -> None:
             f"The scheduled {label} pipeline did not start because {_skip_cause(result)}. {label} data will be a "
             f"day stale unless triggered manually. {after}".rstrip(),
             dedupe_key=f"skipped-{label.lower()}-{utcnow():%Y-%m-%d}",
+            condition=condition,
         )
         return True
 
@@ -147,6 +152,8 @@ def _nightly_pipeline() -> None:
             result = loop.run_until_complete(run_senate_pipeline())
             if _alert_if_skipped("Senate", result):
                 return
+            # The chain started, so a reset no longer holds it off.
+            resolve_ops_alert("nightly-skipped-reset")
 
             logger.info("Senate pipeline done — starting supplementary pipeline")
             supp_result = loop.run_until_complete(run_supplementary_pipeline())
@@ -188,12 +195,15 @@ def _nightly_pipeline() -> None:
             election_result = loop.run_until_complete(run_election_pipeline())
             logger.info("Election pipeline: %s", election_result)
             _alert_if_skipped("Election", election_result)
+            # The chain reached its end without raising.
+            resolve_ops_alert("nightly-crashed")
         except BaseException as e:
             logger.exception("Nightly pipeline failed")
             send_ops_alert(
                 "Nightly pipeline crashed",
                 f"{type(e).__name__}: {e}",
                 dedupe_key=f"crashed-{utcnow():%Y-%m-%d}",
+                condition="nightly-crashed",
             )
         finally:
             loop.close()
@@ -261,7 +271,7 @@ def _hourly_action_refresh() -> None:
                     # House run this old is wedged, not just slow (normal
                     # runs are 1-2h) — left unchecked, a hung run would
                     # silently starve the action center of fresh data all day.
-                    from app.ops_alerts import send_ops_alert
+                    from app.ops_alerts import overrun_condition, send_ops_alert
                     logger.warning(
                         "House pipeline has been running for %s — treating as "
                         "hung and proceeding with action center refresh",
@@ -274,6 +284,7 @@ def _hourly_action_refresh() -> None:
                         "is no longer waiting for it; the run may need "
                         "clear-stuck-house and a container restart.",
                         dedupe_key=f"house-overrun-{utcnow():%Y-%m-%d}",
+                        condition=overrun_condition("House"),
                     )
                 else:
                     logger.info("Action center refresh skipped — house pipeline is running")
@@ -285,7 +296,7 @@ def _hourly_action_refresh() -> None:
                 # uncached per-case Oyez crawl, which can run 5h+ — a tight threshold would misfire as "hung"
                 # on a run that's just legitimately slow that day.
                 if _is_stale(supp_age, timedelta(hours=8)):
-                    from app.ops_alerts import send_ops_alert
+                    from app.ops_alerts import overrun_condition, send_ops_alert
                     logger.warning(
                         "Supplementary pipeline has been running for %s — "
                         "treating as hung and proceeding with action center refresh",
@@ -297,6 +308,7 @@ def _hourly_action_refresh() -> None:
                         f"has been running for {supp_age} and is likely hung. "
                         "The action center is no longer waiting for it.",
                         dedupe_key=f"supplementary-overrun-{utcnow():%Y-%m-%d}",
+                        condition=overrun_condition("Supplementary"),
                     )
                 else:
                     logger.info("Action center refresh skipped — supplementary pipeline is running")
@@ -312,7 +324,7 @@ def _hourly_action_refresh() -> None:
                 from app.ops_alerts import stock_trades_overrun_budget
 
                 if _is_stale(stock_age, stock_trades_overrun_budget()):
-                    from app.ops_alerts import send_ops_alert
+                    from app.ops_alerts import overrun_condition, send_ops_alert
                     logger.warning(
                         "Stock trades pipeline has been running for %s — "
                         "treating as hung and proceeding with action center refresh",
@@ -324,6 +336,7 @@ def _hourly_action_refresh() -> None:
                         f"{stock_trades_overrun_budget()} budget, and is likely hung. The action center "
                         "is no longer waiting for it.",
                         dedupe_key=f"stock-overrun-{utcnow():%Y-%m-%d}",
+                        condition=overrun_condition("Stock trades"),
                     )
                 else:
                     logger.info("Action center refresh skipped — stock trades pipeline is running")

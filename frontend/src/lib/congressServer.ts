@@ -1,4 +1,5 @@
 import type { BillRecord, DayReport, MonthReport, PeriodReport } from "@/types/congress";
+import { headers } from "next/headers";
 import { usableRecord } from "@/lib/ssrPayload";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -52,23 +53,47 @@ export function fetchMonth(month: string): Promise<MonthReport | null> {
   return getJson<MonthReport>(`/api/congress/month/${month}`, "start", "totals");
 }
 
-/** Null on any failure, not just a 404: the bill page still renders from the
- * site's own record of a tracked bill when Congress.gov's side is out. */
-export function fetchBillRecord(
+/** A bill's Congress.gov record, or null. `failed` says why it is null: false
+ * for "no such bill" (404/422), true for anything else — the backend's
+ * per-visitor lookup limit, the hourly budget, an outage. The bill page still
+ * renders from the site's own record of a tracked bill when this fails, and
+ * is an error page (not a 404) when it has neither. */
+export async function fetchBillRecord(
   billId: string,
   congress?: number | null
-): Promise<BillRecord | null> {
+): Promise<{ record: BillRecord | null; failed: boolean }> {
   const query = congress ? `?congress=${congress}` : "";
-  // Not kept in Next's data cache: a record served partial (a part named in
-  // `unavailable` because Congress.gov was slow or down) would be shown to
-  // every reader for the cache's lifetime. The backend caches each part
-  // that did arrive, so asking it again is cheap.
-  return getJsonWith<BillRecord>(
-    `/api/bills/${encodeURIComponent(billId)}/record${query}`,
-    { cache: "no-store" },
-    "billId",
-    "actions"
-  ).catch(() => null);
+  try {
+    const record = await getJsonWith<BillRecord>(
+      `/api/bills/${encodeURIComponent(billId)}/record${query}`,
+      // Not kept in Next's data cache: a record served partial (a part named
+      // in `unavailable` because Congress.gov was slow or down) would be
+      // shown to every reader for the cache's lifetime. The backend caches
+      // each part that did arrive, so asking it again is cheap.
+      { cache: "no-store", headers: await visitorHeaders() },
+      "billId",
+      "actions"
+    );
+    return { record, failed: false };
+  } catch {
+    return { record: null, failed: true };
+  }
+}
+
+/** The reader's address for a backend route that limits lookups per
+ * visitor (api/rate_limit.py). This request comes from the frontend's
+ * container, not the reader's browser: without the header every reader
+ * shared one ten-a-minute bucket, and past it bill pages lost their
+ * Congress.gov record — and an untracked bill answered 404. nginx sets
+ * X-Real-IP from its own view of the client, and the backend trusts
+ * X-Forwarded-For only from a private-network peer. */
+async function visitorHeaders(): Promise<Record<string, string>> {
+  try {
+    const ip = (await headers()).get("x-real-ip");
+    return ip ? { "X-Forwarded-For": ip } : {};
+  } catch {
+    return {}; // outside a request (a build-time render)
+  }
 }
 
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

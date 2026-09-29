@@ -1059,11 +1059,14 @@ async def _crawl_results_source(
 def report_file_problems(subject: str, lead: str, problems: list[str], key: str) -> None:
     """One ops alert (once a day per `key`) for failures a pass contained
     rather than raised — so a state that went dark, or a change that was
-    never written, reaches someone instead of only the log."""
+    never written, reaches someone instead of only the log. A pass with
+    none resolves the open alert for `key`."""
+    from app.ops_alerts import resolve_ops_alert, send_ops_alert
+
     if not problems:
+        resolve_ops_alert(key)
         return
     try:
-        from app.ops_alerts import send_ops_alert
         # Once a day per set of failing states, not per day: the first
         # alert of a day must not silence a different failure later in it.
         failing = sorted({p.split(":", 1)[0] for p in problems})
@@ -1071,6 +1074,7 @@ def report_file_problems(subject: str, lead: str, problems: list[str], key: str)
         send_ops_alert(
             subject, lead + "\n" + "\n".join(problems),
             dedupe_key=f"{key}-{utcnow().date().isoformat()}-{digest}",
+            condition=key,
         )
     except Exception:
         logger.exception("Could not send the %s ops alert", key)

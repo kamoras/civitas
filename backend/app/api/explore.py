@@ -348,17 +348,6 @@ async def get_explore_document_summary(
     once the full text is parsed (also what a cache hit returns
     immediately, as a single event, with no intermediate deltas).
     """
-    now = time.monotonic()
-    last = _summary_timestamps.get(doc_id, 0)
-    if now - last < _SUMMARY_COOLDOWN:
-        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
-    _summary_timestamps[doc_id] = now
-
-    if len(_summary_timestamps) > 500:
-        cutoff = now - _SUMMARY_COOLDOWN * 2
-        for k in [k for k, ts in _summary_timestamps.items() if ts < cutoff]:
-            del _summary_timestamps[k]
-
     from app.pipeline.analyze.ollama_client import get_cached_llm_result, set_cached_llm_result, stream_llm
     from app.pipeline.analyze.prompts import explore_document_summary_prompt, parse_explore_document_summary
 
@@ -377,12 +366,26 @@ async def get_explore_document_summary(
     prompt = explore_document_summary_prompt(doc_dict)
     cache_key = {"doc_id": doc_id, "v": _SUMMARY_CACHE_KEY_VERSION}
 
-    async def event_stream():
-        cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], cache_key)
-        if cached is not None:
-            yield _sse({"done": True, **cached})
-            return
+    # A stored summary is served before the cooldown is consulted: the
+    # cooldown bounds generation, and a reader who opened the document
+    # within 30 seconds of someone else (or reloaded it) used to get a 429,
+    # shown as "Analysis unavailable", with the summary already cached.
+    cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], cache_key)
+    if cached is not None:
+        return StreamingResponse(iter([_sse({"done": True, **cached})]), media_type="text/event-stream")
 
+    now = time.monotonic()
+    last = _summary_timestamps.get(doc_id, 0)
+    if now - last < _SUMMARY_COOLDOWN:
+        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
+    _summary_timestamps[doc_id] = now
+
+    if len(_summary_timestamps) > 500:
+        cutoff = now - _SUMMARY_COOLDOWN * 2
+        for k in [k for k, ts in _summary_timestamps.items() if ts < cutoff]:
+            del _summary_timestamps[k]
+
+    async def event_stream():
         full_text = ""
         try:
             async for delta in stream_llm(

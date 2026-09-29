@@ -532,14 +532,23 @@ export default function ExploreDetailPage() {
   useEffect(() => {
     if (!docId || streamStarted.current === docId || summary) return;
     streamStarted.current = docId;
+    const unavailable = (why: string) => setSummary({ summary: why, keyPoints: [], impact: "" });
     streamExploreDocumentSummary(docId, setLiveText)
-      .then(setSummary)
-      .catch(() => {
-        setSummary({
-          summary: "Analysis unavailable. Try again later.",
-          keyPoints: [],
-          impact: "",
-        });
+      .then((result) =>
+        // A generation that failed before writing anything ends with an empty
+        // result; shown as-is it left the Analysis panel blank.
+        result.summary || result.keyPoints.length || result.impact
+          ? setSummary(result)
+          : unavailable("Analysis unavailable. Try again later.")
+      )
+      .catch((e: unknown) => {
+        // 429: another reader's request for this document is still being
+        // written (the backend generates each summary once, then stores it).
+        unavailable(
+          e instanceof Error && e.message.endsWith(": 429")
+            ? "An analysis of this document is being written. Reload in a minute to read it."
+            : "Analysis unavailable. Try again later."
+        );
       });
   }, [docId, summary]);
 
