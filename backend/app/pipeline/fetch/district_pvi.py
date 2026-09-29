@@ -137,16 +137,6 @@ _MEDIAN_RE = re.compile(
 _STATE_CODES = {name.lower(): code for name, code in STATE_NAME_TO_CODE.items()}
 
 
-def district_title(state: str, district: int) -> str:
-    """Wikipedia's article title for a district (used by callers that link
-    to it; the ingest itself reads the PVI article's table)."""
-    name = STATE_NAMES[state]
-    possessive = f"{name}'s"
-    if district == 0:
-        return f"{possessive} at-large congressional district"
-    return f"{possessive} {ordinal(district)} congressional district"
-
-
 def _state_code(raw: str) -> str | None:
     raw = raw.strip()
     if raw.upper() in STATE_NAMES:

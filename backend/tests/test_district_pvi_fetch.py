@@ -182,6 +182,36 @@ class TestParse:
 
 # ── Gates ──────────────────────────────────────────────────────────────
 
+class TestApportionment:
+    """The House's seats come from the Clerk's list, never a typed table."""
+
+    _XML = b"""<MemberData><members>
+    <member><statedistrict>AK00</statedistrict><member-info><bioguideID>B1</bioguideID>
+      <state postal-code="AK"><state-fullname>Alaska</state-fullname></state><district>At Large</district></member-info></member>
+    <member><statedistrict>FL19</statedistrict><member-info><bioguideID>D1</bioguideID>
+      <state postal-code="FL"><state-fullname>Florida</state-fullname></state><district>19th</district></member-info></member>
+    <member><statedistrict>FL20</statedistrict><member-info><bioguideID/>
+      <state postal-code="FL"><state-fullname>Florida</state-fullname></state><district>20th</district></member-info></member>
+    <member><statedistrict>DC00</statedistrict><member-info><bioguideID>N1</bioguideID>
+      <state postal-code="DC"><state-fullname>District of Columbia</state-fullname></state><district>Delegate</district></member-info></member>
+    <member><statedistrict>PR00</statedistrict><member-info><bioguideID>P1</bioguideID>
+      <state postal-code="PR"><state-fullname>Puerto Rico</state-fullname></state><district>Resident Commissioner</district></member-info></member>
+    </members></MemberData>"""
+
+    def test_counts_voting_seats_vacancies_included_delegates_not(self):
+        from app.pipeline.fetch.house_clerk import parse_apportionment
+
+        assert parse_apportionment(self._XML) == {
+            "AK": {"name": "Alaska", "seats": 1},
+            "FL": {"name": "Florida", "seats": 2},
+        }
+
+    def test_unreadable_list_is_empty(self):
+        from app.pipeline.fetch.house_clerk import parse_apportionment
+
+        assert parse_apportionment(b"<not xml") == {}
+
+
 class TestIngestionGates:
     def test_clean_synthetic_population_passes_gates(self):
         assert dp.ingestion_gates(_synthetic_result(), SEATS) == []
@@ -781,6 +811,12 @@ class TestBundledTablesAreOnTheRightLines:
         sources = dp.load_sources()
         t119 = bundled["congresses"]["119"]["districts"]
         t120 = bundled["congresses"]["120"]["districts"]
+        # SEATS is counted from the 119th table itself, so it can't catch a
+        # seat missing there: check it against the statutory size of the
+        # House (2 U.S.C. §2a) and the 120th table, which a redraw keeps on
+        # the same apportionment.
+        assert sum(SEATS.values()) == 435
+        assert Counter(k.split("-")[0] for k in t120) == Counter(SEATS)
         assert dp.ingestion_gates(t119, SEATS) == [] and dp.ingestion_gates(t120, SEATS) == []
         assert dp.cross_congress_gates(t120, t119, sources["congresses"]["120"]["redrawn_states"], SEATS) == []
         for c in ("119", "120"):
