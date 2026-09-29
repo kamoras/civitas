@@ -49,6 +49,7 @@ CACHEABLE_PREFIXES = (
 # Excluded and why:
 #   /api/admin      — authenticated, per-token, and mutates
 #   /api/health     — liveness must never be answered from a cache
+#   /api/live       — the same (the container health check's)
 #   /api/pipeline   — run status changes continuously during a run
 #   /api/feedback   — POST only
 #   /api/visits     — per-visitor by definition

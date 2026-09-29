@@ -1309,8 +1309,14 @@ unverified one).
 ```
 
 Swarm considers a task healthy purely by its Docker `HEALTHCHECK` exit code
-(`curl -sf http://localhost:8000/api/health` for the backend) — the same
+(`curl -sf http://localhost:8000/api/live` for the backend) — the same
 "HTTP 200, don't parse the body" criterion the old deploy script used.
+`/api/live` answers from the event loop alone, with no database read and no
+llama-server call: `/api/health` waits up to 5s on llama-server and the check
+times out at 5s, so a slow llama-server could get a healthy backend replaced,
+killing any pipeline run in it (suspected 2026-09-29: a House run stopped
+7 minutes in, its task ending "Complete" on the same image). A loop frozen by
+blocking work still fails `/api/live`.
 `database`/`ollama` in the response body are informational for the admin
 dashboard and don't gate the rolling update. The `ollama` key name is
 historical (kept for API/dashboard compatibility even though Ollama isn't
