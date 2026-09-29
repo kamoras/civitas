@@ -117,15 +117,15 @@ export default function LimitationsChapter() {
             <P>
               The 2024 survey asked about 60,000 respondents in October and November 2024, and a
               profile shows a figure only for a member still in the seat the survey asked about: one
-              who has since moved to another seat or district shows none. Small
-              groups are pulled toward what a typical member of the same party gets from that group,
-              by an amount estimated from how much members actually differ. The survey&apos;s size
-              sets how sharp the House figures can be: a district has about a hundred respondents,
-              so most House figures come mostly from what similar members get. Only Democrats&apos;
-              ratings rest mostly on the district&apos;s own respondents, for about three in five
-              Democratic members and two in five Republican ones, and the profile marks every figure
-              that doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s
-              respondents (a median of 672).
+              who has since moved to another seat or district shows none. Small groups are pulled
+              toward what a typical member of the same party gets from that group, by an amount
+              estimated from how much members actually differ. The survey&apos;s size sets how sharp
+              the House figures can be: a district has about a hundred respondents, so most House
+              figures come mostly from what similar members get. Only Democrats&apos; ratings rest
+              mostly on the district&apos;s own respondents, for about three in five Democratic
+              members and two in five Republican ones, and the profile marks every figure that
+              doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s respondents
+              (a median of 672).
             </P>
           </More>
         </Limitation>
