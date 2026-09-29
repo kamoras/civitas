@@ -106,5 +106,6 @@ is the running one, and remove each from `UNMAPPED_PENDING_DROP`:
 |---|---|
 | Drop `justices.score_consistency`, `score_independence`, `score_bipartisan_agreement`, `score_judicial_restraint` | Unscored since justice v2 / v6.13; images before `0020` still map them. |
 | Drop `candidates.last_coverage_search` | The Bluesky candidate search it paced was removed; images before `0020` still map it. |
+| Drop `action_issues.concerned_count`, `not_priority_count` | The Action Center's pulse vote that wrote them was removed in 2026-09. They are NOT NULL, so they stay mapped (with their default) until the image before that release is gone; then unmap and drop them in one revision. |
 | Stop writing the `bsky-congress` / `bsky-congress-week` `api_cache` markers (`congress_bluesky.py`), then drop `RESET_KEEPS_CACHE_TIERS` once the newest marker is more than a week old (past both eligibility windows) | Not a schema change, same rule: images before `0023` know a posted Congress day only by these markers and would post it again on a rollback. |
 | Rename `score_independent_voting` → `score_constituent_alignment` on `senators` and `representatives` | Every image so far maps `score_constituent_alignment` onto the old column name, so an in-place rename breaks the running one. It needs two releases: add the new column and write both, then drop the old one. |

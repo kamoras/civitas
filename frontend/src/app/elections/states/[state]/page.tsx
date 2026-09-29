@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { StateBallot } from "@/types/election";
 import { fetchRecord } from "@/lib/ssrPayload";
+import { stateBallotHref } from "@/lib/elections";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import StateBallotClient from "./StateBallotClient";
@@ -36,7 +37,7 @@ export async function generateMetadata({
   const code = state.toUpperCase();
   const ballot = await fetchStateBallot(code);
   // Always the upper-case code: /elections/states/ca serves the same page.
-  const path = `/elections/states/${code}`;
+  const path = stateBallotHref(code);
 
   if (!ballot) {
     return pageMetadata({
@@ -74,7 +75,7 @@ export default async function StateBallotPage({ params }: { params: Promise<{ st
           { name: "Elections", url: absoluteUrl("/elections") },
           {
             name: ballot.stateName ?? ballot.state,
-            url: absoluteUrl(`/elections/states/${ballot.state}`),
+            url: absoluteUrl(stateBallotHref(ballot.state)),
           },
         ])}
       />

@@ -7,7 +7,7 @@ import {
 } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
-import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
+import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { PviMap, TownBallot, TownEntry } from "@/types/election";
@@ -1149,6 +1149,11 @@ export interface OpsAlert {
   subject: string;
   body: string;
   at: string;
+  /** The ongoing problem it reports; null for a one-off event. */
+  condition?: string | null;
+  resolvedAt?: string | null;
+  /** Its condition is unresolved (the backend decides; never derived here). */
+  open?: boolean;
 }
 
 export async function fetchAdminDashboard(token: string): Promise<AdminDashboard> {
@@ -1518,28 +1523,6 @@ export async function fetchRecentActionIssues(limit = 10): Promise<{ issues: Act
   );
 }
 
-export async function submitPulseVote(
-  issueId: number,
-  stance: "concerned" | "not_priority"
-): Promise<{ issueId: number; concernedCount: number; notPriorityCount: number }> {
-  return requestJson(`${API_BASE}/action/pulse`, "Pulse vote failed", {
-    init: {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ issue_id: issueId, stance }),
-    },
-  });
-}
-
-export async function fetchMyReps(state: string): Promise<MyRepsResponse> {
-  const url = `${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`;
-  return withShape<MyRepsResponse>(
-    await cachedFetch(url, TTL.MEDIUM),
-    { lists: ["senators", "representatives"] },
-    url
-  );
-}
-
 export interface ScoreSnapshot {
   date: string;
   overallScore: number;
@@ -1589,83 +1572,9 @@ export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
   return asList(await cachedFetch(url, TTL.LONG), url);
 }
 
-export interface CountryArticle {
-  title: string;
-  url: string;
-  source: string;
-  date: string;
-}
-
-export interface CountryNews {
-  country: string;
-  lat: number;
-  lng: number;
-  articleCount: number;
-  articles: CountryArticle[];
-}
-
-export interface CountryNewsResponse {
-  countries: CountryNews[];
-}
-
-export async function fetchCountryNews(): Promise<CountryNewsResponse> {
-  const url = `${API_BASE}/action/country-news`;
-  return withShape<CountryNewsResponse>(
-    await requestJson(url, "Failed to load country news"),
-    { lists: ["countries"] },
-    url
-  );
-}
-
-export interface ElectionSenator {
-  id: string;
-  name: string;
-  state: string;
-  party: string;
-  overallScore: number;
-  leadershipScore: number | null;
-  yearsInOffice: number;
-  upForElection: boolean;
-}
-
-export interface ElectionState {
-  state: string;
-  hasSenateRace: boolean;
-  hasHouseRace: boolean;
-  houseDistricts: number;
-  senators: ElectionSenator[];
-}
-
-export interface ElectionInfo {
-  nextElection: {
-    date: string;
-    type: string;
-    year: number;
-    daysUntil: number;
-    isElectionDay: boolean;
-    isElectionSeason: boolean;
-  };
-  senateSeatsUp: number;
-  houseSeatsUp: number;
-  states: ElectionState[];
-}
-
-export async function fetchElectionInfo(): Promise<ElectionInfo> {
-  const url = `${API_BASE}/action/elections`;
-  return withShape<ElectionInfo>(
-    await cachedFetch(url, TTL.LONG),
-    {
-      lists: ["states"],
-    },
-    url
-  );
-}
-
 // ── Midterm-elections feature (candidate rosters, race detail, PVI) ──
-// Separate namespace from /action/elections above (that endpoint is the
-// lightweight Action Center teaser; this is the fuller candidate-research
-// feature) — see backend/app/api/elections.py. Race detail is fetched
-// server-side by app/elections/[raceId]/page.tsx, not through this client.
+// See backend/app/api/elections.py. Race detail is fetched server-side by
+// app/elections/[raceId]/page.tsx, not through this client.
 
 export async function fetchPviMap(): Promise<PviMap> {
   // `states` and `districts` are maps, not lists, and callers index into them

@@ -420,7 +420,11 @@ export default function BillPageView({
                       {detail.relatedIssues.map((issue) => (
                         <li key={issue.id}>
                           <Link
-                            href={`/action?date=${issue.date}`}
+                            href={
+                              issue.publicId
+                                ? `/issue/${issue.publicId}`
+                                : `/action?date=${issue.date}`
+                            }
                             className="text-sm text-ink hover:text-phos"
                           >
                             {issue.title}

@@ -124,7 +124,7 @@ async def run_justice_pipeline(db: Session) -> dict:
         justices = await fetch_current_justices(client)
         if not justices:
             logger.warning("No justices found, aborting pipeline")
-            return {"justices": 0, "votes": 0}
+            return {"justices": 0, "votes": 0, "loyalty_unmeasured": "Oyez listed no sitting justices"}
 
         all_votes = await fetch_case_votes(client)
         measured, unmeasured_why = await _measure_loyalty(client, db)

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import NavigationBeacon from "@/components/NavigationBeacon";
+import ForgetLegacyStorage from "@/components/ForgetLegacyStorage";
 import { FEED_ALTERNATES, HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
 import { fontVariables } from "./fonts";
 import "./fonts/fallback.css";
@@ -90,6 +91,7 @@ export default function RootLayout({
           {children}
           <LoadTimingBeacon />
           <NavigationBeacon />
+          <ForgetLegacyStorage />
         </ConfigProvider>
       </body>
     </html>
