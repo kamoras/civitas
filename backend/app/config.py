@@ -1,7 +1,7 @@
-import datetime
-
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.time_utils import congress_in_session
 
 
 def _default_current_congress() -> int:
@@ -13,12 +13,24 @@ def _default_current_congress() -> int:
     for the rare case an operator pins this via env for archived-DB
     reproducibility and that pin itself goes stale).
 
-    Mirrors app.pipeline.fetch.congress.congress_for_year's formula inline
-    to avoid importing pipeline code at settings-module load time; off by
-    one for the ~2 days before Jan 3 convenes in an odd January, same as
-    that function.
+    Uses app.time_utils.congress_in_session (the 20th Amendment's noon-ET
+    Jan 3 boundary; a clock helper, not pipeline code). Evaluated ONCE,
+    when the settings object is built at process start: a backend that
+    keeps running across Jan 3 keeps the old value until it restarts,
+    which is what check_current_congress_staleness reports. Code that must
+    follow the clock without a restart reads app.config.sitting_congress().
     """
-    return 1 + (datetime.date.today().year - 1789) // 2
+    return congress_in_session()
+
+
+def sitting_congress() -> int:
+    """The Congress in office NOW: CURRENT_CONGRESS when an operator pinned
+    it in the environment (an archived-DB re-run), otherwise the clock —
+    re-read on every call, so it moves at noon ET on Jan 3 with no restart.
+    settings.CURRENT_CONGRESS itself is computed once at process start."""
+    if settings.current_congress_pinned:
+        return settings.CURRENT_CONGRESS
+    return congress_in_session()
 
 
 class Settings(BaseSettings):
@@ -112,6 +124,19 @@ class Settings(BaseSettings):
     # 1d would cry wolf on every transient blip. See that check's own
     # docstring for why this gap needed its own watchdog at all.
     PIPELINE_STALE_ALERT_DAYS: float = 2.0
+
+    # Whether CURRENT_CONGRESS came from the environment (an operator's pin)
+    # rather than the clock default — recorded once, at construction, since
+    # model_fields_set also grows when code later assigns the field.
+    _current_congress_pinned: bool = PrivateAttr(default=False)
+
+    def model_post_init(self, context) -> None:
+        super().model_post_init(context)
+        self._current_congress_pinned = "CURRENT_CONGRESS" in self.model_fields_set
+
+    @property
+    def current_congress_pinned(self) -> bool:
+        return self._current_congress_pinned
 
 
 settings = Settings()

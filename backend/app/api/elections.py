@@ -1172,9 +1172,12 @@ def pvi_map():
     cycle = current_election_cycle()
     districts, district_meta = _election_district_pvi(cycle)
     meta = get_pvi_meta()
-    if district_meta is not None:
+    if district_meta is not None or not districts:
         # Describe the table actually served: the lines this cycle's
-        # races are on, not the sitting members' (get_pvi_meta's).
+        # races are on (or the newest pinned before them — see
+        # district_pvi_for_congress), not the sitting members'
+        # (get_pvi_meta's), and nothing when no table is served. Its asOf
+        # is the pinned revision's timestamp; fetchedOn is the fetch date.
         meta["districts"] = district_meta
     return cached_json(
         {

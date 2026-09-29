@@ -1299,8 +1299,10 @@ async def admin_trigger_pipeline(
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
     async def _run_pipelines():
+        from app.pipeline.fetch.district_pvi import ensure_sitting_lines_before_run
         from app.pipeline.house_pipeline import run_house_pipeline
         from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
+        await ensure_sitting_lines_before_run()
         result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
         if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
             logger.info("Senate pipeline done — starting supplementary pipeline")
@@ -1388,10 +1390,17 @@ async def admin_trigger_house_pipeline():
     No pre-check here (unlike /pipeline/trigger's senate check) — run_house_pipeline
     acquires its own DB lock and safely no-ops if already running.
     """
+    from app.pipeline.fetch.district_pvi import ensure_sitting_lines_before_run
     from app.pipeline.house_pipeline import run_house_pipeline
 
+    async def _run():
+        # The nightly pre-checks don't run for a triggered run; the House
+        # is the chamber scored on district lines.
+        await ensure_sitting_lines_before_run()
+        return await run_house_pipeline()
+
     run_pipeline_in_thread(
-        run_house_pipeline, name="house-pipeline-run", error_label="House pipeline run failed",
+        _run, name="house-pipeline-run", error_label="House pipeline run failed",
     )
     return {"message": "House pipeline triggered"}
 

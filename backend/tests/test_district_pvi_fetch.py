@@ -12,6 +12,7 @@ shapes match the real article's table ({{ushr|State|N|X}} then
 """
 
 import json
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -34,6 +35,20 @@ def _synthetic_result() -> dict[str, int]:
     """Every seat, alternating R+10 / D+10 — inside the gates' split
     bounds (150-285 each way, out of 435)."""
     return {f"{st}-{d}": (10 if i % 2 == 0 else -10) for i, (st, d) in enumerate(_pairs())}
+
+
+def _redraw(base: dict[str, int], states) -> dict[str, int]:
+    """A redraw of `states` in the synthetic population: two adjacent
+    districts trade leans, as when a map moves voters between them — the
+    table changes but the state's mean district lean doesn't (a redraw
+    moves voters between a state's districts, not out of it). Adjacent
+    synthetic seats alternate R+10/D+10, so the last two differ."""
+    new = dict(base)
+    for st in states:
+        n = dp.SEATS[st]
+        a, b = f"{st}-{n - 1}", f"{st}-{n}"
+        new[a], new[b] = base[b], base[a]
+    return new
 
 
 def _cell(v: int, style: int) -> str:
@@ -182,15 +197,44 @@ class TestSelfConsistency:
         summary = dp.parse_stated_summary(_wikitext(table, "L", median=("AL-1", -4)))
         assert any("stated median AL-1" in f for f in dp.self_consistency_gates(table, summary))
 
-    def test_median_one_step_off_is_tolerated_two_is_not(self):
+    def _table_with_median_3(self):
         table = {k: (3 if v > 0 else -3) for k, v in _synthetic_result().items()}
-        key = next(k for k, v in table.items() if v == 3)
-        table[key] = 4  # the sentence names a district that holds R+4
-        ok = dp.self_consistency_gates(table, {"r": 218, "d": 217, "even": 0, "median_key": key, "median_pvi": 4})
-        assert ok == []
+        return table, next(k for k, v in table.items() if v == 3)
+
+    def test_median_must_match_exactly_by_default(self):
+        table, key = self._table_with_median_3()
+        summary = {"r": 218, "d": 217, "even": 0, "median_key": key, "median_pvi": 3}
+        assert dp.self_consistency_gates(table, summary) == []
+        table[key] = 4  # the sentence names a district that holds R+4; the median is R+3
+        summary["median_pvi"] = 4
+        assert any("not within 0" in f for f in dp.self_consistency_gates(table, summary))
+
+    def test_a_stated_tolerance_allows_exactly_that_much(self):
+        table, key = self._table_with_median_3()
+        table[key] = 4
+        summary = {"r": 218, "d": 217, "even": 0, "median_key": key, "median_pvi": 4}
+        assert dp.self_consistency_gates(table, summary, median_tolerance=1) == []
         table[key] = 5
-        bad = dp.self_consistency_gates(table, {"r": 218, "d": 217, "even": 0, "median_key": key, "median_pvi": 5})
-        assert any("not within 1" in f for f in bad)
+        summary["median_pvi"] = 5
+        assert any("not within 1" in f for f in dp.self_consistency_gates(table, summary, median_tolerance=1))
+
+    def test_a_tolerance_without_its_reason_is_refused(self):
+        table = _synthetic_result()
+        rev = _revision(table, "L", 5)
+        _, failures = dp.check_table(_source(5, "L", median_tolerance=1), rev, PAGE)
+        assert any("_why_median_tolerance" in f for f in failures)
+        _, failures = dp.check_table(
+            _source(5, "L", median_tolerance=1, _why_median_tolerance="a stated reason"), rev, PAGE,
+        )
+        assert failures == []
+
+    def test_the_120th_pin_tolerance_is_the_only_one_and_says_why(self):
+        """Pins transcribe Cook's table, whose median Cook computed from it:
+        exact unless a change after the release moved it, and then only
+        with the change written down."""
+        sources = dp.load_sources()["congresses"]
+        assert {c: s.get("median_tolerance", 0) for c, s in sources.items()} == {"119": 0, "120": 1}
+        assert "Missouri" in sources["120"]["_why_median_tolerance"]
 
     def test_missing_prose_is_a_failure(self):
         failures = dp.self_consistency_gates(_synthetic_result(), {})
@@ -208,15 +252,38 @@ class TestCrossCongress:
 
     def test_redrawn_state_left_on_old_lines_fails(self):
         base = _synthetic_result()
-        new = dict(base)
-        new["TN-9"] = 9
+        new = _redraw(base, ["TN"])
         failures = dp.cross_congress_gates(new, base, ["TN", "UT"])
         assert failures == ["redrawn states identical to the base Congress (old lines?): ['UT']"]
 
     def test_clean_redraw_passes(self):
         base = _synthetic_result()
-        new = dict(base, **{"TN-9": 9, "UT-1": -12})
-        assert dp.cross_congress_gates(new, base, ["TN", "UT"]) == []
+        assert dp.cross_congress_gates(_redraw(base, ["TN", "UT"]), base, ["TN", "UT"]) == []
+
+    def test_a_redraw_that_moves_only_two_seats_passes(self):
+        """No minimum share of changed districts: North Carolina's 2025
+        map changed 2 of its 14 districts' PVI."""
+        base = _synthetic_result()
+        new = _redraw(base, ["NC"])
+        assert sum(new[k] != base[k] for k in new if k.startswith("NC-")) == 2
+        assert dp.cross_congress_gates(new, base, ["NC"]) == []
+
+    def test_a_half_updated_redrawn_state_fails(self):
+        """One district of a redrawn state on the new lines, the rest on
+        the old: the voters it gained are still counted where they were,
+        so the state's mean lean moves — a redraw alone can't do that."""
+        base = _synthetic_result()
+        new = dict(base, **{"UT-1": base["UT-1"] - 22})
+        failures = dp.cross_congress_gates(new, base, ["UT"])
+        assert len(failures) == 1 and "mean district lean" in failures[0] and "UT -5.50" in failures[0]
+
+    def test_a_redrawn_state_missing_a_seat_fails(self):
+        base = _synthetic_result()
+        new = _redraw(base, ["UT"])
+        del new["UT-4"]
+        assert dp.cross_congress_gates(new, base, ["UT"]) == [
+            "redrawn states missing seats in this or the base table: ['UT']"
+        ]
 
 
 class TestProvenance:
@@ -240,8 +307,9 @@ class TestProvenance:
 # ── Refresh ────────────────────────────────────────────────────────────
 
 def _two_congress_setup(monkeypatch, tmp_path, *, rev120=None, live=None, sitting=119):
+    """sitting=None leaves the sitting Congress to the (patched) clock."""
     base = _synthetic_result()
-    new = dict(base, **{"TN-9": 9, "UT-1": -12})
+    new = _redraw(base, ["TN", "UT"])
     sources = {
         "page": PAGE,
         "congresses": {
@@ -257,7 +325,8 @@ def _two_congress_setup(monkeypatch, tmp_path, *, rev120=None, live=None, sittin
     monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path))
     monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
     monkeypatch.setattr(dp, "_file_cache", None)
-    monkeypatch.setattr(dp, "_sitting_congress", lambda: sitting)
+    if sitting is not None:
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: sitting)
     revisions = {
         101: _revision(base, "(119th Congress)", 101),
         202: rev120 or _revision(new, "2026 Cook PVI", 202),
@@ -284,14 +353,26 @@ class TestRefresh:
         # Visible to member scoring without a restart.
         assert score_calculator._district_pvi()["TN-9"] == base["TN-9"]
 
-    async def test_sitting_congress_without_a_source_writes_nothing(self, monkeypatch, tmp_path):
-        out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=121)
+    async def test_sitting_congress_without_a_source_still_writes_the_configured_tables(self, monkeypatch, tmp_path):
+        """A missing entry can't fail the weekly refresh wholesale: the
+        configured tables are still (re)validated and the live-drift check
+        still runs; members stay on the newest pinned lines."""
+        out, _, new = _two_congress_setup(monkeypatch, tmp_path, sitting=121)
+        with patch.object(dp, "_check_live_drift", new_callable=AsyncMock) as drift:
+            assert await dp.refresh_district_pvi() is True
+        drift.assert_awaited_once()
+        written = json.loads(out.read_text())
+        assert written["congress"] == 120 and written["districts"] == new
+        assert set(written["congresses"]) == {"119", "120"}
+
+    async def test_a_sitting_congress_older_than_every_pin_writes_nothing(self, monkeypatch, tmp_path):
+        out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=118)
         assert await dp.refresh_district_pvi() is False
         assert not out.exists()
 
     async def test_any_gate_failure_keeps_previous_data(self, monkeypatch, tmp_path):
         base = _synthetic_result()
-        mixed = dict(base, **{"TN-9": 9, "UT-1": -12, "MO-5": 9})  # MO didn't redraw
+        mixed = dict(_redraw(base, ["TN", "UT"]), **{"MO-5": -base["MO-5"]})  # MO didn't redraw
         rev = _revision(mixed, "2026 Cook PVI", 202)
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, rev120=rev)
         out.write_text(json.dumps({"districts": {"KEEP-0": 5}}))
@@ -309,13 +390,28 @@ class TestRefresh:
 
     async def test_live_article_drift_alerts_and_is_never_ingested(self, monkeypatch, tmp_path):
         base = _synthetic_result()
-        edited = dict(base, **{"TN-9": 9, "UT-1": -12, "TX-35": 4})
+        edited = dict(_redraw(base, ["TN", "UT"]), **{"TX-35": 4})
         live = _revision(edited, "2026 Cook PVI", 303)
         out, _, new = _two_congress_setup(monkeypatch, tmp_path, live=live)
         with patch("app.ops_alerts.send_ops_alert") as alert:
             assert await dp.refresh_district_pvi() is True
         assert "TX-35" in alert.call_args.args[1]
         assert json.loads(out.read_text())["congresses"]["120"]["districts"] == new
+
+    async def test_drift_alert_is_keyed_on_the_difference_not_the_revision(self, monkeypatch, tmp_path):
+        """An unrelated edit elsewhere in the article makes a new live
+        revid with the same table difference: same key, so one alert. A
+        different difference is a new key."""
+        base = _synthetic_result()
+        edited = dict(_redraw(base, ["TN", "UT"]), **{"TX-35": 4})
+        keys = []
+        for revid, table in ((303, edited), (304, edited), (305, dict(edited, **{"TX-9": 1}))):
+            _two_congress_setup(monkeypatch, tmp_path, live=_revision(table, "2026 Cook PVI", revid))
+            with patch("app.ops_alerts.send_ops_alert") as alert:
+                assert await dp.refresh_district_pvi() is True
+            keys.append(alert.call_args.kwargs["dedupe_key"])
+        assert keys[0] == keys[1]
+        assert keys[2] != keys[0]
 
     async def test_live_article_at_the_pin_is_quiet(self, monkeypatch, tmp_path):
         _two_congress_setup(monkeypatch, tmp_path)
@@ -338,16 +434,41 @@ class TestEnsureSittingLines:
         refresh.assert_not_called()
         assert out.read_text() == before
 
-    async def test_new_congress_switches_locally_on_jan_3(self, monkeypatch, tmp_path):
-        out, base, new = await self._written(monkeypatch, tmp_path)
-        assert score_calculator._district_pvi()["TN-9"] == base["TN-9"]
-        monkeypatch.setattr(dp, "_sitting_congress", lambda: 120)
+    async def test_new_congress_switches_locally_at_noon_et_on_jan_3(self, monkeypatch, tmp_path):
+        """Driven by the clock, not a patched Congress number and not
+        settings.CURRENT_CONGRESS (computed once at process start): the
+        same process switches at noon Eastern on Jan 3, 2027, no restart,
+        no fetch."""
+        clock = {"now": datetime(2026, 12, 31, 12)}
+        monkeypatch.setattr("app.time_utils.utcnow", lambda: clock["now"])
+        out, base, new = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
+        assert await dp.refresh_district_pvi() is True
+        assert json.loads(out.read_text())["congress"] == 119
         with patch.object(dp, "refresh_district_pvi", new_callable=AsyncMock) as refresh:
+            clock["now"] = datetime(2027, 1, 1, 8)  # Jan 1: still the 119th
+            assert await _in_thread(dp.ensure_sitting_lines) == "current"
+            clock["now"] = datetime(2027, 1, 3, 16, 59)  # 11:59 ET
+            assert await _in_thread(dp.ensure_sitting_lines) == "current"
+            assert score_calculator._district_pvi()["TN-9"] == base["TN-9"]
+            clock["now"] = datetime(2027, 1, 3, 17, 0)  # noon ET
             assert await _in_thread(dp.ensure_sitting_lines) == "reselected"
+            assert await _in_thread(dp.ensure_sitting_lines) == "current"
         refresh.assert_not_called()
         written = json.loads(out.read_text())
         assert written["congress"] == 120 and written["districts"] == new
-        assert score_calculator._district_pvi()["TN-9"] == 9
+        assert score_calculator._district_pvi()["TN-9"] == new["TN-9"] != base["TN-9"]
+
+    async def test_a_pinned_current_congress_holds_the_lines(self, monkeypatch, tmp_path):
+        """An operator's env pin (archived-DB re-run) wins over the clock."""
+        from app import config
+
+        monkeypatch.setattr("app.time_utils.utcnow", lambda: datetime(2027, 6, 1))
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=119))
+        out, base, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
+        assert await dp.refresh_district_pvi() is True
+        assert json.loads(out.read_text())["districts"] == base
+        with patch.object(dp, "refresh_district_pvi", new_callable=AsyncMock):
+            assert await _in_thread(dp.ensure_sitting_lines) == "current"
 
     async def test_pre_pinning_file_triggers_a_refresh(self, monkeypatch, tmp_path):
         out, base, _ = _two_congress_setup(monkeypatch, tmp_path)
@@ -368,10 +489,42 @@ class TestEnsureSittingLines:
         assert score_calculator._district_pvi()["TN-9"] == -23
 
     async def test_failed_refresh_alerts(self, monkeypatch, tmp_path):
-        _two_congress_setup(monkeypatch, tmp_path, sitting=121)
+        async def down(**kw):
+            return None
+
+        _two_congress_setup(monkeypatch, tmp_path, sitting=120)
+        monkeypatch.setattr(dp, "_fetch_revision", down)
+        monkeypatch.setattr(dp, "BUNDLED_PATH", tmp_path / "no-bundle.json")
         with patch("app.ops_alerts.send_ops_alert") as alert:
             assert await _in_thread(dp.ensure_sitting_lines) == "refresh failed"
-        assert "121th Congress" in alert.call_args.args[1]
+        assert "120th Congress" in alert.call_args.args[1]
+
+    async def test_unconfigured_congress_alerts_once_per_congress_and_never_fetches(self, monkeypatch, tmp_path):
+        """Nothing can be fetched for a Congress the sources file doesn't
+        name, so nothing is — night after night — and the alert's key is
+        the Congress, not the day. Members stay on the newest pinned lines."""
+        out, _, new = await self._written(monkeypatch, tmp_path)
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: 121)
+        with patch.object(dp, "refresh_district_pvi", new_callable=AsyncMock) as refresh, \
+             patch("app.ops_alerts.send_ops_alert") as alert:
+            assert await _in_thread(dp.ensure_sitting_lines) == "no source configured"
+            assert await _in_thread(dp.ensure_sitting_lines) == "no source configured"
+        refresh.assert_not_called()
+        assert {c.kwargs["dedupe_key"] for c in alert.call_args_list} == {"district-pvi-no-source-121"}
+        assert "121st Congress" in alert.call_args.args[1]
+        assert "120th Congress's lines" in alert.call_args.args[1]
+        written = json.loads(out.read_text())
+        assert written["congress"] == 120 and written["districts"] == new
+
+    async def test_unconfigured_congress_with_a_pre_pinning_file_still_restores_pinned_tables(
+        self, monkeypatch, tmp_path,
+    ):
+        out, _, new = _two_congress_setup(monkeypatch, tmp_path, sitting=121)
+        out.write_text(json.dumps({"districts": {"TN-9": 9, "MO-5": 9}}))
+        with patch("app.ops_alerts.send_ops_alert"):
+            assert await _in_thread(dp.ensure_sitting_lines) == "no source configured"
+        written = json.loads(out.read_text())
+        assert written["congress"] == 120 and written["districts"] == new
 
 
 async def _in_thread(fn):
@@ -390,7 +543,41 @@ class TestElectionReader:
         assert meta["lines"] == "lines 202"
         assert dp.district_pvi_for_congress(119)[0] == base
 
-    def test_unconfigured_congress_falls_back_to_sitting_lines(self, monkeypatch, tmp_path):
+    async def test_provenance_dates_the_table_by_its_revision_not_the_fetch(self, monkeypatch, tmp_path):
+        _two_congress_setup(monkeypatch, tmp_path)
+        assert await dp.refresh_district_pvi() is True
+        _, meta = dp.district_pvi_for_congress(120)
+        assert meta["asOf"] == "2026-01-01T00:00:00Z"  # the pinned revision's timestamp
+        assert meta["revision"]["revid"] == 202
+        assert meta["fetchedOn"] and meta["fetchedOn"] != meta["asOf"]
+        assert (meta["congress"], meta["forCongress"]) == (120, 120)
+
+    async def test_an_unpinned_later_congress_gets_the_latest_lines_not_the_sitting_ones(self, monkeypatch, tmp_path):
+        """The day after the 2026 election the elections pages ask for the
+        121st Congress (2028's). With no pin for it, the latest lines known
+        are the 120th's — the ones just voted on — never the sitting 119th's,
+        which would put every redrawn state back on its old map."""
+        _, base, new = _two_congress_setup(monkeypatch, tmp_path)
+        assert await dp.refresh_district_pvi() is True
+        table, meta = dp.district_pvi_for_congress(121)
+        assert table == new and table != base
+        assert (meta["congress"], meta["forCongress"]) == (120, 121)
+
+    def test_an_unpinned_later_congress_drops_states_redrawn_for_it(self, monkeypatch):
+        blocks = {"120": {"districts": {"TN-9": 9, "OH-1": 1}, "_revision": {}}}
+        monkeypatch.setattr(dp, "_file_cache", {"congress": 120, "congresses": blocks})
+        monkeypatch.setattr(dp, "load_sources", lambda: {"congresses": {
+            "120": {}, "121": {"redrawn_states": ["OH"]},
+        }})
+        table, meta = dp.district_pvi_for_congress(121)
+        assert table == {"TN-9": 9}
+        assert meta["omittedRedrawnStates"] == ["OH"]
+
+    def test_a_congress_older_than_every_pin_gets_no_district_table(self, monkeypatch):
+        monkeypatch.setattr(dp, "_file_cache", {"congresses": {"119": {"districts": {"TN-9": -23}}}})
+        assert dp.district_pvi_for_congress(118) == ({}, None)
+
+    def test_pre_pinning_file_serves_its_one_table(self, monkeypatch, tmp_path):
         monkeypatch.setattr(dp, "_file_cache", {"districts": {"TN-9": -23, "OH-1": 2}})
         assert dp.district_pvi_for_congress(125) == ({"TN-9": -23, "OH-1": 2}, None)
 
@@ -435,8 +622,88 @@ class TestBundledTablesAreOnTheRightLines:
         for c in ("119", "120"):
             assert bundled["congresses"][c]["_revision"]["revid"] == sources["congresses"][c]["revid"]
 
+    def test_real_pins_conserve_each_redrawn_states_mean_and_a_half_update_would_not(self, bundled):
+        """REDRAW_MEAN_SHIFT_MAX against the real 2026 redraws: all nine
+        pass; the 120th table with only TN-9 moved to the new map (the
+        shape of an edit caught half-way) does not."""
+        t119 = bundled["congresses"]["119"]["districts"]
+        t120 = bundled["congresses"]["120"]["districts"]
+        redrawn = dp.load_sources()["congresses"]["120"]["redrawn_states"]
+        assert dp.cross_congress_gates(t120, t119, redrawn) == []
+        half = dict(t119, **{"TN-9": t120["TN-9"]})
+        failures = dp.cross_congress_gates(half, t119, redrawn)
+        assert any("mean district lean" in f and "TN +3.56" in f for f in failures)
+
     def test_scoring_reads_the_bundled_sitting_table(self, bundled, monkeypatch, tmp_path):
         monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path / "none"))
         monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
         assert score_calculator._seat_pvi("TN", 9) == -23
         assert score_calculator._seat_pvi("TX", 35) == -19
+
+
+# ── Triggered runs skip the nightly pre-checks, so they check first ─────
+
+class TestTriggeredRunsCheckTheSittingLines:
+    @pytest.fixture()
+    def recorded(self, monkeypatch):
+        order, captured = [], {}
+        monkeypatch.setattr(dp, "ensure_sitting_lines", lambda: order.append("pvi"))
+
+        async def house():
+            order.append("house")
+            return {}
+
+        async def senate(**kw):
+            order.append("senate")
+            return {"status": "completed"}
+
+        async def supp():
+            order.append("supplementary")
+            return {}
+
+        monkeypatch.setattr("app.pipeline.house_pipeline.run_house_pipeline", house)
+        monkeypatch.setattr("app.pipeline.supplementary_pipeline.run_supplementary_pipeline", supp)
+        monkeypatch.setattr("app.pipeline.senate_pipeline.run_senate_pipeline", senate)
+        monkeypatch.setattr("app.api.pipeline.run_senate_pipeline", senate)
+        for mod in ("app.api.admin", "app.api.pipeline"):
+            monkeypatch.setattr(f"{mod}.run_pipeline_in_thread", lambda f, **kw: captured.setdefault("run", f))
+        return order, captured
+
+    async def test_house_trigger(self, recorded):
+        from app.api import admin
+
+        order, captured = recorded
+        await admin.admin_trigger_house_pipeline()
+        await captured["run"]()
+        assert order == ["pvi", "house"]
+
+    async def test_admin_trigger(self, recorded, db_session):
+        from app.api import admin
+
+        order, captured = recorded
+        await admin.admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
+        await captured["run"]()
+        assert order == ["pvi", "senate", "supplementary", "house"]
+
+    async def test_token_trigger(self, recorded, db_session, monkeypatch):
+        from app.api import pipeline
+        from app.config import settings
+
+        order, captured = recorded
+        monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "t")
+        await pipeline.trigger_pipeline(authorization="Bearer t", senator=None, fetch_only=False, db=db_session)
+        await captured["run"]()
+        assert order == ["pvi", "senate", "house"]
+
+    async def test_a_failing_check_does_not_stop_the_run(self, recorded, monkeypatch):
+        from app.api import admin
+
+        order, captured = recorded
+
+        def boom():
+            raise RuntimeError("disk")
+
+        monkeypatch.setattr(dp, "ensure_sitting_lines", boom)
+        await admin.admin_trigger_house_pipeline()
+        await captured["run"]()
+        assert order == ["house"]

@@ -124,12 +124,14 @@ def expected_current_congress(now=None) -> int:
     Used only to detect when the CURRENT_CONGRESS config constant has gone
     stale (see ops_alerts.check_current_congress_staleness) — the scored
     windows still key off the config value so an archived DB re-run stays
-    reproducible when the operator pins CURRENT_CONGRESS.
+    reproducible when the operator pins CURRENT_CONGRESS. Switches at noon
+    ET on Jan 3 of an odd year (app.time_utils.congress_in_session), not on
+    Jan 1 — a calendar-year rule alerted "stale" for the two days the
+    outgoing Congress is still in office.
     """
-    from app.time_utils import utcnow
+    from app.time_utils import congress_in_session
 
-    year = (now or utcnow()).year
-    return congress_for_year(year)
+    return congress_in_session(now)
 
 async def fetch_significant_bills(
     client: httpx.AsyncClient,

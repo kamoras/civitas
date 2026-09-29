@@ -377,9 +377,10 @@ export interface StateBallot {
  * backend responses (and cached ones) may omit it entirely. */
 export interface PviMeta {
   states?: { source: string; method: string; window: string; asOf: string };
-  /** `lines` names the district map the table describes — for /pvi, the
-   * map the current cycle's House races are on. */
-  districts?: { source: string; window: string; asOf: string; lines?: string };
+  /** Not rendered: the /elections page draws state leans only. For /pvi,
+   * `asOf` is the pinned source revision's timestamp (what the table is
+   * as of), not the day it was fetched. */
+  districts?: { source: string; window: string; asOf: string };
   /** e.g. "Cook-PVI-style partisan lean relative to the national
    * presidential vote. Measures lean, not a race forecast." */
   note?: string;

@@ -24,18 +24,28 @@ A pinned revision cannot drift. The ingest then refuses a table unless:
   R / more D / EVEN, and the stated median). An editor part-way through
   swapping in a new release leaves the prose on the old one — the
   2026-07-29 revision that started the 2026 edits fails this check;
-- a Congress whose lines were redrawn from an earlier one differs from it
-  in every redrawn state and in no other state.
+- a Congress whose lines were redrawn from an earlier one is identical to
+  it in every state that did not redraw, and in every state that did has
+  all its seats, differs somewhere, and keeps the state's mean district
+  lean (voters move between a state's districts, not out of the state;
+  see REDRAW_MEAN_SHIFT_MAX).
 
 Output (/data/district_pvi.json; bundled fallback app/data/
 district_pvi.json via scripts/fetch_district_pvi.py): every configured
-Congress's table under "congresses", and the table for
-settings.CURRENT_CONGRESS copied to the top-level "districts" that
-score_calculator._district_pvi() and fetch/voteview.py read. Switching to
-the next Congress's lines when its members are seated (Jan 3 of an odd
-year) is automatic once that Congress has an entry in the sources file:
-ensure_sitting_lines() runs before every nightly chain and re-selects
-from the tables already on disk.
+Congress's table under "congresses", and the sitting Congress's table
+copied to the top-level "districts" that score_calculator._district_pvi()
+and fetch/voteview.py read ("congress" names whose table it is).
+
+The sitting Congress is read from the clock on every call
+(app.config.sitting_congress: noon ET on Jan 3 of an odd year starts the
+next one, per the 20th Amendment), not from settings.CURRENT_CONGRESS,
+which is computed once when the process starts. ensure_sitting_lines()
+runs before every nightly chain, so the first nightly run after that noon
+copies the new Congress's table up from the tables already on disk — no
+restart, no fetch — once that Congress has an entry in the sources file.
+If it has none, member scoring stays on the newest pinned lines before
+it, nothing is fetched for it, and one ops alert per Congress asks for
+the entry.
 
 Supplementary re-runs the fetch weekly (idempotent — the pins don't move)
 and compares the article's CURRENT revision with the newest pinned table;
@@ -296,12 +306,17 @@ def ingestion_gates(result: dict[str, int]) -> list[str]:
     return failures
 
 
-def self_consistency_gates(table: dict[str, int], summary: dict) -> list[str]:
+def self_consistency_gates(table: dict[str, int], summary: dict, median_tolerance: int = 0) -> list[str]:
     """The revision's prose must describe its own table. Counts are exact.
     The stated median district must hold the stated value, and the table's
-    median may sit at most one point from it: a single map change adopted
-    after Cook's release (Missouri's 2026-09 reversion) moves the median a
-    step while the release's published median sentence stays as written."""
+    median (the 218th of 435) must equal the stated median exactly — Cook
+    computes it from the same table, so a transcription agrees to the
+    point. `median_tolerance` is not a fudge factor: a source entry sets it
+    only with a written reason (`_why_median_tolerance`, enforced by
+    check_table) naming the change made after Cook's release that moved
+    the median while the release's sentence stayed as written — the 120th
+    Congress's pin carries Missouri's 2026-09 reversion to its 2022 map,
+    which moved the median from R+3 to R+2."""
     failures = []
     if not {"r", "d", "even"} <= summary.keys():
         failures.append("revision states no district counts to check its table against")
@@ -321,30 +336,73 @@ def self_consistency_gates(table: dict[str, int], summary: dict) -> list[str]:
         if table.get(key) != stated:
             failures.append(f"stated median {key} at {stated:+d} but the table has {table.get(key)}")
         vals = sorted(table.values())
-        if vals and abs(vals[len(vals) // 2] - stated) > 1:
-            failures.append(f"table median {vals[len(vals) // 2]:+d} is not within 1 of stated {stated:+d}")
+        if vals and abs(vals[len(vals) // 2] - stated) > median_tolerance:
+            failures.append(
+                f"table median {vals[len(vals) // 2]:+d} is not within {median_tolerance} of stated {stated:+d}"
+            )
     return failures
+
+
+# How far a redrawn state's mean district lean may move between the base
+# table and the new one. A redraw moves voters between a state's districts
+# but not in or out of the state, and districts are equal-population, so
+# with the same Cook window on both sides the unweighted mean of the
+# state's district PVIs is (nearly) conserved. Not exactly: each district
+# is rounded to a whole point (the two means can differ by up to 1.0 from
+# rounding alone), and districts are equal in population, not in votes
+# cast, so turnout differences between the old and new districts move the
+# unweighted mean a little. Measured over the nine 2026 redraws (119th ->
+# 120th Congress pins): |shift| <= 1.11 (TN), every other state <= 0.75.
+# A table that updated only some districts of a redrawn state breaks the
+# conservation, because the voters the updated districts gained or lost
+# are still counted in the old values of the rest: TN with only TN-9
+# updated shifts +3.6, UT with only UT-1 -5.5.
+REDRAW_MEAN_SHIFT_MAX = 1.5
 
 
 def cross_congress_gates(
     table: dict[str, int], base: dict[str, int], redrawn_states: list[str],
 ) -> list[str]:
-    """A Congress whose lines were redrawn from `base`'s: the same Cook
-    window on the same lines gives the same number, so every state that
-    didn't redraw must be identical, and every state that did must differ
-    somewhere. Catches a pin whose table mixes the two maps, or a redrawn
-    state that was never updated."""
+    """A Congress whose lines were redrawn from `base`'s.
+
+    - Every state that didn't redraw must be identical: the same Cook
+      window on the same lines gives the same number.
+    - Every state that did must have all its seats in both tables, differ
+      in at least one of them, and keep its mean district lean within
+      REDRAW_MEAN_SHIFT_MAX of the base's (see that constant) — which a
+      half-updated state fails.
+
+    Deliberately NOT a minimum share of changed districts: a mid-decade
+    redraw can legitimately move one or two seats (North Carolina's 2025
+    map changed 2 of its 14 districts' PVI), so any share threshold either
+    refuses that or is too low to mean anything."""
     failures = []
     redrawn = set(redrawn_states)
     unchanged_diff = sorted(k for k in table if k.split("-")[0] not in redrawn and table.get(k) != base.get(k))
     if unchanged_diff:
         failures.append(f"districts differ from the base Congress in states that did not redraw: {unchanged_diff[:10]}")
-    same = sorted(
-        st for st in redrawn
-        if all(table.get(k) == base.get(k) for k in table if k.split("-")[0] == st)
-    )
+    same, incomplete, shifted = [], [], []
+    for st in sorted(redrawn):
+        n = SEATS.get(st, 0)
+        keys = [f"{st}-0"] if n == 1 else [f"{st}-{i}" for i in range(1, n + 1)]
+        if not keys or any(k not in table or k not in base for k in keys):
+            incomplete.append(st)
+            continue
+        if all(table[k] == base[k] for k in keys):
+            same.append(st)
+            continue
+        shift = (sum(table[k] for k in keys) - sum(base[k] for k in keys)) / len(keys)
+        if abs(shift) > REDRAW_MEAN_SHIFT_MAX:
+            shifted.append(f"{st} {shift:+.2f}")
+    if incomplete:
+        failures.append(f"redrawn states missing seats in this or the base table: {incomplete}")
     if same:
         failures.append(f"redrawn states identical to the base Congress (old lines?): {same}")
+    if shifted:
+        failures.append(
+            f"redrawn states whose mean district lean moved more than {REDRAW_MEAN_SHIFT_MAX} "
+            f"from the base (only some districts updated?): {shifted}"
+        )
     return failures
 
 
@@ -376,7 +434,10 @@ def check_table(source: dict, revision: dict | None, page: str,
     table, problems = parse_district_table(content)
     failures += problems
     failures += ingestion_gates(table)
-    failures += self_consistency_gates(table, parse_stated_summary(content))
+    tolerance = int(source.get("median_tolerance", 0))
+    if tolerance and not source.get("_why_median_tolerance"):
+        failures.append("median_tolerance is set without a _why_median_tolerance saying what moved the median")
+    failures += self_consistency_gates(table, parse_stated_summary(content), tolerance)
     if source.get("redrawn_from"):
         if base is None:
             failures.append(f"base Congress {source['redrawn_from']} table unavailable for comparison")
@@ -447,8 +508,14 @@ def _ordered_congresses(sources: dict) -> list[str]:
 
 async def build_payload(sources: dict, sitting_congress: int) -> tuple[dict | None, list[str]]:
     """Fetch and gate every configured Congress's pinned table. Returns
-    (payload, failures); payload is None unless every table passed and the
-    sitting Congress has one."""
+    (payload, failures); payload is None unless every table passed.
+
+    A sitting Congress with no entry in the sources file is NOT a failure
+    here: the configured tables are still written (so the weekly refresh
+    and the live-drift check keep working), with the newest table at or
+    below the sitting Congress as the top-level one — the latest lines
+    known. ensure_sitting_lines raises the ops alert for the missing
+    entry, once per Congress."""
     page = sources["page"]
     tables: dict[str, dict[str, int]] = {}
     failures: list[str] = []
@@ -459,17 +526,14 @@ async def build_payload(sources: dict, sitting_congress: int) -> tuple[dict | No
         base = tables.get(src["redrawn_from"]) if src.get("redrawn_from") else None
         table, fails = check_table(src, rev, page, base)
         if fails:
-            failures += [f"{c}th Congress: {f}" for f in fails]
+            failures += [f"{ordinal(int(c))} Congress: {f}" for f in fails]
             continue
         tables[c] = table
         blocks[c] = _congress_block(page, src, table)
-    if str(sitting_congress) not in sources["congresses"]:
-        failures.append(
-            f"no source configured for the sitting {sitting_congress}th Congress in "
-            "app/data/district_pvi_sources.json"
-        )
     if failures:
         return None, failures
+    if _lines_congress(blocks, sitting_congress) is None:
+        return None, [f"no pinned table at or below the sitting {ordinal(sitting_congress)} Congress"]
     return _payload(blocks, sitting_congress), []
 
 
@@ -486,8 +550,21 @@ def _congress_block(page: str, src: dict, table: dict[str, int]) -> dict:
     }
 
 
+def _lines_congress(blocks: dict, congress: int) -> str | None:
+    """The key of the newest table at or below `congress` — its own when
+    it has one, otherwise the latest lines known before it (a Congress
+    whose lines nobody has pinned yet is, until someone does, on the
+    latest lines anyone has)."""
+    at_or_below = [int(c) for c in blocks if int(c) <= congress]
+    return str(max(at_or_below)) if at_or_below else None
+
+
 def _payload(blocks: dict[str, dict], sitting_congress: int) -> dict:
-    sitting = blocks[str(sitting_congress)]
+    """The file: every table under "congresses", and the sitting
+    Congress's (or, with none pinned, the newest before it) at the top
+    level. "congress" is the Congress whose pinned table that is."""
+    key = _lines_congress(blocks, sitting_congress)
+    sitting = blocks[key]
     return {
         "_source": sitting["_source"] + (
             ". Pinned per Congress in app/data/district_pvi_sources.json; ingested by "
@@ -498,17 +575,17 @@ def _payload(blocks: dict[str, dict], sitting_congress: int) -> dict:
         "_window": sitting["_window"],
         "_lines": sitting["_lines"],
         "_as_of": date.today().isoformat(),
-        "congress": sitting_congress,
+        "congress": int(key),
         "districts": sitting["districts"],
         "congresses": blocks,
     }
 
 
-def _reselect(payload: dict, sitting_congress: int) -> dict | None:
+def _reselect(payload: dict, sitting_congress: int, *, exact: bool = True) -> dict | None:
     """The same tables with a different sitting Congress, or None when the
-    payload has no table for it."""
+    payload has no table for it (exact) / none at or below it (not exact)."""
     blocks = payload.get("congresses") or {}
-    if str(sitting_congress) not in blocks:
+    if (str(sitting_congress) not in blocks) if exact else _lines_congress(blocks, sitting_congress) is None:
         return None
     out = _payload(blocks, sitting_congress)
     out["_as_of"] = payload.get("_as_of", out["_as_of"])
@@ -528,8 +605,20 @@ def _reset_caches() -> None:
 
 
 def _sitting_congress() -> int:
-    from app.config import settings
-    return settings.CURRENT_CONGRESS
+    """The Congress in office now, read from the clock on every call (noon
+    ET on Jan 3 of an odd year starts the next one) unless CURRENT_CONGRESS
+    is pinned in the environment — see app.config.sitting_congress. NOT
+    settings.CURRENT_CONGRESS, which is computed once at process start and
+    would hold the old Congress's lines until a restart."""
+    from app.config import sitting_congress
+    return sitting_congress()
+
+
+def _diff_digest(changed: list[str], pinned: dict[str, int], live: dict[str, int]) -> str:
+    """A short stable hash of which districts differ and how."""
+    import hashlib
+    text = ";".join(f"{k}:{pinned.get(k)}>{live.get(k)}" for k in sorted(changed))
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
 async def _check_live_drift(sources: dict, payload: dict) -> list[str]:
@@ -553,17 +642,20 @@ async def _check_live_drift(sources: dict, payload: dict) -> list[str]:
         from app.ops_alerts import send_ops_alert
         sample = ", ".join(f"{k} {pinned.get(k)}->{table.get(k)}" for k in changed[:12])
         logger.warning(
-            "district-pvi: live article revision %s differs from the pinned %sth-Congress table in %d districts (%s)",
-            live.get("revid"), newest, len(changed), sample,
+            "district-pvi: live article revision %s differs from the pinned %s-Congress table in %d districts (%s)",
+            live.get("revid"), ordinal(int(newest)), len(changed), sample,
         )
         send_ops_alert(
             "District PVI source changed since its pin",
             f"Wikipedia's \"{page}\" table (revision {live.get('revid')}) differs from the "
-            f"pinned {newest}th-Congress table (revision {pinned_revid}) in {len(changed)} "
+            f"pinned {ordinal(int(newest))}-Congress table (revision {pinned_revid}) in {len(changed)} "
             f"districts: {sample}. Nothing was ingested. If this is a correction or a map "
             f"change for that Congress, review the diff and advance its revid in "
             f"app/data/district_pvi_sources.json.",
-            dedupe_key=f"district-pvi-live-drift-{live.get('revid')}",
+            # Keyed on the difference itself, not the live revid: every
+            # unrelated edit to the article (prose, references, another
+            # section) makes a new revid with the same table difference.
+            dedupe_key=f"district-pvi-live-drift-{pinned_revid}-{_diff_digest(changed, pinned, table)}",
         )
     return changed
 
@@ -578,16 +670,23 @@ async def refresh_district_pvi() -> bool:
     """
     try:
         sources = load_sources()
-        payload, failures = await build_payload(sources, _sitting_congress())
+        sitting = _sitting_congress()
+        payload, failures = await build_payload(sources, sitting)
         if failures:
             for f in failures:
                 logger.warning("district-pvi ingestion gate failed: %s", f)
             return False
         _write(pathlib.Path(_PVI_PATH), payload)
         logger.info(
-            "district-pvi refreshed: %d Congresses, sitting %dth (%d districts)",
-            len(payload["congresses"]), payload["congress"], len(payload["districts"]),
+            "district-pvi refreshed: %d Congresses, sitting %s, member lines the %s's (%d districts)",
+            len(payload["congresses"]), ordinal(sitting), ordinal(payload["congress"]),
+            len(payload["districts"]),
         )
+        if str(sitting) not in sources["congresses"]:
+            logger.warning(
+                "district-pvi: no source pinned for the sitting %s Congress — member scoring is on "
+                "the %s Congress's lines, the latest pinned", ordinal(sitting), ordinal(payload["congress"]),
+            )
         try:
             await _check_live_drift(sources, payload)
         except Exception:
@@ -605,6 +704,10 @@ def ensure_sitting_lines() -> str:
     """Nightly, before any scoring: make sure /data/district_pvi.json's
     top-level table is the sitting Congress's. Returns what it did.
 
+    The sitting Congress comes from the clock (_sitting_congress), so the
+    first nightly run after noon ET on Jan 3 of an odd year switches the
+    lines with no restart and no fetch.
+
     - "current": already the sitting Congress's pinned table.
     - "reselected": the file already holds the sitting Congress's table
       under "congresses" (the Jan 3 switch) — copied up locally, no fetch.
@@ -615,7 +718,13 @@ def ensure_sitting_lines() -> str:
       (same pinned sources, same gates, checked in) has the sitting
       Congress's table — written in place of the file, since a
       pre-pinning file is known to mix maps.
-    - "refresh failed": neither worked; an ops alert says so.
+    - "refresh failed": neither worked; an ops alert says so (once a day).
+    - "no source configured": app/data/district_pvi_sources.json has no
+      entry for the sitting Congress. Nothing can be fetched for it until
+      someone adds one, so nothing is fetched (unless the file is missing
+      or pre-pinning, when the configured tables are still worth
+      restoring); member scoring stays on the newest pinned lines before
+      it, and one ops alert per Congress says so.
     """
     import asyncio
 
@@ -625,12 +734,19 @@ def ensure_sitting_lines() -> str:
         data = json.loads(path.read_text())
     except Exception:
         data = {}
+    try:
+        configured = str(sitting) in load_sources()["congresses"]
+    except Exception:
+        logger.warning("district-pvi: sources file unreadable", exc_info=True)
+        configured = True  # take the fetch path; its own failure alerts
+    if not configured:
+        return _no_source_configured(sitting, data, path)
     if data.get("congress") == sitting and data.get("congresses"):
         return "current"
     reselected = _reselect(data, sitting) if data.get("congresses") else None
     if reselected is not None:
         _write(path, reselected)
-        logger.info("district-pvi: sitting Congress is now the %dth — switched member lines", sitting)
+        logger.info("district-pvi: sitting Congress is now the %s — switched member lines", ordinal(sitting))
         return "reselected"
     if asyncio.run(refresh_district_pvi()):
         return "refreshed"
@@ -641,21 +757,75 @@ def ensure_sitting_lines() -> str:
     if bundled is not None:
         _write(path, bundled)
         logger.warning(
-            "district-pvi: refresh failed — restored the bundled %dth-Congress tables", sitting,
+            "district-pvi: refresh failed — restored the bundled %s-Congress tables", ordinal(sitting),
         )
         return "restored from bundle"
     from app.ops_alerts import send_ops_alert
     send_ops_alert(
         "District PVI has no table for the sitting Congress",
-        f"/data/district_pvi.json has no pinned table for the {sitting}th Congress, the "
+        f"/data/district_pvi.json has no pinned table for the {ordinal(sitting)} Congress, the "
         f"refresh failed, and the bundled copy has none either. Member scoring is reading "
         f"whatever table the file holds (format: "
-        f"{'pinned' if data.get('congresses') else 'missing or pre-pinning'}). If "
-        f"app/data/district_pvi_sources.json has no entry for the {sitting}th Congress, "
-        f"add one (see its _contract).",
+        f"{'pinned' if data.get('congresses') else 'missing or pre-pinning'}). The sources "
+        f"file names this Congress (or could not be read), so this is a fetch, gate or "
+        f"sources-file failure — see the district-pvi warnings in the log.",
         dedupe_key=f"district-pvi-no-sitting-{sitting}-{date.today():%Y-%m-%d}",
     )
     return "refresh failed"
+
+
+async def ensure_sitting_lines_before_run() -> None:
+    """ensure_sitting_lines for a manually triggered run (the admin and
+    token trigger endpoints), which skip the nightly pre-checks: without
+    it, a House run triggered after the Jan 3 switch but before the next
+    nightly run would score on the outgoing Congress's lines. Runs in a
+    worker thread (ensure_sitting_lines may start its own event loop) and
+    never raises — a failure logs and the run goes ahead, as it would
+    nightly."""
+    import asyncio
+
+    try:
+        await asyncio.to_thread(ensure_sitting_lines)
+    except Exception:
+        logger.exception("district-pvi: sitting-lines check before a triggered run failed")
+
+
+def _no_source_configured(sitting: int, data: dict, path: pathlib.Path) -> str:
+    import asyncio
+
+    from app.ops_alerts import send_ops_alert
+
+    if data.get("congresses"):
+        reselected = _reselect(data, sitting, exact=False)
+        if reselected is not None and reselected["congress"] != data.get("congress"):
+            _write(path, reselected)
+        lines = reselected["congress"] if reselected is not None else data.get("congress")
+    else:
+        # Missing or pre-pinning file: the configured tables still beat a
+        # file known to mix maps.
+        lines = None
+        if asyncio.run(refresh_district_pvi()):
+            lines = json.loads(path.read_text()).get("congress")
+        else:
+            try:
+                bundled = _reselect(json.loads(BUNDLED_PATH.read_text()), sitting, exact=False)
+            except Exception:
+                bundled = None
+            if bundled is not None:
+                _write(path, bundled)
+                lines = bundled["congress"]
+    on = f"the {ordinal(lines)} Congress's lines, the latest pinned" if lines else "no pinned table"
+    logger.warning("district-pvi: no source for the sitting %s Congress — member scoring on %s", ordinal(sitting), on)
+    send_ops_alert(
+        "District PVI has no source for the sitting Congress",
+        f"The {ordinal(sitting)} Congress is in office, and app/data/district_pvi_sources.json "
+        f"has no entry for it. Member scoring is on {on}. That is right only if no state "
+        f"redrew its districts for the election that seated this Congress; add an entry "
+        f"(see the file's _contract) either way, listing any redrawn states. Nothing is "
+        f"fetched for it until then.",
+        dedupe_key=f"district-pvi-no-source-{sitting}",
+    )
+    return "no source configured"
 
 
 # ── Readers for surfaces that are not member scoring ───────────────────
@@ -677,23 +847,60 @@ def district_pvi_for_congress(congress: int) -> tuple[dict[str, int], dict | Non
     races (congress_for_election). Member scoring does not use this; it
     reads the sitting Congress's table via score_calculator._district_pvi().
 
-    When that Congress has no pinned table, the sitting table is returned
-    minus any state the sources file lists as redrawn for it: a number
-    for the old lines of a redrawn district would describe a different
-    district, so those seats fall back to the state lean, which the
-    elections API labels as such."""
+    A Congress with no pinned table of its own gets the newest one before
+    it — the latest lines known. From the day after a November election
+    the elections pages ask for the NEXT cycle's Congress (2028's 121st on
+    2026-11-04), which nobody has pinned yet; its races are on the lines
+    just used unless a state redraws again, and falling back to the
+    sitting Congress's table instead would put the nine states that redrew
+    for 2026 back on their old lines. Any state the sources file lists as
+    redrawn for a Congress in between whose table is not on file is
+    dropped — a number for its old lines would describe a different
+    district — and those seats fall back to the state lean, which the
+    elections API labels as such. Provenance says which Congress's table
+    it is ("congress") and for which Congress it was asked ("forCongress").
+    """
     data = _pvi_file()
     blocks = data.get("congresses") or {}
-    block = blocks.get(str(congress))
-    if block:
-        meta = {k.lstrip("_"): block.get(k) for k in ("_source", "_lines", "_window")}
-        meta["asOf"] = data.get("_as_of")
-        return {k: int(v) for k, v in block["districts"].items()}, meta
-    table = {k: int(v) for k, v in (data.get("districts") or {}).items()}
     try:
-        redrawn = set(load_sources()["congresses"].get(str(congress), {}).get("redrawn_states", []))
+        sources = load_sources()["congresses"]
     except Exception:
-        redrawn = set()
+        sources = {}
+    if blocks:
+        key = _lines_congress(blocks, congress)
+        if key is None:
+            return {}, None  # older than every pinned table: no honest answer
+        block = blocks[key]
+        table = {k: int(v) for k, v in block["districts"].items()}
+        low = int(key)
+    else:
+        # Pre-pinning file (replaced by ensure_sitting_lines on the next
+        # nightly run): its one table, of unknown lines.
+        key, block, low = None, None, None
+        table = {k: int(v) for k, v in (data.get("districts") or {}).items()}
+    redrawn = {
+        st
+        for c, src in sources.items()
+        if (int(c) == congress if low is None else low < int(c) <= congress)
+        for st in src.get("redrawn_states", [])
+    }
     if redrawn:
         table = {k: v for k, v in table.items() if k.split("-")[0] not in redrawn}
-    return table, None
+    if block is None:
+        return table, None
+    revision = block.get("_revision") or {}
+    meta = {
+        "source": block.get("_source"),
+        "lines": block.get("_lines"),
+        "window": block.get("_window"),
+        "congress": int(key),
+        "forCongress": congress,
+        # The table is as of the pinned revision — not the day it was
+        # fetched, which is "fetchedOn".
+        "asOf": revision.get("timestamp"),
+        "revision": revision or None,
+        "fetchedOn": data.get("_as_of"),
+    }
+    if redrawn:
+        meta["omittedRedrawnStates"] = sorted(redrawn)
+    return table, meta

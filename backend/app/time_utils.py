@@ -43,3 +43,28 @@ def comment_period_today() -> str:
     Compare against this — never ``date.today()`` or ``utcnow().date()``.
     """
     return datetime.now(COMMENT_DEADLINE_TZ).date().isoformat()
+
+
+# A Congress begins at noon on January 3 of each odd year: the 20th
+# Amendment, section 1, ends the outgoing members' terms "at noon on the 3d
+# day of January", and section 2 convenes the new Congress that day. The
+# noon is the Capitol's.
+CONGRESS_TZ = ZoneInfo("America/New_York")
+
+
+def congress_in_session(now: datetime | None = None) -> int:
+    """The Congress whose members hold office at ``now`` (default: the clock).
+
+    ``now`` may be naive UTC (this module's convention) or aware. Until noon
+    Eastern on January 3 of an odd year the outgoing Congress is the one in
+    office; from that noon it is the new one — not at midnight, and not on
+    January 1 (which a calendar-year rule gives).
+    """
+    now = now or utcnow()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    local = now.astimezone(CONGRESS_TZ)
+    congress = 1 + (local.year - 1789) // 2
+    if local.year % 2 == 1 and (local.month, local.day, local.hour) < (1, 3, 12):
+        congress -= 1
+    return congress

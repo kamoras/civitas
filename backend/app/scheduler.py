@@ -129,9 +129,16 @@ def _nightly_pipeline() -> None:
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
             # Member scoring's district leans must be the sitting
-            # Congress's lines. Switches the table the night a new Congress
-            # is seated (a local copy, no fetch) and replaces a missing or
+            # Congress's lines. The sitting Congress is read from the clock
+            # here, not from CURRENT_CONGRESS (fixed at process start): the
+            # first nightly run after noon ET on Jan 3 of an odd year — with
+            # the default 03:00 UTC schedule, the Jan 4 run — copies the new
+            # Congress's table up locally (no fetch, no restart), provided
+            # app/data/district_pvi_sources.json has an entry for it; with
+            # none, scoring stays on the newest pinned lines and one alert
+            # per Congress asks for the entry. Also replaces a missing or
             # pre-pinning file with a fetch — see fetch/district_pvi.py.
+            # Triggered runs (admin/token endpoints) call it too.
             ensure_sitting_lines,
         )
         for check in pre_checks:

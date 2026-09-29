@@ -96,3 +96,43 @@ class TestCongressStalenessGuard:
 
             check_current_congress_staleness()
             assert not mock_alert.called
+
+
+def test_expected_current_congress_waits_for_noon_et_on_jan_3():
+    """A calendar-year rule said 120 on Jan 1, 2027 and raised a false
+    "stale" alert for the two days the 119th is still in office."""
+    with patch("app.time_utils.utcnow", return_value=datetime(2027, 1, 2, 12)):
+        assert expected_current_congress() == 119
+    with patch("app.time_utils.utcnow", return_value=datetime(2027, 1, 3, 17, 0)):
+        assert expected_current_congress() == 120
+
+
+class TestCongressStalenessMessage:
+    """The fix depends on why it's stale: a default computed at process
+    start needs a restart; an environment pin needs editing."""
+
+    def _alert_text(self, settings_obj):
+        expected = settings_obj.CURRENT_CONGRESS + 1
+        with patch("app.ops_alerts.settings", settings_obj), patch(
+            "app.pipeline.fetch.congress.expected_current_congress", return_value=expected,
+        ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
+            from app.ops_alerts import check_current_congress_staleness
+
+            check_current_congress_staleness()
+        return mock_alert.call_args.args[1]
+
+    def test_unpinned_default_says_restart(self):
+        from app.config import Settings
+
+        s = Settings()  # computed at "process start", before the next Congress
+        assert not s.current_congress_pinned
+        text = self._alert_text(s)
+        assert "not pinned" in text and "Restart the backend" in text
+        assert "District PVI lines do not depend on this setting" in text
+
+    def test_environment_pin_says_edit_the_pin(self):
+        from app.config import Settings
+
+        text = self._alert_text(Settings(CURRENT_CONGRESS=119))
+        assert "pinned in the environment" in text and "change it to 120" in text
+        assert "District PVI" not in text

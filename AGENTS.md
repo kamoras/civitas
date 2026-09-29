@@ -326,25 +326,44 @@ The correct pattern, established by `_district_pvi()` /
    immutable revision of Wikipedia's "Cook Partisan Voting Index"
    article whose citation states the Cook release and the map it
    describes. `app/pipeline/fetch/district_pvi.py` fetches exactly those
-   revisions (Supplementary, weekly; `scheduler.py`'s pre-checks when the
-   file lacks the sitting Congress's table), gates them — the revision's
-   own prose counts must match its table, and a redrawn Congress must
-   differ from its base in exactly the redrawn states — and writes every
-   Congress's table under `congresses`, with the sitting Congress's
-   (`settings.CURRENT_CONGRESS`) as the top-level `districts` member
-   scoring reads. Member scoring must use the lines the member was
-   *elected on*; the elections pages use the lines of the Congress the
-   election seats (`district_pvi_for_congress`). Do not go back to
-   scraping each district's live infobox: it did that until 2026-09, and
-   when nine states redrew for 2026 editors swapped in new-map values
-   district by district, leaving member scoring on a silent mix of two
-   maps (TN-9 read R+9 for a member elected in a D+23 seat). The
-   Supplementary run compares the live article with the newest pin and
-   raises an ops alert on a difference; it never ingests it. Adding the
-   next Congress, or advancing a pin after a correction or a court
-   ruling, is an edit to the sources file — the switch on Jan 3 then
-   happens by itself. `scripts/fetch_district_pvi.py` regenerates the
-   bundled pre-first-ingest fallback through the same code.
+   revisions (Supplementary, weekly; `ensure_sitting_lines` when the file
+   is missing or predates pinning), gates them — the revision's own prose
+   counts must match its table and its stated median must be the table's
+   exactly (a pin may declare a `median_tolerance` only with a written
+   `_why_median_tolerance`); a redrawn Congress must be identical to its
+   base outside the redrawn states, and in each redrawn state differ
+   somewhere while keeping the state's mean district lean (a redraw moves
+   voters between a state's districts, not out of it) — and writes every
+   Congress's table under `congresses`, with the sitting Congress's as
+   the top-level `districts` member scoring reads. Member scoring must use
+   the lines the member was *elected on*; the elections pages use the
+   lines of the Congress the election seats (`district_pvi_for_congress`),
+   or — for a Congress nobody has pinned yet, which is every next cycle
+   from the day after an election — the newest pinned lines before it.
+   Do not go back to scraping each district's live infobox: it did that
+   until 2026-09, and when nine states redrew for 2026 editors swapped in
+   new-map values district by district, leaving member scoring on a
+   silent mix of two maps (TN-9 read R+9 for a member elected in a D+23
+   seat). The Supplementary run compares the live article with the newest
+   pin and raises an ops alert on a difference (once per distinct
+   difference); it never ingests it.
+
+   "Sitting" is read from the clock on every call
+   (`app.config.sitting_congress`: noon ET on Jan 3 of an odd year, the
+   20th Amendment's hand-over), not from `settings.CURRENT_CONGRESS`,
+   which is computed once when the process starts and so holds the old
+   Congress until a restart (`check_current_congress_staleness` says
+   which of the two — a restart, or an environment pin — is holding it).
+   `ensure_sitting_lines` runs in the nightly pre-checks and before every
+   triggered run, so the first run after that noon (with the default
+   03:00 UTC schedule, the Jan 4 nightly) switches member scoring to the
+   new Congress's table from what is already on disk — no fetch, no
+   restart — *if* the sources file has an entry for it. Adding that entry
+   (or advancing a pin after a correction or a court ruling) is an edit to
+   the sources file. Without one, scoring stays on the newest pinned lines,
+   nothing is fetched for it, and one ops alert per Congress asks for the
+   entry. `scripts/fetch_district_pvi.py` regenerates the bundled
+   pre-first-ingest fallback through the same code.
 
    Better still, when the population a value describes is the one the
    pipeline is scoring, measure it in the run itself. Legislative
