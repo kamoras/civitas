@@ -37,7 +37,7 @@ Usage:
 
 Downloads the two CEL spreadsheets (House .xlsx, Senate .xls; dated URLs, so
 effectively pinned) into --cache on first run. Needs pandas and openpyxl, which are not runtime dependencies of the app:
-    pip install -r requirements.txt -r requirements-research.txt
+    pip install -r requirements.txt -r scripts/requirements-research.txt
 """
 
 from __future__ import annotations

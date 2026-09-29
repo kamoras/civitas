@@ -155,6 +155,21 @@ updates:
       - dependency-name: "huggingface-hub"
         update-types: ["version-update:semver-major"]
 
+  # The research/calibration scripts' extras (pandas, statsmodels, ...),
+  # never installed into the image. A directory of its own so these PRs
+  # don't use up /backend's five-PR limit; CI's "Backend — Research deps"
+  # job installs this file together with requirements.txt, so a bump that
+  # breaks the combination goes red.
+  - package-ecosystem: pip
+    directory: /backend/scripts
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - python
+
   - package-ecosystem: npm
     directory: /frontend
     schedule:

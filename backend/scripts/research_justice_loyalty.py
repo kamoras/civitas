@@ -13,14 +13,14 @@ downloaded once into --cache:
 - Martin-Quinn scores (2024 release): each justice's position per term.
 
 Run: python scripts/research_justice_loyalty.py --cache .research-cache/justice-loyalty
-
-Research-only dependencies (requirements-research.txt):
-    pip install -r requirements.txt -r requirements-research.txt
 (pandas, statsmodels, scipy). With --write-bundle it also writes
 app/data/justice_president_votes_1937_2014.csv.gz, the hand-coded votes the
 pipeline reads for the terms before the Database's lead parties take over
 (pipeline/analyze/justice_loyalty.py): the one source here it can't fetch,
 since Epstein & Posner publish it as a Stata file.
+
+Research-only dependencies (scripts/requirements-research.txt):
+    pip install -r requirements.txt -r scripts/requirements-research.txt
 """
 
 import gzip

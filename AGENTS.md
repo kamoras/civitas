@@ -957,7 +957,7 @@ the pending list).
   use. Dependabot can't bump it; `scripts/check_torch_cpu_pin.py` (weekly in
   `torch-cpu-watch.yml`) reports a newer build and prints the replacement
   lines. Research/calibration scripts' extra packages (pandas, statsmodels,
-  …) live in `requirements-research.txt`, never in the image.
+  …) live in `scripts/requirements-research.txt`, never in the image.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
   time. The `senator_service.py` and `representative_service.py` read paths use

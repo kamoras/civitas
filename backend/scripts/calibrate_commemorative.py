@@ -23,8 +23,8 @@ stage-normalized LES from GovTrack statuses, does weighting predicted
 commemorative bills 1x instead of 5x bring the ranking closer to V&W's
 published LES?
 
-Research-only dependencies (requirements-research.txt):
-    pip install -r requirements.txt -r requirements-research.txt
+Research-only dependencies (scripts/requirements-research.txt):
+    pip install -r requirements.txt -r scripts/requirements-research.txt
 
 Usage (network required; on the Pi the model loads normally):
     python backend/scripts/calibrate_commemorative.py [--cache DIR] [--onnx DIR]

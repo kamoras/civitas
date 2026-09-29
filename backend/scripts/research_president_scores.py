@@ -20,8 +20,8 @@ jobs_per_year entries of app/data/president_reference.json. The pipeline
 measures all of these from its own sources every run and those take
 precedence; the bundled values only serve the API before the first run.
 
-Research-only dependencies (requirements-research.txt):
-    pip install -r requirements.txt -r requirements-research.txt
+Research-only dependencies (scripts/requirements-research.txt):
+    pip install -r requirements.txt -r scripts/requirements-research.txt
 Run from backend/:
     PYTHONPATH=. python scripts/research_president_scores.py [--cache DIR] [--write-fallback]
 """

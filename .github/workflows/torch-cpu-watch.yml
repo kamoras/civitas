@@ -23,5 +23,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - run: pip install packaging
+      # The pin requirements.txt already carries, not whatever is latest:
+      # a red run should only ever mean torch, never a packaging release.
+      - run: pip install "$(grep -E '^packaging==' backend/requirements.txt)"
       - run: python backend/scripts/check_torch_cpu_pin.py
