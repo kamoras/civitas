@@ -5,7 +5,9 @@ import Link from "next/link";
 import { fetchRepVotes, fetchSenatorVotes } from "@/lib/api";
 import { billPageHref } from "@/lib/congress";
 import type { AlignmentFacts, BreakVote, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
+import type { ConstituentApproval as Approval } from "@/types/senator";
 import ComponentBars from "./ComponentBars";
+import ConstituentApproval from "./ConstituentApproval";
 import ScoreColumn, { Block } from "./ScoreColumn";
 import { count, partyMembers, percentOneDecimal, shortDate, voteTitle } from "./format";
 
@@ -146,6 +148,7 @@ export default function AlignmentColumn({
   name,
   seat,
   breaks,
+  approval,
   dimension,
   score,
   weight,
@@ -160,6 +163,9 @@ export default function AlignmentColumn({
   /** Stored count of votes against the party (the voting record's): the
    *  list's count until the whole-Congress record is measured. */
   breaks: number;
+  /** Survey approval among the member's own constituents, by party
+   *  (informational, not scored); absent when the survey has none. */
+  approval?: Approval | null;
   dimension: ScoreBreakdownDimension | undefined;
   score: number;
   weight?: number;
@@ -251,6 +257,8 @@ export default function AlignmentColumn({
           )}
         </Block>
       )}
+
+      <ConstituentApproval approval={approval} />
 
       {dimension && <ComponentBars components={dimension.components} />}
     </ScoreColumn>
