@@ -353,6 +353,12 @@ class Representative(Base):
     district: Mapped[int] = mapped_column(Integer, default=0)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
     years_in_office: Mapped[int] = mapped_column(Integer, default=0)
+    # ISO date the member was sworn in to the current Congress, from the
+    # House Clerk's member list (fetch/house_clerk.py). Legislative
+    # Effectiveness prorates its bar for a member seated mid-Congress (a
+    # special election) by the share of the Congress served (v6.23). Null
+    # when the Clerk lists no date.
+    sworn_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
     initials: Mapped[str] = mapped_column(String(4), default="")
 
     # See Senator.leadership_title/committees for the rationale and source.

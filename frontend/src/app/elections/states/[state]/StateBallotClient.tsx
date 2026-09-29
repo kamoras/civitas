@@ -301,6 +301,9 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
     matchesDistrictQuery({ district: s.seat ?? null, areas: s.areas ?? [], candidates: s.nominees }, filter)
   );
   const seatWord = /^\d/.test(first.seat ?? "") ? "District" : "";
+  // Offered whenever there are towns to match: the hint below tells the
+  // reader to filter, so the box has to be there whatever the seat count.
+  const canFilter = byDistrict && hasAreas;
 
   return (
     <div className="border border-white/[0.09] bg-surface px-3 py-2.5">
@@ -313,13 +316,9 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
       {byDistrict && (
         <p className="mt-1 text-xs text-ink-lo">
           Each voter votes in one district&apos;s seat only.{" "}
-          {hasAreas ? (
-            "Filter by your town to find yours, or "
-          ) : (
-            "Find yours with "
-          )}
+          {canFilter ? "Filter by your town to find yours, or " : "Find yours with "}
           <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
-            {hasAreas ? "check the official lookup" : "the official lookup"}
+            {canFilter ? "check the official lookup" : "the official lookup"}
           </a>
           .
         </p>
@@ -329,7 +328,7 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
           Every voter in the state votes for each seat; a seat&apos;s number only says which one it is.
         </p>
       )}
-      {byDistrict && hasAreas && seats.length > 3 && (
+      {canFilter && (
         <div className="mt-2">
           <input
             type="search"

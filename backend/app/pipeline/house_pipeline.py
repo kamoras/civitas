@@ -203,6 +203,25 @@ async def run_house_pipeline() -> dict:
             purge_departed_members(db, CHAMBER_HOUSE)
             db.commit()
 
+            # When each member took the seat, for Legislative Effectiveness's
+            # mid-Congress proration (v6.23). The Clerk's list when it can be
+            # read; otherwise the dates stored last, so one failed request
+            # doesn't score a special-election arrival against a full term.
+            from app.pipeline.fetch.house_clerk import fetch_house_sworn_dates
+            sworn_dates = await fetch_house_sworn_dates(client, db)
+            if sworn_dates:
+                for r in reps:
+                    r["swornDate"] = sworn_dates.get(r.get("bioguideId", ""))
+            else:
+                stored = dict(
+                    db.query(Representative.bioguide_id, Representative.sworn_date)
+                    .filter(Representative.sworn_date.isnot(None))
+                    .all()
+                )
+                for r in reps:
+                    if r.get("bioguideId") in stored:
+                        r["swornDate"] = stored[r["bioguideId"]]
+
             # Build bioguide -> rep mapping
             bio_to_rep: dict[str, dict] = {}
             for r in reps:
