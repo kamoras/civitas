@@ -268,8 +268,9 @@ describe("the contest drawer", () => {
 });
 
 describe("U.S. Representative", () => {
-  const twoDistricts = () =>
+  const twoDistricts = (overrides: Partial<StateBallot> = {}) =>
     ballot({
+      ...overrides,
       houseRaces: [
         houseRace({ id: "d1", district: 1 }),
         houseRace({
@@ -297,6 +298,40 @@ describe("U.S. Representative", () => {
     const drawer = await openContest(/U\.S\. Representative/);
     expect(drawer.getByText("Greg Landsman (I)")).toBeInTheDocument();
     expect(drawer.getByText("Second District Dem")).toBeInTheDocument();
+  });
+
+  it("shows a district's lean in the picker and on a picked district during the campaign", async () => {
+    render(<StateBallotClient ballot={twoDistricts()} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.getAllByText("D+3").length).toBe(2);
+    await userEvent.click(drawer.getByRole("button", { name: /Second District Dem/ }));
+    expect(within(screen.getByRole("dialog")).getByText("D+3")).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
+  it("marks a sitting member on new lines as a sitting member, never the new district's incumbent", async () => {
+    render(<StateBallotClient ballot={twoDistricts({ newDistrictLines: true })} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.getByText("Greg Landsman (sitting member)")).toBeInTheDocument();
+    expect(drawer.queryByText(/\(I\)/)).not.toBeInTheDocument();
+    await userEvent.click(drawer.getByRole("button", { name: /Greg Landsman/ }));
+    const research = within(screen.getByRole("dialog"));
+    expect(research.getByText("SITTING MEMBER")).toBeInTheDocument();
+    expect(research.queryByText("INCUMBENT")).not.toBeInTheDocument();
+    window.location.hash = "";
+  });
+
+  it("marks a sitting member on a single new-lines seat's ballot box the same way", () => {
+    render(<StateBallotClient ballot={ballot({ newDistrictLines: true })} />);
+    const box = screen.getByTestId("ballot-columns");
+    expect(within(box).getByText("SITTING MEMBER")).toBeInTheDocument();
+    expect(within(box).queryByText("INCUMBENT")).not.toBeInTheDocument();
+  });
+
+  it("keeps INCUMBENT on a state's old lines", () => {
+    render(<StateBallotClient ballot={ballot()} />);
+    const box = screen.getByTestId("ballot-columns");
+    expect(within(box).getByText("INCUMBENT")).toBeInTheDocument();
   });
 
   it("opens a picked district's research with its full county list", async () => {

@@ -72,6 +72,12 @@ describe("RaceMoneyBars", () => {
     expect(screen.getByText("INCUMBENT")).toBeInTheDocument();
   });
 
+  it("calls an incumbent on a redrawn seat a sitting member, not the incumbent", () => {
+    render(<RaceMoneyBars candidates={[cand({ incumbentChallenge: "I" })]} redrawnSeat />);
+    expect(screen.getByText("SITTING MEMBER")).toBeInTheDocument();
+    expect(screen.queryByText("INCUMBENT")).not.toBeInTheDocument();
+  });
+
   it("links an incumbent's representation score", () => {
     render(
       <RaceMoneyBars

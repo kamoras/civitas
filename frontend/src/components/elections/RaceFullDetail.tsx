@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { candidateName, isActiveCandidate, tierCandidates } from "@/lib/elections";
+import { candidateName, isActiveCandidate, isRedrawnSeat, tierCandidates } from "@/lib/elections";
 import { cashOnHandDisplay } from "@/lib/formatting";
 import CandidateCard, { getPartyMeta } from "./CandidateCard";
 import RaceMoneyBars from "./RaceMoneyBars";
@@ -71,12 +71,16 @@ function TailRow({ candidate }: { candidate: BallotCandidate }) {
 export default function RaceFullDetail({
   race,
   supersededByPrimary = false,
+  newLines = false,
 }: {
   race: RaceWithCandidates;
   /** From the API's ballotBasis — never re-derived here. */
   supersededByPrimary?: boolean;
+  /** StateBallot.newDistrictLines — how incumbency is worded. */
+  newLines?: boolean;
 }) {
   const [tailOpen, setTailOpen] = useState(false);
+  const redrawnSeat = isRedrawnSeat(race, newLines);
   // FEC candidate files include paper filers and prior-cycle records —
   // collapse those under "Other FEC filers" so the page stays honest
   // without deleting anyone (same rule race-detail used to apply).
@@ -114,7 +118,7 @@ export default function RaceFullDetail({
               run 10:1 to 15:1 and that gap is the story. Bars also make
               the page materially shorter, which is the other half of
               what was wrong with it. */}
-          <RaceMoneyBars candidates={leaders} showUnconfirmed={!tiered} />
+          <RaceMoneyBars candidates={leaders} showUnconfirmed={!tiered} redrawnSeat={redrawnSeat} />
 
           {tail.length > 0 && (
             <>
@@ -152,7 +156,7 @@ export default function RaceFullDetail({
           </p>
           <div className="mt-3 space-y-3">
             {otherFilers.map((c) => (
-              <CandidateCard key={c.id} candidate={c} />
+              <CandidateCard key={c.id} candidate={c} redrawnSeat={redrawnSeat} />
             ))}
           </div>
         </details>

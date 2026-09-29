@@ -59,3 +59,21 @@ describe("unconfirmed badge", () => {
     expect(screen.queryByText("UNCONFIRMED")).not.toBeInTheDocument();
   });
 });
+
+describe("incumbency badge", () => {
+  it("names FEC's incumbency code on a seat whose lines did not change", () => {
+    render(<CandidateCard candidate={candidate({ incumbentChallenge: "I" })} />);
+    expect(screen.getByText("INCUMBENT")).toBeInTheDocument();
+  });
+
+  it("calls a sitting member on a redrawn seat a sitting member, and drops the old seat's other codes", () => {
+    const { unmount } = render(
+      <CandidateCard candidate={candidate({ incumbentChallenge: "I" })} redrawnSeat />
+    );
+    expect(screen.getByText("SITTING MEMBER")).toBeInTheDocument();
+    expect(screen.queryByText("INCUMBENT")).not.toBeInTheDocument();
+    unmount();
+    render(<CandidateCard candidate={candidate({ incumbentChallenge: "C" })} redrawnSeat />);
+    expect(screen.queryByText("CHALLENGER")).not.toBeInTheDocument();
+  });
+});

@@ -669,7 +669,7 @@ elsewhere. The text filter stays for anyone who prefers it.
 Where a county answers nothing — a county split between districts, or a
 city holding several — a **map of the districts themselves** does. Every
 multi-district state page draws its districts, shaded by the same PVI
-rule as the district list (red R, blue D, paler = closer) wherever a
+rule as the district list (red R, blue D, fainter = closer) wherever a
 district has a lean of its own. In the nine redrawn states it has none
 yet (a district number there names a different place than
 `district_pvi.json`'s value for it), so their races carry the flagged
@@ -709,7 +709,8 @@ The crosswalk script refuses to write if a state not on the list differs
 between the two files, so a later redraw can't slip through on stale lines.
 The same list tells the election-night sync that a redrawn seat has no
 holder to measure a flip against, and lets an incumbent running under a new
-number link to their record. Regenerate after any redistricting:
+number link to their record — labelled a *sitting member* there, never the
+new district's incumbent (`incumbencyLabel` in `frontend/src/lib/elections.ts`). Regenerate after any redistricting:
 
 ```bash
 python backend/scripts/build_county_district_crosswalk.py
@@ -844,7 +845,7 @@ Minnesota is also why a district identifier is a **string**: it splits each of i
 
 ## Election Night: Live Results
 
-From election day the elections pages stop being a ballot-research tool first and lead with the count. The national map at `/elections` is shaded by who is leading each covered race — paler while fewer than half the units are in, solid once the state calls its count official — instead of by Cook PVI lean; each state page puts its Senate race, a House table of every district (one the feed gives no count for says so) and a district map shaded by the count above the ballot research — once that state's polls have closed; until then the page stays in its present-tense research framing and the national map marks the state POLLS OPEN, saying nothing about its count; and a **Live updates** feed tells each change in the count as it happens (first returns, a change of leader, every unit reporting, a count called official, a seat changing party). The flow and every rule are drawn in [`docs/diagrams/10-elections.md`](docs/diagrams/10-elections.md#election-night-the-live-count).
+From election day the elections pages stop being a ballot-research tool first and lead with the count. The national map at `/elections` is shaded by who is leading each covered race — fainter while fewer than half the units are in, solid once the state calls its count official — instead of by Cook PVI lean; each state page puts its Senate race, a House table of every district (one the feed gives no count for says so) and a district map shaded by the count above the ballot research — once that state's polls have closed; until then the page stays in its present-tense research framing and the national map marks the state POLLS OPEN, saying nothing about its count; and a **Live updates** feed tells each change in the count as it happens (first returns, a change of leader, every unit reporting, a count called official, a seat changing party). The flow and every rule are drawn in [`docs/diagrams/10-elections.md`](docs/diagrams/10-elections.md#election-night-the-live-count).
 
 **Which election the site is about.** The site no longer flips to the next cycle the night polls close. `election_phase.active_election()` keeps it on the election just held while any count is still moving and for 14 days after the last change (`RESULTS_GRACE_DAYS`), never past January 3, when the new Congress is sworn in; only then does the campaign page for the next election return. The pipeline's cycle, the API's `phase` and the election-season jobs all read that one function.
 

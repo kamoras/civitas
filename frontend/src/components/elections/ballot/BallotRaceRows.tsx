@@ -1,5 +1,5 @@
 import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
-import { candidateName, isActiveCandidate, tierCandidates } from "@/lib/elections";
+import { candidateName, incumbencyLabel, isActiveCandidate, isRedrawnSeat, tierCandidates } from "@/lib/elections";
 import { formatCurrency } from "@/lib/formatting";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 
@@ -20,8 +20,12 @@ function raisedLabel(c: BallotCandidate): string {
  * A race whose list the state has not confirmed ("filers"/"primary") shows
  * only its leaders here, with the rest counted — the full field is one
  * click away in the drawer, and a 25-filer race laid flat in a ballot
- * column is exactly the endless list this page exists to avoid. */
-export default function BallotRaceRows({ race }: { race: RaceWithCandidates }) {
+ * column is exactly the endless list this page exists to avoid.
+ *
+ * `newLines` is StateBallot.newDistrictLines: on a redrawn House seat a
+ * sitting member reads SITTING MEMBER, not INCUMBENT (incumbencyLabel). */
+export default function BallotRaceRows({ race, newLines = false }: { race: RaceWithCandidates; newLines?: boolean }) {
+  const redrawn = isRedrawnSeat(race, newLines);
   const active = race.candidates.filter(isActiveCandidate);
   const tiered = race.candidateSource === "filers" || race.candidateSource === "primary";
   const { leaders, tail } = tiered ? tierCandidates(active) : { leaders: active, tail: [] };
@@ -44,8 +48,8 @@ export default function BallotRaceRows({ race }: { race: RaceWithCandidates }) {
                 <span className="break-words text-[15px] font-bold text-ink-hi">
                   {candidateName(c)}
                   {c.incumbentChallenge === "I" && (
-                    <span className="ml-2 align-middle font-mono text-[10px] font-normal tracking-[0.08em] text-ink-lo">
-                      INCUMBENT
+                    <span className="ml-2 whitespace-nowrap align-middle font-mono text-[10px] font-normal tracking-[0.08em] text-ink-lo">
+                      {incumbencyLabel("I", redrawn)}
                     </span>
                   )}
                 </span>

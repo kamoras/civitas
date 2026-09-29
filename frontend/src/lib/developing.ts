@@ -15,8 +15,37 @@ export function developingSource(sourceType: string | null | undefined): string 
   return (sourceType && DEVELOPING_SOURCE[sourceType]) || "a primary source";
 }
 
+type IssueKind = { sourceType?: string | null; status?: string | null };
+
+/** Whether an issue's facts are the count: a developing election-results
+ * issue (backend live_results/signals.py). Once news coverage confirms
+ * one, the Action Center swaps its facts for the outlets' own lines
+ * (action_center._promote_developing_issue) while `sourceType` stays
+ * "election_results" — so the source type alone would head media quotes
+ * "From the count". */
+export function factsAreTheCount(issue: IssueKind): boolean {
+  return issue.status === "developing" && issue.sourceType === "election_results";
+}
+
 /** The heading over an issue's facts. News-derived issues quote their
  * outlets; an election-results issue quotes the count. */
-export function factsHeading(sourceType: string | null | undefined): string {
-  return sourceType === "election_results" ? "From the count" : "Media coverage";
+export function factsHeading(issue: IssueKind): string {
+  return factsAreTheCount(issue) ? "From the count" : "Media coverage";
+}
+
+/** The facts section's anchor and share id, from its heading — so a count
+ * issue's link is #from-the-count and its shared image
+ * civitas-<id>-from-the-count.png. Every other issue keeps
+ * "media-coverage", the id links already out in the world point at. */
+export function factsSectionId(issue: IssueKind): string {
+  return factsAreTheCount(issue) ? "from-the-count" : "media-coverage";
+}
+
+/** Whether a count issue says the state has called its count official.
+ * The issue carries no structured flag for it, only the backend's fixed
+ * title template (signals._content: "... wins <race> in the official
+ * count, ..."); anything that doesn't match reads as not final, the
+ * conservative way to be wrong. */
+export function countIsOfficial(issue: { title: string }): boolean {
+  return / in the official count\b/.test(issue.title);
 }

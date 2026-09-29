@@ -47,7 +47,7 @@ describe("fitMercator", () => {
 });
 
 describe("leanFill", () => {
-  it("follows pviColor's direction and pales toward even", () => {
+  it("follows pviColor's direction and fades toward even", () => {
     expect(leanFill(-12).fill).toBe(leanFill(-2).fill);
     expect(leanFill(12).fill).not.toBe(leanFill(-12).fill);
     expect(leanFill(2).opacity).toBeLessThan(leanFill(20).opacity);
@@ -135,7 +135,10 @@ describe("DistrictMap", () => {
     );
     const shape = await screen.findByRole("button", { name: "CT-2" });
     expect(screen.getByText("no votes yet")).toBeInTheDocument();
-    expect(screen.getByText(/solid = official/)).toBeInTheDocument();
+    // Share is drawn as opacity over a near-black page: less in reads
+    // dimmer, not lighter, so the key says "fainter", never "paler".
+    expect(screen.getByText("fainter = under half in · solid = official")).toBeInTheDocument();
+    expect(screen.queryByText(/paler/)).not.toBeInTheDocument();
     shape.focus();
     expect(await screen.findByText("tied, not called")).toBeInTheDocument();
     expect(screen.getByText("TIED")).toBeInTheDocument();
@@ -207,6 +210,27 @@ describe("DistrictMap", () => {
 
     shape.focus();
     expect(await screen.findByText("R+6 (statewide)")).toBeInTheDocument();
+  });
+
+  it("keys lean intensity as fainter = closer, never paler", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    render(<DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} />);
+    await screen.findByRole("button", { name: "CT-2" });
+    expect(screen.getByText(/redder = safer R · bluer = safer D · fainter = closer/)).toBeInTheDocument();
+    expect(screen.queryByText(/paler/)).not.toBeInTheDocument();
+  });
+
+  it("shows no lean from election day, even with no count to shade by", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    render(<DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} showLean={false} />);
+    const two = await screen.findByRole("button", { name: "CT-2" });
+    expect(screen.getByText("no lean shown from election day")).toBeInTheDocument();
+    expect(screen.queryByText(/redder = safer R/)).not.toBeInTheDocument();
+    // CT-2 (D+3) and CT-4 (D+10) are drawn alike: no lean in the fill.
+    expect(two.getAttribute("style")).toBe(screen.getByRole("button", { name: "CT-4" }).getAttribute("style"));
+    two.focus();
+    expect(await screen.findByText(/click to show this race/)).toBeInTheDocument();
+    expect(screen.queryByText("D+3")).not.toBeInTheDocument();
   });
 
   it("keys a lone statewide-only district as grey among shaded ones", async () => {

@@ -114,7 +114,8 @@ function rgb(party: string | null): string {
 }
 
 /** A race's map fill: its leader's party (purple for one the feed gives no
- * party the vocabulary knows), paler while fewer than half the
+ * party the vocabulary knows), fainter (lower opacity, so dimmer over the
+ * dark map — never lighter) while fewer than half the
  * units are in, solid once the state calls it official. */
 export function resultFill(result: LiveRaceResult | undefined, covered: boolean): string {
   if (!result) return covered ? AWAITING_FILL : UNCOVERED_FILL;
@@ -359,7 +360,7 @@ export function seatsLed(races: LiveRaceResult[]): Record<string, number> {
 }
 
 /** The fill for a state on the national map, by chamber: its Senate race's
- * leader, or — for House — the party leading more of its seats (paler for
+ * leader, or — for House — the party leading more of its seats (fainter for
  * a split delegation). */
 export function stateFill(
   races: LiveRaceResult[],

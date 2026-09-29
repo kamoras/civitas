@@ -27,6 +27,7 @@ import {
   districtAreaLabel,
   formatPvi,
   isActiveCandidate,
+  isRedrawnSeat,
   majorPartyOf,
   matchesDistrictQuery,
   pviColor,
@@ -553,15 +554,25 @@ function leanTextClass(race: { pvi: number | null; pviLevel: "district" | "state
 
 /** One district in the House picker: number, area, lean, and — reusing
  * the tierCandidates split — the leading D/R names, so a reader can find
- * their district by the names they know as well as by county. */
+ * their district by the names they know as well as by county.
+ *
+ * On new lines a sitting member is marked "(sitting member)", never "(I)":
+ * they are not this district's incumbent (incumbencyLabel). From election
+ * day the lean is left out, as it is from the page header: beside a live
+ * count it reads as a prediction of it. */
 function HouseDistrictOption({
   race,
   onPick,
+  newLines,
+  resultsMode,
 }: {
   race: RaceWithCandidates;
   onPick: () => void;
+  newLines: boolean;
+  resultsMode: boolean;
 }) {
   const { leaders } = tierCandidates(race.candidates.filter(isActiveCandidate));
+  const incumbentMark = isRedrawnSeat(race, newLines) ? " (sitting member)" : " (I)";
   const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c) === "REP");
   const countiesLabel = districtAreaLabel(race.counties);
@@ -581,7 +592,7 @@ function HouseDistrictOption({
           {dem ? (
             <span className="text-dem-blue">
               {candidateName(dem)}
-              {dem.incumbentChallenge === "I" ? " (I)" : ""}
+              {dem.incumbentChallenge === "I" ? incumbentMark : ""}
             </span>
           ) : (
             <span className="text-ink-min">no funded Democrat</span>
@@ -590,22 +601,24 @@ function HouseDistrictOption({
           {rep ? (
             <span className="text-rep-red">
               {candidateName(rep)}
-              {rep.incumbentChallenge === "I" ? " (I)" : ""}
+              {rep.incumbentChallenge === "I" ? incumbentMark : ""}
             </span>
           ) : (
             <span className="text-ink-min">no funded Republican</span>
           )}
         </span>
       </span>
-      <span className="flex flex-col items-end gap-0.5 whitespace-nowrap">
-        <span className={`font-mono text-xs ${leanTextClass(race)}`}>
-          {formatPvi(race.pvi)}
-          {/* No district-level PVI crosswalk data for this district yet —
-              the number shown is this whole state's lean, not this
-              district's. */}
-          {race.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
+      {!resultsMode && (
+        <span className="flex flex-col items-end gap-0.5 whitespace-nowrap">
+          <span className={`font-mono text-xs ${leanTextClass(race)}`}>
+            {formatPvi(race.pvi)}
+            {/* No district-level PVI crosswalk data for this district yet —
+                the number shown is this whole state's lean, not this
+                district's. */}
+            {race.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
+          </span>
         </span>
-      </span>
+      )}
     </button>
   );
 }
@@ -630,10 +643,13 @@ function HouseDetail({
   results,
   feedAnswered,
   lookupHref,
+  resultsMode = false,
 }: {
   ballot: StateBallot;
   pickedId: string | null;
   onPick: (id: string | null) => void;
+  /** From election day: no lean readouts beside the count (see the header). */
+  resultsMode?: boolean;
   /** The state's official ballot/voter lookup, or the generic election-
    * office finder when there is no state-specific one. */
   lookupHref: string;
@@ -656,10 +672,12 @@ function HouseDetail({
           <div className="min-w-0">
             <p className="text-[15px] font-bold text-ink-hi">
               {picked.district === 0 ? "At-large seat" : `District ${picked.district}`}
-              <span className={`ml-2 font-mono text-xs font-normal ${leanTextClass(picked)}`}>
-                {formatPvi(picked.pvi)}
-                {picked.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
-              </span>
+              {!resultsMode && (
+                <span className={`ml-2 font-mono text-xs font-normal ${leanTextClass(picked)}`}>
+                  {formatPvi(picked.pvi)}
+                  {picked.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
+                </span>
+              )}
             </p>
             {picked.counties && picked.counties.length > 0 && (
               <p className="mt-0.5 font-mono text-xs text-ink-min">Covers: {picked.counties.join(", ")}</p>
@@ -679,6 +697,7 @@ function HouseDetail({
           race={picked}
           coverage={stories}
           supersededByPrimary={ballot.ballotBasis?.supersededByPrimary ?? false}
+          newLines={newLines}
         />
       </div>
     );
@@ -734,6 +753,7 @@ function HouseDetail({
         onPick={(id) => onPick(id)}
         results={results}
         feedAnswered={feedAnswered}
+        showLean={!resultsMode}
       />
       {houseRaces.length > 3 && <DistrictFinder races={houseRaces} picked={null} onPick={onPick} />}
       {houseRaces.length > 3 && (
@@ -762,7 +782,13 @@ function HouseDetail({
         </div>
       )}
       {shown.map((r) => (
-        <HouseDistrictOption key={r.id} race={r} onPick={() => onPick(r.id)} />
+        <HouseDistrictOption
+          key={r.id}
+          race={r}
+          onPick={() => onPick(r.id)}
+          newLines={newLines}
+          resultsMode={resultsMode}
+        />
       ))}
       {shown.length === 0 && (
         <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
@@ -820,7 +846,7 @@ function ContestOverview({
       const stories = ballot.coverage.filter((c) => c.race?.id === race.id).length;
       return box(
         <>
-          <BallotRaceRows race={race} />
+          <BallotRaceRows race={race} newLines={ballot.newDistrictLines} />
           <OpenButton
             label={`RESEARCH THIS RACE${stories ? ` · ${stories} ${stories === 1 ? "STORY" : "STORIES"}` : ""}`}
             onClick={() => onOpen(contest.key)}
@@ -832,7 +858,7 @@ function ContestOverview({
       if (ballot.houseRaces.length === 1) {
         return box(
           <>
-            <BallotRaceRows race={ballot.houseRaces[0]} />
+            <BallotRaceRows race={ballot.houseRaces[0]} newLines={ballot.newDistrictLines} />
             <OpenButton label="RESEARCH THIS RACE" onClick={() => onOpen("house", ballot.houseRaces[0].id)} />
           </>,
           { houseRaceId: ballot.houseRaces[0].id },
@@ -1138,6 +1164,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             race={contest.race!}
             coverage={ballot.coverage.filter((c) => c.race?.id === contest.race!.id)}
             supersededByPrimary={ballot.ballotBasis?.supersededByPrimary ?? false}
+            newLines={ballot.newDistrictLines}
           />
         );
       case "house":
@@ -1149,6 +1176,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             results={liveByDistrict}
             feedAnswered={feedAnswered}
             lookupHref={lookupHref}
+            resultsMode={resultsMode}
           />
         );
       case "statewide":

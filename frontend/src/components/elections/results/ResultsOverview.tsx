@@ -158,12 +158,12 @@ export default function ResultsOverview({
                 <Swatch color="rgba(255,137,137,0.85)" /> R LEADS
               </li>
               <li className="flex items-center gap-1.5">
-                {/* Either party's colour, paler: not a blue-only state. */}
+                {/* Either party's colour, fainter: not a blue-only state. */}
                 <span className="flex">
                   <Swatch color="rgba(130,172,255,0.3)" />
                   <Swatch color="rgba(255,137,137,0.3)" />
                 </span>{" "}
-                PALER: UNDER HALF IN
+                FAINTER: UNDER HALF IN
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={TIED_FILL} /> {chamber === "S" ? "TIED" : "TIED / SPLIT"}
@@ -199,7 +199,7 @@ export default function ResultsOverview({
             />
           </div>
           <p className="border-t border-white/[0.07] px-4 py-3 text-xs text-ink-min">
-            Colour is who leads each state&apos;s own count, not a projection. Paler means fewer
+            Colour is who leads each state&apos;s own count, not a projection. Fainter means fewer
             than half the precincts or counties are in; solid means the state calls its count
             official.
             {chamber === "H" &&

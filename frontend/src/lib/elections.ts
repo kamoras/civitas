@@ -203,6 +203,38 @@ export function isActiveCandidate(c: CandidateSummary): boolean {
   return c.confirmed || c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I";
 }
 
+/** FEC's incumbency codes, in words. */
+const FEC_INCUMBENCY: Record<string, string> = {
+  I: "INCUMBENT",
+  C: "CHALLENGER",
+  O: "OPEN SEAT",
+};
+
+/** Whether `race` is a House seat on lines other than the ones today's
+ * members were elected on (StateBallot.newDistrictLines). Senate seats are
+ * statewide and never redrawn. */
+export function isRedrawnSeat(race: { office: string }, newDistrictLines: boolean | undefined): boolean {
+  return !!newDistrictLines && race.office === "H";
+}
+
+/** A candidate's FEC incumbency code as the page says it, or null to say
+ * nothing.
+ *
+ * On a redrawn seat (isRedrawnSeat) a district number names a different
+ * place than the one today's member was elected in: Greg Casar holds TX-35
+ * and runs in the new TX-37. "Incumbent" there claims a seat nobody holds
+ * — the page itself says no seat on the new lines has a previous holder —
+ * so "I" reads SITTING MEMBER, which is true of the person and claims
+ * nothing about the district, and CHALLENGER / OPEN SEAT, which describe
+ * the old seat, are not said at all. The district a member holds today is
+ * not in the ballot payload (incumbentRecord is id and score), so it is not
+ * named here. */
+export function incumbencyLabel(code: string | null, redrawnSeat: boolean): string | null {
+  if (!code) return null;
+  if (redrawnSeat) return code === "I" ? "SITTING MEMBER" : null;
+  return FEC_INCUMBENCY[code] ?? code;
+}
+
 /** Display suffixes for FEC codes that are a Democratic state affiliate —
  * DFL (Minnesota), D-NPL (North Dakota, FEC code DNL) — for
  * CandidateCard.tsx's PARTY_META label ("DEMOCRAT (DFL)"). Labels only:

@@ -8,7 +8,8 @@ import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
 import { formatUtcDate, isNewFact } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
-import { factsHeading } from "@/lib/developing";
+import { countIsOfficial, factsAreTheCount, factsHeading, factsSectionId } from "@/lib/developing";
+import { formatEasternTime } from "@/lib/results";
 import { PolicyBadge, MonitorChips, NewFactTag, IssueImage } from "@/components/action/IssueEnrichment";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { articleJsonLd } from "@/lib/seo";
@@ -121,8 +122,15 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
   // Resolved once, on the server, and handed to the client panel so a comment
   // period reads as open/closed identically before and after hydration.
-  const today = new Date().toISOString().slice(0, 10);
+  const renderedAt = new Date();
+  const today = renderedAt.toISOString().slice(0, 10);
   const shareUrl = absoluteUrl(`/issue/${issue.publicId}`);
+  const factsId = factsSectionId(issue);
+  // A count issue's facts are the count as this page read it, and the issue
+  // carries no time of its own (only a date), so the section says when that
+  // was and whether the state calls it official — inside the section, so a
+  // shared image of it says so too, not just the frame's capture day.
+  const countReadAt = factsAreTheCount(issue) ? formatEasternTime(renderedAt.toISOString()) : null;
 
   return (
     <ShareSubjectProvider
@@ -202,16 +210,17 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </article>
           ) : null}
 
-          {/* Media coverage: lines quoted from the sources, each with its outlet */}
+          {/* Media coverage: lines quoted from the sources, each with its
+              outlet — or, for an election-results issue, the count. */}
           {issue.facts?.length > 0 && (
             <section
-              id="media-coverage"
-              {...{ [SHARE_SECTION_ATTR]: "media-coverage" }}
+              id={factsId}
+              {...{ [SHARE_SECTION_ATTR]: factsId }}
               className="mb-10 scroll-mt-[var(--header-clearance)]"
             >
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-xs text-ink-min tracking-widest uppercase">{factsHeading(issue.sourceType)}</h2>
-                <ShareSectionButton label={factsHeading(issue.sourceType)} />
+                <h2 className="text-xs text-ink-min tracking-widest uppercase">{factsHeading(issue)}</h2>
+                <ShareSectionButton label={factsHeading(issue)} />
               </div>
               <ul className="space-y-3">
                 {issue.facts.map((fact, i) => (
@@ -229,6 +238,17 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                   </li>
                 ))}
               </ul>
+              {countReadAt && (
+                <p className="mt-4 text-xs text-ink-min">
+                  {countIsOfficial(issue) ? (
+                    <span className="text-ink-hi">OFFICIAL COUNT</span>
+                  ) : (
+                    <span className="text-signal-amber">NOT FINAL</span>
+                  )}{" "}
+                  · the count as of {countReadAt}, when this page read it. The state&apos;s own
+                  results site has the current count.
+                </p>
+              )}
             </section>
           )}
 

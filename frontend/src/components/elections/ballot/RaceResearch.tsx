@@ -65,10 +65,13 @@ export default function RaceResearch({
   race,
   coverage,
   supersededByPrimary = false,
+  newLines = false,
 }: {
   race: RaceWithCandidates;
   coverage: RaceCoverageItem[];
   supersededByPrimary?: boolean;
+  /** StateBallot.newDistrictLines — how incumbency is worded. */
+  newLines?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("money");
   const base = useId();
@@ -135,7 +138,7 @@ export default function RaceResearch({
           hidden={t.id !== tab}
           className="mt-4"
         >
-          {t.id === "money" && <RaceFullDetail race={race} supersededByPrimary={supersededByPrimary} />}
+          {t.id === "money" && <RaceFullDetail race={race} supersededByPrimary={supersededByPrimary} newLines={newLines} />}
           {t.id === "record" && <RecordPanel race={race} />}
           {t.id === "news" && <CoverageFeed items={coverage} />}
         </div>

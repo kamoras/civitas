@@ -42,7 +42,9 @@ import {
  *
  * Colour follows the SAME rule as the district list (pviColor: R red,
  * D blue), with intensity for distance from even, so a close seat reads
- * pale and a safe one saturated. Deliberately not a new "toss-up"
+ * faint and a safe one saturated. (Faint, not pale: the fill's opacity
+ * drops over a near-black page, so a close seat is dimmer, not lighter —
+ * every legend says "fainter".) Deliberately not a new "toss-up"
  * category: a second classification on the same page would eventually
  * disagree with the first.
  *
@@ -57,7 +59,10 @@ import {
  * From election day, given `results`, it shades by who LEADS each
  * district's count instead (lib/results resultFill — the same fill the
  * national map uses), and the preview shows the count. Lean says how a
- * seat usually votes; on the night itself, the count is the news. A
+ * seat usually votes; on the night itself, the count is the news — so
+ * with `showLean` off (the page is in results mode) a map with no count to
+ * shade by is drawn unshaded rather than by lean, and its preview names no
+ * lean: beside the count, a lean reads as a prediction of it. A
  * district the state's feed gives no count for while it counts others
  * (`feedAnswered`) is hatched and says so — never "no votes yet".
  */
@@ -124,8 +129,12 @@ export default function DistrictMap({
   results,
   feedAnswered,
   newLines = false,
+  showLean = true,
 }: {
   state: string;
+  /** Off from election day (results mode): no lean is shown, shaded or
+   * written, even where there is no count to shade by. */
+  showLean?: boolean;
   /** The state votes this cycle on new congressional lines
    * (StateBallot.newDistrictLines): no district here has a lean of its
    * own yet, and the caption says why. */
@@ -184,7 +193,7 @@ export default function DistrictMap({
   const drawn = races.filter((r) => r.district != null);
   const stateLevel = drawn.filter((r) => r.pviLevel === "state").length;
   // No drawn district has a lean of its own: nothing to key red/blue by.
-  const unshaded = !results && (newLines || (drawn.length > 0 && stateLevel === drawn.length));
+  const unshaded = !results && (!showLean || newLines || (drawn.length > 0 && stateLevel === drawn.length));
 
   return (
     <div className="mb-4 border border-white/15">
@@ -199,7 +208,7 @@ export default function DistrictMap({
           // no count for.
           <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-ink-min">
             <li>red = R leads · blue = D leads · purple = other party leads</li>
-            <li>paler = under half in · solid = official</li>
+            <li>fainter = under half in · solid = official</li>
             <li className="flex items-center gap-1">
               <span aria-hidden="true" className="inline-block h-2 w-3" style={{ backgroundColor: TIED_FILL }} />
               tied
@@ -225,11 +234,12 @@ export default function DistrictMap({
           </ul>
         ) : unshaded ? (
           <p className="font-mono text-[10px] text-ink-min">
-            {newLines ? "the new 2026 districts · " : ""}no per-district lean published here yet
+            {newLines ? "the new 2026 districts · " : ""}
+            {showLean ? "no per-district lean published here yet" : "no lean shown from election day"}
           </p>
         ) : (
           <p className="font-mono text-[10px] text-ink-min">
-            redder = safer R · bluer = safer D · paler = closer
+            redder = safer R · bluer = safer D · fainter = closer
             {stateLevel > 0 && " · grey = no district lean yet"}
           </p>
         )}
@@ -320,7 +330,7 @@ export default function DistrictMap({
             feedAnswered={answered}
           />
         ) : focusRace ? (
-          <DistrictPreview state={state} race={focusRace} />
+          <DistrictPreview state={state} race={focusRace} showLean={showLean} />
         ) : (
           <span className="text-ink-min">
             Hover or tab to a district to preview its race. Nothing is sent or stored.
@@ -331,7 +341,15 @@ export default function DistrictMap({
   );
 }
 
-function DistrictPreview({ state, race }: { state: string; race: RaceWithCandidates }) {
+function DistrictPreview({
+  state,
+  race,
+  showLean,
+}: {
+  state: string;
+  race: RaceWithCandidates;
+  showLean: boolean;
+}) {
   const top = [...race.candidates]
     .sort((a, b) => (b.contributions ?? 0) - (a.contributions ?? 0))
     .slice(0, 2);
@@ -340,10 +358,12 @@ function DistrictPreview({ state, race }: { state: string; race: RaceWithCandida
       <span className="text-ink-hi">
         {race.district === 0 ? `${state} at-large` : `${state}-${race.district}`}
       </span>
-      <span className="text-ink-min">
-        {formatPvi(race.pvi)}
-        {race.pviLevel === "state" && " (statewide)"}
-      </span>
+      {showLean && (
+        <span className="text-ink-min">
+          {formatPvi(race.pvi)}
+          {race.pviLevel === "state" && " (statewide)"}
+        </span>
+      )}
       {top.map((c) => {
         const major = majorPartyOf(c);
         return (

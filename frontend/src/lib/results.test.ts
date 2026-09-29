@@ -183,7 +183,7 @@ describe("resultFill", () => {
     expect(resultFill(unknown, true)).toMatch(/^rgba\(201,149,255/);
   });
 
-  it("is paler with under half in and solid only when official", () => {
+  it("is fainter (lower opacity) with under half in and solid only when official", () => {
     expect(resultFill(race({ reportingUnits: 10 }), true)).toBe("rgba(255,137,137, 0.30)");
     expect(resultFill(race({ official: true }), true)).toBe("rgba(255,137,137, 1)");
     expect(resultFill(race({ leaderParty: "DEM", reportingUnits: 100 }), true)).toBe(

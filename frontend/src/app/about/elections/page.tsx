@@ -109,7 +109,10 @@ export default function ElectionsChapter() {
           In a state voting on new lines, a lookup by representative — house.gov&apos;s, or your
           current member&apos;s name — answers for the district you were in at the last election,
           which on the new map can be a different place under the same number. Those pages point to
-          the map, the counties and the state&apos;s own ballot lookup instead.
+          the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
+          a member of Congress running there is marked a &ldquo;sitting member&rdquo;, not the
+          &ldquo;incumbent&rdquo;: the district they hold today is on the old map, and no seat on
+          the new one has a previous holder.
         </P>
         <Sub title="The optional town selector">
           <P>
@@ -208,7 +211,7 @@ export default function ElectionsChapter() {
         <P>
           From election day, <span className="font-mono text-ink-hi">/elections</span> and each
           state page put results first. The national map is shaded by who is leading each race
-          instead of by how the state usually leans — pale while fewer than half its reporting areas
+          instead of by how the state usually leans — fainter while fewer than half its reporting areas
           (usually precincts) are in, solid once the state calls its count official. Each state page
           shows its Senate race, every House district and a district map shaded the same way, above
           the ballot research, and a live-updates feed tells each change as it happens: first
@@ -217,7 +220,9 @@ export default function ElectionsChapter() {
           doesn&apos;t list, an uncontested seat — is listed and marked as exactly that, not as
           &ldquo;no votes yet&rdquo;. While a state&apos;s polls are still open, its page stays a
           ballot-research page and the national map marks it &ldquo;polls open&rdquo;: nothing is
-          said about a count until its last polls close.
+          said about a count until its last polls close. From election day the elections pages show
+          no partisan lean, on a map or beside a district, even where there is no count to show:
+          next to a live count, a lean reads as a prediction of it.
         </P>
         <Sub title="Where the numbers come from">
           <P>

@@ -10,6 +10,8 @@ import {
   raceBadgeLabel,
   raceTitleLabel,
   tierCandidates,
+  incumbencyLabel,
+  isRedrawnSeat,
 } from "./elections";
 import type { BallotCandidate, CandidateSummary } from "@/types/election";
 
@@ -402,5 +404,28 @@ describe("candidateName", () => {
   it("lets a reader find a district by the printed name too", () => {
     const race = { district: 1, areas: [], candidates: [{ name: "COOPER, ROY", ballotName: "Roy Cooper" }] };
     expect(matchesDistrictQuery(race, "roy cooper")).toBe(true);
+  });
+});
+
+describe("incumbencyLabel", () => {
+  it("words FEC's codes on a seat whose lines did not change", () => {
+    expect(incumbencyLabel("I", false)).toBe("INCUMBENT");
+    expect(incumbencyLabel("C", false)).toBe("CHALLENGER");
+    expect(incumbencyLabel("O", false)).toBe("OPEN SEAT");
+    expect(incumbencyLabel(null, false)).toBeNull();
+  });
+
+  it("calls a sitting member on a redrawn seat a sitting member, and says nothing of the old seat", () => {
+    // Casar holds TX-35 and runs in the new TX-37: not TX-37's incumbent.
+    expect(incumbencyLabel("I", true)).toBe("SITTING MEMBER");
+    expect(incumbencyLabel("C", true)).toBeNull();
+    expect(incumbencyLabel("O", true)).toBeNull();
+  });
+
+  it("treats only House seats in a state on new lines as redrawn", () => {
+    expect(isRedrawnSeat({ office: "H" }, true)).toBe(true);
+    expect(isRedrawnSeat({ office: "S" }, true)).toBe(false);
+    expect(isRedrawnSeat({ office: "H" }, false)).toBe(false);
+    expect(isRedrawnSeat({ office: "H" }, undefined)).toBe(false);
   });
 });

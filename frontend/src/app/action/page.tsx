@@ -232,7 +232,7 @@ function HeroIssue({
       {issue.facts.length > 0 && (
         <div className="mb-6">
           <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-            {factsHeading(issue.sourceType)}
+            {factsHeading(issue)}
           </h3>
           <ol className="space-y-2">
             {issue.facts.map((fact, i) => (
@@ -380,7 +380,7 @@ function SecondaryIssue({
           {issue.facts.length > 0 && (
             <div>
               <h4 className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-                {factsHeading(issue.sourceType)}
+                {factsHeading(issue)}
               </h4>
               <ol className="space-y-1.5">
                 {issue.facts.map((fact, i) => (

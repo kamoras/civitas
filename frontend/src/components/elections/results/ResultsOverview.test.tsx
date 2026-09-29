@@ -120,3 +120,12 @@ describe("the seats-changing-party card", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("the national results map's key", () => {
+  it("calls a count under half in fainter, not paler: the fill is opacity over a dark map", () => {
+    render(<ResultsOverview results={results()} states={["GA"]} />);
+    expect(screen.getByText(/FAINTER: UNDER HALF IN/)).toBeInTheDocument();
+    expect(screen.getByText(/Fainter means fewer than half/)).toBeInTheDocument();
+    expect(screen.queryByText(/paler/i)).not.toBeInTheDocument();
+  });
+});

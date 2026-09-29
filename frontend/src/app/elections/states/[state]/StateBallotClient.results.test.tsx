@@ -22,6 +22,7 @@ vi.mock("@/components/BackToTop", () => ({ default: () => null }));
 type MapProps = {
   results?: Map<number, unknown>;
   feedAnswered?: boolean;
+  showLean?: boolean;
   onPick: (raceId: string) => void;
 };
 const districtMapProps = vi.hoisted(() => [] as MapProps[]);
@@ -299,6 +300,24 @@ describe("the state page in results mode", () => {
     await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
     expect(districtMapProps.length).toBeGreaterThan(0);
     expect(districtMapProps.every((p) => p.results === undefined)).toBe(true);
+  });
+
+  it("shows no district lean beside the count: not in the picker, on a picked district or on the map", async () => {
+    fetchLiveResults.mockResolvedValue(live());
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const drawer = within(screen.getByRole("dialog"));
+    // The picker lists both districts, with no D+3 beside either.
+    expect(drawer.getAllByRole("button", { name: /no funded Democrat/ })).toHaveLength(2);
+    expect(drawer.queryByText("D+3")).not.toBeInTheDocument();
+    expect(districtMapProps.at(-1)?.showLean).toBe(false);
+    await userEvent.click(drawer.getAllByRole("button", { name: /no funded Democrat/ })[1]);
+    const picked = within(screen.getByRole("dialog"));
+    expect(picked.getByText("District 2")).toBeInTheDocument();
+    expect(picked.queryByText("D+3")).not.toBeInTheDocument();
   });
 
   it("opens research for a #race- link to a race with no count", async () => {
