@@ -3,7 +3,7 @@ import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import NavigationBeacon from "@/components/NavigationBeacon";
 import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
-import { fontVariables, shareTech } from "./fonts";
+import { fontVariables } from "./fonts";
 import "./fonts/fallback.css";
 import "./globals.css";
 
@@ -74,7 +74,7 @@ export default function RootLayout({
            the ink ramp and 12px). Letting the platform use its default
            smoothing renders the same text perceptibly heavier at zero layout
            cost. */
-        className={`${shareTech.variable} font-mono`}
+        className="font-mono"
         style={fontVariables}
       >
         <ConfigProvider>

@@ -25,7 +25,7 @@ vi.mock("next/font/local", () => ({
   },
 }));
 
-const { ARCHIVO_FALLBACK, familyStack, fontVariables } = await import("./fonts");
+const { FALLBACKS, familyStack, fontVariables } = await import("./fonts");
 
 const FONTS = join(__dirname, "fonts");
 type Entry = {
@@ -35,7 +35,7 @@ type Entry = {
   unicodeRange: string;
   preload: boolean;
 };
-const manifest: { fonts: Record<string, Entry[]> } = JSON.parse(
+const manifest: { fonts: Record<string, { fallback: string; files: Entry[] }> } = JSON.parse(
   readFileSync(join(FONTS, "manifest.json"), "utf8")
 );
 
@@ -56,7 +56,7 @@ function callFor(file: string): Options {
 }
 
 describe("the fonts match what the fetch script recorded from Google", () => {
-  const entries = Object.values(manifest.fonts).flat();
+  const entries = Object.values(manifest.fonts).flatMap((font) => font.files);
 
   it("loads every fetched file exactly once, and nothing else", () => {
     expect(calls.map((c) => files(c.src)[0]).sort()).toEqual(
@@ -66,6 +66,8 @@ describe("the fonts match what the fetch script recorded from Google", () => {
 
   it.each(entries)("$file keeps Google's unicode-range, weights and preload", (entry) => {
     const options = callFor(entry.file);
+    // fonts/fallback.css supplies the fallback, not next/font.
+    expect(options.adjustFontFallback).toBe(false);
     const range = options.declarations?.find((d) => d.prop === "unicode-range")?.value;
     expect(range).toBe(entry.unicodeRange);
     expect(weights(options)).toEqual(entry.weights);
@@ -87,19 +89,19 @@ describe("font family stacks", () => {
     ).toBe("'latin', 'ext', 'viet', 'latin Fallback', 'extra'");
   });
 
-  it("ends Archivo's stack with the generated 400-weight fallback", () => {
-    const stack = (fontVariables as Record<string, string>)["--font-archivo"].split(", ");
-    expect(stack).toHaveLength(manifest.fonts.archivo.length + 1);
-    expect(stack.at(-1)).toBe(`'${ARCHIVO_FALLBACK}'`);
-    expect(stack.slice(0, -1).every((name) => !name.includes("Fallback"))).toBe(true);
-    const css = readFileSync(join(FONTS, "fallback.css"), "utf8");
-    expect(css).toContain(`font-family: "${ARCHIVO_FALLBACK}"`);
-  });
+  const css = readFileSync(join(FONTS, "fallback.css"), "utf8");
+  const variables = fontVariables as Record<string, string>;
 
-  it("builds Press Start 2P from every subset, fallback last", () => {
-    const stack = (fontVariables as Record<string, string>)["--font-press-start"].split(", ");
-    expect(stack).toHaveLength(manifest.fonts["press-start-2p"].length + 1);
-    expect(stack.at(-1)).toMatch(/ Fallback'$/);
+  it.each([
+    ["--font-archivo", "archivo", FALLBACKS.archivo],
+    ["--font-press-start", "press-start-2p", FALLBACKS.pressStart],
+    ["--font-share-tech", "share-tech-mono", FALLBACKS.shareTech],
+  ])("%s lists every subset, then the generated fallback", (variable, font, fallback) => {
+    const stack = variables[variable].split(", ");
+    expect(stack).toHaveLength(manifest.fonts[font].files.length + 1);
+    expect(stack.at(-1)).toBe(`'${fallback}'`);
     expect(stack.slice(0, -1).every((name) => !name.includes("Fallback"))).toBe(true);
+    expect(manifest.fonts[font].fallback).toBe(fallback);
+    expect(css).toContain(`font-family: "${fallback}"`);
   });
 });

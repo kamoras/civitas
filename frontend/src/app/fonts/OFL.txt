@@ -1,6 +1,6 @@
 Font software in this directory, all licensed under the SIL Open Font License 1.1.
-The files are Google Fonts' releases, unmodified, as fetched by
-backend/scripts/fetch_site_fonts.py. Copyright notices, from each font's name table:
+The files are unmodified, as Google Fonts serves them (one woff2 per script subset),
+fetched by backend/scripts/fetch_site_fonts.py. Copyright notices, from each font's name table:
 
 Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
 Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"
