@@ -48,10 +48,11 @@ function pviHoverColor(pvi: number | null): string {
   return pvi > 0 ? "rgba(255, 92, 92, 0.55)" : "rgba(102, 153, 255, 0.55)";
 }
 
-// DC has no voting House/Senate race (STATES_WITH_FEDERAL_RACES on the
-// backend excludes it the same way) even though it's clickable on the
-// map's SVG — filtered out of both the map's click target and the
-// directory grid rather than letting either lead to a 404.
+// DC has no voting House/Senate race (the backend's
+// election_calendar.federal_states(), read from the Senate's classes,
+// excludes it the same way) even though it's clickable on the map's SVG —
+// filtered out of both the map's click target and the state grid, which
+// list the states with federal contests.
 const STATES = Array.from(new Set(Object.values(FIPS_TO_STATE)))
   .filter((s) => s !== "DC")
   .sort();
