@@ -2,6 +2,14 @@
 no network, no DB, deterministic.
 """
 
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from PIL import Image
+
+from app.pipeline.fetch import ptr_common
 from app.pipeline.fetch.ptr_common import (
     TradeRow,
     _parse_ocr_line,
@@ -230,7 +238,8 @@ class TestParseOcrLine:
         row = _parse_ocr_line("s Howmet Aerospace Inc purchase 6/23/2026 No| $15,003 - $50,000")
         assert row is not None
         assert "Howmet Aerospace" in row.asset_name
-        assert row.amount_low == 15003.0
+        # "$15,003" is no range the form prints: the upper bound names it.
+        assert row.amount_low == 15001.0
         assert row.amount_high == 50000.0
 
     def test_a_bracket_glued_directly_onto_the_type_keyword_still_parses(self):
@@ -254,12 +263,27 @@ class TestParseOcrLine:
         assert row is not None
         assert row.ticker is None
 
-    def test_a_reversed_amount_bracket_is_dropped_not_stored(self):
-        """A misread digit produced a real, live "$31,001 - $15,000" —
-        low > high is never a valid disclosed bracket on this form, so
-        this is dropped rather than stored as a range it never was."""
+    def test_one_misread_bound_is_recovered_from_the_other(self):
+        """A misread digit produced a real, live "$31,001 - $15,000". The
+        form prints one range ending at $15,000, so that is the range."""
         row = _parse_ocr_line("535 EXXON MOBIL CORP [purchase 6/23/2026 No|$31,001 - $15,000")
-        assert row is None
+        assert (row.amount_low, row.amount_high) == (1001.0, 15000.0)
+
+    def test_an_amount_matching_no_range_the_form_prints_is_dropped(self):
+        assert _parse_ocr_line("535 EXXON MOBIL CORP [purchase 6/23/2026 No|$31,004 - $15,007") is None
+
+    def test_a_bonds_maturity_is_not_read_as_its_trade_date(self):
+        """The old loose fallback took a line's first date: on a bond, its
+        maturity. Stored live as a trade on 2078-12-15 (2026-09)."""
+        line = ("UNITED RENTALS NORTH AMER INC SENIOR SECURED NOTES REG S DUE 12/15/2078 08.000% "
+                "DISCRETIONARY ORDER IF THIS CONFIRMATION IS IN CONNECTION WITH A SALE PI")
+        assert _parse_ocr_line(line) is None
+
+    def test_a_date_outside_the_filings_window_is_not_read(self):
+        line = "7 KIMBERLY CLARK CORPORATION [purchase 6/12/2026 Yes |$15,001 - $50,000"
+        assert _parse_ocr_line(line, not_after="2026-06-01") is None
+        assert _parse_ocr_line(line, not_before="2026-06-13") is None
+        assert _parse_ocr_line(line, "2025-01-20", "2026-07-01").transaction_date == "2026-06-12"
 
     def test_a_missing_amount_is_dropped_not_fabricated(self):
         # This exact row's dollar bracket did not survive OCR at all —
@@ -278,3 +302,50 @@ class TestParseOcrLine:
     def test_a_line_with_no_transaction_data_is_dropped(self):
         assert _parse_ocr_line("OGE Form 278-T (Updated February 2024)") is None
         assert _parse_ocr_line("") is None
+
+
+class TestScannedTableReading:
+    """A scanned 278-T read by where its words sit (_ocr_table_page), on the
+    word boxes tesseract gave for a real page (the President's Jan 14, 2026
+    filing, page 2). tesseract's plain text lists the page's descriptions,
+    then its types and dates, then its amounts, so a line parser paired a
+    bond with the next row's date or its own maturity."""
+
+    @staticmethod
+    def _read(not_before="2025-01-20", not_after="2026-01-14"):
+        fixture = json.loads((Path(__file__).parent / "fixtures_278t_scanned_page_words.json").read_text())
+
+        class Page:
+            def to_image(self, resolution):
+                return SimpleNamespace(original=Image.new("L", tuple(fixture["size"]), 255))
+
+        # CI has no tesseract: the page's recorded word boxes, and no second
+        # read of each cell (the rows below read from the words alone).
+        with patch("pytesseract.image_to_data", return_value=fixture["data"]), \
+                patch.object(ptr_common, "_ocr_cell", return_value=""):
+            return ptr_common._ocr_table_page(Page(), not_before, not_after)
+
+    def test_each_row_keeps_its_own_date_and_amount(self):
+        rows, unread = self._read()
+        by_asset = {r.asset_name: r for r in rows}
+        washington = by_asset["WASHINGTON ST HEALT 5% DUE 09/01/38"]
+        assert (washington.transaction_date, washington.amount_low, washington.amount_high) == (
+            "2025-11-26", 1_000_001.0, 5_000_000.0,
+        )
+        assert by_asset["PENNSYLVANIA ST 5.25% DUE 11/01/39"].transaction_date == "2025-11-28"
+        # The page's 29 rows are each read or counted, none guessed.
+        assert len(rows) + unread == 29
+
+    def test_no_maturity_or_out_of_window_date_and_only_the_forms_ranges(self):
+        rows, _ = self._read()
+        assert all("2025-01-20" <= r.transaction_date <= "2026-01-14" for r in rows)
+        assert all((r.amount_low, r.amount_high) in ptr_common.AMOUNT_BRACKETS for r in rows)
+
+    def test_the_form_words_as_ocr_misreads_them(self):
+        assert ptr_common.ocr_transaction_type("purchaso") == "purchase"
+        assert ptr_common.ocr_transaction_type("salo") == "sale_full"
+        assert ptr_common.ocr_transaction_type("PURSUANT") is None
+        assert ptr_common.window_date("14/19/2025", None, None) is None
+        assert ptr_common.window_date("12/10/25", "2025-01-20", None) == "2025-12-10"
+        assert ptr_common.form_bracket("Over $50,000,000") == (50_000_000.0, 50_000_000.0)
+        assert ptr_common.form_bracket("$250,004 - $500,000") == (250_001.0, 500_000.0)
