@@ -59,6 +59,7 @@ class TestResetAllDataTables:
         db_session.add(models.ActionIssue(date="2026-09-01", rank=1, title="An issue", related_explore_ids="[12, 40]"))
         db_session.add(models.ApiCache(tier="action-refresh-lock", cache_key="lock", data_json="{}"))
         db_session.add(models.ApiCache(tier="fec", cache_key="k", data_json="{}"))
+        db_session.add(models.ApiCache(tier="bsky-congress", cache_key="2026-09-24", data_json="{}"))
         db_session.add(models.BroadcastPost(kind="congress_day", subject="congress-day:2026-09-24",
                                             title="t", text="x", url="u"))
         db_session.commit()
@@ -75,9 +76,11 @@ class TestResetAllDataTables:
         # A kept issue no longer links to Explore rowids the rebuild reuses.
         db_session.expire_all()
         assert db_session.query(models.ActionIssue).one().related_explore_ids == "[]"
-        # The refresh lease the reset holds while it runs is the one row it
-        # leaves in api_cache.
-        assert [r.tier for r in db_session.query(models.ApiCache).all()] == ["action-refresh-lock"]
+        # What a reset leaves in api_cache: the refresh lease it holds while
+        # it runs...
+        # and the pre-feed Congress post markers, which nothing can rebuild.
+        assert sorted(r.tier for r in db_session.query(models.ApiCache).all()) == [
+            "action-refresh-lock", "bsky-congress"]
         for table in Base.metadata.sorted_tables:
             if table.name not in RESET_KEEPS | {"api_cache"}:
                 assert db_session.execute(select(func.count()).select_from(table)).scalar_one() == 0, table.name
@@ -890,3 +893,10 @@ def test_a_run_whose_lease_was_lost_before_its_row_does_not_start(db_session):
         None, lease.REFUSED_HELD,
     )
     assert db_session.query(models.PipelineRun).count() == 0
+
+
+def test_the_kept_cache_tiers_are_the_congress_post_markers():
+    from app.database import RESET_KEEPS_CACHE_TIERS
+    from app.pipeline.analyze import congress_bluesky
+
+    assert set(RESET_KEEPS_CACHE_TIERS) == {congress_bluesky._CACHE_TIER, congress_bluesky._WEEK_CACHE_TIER}

@@ -39,6 +39,7 @@ import logging
 import time
 from datetime import timedelta
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -287,15 +288,23 @@ def _races_posted_recently(db: Session) -> set[str]:
 
 def _drain_stale_unconsidered(db: Session) -> int:
     """Mark never-considered items older than CONSIDER_MAX_AGE_HOURS as
-    considered-without-posting so the eligible pool stays bounded."""
+    considered-without-posting so the eligible pool stays bounded.
+
+    Aged by the article's own date where it has one, and by when it was
+    fetched where it doesn't. A data reset wipes the coverage items and the
+    next ingest fetches the same articles again, all stamped now: aged by
+    fetch time alone, a story posted days before the reset would be
+    eligible a second time. Anything younger than the window is also
+    inside every race's cooldown (RACE_COOLDOWN_HOURS, the same length),
+    which counts the published posts and so survives the reset too."""
     cutoff = utcnow() - timedelta(hours=CONSIDER_MAX_AGE_HOURS)
     drained = (
         db.query(RaceCoverageItem)
         .filter(
             RaceCoverageItem.bsky_posted_at.is_(None),
-            RaceCoverageItem.fetched_at < cutoff,
+            func.coalesce(RaceCoverageItem.published_at, RaceCoverageItem.fetched_at) < cutoff,
         )
-        .update({RaceCoverageItem.bsky_posted_at: utcnow()})
+        .update({RaceCoverageItem.bsky_posted_at: utcnow()}, synchronize_session="fetch")
     )
     if drained:
         db.commit()

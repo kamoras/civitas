@@ -485,3 +485,24 @@ def test_a_data_reset_does_not_reset_the_budget_or_the_cooldown(db_session, monk
     with patch.object(election_bluesky, "_generate_post_text", return_value="A sentence.") as gen:
         assert election_bluesky.post_race_coverage_updates(db_session) == 0
     gen.assert_not_called()
+
+
+def test_an_old_article_fetched_again_is_drained_by_its_own_date(db_session):
+    """After a data reset the same articles come back with a fresh fetch
+    time; their own publication date still says how old the story is."""
+    _race(db_session)
+    old = _item(db_session, url="https://apnews.com/old", published_at=utcnow() - timedelta(days=3))
+    fresh = _item(db_session, url="https://apnews.com/new", published_at=utcnow() - timedelta(hours=2))
+    undated = _item(db_session, url="https://apnews.com/undated")
+    db_session.commit()
+
+    assert election_bluesky._drain_stale_unconsidered(db_session) == 1
+    assert old.bsky_posted_at is not None
+    assert fresh.bsky_posted_at is None and undated.bsky_posted_at is None
+
+
+def test_the_cooldown_covers_everything_the_drain_lets_through():
+    """The drain's docstring relies on this: an article young enough to
+    survive the drain is inside its race's cooldown if the race was posted
+    about it, so a reset can't re-post it."""
+    assert election_bluesky.RACE_COOLDOWN_HOURS >= election_bluesky.CONSIDER_MAX_AGE_HOURS

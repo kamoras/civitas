@@ -1030,6 +1030,13 @@ RESET_KEEPS = frozenset({
 })
 
 
+# api_cache tiers a reset leaves alone, besides the leases: the markers that
+# recorded Congress posts made before broadcast_posts existed. Wiped, a reset
+# in the days after that deploy would post those days again
+# (congress_bluesky._already_published).
+RESET_KEEPS_CACHE_TIERS = ("bsky-congress", "bsky-congress-week")
+
+
 def reset_all_data() -> dict:
     """Drop all pipeline-generated data and start fresh.
 
@@ -1058,7 +1065,7 @@ def reset_all_data() -> dict:
                 # any other that may be live.
                 from app.pipeline import lease
 
-                wipe = wipe.where(table.c.tier.notin_(lease.TIERS))
+                wipe = wipe.where(table.c.tier.notin_([*lease.TIERS, *RESET_KEEPS_CACHE_TIERS]))
             summary[table.name] = db.execute(wipe).rowcount
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the
