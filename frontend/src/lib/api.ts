@@ -5,11 +5,7 @@ import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
-import type {
-  JusticeScoreBreakdown,
-  PresidentScoreBreakdown,
-  RepresentationScoreBreakdown,
-} from "@/types/scoreBreakdown";
+import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -274,11 +270,6 @@ export async function fetchPresidentScoreBreakdown(id: string): Promise<Presiden
   return camelizeKeys(raw) as PresidentScoreBreakdown;
 }
 
-export async function fetchJusticeScoreBreakdown(id: string): Promise<JusticeScoreBreakdown> {
-  const raw = await cachedFetch(`${API_BASE}/justices/${id}/score-breakdown`, TTL.MEDIUM);
-  return camelizeKeys(raw) as JusticeScoreBreakdown;
-}
-
 export interface PaginatedLeaderboard {
   entries: LeaderboardEntry[];
   total: number;
@@ -448,21 +439,6 @@ export async function fetchBillsInFlight(options?: {
   );
 }
 
-async function fetchHighlights(chamber: Chamber, entityId: string): Promise<string[]> {
-  const res = await fetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/highlights`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return Array.isArray(data.highlights) ? data.highlights : [];
-}
-
-export async function fetchSenatorHighlights(senatorId: string): Promise<string[]> {
-  return fetchHighlights(Chamber.Senate, senatorId);
-}
-
-export async function fetchRepHighlights(repId: string): Promise<string[]> {
-  return fetchHighlights(Chamber.House, repId);
-}
-
 export interface IndustryInfo {
   name: string;
   color: string;
@@ -479,6 +455,10 @@ export interface AppConfig {
   platformCategories: Record<string, string>;
   policyAreas: string[];
   billStages: Record<string, BillStageInfo>;
+  /** Each dimension's share of the Representation Score (config_definitions.SCORE_WEIGHTS). */
+  scoreWeights?: Record<string, number>;
+  /** Each dimension's share of the Presidential Score (PRESIDENT_SCORE_WEIGHTS). */
+  presidentScoreWeights?: Record<string, number>;
 }
 
 const DEFAULT_CONFIG: AppConfig = {

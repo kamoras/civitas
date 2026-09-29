@@ -64,14 +64,21 @@ needed: a simple majority, two-thirds of those voting, or cloture's 60), and
 a one-line summary filled from counts by
 template. Served at `/api/congress/{latest, day/…, week/…, month/…}`; one roll
 call with every member's position at `/api/congress/votes/…`. A bill's full
-record for its page, any bill, at `/api/bills/{id}/record`
-(`app/services/bill_record.py`).
+record for its page, any bill of any Congress that has convened, at
+`/api/bills/{id}/record?congress=N` (`app/services/bill_record.py`), within
+a 10-second deadline: a part not fetched by then is `unavailable`, not
+cached.
 
 **Pages.** `/congress` (latest day), `/congress/{date}`, `/congress/week/{date}`,
 `/congress/month/{YYYY-MM}` render these reports on the server
 (`frontend/src/components/congress/`); `/congress/bills` is the in-motion list
-and `/congress/bills/{id}` any bill's page, whose vote panel loads one roll
+and `/congress/bills/{id}?congress=N` any bill's page (without `?congress=`,
+the current Congress's bill of that number), whose vote panel loads one roll
 call's members at a time. `/bills` and `/bills/:id` redirect permanently.
+`/congress` renders per request, since `next build` has no backend to
+prerender it from. A failed fetch throws to `app/congress/error.tsx`, which
+says the record could not be reached; only the backend's 404 is "nothing
+recorded".
 
 **Bluesky.** After each sync run, `analyze/congress_bluesky.py` posts the most
 recent session day whose record the Digest has made final, if it is from the

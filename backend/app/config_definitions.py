@@ -39,19 +39,16 @@ PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
     "historicalLegacy": 0.35,
 }
 
-# Supreme Court impartiality-score weights. Single source of truth shared by
-# the scorer (services/justice_service.py), the directory's overall-score calc
-# (api/politicians.py), and the public /justices/weights endpoint — previously
-# these were three independent copies that could silently drift.
+# Supreme Court score weights: the single source shared by the scorer
+# (services/justice_service.py), the directory's overall score
+# (api/politicians.py) and the public /justices/weights endpoint.
 #
-# v6.13: Judicial Restraint (0.20) and Bipartisan Agreement (0.15) removed —
-# see justice_analyzer's module docstring. Bipartisan Agreement measured
-# Independence's construct (Spearman 0.86), so its weight joins
-# Independence's (0.30 + 0.15); the two remaining weights are then
-# renormalized over 0.80 — no new weighting judgment.
+# Justice v2: loyalty to the appointing president
+# (pipeline/analyze/justice_loyalty.py), the one measure. Consistency and
+# Independence, the two bloc-agreement measures before it, ranked justices
+# by their distance from the Court's median (docs/research/justice-scores.md).
 JUSTICE_SCORE_WEIGHTS: dict[str, float] = {
-    "consistency": 0.35 / 0.80,
-    "independence": 0.45 / 0.80,
+    "loyalty": 1.0,
 }
 
 INDUSTRIES: dict[str, dict] = {
@@ -244,7 +241,8 @@ CONSTITUENT_FULL_CONFIDENCE_VOTES = 20
 SATURATION_QUANTILE = 0.9
 
 # What a Constituent Alignment reference is measured on: the unweighted
-# break rate (party_break_rate) over records with at least
+# break rate (party_break_rate; since v6.20 over the whole Congress, each
+# measure once, breaks toward the other party only) over records with at least
 # CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes, its expectation a
 # fractional-logit fit, its scale per party the SATURATION_QUANTILE of the
 # Pearson residual per vote (written exactly, so any change to either constant
@@ -253,5 +251,16 @@ SATURATION_QUANTILE = 0.9
 # expectation and percentage-point scale, v6.13's content-weighted rate,
 # another threshold or quantile — is not scored against.
 CONSTITUENT_REFERENCE_STATISTIC = (
-    f"unweighted-break-rate/logit/party-residual/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
+    f"congress-centerward-per-measure-break-rate/logit/party-residual/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
 )
+
+
+# ── The homepage's recent-issues feed ─────────────────────────────
+# Its largest page, and how many rows per slot it reads before duplicates
+# are set aside (a near-identical cluster can run 3-4 rows deep: the
+# beef-tariff incident). The hourly refresh marks duplicates over exactly
+# this pool (action_center.mark_recent_duplicates) and the API reads it
+# (app/api/action.py), so the two share these numbers.
+RECENT_FEED_MAX_LIMIT = 30
+RECENT_FEED_POOL_MULTIPLIER = 3
+

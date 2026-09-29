@@ -1,8 +1,10 @@
 """Regenerate app/data/funding_reference.json — Funding Independence's
 bundled pre-first-run PAC-share reference.
 
-The PAC-dependency component scores a member's PAC share against their
-chamber's median (the median member scores 50; multiplier = 0.5 / median).
+The PAC-dependency component scores a member's PAC share against the share
+campaigns of the same size typically take in their chamber (v6.22,
+score_calculator._pac_size_fit), and against the chamber median before a
+chamber has a fit.
 The pipeline measures that median from the members it is about to score on
 every run (score_calculator.compute_funding_reference) and writes
 /data/funding_reference.json, which takes precedence; this bundled file
@@ -38,7 +40,9 @@ def _fetch_json(url: str):
 
 def fetch_fundings(branch: str) -> list[dict]:
     listing = _fetch_json(f"{API_BASE}/politicians?branch={branch}")
-    ids = [d["id"] for d in listing if d.get("hasScorecard")]
+    # Current members only, the population the pipeline measures; the
+    # listing also has departed members inside the removal grace window.
+    ids = [d["id"] for d in listing if d.get("hasScorecard") and d.get("isCurrent") is not False]
     return [
         (_fetch_json(f"{API_BASE}/politicians/{pid}").get("scorecard") or {}).get("funding") or {}
         for pid in ids
@@ -62,7 +66,7 @@ def main() -> None:
             out[branch] = existing.get(branch)
             continue
         out[branch] = ref
-        print(f"{branch}: {ref} (implied multiplier x{0.5 / ref['pac_ratio_median']:.2f})")
+        print(f"{branch}: {ref}")
     OUT.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
     print(f"wrote {OUT}")
 

@@ -110,6 +110,31 @@ def test_a_failed_part_is_named_and_not_cached(senate, monkeypatch):
     assert len(calls) == n + 1 and "/cosponsors" in calls[-1]
 
 
+def test_a_part_that_misses_the_deadline_is_unavailable_and_asked_again(senate, monkeypatch):
+    # The limiter is shared with the nightly pipeline: a part still waiting
+    # when the reader's deadline passes is served as unavailable, never as
+    # empty, and is not cached.
+    fast, calls = _answers()
+
+    async def slow_cosponsors(client, url):
+        if "/cosponsors" in url:
+            await asyncio.sleep(5)
+        return await fast(client, url)
+
+    monkeypatch.setattr(br, "_congress_get", slow_cosponsors)
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", deadline_s=0.5))
+    # Cosponsors ran out the clock, and the part after it was never asked.
+    assert raw["unavailable"] == ["cosponsors", "text"]
+    assert raw["bill"] is not None
+
+    monkeypatch.setattr(br, "_congress_get", fast)
+    n = len(calls)
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", deadline_s=0.5))
+    assert raw["unavailable"] == []
+    # Only those two are asked again; the rest was cached.
+    assert len(calls) == n + 2 and "/cosponsors" in calls[-2] and "/text" in calls[-1]
+
+
 def test_no_such_bill(senate, monkeypatch):
     fake, _ = _answers(missing=True)
     monkeypatch.setattr(br, "_congress_get", fake)
@@ -180,6 +205,13 @@ class TestRoutes:
     def test_record(self, client):
         r = client.get("/api/bills/S.4668/record?congress=119")
         assert r.status_code == 200 and r.json()["votes"][0]["number"] == 243
+
+    def test_a_partial_record_is_not_kept_by_any_cache(self, client, monkeypatch):
+        fake, _ = _answers(fail={"text"})
+        monkeypatch.setattr(br, "_congress_get", fake)
+        r = client.get("/api/bills/S.4668/record?congress=119")
+        assert r.status_code == 200 and r.json()["unavailable"] == ["text"]
+        assert r.headers["Cache-Control"] == "no-store"
 
     def test_not_a_bill_id(self, client):
         assert client.get("/api/bills/PN.12/record").status_code == 404

@@ -349,3 +349,57 @@ class TestBuildTopDonors:
         donors = build_top_donors(pac_receipts, [], [], "")
         assert donors[0]["total"] == 10000
         assert donors[-1]["total"] == 100
+
+
+class TestCommitteeMasterMetadata:
+    """The FEC's committee registration outranks the name classifier
+    (tier 1): a party, candidate, joint-fundraising or leadership committee
+    is political money whatever its name embeds near. Found live: the NRSC
+    headlined a senator's "GUNS" donor-vote match."""
+
+    def _receipt(self, name, cid, amount=5000):
+        return {
+            "contributor_name": name, "contribution_receipt_amount": amount,
+            "memo_text": "", "entity_type": "COM", "contributor_id": cid,
+        }
+
+    def test_party_committee_is_political_not_its_name_industry(self):
+        ai = {"NRSC": {"type": "PAC", "industry": "GUNS", "skip": False}}
+        donors = build_top_donors(
+            [self._receipt("NRSC", "C00027466")], [], [], "", ai_classifications=ai,
+            committee_meta_map={"C00027466": {"type": "Y", "designation": "U", "connectedOrg": None}},
+        )
+        assert donors[0]["industry"] == "POLITICAL"
+
+    def test_leadership_pac_is_political(self):
+        ai = {"SOME LEADERSHIP PAC": {"type": "PAC", "industry": "ENERGY", "skip": False}}
+        donors = build_top_donors(
+            [self._receipt("SOME LEADERSHIP PAC", "C1")], [], [], "", ai_classifications=ai,
+            committee_meta_map={"C1": {"type": "Q", "designation": "D", "connectedOrg": None}},
+        )
+        assert donors[0]["industry"] == "POLITICAL"
+
+    def test_corporate_pac_keeps_its_industry_and_names_its_sponsor(self):
+        ai = {"JPMORGAN CHASE & CO. FEDERAL POLITICAL ACTION COMMITTEE": {
+            "type": "PAC", "industry": "FINANCE", "skip": False}}
+        donors = build_top_donors(
+            [self._receipt("JPMORGAN CHASE & CO. FEDERAL POLITICAL ACTION COMMITTEE", "C00104299")],
+            [], [], "", ai_classifications=ai,
+            committee_meta_map={"C00104299": {"type": "Q", "designation": "B", "connectedOrg": "JPMORGAN CHASE & CO."}},
+        )
+        assert donors[0]["industry"] == "FINANCE"
+        assert donors[0]["connectedOrg"] == "JPMORGAN CHASE & CO."
+        assert donors[0]["isCommittee"] is True
+        # The master's type is recorded without asking the per-committee
+        # API.
+        assert donors[0]["committeeType"] == "Q"
+
+    def test_individual_rows_never_read_committee_metadata(self):
+        receipt = self._receipt("NRSC", "C00027466")
+        receipt["entity_type"] = "IND"
+        ai = {"NRSC": {"type": "PAC", "industry": "GUNS", "skip": False}}
+        donors = build_top_donors(
+            [receipt], [], [], "", ai_classifications=ai,
+            committee_meta_map={"C00027466": {"type": "Y", "designation": "U", "connectedOrg": None}},
+        )
+        assert donors[0]["industry"] == "GUNS"

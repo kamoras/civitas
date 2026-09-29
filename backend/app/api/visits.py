@@ -310,6 +310,10 @@ _KNOWN_STATIC_PATHS = {
     # link to it — kept here so that 404 traffic stays visibly labeled
     # "/scorecard" instead of draining into the unlabeled "/other" bucket.
     "/scorecard",
+    # The About chapters (frontend/src/lib/aboutPages.ts). Listed rather
+    # than prefix-collapsed: which chapter people read is the useful part.
+    "/about/scores", "/about/presidents-and-justices", "/about/elections",
+    "/about/news", "/about/data", "/about/limitations", "/about/references",
 }
 # Longest first: "/congress/bills/S.1" is a bill page, "/congress/2026-09-24"
 # a day report.

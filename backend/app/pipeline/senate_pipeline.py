@@ -40,6 +40,7 @@ from app.models import (
 
 # Fetch modules
 from app.pipeline.analyze.bill_stage import became_law_action, classify_bill_stage_from_actions, is_enacted
+from app.pipeline.analyze.party_line_record import party_line_records
 from app.pipeline.fetch.congress import (
     extract_official_title,
     fetch_bill,
@@ -59,14 +60,17 @@ from app.pipeline.fetch.fec import (
     fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
+    committee_id_of,
+    committee_master_cycles,
+    fetch_committee_master,
     fetch_committee_receipts,
-    fetch_committee_type,
     fetch_pac_receipts,
     find_candidate,
+    resolve_committee_meta,
     reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
-from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
+from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
 from app.pipeline.member_lifecycle import (
     CHAMBER_SENATE,
     purge_departed_members,
@@ -98,7 +102,7 @@ from app.pipeline.analyze.bill_analyzer import (
     clear_bill_embedding_cache,
     recent_roll_call_key,
 )
-from app.pipeline.analyze.bill_learning import clear_reference_cache
+from app.pipeline.analyze.bill_learning import clear_reference_cache, stamp_motion_type
 from app.pipeline.analyze.party_platform import clear_platform_cache, initialize_platform_embeddings
 from app.pipeline.vector_store import (
     check_model_version,
@@ -157,6 +161,10 @@ RECENT_RC_SESSIONS = 2
 MIN_CONGRESS_FOR_BILL_TITLES = 116
 
 
+def _record_json(record: dict | None) -> str | None:
+    return json.dumps(record) if record else None
+
+
 def upsert_senator(db: Session, data: dict) -> None:
     """
     Upsert a fully assembled senator record into the database.
@@ -194,6 +202,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "total_raised": funding.get("totalRaised") or 0,
         "total_contributions": funding.get("totalContributions"),
         "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),
+        "party_line_record": _record_json((data.get("votingRecord") or {}).get("partyLineRecord")),
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
         "website_url": data.get("officialWebsiteUrl") or "",
@@ -300,6 +309,9 @@ def upsert_senator(db: Session, data: dict) -> None:
                 senator_vote_aligned=match_data.get("senatorVoteAligned"),
                 is_consensus_vote=match_data.get("isConsensusVote"),
                 description=match_data.get("description") or "",
+                lobbied_bills=json.dumps(match_data.get("lobbiedBills") or []),
+                lobbying_clients=json.dumps(match_data.get("lobbyingClients") or []),
+                lobbying_checked=match_data.get("lobbyingChecked"),
             )
         )
 
@@ -452,6 +464,9 @@ _COORDINATION_PATHS = {
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",
     "pipeline/filer_matching.py",
+    # Which bills a lobbying filing names: shown beside donor-vote
+    # connections, read by no classifier or score.
+    "pipeline/analyze/lobbying_records.py",
     # The election run's orchestration: candidate rosters, ballots, measures
     # and coverage, none of it classified or scored. Its matching and
     # posting logic lives in analyze/ and fetch/, and is hashed (or not)
@@ -1402,21 +1417,28 @@ async def run_senate_pipeline(
             )
             progress.complete("fetch_fec", detail=f"{len(fec_data)}/{len(senators)} matched")
 
-            # 1e-2. Resolve PAC committee types (multicandidate vs not) once per
-            # unique contributing PAC across the whole run — feeds the
-            # PAC-utilization signal in _funding_independence_core. A single
+            # 1e-2. Resolve contributing committees' FEC registrations (type,
+            # designation, connected organization) once per unique committee
+            # across the whole run — the tier-1 political-committee rule and
+            # the lobbying client name in normalize_finance. A single
             # global pass here (rather than a per-senator lookup) means a PAC
             # that gives to 30 different senators is looked up exactly once,
-            # not 30 times, on top of fetch_committee_type's own long-TTL cache.
+            # not 30 times, on top of the committee master's weekly cache.
             pac_committee_ids: set[str] = set()
             for fec in fec_data.values():
                 for r in fec.get("pacReceipts") or []:
-                    if r.get("entity_type") == "COM" and r.get("contributor_id"):
+                    if committee_id_of(r):
                         pac_committee_ids.add(r["contributor_id"])
             logger.info("Resolving committee type for %d unique contributing PACs...", len(pac_committee_ids))
-            committee_type_map: dict[str, str | None] = {}
-            for cid in pac_committee_ids:
-                committee_type_map[cid] = await fetch_committee_type(client, db, cid)
+            # The FEC's bulk committee master answers type, designation and
+            # connected organization for nearly every PAC in one download per
+            # cycle; the per-committee API covers only what it lacks.
+            committee_master = await fetch_committee_master(
+                client, db, committee_master_cycles(),
+            )
+            committee_meta_map = await resolve_committee_meta(
+                client, db, pac_committee_ids, committee_master,
+            )
 
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
@@ -1477,6 +1499,7 @@ async def run_senate_pipeline(
             roll_call_data = roll_call_data_map.get(bill["billId"])
             if roll_call_data:
                 stamp_roll_call_outcome(bill, roll_call_data)
+                stamp_motion_type(bill, roll_call_data)
                 split = compute_party_vote_split(roll_call_data)
                 vote_split = split["label"] if split else None
                 bill["partyLeaning"] = refine_with_vote_data(
@@ -1519,6 +1542,7 @@ async def run_senate_pipeline(
             roll_call_data = recent_rc_map.get(rc_id)
             if roll_call_data:
                 stamp_roll_call_outcome(rc, roll_call_data)
+                stamp_motion_type(rc, roll_call_data)
                 split = compute_party_vote_split(roll_call_data)
                 computed_split = split["label"] if split else None
                 if computed_split:
@@ -1589,7 +1613,7 @@ async def run_senate_pipeline(
                         fec.get("aggregated") or [],
                         ai_classifications=ai_classifications,
                         db_session=db,
-                        committee_type_map=committee_type_map,
+                        committee_meta_map=committee_meta_map,
                     )
                 else:
                     funding = senator.get("funding", {})
@@ -1881,6 +1905,13 @@ async def run_senate_pipeline(
         from app.pipeline.analyze.commemorative import mark_commemorative
         mark_commemorative([sp for p in senator_prepared for sp in p.get("sponsoredBills", [])])
 
+        # Each senator's party-line record over the whole Congress (v6.20),
+        # before the reference is measured on it.
+        for p, record in zip(senator_prepared, party_line_records(
+            db, "senate", [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared],
+        )):
+            p["votingRecord"]["partyLineRecord"] = record
+
         funding_reference = live_funding_reference(
             "senate", [p.get("funding") or {} for p in senator_prepared],
         )
@@ -1900,6 +1931,7 @@ async def run_senate_pipeline(
             db,
         )
 
+        lda_totals: dict[str, int] = {}
         for senator_idx in range(len(senator_prepared)):
             prepared = senator_prepared[senator_idx]
             senator = prepared["senator"]
@@ -1949,9 +1981,12 @@ async def run_senate_pipeline(
                 # federal lobbying by the matched organization, not a
                 # placeholder. Cached per org+year, so only the first
                 # pipeline run pays the fetch.
-                await enrich_lobbying_matches_with_lda(
+                lda_stats = await enrich_lobbying_matches_with_lda(
                     lobbying_matches, db, utcnow().year - 1,
+                    votes=(voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or []),
                 )
+                for k, v in lda_stats.items():
+                    lda_totals[k] = lda_totals.get(k, 0) + v
 
                 bio_id_for_score = senator.get("bioguideId", "")
                 temp_senator = {
@@ -2122,6 +2157,8 @@ async def run_senate_pipeline(
                 pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
                 db.commit()
                 progress.update("analyze_senators", done=senator_idx + 1)
+
+        alert_if_lda_down(lda_totals, "senate")
 
         progress.complete(
             "analyze_senators",

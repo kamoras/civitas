@@ -141,8 +141,7 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
         return None
 
     term_years = _term_years(p.term_start, p.term_end)
-
-    return {
+    breakdown = {
         "publicMandate": _public_mandate_core(
             avg_approval=p.avg_approval,
             approval_trend=p.approval_trend,
@@ -161,6 +160,18 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             historical_legacy_score=p.historical_legacy_score,
         ),
     }
+    # What the scorecard states beside each score that isn't scored: the
+    # last 90 days' approval, how many rulemakings the rate is over, and
+    # the historians' rating of the same person's other presidency (a
+    # sitting president's is unrated until the term ends).
+    breakdown["publicMandate"]["facts"]["recentApproval"] = p.recent_avg_approval
+    breakdown["agencyAlignment"]["facts"]["rulemakings"] = p.rulemaking_count
+    breakdown["historicalLegacy"]["facts"]["otherTerms"] = [
+        {"id": o.id, "number": o.number, "points": o.historical_legacy_score, "score": o.score_historical_legacy}
+        for o in db.query(President).filter(President.name == p.name, President.id != p.id).order_by(President.number)
+        if o.historical_legacy_score is not None
+    ]
+    return breakdown
 
 
 def get_all_presidents(db: Session) -> list[PresidentSchema]:
@@ -249,7 +260,10 @@ def get_president_trades(
 
     query = db.query(PresidentTrade).filter(PresidentTrade.president_id == president_id)
     total = query.count()
-    late_count = query.filter(PresidentTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
+    # Only trades whose timeliness is known (StockTradeSchema).
+    late_count = query.filter(
+        PresidentTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS, PresidentTrade.parse_confidence == "text", PresidentTrade.report_kind == "periodic",
+    ).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
@@ -274,6 +288,7 @@ def get_president_trades(
                 industry=t.industry,
                 source_url=t.source_url,
                 parse_confidence=t.parse_confidence,
+                report_kind=t.report_kind,
             )
             for t in trades_db
         ],

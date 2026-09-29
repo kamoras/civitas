@@ -109,6 +109,8 @@ erDiagram
         float amount_low "OGE 278-T reports a range, never a single figure"
         float amount_high "== amount_low encodes the open-ended top bracket"
         string industry "embedding-classified, same classifier as donors"
+        string parse_confidence "ocr for a scanned 278-T"
+        string report_kind "periodic (278-T) | annual (278e Part 7, the record for its year)"
     }
 
     JUSTICES {

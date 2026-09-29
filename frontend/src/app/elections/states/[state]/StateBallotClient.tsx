@@ -16,7 +16,14 @@ import ContestBox from "@/components/elections/ballot/ContestBox";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
-import { buildBallotContests, contestForHash, countBallotContests, type BallotContest } from "@/lib/ballotContests";
+import {
+  buildBallotContests,
+  contestForHash,
+  countBallotContests,
+  groupStatewideRaces,
+  type BallotContest,
+  contestHash,
+} from "@/lib/ballotContests";
 import {
   candidateName,
   districtAreaLabel,
@@ -29,6 +36,9 @@ import {
   tierCandidates,
 } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
+import { absoluteUrl } from "@/lib/site";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type {
   RaceWithCandidates,
@@ -255,27 +265,6 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
  * independent or minor-party candidate ever appears. */
 const PRIMARY_RESULTS_CAVEAT =
   "Names come from primary results, which can omit a nominee who ran unopposed, independent candidates (who run in no primary) and anyone a party named or replaced after the primary — so an office may be missing, or missing a party's nominee.";
-
-type StatewideGroup = { key: string; race?: StatewideRace; seats?: StatewideRace[] };
-
-/** Rows in the backend's order, with every seat of one body (the rows
- * sharing an officeCode that carry a seat) gathered under that body. */
-function groupStatewideRaces(races: StatewideRace[]): StatewideGroup[] {
-  const groups: StatewideGroup[] = [];
-  for (const race of races) {
-    const last = groups[groups.length - 1];
-    if (race.seat && race.officeCode) {
-      if (last?.seats && last.seats[0].officeCode === race.officeCode) {
-        last.seats.push(race);
-      } else {
-        groups.push({ key: race.officeCode, seats: [race] });
-      }
-    } else {
-      groups.push({ key: race.office, race });
-    }
-  }
-  return groups;
-}
 
 function StatewideOfficeRow({ race }: { race: StatewideRace }) {
   return (
@@ -855,6 +844,7 @@ function OpenButton({ label, onClick }: { label: string; onClick: () => void }) 
     <button
       type="button"
       onClick={onClick}
+      {...{ [SHARE_EXCLUDE_ATTR]: "" }}
       className="min-h-[44px] w-full px-4 text-left font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
     >
       {label} →
@@ -871,8 +861,16 @@ function ContestOverview({
   ballot: StateBallot;
   onOpen: (key: string, houseRaceId?: string | null) => void;
 }) {
-  const box = (children: ReactNode) => (
-    <ContestBox title={contest.title} subtitle={contest.subtitle} instruction={contest.instruction}>
+  // Shared as an image unless the box is only controls (the House district
+  // picker), linking to the fragment that opens this contest.
+  const box = (children: ReactNode, share: { houseRaceId?: string | null } | false = {}) => (
+    <ContestBox
+      title={contest.title}
+      subtitle={contest.subtitle}
+      instruction={contest.instruction}
+      shareId={share ? `contest-${contest.key}` : undefined}
+      shareAnchor={share ? contestHash(contest, share.houseRaceId ?? null).slice(1) : undefined}
+    >
       {children}
     </ContestBox>
   );
@@ -898,6 +896,7 @@ function ContestOverview({
             <BallotRaceRows race={ballot.houseRaces[0]} />
             <OpenButton label="RESEARCH THIS RACE" onClick={() => onOpen("house", ballot.houseRaces[0].id)} />
           </>,
+          { houseRaceId: ballot.houseRaces[0].id },
         );
       }
       return box(
@@ -924,6 +923,7 @@ function ContestOverview({
             DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
           </button>
         </div>,
+        false,
       );
     }
     case "statewide":
@@ -935,21 +935,53 @@ function ContestOverview({
         ) : (
           <>
             <ul>
-              {ballot.statewideRaces.map((r) => (
-                <li key={r.office} className="border-b border-white/[0.09] px-4 py-2">
-                  <span className="block text-[13px] font-bold text-ink-hi">
-                    {r.label}
-                    {termPhrase(r.termYears) && (
-                      <span className="font-normal text-ink-lo"> · {termPhrase(r.termYears)}</span>
+              {groupStatewideRaces(ballot.statewideRaces).map((g) =>
+                g.race ? (
+                  <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
+                    <span className="block text-[13px] font-bold text-ink-hi">
+                      {g.race.label}
+                      {termPhrase(g.race.termYears) && (
+                        <span className="font-normal text-ink-lo"> · {termPhrase(g.race.termYears)}</span>
+                      )}
+                    </span>
+                    <span className="flex flex-wrap gap-x-3 text-sm">
+                      {g.race.nominees.map((n) => (
+                        <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                      ))}
+                    </span>
+                  </li>
+                ) : (
+                  // A body's seats under one heading, saying how it is
+                  // elected: listed flat, New Hampshire's five council
+                  // districts read as five offices every voter marks.
+                  <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
+                    <span className="block text-[13px] font-bold text-ink-hi">
+                      {g.seats![0].officeLabel || g.seats![0].label}
+                      <span className="font-normal text-ink-lo">
+                        {" "}
+                        · {g.seats!.length} {g.seats!.length === 1 ? "seat" : "seats"}
+                        {termPhrase(g.seats![0].termYears) && ` · ${termPhrase(g.seats![0].termYears)}`}
+                      </span>
+                    </span>
+                    {g.seats![0].electedBy === "district" && (
+                      <span className="block text-[12px] text-ink-lo">You vote in your district&apos;s seat only</span>
                     )}
-                  </span>
-                  <span className="flex flex-wrap gap-x-3 text-sm">
-                    {r.nominees.map((n) => (
-                      <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                    {g.seats![0].electedBy === "statewide" && (
+                      <span className="block text-[12px] text-ink-lo">Every voter votes for each seat</span>
+                    )}
+                    {g.seats!.map((seat) => (
+                      <span key={seat.office} className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                        <span className="font-mono text-[11px] text-ink-lo">
+                          {/^\d/.test(seat.seat ?? "") ? `District ${seat.seat}` : seat.seat}
+                        </span>
+                        {seat.nominees.map((n) => (
+                          <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                        ))}
+                      </span>
                     ))}
-                  </span>
-                </li>
-              ))}
+                  </li>
+                ),
+              )}
             </ul>
             <OpenButton label="SOURCE AND NOTES" onClick={() => onOpen(contest.key)} />
           </>
@@ -1103,8 +1135,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const openContest = useCallback(
     (key: string, houseRaceId: string | null = null) => {
       setChosen({ key, houseRaceId });
-      const race = contests.find((c) => c.key === key)?.race;
-      const hash = houseRaceId ? `#race-${houseRaceId}` : race ? `#race-${race.id}` : `#ballot-${key}`;
+      const contest = contests.find((c) => c.key === key);
+      const hash = contest ? contestHash(contest, houseRaceId) : `#ballot-${key}`;
       window.history.replaceState(null, "", hash);
     },
     [contests],
@@ -1160,7 +1192,16 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
   const columns: BallotContest["column"][] = ["federal", "state", "local"];
 
+  // What a shared image of any contest says it is from. "Statewide", like
+  // the page itself: a precinct's ballot has more on it (ballot.omits).
+  const shareSubject = {
+    title: `${stateName} statewide ballot`,
+    subtitle: `${ballot.cycleYear} general election · ${ballot.electionDate}`,
+    url: absoluteUrl(`/elections/states/${ballot.state}`),
+  };
+
   return (
+    <ShareSubjectProvider subject={shareSubject}>
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
@@ -1320,6 +1361,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       {openContestEntry && (
         <ContestDrawer
           contest={openContestEntry}
+          shareAnchor={contestHash(openContestEntry, open?.houseRaceId ?? null).slice(1)}
           index={openIndex}
           total={contests.length}
           prev={openIndex > 0 ? contests[openIndex - 1] : null}
@@ -1334,5 +1376,6 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       <BackToTop />
       <Footer />
     </div>
+    </ShareSubjectProvider>
   );
 }

@@ -2,6 +2,7 @@ import { displayScore } from "@/lib/formatting";
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
 import { loadArchivoBold } from "@/lib/ogFonts";
+import { fetchRemoteImage } from "@/lib/remoteImage";
 import { STATE_CODES } from "@/lib/stateCodes";
 import { usableRecord } from "@/lib/ssrPayload";
 import type { StateBallot } from "@/types/election";
@@ -61,33 +62,15 @@ async function fetchIssue(id: string) {
   }
 }
 
-// bioguide.congress.gov sits behind Cloudflare bot-mitigation that blocks
-// a plain HEAD request outright (confirmed live) and challenges a GET
-// that self-identifies as a bot/non-browser client — a browser-shaped
-// User-Agent gets a normal 200, confirmed live, so that's used here
-// rather than a self-identifying one. This fetches the actual bytes
-// (there's no cheaper existence check that reliably works against this
-// host) and inlines them as a data URI rather than leaving the img src
-// pointing at the remote URL, since satori's own internal fetch for a
-// remote <img> src isn't guaranteed to behave any better than a HEAD
-// would. A 5s timeout keeps a slow/hanging host (also observed live)
-// from stalling the whole OG image instead of just dropping the photo.
+// Fetches the photo's bytes and inlines them as a data URI rather than
+// leaving the img src pointing at the remote URL, since satori's own
+// internal fetch for a remote <img> src isn't guaranteed to get past
+// bioguide's bot-mitigation (see lib/remoteImage.ts).
 async function fetchPhotoAsDataUri(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!res.ok || !contentType.startsWith("image/")) return null;
-    const bytes = Buffer.from(await res.arrayBuffer());
-    return `data:${contentType};base64,${bytes.toString("base64")}`;
-  } catch {
-    return null;
-  }
+  const photo = await fetchRemoteImage(url);
+  return photo.status === "ok"
+    ? `data:${photo.contentType};base64,${photo.bytes.toString("base64")}`
+    : null;
 }
 
 async function fetchPolitician(id: string) {

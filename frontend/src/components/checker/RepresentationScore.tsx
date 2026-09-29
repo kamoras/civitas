@@ -174,7 +174,7 @@ export default function RepresentationScore({
   })();
 
   // Surface the FI sub-components so the score is an auditable claim,
-  // not a black-box number (matches the methodology on /about).
+  // not a black-box number (matches the methodology on /about/scores).
   const fundingIndependenceBasis: string | undefined = (() => {
     if (!funding || fundingShareBase(funding) === 0) {
       return "no funding data · defaults to 50";

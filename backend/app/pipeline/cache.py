@@ -33,7 +33,7 @@ Old version rows remain in the DB until pruned — they do not affect correctnes
 """
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -60,6 +60,24 @@ def api_cache_get(
     if age > timedelta(hours=ttl):
         return None
     return json.loads(entry.data_json)
+
+
+def api_cache_stamp(
+    db: Session, tier: str, key: str, max_age_hours: int | None = None,
+) -> datetime | None:
+    """When a live (unexpired) cache entry was written, without reading its
+    payload; None if it is missing or expired. Lets a caller that derives
+    something expensive from an entry keep the result for exactly as long as
+    the entry itself is unchanged."""
+    cached_at = (
+        db.query(ApiCache.cached_at)
+        .filter(ApiCache.tier == tier, ApiCache.cache_key == key)
+        .scalar()
+    )
+    if cached_at is None:
+        return None
+    ttl = max_age_hours if max_age_hours is not None else settings.PIPELINE_CACHE_TTL_HOURS
+    return cached_at if utcnow() - cached_at <= timedelta(hours=ttl) else None
 
 
 # Empty responses ([] / {} / None) are cached for at most this long. A

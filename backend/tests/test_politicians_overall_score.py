@@ -8,7 +8,7 @@ all-zero "not yet scored" guard and rounding to 1 decimal place."""
 import pytest
 
 from app.api.politicians import _president_overall, _senator_overall
-from app.models import President, Representative, Senator
+from app.models import Justice, President, Representative, Senator
 from app.pipeline.analyze.score_calculator import compute_overall_score
 
 
@@ -135,3 +135,58 @@ class TestMalformedRelatedOfficials:
         self._issue(db_session, senators="[]", officials='["potus"]')
 
         assert _get_active_issues("potus", db_session) == []
+
+
+class TestChamberRank:
+    """The profile states the rank the leaderboard gives: by the overall
+    score as displayed, ties sharing a standard competition rank, among
+    members serving now."""
+
+    def _rep(self, db, rid, score, current=True):
+        db.add(Representative(
+            id=rid, name=rid, state="TN", district=1, party="R", is_current=current,
+            score_funding_independence=score, score_constituent_alignment=score,
+            score_legislative_effectiveness=score,
+        ))
+
+    def test_rank_among_serving_members_with_ties_sharing(self, db_session):
+        from app.api.politicians import _chamber_rank
+        for rid, score in (("a", 80), ("b", 70), ("c", 70), ("d", 60)):
+            self._rep(db_session, rid, score)
+        self._rep(db_session, "gone", 90, current=False)
+        db_session.commit()
+
+        def rank(rid):
+            return _chamber_rank("house", db_session.get(Representative, rid), db_session)
+
+        assert rank("a") == {"rank": 1, "of": 4}
+        assert rank("b") == rank("c") == {"rank": 2, "of": 4}
+        assert rank("d") == {"rank": 4, "of": 4}
+        # Not serving: the leaderboard doesn't rank them, so neither does the profile.
+        assert rank("gone") is None
+
+    def test_a_president_ranks_among_completed_terms_and_a_sitting_one_not_at_all(self, db_session):
+        """As the president leaderboard ranks them (get_president_leaderboard)."""
+        from app.api.politicians import _chamber_rank
+        from app.models import President
+        for pid, number, score, current in (("a-1", 1, 80.0, False), ("b-2", 2, 60.0, False), ("c-3", 3, 70.0, True)):
+            db_session.add(President(id=pid, name=pid, party="D", number=number, term_start="2001-01-20",
+                                     is_current=current, score_public_mandate=score))
+        db_session.commit()
+        assert _chamber_rank("president", db_session.get(President, "b-2"), db_session) == {"rank": 2, "of": 2}
+        assert _chamber_rank("president", db_session.get(President, "c-3"), db_session) is None
+
+    def test_justices_rank_by_loyalty_and_the_unmeasured_are_unranked(self, db_session):
+        from app.api.politicians import _chamber_rank
+        for jid, score in (("a", 90.0), ("b", 40.0), ("new", None)):
+            db_session.add(Justice(id=jid, name=jid, last_name=jid, is_active=True, score_loyalty=score))
+        db_session.add(Justice(id="retired", name="r", last_name="r", is_active=False, score_loyalty=99.0))
+        db_session.commit()
+
+        def rank(jid):
+            return _chamber_rank("scotus", db_session.get(Justice, jid), db_session)
+
+        assert rank("a") == {"rank": 1, "of": 2}
+        assert rank("b") == {"rank": 2, "of": 2}
+        assert rank("new") is None
+        assert rank("retired") is None
