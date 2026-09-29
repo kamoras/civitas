@@ -32,6 +32,17 @@ last federal race on the page falsely inherited it.
 Kansas nominates on a PLURALITY — no runoff exists in state law for a
 federal primary — so `runoff_threshold_pct: null`.
 
+With the source's `statewide_offices` opt-in, the same document's state
+contests are read as well, by the same plurality rule: Governor / Lt.
+Governor (a joint ticket, kept whole under the Governor), Secretary of
+State, Attorney General, State Treasurer, Commissioner of Insurance, the
+State Board of Education seats, and both legislative chambers. Each
+header goes through the shared gates (parse_statewide_office, then
+parse_state_leg_office); this module only restates the document's bare
+trailing seat number ("Kansas Senate 24") as the "District 24" those
+gates read. The race reset above still applies: a section neither gate
+claims (a judgeship, the constitutional amendment) attributes nothing.
+
 No settle_days/require_official gate: unlike a live results API (this
 system's other bespoke modules read one, e.g. Arkansas's), this is a
 single PDF the Secretary of State's office files, explicitly titled
@@ -61,7 +72,14 @@ import httpx
 import pdfplumber
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, resolve_confirmed_nominees, surname
+from app.pipeline.fetch.state_candidates_common import (
+    clean_display_name,
+    normalize_party,
+    parse_state_leg_office,
+    parse_statewide_office,
+    resolve_confirmed_nominees,
+    surname,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -75,6 +93,16 @@ _LINK_RE = re.compile(
 
 _RACE_SENATE_RE = re.compile(r"^United States Senate$")
 _RACE_HOUSE_RE = re.compile(r"^United States House of Representatives\s+(\d+)$")
+# This document's own convention for a districted contest: the number
+# follows the office with nothing between ("Kansas Senate 24", "Kansas
+# House of Representatives 1", "Member, State Board of Education 3") --
+# the same shape as its federal "United States House of Representatives
+# 4" above. The shared gates read a district only after the word
+# "District", so the header is restated in that vocabulary before it is
+# asked; the gates still make every decision. A bare trailing number
+# only: "District Court Judge 13-1" keeps its hyphenated seat untouched
+# (and is refused by both gates regardless).
+_TRAILING_SEAT_RE = re.compile(r"^(.*\D)\s+0*(\d+)$")
 _CANDIDATE_RE = re.compile(r"^\s*([A-Z])-(.+?)\s+([\d,]+)\s+[\d.]+%\s*$")
 # The listing page's own chrome/banners repeated on every one of the
 # PDF's 15 pages -- anything else is a race-section header of SOME kind.
@@ -116,11 +144,35 @@ async def _discover_pdf_url(client: httpx.AsyncClient, year: int) -> str | None:
     return None
 
 
-def _parse_totals_pdf(content: bytes) -> list[dict]:
+def _state_contest(header: str) -> tuple[str, str | None, str | None] | None:
+    """(office code, district, seat) for a Kansas statewide-executive or
+    legislative section header, or None for anything else (a judgeship,
+    the constitutional amendment). Statewide is asked first, as every
+    other adapter asks it."""
+    match = _TRAILING_SEAT_RE.match(header)
+    label = f"{match.group(1)} District {match.group(2)}" if match else header
+    statewide = parse_statewide_office(label)
+    if statewide is not None:
+        office, district = statewide
+        return office, district, None
+    seat = parse_state_leg_office(label)
+    if seat is not None:
+        return seat
+    return None
+
+
+def _parse_totals_pdf(content: bytes, state_offices: bool = False) -> list[dict]:
     """Every confirmed federal nominee this document decides -- a
     race section this document never gives (Kansas's real 2026 ballot
     has no uncontested-primary gaps at the federal level, but a future
-    cycle's could) simply contributes nothing, never a guess."""
+    cycle's could) simply contributes nothing, never a guess.
+
+    With `state_offices` (the source's `statewide_offices` opt-in), the
+    statewide executive contests and legislative seats printed after the
+    federal ones are resolved too, by the same plurality rule: the
+    party's primary winner is its November nominee. Kept as the whole
+    printed name -- a joint ticket reads "Cindy Holscher / KC Ohaebosim",
+    exactly as the state prints it under "Governor / Lt. Governor"."""
     lines: list[str] = []
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         for page in pdf.pages:
@@ -128,30 +180,41 @@ def _parse_totals_pdf(content: bytes) -> list[dict]:
             lines.extend(text.split("\n"))
 
     by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
+    by_state_seat: dict[tuple, list[tuple[str, int]]] = {}
     current: tuple[str, int | None] | None = None
+    current_state: tuple[str, str | None, str | None] | None = None
     for raw in lines:
         stripped = raw.strip()
         if not stripped:
             continue
         m = _CANDIDATE_RE.match(raw)
         if m:
-            if current is None:
+            if current is None and current_state is None:
                 continue
             party = normalize_party(m.group(1))
             if party is None:
                 continue
             name, votes = m.group(2).strip(), int(m.group(3).replace(",", ""))
-            by_seat.setdefault((current[0], current[1], party), []).append((name, votes))
+            if current is not None:
+                by_seat.setdefault((current[0], current[1], party), []).append((name, votes))
+            else:
+                office, district, seat = current_state
+                key = (office, district, party, seat) if seat else (office, district, party)
+                by_state_seat.setdefault(key, []).append((name, votes))
             continue
         if _BANNER_RE.match(stripped):
             continue
+        # Every other line is a race header, and each one resets BOTH
+        # trackers before deciding what it is -- a section this module
+        # does not read must never inherit the previous one's rows.
+        current = current_state = None
         house_m = _RACE_HOUSE_RE.match(stripped)
         if house_m:
             current = ("H", int(house_m.group(1)))
         elif _RACE_SENATE_RE.match(stripped):
             current = ("S", None)
-        else:
-            current = None  # a non-federal race section -- stop attributing here
+        elif state_offices:
+            current_state = _state_contest(stripped)
 
     # Kansas has no runoff, so choices are reduced to surname (dropping any
     # unresolvable name from the vote pool entirely) before ranking, not
@@ -162,11 +225,16 @@ def _parse_totals_pdf(content: bytes) -> list[dict]:
         for seat, choices in by_seat.items()
     }
     records = resolve_confirmed_nominees(by_seat, runoff_threshold_pct=None, name_transform=surname)
+    # A state office has no FEC row to match, so its winner keeps the whole
+    # printed name; the same tie-safe plurality pick decides it.
+    records += resolve_confirmed_nominees(
+        by_state_seat, runoff_threshold_pct=None, name_transform=clean_display_name,
+    )
     return records
 
 
 async def fetch_confirmed_candidates(
-    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state/source unused, this strategy is KS-only by construction
+    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is KS-only by construction
 ) -> list[dict] | None:
     pdf_url = await _discover_pdf_url(client, year)
     if pdf_url is None:
@@ -179,7 +247,7 @@ async def fetch_confirmed_candidates(
     if resp is None:
         return None
     try:
-        results = _parse_totals_pdf(resp.content)
+        results = _parse_totals_pdf(resp.content, bool(source.get("statewide_offices")))
     except Exception:
         logger.exception("KS official totals PDF for %d failed to parse", year)
         return None

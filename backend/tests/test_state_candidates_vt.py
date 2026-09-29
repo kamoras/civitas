@@ -1,7 +1,8 @@
 """Tests for Vermont's confirmed-general-candidate strategy
 (state_candidates_vt.py).
 
-All three fixtures are REAL data, trimmed, never fabricated:
+All fixtures are REAL data, trimmed, never fabricated (the statewide ones
+are described above their own tests, at the end of this file):
 
 fixtures_vt_elections.json -- the real 2026 "AUGUST PRIMARY" entry from
 the live elections.json (fetched 2026-09-08), plus three other real
@@ -279,3 +280,201 @@ class TestFetchConfirmedCandidates:
         # Malloy's real 4-town R total (367/451 = 81.4%) falls under a 90%
         # bar -- proves the threshold actually withholds a real leader.
         assert {"office": "H", "district": None, "party": "R", "last_name": "MALLOY", "display_name": "GERALD MALLOY"} not in result
+
+
+# ── Statewide executive offices ───────────────────────────────────────
+#
+# Real data, trimmed, never fabricated:
+#
+# fixtures_vt_statewide_primary.json -- the real 2026 August Primary's
+# stateWide report (read 2026-09-28 from the path the primary manifest
+# names, the `stateWide` key added to fixtures_vt_election_detail.json),
+# every party block and all six offices kept, trimmed to two towns
+# (Addison, Alburgh). Totals below are THOSE two towns' sums.
+#
+# fixtures_vt_statewide_general.json -- the real 2026 General Election's
+# stateWide report (read 2026-09-28, the same day, from the manifest in
+# fixtures_vt_general_detail.json), same two towns. No votes yet: it is
+# the printed ballot, one `rc` line per candidate, each with its own `pn`.
+#
+# Statewide, the primary named H. Brooke Paige the Republican winner for
+# Treasurer, Secretary of State, Auditor of Accounts and Attorney General
+# (35,936 / 35,084 / 33,740 / 33,374 votes); the general ballot carries
+# Lynn LaFleur, Ivar Kronick and Edwin Howell Kemon on three of those
+# lines. That difference is what these tests pin.
+
+STATEWIDE_PRIMARY = json.loads((FIXTURES / "fixtures_vt_statewide_primary.json").read_text())
+STATEWIDE_GENERAL = json.loads((FIXTURES / "fixtures_vt_statewide_general.json").read_text())
+GENERAL_DETAIL = json.loads((FIXTURES / "fixtures_vt_general_detail.json").read_text())
+_GENERAL_GUID = "68d61e96-1d28-4210-8c1d-8e90512ae105"
+
+
+def _patched_statewide(monkeypatch, *, general=STATEWIDE_GENERAL, primary=STATEWIDE_PRIMARY,
+                       general_detail=GENERAL_DETAIL):
+    async def fake_json(client, rl, url, label, **kw):
+        if url == vtm._ELECTIONS_URL:
+            return ELECTIONS
+        if url == f"{vtm._BASE_URL}/elections/{_REAL_GUID}.json":
+            return DETAIL
+        if url == f"{vtm._BASE_URL}/elections/{_GENERAL_GUID}.json":
+            return general_detail
+        if f"{_GENERAL_GUID}-s-" in url:
+            return general
+        if f"{_REAL_GUID}-s-" in url:
+            return primary
+        return RESULTS
+
+    monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
+
+
+def _seats(records):
+    """(office, party) -> name for the recognised parties; OTHER_PARTY
+    lines share one code, so _others reads them by printed label."""
+    return {
+        (r["office"], r["party"]): r["last_name"] for r in records
+        if r["office"] not in ("S", "H") and r["party"] != "O"
+    }
+
+
+def _others(records):
+    return {
+        (r["office"], r["party_label"], r["last_name"]) for r in records
+        if r["office"] not in ("S", "H") and r["party"] == "O"
+    }
+
+
+class TestBallotFinal:
+    def test_final_from_the_uocava_mailing_deadline(self):
+        from datetime import date
+        assert vtm._ballot_final("2026-11-03T00:00:00", today=date(2026, 9, 19))
+        assert not vtm._ballot_final("2026-11-03T00:00:00", today=date(2026, 9, 18))
+
+    def test_an_unreadable_date_is_never_final(self):
+        assert not vtm._ballot_final("")
+
+
+class TestGeneralBallotStatewide:
+    def test_reads_every_line_of_the_real_general_ballot(self):
+        seats = _seats(vtm._general_ballot_statewide(STATEWIDE_GENERAL))
+        assert seats == {
+            ("governor", "D"): "AMANDA JANOO",       # printed "DEM/PROG": the first party is the line's
+            ("governor", "R"): "PHIL SCOTT",
+            ("governor", "I"): "BRIAN JUDD",         # an independent is an ordinary ballot line
+            ("lt_governor", "D"): "MOLLY GRAY",
+            ("lt_governor", "R"): "JOHN S. RODGERS",
+            ("treasurer", "D"): "MIKE PIECIAK",
+            ("treasurer", "R"): "LYNN LAFLEUR",
+            ("secretary_of_state", "D"): "SARAH COPELAND HANZAS",
+            ("secretary_of_state", "R"): "H. BROOKE PAIGE",
+            ("auditor", "D"): "TIM ASHE",            # "AUDITOR OF ACCOUNTS"
+            ("auditor", "R"): "IVAR KRONICK",
+            ("attorney_general", "D"): "CHARITY R. CLARK",
+            ("attorney_general", "R"): "EDWIN HOWELL KEMON",
+            # Progressive has an FEC code of its own (PRO); on a ballot
+            # list it is read, on primary results it never is.
+            ("treasurer", "P"): "ZACHARY HAMPL",
+            ("secretary_of_state", "P"): "RACHEL SHAW",
+        }
+
+    def test_a_party_with_no_code_keeps_its_printed_label(self):
+        """Peace and Justice and Freedom and Unity are really on the 2026
+        ballot and have no FEC code: kept as the state printed them, not
+        dropped and not guessed into a code."""
+        records = vtm._general_ballot_statewide(STATEWIDE_GENERAL)
+        assert _others(records) == {
+            ("governor", "PEACE AND JUSTICE", "JUNE GOODBAND"),
+            ("governor", "FREEDOM AND UNITY", "DEAN ROY"),
+        }
+        # The real report's 17 ballot lines, every one kept.
+        assert len(records) == 17
+        # A recognised party carries no label: its code is the whole fact.
+        assert all("party_label" not in r for r in records if r["party"] != "O")
+
+    def test_no_district_on_any_vermont_executive_office(self):
+        assert {r["district"] for r in vtm._general_ballot_statewide(STATEWIDE_GENERAL)} == {None}
+
+
+class TestStatewideFetch:
+    async def test_the_final_general_ballot_names_the_nominees(self, monkeypatch):
+        _patched_statewide(monkeypatch)
+        monkeypatch.setattr(vtm, "_ballot_final", lambda held, today=None: True)
+        records = await vtm.fetch_confirmed_candidates(
+            None, 2026, "VT", {"settle_days": 1, "statewide_offices": True},
+        )
+        seats = _seats(records)
+        assert seats[("treasurer", "R")] == "LYNN LAFLEUR"
+        assert seats[("auditor", "R")] == "IVAR KRONICK"
+        assert seats[("attorney_general", "R")] == "EDWIN HOWELL KEMON"
+        assert len(seats) == 15
+        assert len(_others(records)) == 2
+        # The federal seat is still read from the primary, unchanged.
+        assert {"office": "H", "district": None, "party": "D", "last_name": "BALINT",
+                "display_name": "BECCA BALINT"} in records
+
+    async def test_before_the_ballot_is_final_the_primary_winners_stand(self, monkeypatch):
+        _patched_statewide(monkeypatch)
+        monkeypatch.setattr(vtm, "_ballot_final", lambda held, today=None: False)
+        records = await vtm.fetch_confirmed_candidates(
+            None, 2026, "VT", {"settle_days": 1, "statewide_offices": True},
+        )
+        seats = _seats(records)
+        # Paige leads every Republican line in these two towns too.
+        assert seats[("treasurer", "R")] == "H. BROOKE PAIGE"
+        assert seats[("attorney_general", "R")] == "H. BROOKE PAIGE"
+        assert seats[("governor", "R")] == "PHIL SCOTT"
+        # Addison + Alburgh: Aly Richards 141, Amanda Janoo 126. Both
+        # towns' rows carry isWinner=true on JANOO -- the feed's flag is
+        # the STATEWIDE result (Janoo 79,228 to 75,140), so this proves
+        # the winner comes from the sums actually read, not the flag.
+        assert seats[("governor", "D")] == "ALY RICHARDS"
+        assert seats[("auditor", "D")] == "TIM ASHE"
+        # Progressive: a party block with no party code, never a nominee.
+        assert {party for _office, party in seats} == {"D", "R"}
+
+    async def test_statewide_is_only_read_when_the_state_opts_in(self, monkeypatch):
+        _patched_statewide(monkeypatch)
+        records = await vtm.fetch_confirmed_candidates(None, 2026, "VT", {"settle_days": 1})
+        assert _seats(records) == {}
+
+    async def test_no_statewide_contest_anywhere_is_a_failure_not_a_none(self, monkeypatch):
+        """Vermont elects all six every even year; an empty read under the
+        opt-in would be published as "no statewide offices"."""
+        _patched_statewide(monkeypatch, general={"d": []}, primary={"d": []})
+        monkeypatch.setattr(vtm, "_ballot_final", lambda held, today=None: True)
+        assert await vtm.fetch_confirmed_candidates(
+            None, 2026, "VT", {"settle_days": 1, "statewide_offices": True},
+        ) is None
+
+    async def test_an_empty_final_general_falls_back_to_the_primary(self, monkeypatch):
+        _patched_statewide(monkeypatch, general={"d": []})
+        monkeypatch.setattr(vtm, "_ballot_final", lambda held, today=None: True)
+        records = await vtm.fetch_confirmed_candidates(
+            None, 2026, "VT", {"settle_days": 1, "statewide_offices": True},
+        )
+        assert _seats(records)[("treasurer", "R")] == "H. BROOKE PAIGE"
+
+    async def test_a_general_report_fetch_failure_fails_the_fetch(self, monkeypatch):
+        _patched_statewide(monkeypatch, general=None)
+        monkeypatch.setattr(vtm, "_ballot_final", lambda held, today=None: True)
+        assert await vtm.fetch_confirmed_candidates(
+            None, 2026, "VT", {"settle_days": 1, "statewide_offices": True},
+        ) is None
+
+    async def test_no_general_election_listed_yet_uses_the_primary(self, monkeypatch):
+        _patched_statewide(monkeypatch)
+        without_general = [e for e in ELECTIONS if e["electionTypeCode"] != "G"]
+
+        async def fake_json(client, rl, url, label, **kw):
+            if url == vtm._ELECTIONS_URL:
+                return without_general
+            if url == f"{vtm._BASE_URL}/elections/{_REAL_GUID}.json":
+                return DETAIL
+            if f"{_REAL_GUID}-s-" in url:
+                return STATEWIDE_PRIMARY
+            return RESULTS
+
+        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
+        records = await vtm.fetch_confirmed_candidates(
+            None, 2026, "VT", {"settle_days": 1, "statewide_offices": True},
+        )
+        assert _seats(records)[("governor", "R")] == "PHIL SCOTT"

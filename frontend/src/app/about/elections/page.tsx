@@ -64,9 +64,14 @@ export default function ElectionsChapter() {
           Candidates appear under the name their state prints on its ballot. Each contest states the
           term it is for — two years for the House, six for the Senate, and for state offices, the
           term set by that state&apos;s constitution or statute (none is shown where we haven&apos;t
-          confirmed it). Where a state&apos;s own results name them, the page also covers statewide
-          executive offices, state legislative seats and elected judgeships; where they aren&apos;t
-          covered yet, it says so.
+          confirmed it). Where a state&apos;s own results or candidate list name them, the page
+          also covers statewide executive offices, state legislative seats and elected judgeships;
+          where they aren&apos;t covered yet, it says so rather than showing an empty section that
+          would read as &ldquo;no governor&apos;s race&rdquo;. A state whose governor isn&apos;t up this year says that
+          too, with the calendar that decides it. A minor party is shown as the state printed it,
+          and where the names come from primary results rather than the state&apos;s November list,
+          the section says what primary results can&apos;t show: an unopposed nominee is often not
+          itemised, and independents never are.
         </P>
       </Section>
 
