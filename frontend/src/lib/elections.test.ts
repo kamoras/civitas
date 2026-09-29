@@ -148,16 +148,55 @@ describe("tierCandidates", () => {
     };
   }
 
-  const brown = cand({ id: "S6OH00163", name: "Brown, Sherrod", party: "DEM", cashOnHand: 16229741.32 });
-  const husted = cand({
-    id: "S6OH00304", name: "Husted, Jon", party: "REP", incumbentChallenge: "I", cashOnHand: 9419311.2,
+  const brown = cand({
+    id: "S6OH00163",
+    name: "Brown, Sherrod",
+    party: "DEM",
+    cashOnHand: 16229741.32,
   });
-  const levy = cand({ id: "S6OH00395", name: "Levy, Gregory Lee", party: "IND", cashOnHand: 25971.13 });
-  const ode = cand({ id: "S6OH00387", name: "Ode, Frederick J", party: "DEM", cashOnHand: 25865.53 });
-  const kincaid = cand({ id: "S6OH00361", name: "Kincaid, Ronald E Jr", party: "DEM", cashOnHand: 17486.87 });
-  const redpath = cand({ id: "S6OH00429", name: "Redpath, William", party: "LIB", cashOnHand: 730.35 });
-  const volpe = cand({ id: "S6OH00353", name: "Volpe, Christopher", party: "DEM", cashOnHand: 168.3 });
-  const faris = cand({ id: "S6OH00243", name: "Faris, Stephen I Mr", party: "IND", cashOnHand: 155.94 });
+  const husted = cand({
+    id: "S6OH00304",
+    name: "Husted, Jon",
+    party: "REP",
+    incumbentChallenge: "I",
+    cashOnHand: 9419311.2,
+  });
+  const levy = cand({
+    id: "S6OH00395",
+    name: "Levy, Gregory Lee",
+    party: "IND",
+    cashOnHand: 25971.13,
+  });
+  const ode = cand({
+    id: "S6OH00387",
+    name: "Ode, Frederick J",
+    party: "DEM",
+    cashOnHand: 25865.53,
+  });
+  const kincaid = cand({
+    id: "S6OH00361",
+    name: "Kincaid, Ronald E Jr",
+    party: "DEM",
+    cashOnHand: 17486.87,
+  });
+  const redpath = cand({
+    id: "S6OH00429",
+    name: "Redpath, William",
+    party: "LIB",
+    cashOnHand: 730.35,
+  });
+  const volpe = cand({
+    id: "S6OH00353",
+    name: "Volpe, Christopher",
+    party: "DEM",
+    cashOnHand: 168.3,
+  });
+  const faris = cand({
+    id: "S6OH00243",
+    name: "Faris, Stephen I Mr",
+    party: "IND",
+    cashOnHand: 155.94,
+  });
 
   const field = [brown, husted, levy, ode, kincaid, redpath, volpe, faris];
 
@@ -190,7 +229,12 @@ describe("tierCandidates", () => {
     // upstream in the backend, not here — see the "ranks a major-party
     // leader by money raised" test below, which starts from the
     // already-corrected (incumbentChallenge: null) payload.
-    const brokeIncumbent = cand({ id: "INC1", party: "REP", incumbentChallenge: "I", cashOnHand: 100 });
+    const brokeIncumbent = cand({
+      id: "INC1",
+      party: "REP",
+      incumbentChallenge: "I",
+      cashOnHand: 100,
+    });
     const { leaders, tail } = tierCandidates([brown, brokeIncumbent]);
     expect(leaders.map((c) => c.id)).toContain(brokeIncumbent.id);
     expect(tail.map((c) => c.id)).not.toContain(brokeIncumbent.id);
@@ -206,16 +250,26 @@ describe("tierCandidates", () => {
     // never-wound-down committee), which is exactly why ranking by
     // cashOnHand got this wrong before.
     const peters = cand({
-      id: "PETERS", name: "Peters, Gary", party: "DEM",
-      incumbentChallenge: null, cashOnHand: 6_546_332, contributions: 6_978_978,
+      id: "PETERS",
+      name: "Peters, Gary",
+      party: "DEM",
+      incumbentChallenge: null,
+      cashOnHand: 6_546_332,
+      contributions: 6_978_978,
     });
     const elSayed = cand({
-      id: "ELSAYED", name: "El-Sayed, Abdul", party: "DEM",
-      cashOnHand: 2_552_763, contributions: 14_479_903,
+      id: "ELSAYED",
+      name: "El-Sayed, Abdul",
+      party: "DEM",
+      cashOnHand: 2_552_763,
+      contributions: 14_479_903,
     });
     const rogers = cand({
-      id: "ROGERS", name: "Rogers, Michael J", party: "REP",
-      cashOnHand: 4_473_237, contributions: 7_681_046,
+      id: "ROGERS",
+      name: "Rogers, Michael J",
+      party: "REP",
+      cashOnHand: 4_473_237,
+      contributions: 7_681_046,
     });
     const { leaders, tail } = tierCandidates([peters, elSayed, rogers]);
     expect(leaders.map((c) => c.id).sort()).toEqual([elSayed.id, rogers.id].sort());
@@ -244,7 +298,11 @@ describe("tierCandidates", () => {
 
   it("never tiers an inactive (paper-filer) candidate into either bucket incorrectly", () => {
     const inactive = cand({
-      id: "PAPER1", party: "REP", candidateStatus: "P", hasRaisedFunds: false, incumbentChallenge: null,
+      id: "PAPER1",
+      party: "REP",
+      candidateStatus: "P",
+      hasRaisedFunds: false,
+      incumbentChallenge: null,
     });
     const { leaders, tail } = tierCandidates([brown, inactive]);
     expect(leaders.map((c) => c.id)).not.toContain(inactive.id);
@@ -393,7 +451,11 @@ describe("candidateName", () => {
   });
 
   it("lets a reader find a district by the printed name too", () => {
-    const race = { district: 1, areas: [], candidates: [{ name: "COOPER, ROY", ballotName: "Roy Cooper" }] };
+    const race = {
+      district: 1,
+      areas: [],
+      candidates: [{ name: "COOPER, ROY", ballotName: "Roy Cooper" }],
+    };
     expect(matchesDistrictQuery(race, "roy cooper")).toBe(true);
   });
 });

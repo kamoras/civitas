@@ -422,7 +422,6 @@ export interface StateBallot {
   omits: string[];
 }
 
-
 /** Provenance block on the /pvi response. Optional end to end — older
  * backend responses (and cached ones) may omit it entirely. */
 export interface PviMeta {

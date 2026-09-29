@@ -564,7 +564,15 @@ function ComparePageInner() {
 
 export default function ComparePage() {
   return (
-    <Suspense fallback={<PageFallback eyebrow={"Compare · two legislators, side by side"} title={"Compare legislators"} rows={3} />}>
+    <Suspense
+      fallback={
+        <PageFallback
+          eyebrow={"Compare · two legislators, side by side"}
+          title={"Compare legislators"}
+          rows={3}
+        />
+      }
+    >
       <ComparePageInner />
     </Suspense>
   );

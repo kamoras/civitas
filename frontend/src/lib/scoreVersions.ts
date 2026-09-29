@@ -26,7 +26,8 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "v6.23",
     date: "2026-10-01",
-    title: "Legislative Effectiveness: members who won a special election are compared with the time they have served",
+    title:
+      "Legislative Effectiveness: members who won a special election are compared with the time they have served",
     tldr: "A member sworn in partway through the Congress is now compared with what the typical member achieves in the same share of it, not in the whole Congress so far. It matters only for the 11 House members who arrived late this Congress; everyone else keeps their score.",
     changes: [
       "Why: bill credit builds up over the time a member has had to sponsor and advance bills, but late arrivals were held to the bar of colleagues with up to 20 more months. One member sworn in on September 1, 2026, dropped from a neutral 50 to 38 on the bill measure by introducing his first bill.",
@@ -50,7 +51,8 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "v6.21",
     date: "2026-09-29",
-    title: "Funding: party, candidate and leadership committees are political money, not an industry",
+    title:
+      "Funding: party, candidate and leadership committees are political money, not an industry",
     tldr: "Money from a party committee, a candidate's campaign, a joint-fundraising committee or a leadership PAC no longer counts toward any industry. The FEC's own registration of each committee decides it, not the committee's name. Funding Independence moves by under two points for anyone; donor-vote connections built on such money are gone.",
     changes: [
       "Why: industries were assigned to committees by their names, and some names read like an industry. The NRSC (the Senate Republicans' campaign committee) was filed under GUNS for 19 senators, $919,000 in all, and headed Lindsey Graham's gun-industry donor-vote connection. Leadership PACs with names like Pineapple PAC, Giddy Up PAC and Velvet Hammer PAC were filed under lobbyists, finance and labor unions. Across the September 2026 Senate, 57 of 101 senators had some of this money counted as an industry's.",
@@ -102,7 +104,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     changes: [
       "Before, a vote with no recorded roll call was judged by the bill's content: a Republican voting for a bill that read as Democratic counted as a break, however Republicans actually voted. Such votes no longer count.",
       "Checked first: in a sample of 25 representatives and 10 senators, every party label on a recorded roll call already matched the chamber's official party totals, and none came from content, so no score in the sample changes.",
-      "The list of breaks on a profile read only \"key\" votes, so a member whose breaks were all recent roll calls saw a count and then an empty list. It now shows every break, each with the question voted on, the date, each party's tally and a link to the record.",
+      'The list of breaks on a profile read only "key" votes, so a member whose breaks were all recent roll calls saw a count and then an empty list. It now shows every break, each with the question voted on, the date, each party\'s tally and a link to the record.',
     ],
   },
   {
@@ -111,17 +113,18 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     title: "Legislative Effectiveness credits getting a bill out of committee",
     tldr: "A bill reported out of committee now counts as a step of its own, between committee action and passing the chamber, as in the Volden & Wiseman effectiveness score. It used to count the same as a bill that only had a hearing. The score now ranks members closer to their published scores, most of all in the Senate.",
     changes: [
-      "Volden & Wiseman count five stages: introduced, action in committee, action beyond committee, passed the chamber, became law. Civitas counted four, with a bill reported out of committee credited the same as one that only had a hearing or markup. Bills now have a \"Reported by Committee\" stage, and it and \"On the Floor\" are credited as action beyond committee.",
+      'Volden & Wiseman count five stages: introduced, action in committee, action beyond committee, passed the chamber, became law. Civitas counted four, with a bill reported out of committee credited the same as one that only had a hearing or markup. Bills now have a "Reported by Committee" stage, and it and "On the Floor" are credited as action beyond committee.',
       "Checked against Volden & Wiseman's published scores for the 110th to 118th Congresses, rank correlation rose from 0.895 to 0.898 (House) and 0.963 to 0.973 (Senate), and in the worst congress from 0.814 to 0.817 and 0.863 to 0.873. Majority and minority members' typical scores stay level.",
       "Checked bill by bill against Volden & Wiseman's counts for the 118th Congress, the stage Civitas gives each bill now matches theirs much more closely: for action beyond committee, a rank correlation of 0.94 (House) and 0.98 (Senate), up from 0.81 and 0.78.",
-      "A House committee passing a bill to one of its subcommittees was read as the committee acting on it. That step is as automatic as the first referral, and it put more than three times as many House bills \"in committee\" as Volden & Wiseman count (5,000 against 1,405 in the 118th Congress; now 1,562). It now counts as a referral.",
+      'A House committee passing a bill to one of its subcommittees was read as the committee acting on it. That step is as automatic as the first referral, and it put more than three times as many House bills "in committee" as Volden & Wiseman count (5,000 against 1,405 in the 118th Congress; now 1,562). It now counts as a referral.',
       "A bill reported out of committee now counts as advancing in a member's sponsored-bills summary.",
     ],
   },
   {
     version: "v6.16",
     date: "2026-09-27",
-    title: "Constituent Alignment: highest when a member breaks with their party about as often as their seat's norm",
+    title:
+      "Constituent Alignment: highest when a member breaks with their party about as often as their seat's norm",
     tldr: "The vote part of Constituent Alignment now scores 100 when a member breaks with their party about as often as same-party members in similarly-leaning seats, and falls both ways: steeply for breaking too often, half as steeply for being more loyal. The gap is measured in standard deviations, so a few extra points count for more where members of that seat rarely break.",
     changes: [
       "Why: the score measured distance in percentage points from an expectation that a few heavy breakers pulled upward. Gary Peters, breaking on 3.5% of votes where the expectation said 7.1%, scored 41 even though most swing-seat Democrats break about as rarely as he does; 33 of 47 Democrats and 46 of 53 Republicans scored under 50. Bill Cassidy, breaking on 5.5% where members of seats like his break about 1.5%, scored 90, because four extra points counted the same wherever they fell. Now Peters scores 83 and Cassidy 26.",
@@ -137,7 +140,8 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "v6.15",
     date: "2026-09-27",
-    title: "Constituent Alignment: breaking with your party far more than your seat calls for no longer scores as perfect",
+    title:
+      "Constituent Alignment: breaking with your party far more than your seat calls for no longer scores as perfect",
     tldr: "Breaking with your party more often than members in similar seats still raises Constituent Alignment, up to a point. Past the point where the most out-of-pattern tenth of members sit, breaking even more now lowers it again. Before, anyone past that point scored 100 however far they went. Voting with your party more than similar members is also penalized less steeply than before.",
     changes: [
       "The vote part of Constituent Alignment still scores 50 when a member breaks with their party as often as same-party members in similarly-leaning seats, below 50 for breaking less and above for breaking more. It still reaches 100 at the gap the chamber's most out-of-pattern tenth of members show. Past that gap it now falls at the same rate it rose: back to 50 at twice the gap and 0 at three times. It used to stay at 100.",
@@ -166,7 +170,8 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "v6.13",
     date: "2026-09-24",
-    title: "Each vote counts once; alignment rebuilt on election evidence; references measured from the current population",
+    title:
+      "Each vote counts once; alignment rebuilt on election evidence; references measured from the current population",
     tldr: "Some senators' votes were being counted twice, and the ones most often doubled were votes against their own party, which made those senators look more independent than they are. Each roll call now counts exactly once, in both chambers. Separately, Legislative Effectiveness used to compare everyone against a typical-member figure measured once in July. Bills pile up over a two-year Congress, so that fixed figure let scores creep up over time and would have dropped them all when the next Congress began. It is now re-measured from the chamber's current members on every update.",
     changes: [
       "Senate: the pipeline added each recent roll call to a senator's record twice, then removed duplicates by bill number against only part of the list. A recent vote chosen as a 'key vote' therefore stayed in the record twice. Key votes are chosen partly for being votes against the senator's party, so the doubled votes were mostly party breaks, and that pushed Constituent Alignment up. In a worked example with 20 roll calls and 2 party breaks, the score counted 25 votes and 4 breaks, and a swing-state senator's Constituent Alignment rose from 54 to 66.",
@@ -193,7 +198,8 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "President v5",
     date: "2026-09-24",
-    title: "Presidents measured against each other, not fixed cut-offs; rule volume no longer scored",
+    title:
+      "Presidents measured against each other, not fixed cut-offs; rule volume no longer scored",
     tldr: "The numbers used to put approval, election margins, historians' rankings, economic growth, jobs and rulemaking on a common scale were typed into the code. They are now measured from the presidents on record on every update. Growth is compared within its era, and the count of rules an administration issued is no longer scored, because it tracks how much an administration wants to regulate, not how well it governs.",
     changes: [
       "Approval, approval trend, election margin and the historians' survey are scored against averages measured from the presidents on record each update, and so is the conversion from electoral-college margins to popular-vote margins for early elections.",

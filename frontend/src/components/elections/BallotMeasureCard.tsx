@@ -54,14 +54,12 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
         // to be told it was struck; a card that simply disappeared cannot
         // say that.
         <p className="text-xs text-signal-red mb-3">
-          This measure is no longer on the ballot. It is kept here so a
-          change since your last visit is visible rather than silent.
+          This measure is no longer on the ballot. It is kept here so a change since your last visit
+          is visible rather than silent.
         </p>
       )}
 
-      {measure.number && measure.title && (
-        <p className="text-sm text-ink mb-3">{measure.title}</p>
-      )}
+      {measure.number && measure.title && <p className="text-sm text-ink mb-3">{measure.title}</p>}
 
       {measure.officialTitle && (
         <section className="mb-3">
@@ -108,9 +106,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
 
       {measure.fiscalImpact && (
         <section className="mb-3">
-          <h4 className="font-mono text-[10px] text-ink-lo tracking-widest mb-1">
-            FISCAL IMPACT
-          </h4>
+          <h4 className="font-mono text-[10px] text-ink-lo tracking-widest mb-1">FISCAL IMPACT</h4>
           <p className="text-xs text-ink whitespace-pre-line">{measure.fiscalImpact}</p>
           {measure.fiscalAuthority && (
             <p className="text-[10px] text-ink-min mt-1">Prepared by {measure.fiscalAuthority}</p>

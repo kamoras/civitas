@@ -5,9 +5,19 @@ import { ISO_DATE, fetchDay } from "@/lib/congressServer";
 import { longDate } from "@/lib/congress";
 import DayReportView from "@/components/congress/DayReportView";
 
-export async function generateMetadata({ params }: { params: Promise<{ date: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ date: string }>;
+}): Promise<Metadata> {
   const { date } = await params;
-  if (!ISO_DATE.test(date)) return pageMetadata({ title: "Not found", description: "", path: `/congress/${date}`, noindex: true });
+  if (!ISO_DATE.test(date))
+    return pageMetadata({
+      title: "Not found",
+      description: "",
+      path: `/congress/${date}`,
+      noindex: true,
+    });
   const report = await fetchDay(date);
   return pageMetadata({
     title: `Congress on ${longDate(date)}`,

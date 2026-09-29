@@ -74,7 +74,10 @@ export default async function StateBallotPage({ params }: { params: Promise<{ st
         data={breadcrumbList([
           { name: "Home", url: absoluteUrl("/") },
           { name: "Elections", url: absoluteUrl("/elections") },
-          { name: ballot.stateName ?? ballot.state, url: absoluteUrl(`/elections/states/${ballot.state}`) },
+          {
+            name: ballot.stateName ?? ballot.state,
+            url: absoluteUrl(`/elections/states/${ballot.state}`),
+          },
         ])}
       />
       <StateBallotClient ballot={ballot} />

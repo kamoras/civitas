@@ -104,14 +104,14 @@ export default function Footer() {
 
           <div className="md:col-span-8">
             <p className="font-display text-base leading-relaxed text-ink-lo">
-              All data sourced from public records, principally: FEC campaign finance filings (fec.gov);
-              bills and roll-call votes from Congress.gov, Senate.gov and the House Clerk;
-              ideal points from Voteview; Lobbying Disclosure Act filings (lda.gov); the
+              All data sourced from public records, principally: FEC campaign finance filings
+              (fec.gov); bills and roll-call votes from Congress.gov, Senate.gov and the House
+              Clerk; ideal points from Voteview; Lobbying Disclosure Act filings (lda.gov); the
               Federal Register and GovInfo; and state election offices. Donor industries are
-              classified by Civitas from FEC filings, not taken from a third party. The Representation
-              Scorecard is a weighted composite metric — not a measure of illegality or wrongdoing.
-              Correlation between donations and votes does not prove causation. Verify all data at
-              the original sources. Draw your own conclusions.
+              classified by Civitas from FEC filings, not taken from a third party. The
+              Representation Scorecard is a weighted composite metric — not a measure of illegality
+              or wrongdoing. Correlation between donations and votes does not prove causation.
+              Verify all data at the original sources. Draw your own conclusions.
             </p>
           </div>
         </div>

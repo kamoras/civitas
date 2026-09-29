@@ -5,7 +5,9 @@ import { fundingShareBase, pacSharePct } from "./funding";
 describe("funding shares", () => {
   it("uses contributions, not receipts, as the base", () => {
     // $50M receipts, $30M of it JFC transfers: PACs gave $5M of $20M contributed.
-    expect(pacSharePct(5_000_000, { totalRaised: 50_000_000, totalContributions: 20_000_000 })).toBe(25);
+    expect(
+      pacSharePct(5_000_000, { totalRaised: 50_000_000, totalContributions: 20_000_000 })
+    ).toBe(25);
   });
 
   it("falls back to total raised for records without contributions", () => {

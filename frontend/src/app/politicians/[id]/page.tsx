@@ -31,7 +31,13 @@ async function fetchBreakdown(
   id: string
 ): Promise<RepresentationScoreBreakdown | null> {
   const segment =
-    branch === "senate" ? "senators" : branch === "house" ? "representatives" : branch === "president" ? "presidents" : null;
+    branch === "senate"
+      ? "senators"
+      : branch === "house"
+        ? "representatives"
+        : branch === "president"
+          ? "presidents"
+          : null;
   if (!segment) return null;
   try {
     const res = await fetch(`${BACKEND}/api/${segment}/${encodeURIComponent(id)}/score-breakdown`, {

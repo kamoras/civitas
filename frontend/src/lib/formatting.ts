@@ -29,7 +29,9 @@ export function formatCurrency(amount: number): string {
  * printing "-$4K" next to a label that reads as an achievement. Shared
  * by CandidateCard and RaceFullDetail's tail rows so the two don't drift
  * (both used to compute this inline). */
-export function cashOnHandDisplay(cashOnHand: number | null): { label: string; amount: string } | null {
+export function cashOnHandDisplay(
+  cashOnHand: number | null
+): { label: string; amount: string } | null {
   if (cashOnHand == null) return null;
   const debt = cashOnHand < 0;
   return { label: debt ? "Debt" : "Cash on hand", amount: formatCurrency(Math.abs(cashOnHand)) };
@@ -232,7 +234,11 @@ export function displayScore(score: number): number {
  * skips past the tie. Numbering by position gave two members with the same
  * score different ranks, decided by the alphabetical tiebreak.
  */
-export function competitionRanks<T>(items: readonly T[], key: (item: T) => unknown, offset = 0): number[] {
+export function competitionRanks<T>(
+  items: readonly T[],
+  key: (item: T) => unknown,
+  offset = 0
+): number[] {
   const ranks: number[] = [];
   items.forEach((item, i) => {
     ranks.push(i > 0 && key(item) === key(items[i - 1]) ? ranks[i - 1] : offset + i + 1);

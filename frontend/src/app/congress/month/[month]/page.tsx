@@ -5,9 +5,19 @@ import { ISO_MONTH, fetchMonth } from "@/lib/congressServer";
 import { monthLabel } from "@/lib/congress";
 import PeriodReportView from "@/components/congress/PeriodReportView";
 
-export async function generateMetadata({ params }: { params: Promise<{ month: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ month: string }>;
+}): Promise<Metadata> {
   const { month } = await params;
-  if (!ISO_MONTH.test(month)) return pageMetadata({ title: "Not found", description: "", path: `/congress/month/${month}`, noindex: true });
+  if (!ISO_MONTH.test(month))
+    return pageMetadata({
+      title: "Not found",
+      description: "",
+      path: `/congress/month/${month}`,
+      noindex: true,
+    });
   const report = await fetchMonth(month);
   return pageMetadata({
     title: `Congress in ${monthLabel(month)}`,
@@ -16,7 +26,11 @@ export async function generateMetadata({ params }: { params: Promise<{ month: st
   });
 }
 
-export default async function CongressMonthPage({ params }: { params: Promise<{ month: string }> }) {
+export default async function CongressMonthPage({
+  params,
+}: {
+  params: Promise<{ month: string }>;
+}) {
   const { month } = await params;
   if (!ISO_MONTH.test(month)) notFound();
   const report = await fetchMonth(month);

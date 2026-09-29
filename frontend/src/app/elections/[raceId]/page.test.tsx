@@ -1,7 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const redirect = vi.hoisted(() => vi.fn((url: string) => { throw new Error(`REDIRECT:${url}`); }));
-const notFound = vi.hoisted(() => vi.fn(() => { throw new Error("NOT_FOUND"); }));
+const redirect = vi.hoisted(() =>
+  vi.fn((url: string) => {
+    throw new Error(`REDIRECT:${url}`);
+  })
+);
+const notFound = vi.hoisted(() =>
+  vi.fn(() => {
+    throw new Error("NOT_FOUND");
+  })
+);
 vi.mock("next/navigation", () => ({ redirect, notFound }));
 
 import RaceDetailRedirect from "./page";
@@ -37,8 +45,8 @@ describe("RaceDetailRedirect", () => {
   it("404s rather than throws when the backend fetch itself fails", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("network down"));
 
-    await expect(
-      RaceDetailRedirect({ params: Promise.resolve({ raceId: "x" }) })
-    ).rejects.toThrow("NOT_FOUND");
+    await expect(RaceDetailRedirect({ params: Promise.resolve({ raceId: "x" }) })).rejects.toThrow(
+      "NOT_FOUND"
+    );
   });
 });

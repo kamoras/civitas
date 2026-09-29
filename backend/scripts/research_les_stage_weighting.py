@@ -36,8 +36,8 @@ Usage:
     python backend/scripts/research_les_stage_weighting.py [--first 110] [--last 118] [--cache DIR]
 
 Downloads the two CEL spreadsheets (House .xlsx, Senate .xls; dated URLs, so
-effectively pinned) into --cache on first run. Needs pandas, openpyxl and xlrd, which are not runtime
-dependencies of the app.
+effectively pinned) into --cache on first run. Needs pandas and openpyxl, which are not runtime dependencies of the app:
+    pip install -r requirements.txt -r scripts/requirements-research.txt
 """
 
 from __future__ import annotations

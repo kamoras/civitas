@@ -4,7 +4,10 @@ import { fetchBillRecord, fetchDay, fetchLatestDay } from "./congressServer";
 afterEach(() => vi.unstubAllGlobals());
 
 const answer = (status: number, body: unknown = {}) =>
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status, ok: status < 300, json: async () => body }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ status, ok: status < 300, json: async () => body })
+  );
 
 describe("congressServer: an outage never reads as no record", () => {
   it("returns the report", async () => {

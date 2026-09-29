@@ -216,7 +216,9 @@ describe("API shape guarantees", () => {
     const fetchMock = mockJson({ issues: [] });
     vi.stubGlobal("fetch", fetchMock);
     await fetchRecentActionIssues(6);
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/action/issues/recent?limit=6"));
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/action/issues/recent?limit=6")
+    );
   });
 
   it("fetchTimeline always exposes its four lists", async () => {

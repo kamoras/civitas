@@ -16,8 +16,13 @@ export function CongressTabs({ active }: { active: "reports" | "bills" }) {
     </Link>
   );
   return (
-    <nav aria-label="Congress sections" className="mb-8 flex items-end gap-8 border-b border-white/15">
-      <span className="py-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">Congress</span>
+    <nav
+      aria-label="Congress sections"
+      className="mb-8 flex items-end gap-8 border-b border-white/15"
+    >
+      <span className="py-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+        Congress
+      </span>
       {tab("Reports", "/congress", active === "reports")}
       {tab("Bills", "/congress/bills", active === "bills")}
     </nav>
