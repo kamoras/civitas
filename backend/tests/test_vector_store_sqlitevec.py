@@ -381,6 +381,18 @@ class TestEnsureExploreIndex:
             vector_store.rebuild_explore_index(lambda: None)
         assert vector_store.index_is_whole()
 
+    def test_a_data_reset_begun_meanwhile_is_left_to_it(self, vec_env, monkeypatch):
+        # It empties the index; the first Explore run after it builds it.
+        from app.background import WritesHeld
+
+        vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
+
+        def held(*_a, **_k):
+            raise WritesHeld("data-reset")
+
+        monkeypatch.setattr(vector_store, "start_writer", held)
+        vector_store.ensure_explore_index(lambda: None)  # doesn't raise
+
     def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
         # Two overlapping would each clear what the other built.
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")

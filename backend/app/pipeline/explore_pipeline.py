@@ -30,8 +30,8 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
-from app.models import ExploreDocument, Justice, Representative, Senator
-from app.pipeline.cache import api_cache_set
+from app.models import ApiCache, ExploreDocument, Justice, Representative, Senator
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.house_record import fetch_house_floor_remarks
 from app.pipeline.fetch.presidential_actions import (
@@ -371,7 +371,13 @@ def _purge_duplicate_floor_speeches(db: Session) -> list[int]:
     return doomed
 
 
-async def _index_is_whole_or_none() -> bool | None:
+# api_cache: ids whose re-embed a skipped embed step still owes, kept until
+# a run pays it.
+_REEMBED_OWED_KEY = "reembed_owed"
+_OWED_KEPT_H = 24 * 365
+
+
+async def _index_is_whole_or_none(*, quiet: bool = False) -> bool | None:
     """Whether the vector index is a complete build: False when it can't be
     read (a rebuild recreates it), None when it is only locked — after
     waiting out any rebuild in this process and looking once more."""
@@ -380,7 +386,8 @@ async def _index_is_whole_or_none() -> bool | None:
             return await asyncio.to_thread(index_is_whole)
         except Exception as error:
             if not is_busy_error(error):
-                logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
+                if not quiet:
+                    logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
                 return False
             if attempt == 1:
                 await asyncio.to_thread(wait_for_rebuild)
@@ -644,13 +651,20 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # failed or was cut off, a model change) is rebuilt whole, here and
         # under this run's lease, rather than topped up: an incremental pass
         # can't make it whole, and calibration below measures it.
-        rebuilt = None
+        # Documents whose bodies an earlier run backfilled while its embed
+        # step was skipped: nothing else would re-embed them — the backfill
+        # won't return them again, and they are in the index already.
+        refreshed_ids |= set(api_cache_get(db, "explore", _REEMBED_OWED_KEY, max_age_hours=_OWED_KEPT_H) or [])
+        rebuilt, rebuild_failed = None, False
         whole = await _index_is_whole_or_none()
         if whole is None:
             # Busy even after waiting out any rebuild here: neither rebuilt
             # (it may well be whole) nor topped up (it may not be, and a
-            # rebuild could start beside it). The next run looks again.
+            # rebuild could start beside it). The next run looks again, and
+            # re-embeds what this one's backfill changed.
             logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
+            if refreshed_ids:
+                api_cache_set(db, "explore", _REEMBED_OWED_KEY, sorted(refreshed_ids))
             rebuilt = 0
         elif not whole:
             logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
@@ -672,14 +686,14 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                     dedupe_key=f"explore-index-rebuild-{utcnow():%Y-%m-%d}",
                     condition="explore-index-rebuild",
                 )
-                rebuilt = 0
+                rebuilt, rebuild_failed = 0, True
             if rebuilt is None:
                 # Waited out a start's rebuild, which reads documents by id
                 # without this run's lease: one this run deleted meanwhile
                 # may have been embedded after the purge above.
                 await asyncio.to_thread(_purge_orphaned_vectors, db)
         # Resolved only on a look that answered: a busy one says nothing.
-        if whole or await _index_is_whole_or_none():
+        if whole or (whole is False and await _index_is_whole_or_none(quiet=True)):
             from app.ops_alerts import resolve_ops_alert
 
             await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
@@ -716,6 +730,11 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
             # donor_classifier_ai.py and api/explore.py already give their own
             # CPU-bound calls.
             embedded = await asyncio.to_thread(embed_explore_documents, doc_dicts)
+        if whole is not None and not rebuild_failed and refreshed_ids:
+            # Re-embedded now, by the top-up or the rebuild: owed no longer.
+            # Deleted, not set empty — an empty payload never overwrites one.
+            db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _REEMBED_OWED_KEY).delete()
+            db.commit()
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill

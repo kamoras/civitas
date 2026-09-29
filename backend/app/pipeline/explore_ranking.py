@@ -219,15 +219,22 @@ def calibrate_and_store(db) -> dict | None:
     calibration ranks worse than a fresh one, and far better than none.
     """
     from app.pipeline.calibrate_ranking import compute_calibration
-    from app.pipeline.vector_store import index_is_whole
+    from app.pipeline.vector_store import index_is_whole, is_busy_error
 
     try:
-        if not index_is_whole():
-            # The semantic channel answers nothing while its index isn't a
-            # complete build: measured against it, the priors come out as
-            # if the channels agreed perfectly (freshness and authority 0).
-            logger.warning("Explore vector index not ready — keeping the previous ranking calibration")
-            return None
+        whole = index_is_whole()
+    except Exception as error:
+        if not is_busy_error(error):
+            raise
+        logger.warning("Explore vector index busy — keeping the previous ranking calibration")
+        return None
+    if not whole:
+        # The semantic channel answers nothing while its index isn't a
+        # complete build: measured against it, the priors come out as if the
+        # channels agreed perfectly (freshness and authority 0).
+        logger.warning("Explore vector index not ready — keeping the previous ranking calibration")
+        return None
+    try:
         payload = compute_calibration(db)
     except Exception:
         logger.exception("Explore ranking calibration failed — keeping the previous one")

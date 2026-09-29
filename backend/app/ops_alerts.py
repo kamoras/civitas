@@ -23,6 +23,7 @@ history from the start.
 
 import json
 import logging
+import threading
 import uuid
 from datetime import date, datetime, timedelta
 
@@ -144,24 +145,33 @@ def _already_sent(dedupe_key: str) -> bool:
 # right), capped so a long outage can't grow it without bound.
 _sent_unrecorded: dict[str, str | None] = {}
 _UNRECORDED_MAX = 1000
+# Alerts are sent from many threads (the scheduler's, to_thread workers).
+_unrecorded_lock = threading.Lock()
 
 
 def _sent_without_record(dedupe_key: str) -> bool:
-    return dedupe_key in _sent_unrecorded
+    with _unrecorded_lock:
+        return dedupe_key in _sent_unrecorded
 
 
 def _remember_unrecorded(dedupe_key: str, condition: str | None) -> None:
-    _sent_unrecorded[dedupe_key] = condition
-    while len(_sent_unrecorded) > _UNRECORDED_MAX:
-        del _sent_unrecorded[next(iter(_sent_unrecorded))]  # oldest first
+    with _unrecorded_lock:
+        _sent_unrecorded[dedupe_key] = condition
+        while len(_sent_unrecorded) > _UNRECORDED_MAX:
+            del _sent_unrecorded[next(iter(_sent_unrecorded))]  # oldest first
+
+
+def _forget_unrecorded(condition: str) -> None:
+    with _unrecorded_lock:
+        for key in [k for k, c in _sent_unrecorded.items() if c == condition]:
+            del _sent_unrecorded[key]
 
 
 def resolve_ops_alert(condition: str) -> int:
     """Close every open alert for ``condition``: the code that detects it
     found it gone. Frees their dedupe keys, so the condition alerts again
     if it comes back. Never raises. Returns how many were closed."""
-    for key in [k for k, c in _sent_unrecorded.items() if c == condition]:
-        del _sent_unrecorded[key]
+    _forget_unrecorded(condition)
     db = None
     try:
         db = SessionLocal()

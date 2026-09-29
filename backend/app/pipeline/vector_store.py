@@ -1070,23 +1070,23 @@ def _refit_after_a_start_rebuild(db_session_factory) -> None:
     """The fit in force was measured against the index a start's rebuild
     replaced. Under the Explore lease — a run holding it is mid-ingest (the
     corpus and keyword index moving under a fit), and refits at its own
-    end — but refused for anything else (the lease's database busy), it
-    refits anyway rather than leave the old fit in force for a day."""
+    end. Refused with neither a run nor a reset holding anything (the
+    lease's database was busy a moment), it refits anyway rather than leave
+    the old fit in force for a day; when that can't be told either, it
+    leaves the fit to the next Explore run rather than take one blind."""
     from app.pipeline import lease
 
+    with lease.job(lease.EXPLORE, who="Explore ranking refit") as held:
+        if held:
+            recalibrate_ranking(db_session_factory)
+            return
     try:
-        with lease.job(lease.EXPLORE, who="Explore ranking refit") as held:
-            if held:
-                recalibrate_ranking(db_session_factory)
-                return
         db = db_session_factory()
         try:
             running = lease.holder(db, lease.EXPLORE) is not None or lease.held(db, lease.DATA_RESET)
         finally:
             db.close()
     except Exception:
-        # Can't tell whether a run is mid-ingest: no fit taken under it. The
-        # next Explore run refits.
         logger.warning("Explore ranking refit skipped — the lease couldn't be read", exc_info=True)
         return
     if not running:
@@ -1118,7 +1118,10 @@ def ensure_explore_index(db_session_factory) -> None:
     that starts meanwhile — since the rebuild reads documents by id
     (rebuild_explore_index) and one rebuild at a time is the lock's job.
     """
+    whole = None
     for attempt in range(_BUSY_CHECKS):
+        if attempt:
+            time.sleep(_BUSY_CHECK_EVERY_S)
         try:
             whole = index_is_whole()
             break
@@ -1132,8 +1135,7 @@ def ensure_explore_index(db_session_factory) -> None:
             # index that may well be whole — nor to leave one that isn't for
             # a day. Looked at again shortly (main runs this on a thread).
             logger.warning("Explore index busy at start (%s) — checking again", error)
-            time.sleep(_BUSY_CHECK_EVERY_S)
-    else:
+    if whole is None:
         logger.warning("Explore index stayed busy at start — the next Explore run checks it")
         return
     if whole or is_rebuilding():
@@ -1150,9 +1152,21 @@ def ensure_explore_index(db_session_factory) -> None:
             finally:
                 db.close()
             logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
-            if rebuild_explore_index(db_session_factory) is not None:
-                _refit_after_a_start_rebuild(db_session_factory)
+            if rebuild_explore_index(db_session_factory) is None:
+                return
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
+            return
+        try:
+            _refit_after_a_start_rebuild(db_session_factory)
+        except Exception:
+            logger.exception("Explore ranking refit after the rebuild failed — the next Explore run refits")
 
-    start_writer(_reindex, name="explore-reindex")
+    from app.background import WritesHeld
+
+    try:
+        start_writer(_reindex, name="explore-reindex")
+    except WritesHeld:
+        # A data reset began while this looked: it empties the index, and the
+        # first Explore run after it builds it.
+        logger.info("Explore index rebuild not started — a data reset holds writes; the next Explore run builds it")

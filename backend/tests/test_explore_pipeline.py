@@ -476,6 +476,56 @@ async def test_a_run_facing_a_locked_index_neither_rebuilds_nor_tops_it_up(db_se
     resolve.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_a_skipped_embed_step_owes_the_backfilled_documents_to_the_next_run(db_session):
+    # The backfill won't return them again and they are in the index
+    # already: nothing else would re-embed them.
+    import sqlite3
+
+    from app.pipeline.cache import api_cache_get
+
+    doc = ExploreDocument(doc_type="Executive Order", source="Federal Register", title="An order",
+                          summary="s", body="b", date="2026-07-01")
+    db_session.add(doc)
+    db_session.commit()
+    doc_id = doc.id  # the run closes the session it is handed
+
+    async def run(**over):
+        empty = AsyncMock(return_value={})
+        patches = {
+            "SessionLocal": MagicMock(return_value=db_session),
+            "fetch_floor_remarks": empty,
+            "fetch_house_floor_remarks": AsyncMock(return_value=[]),
+            "fetch_recent_presidential_actions": AsyncMock(return_value=[]),
+            "fetch_scotus_cases": AsyncMock(return_value=[]),
+            "fetch_fr_rulemaking": AsyncMock(return_value=[]),
+            "_backfill_presidential_bodies": AsyncMock(return_value=[]),
+            "_backfill_rulemaking_bodies": AsyncMock(return_value=[]),
+            "_purge_orphaned_vectors": MagicMock(return_value=0),
+            "get_embedded_explore_ids": MagicMock(return_value={doc_id}),
+            "rebuild_index": MagicMock(return_value=0),
+            "update_document_authority": MagicMock(return_value={"documents": 0, "cited": 0}),
+            "calibrate_and_store": MagicMock(return_value={}),
+            **over,
+        }
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            for name, value in patches.items():
+                stack.enter_context(patch(f"app.pipeline.explore_pipeline.{name}", value))
+            await run_explore_pipeline(days_back=1)
+
+    locked = MagicMock(side_effect=sqlite3.OperationalError("database is locked"))
+    await run(_backfill_presidential_bodies=AsyncMock(return_value=[doc_id]), index_is_whole=locked,
+              embed_explore_documents=MagicMock(return_value=0))
+    assert api_cache_get(db_session, "explore", "reembed_owed", max_age_hours=24) == [doc_id]
+
+    embed = MagicMock(return_value=1)
+    await run(index_is_whole=MagicMock(return_value=True), embed_explore_documents=embed)
+    assert [d["id"] for d in embed.call_args.args[0]] == [doc_id]
+    assert api_cache_get(db_session, "explore", "reembed_owed", max_age_hours=24) is None
+
+
 def test_ranking_calibration_is_kept_while_the_vector_index_is_not_whole(db_session):
     # Measured against a semantic channel answering nothing, the priors come
     # out as if the channels agreed perfectly.
@@ -484,3 +534,15 @@ def test_ranking_calibration_is_kept_while_the_vector_index_is_not_whole(db_sess
     with patch("app.pipeline.vector_store.index_is_whole", return_value=False), \
          patch("app.pipeline.calibrate_ranking.compute_calibration", side_effect=AssertionError("measured")):
         assert explore_ranking.calibrate_and_store(db_session) is None
+
+
+def test_a_busy_vector_index_keeps_the_calibration_without_calling_it_a_failure(db_session, caplog):
+    import sqlite3
+
+    from app.pipeline import explore_ranking
+
+    with patch("app.pipeline.vector_store.index_is_whole",
+               side_effect=sqlite3.OperationalError("database is locked")), \
+         patch("app.pipeline.calibrate_ranking.compute_calibration", side_effect=AssertionError("measured")):
+        assert explore_ranking.calibrate_and_store(db_session) is None
+    assert "calibration failed" not in caplog.text
