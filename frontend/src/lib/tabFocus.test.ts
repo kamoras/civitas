@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { retryKeepingFocus } from "./tabFocus";
+import { keepFocusOnSelectedTab, retryKeepingFocus } from "./tabFocus";
 
 describe("retryKeepingFocus", () => {
   it("moves focus to the enclosing tab panel before retrying", () => {
@@ -40,5 +40,37 @@ describe("retryKeepingFocus", () => {
     )({ currentTarget: document.getElementById("retry")! });
     expect(document.activeElement?.id).toBe("toggle");
     expect(retry).toHaveBeenCalledOnce();
+  });
+});
+
+describe("keepFocusOnSelectedTab", () => {
+  const tabs = () => {
+    document.body.innerHTML = `
+      <div role="tablist">
+        <button role="tab" id="a" tabindex="-1" aria-selected="false">A</button>
+        <button role="tab" id="b" tabindex="0" aria-selected="true">B</button>
+      </div>
+      <div role="tabpanel" tabindex="0"><button id="inside">x</button></div>`;
+  };
+
+  it("moves focus off a tab that stopped being selected (Back from B to A's history entry)", () => {
+    tabs();
+    document.getElementById("a")!.focus();
+    keepFocusOnSelectedTab("b");
+    expect(document.activeElement?.id).toBe("b");
+  });
+
+  it("leaves focus inside a panel where it is", () => {
+    tabs();
+    document.getElementById("inside")!.focus();
+    keepFocusOnSelectedTab("b");
+    expect(document.activeElement?.id).toBe("inside");
+  });
+
+  it("does nothing with focus on the body", () => {
+    tabs();
+    (document.activeElement as HTMLElement | null)?.blur();
+    keepFocusOnSelectedTab("b");
+    expect(document.activeElement).toBe(document.body);
   });
 });

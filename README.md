@@ -1237,9 +1237,12 @@ the overrun and staleness watchdogs on their next clean tick, a failed step
 when that step next completes, a skipped nightly phase when it next runs, the
 justice alert when loyalty is next measured, and so on for every alert. The
 panel lists active alerts first, then resolved ones (with when) and one-off
-events. A newer alert for the same condition supersedes the older, and
-resolving frees the dedupe key so a recurrence alerts again. Open alerts are
-never pushed off the panel by newer history.
+events. A newer alert for the same condition replaces the older (shown as
+replaced, not resolved) and leaves its dedupe key held, so details that swing
+back and forth (failing states A, then B, then A) don't notify on every swing.
+Resolving frees the keys of every alert for the condition, so a recurrence
+alerts again. Open alerts are never pushed off the panel by newer history, and
+never pruned from the 50 kept.
 
 ### Docker Swarm Architecture
 

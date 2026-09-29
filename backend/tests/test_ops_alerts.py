@@ -357,6 +357,35 @@ class TestOpenAndResolved:
         open_ = [a["subject"] for a in self._alerts(db_session) if a["open"]]
         assert open_ == ["1 state failed"]
 
+    def test_a_superseded_alert_is_not_called_resolved(self, db_session):
+        self._send(db_session, "3 states failed", dedupe_key="a", condition="ingest")
+        self._send(db_session, "1 state failed", dedupe_key="b", condition="ingest")
+        newer, older = self._alerts(db_session)
+        assert (older["open"], older["resolvedAt"]) == (False, None)
+        assert older["supersededAt"] is not None
+
+    def test_details_swinging_back_do_not_alert_again_while_the_condition_is_open(self, db_session):
+        # Failing states A, then B, then A again, the same day: A has been
+        # sent, and the condition never cleared, so nothing new to say.
+        assert self._send(db_session, "A failed", dedupe_key="day-A", condition="ingest")
+        assert self._send(db_session, "B failed", dedupe_key="day-B", condition="ingest")
+        assert not self._send(db_session, "A failed", dedupe_key="day-A", condition="ingest")
+
+    def test_resolving_frees_the_superseded_alerts_keys_too(self, db_session):
+        self._send(db_session, "A failed", dedupe_key="day-A", condition="ingest")
+        self._send(db_session, "B failed", dedupe_key="day-B", condition="ingest")
+        assert self._resolve(db_session, "ingest") == 1
+        assert self._send(db_session, "A failed", dedupe_key="day-A", condition="ingest")
+
+    def test_pruning_never_deletes_an_open_alert(self, db_session, monkeypatch):
+        monkeypatch.setattr("app.ops_alerts._HISTORY_KEEP", 5)
+        self._send(db_session, "Still broken", condition="old")
+        for i in range(8):
+            self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
+        subjects = [a["subject"] for a in self._alerts(db_session)]
+        assert subjects[0] == "Still broken"
+        assert len(subjects) == 6  # kept open, plus the five newest
+
     def test_an_event_alert_has_no_open_state(self, db_session):
         self._send(db_session, "Something happened once")
         [alert] = self._alerts(db_session)
