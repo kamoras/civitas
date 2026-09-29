@@ -1,18 +1,21 @@
 alembic==1.20.0
-atproto>=0.0.72
+atproto==0.0.72
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
 APScheduler==3.11.3
-backoff==2.2.1
 certifi==2026.7.22
+cffi==2.1.1
+chardet==7.6.0
 charset-normalizer==3.5.1
 click==8.5.0
 cloudpickle==3.1.2
+cryptography==50.0.1
 cssselect==1.5.0
 coverage==7.16.2
 defusedxml==0.7.1
 diff-cover==10.6.0
+dnspython==2.8.0
 fastapi==0.141.1
 filelock==4.0.6
 fsspec==2026.9.0
@@ -27,17 +30,23 @@ idna==3.20
 iniconfig==2.3.0
 Jinja2==3.1.6
 joblib==1.6.0
+libipld==3.4.1
 lxml==6.1.3
 Mako==1.4.3
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
 mpmath==1.3.0
+narwhals==2.26.0
 networkx==3.7
 numpy==2.5.3
 packaging==26.3
+pdfminer.six==20260107
 pdfplumber==0.11.10
 pillow==12.3.0
+pycparser==3.0
+pyee==13.0.1
+pypdfium2==5.13.0
 pytesseract==0.3.13
 pluggy==1.6.0
 pydantic==2.13.5
@@ -65,7 +74,19 @@ starlette==1.7.0
 sympy==1.14.0
 threadpoolctl==3.7.0
 tokenizers==0.23.2
-torch==2.14.0
+# torch is the CPU-only build, pinned by URL and sha256 (pip verifies the
+# hash). PyPI's Linux torch wheels, aarch64 included (the Pi), depend on the
+# full NVIDIA CUDA stack and triton: ~4 GB in every backend image for a Pi 5
+# with no NVIDIA GPU, and nothing here asks for a device. Measured 2026-09-29:
+# the CPU build's embeddings for both models are bit-identical to the CUDA
+# build's on CPU, so no classification threshold moves. A direct URL rather
+# than --extra-index-url because pip merges an extra index with PyPI for
+# every package, and uv refuses the mix outright. Dependabot does not update
+# URL requirements: bump torch by hand (new version in all three lines, new
+# wheel URLs and hashes from https://download.pytorch.org/whl/cpu/torch/).
+torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl#sha256=092d5c12938850dfbd90a654b3c8dac34c33e300f88eb19ee6f4ef93992c6347 ; sys_platform == "linux" and platform_machine == "aarch64"
+torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl#sha256=160e1bc46aeded3111d2801f8ae10dc9a1b946843a7e126b4dbf5e19c5706e95 ; sys_platform == "linux" and platform_machine == "x86_64"
+torch==2.14.0 ; sys_platform != "linux"
 tqdm==4.70.1
 transformers==5.17.0
 typer==0.27.2
@@ -78,3 +99,4 @@ uvloop==0.22.1
 watchfiles==1.3.0
 websockets==17.1
 xlrd==2.0.2
+zstandard==0.25.0

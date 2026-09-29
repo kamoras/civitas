@@ -147,8 +147,8 @@ export default function DataChapter() {
         </Sub>
         <P>
           Every source&apos;s rate limits are respected, and responses are cached for 72 hours to
-          avoid asking twice — except a state&apos;s answer that it has no measures, kept for only six
-          hours, so a measure certified afterwards appears the next night.
+          avoid asking twice — except a state&apos;s answer that it has no measures, kept for only
+          six hours, so a measure certified afterwards appears the next night.
         </P>
       </Section>
 

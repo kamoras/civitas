@@ -79,7 +79,9 @@ function TradeRow({ trade }: { trade: StockTrade }) {
         )}
         {trade.reportKind === "annual" && (
           <MetricTooltip text="From the annual report (OGE Form 278e), which lists every transaction of the year. It does not say when each was first reported, so no timeliness is shown.">
-            <span className="text-xs px-1 py-0.5 border text-ink-lo border-white/15">ANNUAL REPORT</span>
+            <span className="text-xs px-1 py-0.5 border text-ink-lo border-white/15">
+              ANNUAL REPORT
+            </span>
           </MetricTooltip>
         )}
       </div>
@@ -135,11 +137,13 @@ const ABOUT_DATA = {
 
 export default function StockTrades({ politicianId, filer = "senate" }: StockTradesProps) {
   const { data, loading, error, request } = useLatestRequest<PaginatedStockTrades, null>(
-    null, "Failed to load stock trades",
+    null,
+    "Failed to load stock trades"
   );
 
   const fetchPage = useCallback(
-    (p: number) => request(null, () => FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE })),
+    (p: number) =>
+      request(null, () => FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE })),
     [request, politicianId, filer]
   );
 

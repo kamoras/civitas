@@ -30,7 +30,13 @@ const SUBSTANTIVE_BILL_TYPES = new Set(["s", "hr", "sjres", "hjres"]);
 // every stage as a current status. Before the 2026-07 REFERRED split, the
 // automatic referral also read as IN_COMMITTEE, and one senator's summary
 // read "135 bills, 123 advancing".
-const ADVANCING_STAGES = new Set(["REPORTED", "ON_FLOOR", "PASSED_CHAMBER", "IN_OTHER_CHAMBER", "TO_PRESIDENT"]);
+const ADVANCING_STAGES = new Set([
+  "REPORTED",
+  "ON_FLOOR",
+  "PASSED_CHAMBER",
+  "IN_OTHER_CHAMBER",
+  "TO_PRESIDENT",
+]);
 
 // `stage` (BILL_STAGES taxonomy, backend/app/config_definitions.py) is the
 // more reliable signal when present. Falling back to the original
@@ -222,10 +228,20 @@ interface FilterTileProps {
  * A zero count can't filter to anything, so its tile is disabled (the
  * explanation stays reachable).
  */
-function FilterTile({ count, label, help, pressed, onSelect, activeClass, countClass }: FilterTileProps) {
+function FilterTile({
+  count,
+  label,
+  help,
+  pressed,
+  onSelect,
+  activeClass,
+  countClass,
+}: FilterTileProps) {
   const empty = count === 0;
   return (
-    <div className={`panel p-2 transition-colors ${pressed ? activeClass : empty ? "" : "hover:bg-white/[0.03]"}`}>
+    <div
+      className={`panel p-2 transition-colors ${pressed ? activeClass : empty ? "" : "hover:bg-white/[0.03]"}`}
+    >
       <button
         type="button"
         onClick={onSelect}
@@ -233,7 +249,9 @@ function FilterTile({ count, label, help, pressed, onSelect, activeClass, countC
         aria-pressed={pressed}
         className={`block w-full ${empty ? "cursor-default" : "cursor-pointer"}`}
       >
-        <span className={`block text-xl font-display font-semibold ${empty ? "text-ink-min" : countClass}`}>
+        <span
+          className={`block text-xl font-display font-semibold ${empty ? "text-ink-min" : countClass}`}
+        >
           {count}
         </span>{" "}
         <span className="block text-xs text-ink-min">{label}</span>

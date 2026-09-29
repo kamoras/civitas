@@ -8,7 +8,12 @@ import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
 import { formatUtcDate, isNewFact } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
-import { PolicyBadge, MonitorChips, NewFactTag, IssueImage } from "@/components/action/IssueEnrichment";
+import {
+  PolicyBadge,
+  MonitorChips,
+  NewFactTag,
+  IssueImage,
+} from "@/components/action/IssueEnrichment";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
@@ -26,14 +31,19 @@ interface Retraction {
 
 /** The issue; or, for one Civitas withdrew (410, backend/app/data/
  * retractions.json), the date and reason; or null. */
-async function fetchIssueOrRetraction(id: string): Promise<{ issue: ActionIssue | null; retraction: Retraction | null }> {
+async function fetchIssueOrRetraction(
+  id: string
+): Promise<{ issue: ActionIssue | null; retraction: Retraction | null }> {
   try {
     const res = await fetch(`${BACKEND}/api/action/issues/${encodeURIComponent(id)}`, {
       next: { revalidate: 300 },
     });
     if (res.status === 410) {
       const detail = (await res.json())?.detail;
-      return { issue: null, retraction: detail?.reason ? { date: detail.date, reason: detail.reason } : null };
+      return {
+        issue: null,
+        retraction: detail?.reason ? { date: detail.date, reason: detail.reason } : null,
+      };
     }
     if (!res.ok) return { issue: null, retraction: null };
     return { issue: usableRecord<ActionIssue>(await res.json(), "id", "title"), retraction: null };
@@ -48,12 +58,22 @@ function Withdrawn({ retraction }: { retraction: Retraction }) {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
-          <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">Withdrawn {retraction.date}</p>
-          <h1 className="font-display text-3xl font-extrabold text-ink-hi">This issue was withdrawn</h1>
+          <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+            Withdrawn {retraction.date}
+          </p>
+          <h1 className="font-display text-3xl font-extrabold text-ink-hi">
+            This issue was withdrawn
+          </h1>
           <p className="leading-relaxed text-ink">{retraction.reason}</p>
           <p className="text-sm text-ink-lo">
             Every withdrawal is listed, with its reason, in the public retraction log in the Civitas
-            source code. <Link href={ACTION_CENTER_HREF} className="underline decoration-white/30 underline-offset-4 hover:text-phos">Current issues</Link>
+            source code.{" "}
+            <Link
+              href={ACTION_CENTER_HREF}
+              className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+            >
+              Current issues
+            </Link>
           </p>
         </div>
       </main>

@@ -21,12 +21,15 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
   return (
     <div>
       <p className="mb-3 text-[13px] text-ink-lo">
-        A sitting member of Congress has a Representation Score from their voting record, linked
-        to their full scorecard.
+        A sitting member of Congress has a Representation Score from their voting record, linked to
+        their full scorecard.
       </p>
       <ul>
         {active.map((c) => (
-          <li key={c.id} className="flex items-baseline justify-between gap-3 border-b border-white/[0.09] py-2.5">
+          <li
+            key={c.id}
+            className="flex items-baseline justify-between gap-3 border-b border-white/[0.09] py-2.5"
+          >
             <span className="flex min-w-0 flex-col">
               <span className="text-[15px] font-bold text-ink-hi">{candidateName(c)}</span>
               <span className={`font-mono text-[11px] tracking-[0.08em] ${getPartyMeta(c).color}`}>
@@ -83,10 +86,14 @@ export default function RaceResearch({
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     const i = tabs.findIndex((t) => t.id === tab);
     const next =
-      e.key === "ArrowRight" ? (i + 1) % tabs.length
-        : e.key === "ArrowLeft" ? (i - 1 + tabs.length) % tabs.length
-          : e.key === "Home" ? 0
-            : e.key === "End" ? tabs.length - 1
+      e.key === "ArrowRight"
+        ? (i + 1) % tabs.length
+        : e.key === "ArrowLeft"
+          ? (i - 1 + tabs.length) % tabs.length
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? tabs.length - 1
               : null;
     if (next === null) return;
     e.preventDefault();
@@ -96,7 +103,12 @@ export default function RaceResearch({
 
   return (
     <div>
-      <div role="tablist" aria-label="Research this race" className="flex gap-2" onKeyDown={onKeyDown}>
+      <div
+        role="tablist"
+        aria-label="Research this race"
+        className="flex gap-2"
+        onKeyDown={onKeyDown}
+      >
         {tabs.map((t, i) => {
           const selected = t.id === tab;
           return (
@@ -135,7 +147,9 @@ export default function RaceResearch({
           hidden={t.id !== tab}
           className="mt-4"
         >
-          {t.id === "money" && <RaceFullDetail race={race} supersededByPrimary={supersededByPrimary} />}
+          {t.id === "money" && (
+            <RaceFullDetail race={race} supersededByPrimary={supersededByPrimary} />
+          )}
           {t.id === "record" && <RecordPanel race={race} />}
           {t.id === "news" && <CoverageFeed items={coverage} />}
         </div>

@@ -121,9 +121,7 @@ function Footer({ label }: { label: string }) {
         paddingTop: 28,
       }}
     >
-      <span style={{ color: INK_LO, fontSize: 14, letterSpacing: 2 }}>
-        {DOMAIN}
-      </span>
+      <span style={{ color: INK_LO, fontSize: 14, letterSpacing: 2 }}>{DOMAIN}</span>
       <span style={{ color: INK_MIN, fontSize: 13, letterSpacing: 1 }}>{label}</span>
     </div>
   );
@@ -188,9 +186,7 @@ async function issueImage(
           >
             {title}
           </div>
-          <div style={{ color: INK, fontSize: 22, lineHeight: 1.5 }}>
-            {summary}
-          </div>
+          <div style={{ color: INK, fontSize: 22, lineHeight: 1.5 }}>{summary}</div>
         </div>
         {photoDataUri && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -209,15 +205,28 @@ async function issueImage(
       width: 1200,
       height: 630,
       ...(archivoBold
-        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700 as const, style: "normal" as const }] }
+        ? {
+            fonts: [
+              {
+                name: "Archivo",
+                data: archivoBold,
+                weight: 700 as const,
+                style: "normal" as const,
+              },
+            ],
+          }
         : {}),
     }
   );
 }
 
 export type OgPoliticianIdentity = {
-  name?: string; party?: string; state?: string; district?: number | null;
-  role?: string; thumbnailUrl?: string | null;
+  name?: string;
+  party?: string;
+  state?: string;
+  district?: number | null;
+  role?: string;
+  thumbnailUrl?: string | null;
 };
 
 // A truthy check on district treats an at-large seat (0, FEC's own "00"
@@ -242,11 +251,13 @@ export function scoreFooterLabel(branch: string | undefined): string {
   return branch === "senate" || branch === "house" ? "REPRESENTATION SCORE" : "CIVITAS SCORE";
 }
 
-async function politicianImage(profile: {
-  branch?: string;
-  identity?: OgPoliticianIdentity;
-  overallScore?: number | null;
-} | null) {
+async function politicianImage(
+  profile: {
+    branch?: string;
+    identity?: OgPoliticianIdentity;
+    overallScore?: number | null;
+  } | null
+) {
   const identity = profile?.identity;
   const name = identity?.name ?? "Civitas";
   const party = identity?.party ?? "";
@@ -331,7 +342,16 @@ async function politicianImage(profile: {
       width: 1200,
       height: 630,
       ...(archivoBold
-        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700 as const, style: "normal" as const }] }
+        ? {
+            fonts: [
+              {
+                name: "Archivo",
+                data: archivoBold,
+                weight: 700 as const,
+                style: "normal" as const,
+              },
+            ],
+          }
         : {}),
     }
   );
@@ -355,7 +375,9 @@ async function genericCard({
 }) {
   let archivoBold: ArrayBuffer | null = null;
   try {
-    archivoBold = await loadArchivoBold(`CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}`);
+    archivoBold = await loadArchivoBold(
+      `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}`
+    );
   } catch {
     // fall through with archivoBold still null — degrade to Satori's
     // default face rather than fail the whole image over a font fetch.
@@ -376,9 +398,7 @@ async function genericCard({
     >
       <Header section={section} />
       <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
-        <div style={{ color: INK_HI, fontSize: 46, fontWeight: 700, lineHeight: 1.2 }}>
-          {title}
-        </div>
+        <div style={{ color: INK_HI, fontSize: 46, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
         <div style={{ color: INK, fontSize: 22, marginTop: 16 }}>{description}</div>
       </div>
       <Footer label={footerLabel} />
@@ -387,7 +407,16 @@ async function genericCard({
       width: 1200,
       height: 630,
       ...(archivoBold
-        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700 as const, style: "normal" as const }] }
+        ? {
+            fonts: [
+              {
+                name: "Archivo",
+                data: archivoBold,
+                weight: 700 as const,
+                style: "normal" as const,
+              },
+            ],
+          }
         : {}),
     }
   );
@@ -405,9 +434,7 @@ function StatTile({ value, label }: { value: string; label: string }) {
       }}
     >
       <span style={{ color: INK_HI, fontSize: 40, fontWeight: 700 }}>{value}</span>
-      <span style={{ color: INK_LO, fontSize: 15, letterSpacing: 1, marginTop: 8 }}>
-        {label}
-      </span>
+      <span style={{ color: INK_LO, fontSize: 15, letterSpacing: 1, marginTop: 8 }}>{label}</span>
     </div>
   );
 }
@@ -455,7 +482,7 @@ async function electionImage(ballot: StateBallot | null, code: string) {
   try {
     archivoBold = await loadArchivoBold(
       `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}` +
-      `${SENATE_LABEL}${HOUSE_LABEL}${MEASURES_LABEL}${senateCount}${houseCount}${measureCount}`
+        `${SENATE_LABEL}${HOUSE_LABEL}${MEASURES_LABEL}${senateCount}${houseCount}${measureCount}`
     );
   } catch {
     // fall through with archivoBold still null — degrade to Satori's
@@ -477,9 +504,7 @@ async function electionImage(ballot: StateBallot | null, code: string) {
     >
       <Header section={section} />
       <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
-        <div style={{ color: INK_HI, fontSize: 56, fontWeight: 700, lineHeight: 1.2 }}>
-          {title}
-        </div>
+        <div style={{ color: INK_HI, fontSize: 56, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
         <div style={{ color: INK, fontSize: 24, marginTop: 16, marginBottom: 48 }}>
           {description}
         </div>
@@ -495,7 +520,16 @@ async function electionImage(ballot: StateBallot | null, code: string) {
       width: 1200,
       height: 630,
       ...(archivoBold
-        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700 as const, style: "normal" as const }] }
+        ? {
+            fonts: [
+              {
+                name: "Archivo",
+                data: archivoBold,
+                weight: 700 as const,
+                style: "normal" as const,
+              },
+            ],
+          }
         : {}),
     }
   );

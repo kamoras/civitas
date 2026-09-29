@@ -32,7 +32,11 @@ async function fetchIndex(): Promise<SitemapIndex | null> {
     const res = await fetch(`${BACKEND}/api/sitemap`, { next: { revalidate: 3600 } });
     if (!res.ok) return null;
     const data = await res.json();
-    if (!Array.isArray(data?.politicians) || !Array.isArray(data?.bills) || !Array.isArray(data?.issues)) {
+    if (
+      !Array.isArray(data?.politicians) ||
+      !Array.isArray(data?.bills) ||
+      !Array.isArray(data?.issues)
+    ) {
       return null;
     }
     return data as SitemapIndex;
@@ -45,7 +49,7 @@ function entries(
   items: SitemapEntry[],
   path: (id: string) => string,
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"],
-  priority: number,
+  priority: number
 ): MetadataRoute.Sitemap {
   return items.map((item) => ({
     url: `${SITE_URL}${path(encodeURIComponent(item.id))}`,

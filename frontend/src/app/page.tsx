@@ -4,7 +4,15 @@ import Masthead from "@/components/home/Masthead";
 import RecordIndex from "@/components/home/RecordIndex";
 import Holdings from "@/components/home/Holdings";
 import JsonLd from "@/components/seo/JsonLd";
-import { BSKY_PROFILE_URL, GITHUB_REPO_URL, HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL, pageMetadata } from "@/lib/site";
+import {
+  BSKY_PROFILE_URL,
+  GITHUB_REPO_URL,
+  HOME_DESCRIPTION,
+  HOME_TITLE,
+  SITE_NAME,
+  SITE_URL,
+  pageMetadata,
+} from "@/lib/site";
 
 export const metadata = pageMetadata({
   title: HOME_TITLE,

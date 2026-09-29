@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatStanding, parseIssueId, parsePoliticianId, parseStateCode, scoreFooterLabel } from "./route";
+import {
+  formatStanding,
+  parseIssueId,
+  parsePoliticianId,
+  parseStateCode,
+  scoreFooterLabel,
+} from "./route";
 
 describe("formatStanding", () => {
   it("formats a senator as party-state, no district", () => {

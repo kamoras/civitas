@@ -91,9 +91,7 @@ describe("formatUtcDate", () => {
 
 describe("issueDateLabel", () => {
   it("shows a single date when the story hasn't been re-matched since it surfaced", () => {
-    expect(issueDateLabel({ date: "2026-08-19", firstSurfaced: "2026-08-19" })).toBe(
-      "2026-08-19"
-    );
+    expect(issueDateLabel({ date: "2026-08-19", firstSurfaced: "2026-08-19" })).toBe("2026-08-19");
   });
 
   it("shows both dates when a still-trending story's date has drifted from its origin", () => {
