@@ -100,6 +100,16 @@ def render_atom(*, title: str, subtitle: str, path: str, posts: list[BroadcastPo
     return b'<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(feed, encoding="utf-8")
 
 
+def _matches(if_none_match: str | None, etag: str) -> bool:
+    """If-None-Match's weak comparison (RFC 9110 §13.1.2): any listed tag,
+    with or without its W/ prefix, or "*". A client given this feed through
+    nginx's gzip holds the weak form of the tag."""
+    if not if_none_match:
+        return False
+    tags = {t.strip().removeprefix("W/") for t in if_none_match.split(",")}
+    return "*" in tags or etag in tags
+
+
 def _atom_response(request: Request, body: bytes, posts: list[BroadcastPost]) -> Response:
     """The feed with validators, so a poller that sends them back gets a 304
     instead of the document (nginx answers these from its cache too)."""
@@ -110,7 +120,7 @@ def _atom_response(request: Request, body: bytes, posts: list[BroadcastPost]) ->
     }
     if posts:
         headers["Last-Modified"] = posts[0].published_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
-    if request.headers.get("if-none-match") == etag:
+    if _matches(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers=headers)
     return Response(content=body, media_type=ATOM_MEDIA_TYPE, headers=headers)
 

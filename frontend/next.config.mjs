@@ -19,6 +19,9 @@ const nextConfig = {
       { source: "/bills", destination: "/congress/bills", permanent: true },
       { source: "/bills/:id", destination: "/congress/bills/:id", permanent: true },
       { source: "/scorecard", destination: "/politicians", permanent: true },
+      // No feed is at /feed itself; the page listing them is (nginx sends
+      // /feed/ there too, before Next sees it).
+      { source: "/feed", destination: "/feeds", permanent: true },
     ];
   },
   async rewrites() {
