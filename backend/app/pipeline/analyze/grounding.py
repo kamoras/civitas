@@ -74,47 +74,6 @@ def _number_tokens(text: str) -> set[str]:
     }
 
 
-_STAT_CONTEXT = (
-    "$", "%", "percent", "million", "billion", "trillion",
-    "degree", "point", "ton", "acre", "death", "case", "vote",
-    "mile", "foot", "feet", "pound", "gallon", "barrel", "year-old",
-)
-
-# A bare 4-digit number in this range reads as a calendar year regardless
-# of nearby words ("signed in 2023", "the 2023 ruling") — this is exactly
-# where a model asked to write a specific-sounding sentence about a thin
-# fact set fabricates a plausible year from its training data rather than
-# leaving the date out (observed 2026-07: a story about an unrelated
-# fact set stated a fictional AI-export-ban was "lifted on July 15, 2023"
-# — no date of any kind was in the source material).
-_YEAR_RANGE = range(1900, 2100)
-
-
-def ungrounded_statistics(generated: str, source: str) -> list[str]:
-    """Like ungrounded_numbers, but only for statistic-shaped numbers.
-
-    For long-form prose, checking every digit group over-rejects: contextual
-    numbers ("three of the 12 members", ordinal years) are often phrased
-    differently than the source without being fabrications. Money,
-    percentages, magnitude-worded figures, and bare years are the numbers
-    that damage credibility when invented — a digit group counts as a
-    statistic when $, %, a magnitude word appears within a few characters
-    of it, or the digit group is itself a plausible calendar year.
-    """
-    source_numbers = _number_tokens(source)
-    missing = set()
-    text = generated or ""
-    for m in _DIGIT_GROUP_RE.finditer(text):
-        tok = _normalize_token(m.group(0))
-        context = text[max(0, m.start() - 3):m.end() + 12].lower()
-        is_year = tok.isdigit() and len(tok) == 4 and int(tok) in _YEAR_RANGE
-        if not is_year and not any(k in context for k in _STAT_CONTEXT):
-            continue
-        if tok not in source_numbers:
-            missing.add(tok)
-    return sorted(missing)
-
-
 def ungrounded_numbers(generated: str, source: str) -> list[str]:
     """Digit groups in ``generated`` that never appear in ``source``."""
     source_numbers = _number_tokens(source)

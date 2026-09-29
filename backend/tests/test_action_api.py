@@ -969,3 +969,19 @@ class TestCountIssuePayload:
         assert data["countOfficial"] is True
         other = _build_issue_response(news, db_session)
         assert other["countAsOf"] is None and other["countOfficial"] is None
+
+
+def test_timeline_refuses_a_year_it_cannot_build_dates_for(db_session):
+    # year=0 reached date(0, 10, 1) and answered 500; out-of-range input is a 422.
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api import action
+    from app.database import get_db
+
+    app = FastAPI()
+    app.include_router(action.router, prefix="/api")
+    app.dependency_overrides[get_db] = lambda: db_session
+    client = TestClient(app)
+    assert client.get("/api/action/timeline?year=0").status_code == 422
+    assert client.get("/api/action/timeline?year=2026").status_code == 200

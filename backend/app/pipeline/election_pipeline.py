@@ -1533,7 +1533,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         logger.info("--- Election: COVERAGE INGESTION ---")
                         progress.begin("coverage_ingestion")
                         try:
-                            ingested = await ingest_race_coverage(db, client)
+                            ingested = await ingest_race_coverage(db)
                             run.coverage_items_ingested = ingested
                             logger.info("Ingested %d coverage items", ingested)
                             progress.complete("coverage_ingestion", detail=f"{ingested} items")

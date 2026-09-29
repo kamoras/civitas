@@ -18,7 +18,6 @@ import math
 from datetime import date, datetime
 from unittest.mock import patch
 
-from app.api.highlights import build_highlights
 from app.pipeline.analyze.population_reference import ChamberReference
 from app.pipeline.analyze.score_calculator import (
     _funding_independence_core,
@@ -208,20 +207,6 @@ class TestContributionsDenominator:
                         "smallDonorPercentage": 5, "topDonors": [], "industryBreakdown": []},
         })
         assert s["funding"]["totalContributions"] == 8
-
-    def test_highlights_describe_shares_of_contributions(self):
-        entity = {
-            "name": "Jane Doe",
-            "funding": {"totalRaised": 50_000_000, "totalContributions": 20_000_000,
-                        "totalFromPACs": 10_000_000, "smallDonorPercentage": 10,
-                        "topDonors": [], "industryBreakdown": []},
-            "representationScore": {"fundingIndependence": 50, "constituentAlignment": 50,
-                                    "legislativeEffectiveness": 50},
-            "votingRecord": {"totalVotes": 0}, "campaignPromises": [], "lobbyingMatches": [],
-        }
-        text = " ".join(build_highlights(entity))
-        assert "$20.0M in contributions came from small donors" in text
-        assert "PAC-heavy: 50% of contributions" in text
 
 
 class TestFundingReference:

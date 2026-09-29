@@ -1849,8 +1849,7 @@ def _calc_constituent_alignment(
 ) -> int:
     """
     Constituent Alignment Score (0-100, higher = better). Keyed
-    "constituentAlignment" (it was "independentVoting" until 2026-09; the
-    public API still emits that name too, for existing consumers).
+    "constituentAlignment" (it was "independentVoting" until 2026-09).
 
     How far a member's voting sits from what members of their party in
     comparably-leaning seats do, in the direction their seat leans. v6.13
@@ -2750,10 +2749,6 @@ _MIN_LES_REFERENCE_MEMBERS = 30
 def load_les_reference() -> dict:
     """{"senate": {...}, "house": {...}} — see population_reference."""
     return LES_REFERENCE.load()
-
-
-def write_les_reference(chamber: str, reference: dict) -> None:
-    LES_REFERENCE.write(chamber, reference)
 
 
 def _les_component_score(

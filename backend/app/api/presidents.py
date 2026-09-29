@@ -7,10 +7,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
-from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.database import SessionLocal, get_db
 from app.api.response_helpers import (
-    CACHE_TTL_CONFIG_S,
     CACHE_TTL_DETAIL_S,
     CACHE_TTL_LIST_S,
     PRESIDENT_DIMENSION_LABELS,
@@ -37,12 +35,6 @@ def leaderboard(db: Session = Depends(get_db)):
     """All presidents ranked by weighted score."""
     data = get_president_leaderboard(db)
     return _cached_json([e.model_dump(by_alias=True) for e in data], max_age=CACHE_TTL_LIST_S)
-
-
-@router.get("/weights")
-def weights():
-    """Score weights for the presidential scorecard."""
-    return _cached_json(PRESIDENT_SCORE_WEIGHTS, max_age=CACHE_TTL_CONFIG_S)
 
 
 @router.post("/pipeline/trigger")

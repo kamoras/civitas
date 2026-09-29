@@ -6,8 +6,6 @@ docs/research/justice-scores.md.
 
 import numpy as np
 import pytest
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.pool import StaticPool
 
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.pipeline.analyze.justice_loyalty import Vote, fit, label, loyalty_by_justice, president_on, score
@@ -126,23 +124,3 @@ def test_the_bundle_reads_and_every_row_is_binary():
     rows = _bundled_rows()
     assert sum(len(r) for r in rows.values()) == 29585
     assert all(set(v) <= {0, 1} for r in rows.values() for v in r)
-
-
-def test_a_new_justice_inserts_while_the_retired_columns_remain():
-    # Expand, then contract (migrations/README.md): the two unscored columns
-    # stay NOT NULL in this release because the previous image reads them,
-    # so the model must keep supplying them or no new justice could be
-    # inserted.
-    from sqlalchemy.orm import Session
-
-    from app.database import Base
-    from app.models import Justice
-
-    eng = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(bind=eng)
-    cols = {c["name"]: c for c in inspect(eng).get_columns("justices")}
-    assert {"score_bipartisan_agreement", "score_judicial_restraint"} <= set(cols)
-    with Session(eng) as s:
-        s.add(Justice(id="new", name="New Justice", last_name="Justice", appointing_president="X", appointing_party="D"))
-        s.commit()
-        assert s.query(Justice).count() == 1

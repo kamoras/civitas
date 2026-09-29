@@ -151,11 +151,6 @@ _FUND_TRANSFER_PROTOTYPE = (
 # Srivastava (2017, "Train Once, Test Anywhere"): mixing semantic descriptions
 # with exemplar entity names gives the embedding model both conceptual and
 # lexical anchors, improving generalization to unseen entities.
-_CANDIDATE_AFFILIATED_PROTOTYPE = (
-    "candidate personal campaign committee senator victory fund "
-    "friends of for senate for congress reelect leadership pac "
-    "joint fundraising state victory"
-)
 _PARTY_PROTOTYPE = (
     "national party committee democratic republican senatorial "
     "congressional campaign committee DSCC NRSC DCCC NRCC "

@@ -7,7 +7,6 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.database import SessionLocal
-from app.http_client import make_async_client
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
 from app.pipeline.supplementary_pipeline import (
@@ -412,8 +411,7 @@ def _election_coverage_refresh() -> None:
             deadline = lease.deadline(lease.COVERAGE_REFRESH)
             db = SessionLocal()
             try:
-                async with make_async_client() as client:
-                    ingested = await ingest_race_coverage(db, client)
+                ingested = await ingest_race_coverage(db)
                 # Election night: the live count's own posts
                 # (live_results/bluesky.py) have the account while any
                 # race's totals are still moving.
@@ -506,6 +504,7 @@ def _election_results_sync() -> None:
         return
 
     def _run():
+        from app.http_client import make_async_client
         from app.live_results.sync import results_tracker, sync_live_results
 
         async def _sync():

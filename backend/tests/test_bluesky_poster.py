@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from app.pipeline.analyze.bluesky_poster import _is_near_duplicate
 from app.pipeline.analyze.bluesky_utils import strip_hashtags_and_truncate
-from app.pipeline.analyze.action_center import _validate_facts
+from app.pipeline.analyze.grounding import validate_facts as _validate_facts
 
 
 # ---------------------------------------------------------------------------

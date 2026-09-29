@@ -824,8 +824,10 @@ job, since a fix looks the same — or when members were tried (or the budget
 went on requests that failed) and none loaded *and* none of the reports
 already stored still loads either. That live probe, not a
 memory of failing filings, is what tells an outage from a few dead links
-(`_SourceHealth`). Presidents are not covered yet: the OGE 278e is an
-~850-page hybrid scan with no asset-type column.
+(`_SourceHealth`). The sitting president's annual report (OGE 278e) is a
+third phase (`ingest_president_holdings`): it has no asset-type column, so a
+category comes only from what the form states, and every other security is
+`UNSTATED` ("Type not stated"), never typed from its name.
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
