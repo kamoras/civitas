@@ -338,8 +338,17 @@ class TestScannedTableReading:
 
     def test_no_maturity_or_out_of_window_date_and_only_the_forms_ranges(self):
         rows, _ = self._read()
-        assert all("2025-01-20" <= r.transaction_date <= "2026-01-14" for r in rows)
+        # A date is one inside the window or none at all, never a maturity.
+        assert all("2025-01-20" <= r.transaction_date <= "2026-01-14" for r in rows if r.transaction_date)
         assert all((r.amount_low, r.amount_high) in ptr_common.AMOUNT_BRACKETS for r in rows)
+
+    def test_a_row_whose_date_alone_is_illegible_is_kept_only_when_asked(self):
+        dated = ptr_common.TradeRow(None, "APPLE INC", "unknown", "purchase", "2026-03-02", "2026-05-14", 1001.0, 15000.0)
+        undated = ptr_common.TradeRow(None, "COMCAST CORP", "unknown", "purchase", None, "2026-05-14", 1001.0, 15000.0)
+        pdf = SimpleNamespace(pages=[object()])
+        with patch.object(ptr_common, "_ocr_table_page", return_value=([dated, undated], 1)):
+            assert ptr_common.ocr_extract_rows(pdf) == [dated]
+            assert ptr_common.ocr_extract_rows(pdf, keep_undated=True) == [dated, undated]
 
     def test_the_form_words_as_ocr_misreads_them(self):
         assert ptr_common.ocr_transaction_type("purchaso") == "purchase"

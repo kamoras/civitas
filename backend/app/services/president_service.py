@@ -277,7 +277,8 @@ def get_president_trades(
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
-        query.order_by(PresidentTrade.transaction_date.desc(), PresidentTrade.id.desc())
+        # Undated rows (a scan's illegible dates) after the dated ones.
+        query.order_by(PresidentTrade.transaction_date.desc().nulls_last(), PresidentTrade.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()

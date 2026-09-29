@@ -381,7 +381,7 @@ async def fetch_and_parse_ptr(db: Session, filing: dict) -> list[TradeRow]:
 
     try:
         rows, confidence = parse_pdf_bytes(
-            resp.content, not_before=filing.get("not_before"), not_after=filing.get("filing_date"),
+            resp.content, not_before=filing.get("not_before"), not_after=filing.get("filing_date"), keep_undated=True,
         )
     except Exception as e:
         logger.error("Failed to parse presidential 278-T PDF %s: %s", pdf_url, e)
