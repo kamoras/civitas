@@ -15,6 +15,7 @@ import {
   A,
 } from "@/components/about/AboutPage";
 import ScoreWeightBar from "@/components/about/ScoreWeightBar";
+import SignalOverlapReading from "@/components/about/SignalOverlapReading";
 
 export const metadata = pageMetadata({
   title: "How Senators and Representatives Are Scored",
@@ -242,6 +243,11 @@ export default function ScoresChapter() {
             neutral; toward the seat&apos;s center scores above, by the same amount either way. When
             that data isn&apos;t available, the score is all break-rate.
           </P>
+          <P>
+            Both parts come from roll calls (a crossing rate and a position), so every pipeline run
+            checks that they still measure different things by how closely they move together across
+            each chamber. <SignalOverlapReading pair="constituent" />
+          </P>
         </Sub>
         <Sub title="What 0 and 100 mean">
           <P>
@@ -359,6 +365,15 @@ export default function ScoresChapter() {
         </List>
         <P>
           When cosponsorship data is missing, the split falls back to 70% bills and 30% leadership.
+        </P>
+        <P>
+          Leadership and bipartisan attraction are both measured from the cosponsorship network (how
+          central a member is, and how many cosponsors cross party lines to join them), so their
+          combined weight is capped at 40%, and every pipeline run checks that they still carry
+          separate information by how closely they move together across each chamber. Two earlier
+          pairs that shipped as distinct signals turned out to move together at |r| of 0.72 and 0.76
+          and were restructured (see the <A href="/changelog">scoring changelog</A>).{" "}
+          <SignalOverlapReading pair="effectiveness" />
         </P>
         <Sub title="How bills are counted">
           <Steps>

@@ -5,7 +5,7 @@ import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
-import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
+import type { PresidentScoreBreakdown, RepresentationScoreBreakdown, SignalOverlap } from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -1452,6 +1452,12 @@ export async function setPoliticianVacancy(
     throw new Error(body.detail || `Vacancy update failed: ${res.status}`);
   }
   return res.json();
+}
+
+/** The post-run check that related score components still measure
+ * different things. Refreshed by each pipeline run. */
+export async function fetchSignalOverlap(): Promise<SignalOverlap> {
+  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.LONG);
 }
 
 export async function fetchConfig(): Promise<AppConfig> {

@@ -228,3 +228,19 @@ def test_a_database_that_ran_the_justice_change_as_0012_converges(patched_engine
     assert _revision(eng) == _head()
     assert "duplicate_of_id" in {c["name"] for c in inspect(eng).get_columns("action_issues")}
     assert "score_loyalty" in {c["name"] for c in inspect(eng).get_columns("justices")}
+
+
+def test_a_database_that_ran_the_sworn_date_change_as_0016_converges(patched_engine):
+    # Two branches each merged a "0016" (financial_disclosures.president_id
+    # and representatives.sworn_date). Stamped 0016 having run only the
+    # sworn-date one, the upgrade must still end at the models' schema.
+    eng = patched_engine
+    database._run_migrations("0015")
+    with eng.begin() as conn:
+        conn.execute(text("ALTER TABLE representatives ADD COLUMN sworn_date VARCHAR(10)"))
+        conn.execute(text("UPDATE alembic_version SET version_num = '0016'"))
+    database._run_migrations()
+    assert _revision(eng) == _head()
+    assert "president_id" in {c["name"] for c in inspect(eng).get_columns("financial_disclosures")}
+    assert "sworn_date" in {c["name"] for c in inspect(eng).get_columns("representatives")}
+    assert _diff(eng) == []

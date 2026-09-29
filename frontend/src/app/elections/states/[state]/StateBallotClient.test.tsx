@@ -366,6 +366,15 @@ describe("statewide executive offices", () => {
     expect(drawer.queryByText("John Stephen")).not.toBeInTheDocument();
   });
 
+  it("offers the town filter it tells the reader to use, however few the seats", async () => {
+    const seats = [council("1", ["Albany"], "Joseph D. Kenney"), council("2", ["Concord"], "Tobin Menard")];
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: seats })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/Filter by your town to find yours/)).toBeInTheDocument();
+    fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), { target: { value: "concord" } });
+    expect(drawer.queryByText("Joseph D. Kenney")).not.toBeInTheDocument();
+  });
+
   it("groups a body's seats in the ballot box, which is shared as an image on its own", () => {
     const seats = [council("1", ["Albany"], "Joseph D. Kenney"), council("2", ["Concord"], "Tobin Menard")];
     render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })} />);

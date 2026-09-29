@@ -234,3 +234,17 @@ def test_too_few_members_to_measure_leaves_scores(db_session):
     assert rescore_stale_constituent_alignment(_factory(db_session)) == []
     db_session.expire_all()
     assert {s.score_constituent_alignment for s in db_session.query(Senator)} == {100.0}
+
+
+def test_the_signal_overlap_is_re_measured_after_a_rescore(db_session, monkeypatch):
+    # The overlap check reads the breakdowns the rescore just moved; without
+    # this /about/scores kept the pre-rescore reading until the next run.
+    import app.pipeline.analyze.signal_overlap as so
+
+    measured = []
+    monkeypatch.setattr(so, "record_signal_overlap", lambda db, chamber: measured.append(chamber))
+    _make_stale("senate")
+    _seed_senate(db_session)
+
+    assert rescore_stale_constituent_alignment(_factory(db_session)) == ["senate"]
+    assert measured == ["senate"]
