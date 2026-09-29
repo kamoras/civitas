@@ -11,11 +11,13 @@ here against a small fake Playwright page rather than a real browser.
 """
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from app.pipeline.fetch import senate_ptr
 from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
+from app.pipeline.fetch.ptr_common import TradeRow
 
 
 def _search_row(first, last, path="/search/view/ptr/abc123/", filed="7/1/2026", office="Senator"):
@@ -359,6 +361,31 @@ class TestFiledDateBecomesDisclosureDate:
             "stored_filed_date": "2026-06-20",
         })
         assert rows[0].disclosure_date == "2026-06-20"
+
+    @pytest.mark.asyncio
+    async def test_a_paper_scan_row_without_a_legible_date_is_kept_with_the_filed_date(self, monkeypatch):
+        page = '<html><body><a href="/media/ptr/scan.pdf">PDF</a></body></html>'
+
+        async def fake_request(client, method, url, **kwargs):
+            return SimpleNamespace(content=b"%PDF-scan") if url.endswith(".pdf") else _FakeResponse(text=page)
+
+        undated = TradeRow(None, "COMCAST CORP", "unknown", "purchase", None, "", 1001.0, 15000.0)
+        calls = []
+
+        def fake_parse(content, **kwargs):
+            calls.append(kwargs)
+            return [undated], "ocr"
+
+        monkeypatch.setattr(senate_ptr, "_request_with_retry", fake_request)
+        monkeypatch.setattr(senate_ptr, "parse_pdf_bytes", fake_parse)
+        monkeypatch.setattr(senate_ptr, "api_cache_get", lambda *a, **k: None)
+        monkeypatch.setattr(senate_ptr, "api_cache_set", lambda *a, **k: None)
+        rows = await senate_ptr.fetch_and_parse_ptr(None, None, {
+            "report_url": "https://efdsearch.senate.gov/search/view/paper/xyz/", "is_paper": True,
+            "filed_date": "2026-05-14",
+        })
+        assert calls[0]["keep_undated"] is True
+        assert (rows[0].transaction_date, rows[0].disclosure_date) == (None, "2026-05-14")
 
 
 class TestRepeatedRowsAcrossPages:
