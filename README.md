@@ -733,7 +733,7 @@ to its whole network, so it arrives from twenty-odd outlets at twenty-odd
 legitimate URLs. One race held 22 copies of a single headline. Deduping on the
 headline keeps the outlet that ran it first.
 
-**The open Bluesky name search is disabled.** Searching the whole network for a
+**The open Bluesky name search was removed.** Searching the whole network for a
 candidate's name produced 7,740 of 8,239 stored coverage items — 94% — and the
 content was not coverage. Four successive filters were built against it and each
 failed in a different direction: source-type discarded real local newsrooms;
