@@ -244,3 +244,23 @@ def test_a_database_that_ran_the_sworn_date_change_as_0016_converges(patched_eng
     assert "president_id" in {c["name"] for c in inspect(eng).get_columns("financial_disclosures")}
     assert "sworn_date" in {c["name"] for c in inspect(eng).get_columns("representatives")}
     assert _diff(eng) == []
+
+
+def test_a_raw_vote_date_on_an_issue_is_rewritten_iso(patched_engine):
+    # 2026-09-29: a roll-call draft stored the Senate's own date string,
+    # which sorted after every ISO date and left the Action Center showing
+    # that one issue.
+    eng = patched_engine
+    database._run_migrations("0019")
+    # Every NOT NULL column without a default gets a placeholder.
+    required = [c["name"] for c in inspect(eng).get_columns("action_issues")
+                if not c["nullable"] and c.get("default") is None and c["name"] != "id"]
+    with eng.begin() as conn:
+        for issue_id, day in ((1, "September 28, 2026,  09:42 PM"), (2, "2026-09-29")):
+            values = {name: "0" for name in required} | {"id": issue_id, "date": day, "primary_article_date": day}
+            columns = ", ".join(values)
+            conn.execute(text(f"INSERT INTO action_issues ({columns}) VALUES ({', '.join(':' + k for k in values)})"), values)
+    database._run_migrations()
+    with eng.connect() as conn:
+        rows = conn.execute(text("SELECT id, date, primary_article_date FROM action_issues ORDER BY id")).fetchall()
+    assert [tuple(r) for r in rows] == [(1, "2026-09-28", "2026-09-28"), (2, "2026-09-29", "2026-09-29")]

@@ -3097,3 +3097,20 @@ class TestMentionsFullName:
     ])
     def test_boundary_rule(self, text, name, expected):
         assert _mentions_full_name(text, name) is expected
+
+
+def test_a_bill_named_by_its_short_title_is_resolved():
+    """2026-09-28: every outlet called S. 4668 "the Protect College Sports
+    Act" and none by number, so the issue recorded no bill and the
+    roll-call draft of the same vote couldn't see it was covered."""
+    from app.pipeline.analyze.action_center import _resolve_bills
+
+    titles = {"protect college sports act": {"S.4668"}, "college athlete protection act": {"S.10", "HR.20"}}
+    resolved = _resolve_bills(
+        [], ["The Senate passes the Protect College Sports Act, but the bill's future is unclear"], titles,
+    )
+    assert [b["id"] for b in resolved] == ["S.4668"]
+    # A title two bills share (companions) names neither; a title inside a
+    # longer word run doesn't count.
+    assert _resolve_bills([], ["The College Athlete Protection Act advanced."], titles) == []
+    assert _resolve_bills([], ["The Protect College Sports Actors Guild met."], titles) == []
