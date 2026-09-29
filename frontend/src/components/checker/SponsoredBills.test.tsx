@@ -5,9 +5,19 @@ import SponsoredBills from "./SponsoredBills";
 
 function bill(overrides: Partial<SponsoredBill>): SponsoredBill {
   return {
-    billId: "H.R.1", title: "A bill", introducedDate: "2025-03-01", latestAction: "",
-    latestActionDate: "", policyArea: "", policyAreas: [], partyLeaning: null,
-    congress: 119, billType: "hr", isLaw: false, stage: "INTRODUCED", ...overrides,
+    billId: "H.R.1",
+    title: "A bill",
+    introducedDate: "2025-03-01",
+    latestAction: "",
+    latestActionDate: "",
+    policyArea: "",
+    policyAreas: [],
+    partyLeaning: null,
+    congress: 119,
+    billType: "hr",
+    isLaw: false,
+    stage: "INTRODUCED",
+    ...overrides,
   };
 }
 
@@ -16,10 +26,14 @@ describe("SponsoredBills", () => {
     render(
       <SponsoredBills
         bills={[
-          bill({ billId: "H.R.10", title: "To designate the facility of the United States Postal Service", commemorative: true }),
+          bill({
+            billId: "H.R.10",
+            title: "To designate the facility of the United States Postal Service",
+            commemorative: true,
+          }),
           bill({ billId: "H.R.11", title: "Rural Broadband Access Act" }),
         ]}
-      />,
+      />
     );
     fireEvent.click(screen.getByRole("button", { name: /SPONSORED LEGISLATION/ }));
     expect(screen.getAllByText("COMMEMORATIVE · 1×")).toHaveLength(1);
@@ -32,7 +46,7 @@ describe("SponsoredBills", () => {
           bill({ billId: "H.R.12", stage: "IN_COMMITTEE" }),
           bill({ billId: "H.R.13", stage: "PASSED_CHAMBER" }),
         ]}
-      />,
+      />
     );
     expect(screen.getByText(/2 bills · 1 advancing/)).toBeInTheDocument();
   });
@@ -44,7 +58,7 @@ describe("SponsoredBills", () => {
           bill({ billId: "H.R.14", title: "Enacted Act", isLaw: true, stage: "BECAME_LAW" }),
           bill({ billId: "H.R.15", title: "Pending Act" }),
         ]}
-      />,
+      />
     );
     fireEvent.click(screen.getByRole("button", { name: /SPONSORED LEGISLATION/ }));
     expect(container.querySelectorAll("button button, [role=button] button")).toHaveLength(0);

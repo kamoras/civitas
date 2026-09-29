@@ -67,6 +67,4 @@ export const FIPS_TO_STATE: Record<string, string> = {
 };
 
 /** Unique USPS codes, A→Z. */
-export const STATE_CODES: string[] = Array.from(
-  new Set(Object.values(FIPS_TO_STATE)),
-).sort();
+export const STATE_CODES: string[] = Array.from(new Set(Object.values(FIPS_TO_STATE))).sort();

@@ -77,7 +77,7 @@ civitas/
 │   │   ├── services/            # Business logic (senator_service, representative_service with paginated vote APIs)
 │   │   ├── pipeline/
 │   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register,
-│   │   │   │                    #   Vote Smart ballot measures)
+│   │   │   │                    #   per-state ballot-measure readers)
 │   │   │   ├── transform/       # Data normalization, embedding-based industry classification
 │   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, action center LLM synthesis, justice scoring
 │   │   │   ├── assemble/        # Scorecard builder + validator
@@ -908,7 +908,7 @@ the pending list).
 | Justice profile summary (LLM, from pre-computed statistics) | `backend/app/pipeline/justice_pipeline.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
-| Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures.py` |
+| Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
@@ -951,6 +951,21 @@ the pending list).
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
 - Use parameterized queries via SQLAlchemy ORM; never concatenate user input into SQL
+- **Dependencies** (`backend/requirements.txt`) pin exactly the dependency tree
+  of the direct dependencies — every package, `==` or a sha256-hashed wheel
+  URL, nothing extra. `tests/test_requirements_pins.py` enforces both
+  directions: add a new direct dependency to its `DIRECT` set, and when you
+  drop one's last use, remove it there and the test names every pin that went
+  unused with it (42 ChromaDB-era pins sat in the image for months before
+  anyone noticed). Everything installs from wheels (`--only-binary=:all:` in
+  the Dockerfile and CI): a package with no aarch64 wheel fails the build
+  rather than compiling for the build host's CPU (the 2026-07-12 SIGILL).
+  torch is the **CPU-only** build, pinned by wheel URL per architecture —
+  PyPI's Linux torch drags in ~4 GB of NVIDIA CUDA libraries the Pi can't
+  use. Dependabot can't bump it; `scripts/check_torch_cpu_pin.py` (weekly in
+  `torch-cpu-watch.yml`) reports a newer build and prints the replacement
+  lines. Research/calibration scripts' extra packages (pandas, statsmodels,
+  …) live in `scripts/requirements-research.txt`, never in the image.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
   time. The `senator_service.py` and `representative_service.py` read paths use

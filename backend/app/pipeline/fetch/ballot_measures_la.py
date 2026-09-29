@@ -64,7 +64,9 @@ def parse_document(pages) -> list[dict]:
         body = _TRAILING_PAGE_NUMBER_RE.sub("", parts[i + 1])
         official_summary = clean_text(body)
         if not official_summary:
-            continue
+            # A numbered amendment with no text: the split landed wrong,
+            # and dropping it would publish the ballot one amendment short.
+            raise ValueError(f"LA Proposed Amendment No. {number}: no text under its heading")
         results.append({
             "number": number,
             "title": f"Proposed Amendment No. {number}",
@@ -76,4 +78,9 @@ def parse_document(pages) -> list[dict]:
             "title_authority": TITLE_AUTHORITY,
             "fiscal_authority": None,
         })
+    if not results:
+        # The guide is published for the amendments on the ballot; one this
+        # reader finds none in (no text layer, a new layout) can't be read
+        # as "none".
+        raise ValueError("LA Proposed Constitutional Amendments: no amendment found")
     return results

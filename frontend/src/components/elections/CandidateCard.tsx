@@ -21,7 +21,7 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
     Object.entries(DEM_AFFILIATE_PARTIES).map(([code, suffix]) => [
       code,
       { label: `DEMOCRAT (${suffix})`, color: "text-dem-blue", rule: "bg-dem-blue" },
-    ]),
+    ])
   ),
   LIB: { label: "LIBERTARIAN", color: "text-ink-lo", rule: "bg-ink-min" },
   GRE: { label: "GREEN", color: "text-phos-mid", rule: "bg-phos-mid" },

@@ -39,6 +39,12 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Format check
+        # .prettierrc and the format/format:check scripts existed, but
+        # nothing ran them: by 2026-09-29, 93 files had drifted, so every
+        # `npm run format` in an unrelated change would have dragged dozens
+        # of files of pure reformatting into its diff.
+        run: npm run format:check
       - name: Unused code check
         # tsc's noUnusedLocals/noUnusedParameters (tsconfig.json) catches
         # dead locals/params at build time; knip catches the category those
@@ -78,18 +84,14 @@ jobs:
           # origin/main, which a depth-1 checkout doesn't have.
           fetch-depth: 0
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc g++ libxml2-dev libxslt-dev
-
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - run: pip install -r requirements.txt
+      # Wheels only, as in backend/Dockerfile (see the comment there).
+      - run: "pip install --only-binary=:all: -r requirements.txt"
 
       - name: Lint (ruff)
         # Pinned: ruff 0.16.0 (released 2026-07-23) flags 345 pre-existing
@@ -264,12 +266,6 @@ jobs:
             echo "needed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install system dependencies
-        if: steps.check.outputs.needed == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc g++ libxml2-dev libxslt-dev
-
       - uses: actions/setup-python@v7
         if: steps.check.outputs.needed == 'true'
         with:
@@ -277,7 +273,8 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - run: pip install -r requirements.txt
+      # Wheels only, as in backend/Dockerfile (see the comment there).
+      - run: "pip install --only-binary=:all: -r requirements.txt"
         if: steps.check.outputs.needed == 'true'
 
       - name: Cache sentence-transformer model
@@ -290,3 +287,48 @@ jobs:
       - name: Run slow tests (loads embedding model)
         if: steps.check.outputs.needed == 'true'
         run: python -m pytest tests/ -v -m slow
+
+  backend-research:
+    name: Backend — Research deps
+    runs-on: ubuntu-latest
+    # See frontend job's comment on why every job here has one of these.
+    # Normal run: ~3 minutes with a warm pip cache (torch's CPU wheel plus
+    # pandas/statsmodels/onnxruntime; no model download).
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/scripts/requirements-research.txt
+      # A venv of its own, separate from the fast/slow jobs': with pandas and
+      # friends installed next to the app, an app test could pass on a
+      # package production doesn't have. Here the two files are installed
+      # together exactly as scripts/requirements-research.txt says to, so a
+      # Dependabot bump to either that breaks the combination goes red.
+      - run: "pip install --only-binary=:all: -r requirements.txt -r scripts/requirements-research.txt"
+      - name: Pins match the combined dependency tree
+        run: python -m pytest tests/test_requirements_pins.py -v
+      - name: Every script's imports resolve
+        # Runs each script's module body (imports, constants), never main():
+        # a script importing a package no requirements file declares fails
+        # here instead of on the one day someone reruns a calibration.
+        run: |
+          python - <<'PY'
+          import glob, runpy, sys
+          sys.path[:0] = ["scripts", "."]
+          bad = []
+          for f in sorted(glob.glob("scripts/*.py")):
+              try:
+                  runpy.run_path(f, run_name="__import_check__")
+              except BaseException as e:  # noqa: BLE001 — report every script
+                  bad.append(f"{f}: {type(e).__name__}: {e}")
+          print("\n".join(bad) or f"all {len(glob.glob('scripts/*.py'))} scripts import")
+          sys.exit(1 if bad else 0)
+          PY

@@ -13,11 +13,22 @@ import type { BallotMeasure } from "@/types/election";
  */
 export default function BallotMeasureCard({ measure }: { measure: BallotMeasure }) {
   const removed = measure.status === "removed" || measure.status === "withdrawn";
-  // Vote Smart-sourced, not user-controlled, but still external data
+  // Read from the state's own office, not user-controlled, but still external data
   // rendered as an href — same guard CoverageFeed.tsx uses for article
   // URLs from the news-feed pipeline, for the same reason (reject
   // javascript:/data: before it reaches a real <a>).
   const sourceHref = safeHref(measure.sourceUrl);
+  // `titleAuthority` names the drafter of the official ballot title when
+  // the state publishes one; otherwise of the quoted summary (the ballot
+  // question itself, for most states). It is rendered beside whichever of
+  // the two it names, and never beside the display label `title`, which
+  // can be a label like "Proposition 3" that nobody drafted.
+  const drafter = measure.titleAuthority ? (
+    // Naming the drafter is MORE neutral than the bare quote: ballot
+    // titles are routinely litigated as slanted, and who wrote one is
+    // what tells a reader how to weigh it.
+    <p className="text-[10px] text-ink-min mt-1">Drafted by {measure.titleAuthority}</p>
+  ) : null;
 
   return (
     <article
@@ -43,14 +54,12 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
         // to be told it was struck; a card that simply disappeared cannot
         // say that.
         <p className="text-xs text-signal-red mb-3">
-          This measure is no longer on the ballot. It is kept here so a
-          change since your last visit is visible rather than silent.
+          This measure is no longer on the ballot. It is kept here so a change since your last visit
+          is visible rather than silent.
         </p>
       )}
 
-      {measure.number && measure.title && (
-        <p className="text-sm text-ink mb-3">{measure.title}</p>
-      )}
+      {measure.number && measure.title && <p className="text-sm text-ink mb-3">{measure.title}</p>}
 
       {measure.officialTitle && (
         <section className="mb-3">
@@ -60,14 +69,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
           <blockquote className="text-xs text-ink border-l-2 border-white/15 pl-3">
             {measure.officialTitle}
           </blockquote>
-          {measure.titleAuthority && (
-            // Naming the drafter is MORE neutral than the bare quote:
-            // ballot titles are routinely litigated as slanted, and who
-            // wrote one is what tells a reader how to weigh it.
-            <p className="text-[10px] text-ink-min mt-1">
-              Drafted by {measure.titleAuthority}
-            </p>
-          )}
+          {drafter}
         </section>
       )}
 
@@ -77,6 +79,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
             OFFICIAL SUMMARY
           </h4>
           <p className="text-xs text-ink whitespace-pre-line">{measure.officialSummary}</p>
+          {!measure.officialTitle && drafter}
         </section>
       )}
 
@@ -103,9 +106,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
 
       {measure.fiscalImpact && (
         <section className="mb-3">
-          <h4 className="font-mono text-[10px] text-ink-lo tracking-widest mb-1">
-            FISCAL IMPACT
-          </h4>
+          <h4 className="font-mono text-[10px] text-ink-lo tracking-widest mb-1">FISCAL IMPACT</h4>
           <p className="text-xs text-ink whitespace-pre-line">{measure.fiscalImpact}</p>
           {measure.fiscalAuthority && (
             <p className="text-[10px] text-ink-min mt-1">Prepared by {measure.fiscalAuthority}</p>

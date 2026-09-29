@@ -41,12 +41,48 @@ describe("countBallotContests", () => {
     const b = ballot({
       statewideCoverage: { status: "covered" },
       statewideRaces: [{}, {}, {}],
-      stateLegRaces: [{ label: "State Senate", districts: [1, 2] }, { label: "State House", districts: [1] }],
+      stateLegRaces: [
+        { label: "State Senate", districts: [1, 2] },
+        { label: "State House", districts: [1] },
+      ],
       judicialCoverage: { status: "covered" },
       judicialRaces: [{}],
       measures: [{}, {}],
     } as unknown as Partial<StateBallot>);
     expect(countBallotContests(buildBallotContests(b, true), b)).toBe(2 + 3 + 2 + 1 + 2);
+  });
+});
+
+describe("statewide ballot measures", () => {
+  const m = (id: string, status: string) => ({ id, number: id, title: id, status });
+
+  it("counts only measures still on the ballot", () => {
+    const b = ballot({
+      measureCoverage: { status: "covered" },
+      measures: [m("1", "certified"), m("2", "removed"), m("3", "withdrawn")],
+    } as unknown as Partial<StateBallot>);
+    const contests = buildBallotContests(b, false);
+    expect(contests.find((c) => c.kind === "measures")!.subtitle).toBe("1 measure");
+    expect(countBallotContests(contests, b)).toBe(2 + 1);
+  });
+
+  it("never calls a dropped list that no read confirmed empty 'none'", () => {
+    const b = ballot({
+      measureCoverage: { status: "not_yet_covered" },
+      measures: [m("SQ 1", "removed")],
+    } as unknown as Partial<StateBallot>);
+    const subtitle = buildBallotContests(b, false).find((c) => c.kind === "measures")!.subtitle;
+    expect(subtitle).toBe("None current — check the official lookup");
+  });
+
+  it("does not word an operator's 'none' as the state's", () => {
+    const b = ballot({
+      measureCoverage: { status: "confirmed_none", basis: "operator" },
+      measures: [],
+    } as unknown as Partial<StateBallot>);
+    expect(buildBallotContests(b, false).find((c) => c.kind === "measures")!.subtitle).toBe(
+      "None remaining"
+    );
   });
 });
 
@@ -65,7 +101,10 @@ describe("statewide seats", () => {
   it("counts a body elected by district as one office and one contest", () => {
     const b = ballot({
       statewideCoverage: { status: "covered", ballotList: true },
-      statewideRaces: [gov, ...["1", "2", "3", "4", "5"].map((n) => seat("executive_council", n, "district"))],
+      statewideRaces: [
+        gov,
+        ...["1", "2", "3", "4", "5"].map((n) => seat("executive_council", n, "district")),
+      ],
     } as unknown as Partial<StateBallot>);
     const contests = buildBallotContests(b, false);
     const statewide = contests.find((c) => c.kind === "statewide")!;
@@ -80,7 +119,9 @@ describe("statewide seats", () => {
     } as unknown as Partial<StateBallot>);
     const contests = buildBallotContests(b, false);
     // Primary results: the box says so, since a shared image of it travels alone.
-    expect(contests.find((c) => c.kind === "statewide")!.subtitle).toBe("1 office · from primary results");
+    expect(contests.find((c) => c.kind === "statewide")!.subtitle).toBe(
+      "1 office · from primary results"
+    );
     expect(countBallotContests(contests, b)).toBe(2 + 2);
   });
 
@@ -88,16 +129,36 @@ describe("statewide seats", () => {
     // North Dakota's PSC: two nominees per party, and a voter marks two.
     const nominee = (name: string, party: string) => ({ name, party });
     const psc = {
-      office: "psc", label: "Public Service Commission",
-      nominees: [nominee("A", "REP"), nominee("B", "REP"), nominee("C", "DEM"), nominee("D", "DEM")],
+      office: "psc",
+      label: "Public Service Commission",
+      nominees: [
+        nominee("A", "REP"),
+        nominee("B", "REP"),
+        nominee("C", "DEM"),
+        nominee("D", "DEM"),
+      ],
     };
-    const b = ballot({ statewideCoverage: { status: "covered", ballotList: true }, statewideRaces: [gov, psc] } as unknown as Partial<StateBallot>);
-    expect(buildBallotContests(b, false).find((c) => c.kind === "statewide")!.instruction).toBeNull();
+    const b = ballot({
+      statewideCoverage: { status: "covered", ballotList: true },
+      statewideRaces: [gov, psc],
+    } as unknown as Partial<StateBallot>);
+    expect(
+      buildBallotContests(b, false).find((c) => c.kind === "statewide")!.instruction
+    ).toBeNull();
 
     // Two nonpartisan nominees are rivals for one seat, not two seats.
-    const supt = { office: "supt", label: "Superintendent", nominees: [nominee("E", "N"), nominee("F", "N")] };
-    const one = ballot({ statewideCoverage: { status: "covered", ballotList: true }, statewideRaces: [gov, supt] } as unknown as Partial<StateBallot>);
-    expect(buildBallotContests(one, false).find((c) => c.kind === "statewide")!.instruction).toBe("Vote for one in each");
+    const supt = {
+      office: "supt",
+      label: "Superintendent",
+      nominees: [nominee("E", "N"), nominee("F", "N")],
+    };
+    const one = ballot({
+      statewideCoverage: { status: "covered", ballotList: true },
+      statewideRaces: [gov, supt],
+    } as unknown as Partial<StateBallot>);
+    expect(buildBallotContests(one, false).find((c) => c.kind === "statewide")!.instruction).toBe(
+      "Vote for one in each"
+    );
   });
 
   it("says the legislature and judges came from primary results, as the statewide box does", () => {
@@ -108,8 +169,12 @@ describe("statewide seats", () => {
       judicialRaces: [{}],
     } as unknown as Partial<StateBallot>);
     let contests = buildBallotContests(fromPrimaries, false);
-    expect(contests.find((c) => c.kind === "stateleg")!.subtitle).toBe("Your seats depend on where you live · from primary results");
-    expect(contests.find((c) => c.kind === "judicial")!.subtitle).toBe("1 court · from primary results");
+    expect(contests.find((c) => c.kind === "stateleg")!.subtitle).toBe(
+      "Your seats depend on where you live · from primary results"
+    );
+    expect(contests.find((c) => c.kind === "judicial")!.subtitle).toBe(
+      "1 court · from primary results"
+    );
 
     const certified = ballot({
       statewideCoverage: { status: "covered", ballotList: true },
@@ -118,7 +183,9 @@ describe("statewide seats", () => {
       judicialRaces: [{}],
     } as unknown as Partial<StateBallot>);
     contests = buildBallotContests(certified, false);
-    expect(contests.find((c) => c.kind === "stateleg")!.subtitle).toBe("Your seats depend on where you live");
+    expect(contests.find((c) => c.kind === "stateleg")!.subtitle).toBe(
+      "Your seats depend on where you live"
+    );
     expect(contests.find((c) => c.kind === "judicial")!.subtitle).toBe("1 court");
   });
 });
@@ -141,6 +208,9 @@ describe("contestHash", () => {
     const house = contests.find((c) => c.key === "house")!;
     const hash = contestHash(house, "2026-H-CT-03");
     expect(hash).toBe("#race-2026-H-CT-03");
-    expect(contestForHash(hash, contests, b)).toEqual({ key: "house", houseRaceId: "2026-H-CT-03" });
+    expect(contestForHash(hash, contests, b)).toEqual({
+      key: "house",
+      houseRaceId: "2026-H-CT-03",
+    });
   });
 });

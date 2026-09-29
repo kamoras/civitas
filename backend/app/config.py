@@ -1,7 +1,7 @@
 import datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +25,12 @@ def _default_current_congress(today: datetime.date | None = None) -> int:
     return 1 + (year - 1789) // 2
 
 
+# Settings removed from the code that a deployed .env may still set. The
+# Vote Smart ballot-measure integration was removed in 2026-09: measures
+# are read only from each state's own office now.
+RETIRED_SETTINGS = frozenset({"VOTESMART_API_KEY"})
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -33,12 +39,6 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///data/civitas.db"
     DATA_GOV_API_KEY: str = ""
-    # Vote Smart (api.votesmart.org) — statewide ballot-measure ingestion.
-    # Optional: with no key the measure sync is skipped entirely and every
-    # state's ballot page renders an explicit "measures not yet ingested"
-    # block linking the state's own lookup, rather than an empty section
-    # that would read as "this state has no measures".
-    VOTESMART_API_KEY: str = ""
     # Google Civic Information API (voterInfoQuery) — town-level ballot
     # content (city council, school board, local measures) that a statewide
     # page structurally can't show, since a real ballot is defined per
@@ -51,8 +51,8 @@ class Settings(BaseSettings):
     # That's a real approximation, not a precinct-accurate lookup: two
     # addresses in the same town can be on different ballots. Optional:
     # with no key, town lookups are skipped and the town selector doesn't
-    # appear — the statewide page (VOTESMART_API_KEY's feature) is
-    # unaffected either way.
+    # appear — the statewide page (ballot measures read from each state's
+    # own office) is unaffected either way.
     GOOGLE_CIVIC_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "LiquidAI/lfm2.5-1.2b-instruct"
@@ -129,6 +129,19 @@ class Settings(BaseSettings):
     # 1d would cry wolf on every transient blip. See that check's own
     # docstring for why this gap needed its own watchdog at all.
     PIPELINE_STALE_ALERT_DAYS: float = 2.0
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_retired_settings(cls, data):
+        """Ignore settings this code no longer has. Settings forbids unknown
+        keys (a typo'd name fails loudly at startup, which is the point),
+        so a key simply deleted here would take the whole app down on any
+        deploy whose hand-edited .env still sets it — the Pi's .env is
+        edited by hand, not synced. Keys retired on purpose are dropped
+        instead; everything else unknown still fails."""
+        if isinstance(data, dict):
+            data = {k: v for k, v in data.items() if str(k).upper() not in RETIRED_SETTINGS}
+        return data
 
 
 settings = Settings()

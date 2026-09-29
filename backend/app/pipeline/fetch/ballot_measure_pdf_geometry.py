@@ -5,8 +5,9 @@ strategies plug into).
 State-agnostic by construction: everything here operates on pdfplumber's
 raw `extract_words()` output (top/x0/x1/text dicts) or on plain strings,
 never on a specific state's page layout. A state whose PDF needs
-multi-column reconstruction (built and verified against California's
-real Voter Information Guide — see ballot_measures_ca.py) uses
+multi-column reconstruction (built against California's former PDF
+guide reader, now used by Massachusetts and Colorado — see
+ballot_measures_ma.py) uses
 `split_by_row_gap`; a state with a plain single-column layout may not
 need it at all. Either way, `looks_corrupted` and `clean_text` apply
 unchanged, because they check properties of English prose, not of any
@@ -114,8 +115,8 @@ def split_by_fixed_boundary(words: list[dict], boundary: float) -> tuple[list[di
 def split_by_row_gap(words: list[dict]) -> tuple[list[dict], list[dict]]:
     """Per visual row, cut at the single largest x-gap between adjacent
     words. Correct ONLY when each row has exactly two fragments — e.g.
-    California's YES/NO and PRO/CON sub-zones once already isolated to
-    one outer side (see ballot_measures_ca.py's module docstring)."""
+    a two-column YES/NO or PRO/CON sub-zone once already isolated to
+    one outer side (Colorado's and Massachusetts's guides)."""
     left: list[dict] = []
     right: list[dict] = []
     for top in sorted(rows(words)):

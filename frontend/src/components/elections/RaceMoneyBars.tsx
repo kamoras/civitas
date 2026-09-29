@@ -32,9 +32,7 @@ export default function RaceMoneyBars({
   candidates: BallotCandidate[];
   showUnconfirmed?: boolean;
 }) {
-  const ranked = [...candidates].sort(
-    (a, b) => (b.contributions ?? 0) - (a.contributions ?? 0),
-  );
+  const ranked = [...candidates].sort((a, b) => (b.contributions ?? 0) - (a.contributions ?? 0));
   const leader = ranked[0]?.contributions ?? 0;
 
   return (

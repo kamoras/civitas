@@ -39,8 +39,8 @@ export default function LimitationsChapter() {
     >
       <Summary>
         <Point>
-          Funding covers six years for a senator but two for a representative, so the two are
-          best read side by side, not ranked.
+          Funding covers six years for a senator but two for a representative, so the two are best
+          read side by side, not ranked.
         </Point>
         <Point>
           &ldquo;What a seat expects&rdquo; comes from how it votes for president: a broad stand-in
@@ -57,15 +57,14 @@ export default function LimitationsChapter() {
           <P>
             Funding covers a member&apos;s most recent completed election: six years of fundraising
             for a senator, two for a representative. The PAC share and top-donor concentration are
-            each scored against the member&apos;s own chamber, but industry concentration is not, and
-            no adjustment makes six years and two years the same span. Within a chamber members are
-            measured over the same length of time, except a member with no completed election yet
-            (appointed, or seated by a special election), who is measured on the campaign still in
-            progress; across chambers the scores are best read side by side, not ranked, which is
+            each scored against the member&apos;s own chamber, but industry concentration is not,
+            and no adjustment makes six years and two years the same span. Within a chamber members
+            are measured over the same length of time, except a member with no completed election
+            yet (appointed, or seated by a special election), who is measured on the campaign still
+            in progress; across chambers the scores are best read side by side, not ranked, which is
             why the compare page names no winner when a senator and a representative are compared.
-            The window itself is deliberate: a strict two-year window would leave most senators
-            with little or no fundraising to measure. FEC filings also lag donations by weeks or
-            months.
+            The window itself is deliberate: a strict two-year window would leave most senators with
+            little or no fundraising to measure. FEC filings also lag donations by weeks or months.
           </P>
         </Limitation>
       </Section>
@@ -118,15 +117,15 @@ export default function LimitationsChapter() {
             <P>
               The 2024 survey asked about 60,000 respondents in October and November 2024, and a
               profile shows a figure only for a member still in the seat the survey asked about: one
-              who has since moved to another seat or district shows none. Small
-              groups are pulled toward what a typical member of the same party gets from that group,
-              by an amount estimated from how much members actually differ. The survey&apos;s size
-              sets how sharp the House figures can be: a district has about a hundred respondents,
-              so most House figures come mostly from what similar members get. Only Democrats&apos;
-              ratings rest mostly on the district&apos;s own respondents, for about three in five
-              Democratic members and two in five Republican ones, and the profile marks every figure
-              that doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s
-              respondents (a median of 672).
+              who has since moved to another seat or district shows none. Small groups are pulled
+              toward what a typical member of the same party gets from that group, by an amount
+              estimated from how much members actually differ. The survey&apos;s size sets how sharp
+              the House figures can be: a district has about a hundred respondents, so most House
+              figures come mostly from what similar members get. Only Democrats&apos; ratings rest
+              mostly on the district&apos;s own respondents, for about three in five Democratic
+              members and two in five Republican ones, and the profile marks every figure that
+              doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s respondents
+              (a median of 672).
             </P>
           </More>
         </Limitation>
@@ -162,23 +161,23 @@ export default function LimitationsChapter() {
           <P>
             Ballots are printed per precinct, so there&apos;s no single &ldquo;ballot&rdquo; for a
             whole state. Pages show federal contests, statewide measures and — where a state&apos;s
-            own results or candidate list name them — statewide offices, state legislative seats
-            and judgeships.
-            County and city offices and local measures are shown only for a small, hand-picked list
-            of towns (looked up from each town hall&apos;s address); anywhere else, showing them
-            would mean taking a home address to a lookup service, and we won&apos;t do that. Every
-            page lists what it omits for that state and links to the election office. See{" "}
-            <A href="/about/elections">Elections &amp; ballots</A>.
+            own results or candidate list name them — statewide offices, state legislative seats and
+            judgeships. County and city offices and local measures are shown only for a small,
+            hand-picked list of towns (looked up from each town hall&apos;s address); anywhere else,
+            showing them would mean taking a home address to a lookup service, and we won&apos;t do
+            that. Every page lists what it omits for that state and links to the election office.
+            See <A href="/about/elections">Elections &amp; ballots</A>.
           </P>
         </Limitation>
         <Limitation title="Ballot-measure coverage is still filling in">
           <P>
-            Six states&apos; measures are read from their own official voter guides; the rest depend
-            on Vote Smart. Where a state hasn&apos;t been covered, or an update failed, the page
-            says so rather than showing an empty section — which would read as &ldquo;no
-            measures&rdquo;, a different and potentially damaging claim. Reading every state
-            directly means a separate reader for each state&apos;s own publication, added as each is
-            researched. Until then, the official link on every page is the complete answer.
+            Measures are read only from the states themselves, each through a reader built for that
+            state&apos;s own publication, with no third-party source behind them. A few states
+            publish no official list of what they have certified, and the rest aren&apos;t read
+            automatically yet. Those pages say the state isn&apos;t covered and which of the two
+            reasons applies, as do pages where an update failed, rather than showing an empty
+            section — which would read as &ldquo;no measures&rdquo;, a different and potentially
+            damaging claim. There, the official link on every page is the complete answer.
           </P>
         </Limitation>
       </Section>

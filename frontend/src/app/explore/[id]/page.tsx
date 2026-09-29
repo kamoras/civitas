@@ -766,12 +766,14 @@ export default function ExploreDetailPage() {
 
                   {summary?.partial && (
                     <p className="text-xs text-ink-lo">
-                      This analysis was cut short before it finished. Try again later for the whole of it.
+                      This analysis was cut short before it finished. Try again later for the whole
+                      of it.
                     </p>
                   )}
                   {summary?.truncated && (
                     <p className="text-xs text-ink-lo">
-                      This analysis reached its length limit; the section it was writing is left out.
+                      This analysis reached its length limit; the section it was writing is left
+                      out.
                     </p>
                   )}
                 </div>

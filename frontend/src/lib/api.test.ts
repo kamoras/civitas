@@ -420,7 +420,12 @@ describe("streamExploreDocumentSummary", () => {
     const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
     const cancel = vi.spyOn(refused.body!, "cancel");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(done()));
-    await streamExploreDocumentSummary(1, () => {}, undefined, async () => {});
+    await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async () => {}
+    );
     expect(cancel).toHaveBeenCalled();
   });
 
@@ -503,13 +508,22 @@ describe("streamExploreDocumentSummary after its own generation timed out", () =
     const sse = (body: string) => new Response(`data: ${body}\n\n`, { status: 200 });
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(sse('{"done": true, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 120}'))
-      .mockResolvedValueOnce(sse('{"done": true, "summary": "S", "keyPoints": [], "impact": "", "truncated": true}'));
+      .mockResolvedValueOnce(
+        sse('{"done": true, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 120}')
+      )
+      .mockResolvedValueOnce(
+        sse('{"done": true, "summary": "S", "keyPoints": [], "impact": "", "truncated": true}')
+      );
     vi.stubGlobal("fetch", fetchMock);
     const waits: number[] = [];
-    const result = await streamExploreDocumentSummary(1, () => {}, undefined, async (ms) => {
-      waits.push(ms);
-    });
+    const result = await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async (ms) => {
+        waits.push(ms);
+      }
+    );
     expect(result.summary).toBe("S");
     expect(result.truncated).toBe(true);
     expect(waits).toEqual([125_000]); // the whole hold-off, and a margin

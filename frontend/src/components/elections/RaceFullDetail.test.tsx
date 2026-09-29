@@ -115,9 +115,27 @@ describe("RaceFullDetail", () => {
         race={race({
           candidateSource: "filers",
           candidates: [
-            candidate({ id: "d", name: "Big Dem", party: "DEM", hasRaisedFunds: true, cashOnHand: 1_000_000 }),
-            candidate({ id: "r", name: "Big Rep", party: "REP", hasRaisedFunds: true, cashOnHand: 800_000 }),
-            candidate({ id: "long-shot", name: "Long Shot", party: "DEM", hasRaisedFunds: true, cashOnHand: 50 }),
+            candidate({
+              id: "d",
+              name: "Big Dem",
+              party: "DEM",
+              hasRaisedFunds: true,
+              cashOnHand: 1_000_000,
+            }),
+            candidate({
+              id: "r",
+              name: "Big Rep",
+              party: "REP",
+              hasRaisedFunds: true,
+              cashOnHand: 800_000,
+            }),
+            candidate({
+              id: "long-shot",
+              name: "Long Shot",
+              party: "DEM",
+              hasRaisedFunds: true,
+              cashOnHand: 50,
+            }),
           ],
         })}
       />
@@ -143,9 +161,27 @@ describe("RaceFullDetail", () => {
         race={race({
           candidateSource: "filers",
           candidates: [
-            candidate({ id: "d", name: "Big Dem", party: "DEM", hasRaisedFunds: true, cashOnHand: 1_000_000 }),
-            candidate({ id: "r", name: "Big Rep", party: "REP", hasRaisedFunds: true, cashOnHand: 800_000 }),
-            candidate({ id: "long-shot", name: "Long Shot", party: "DEM", hasRaisedFunds: true, cashOnHand: 50 }),
+            candidate({
+              id: "d",
+              name: "Big Dem",
+              party: "DEM",
+              hasRaisedFunds: true,
+              cashOnHand: 1_000_000,
+            }),
+            candidate({
+              id: "r",
+              name: "Big Rep",
+              party: "REP",
+              hasRaisedFunds: true,
+              cashOnHand: 800_000,
+            }),
+            candidate({
+              id: "long-shot",
+              name: "Long Shot",
+              party: "DEM",
+              hasRaisedFunds: true,
+              cashOnHand: 50,
+            }),
           ],
         })}
       />
@@ -165,8 +201,20 @@ describe("RaceFullDetail", () => {
         race={race({
           candidateSource: "filers",
           candidates: [
-            candidate({ id: "l", name: "Lib One", party: "LIB", hasRaisedFunds: true, cashOnHand: 5000 }),
-            candidate({ id: "g", name: "Green One", party: "GRE", hasRaisedFunds: true, cashOnHand: 1000 }),
+            candidate({
+              id: "l",
+              name: "Lib One",
+              party: "LIB",
+              hasRaisedFunds: true,
+              cashOnHand: 5000,
+            }),
+            candidate({
+              id: "g",
+              name: "Green One",
+              party: "GRE",
+              hasRaisedFunds: true,
+              cashOnHand: 1000,
+            }),
           ],
         })}
       />
@@ -182,8 +230,20 @@ describe("RaceFullDetail", () => {
         race={race({
           candidateSource: "filers",
           candidates: [
-            candidate({ id: "d", name: "Big Dem", party: "DEM", hasRaisedFunds: true, cashOnHand: 1_000_000 }),
-            candidate({ id: "long-shot", name: "Long Shot", party: "DEM", hasRaisedFunds: true, cashOnHand: 50 }),
+            candidate({
+              id: "d",
+              name: "Big Dem",
+              party: "DEM",
+              hasRaisedFunds: true,
+              cashOnHand: 1_000_000,
+            }),
+            candidate({
+              id: "long-shot",
+              name: "Long Shot",
+              party: "DEM",
+              hasRaisedFunds: true,
+              cashOnHand: 50,
+            }),
           ],
         })}
       />
@@ -200,8 +260,20 @@ describe("RaceFullDetail", () => {
         race={race({
           candidateSource: "confirmed",
           candidates: [
-            candidate({ id: "d", name: "Nominee One", party: "DEM", hasRaisedFunds: true, cashOnHand: 100 }),
-            candidate({ id: "r", name: "Nominee Two", party: "REP", hasRaisedFunds: true, cashOnHand: 90 }),
+            candidate({
+              id: "d",
+              name: "Nominee One",
+              party: "DEM",
+              hasRaisedFunds: true,
+              cashOnHand: 100,
+            }),
+            candidate({
+              id: "r",
+              name: "Nominee Two",
+              party: "REP",
+              hasRaisedFunds: true,
+              cashOnHand: 90,
+            }),
           ],
         })}
       />
@@ -221,8 +293,21 @@ describe("RaceFullDetail", () => {
         race={race({
           candidateSource: "nominees",
           candidates: [
-            candidate({ id: "d", name: "Real Nominee", party: "DEM", hasRaisedFunds: true, cashOnHand: 100 }),
-            candidate({ id: "r", name: "Unopposed Rep", party: "REP", confirmed: false, hasRaisedFunds: true, cashOnHand: 90 }),
+            candidate({
+              id: "d",
+              name: "Real Nominee",
+              party: "DEM",
+              hasRaisedFunds: true,
+              cashOnHand: 100,
+            }),
+            candidate({
+              id: "r",
+              name: "Unopposed Rep",
+              party: "REP",
+              confirmed: false,
+              hasRaisedFunds: true,
+              cashOnHand: 90,
+            }),
           ],
         })}
       />
@@ -242,8 +327,20 @@ describe("RaceFullDetail", () => {
         race={race({
           candidateSource: "filers",
           candidates: [
-            candidate({ id: "a", name: "Filer One", confirmed: false, hasRaisedFunds: true, cashOnHand: 100 }),
-            candidate({ id: "b", name: "Filer Two", confirmed: false, hasRaisedFunds: true, cashOnHand: 90 }),
+            candidate({
+              id: "a",
+              name: "Filer One",
+              confirmed: false,
+              hasRaisedFunds: true,
+              cashOnHand: 100,
+            }),
+            candidate({
+              id: "b",
+              name: "Filer Two",
+              confirmed: false,
+              hasRaisedFunds: true,
+              cashOnHand: 90,
+            }),
           ],
         })}
       />

@@ -3,8 +3,9 @@ voterInfoQuery — candidate contests and referendums for one CURATED town's
 representative address (see town_directory.py).
 
 Never called with a visitor's address. voterInfoQuery is address-keyed, and
-the whole reason the statewide-only feature (ballot_measures.py) exists
-instead of this is that sending a VISITOR's address off-box is the one
+the whole reason the statewide feature (each state's own measure list,
+ballot_measures_pdf.py) exists instead of this is that sending a VISITOR's
+address off-box is the one
 thing this platform's architecture exists to prevent. This module only ever
 sends a fixed, publicly-known civic-building address that WE chose — the
 input is the same for every visitor who picks that town, so nothing
@@ -72,18 +73,15 @@ logger = logging.getLogger(__name__)
 # declares as canonical.
 CIVIC_BASE = "https://civicinfo.googleapis.com/civicinfo/v2"
 
-# Shorter than the platform's default 72h API cache, same reasoning as
-# ballot_measures.MEASURE_CACHE_TTL_HOURS: election content is corrected
-# continuously through a cycle, and a stale local ballot is exactly the
-# failure this feature can't have.
+# Shorter than the platform's default 72h API cache: election content is
+# corrected continuously through a cycle, and a stale local ballot is
+# exactly the failure this feature can't have.
 TOWN_CACHE_TTL_HOURS = 12
 
 
 def _text(raw: dict, *keys: str) -> str | None:
-    """First non-empty string among `keys`, or None. Same contract as
-    ballot_measures._text — not shared across modules since the two
-    response shapes are unrelated, but the discipline is identical: a
-    shape change should cost us a field, not the whole lookup."""
+    """First non-empty string among `keys`, or None: a shape change should
+    cost us a field, not the whole lookup."""
     for key in keys:
         value = raw.get(key)
         if isinstance(value, str) and value.strip():
@@ -92,9 +90,9 @@ def _text(raw: dict, *keys: str) -> str | None:
 
 
 def is_configured() -> bool:
-    """Whether town lookups can run at all. Independent of
-    ballot_measures.is_configured() — a deployment can run the statewide
-    feature without this one, or (once verified) this without that one."""
+    """Whether town lookups can run at all. Independent of the statewide
+    ballot measures, which are read from each state's own office and need
+    no key."""
     return bool(settings.GOOGLE_CIVIC_API_KEY)
 
 
@@ -173,8 +171,9 @@ async def fetch_town_ballot(
     on missing config, an unknown town, or a fetch/parse failure.
 
     None here means "we could not get an answer" — the caller renders
-    that as the town's own ingest_failed, same tri-state discipline
-    ballot_measures.fetch_state_measures uses, never as "no local races".
+    that as the town's own ingest_failed, same tri-state discipline the
+    statewide measure readers use (ballot_measures_pdf), never as "no
+    local races".
     """
     if not is_configured():
         return None
