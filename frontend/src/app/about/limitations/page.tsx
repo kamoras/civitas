@@ -158,8 +158,9 @@ export default function LimitationsChapter() {
           </P>
           <More label="How sharp the approval figures can be">
             <P>
-              The 2024 survey asked about 60,000 respondents in October and November 2024, and the
-              profile shows a figure for every member who held the seat when it was asked. Small
+              The 2024 survey asked about 60,000 respondents in October and November 2024, and a
+              profile shows a figure only for a member still in the seat the survey asked about: one
+              who has since moved to another seat or district shows none. Small
               groups are pulled toward what a typical member of the same party gets from that group,
               by an amount estimated from how much members actually differ. The survey&apos;s size
               sets how sharp the House figures can be: a district has about a hundred respondents,
