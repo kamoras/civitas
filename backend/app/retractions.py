@@ -1,9 +1,10 @@
 """Withdrawn content: the public retraction log (app/data/retractions.json).
 
 The log is the record of what Civitas published and withdrew, and why.
-An issue in it answers 410 with its reason, so a link someone saw in a
-post explains itself rather than breaking; its rows are removed by the
-data migration the entry names.
+The API answers 410 with its reason for an issue in it, and the issue page
+shows that reason (marked noindex), so a link someone saw in a post
+explains itself rather than breaking; its rows are removed by the data
+migration the entry names.
 """
 
 import json

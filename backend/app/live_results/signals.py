@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.models import ActionIssue, ActionIssueStatus, RaceResult
 from app.pipeline.analyze.early_signal import CONFIRMATION_WINDOW_HOURS
 from app.live_results.sync import event_detail, is_flip
-from app.pipeline.fetch.district_pvi import STATE_NAMES
+from app.state_names import STATE_NAMES
 from app.time_utils import COMMENT_DEADLINE_TZ, utcnow
 
 SOURCE_TYPE = "election_results"

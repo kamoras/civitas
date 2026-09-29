@@ -34,7 +34,7 @@ from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.historical_executive_orders import NAME_TO_ID
+from app.pipeline.fetch.historical_executive_orders import NAME_TO_ID, derived_president_id
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -146,16 +146,11 @@ def _parse_roster(html: str) -> list[RosterEntry]:
 
     entries: list[RosterEntry] = []
     for i, (display_name, lookup_name, start, end) in enumerate(parsed, start=1):
-        pid = _resolve_id(lookup_name)
-        if pid is None:
-            # Logs position, not the name itself — a name string reads as
-            # a person identifier to CodeQL's clear-text-logging
-            # heuristic even for public historical figures (see
-            # error_utils.py's docstring on this codebase's prior fights
-            # with the same query; position is enough to cross-reference
-            # against the raw page HTML when debugging a parse failure).
-            logger.warning("Presidential roster: no id mapping for row %d", i)
-            continue
+        # A president the id table doesn't list (one sworn in after it was
+        # written) gets a derived id rather than being dropped: skipping
+        # them left the sitting president off the site, and the row count
+        # still passed the sanity floor below.
+        pid = _resolve_id(lookup_name) or derived_president_id(display_name, i)
         entries.append(RosterEntry(id=pid, name=display_name, term_start=start, term_end=end, number=i))
 
     # UCSB's page has no end date at all for a president who died in

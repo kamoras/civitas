@@ -13,7 +13,7 @@ import { useAsyncData, type AsyncData } from "@/hooks/useAsyncData";
 import { commentPeriodToday, describeDaysLeft, formatUtcDate } from "@/lib/formatting";
 import ShareButtons from "@/components/action/ShareButtons";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
-import { focusTabWhenSelected, retryKeepingFocus } from "@/lib/tabFocus";
+import { focusTabWhenSelected, keepFocusOnSelectedTab, retryKeepingFocus } from "@/lib/tabFocus";
 import BackToTop from "@/components/BackToTop";
 import {
   Coverage,
@@ -516,6 +516,8 @@ function ActionPageInner() {
   // Forward included — with no second copy of the answer to keep in sync.
   const paramTab = searchParams.get("tab");
   const activeTab: Tab = isValidTab(paramTab) ? paramTab : "issues";
+  // Back and Forward change the tab with focus still on the tab bar.
+  useEffect(() => keepFocusOnSelectedTab(`tab-${activeTab}`), [activeTab]);
 
   // ?issue= and ?monitor= describe how the page was opened: an item to
   // expand and scroll to on arrival. They are read once, from the URL the page

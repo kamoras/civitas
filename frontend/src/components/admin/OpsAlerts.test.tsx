@@ -51,6 +51,14 @@ describe("OpsAlerts", () => {
     expect(result.violations.map((v) => v.id)).toEqual([]);
   });
 
+  it("says a replaced alert was replaced, not resolved", () => {
+    const replaced = { ...open, open: false, supersededAt: "2026-09-29T12:30:00" };
+    render(<OpsAlerts alerts={[replaced]} />);
+    const earlier = screen.getByRole("region", { name: "Earlier alerts" });
+    expect(earlier).toHaveTextContent("Replaced by a newer alert");
+    expect(earlier).not.toHaveTextContent("Resolved");
+  });
+
   it("says nothing is wrong when nothing is open", () => {
     render(<OpsAlerts alerts={[resolved]} />);
     expect(screen.getByText("Nothing is wrong right now.")).toBeInTheDocument();

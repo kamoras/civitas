@@ -2177,7 +2177,7 @@ def _find_related_officials(
             full_match = _mentions_full_name(text, j.name)
             if full_match:
                 matched_justices[j.id] = {
-                    "id": j.id, "name": j.name, "party": j.appointing_party or "R",
+                    "id": j.id, "name": j.name, "party": j.appointing_party or "",
                     "branch": "scotus", "match_reason": "named in coverage",
                 }
                 continue
@@ -2204,7 +2204,7 @@ def _find_related_officials(
                     sim = float(np.dot(justice_embeds[i], context_embeds[i]))
                     if sim >= DISAMBIGUATION_THRESHOLD:
                         matched_justices[j.id] = {
-                            "id": j.id, "name": j.name, "party": j.appointing_party or "R",
+                            "id": j.id, "name": j.name, "party": j.appointing_party or "",
                             "branch": "scotus", "match_reason": "referenced in coverage",
                         }
             except Exception as exc:

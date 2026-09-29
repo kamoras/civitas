@@ -636,10 +636,10 @@ def admin_accept_measure_absence(
     from app.pipeline.election_pipeline import AbsenceRefused, accept_state_absence
     from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
 
-    from app.api.elections import BALLOT_STATE_CODES
+    from app.api.elections import ballot_state_codes
 
     state = state.upper()
-    if state not in BALLOT_STATE_CODES:
+    if state not in ballot_state_codes():
         raise HTTPException(status_code=404, detail="Unknown state")
     try:
         datetime.strptime(election_date, "%Y-%m-%d")

@@ -824,7 +824,7 @@ class TestBallotMeasures:
 
     def test_dc_is_a_valid_ballot_jurisdiction_despite_no_federal_race(self, db_session):
         """DC has no voting House/Senate race and is absent from
-        STATES_WITH_FEDERAL_RACES, but it does vote on statewide
+        election_calendar.federal_states(), but it does vote on statewide
         initiatives — the ballot page must not 404 it."""
         data = _body(elections.state_ballot("DC", db_session))
         assert data["senateRaces"] == []
