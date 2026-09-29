@@ -8,6 +8,7 @@ Representative/President/Justice into one directory.
 """
 import json
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -407,3 +408,40 @@ def get_bills_in_flight(
         total_pages=total_pages,
         stage_counts=stage_counts,
     )
+
+
+# A bill title that reads as a short title: "... Act" (a year suffix, "of
+# 2026", dropped), three words or more. Shorter ones ("Energy Act") and
+# official long titles ("A bill to amend ...") are left out: a short
+# title's point is that news uses it to name the bill, and a two-word one
+# names too much else.
+_YEAR_SUFFIX_RE = re.compile(r"\s+of\s+\d{4}$", re.I)
+_SHORT_TITLE_MIN_WORDS = 3
+
+
+def short_title(title: str) -> str | None:
+    """The name news uses for a bill ("Protect College Sports Act" for
+    "Protect College Sports Act of 2026"), lowercased, or None when the
+    title isn't a short title (above)."""
+    name = _YEAR_SUFFIX_RE.sub("", " ".join((title or "").split()).rstrip("."))
+    if not name.lower().endswith(" act") or len(name.split()) < _SHORT_TITLE_MIN_WORDS:
+        return None
+    return name.lower()
+
+
+def short_title_index(db: Session, congress: int | None = None) -> dict[str, set[str]]:
+    """{short title: {bill ids}} for the Congress's bills that current
+    members sponsor (the bills the site holds). A title can name more
+    than one bill: House and Senate companions share one."""
+    congress = congress or settings.CURRENT_CONGRESS
+    index: dict[str, set[str]] = {}
+    for model in (SponsoredBill, RepSponsoredBill):
+        for bill_id, title in db.query(model.bill_id, model.title).filter(model.congress == congress).distinct():
+            if name := short_title(title):
+                index.setdefault(name, set()).add(bill_id.upper())
+    return index
+
+
+def names_phrase(text_lower: str, phrase: str) -> bool:
+    """`phrase` appears in the (lowercased) text as whole words."""
+    return phrase in text_lower and re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", text_lower) is not None
