@@ -6,10 +6,16 @@ is defined by the same federal disclosure form conventions in both chambers,
 only the delivery mechanism (PDF vs. HTML) differs.
 """
 
+import difflib
 import logging
 import re
+import statistics
 from dataclasses import dataclass
 from datetime import datetime
+
+import numpy as np
+from PIL import Image, ImageOps
+from scipy import ndimage
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +47,18 @@ class TradeRow:
     source_url: str = ""
     filing_id: str = ""
     industry: str | None = None
+    # "periodic" (a PTR / 278-T) or "annual" (a presidential 278e's Part 7,
+    # which states no notification date: president_fd).
+    report_kind: str = "periodic"
 
 # Bump whenever a parser here reads the same filing differently: every
 # stored trade an older version read — House, Senate and presidential — is
 # read again (stock_pipeline._reread_trades), within a nightly budget.
 # 2: owners printed as words, and an owner the form doesn't state is
 # "unknown" rather than the filer.
-PARSER_VERSION = 2
+# 3: scanned filings read as a table by word position, amounts only as the
+# form's ranges, dates only inside the filing's window.
+PARSER_VERSION = 3
 
 # PTR owner codes -> our owner vocabulary (StockTrade.owner / RepStockTrade.owner).
 OWNER_CODES = {"SP": "spouse", "DC": "dependent", "JT": "joint"}
@@ -244,112 +255,274 @@ def parse_table_rows(table: list[list[str | None]], *, blank_owner: str = "self"
     return rows
 
 
-# Matches one OCR'd transaction line on a scanned 278-T form: the asset
-# name, the transaction type, the date, then the $low - $high bracket.
-# Verified against real tesseract output on a live presidential filing
-# (2026-08 audit) rather than an assumed-clean layout — real OCR noise
-# is much messier than the form's own printed structure: a leading row
-# number just as often OCRs as a stray letter/symbol ("s Howmet...",
-# "« (es Centerpoint...") as a digit, and table gridlines and the
-# "Yes/No" notified-within-30-days column OCR as an inconsistent mix of
-# "|", "]", "}", ":", "." in no fixed position. Two design choices follow
-# from that:
-#   - `asset` isn't anchored to a leading row number at all — it's left
-#     unconstrained on the left and required to START with a letter, so
-#     a leading digit/symbol token (real or misread) is simply outside
-#     the match rather than needing to be recognized and stripped.
-#   - Everything between the asset and the type keyword, and again
-#     between the date and the amount, is skipped rather than matched
-#     against an enumerated set of expected characters — a bracket can
-#     OCR glued directly onto the next word with no space at all
-#     ("CORPORATION [purchase"), and the amount separator itself isn't
-#     always a single "-" ("$15,001-- $50,000").
-# Anchoring the amount pair to this trailing segment (rather than
-# scanning the whole line, as the old fallback below still does) is what
-# keeps a leading row number from being read as part of the dollar
-# amount: without it, a line like "1 Goldman Sachs Group Inc purchase
-# 6/23/2026) No] $1,001 - $15,000" extracts (1, 6) — the row number and
-# the date — as the amount pair instead.
+# The value ranges every periodic transaction report prints, the OGE 278-T
+# and the House and Senate PTRs alike: a documented form convention, like
+# OWNER_CODES. An amount read by OCR is accepted only as one of them. One
+# misread bound ("$250,004 - $500,000") is recovered from the other; a
+# pair matching neither is not a range the filing states, so the row is
+# not read rather than stored with an amount nobody disclosed.
+AMOUNT_BRACKETS = (
+    (1_001, 15_000), (15_001, 50_000), (50_001, 100_000), (100_001, 250_000),
+    (250_001, 500_000), (500_001, 1_000_000), (1_000_001, 5_000_000),
+    (5_000_001, 25_000_000), (25_000_001, 50_000_000),
+)
+# The open-ended ranges: "Over $50,000,000", and "Over $1,000,000" for a
+# spouse's or dependent child's asset.
+OPEN_ENDED_FLOORS = (1_000_000, 50_000_000)
+
+_OCR_NUMBER_RE = re.compile(r"\d[\d,]{2,}")
+_OCR_DATE_RE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4}|\d{2})(?!\d)")
+_OCR_TYPES = {"purchase": "purchase", "sale": "sale_full", "exchange": "exchange"}
+_AMOUNT_WORD_RE = re.compile(r"^[|\[{(]?\$\s?\d{1,3}(?:[,.]\d{3})+")
+
+
+def form_bracket(text: str) -> tuple[float, float] | None:
+    """The form's own amount range an OCR'd amount names, or None."""
+    numbers = [int(n.replace(",", "")) for n in _OCR_NUMBER_RE.findall(text or "")]
+    if numbers and numbers[0] in OPEN_ENDED_FLOORS and OPEN_ENDED_AMOUNT_RE.search(text):
+        return float(numbers[0]), float(numbers[0])
+    if len(numbers) < 2:
+        return None
+    for low, high in AMOUNT_BRACKETS:
+        if numbers[0] == low or numbers[1] == high:
+            return float(low), float(high)
+    return None
+
+
+def window_date(text: str, not_before: str | None, not_after: str | None) -> str | None:
+    """The first M/D/YYYY date in OCR'd text as ISO, or None when there is
+    none, it is no calendar date ("14/19/2025"), or it falls outside
+    [not_before, not_after]: a transaction reported on a filing can't
+    postdate the filing, nor predate the filer's office."""
+    match = _OCR_DATE_RE.search(text or "")
+    if not match:
+        return None
+    year = int(match[3]) + (2000 if len(match[3]) == 2 else 0)
+    try:
+        iso = datetime(year, int(match[1]), int(match[2])).strftime("%Y-%m-%d")
+    except ValueError:
+        return None
+    if (not_before and iso < not_before) or (not_after and iso > not_after):
+        return None
+    return iso
+
+
+def ocr_transaction_type(text: str) -> str | None:
+    """The transaction type an OCR'd word spells, allowing the misreads
+    real scans show ("purchaso", "salo", "Durchase"): the nearest of the
+    form's three words, if close enough and nearly as long, so a fragment
+    or a name ("CHASE", of JPMorgan Chase, 0.77 like "purchase") isn't read
+    as a type."""
+    letters = re.sub(r"[^a-z]", "", (text or "").lower())
+    if len(letters) < 4:
+        return None
+    if "partial" in letters:
+        return "sale_partial"
+    ratios = {word: difflib.SequenceMatcher(None, letters, word).ratio() for word in _OCR_TYPES}
+    word = max(ratios, key=ratios.get)
+    return _OCR_TYPES[word] if ratios[word] >= 0.75 and len(letters) >= len(word) - 2 else None
+
+
+# Matches one OCR'd line of a scanned form that the table reader below
+# can't lay out (no transaction-type column found on the page): the asset,
+# the type, the date, then the amount. Verified against real tesseract
+# output on a live presidential filing (2026-08 audit): a leading row
+# number OCRs as a stray letter as often as a digit, and gridlines and the
+# notification column OCR as an inconsistent mix of "|", "]", "}", ":",
+# ".", so the asset isn't anchored to a row number and the separators are
+# skipped rather than matched. The amount is anchored to the segment
+# after the date, which keeps a row number from being read as part of it.
 _OCR_LINE_RE = re.compile(
     r"(?P<asset>[A-Za-z].*?)(?:\s|[\[\]{}|:.,])*(?P<type>purchase|sale(?:\s*\(partial\))?|exchange)\b[^\d$]*"
     r"(?P<date>\d{1,2}/\d{1,2}/\d{2,4})[^\d$]*"
-    r"\$?(?P<low>[\d,]+)\s*[-~]+\s*\$?(?P<high>[\d,]+)",
+    r"(?P<amount>\$?[\d,]+\s*[-~]+\s*\$?[\d,]+)",
     re.IGNORECASE,
 )
 
 
-def _parse_ocr_line(line: str) -> TradeRow | None:
-    """One structured attempt, then one loose fallback, at parsing a
-    single OCR'd line into a trade row. Never guesses a row boundary —
-    both paths still require a real date and a real amount pair before
-    accepting anything."""
+def _parse_ocr_line(line: str, not_before: str | None = None, not_after: str | None = None) -> TradeRow | None:
+    """One OCR'd line as a trade row, or None. There is no looser second
+    try: it read whatever two numbers a line held as the amount and its
+    first date as the transaction's, which on a bond was the maturity
+    ("DUE 12/15/2078"), and stored the whole line as the asset (2026-09)."""
     match = _OCR_LINE_RE.search(line)
-    if match:
-        txn_type = classify_transaction_type(match.group("type"))
-        txn_date = normalize_date(match.group("date"))
-        if txn_type is None or txn_date is None:
-            return None
-        asset_name = match.group("asset").strip(" |")
-        try:
-            low, high = float(match.group("low").replace(",", "")), float(match.group("high").replace(",", ""))
-        except ValueError:
-            return None
-        if low > high:
-            # A misread digit in one bound (e.g. "$31,001 - $15,000") is
-            # a fact about tesseract, not about the filing — every real
-            # bracket on this form has low <= high, so this is dropped
-            # rather than stored as a disclosed range it never was.
-            return None
-        return TradeRow(
-            ticker=extract_ticker(asset_name),
-            asset_name=asset_name,
-            # The line pattern doesn't read an owner column, so the owner is
-            # not stated rather than assumed to be the filer.
-            owner="unknown",
-            transaction_type=txn_type,
-            transaction_date=txn_date,
-            disclosure_date=txn_date,
-            amount_low=low,
-            amount_high=high,
-        )
-
-    # Loose fallback for a differently-formatted scan (older years, a
-    # different agency scanner) that doesn't match this form's exact
-    # column order — something is better than nothing, but a ticker is
-    # no longer required to accept the row (see extract_ticker: this
-    # form prints no ticker at all, so requiring one silently dropped
-    # nearly every real row rather than corrupting a few).
-    amount_range = parse_amount_range(line)
-    txn_type = classify_transaction_type(line)
-    dates = re.findall(r"\d{1,2}/\d{1,2}/\d{2,4}", line)
-    if not (amount_range and txn_type and dates):
+    if not match:
         return None
-    if amount_range[0] > amount_range[1]:
+    txn_type = classify_transaction_type(match.group("type"))
+    txn_date = window_date(match.group("date"), not_before, not_after)
+    amount = form_bracket(match.group("amount"))
+    if txn_type is None or txn_date is None or amount is None:
         return None
-    txn_date = normalize_date(dates[0])
-    if txn_date is None:
-        return None
-    disclosure_date = normalize_date(dates[1]) if len(dates) > 1 else txn_date
+    asset_name = match.group("asset").strip(" |")
     return TradeRow(
-        ticker=extract_ticker(line),
-        asset_name=line.strip(),
-        owner="unknown",  # no owner column read; see the pattern above
+        ticker=extract_ticker(asset_name),
+        asset_name=asset_name,
+        # The line pattern doesn't read an owner column, so the owner is
+        # not stated rather than assumed to be the filer.
+        owner="unknown",
         transaction_type=txn_type,
         transaction_date=txn_date,
-        disclosure_date=disclosure_date or txn_date,
-        amount_low=amount_range[0],
-        amount_high=amount_range[1],
+        disclosure_date=not_after or txn_date,
+        amount_low=amount[0],
+        amount_high=amount[1],
     )
 
 
-def ocr_extract_rows(pdf: object) -> list[TradeRow]:
-    """Best-effort OCR fallback for scanned (paper) PTR filings.
+# Scans run 150-200 dpi; rendered at this, the form's print is large
+# enough for tesseract's word boxes to hold one cell each.
+_OCR_DPI = 300
+# A dark run this long (0.4 inch at _OCR_DPI) is a ruling line of the
+# form's table, not a stroke of any letter.
+_RULE_PX = 120
 
-    Only reached when a PDF has no extractable text layer at all. OCR'd
-    amounts/tickers are materially less reliable than a real text layer —
-    callers must tag these rows with parse_confidence="ocr" rather than
-    presenting them as equivalent to a text-layer parse.
-    """
+
+def _ruled(image) -> tuple[Image.Image, list[float]]:
+    """(the page with its table's ruling lines erased, the heights of its
+    horizontal rules). Print that sits on a rule OCRs as noise: "INTL
+    FLAVORS & FRAGRANCES INC" read as "__—dnurtavorsarmacrancesine", and 2
+    of a page's 33 "sale"s were found, before the rules were taken out (31
+    after). The horizontal rules are the table's rows: every filing rules
+    each row, while where a row's number and text sit within it varies."""
+    gray = np.asarray(ImageOps.grayscale(image))
+    dark = gray < 160
+    horizontal = ndimage.binary_opening(dark, structure=np.ones((1, _RULE_PX)))
+    rules = horizontal | ndimage.binary_opening(dark, structure=np.ones((_RULE_PX, 1)))
+    cleaned = gray.copy()
+    cleaned[ndimage.binary_dilation(rules, iterations=2)] = 255
+    # A table rule spans a good part of the page; a short one is an
+    # underline or a form field.
+    ys = np.flatnonzero(horizontal.sum(axis=1) > gray.shape[1] * 0.4)
+    heights = [float(np.mean(run)) for run in np.split(ys, np.flatnonzero(np.diff(ys) > 3) + 1) if len(run)]
+    return Image.fromarray(cleaned), heights
+
+
+def _ocr_cell(image, box: tuple[int, int, int, int], whitelist: str, scale: int = 1) -> str:
+    """One table cell read on its own, as a single line of the characters
+    it can hold; `scale` enlarges it first, for print too small to read."""
+    import pytesseract
+
+    cell = image.crop(box)
+    if scale > 1:
+        cell = cell.resize((cell.width * scale, cell.height * scale), Image.LANCZOS)
+    return pytesseract.image_to_string(
+        cell, config=f"--psm 7 -c tessedit_char_whitelist={whitelist}",
+    ).strip()
+
+
+def _ocr_table_page(page, not_before: str | None, not_after: str | None) -> tuple[list[TradeRow], int] | None:
+    """A scanned page's transactions, read by where each word sits: the
+    form is a ruled table, but tesseract's plain text reads its columns as
+    separate blocks (every description, then every type and date, then
+    every amount), so row order is lost before any line can be parsed.
+
+    Each row is found by its transaction-type word (the column is located
+    from where those words cluster) or its row number, and its description
+    is the words left of the type column on its line. The date and amount
+    cells are read again on their own and must be a real date inside the
+    filing's window and one of the form's ranges; a row that isn't both is
+    counted, not guessed. Returns (rows, rows not read), or None when the
+    page has no type column (not a transaction table)."""
+    import pytesseract
+
+    image, rule_heights = _ruled(page.to_image(resolution=_OCR_DPI).original)
+    width = image.size[0]
+    data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT, config="--psm 11")
+    words = [
+        {"t": text.strip(), "x": data["left"][i], "y": data["top"][i], "w": data["width"][i], "h": data["height"][i]}
+        for i, text in enumerate(data["text"]) if text.strip()
+    ]
+    types = [w for w in words if ocr_transaction_type(w["t"])]
+    if not types:
+        return None
+    # The type column is where most type words sit: a stray match elsewhere
+    # (a description's "exchange") doesn't move it.
+    near = width * 0.03
+    type_x = max((w["x"] for w in types), key=lambda x: sum(abs(o["x"] - x) < near for o in types))
+    types = [w for w in types if abs(w["x"] - type_x) < near]
+    line = statistics.median(w["h"] for w in types)
+    type_right = max(w["x"] + w["w"] for w in types)
+    # An amount word is a comma-grouped figure: a date misread with a "$"
+    # ("$/9/2025") is not, and taking it for one put the amount column at
+    # the date's.
+    amount_x = min((w["x"] for w in words if w["x"] > type_right and _AMOUNT_WORD_RE.search(w["t"])), default=None)
+    if amount_x is None:
+        return None
+    dates = [w["x"] for w in words if "/" in w["t"] and type_right < w["x"] < amount_x]
+    date_x = statistics.median(dates) if dates else type_right
+    # The row-number column is left of the Description header, wherever a
+    # scan's margin puts it (6% of the page's width on one, 15% on another).
+    heading = next((w for w in words if w["t"].lower().startswith("description")), None)
+    number_right = heading["x"] if heading else width * 0.06
+    header = heading["y"] if heading else 0
+    numbers = [w for w in words if re.fullmatch(r"\d{1,4}", w["t"]) and w["x"] < number_right and w["y"] > header]
+    desc_left = max((w["x"] + w["w"] for w in numbers), default=number_right) + 5
+    # A row is the space between two of the table's rules, one line of text
+    # tall at least. A page without them (none has been seen) is read by
+    # the rows its type words and numbers name.
+    regions = [(a, b) for a, b in zip(rule_heights, rule_heights[1:]) if line * 0.9 <= b - a <= line * 8]
+    if len(regions) < 3:
+        centers: list[float] = []
+        for center in sorted(w["y"] + w["h"] / 2 for w in types + numbers):
+            if not centers or center - centers[-1] >= line * 0.8:
+                centers.append(center)
+        regions = [(c - line * 0.9, c + line * 0.9) for c in centers]
+
+    rows: list[TradeRow] = []
+    unread = 0
+    for region_top, region_bottom in regions:
+        band = sorted((w for w in words if region_top <= w["y"] + w["h"] / 2 < region_bottom), key=lambda w: w["x"])
+        # The row's text line: its type word's, else the middle of its words.
+        on_type = [w for w in band if abs(w["x"] - type_x) < near and ocr_transaction_type(w["t"])]
+        texts = on_type or [w for w in band if w["x"] > desc_left]
+        if not texts:
+            continue
+        center = statistics.median(w["y"] + w["h"] / 2 for w in texts)
+        asset = " ".join(w["t"] for w in band if desc_left < w["x"] < type_x - line).strip(" |[]{}")
+        top, bottom = int(center - line * 1.1), int(center + line * 1.1)
+        txn_type = next((t for w in band if abs(w["x"] - type_x) < near and (t := ocr_transaction_type(w["t"]))), None)
+        if txn_type is None:
+            letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ()"
+            txn_type = ocr_transaction_type(_ocr_cell(image, (int(type_x - line), top, int(type_right + line), bottom), letters))
+        if any("partial" in w["t"].lower() for w in band if w["x"] > type_x - line):
+            txn_type = "sale_partial"
+        if not asset and txn_type is None:
+            continue
+        # From the type column's edge: a filing that right-aligns its dates
+        # in a wide column starts each a different distance from the
+        # median, and a cell cut at the median lost the month ("23/2026").
+        date_box = (int(type_right + line / 2), top, int(date_x + (amount_x - date_x) * 0.55), bottom)
+        # Enlarged when the first reading isn't a date: one filing prints
+        # the table at half size, and tesseract drops digits from it.
+        txn_date = window_date(_ocr_cell(image, date_box, "0123456789/"), not_before, not_after) or window_date(
+            _ocr_cell(image, date_box, "0123456789/", scale=2), not_before, not_after,
+        ) or window_date(
+            " ".join(w["t"] for w in band if type_right < w["x"] < amount_x), not_before, not_after,
+        )
+        cell_amount = _ocr_cell(image, (int(amount_x - line), top, int(width * 0.98), bottom), "0123456789,$-Ovr ")
+        amount = form_bracket(cell_amount) or form_bracket(" ".join(w["t"] for w in band if w["x"] >= amount_x - line))
+        if not (asset and txn_type and txn_date and amount):
+            unread += 1
+            continue
+        rows.append(TradeRow(
+            ticker=extract_ticker(asset),
+            asset_name=asset,
+            owner="unknown",  # the form's rows state no owner
+            transaction_type=txn_type,
+            transaction_date=txn_date,
+            disclosure_date=not_after or txn_date,
+            amount_low=amount[0],
+            amount_high=amount[1],
+        ))
+    return rows, unread
+
+
+def ocr_extract_rows(pdf: object, not_before: str | None = None, not_after: str | None = None) -> list[TradeRow]:
+    """Best-effort OCR for scanned (paper) PTR filings, reached only when a
+    PDF has no text layer at all. Each page is read as a table
+    (_ocr_table_page), or line by line when it has no transaction-type
+    column. OCR'd rows are materially less reliable than a text layer:
+    callers tag them parse_confidence="ocr", and a transaction date read
+    by OCR supports no timeliness figure (schemas.StockTradeSchema)."""
     try:
         import pytesseract
     except ImportError:
@@ -357,26 +530,32 @@ def ocr_extract_rows(pdf: object) -> list[TradeRow]:
         return []
 
     rows: list[TradeRow] = []
+    unread = 0
     for page in pdf.pages:
         try:
-            img = page.to_image(resolution=200).original
-            text = pytesseract.image_to_string(img)
+            table = _ocr_table_page(page, not_before, not_after)
+            if table is None:
+                text = pytesseract.image_to_string(page.to_image(resolution=_OCR_DPI).original)
+                rows.extend(r for line in text.splitlines() if (r := _parse_ocr_line(line, not_before, not_after)))
+                continue
+            rows.extend(table[0])
+            unread += table[1]
         except Exception as e:
             logger.warning("OCR failed on PTR page: %s", e)
-            continue
-        for line in text.splitlines():
-            row = _parse_ocr_line(line)
-            if row is not None:
-                rows.append(row)
+    if unread:
+        logger.warning("OCR: %d transaction rows of a scanned PTR could not be read (%d read)", unread, len(rows))
     return rows
 
 
-def parse_pdf_bytes(pdf_bytes: bytes, *, blank_owner: str = "self") -> tuple[list[TradeRow], str]:
+def parse_pdf_bytes(
+    pdf_bytes: bytes, *, blank_owner: str = "self", not_before: str | None = None, not_after: str | None = None,
+) -> tuple[list[TradeRow], str]:
     """Parse a PTR PDF's bytes into (rows, confidence).
 
     Tries the text layer first (tables via pdfplumber); falls back to OCR
     only if no text layer exists at all (scanned/paper filings).
-    `blank_owner`: see parse_table_rows.
+    `blank_owner`: see parse_table_rows. `not_before`/`not_after`: the
+    window an OCR'd transaction date must fall in (window_date).
     """
     import io
 
@@ -392,5 +571,5 @@ def parse_pdf_bytes(pdf_bytes: bytes, *, blank_owner: str = "self") -> tuple[lis
                     rows.extend(parse_table_rows(table, blank_owner=blank_owner))
         if not rows:
             confidence = "ocr"
-            rows = ocr_extract_rows(pdf)
+            rows = ocr_extract_rows(pdf, not_before, not_after)
     return rows, confidence
