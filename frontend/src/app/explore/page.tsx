@@ -170,7 +170,15 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
 
 export default function ExplorePage() {
   return (
-    <Suspense fallback={<PageFallback eyebrow={"Explore · search across every branch"} title={"Explore the record"} rows={4} />}>
+    <Suspense
+      fallback={
+        <PageFallback
+          eyebrow={"Explore · search across every branch"}
+          title={"Explore the record"}
+          rows={4}
+        />
+      }
+    >
       <ExplorePageInner />
     </Suspense>
   );

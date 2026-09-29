@@ -3,8 +3,18 @@
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 /** "2026-09-24" as a calendar date, never shifted by the reader's time zone. */
@@ -62,7 +72,11 @@ export function currentCongress(now: Date = new Date()): number {
 
 /** The canonical path of a bill's page: ?congress= only for an earlier
  * Congress, so a current bill keeps the one URL it has always had. */
-export function billCanonicalPath(billId: string, congress: number | null | undefined, now?: Date): string {
+export function billCanonicalPath(
+  billId: string,
+  congress: number | null | undefined,
+  now?: Date
+): string {
   return billHref(billId, congress && congress !== currentCongress(now) ? congress : null);
 }
 
@@ -72,8 +86,14 @@ const BILL_TYPES = new Set(["HR", "S", "HJRES", "SJRES", "HCONRES", "SCONRES", "
  * ("HR.8800", "H.R. 8800", the Clerk's "H R 8800"); null for anything that
  * isn't a bill, such as a roll call's own id or a nomination. Pass the
  * Congress whenever it is known (see billHref). */
-export function billPageHref(billId: string | null | undefined, congress?: number | null): string | null {
-  const m = (billId ?? "").replace(/[\s.]/g, "").toUpperCase().match(/^([A-Z]+)(\d+)$/);
+export function billPageHref(
+  billId: string | null | undefined,
+  congress?: number | null
+): string | null {
+  const m = (billId ?? "")
+    .replace(/[\s.]/g, "")
+    .toUpperCase()
+    .match(/^([A-Z]+)(\d+)$/);
   return m && BILL_TYPES.has(m[1]) ? billHref(`${m[1]}.${m[2]}`, congress) : null;
 }
 

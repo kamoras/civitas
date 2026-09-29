@@ -23,7 +23,11 @@ async function getJson<T>(path: string, ...required: (keyof T & string)[]): Prom
   return getJsonWith<T>(path, { next: { revalidate: REVALIDATE_S } }, ...required);
 }
 
-async function getJsonWith<T>(path: string, init: RequestInit, ...required: (keyof T & string)[]): Promise<T | null> {
+async function getJsonWith<T>(
+  path: string,
+  init: RequestInit,
+  ...required: (keyof T & string)[]
+): Promise<T | null> {
   const res = await fetch(`${BACKEND}${path}`, init);
   if (NO_RECORD.has(res.status)) return null;
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
@@ -50,13 +54,21 @@ export function fetchMonth(month: string): Promise<MonthReport | null> {
 
 /** Null on any failure, not just a 404: the bill page still renders from the
  * site's own record of a tracked bill when Congress.gov's side is out. */
-export function fetchBillRecord(billId: string, congress?: number | null): Promise<BillRecord | null> {
+export function fetchBillRecord(
+  billId: string,
+  congress?: number | null
+): Promise<BillRecord | null> {
   const query = congress ? `?congress=${congress}` : "";
   // Not kept in Next's data cache: a record served partial (a part named in
   // `unavailable` because Congress.gov was slow or down) would be shown to
   // every reader for the cache's lifetime. The backend caches each part
   // that did arrive, so asking it again is cheap.
-  return getJsonWith<BillRecord>(`/api/bills/${encodeURIComponent(billId)}/record${query}`, { cache: "no-store" }, "billId", "actions").catch(() => null);
+  return getJsonWith<BillRecord>(
+    `/api/bills/${encodeURIComponent(billId)}/record${query}`,
+    { cache: "no-store" },
+    "billId",
+    "actions"
+  ).catch(() => null);
 }
 
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import RaceMap from "./RaceMap";
 
 // The real vendored atlas, so the callouts are placed from real geometry.
-const ATLAS = JSON.parse(readFileSync(join(__dirname, "../../../public/data/states-10m.json"), "utf8"));
+const ATLAS = JSON.parse(
+  readFileSync(join(__dirname, "../../../public/data/states-10m.json"), "utf8")
+);
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -20,7 +22,7 @@ describe("RaceMap", () => {
         onStateClick={onStateClick}
         getFillColor={() => "#222"}
         getHoverFillColor={() => "#333"}
-      />,
+      />
     );
 
     // Two buttons for each small state: the shape and the callout.

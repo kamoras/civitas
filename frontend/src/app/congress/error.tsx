@@ -18,9 +18,12 @@ export default function CongressError({ retry }: { retry: () => void }) {
           <CongressTabs active="reports" />
           <PageMasthead eyebrow="What happened in Congress" title="Congress">
             <p>
-              The record of Congress could not be reached just now. This is an outage on this site, not
-              a day without a record. The{" "}
-              <Link href="/congress/bills" className="underline decoration-white/30 underline-offset-4 hover:text-phos">
+              The record of Congress could not be reached just now. This is an outage on this site,
+              not a day without a record. The{" "}
+              <Link
+                href="/congress/bills"
+                className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+              >
                 bills tab
               </Link>{" "}
               may still load.

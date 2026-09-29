@@ -87,7 +87,13 @@ export interface SignalOverlap {
   actionR: number;
   watchR: number;
   /** null for a chamber not yet measured. */
-  chambers: Record<"senate" | "house", { pairs: Partial<Record<SignalOverlapPairKey, SignalOverlapPair>>; computedAt: string | null } | null>;
+  chambers: Record<
+    "senate" | "house",
+    {
+      pairs: Partial<Record<SignalOverlapPairKey, SignalOverlapPair>>;
+      computedAt: string | null;
+    } | null
+  >;
 }
 
 /** President: publicMandate.facts. Approval where polling exists (Truman

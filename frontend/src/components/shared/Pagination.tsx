@@ -28,7 +28,8 @@ export default function Pagination({
     }
   }
 
-  const step = "text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed";
+  const step =
+    "text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed";
   return (
     <div className={`flex items-center justify-center mt-4 ${numbered ? "gap-1" : "gap-2"}`}>
       <button
@@ -60,7 +61,7 @@ export default function Pagination({
             >
               {p}
             </button>
-          ),
+          )
         )
       ) : (
         <span className="text-xs text-ink-min">

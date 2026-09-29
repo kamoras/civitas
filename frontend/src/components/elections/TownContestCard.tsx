@@ -51,9 +51,7 @@ export default function TownContestCard({ item }: { item: TownBallotItem }) {
       {item.subtitle && <p className="text-sm text-ink mb-3">{item.subtitle}</p>}
       {item.text && <p className="text-xs text-ink whitespace-pre-line mb-3">{item.text}</p>}
       {item.passageThreshold && (
-        <p className="text-[10px] text-ink-min mb-2">
-          Passage threshold: {item.passageThreshold}
-        </p>
+        <p className="text-[10px] text-ink-min mb-2">Passage threshold: {item.passageThreshold}</p>
       )}
       {measureHref && (
         <a

@@ -189,8 +189,8 @@ export default function FeedbackPage() {
                   >
                     open-source repo
                   </a>
-                  . Don&apos;t include anything you wouldn&apos;t want public — including your
-                  own email, if you&apos;d rather not.
+                  . Don&apos;t include anything you wouldn&apos;t want public — including your own
+                  email, if you&apos;d rather not.
                 </p>
               </form>
             )}

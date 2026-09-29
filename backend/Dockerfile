@@ -10,26 +10,22 @@ FROM python:3.13.14-slim-bookworm
 WORKDIR /app
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc g++ libxml2-dev libxslt-dev curl gosu \
-        tesseract-ocr && \
+    apt-get install -y --no-install-recommends curl gosu tesseract-ocr && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-# hnswlib has no prebuilt aarch64 wheel and compiles from source. Left to its
-# own defaults, gcc auto-detects the *build host's* CPU (-march=native-ish
-# tuning), which on GitHub's ubuntu-24.04-arm runners (server-grade
-# Ampere/Cobalt) bakes in SIMD instructions absent on a Pi 5 (Cortex-A76) ->
-# SIGILL at runtime. Pin to the portable ARMv8-A baseline so the same image
-# runs on any aarch64 target regardless of build host — but ONLY on arm64:
-# -march=armv8-a is an invalid flag on amd64 gcc ("Compiler cc cannot
-# compile programs" from meson/numpy's build, not an obvious error) and
-# broke the CI amd64 smoke-build job. TARGETARCH is auto-populated by
-# BuildKit from the actual build platform, no --platform flag needed.
-ARG TARGETARCH
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        export CFLAGS="-march=armv8-a" CXXFLAGS="-march=armv8-a"; \
-    fi; \
-    pip install --no-cache-dir -r requirements.txt
+# Wheels only: nothing is compiled from source in this image. Compiling here
+# is how the backend once crash-looped in production — hnswlib (ChromaDB's
+# vector index, gone since the sqlite-vec migration) had no aarch64 wheel,
+# and gcc left to its defaults tuned it for the *build host's* CPU; built on
+# a GitHub arm runner (server-grade Ampere/Cobalt), that baked in SIMD
+# instructions a Pi 5's Cortex-A76 lacks -> SIGILL (2026-07-12). Every pin
+# ships a wheel for both linux/arm64 and linux/amd64 on this base image, so
+# the old CFLAGS workaround and the gcc/g++/libxml2-dev/libxslt-dev
+# toolchain it needed are gone; a future dependency without a wheel now
+# fails this step loudly instead of compiling quietly. If one is ever
+# genuinely needed, build it deliberately for armv8-a and say why.
+RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt
 
 # Chromium for senate_ptr.py's search_ptr_filings — the one PTR fetcher
 # that needs a real browser to pass efdsearch.senate.gov's Akamai
