@@ -16,7 +16,7 @@ const counts = { recordVotes: 0, billsPassed: 0, resolutionsPassed: 0, failed: 0
 
 function event(over: Partial<CongressEvent>): CongressEvent {
   return {
-    kind: "passed", name: "", text: "", billId: null, billLabel: null, isResolution: false, nextStep: null,
+    congress: 119, kind: "passed", name: "", text: "", billId: null, billLabel: null, isResolution: false, nextStep: null,
     time: null, pages: "", date: "2026-09-24", chamber: "senate", ...over,
   };
 }
@@ -83,8 +83,8 @@ describe("day report", () => {
     expect(screen.getByText(day.sentence)).toBeTruthy();
     expect(screen.getByText("Passed both chambers")).toBeTruthy();
     // A bill links to its page; a vote on a bill opens that vote there.
-    expect(screen.getByRole("link", { name: /H\.R\. 2388/ }).getAttribute("href")).toBe("/congress/bills/HR.2388");
-    expect(screen.getByRole("link", { name: "S. 4668" }).getAttribute("href")).toBe("/congress/bills/S.4668#vote-senate-2-243");
+    expect(screen.getByRole("link", { name: /H\.R\. 2388/ }).getAttribute("href")).toBe("/congress/bills/HR.2388?congress=119");
+    expect(screen.getByRole("link", { name: "S. 4668" }).getAttribute("href")).toBe("/congress/bills/S.4668?congress=119#vote-senate-2-243");
     expect(screen.getByRole("link", { name: /Wed, Sep 23/ }).getAttribute("href")).toBe("/congress/2026-09-23");
   });
 
@@ -129,7 +129,7 @@ describe("week report", () => {
     render(<PeriodReportView report={week} kind="week" />);
     expect(screen.getByRole("heading", { level: 1, name: "Week of September 21, 2026" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Thu, Sep 24/ }).getAttribute("href")).toBe("/congress/2026-09-24");
-    expect(screen.getByRole("link", { name: "S. 3257" }).getAttribute("href")).toBe("/congress/bills/S.3257");
+    expect(screen.getByRole("link", { name: "S. 3257" }).getAttribute("href")).toBe("/congress/bills/S.3257?congress=119");
     // A day with no Congressional Record says so, rather than a dash.
     expect(within(screen.getByRole("link", { name: /Sat, Sep 26/ })).getAllByText("No Record")).toHaveLength(2);
   });
@@ -168,7 +168,7 @@ const detail: VoteDetail = {
 describe("bill page", () => {
   it("shows the record, every member's vote, and filters by state", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
-    render(<BillPageView billId="S.4668" record={record} detail={null} stageName={null} />);
+    render(<BillPageView billId="S.4668" canonicalPath="/congress/bills/S.4668" record={record} detail={null} stageName={null} />);
     expect(screen.getByRole("heading", { level: 1, name: "Protect College Sports Act of 2026" })).toBeTruthy();
     // A part Congress.gov did not return is said to be missing, not shown empty.
     expect(screen.getByText(/did not return the cosponsors/)).toBeTruthy();
@@ -181,7 +181,7 @@ describe("bill page", () => {
 
   it("has no axe violations", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
-    render(<BillPageView billId="S.4668" record={record} detail={null} stageName={null} />);
+    render(<BillPageView billId="S.4668" canonicalPath="/congress/bills/S.4668" record={record} detail={null} stageName={null} />);
     await screen.findByRole("link", { name: "Ted Cruz" });
     expect(await violations()).toEqual([]);
   });

@@ -7,6 +7,7 @@ import type { ActionIssue } from "@/types/action";
 import type { BillDetail } from "@/types/bill";
 import type { PoliticianProfile } from "@/types/politicians";
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
+import { billCanonicalPath } from "./congress";
 
 const PARTY_ADJECTIVES: Record<string, string> = { D: "Democratic", R: "Republican", I: "independent" };
 // No entry for "I": an independent has no party to be affiliated with.
@@ -106,7 +107,7 @@ export function legislationJsonLd(bill: BillDetail) {
     "@type": "Legislation",
     name: bill.title,
     legislationIdentifier: bill.billId,
-    url: absoluteUrl(`/congress/bills/${encodeURIComponent(bill.billId)}`),
+    url: absoluteUrl(billCanonicalPath(bill.billId, bill.congress)),
     ...(bill.introducedDate ? { legislationDate: bill.introducedDate } : {}),
     legislationJurisdiction: "US",
     sponsor: {

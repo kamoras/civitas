@@ -48,7 +48,7 @@ function VoteRow({ vote }: { vote: KeyVote }) {
   const title = voteTitle(rc?.title, rc?.billLabel, vote.billName);
   // The roll call's bill, or, for a vote stored before its roll call was
   // recorded, the vote's own bill id. A nomination has no bill page.
-  const href = billPageHref(rc ? rc.billId : vote.billId);
+  const href = rc ? billPageHref(rc.billId, rc.congress) : billPageHref(vote.billId);
   return (
     <li className="flex items-start justify-between gap-3 border-b border-white/[0.07] py-2.5">
       <div className="min-w-0">

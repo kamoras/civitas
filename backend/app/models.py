@@ -1194,6 +1194,10 @@ class ActionIssue(Base):
     # it" signal. Read by app/fact_diff.py to mark newly-added facts.
     previous_facts: Mapped[str] = mapped_column(Text, default="[]")
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
+    # The row this one is a near-identical duplicate of, among the newest
+    # rows the homepage feed reads (action_center.mark_recent_duplicates);
+    # None for a representative, or a row never compared.
+    duplicate_of_id: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
     # Only ever set from a source article whose feed explicitly granted
     # redistribution rights (see pipeline/fetch/news_feeds.py's
