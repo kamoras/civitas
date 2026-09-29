@@ -338,6 +338,9 @@ const OPERATOR_NONE_TEXT = (state: string) =>
   `No statewide ballot measures remain on ${state}'s ballot as far as Civitas can tell. This is our ` +
   `operator's determination, made after checking the state's own announcements when its published ` +
   `list stopped being available — not a list published by the state.`;
+/** The shareable measures box's short form of OPERATOR_NONE_TEXT. */
+const OPERATOR_NONE_SHORT =
+  "None remain as far as Civitas can tell — our determination, not a list from the state.";
 
 function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
   const { measures, measureCoverage, state } = ballot;
@@ -990,6 +993,15 @@ function ContestOverview({
                 From our last successful read — may be out of date.
               </p>
             )}
+            {/* An operator's accepted absence marks every row removed; say
+                whose determination that is, or the image reads as the state
+                having struck them. */}
+            {ballot.measureCoverage.status === "confirmed_none" &&
+              ballot.measureCoverage.basis === "operator" && (
+                <p className="border-b border-white/[0.09] px-4 py-2 text-[12px] text-signal-amber">
+                  {OPERATOR_NONE_SHORT}
+                </p>
+              )}
             <ul>
               {ballot.measures.map((m) => (
                 <li key={m.id} className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-hi">
@@ -1008,7 +1020,7 @@ function ContestOverview({
             <p className="px-4 pt-3 text-[13px] text-ink-lo">
               {ballot.measureCoverage.status === "confirmed_none"
                 ? ballot.measureCoverage.basis === "operator"
-                  ? "None remain as far as Civitas can tell — our determination, not a list from the state."
+                  ? OPERATOR_NONE_SHORT
                   : "No statewide measures are on record for this ballot."
                 : "Civitas does not have this state's measures yet — that does not mean there are none."}
             </p>

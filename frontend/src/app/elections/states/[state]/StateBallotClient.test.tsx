@@ -723,6 +723,26 @@ describe("ballot measures", () => {
     expect(box.getByText("1 measure")).toBeInTheDocument();
   });
 
+  it("says whose determination an operator's none is in the ballot box, rows and all", () => {
+    // An operator's accepted absence marks every row removed, so the box
+    // takes its list branch; without the line, the shared image read as
+    // the state having struck the measures.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, status: "removed" }],
+          measureCoverage: {
+            status: "confirmed_none", sourceName: "Ohio SoS", basis: "operator",
+            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const box = within(screen.getByTestId("ballot-columns"));
+    expect(box.getByText(/our determination, not a list from the state/)).toBeInTheDocument();
+    expect(box.getByText("removed")).toBeInTheDocument();
+  });
+
   it("keeps the stale notice when the latest check found the document missing", async () => {
     // Round 3: a status other than ingest_failed (not_yet_covered, after a
     // document that was read goes missing) hid the notice while the
