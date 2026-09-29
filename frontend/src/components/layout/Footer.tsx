@@ -17,6 +17,7 @@ import { BSKY_PROFILE_URL, GITHUB_REPO_URL } from "@/lib/site";
 const INTERNAL_LINKS: readonly { href: string; label: string }[] = [
   { href: "/politicians", label: "Politicians" },
   { href: "/about", label: "Methodology" },
+  { href: "/feeds", label: "Feeds" },
   { href: "/changelog", label: "Changelog" },
   { href: "/accessibility", label: "Accessibility" },
   { href: "/environmental", label: "Environmental" },

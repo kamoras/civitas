@@ -2,7 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import type { ActionIssue } from "@/types/action";
-import { useCopyFeedback } from "@/hooks/useCopyFeedback";
+import { CopyStatus, useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import { absoluteUrl } from "@/lib/site";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
@@ -55,7 +55,10 @@ export default function ShareButtons({
 
   const [mastodonInstance, setMastodonInstance] = useState("mastodon.social");
   const [showMastodonInput, setShowMastodonInput] = useState(false);
-  const [copied, copy] = useCopyFeedback(1500);
+  const [copied, copy, copyFeedback] = useCopyFeedback(1500, {
+    copied: "Link copied.",
+    failed: "This browser wouldn't copy the link.",
+  });
 
   function handleCopy() {
     copy(shareUrl);
@@ -162,12 +165,13 @@ export default function ShareButtons({
           className={`text-xs font-mono px-2 py-1 border transition-colors ${
             copied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
-          // The visible "COPIED!" is the only confirmation; a fixed label hid it
-          // from screen readers.
-          aria-label={copied ? "Link copied" : "Copy link to clipboard"}
+          // A fixed name: the result is announced by CopyStatus, since a
+          // change to the focused button's own name usually isn't.
+          aria-label="Copy link to clipboard"
         >
           {copied ? "[ COPIED! ]" : "[ COPY LINK ]"}
         </button>
+        <CopyStatus feedback={copyFeedback} />
       </div>
     </div>
   );

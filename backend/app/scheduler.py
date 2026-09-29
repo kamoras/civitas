@@ -514,10 +514,10 @@ def _congress_activity_sync() -> None:
             try:
                 posted = post_daily_congress(db, eastern_today())
                 if posted:
-                    logger.info("Posted the Congress day %s to Bluesky", posted)
+                    logger.info("Published the Congress day %s", posted)
                 week = post_weekly_congress(db, eastern_today())
                 if week:
-                    logger.info("Posted the Congress week of %s to Bluesky", week)
+                    logger.info("Published the Congress week of %s", week)
             except Exception:
                 logger.exception("Congress Bluesky post failed")
             finally:

@@ -214,3 +214,38 @@ def start_senate_run_then_stop_beating(db, beat_ago=None):
         )
         db.commit()
     return run
+
+
+class BlueskyOutbox(list):
+    """What would have been sent to Bluesky, as (text, url) pairs. Set
+    `ok = False` to have Bluesky refuse every post."""
+    ok = True
+
+
+@pytest.fixture(autouse=True)
+def bluesky_outbox(monkeypatch):
+    """No test ever reaches Bluesky: app.broadcast is the one place that
+    sends a post, and its sender is replaced here for every test. A test
+    that sets BSKY_* credentials to exercise delivery reads what was sent
+    from this list."""
+    from app import broadcast
+
+    outbox = BlueskyOutbox()
+
+    def send(text, url, **_kw):
+        if outbox.ok:
+            outbox.append((text, url))
+        return outbox.ok
+
+    monkeypatch.setattr(broadcast, "publish_post", send)
+    return outbox
+
+
+@pytest.fixture()
+def bluesky_configured(monkeypatch, bluesky_outbox):
+    """Bluesky credentials set, sends captured in `bluesky_outbox`."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "BSKY_HANDLE", "civitas.test", raising=False)
+    monkeypatch.setattr(settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+    return bluesky_outbox

@@ -167,6 +167,40 @@ class TestNormalizedSource:
                     if name.startswith("app.pipeline."):
                         assert f"pipeline/{name.split('.')[2]}.py" in senate_pipeline._COORDINATION_PATHS, (rel, name)
 
+    def test_hashed_code_calls_the_publishing_modules_only_through_their_entry_points(self):
+        """The publishing modules are exempt because they only word and send
+        posts. A hashed module importing one of their helpers or constants
+        into an analysis decision would be a change the hash no longer
+        notices, so the only names hashed code may take from them are the
+        post_*/process_* calls that publish."""
+        import ast
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        assert senate_pipeline._PUBLISHING_PATHS <= senate_pipeline._NOT_ANALYSIS_PATHS
+        modules = {
+            "app." + rel.removesuffix(".py").replace("/", "."): rel
+            for rel in senate_pipeline._PUBLISHING_PATHS
+        }
+        hashed = [
+            py for py in [*(app_dir / "pipeline").rglob("*.py"), app_dir / "config_definitions.py"]
+            if "/fetch/" not in str(py)
+            and py.relative_to(app_dir).as_posix() not in senate_pipeline._NOT_ANALYSIS_PATHS
+        ]
+        for py in hashed:
+            for node in ast.walk(ast.parse(py.read_text())):
+                if isinstance(node, ast.Import):
+                    assert not any(a.name in modules for a in node.names), (py, ast.unparse(node))
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module in modules:
+                        for a in node.names:
+                            assert a.name.startswith(("post_", "process_")), (py, a.name)
+                    elif node.module == "app.pipeline.analyze":
+                        assert not any(f"app.pipeline.analyze.{a.name}" in modules for a in node.names), (
+                            py, ast.unparse(node))
+
 
 class TestKnnReferencesExcludeOwnOutputs:
     def _add(self, db, name, value, source):
