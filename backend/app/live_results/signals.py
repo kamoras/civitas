@@ -13,9 +13,11 @@ frame around the state's own figures, and says "leads" until the state
 itself calls the count official.
 
 The issue follows the count. Each sync refreshes its facts while the flip
-holds; if the lead reverts to the holder's party the issue is retired
-(is_current=False, never deleted), and it comes back if the flip does,
-until its confirmation deadline has passed.
+holds; if the lead reverts to the holder's party (or ties) the issue is
+retired (is_current=False, never deleted) AND rewritten to say the count no
+longer shows a change of party — a retired row still shows on the
+homepage's record and at its own address — and it comes back if the flip
+does, until its confirmation deadline has passed.
 """
 
 import json
@@ -31,6 +33,9 @@ from app.pipeline.fetch.district_pvi import STATE_NAMES
 from app.time_utils import utcnow
 
 SOURCE_TYPE = "election_results"
+# Who held a seat going in is Civitas's record of the sitting member, not a
+# figure from the state's count.
+HOLDER_SOURCE = "Civitas member records"
 
 _PARTY_WORDS = {
     "DEM": ("Democrat", "Democrats"),
@@ -108,6 +113,9 @@ def _content(result: RaceResult) -> dict:
         "title": title[:500],
         "summary": summary,
         "facts": facts,
+        # Every fact is the state's count but the last: who held the seat
+        # comes from Civitas's own member records, not the state's feed.
+        "fact_sources": [publisher(result.source_name)] * (len(facts) - 1) + [HOLDER_SOURCE],
         "actions": [{
             "text": f"Follow the count for {label}",
             "type": "follow_results",
@@ -116,21 +124,57 @@ def _content(result: RaceResult) -> dict:
     }
 
 
-def _fill(issue: ActionIssue, result: RaceResult) -> None:
-    content = _content(result)
-    # Dated the day it last said something: the Action Center lists the
-    # newest day's issues, and a flip drafted before midnight Eastern must
-    # not drop off the list at the first refresh after it.
+def _reverted_content(result: RaceResult) -> dict:
+    """What the issue says once the count no longer shows the seat changing
+    party. A retired row still shows on the homepage's record and at its
+    own address, so retiring it alone left "leads in a seat Democrats hold"
+    standing there after the lead went back."""
+    d = event_detail(result)
+    leader, runner = d["leader"], d["runnerUp"]
+    label = race_label(result.race)
+    holders = holders_word(result.held_by_party)
+    if leader:
+        now = f"{publisher(result.source_name)}'s latest count shows {_person(leader)} ahead."
+    else:
+        now = f"{publisher(result.source_name)}'s latest count shows the top two tied."
+    summary = (f"The count earlier showed a candidate from another party leading in a seat {holders} "
+               f"hold. {now} The count is not final.")
+    facts = [f"{_person(p)}: {p['votes']:,} votes, {p['pct']}%" for p in (leader, runner) if p]
+    if d["totalUnits"]:
+        share = round(100 * (d["reportingUnits"] or 0) / d["totalUnits"])
+        facts.append(f"{d['reportingUnits']:,} of {d['totalUnits']:,} {d['unitLabel']} reporting ({share}%)")
+    race = result.race
+    return {
+        "title": f"{label[:1].upper()}{label[1:]} count no longer shows a change of party"[:500],
+        "summary": summary,
+        "facts": facts,
+        "actions": [{
+            "text": f"Follow the count for {label}",
+            "type": "follow_results",
+            "url": f"/elections/states/{race.state}#race-{race.id}",
+        }],
+    }
+
+
+def _fill(issue: ActionIssue, result: RaceResult, *, content: dict | None = None, touch_date: bool = True) -> None:
+    content = content or _content(result)
+    # Dated the day it last said something new: the Action Center lists
+    # the newest day's issues, and a flip drafted before midnight Eastern
+    # must not drop off the list at the first refresh after it. A retired
+    # issue's figures are kept current without moving it up the record.
     from app.election_phase import election_today
 
-    issue.date = election_today().isoformat()
+    if touch_date:
+        issue.date = election_today().isoformat()
     facts = json.dumps(content["facts"])
     if issue.facts and issue.facts != facts:
         issue.previous_facts = issue.facts
     issue.title = content["title"]
     issue.summary = content["summary"]
     issue.facts = facts
-    issue.fact_sources = json.dumps([publisher(result.source_name)] * len(content["facts"]))
+    issue.fact_sources = json.dumps(
+        content.get("fact_sources") or [publisher(result.source_name)] * len(content["facts"])
+    )
     issue.actions = json.dumps(content["actions"])
     issue.source_urls = json.dumps([result.source_url] if result.source_url else [])
     issue.source_names = json.dumps([publisher(result.source_name)])
@@ -180,14 +224,21 @@ def update_developing_issues(db: Session, applied: list) -> int:
                 changed += 1
                 continue
             if not issue.is_current:
-                if not outcome.new_flip:
+                expired = issue.confirmation_deadline and issue.confirmation_deadline < now
+                if not outcome.new_flip or expired:
+                    # Stays retired (or expired unconfirmed), but its own
+                    # page keeps showing the count as it stands.
+                    _fill(issue, result, touch_date=False)
                     continue
-                if issue.confirmation_deadline and issue.confirmation_deadline < now:
-                    continue  # expired unconfirmed; not resurrected
                 issue.is_current = True
                 changed += 1
             _fill(issue, result)
-        elif issue is not None and issue.is_current:
-            issue.is_current = False
-            changed += 1
+        elif issue is not None:
+            # The lead went back (or is tied): say so, on the row the
+            # homepage and the issue's own address still show.
+            was_current = issue.is_current
+            if was_current:
+                issue.is_current = False
+                changed += 1
+            _fill(issue, result, content=_reverted_content(result), touch_date=was_current)
     return changed

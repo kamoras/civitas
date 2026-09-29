@@ -253,7 +253,8 @@ export default function ElectionsChapter() {
           <P>
             A seat changing party opens a <em>developing</em> story in the{" "}
             <A href={ACTION_CENTER_HREF}>Action Center</A>, marked as not yet confirmed by the
-            press; it follows the count and is withdrawn if the lead reverts. Civitas&apos;s Bluesky
+            press; it follows the count, and if the lead reverts it comes off the Action Center and is
+            rewritten to say the count no longer shows a change of party. Civitas&apos;s Bluesky
             account posts fewer moments than the feed shows: a seat changing party, a count called
             official (a Senate race, or a seat changing party), and the big moves in a Senate race —
             a new leader with most of the count in, every reporting area in. A few an hour at most;

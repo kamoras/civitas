@@ -224,8 +224,26 @@ class TestTrustGates:
         _setup(db_session)
         out, alert = _sync(db_session, UntrustedCount("GA is not production data"))
         assert out["status"] == "untrusted"
-        assert alert.called
+        # One refusal is not a page: a feed republished mid-read is refused
+        # once and reads cleanly on the next pass.
+        assert not alert.called
         assert db_session.get(RaceResult, "2026-HOUSE-GA-2") is None
+        _, alert = _sync(db_session, UntrustedCount("GA is not production data"))
+        assert alert.called
+
+    def test_a_transient_refusal_does_not_spend_a_later_ones_alert(self, db_session):
+        from app.pipeline.fetch.election_results import UntrustedCount
+
+        _setup(db_session)
+        _sync(db_session, UntrustedCount("GA changed version mid-read (v7 then v8)"))
+        _sync(db_session, UntrustedCount("GA changed version mid-read (v8 then v9)"))
+        first = er.refusal_kind("GA changed version mid-read (v7 then v8)")
+        assert first == er.refusal_kind("GA changed version mid-read (v8 then v9)")
+        _sync(db_session, UntrustedCount("GA results site is in demo mode"))
+        _, alert = _sync(db_session, UntrustedCount("GA results site is in demo mode"))
+        assert alert.called
+        assert alert.call_args.kwargs["dedupe_key"].endswith(er.refusal_kind("GA results site is in demo mode"))
+        assert er.refusal_kind("GA results site is in demo mode") != first
 
     def test_a_feed_that_goes_backwards_is_not_stored(self, db_session):
         _setup(db_session)
@@ -365,6 +383,44 @@ class TestIssueLifecycle:
         with patch("app.election_phase.election_today", return_value=date(2026, 11, 4)):
             _apply(db_session, race, _contest(1000, 1100, 70))
         assert issue.date == "2026-11-04"
+
+    def test_a_retired_issue_keeps_its_figures_current_without_moving_up(self, db_session):
+        race = _setup(db_session)
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 3)):
+            _apply(db_session, race, _contest(900, 1000, 60))
+        [issue] = _issues(db_session)
+        issue.is_current = False
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 5)):
+            _apply(db_session, race, _contest(1000, 1200, 90))
+        assert issue.date == "2026-11-03"
+        assert any("1,200 votes" in f for f in json.loads(issue.facts))
+
+    def test_the_holder_fact_is_credited_to_civitas_not_the_state(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 60))
+        [issue] = _issues(db_session)
+        facts, sources = json.loads(issue.facts), json.loads(issue.fact_sources)
+        assert len(facts) == len(sources)
+        assert sources[-1] == signals.HOLDER_SOURCE and facts[-1].startswith("The seat is held by")
+        assert set(sources[:-1]) == {"Georgia Secretary of State"}
+
+    def test_a_reverted_flip_says_so_where_it_is_still_shown(self, db_session):
+        """The homepage record and the issue's own address show retired
+        rows; retiring alone left "leads in a seat Democrats hold" there."""
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 60))
+        [issue] = _issues(db_session)
+        _apply(db_session, race, _contest(1300, 1100, 80))
+        assert issue.is_current is False
+        assert issue.title == "Georgia's 2nd Congressional District count no longer shows a change of party"
+        assert "latest count shows Dana Smith (D) ahead" in issue.summary
+        assert "leads" not in issue.title
+        # Tied: nobody named as ahead.
+        _apply(db_session, race, _contest(1300, 1300, 85))
+        assert "top two tied" in issue.summary
+        # Flipped again: the flip story, current again.
+        _apply(db_session, race, _contest(1300, 1500, 90))
+        assert issue.is_current is True and "leads" in issue.title
 
 
 class TestWholePass:

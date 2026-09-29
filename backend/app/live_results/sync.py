@@ -474,6 +474,16 @@ def freshness_problem(db: Session, state: str, election_day: date, count: StateC
     return None
 
 
+def refusal_kind(reason: str | None) -> str:
+    """A refusal's reason with its figures taken out ("ND election 346 is a
+    preview" and "… 348 is a preview" are one kind), hashed short for an
+    alert's dedupe key."""
+    import hashlib
+    import re
+
+    return hashlib.sha256(re.sub(r"\d+", "#", reason or "").encode()).hexdigest()[:10]
+
+
 @dataclass
 class StateRead:
     """One state's feed, read — before anything touches the database, so
@@ -506,6 +516,7 @@ def _record_read(db: Session, state: str, election_day: date, status: str) -> No
     if row is None:
         row = LiveResultRead(state=state, election_date=election_day.isoformat(), status=status)
         db.add(row)
+        db.flush()  # found by the next read's db.get, even before a commit
     row.status = status
     row.checked_at = now
     if status == "ok":
@@ -524,11 +535,20 @@ def _apply_state(db: Session, state: str, election_day: date, read: StateRead) -
         return {"status": "polls_open", "pollsClose": last_poll_close(state, election_day).isoformat() + "Z"}
     if read.status == "untrusted":
         logger.warning("Live results refused for %s: %s", state, read.reason)
-        send_ops_alert(
-            f"Live results: {state} feed refused",
-            f"{read.reason}. Nothing from it was stored or published; the page keeps the last trusted count.",
-            dedupe_key=f"results-untrusted-{state}-{election_day.isoformat()}",
-        )
+        previous = db.get(LiveResultRead, (state, election_day.isoformat()))
+        # Alert on the second refusal in a row, not the first: a feed
+        # republished mid-read (Tally's version changing between calls) is
+        # refused once and reads cleanly five minutes later. Keyed by the
+        # kind of refusal, not just the state and day — one transient
+        # refusal used to spend the only alert, so a later persistent one
+        # (demo mode, two same-day generals) was never raised.
+        if previous is not None and previous.status == "untrusted":
+            send_ops_alert(
+                f"Live results: {state} feed refused",
+                f"{read.reason}. Refused on consecutive reads; nothing from it was stored or published, and "
+                "the page keeps the last trusted count.",
+                dedupe_key=f"results-untrusted-{state}-{election_day.isoformat()}-{refusal_kind(read.reason)}",
+            )
         return {"status": "untrusted", "reason": read.reason}
     if read.status != "read":
         return {"status": read.status, **({"reason": read.reason} if read.reason else {})}

@@ -891,3 +891,49 @@ def test_a_developing_issue_names_what_it_was_drafted_from(db_session):
     db_session.flush()
     resp = _build_issue_response(issue, db_session)
     assert resp["status"] == "developing" and resp["sourceType"] == "election_results"
+
+
+class TestRecentFeedAndSeatFlips:
+    """The refresh's duplicate pass reads every seat flip in a state as one
+    story (their titles differ only by the district, their source is the
+    state's results page); the homepage keeps each race's own."""
+
+    async def test_a_flip_is_never_hidden_behind_another_races_flip(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+
+        ga2 = ActionIssue(date="2026-11-04", rank=999, title="Republican leads Georgia's 2nd", is_current=True,
+                          source_type="election_results")
+        db_session.add(ga2)
+        db_session.flush()
+        ga6 = ActionIssue(date="2026-11-04", rank=999, title="Republican leads Georgia's 6th", is_current=True,
+                          source_type="election_results", duplicate_of_id=ga2.id)
+        news = ActionIssue(date="2026-11-04", rank=1, title="Republican flips Georgia's 2nd", is_current=True,
+                           source_type="rss")
+        db_session.add_all([ga6, news])
+        db_session.flush()
+        copy = ActionIssue(date="2026-11-04", rank=2, title="Copy of the news story", is_current=True,
+                           source_type="rss", duplicate_of_id=news.id)
+        db_session.add(copy)
+        db_session.commit()
+
+        titles = {i["title"] for i in (await get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
+        assert "Republican leads Georgia's 6th" in titles
+        assert "Copy of the news story" not in titles
+
+    async def test_a_flip_still_gives_way_to_a_news_story_of_the_same_flip(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+
+        news = ActionIssue(date="2026-11-04", rank=1, title="Republican flips Georgia's 2nd", is_current=True,
+                           source_type="rss")
+        db_session.add(news)
+        db_session.flush()
+        db_session.add(ActionIssue(date="2026-11-04", rank=999, title="Republican leads Georgia's 2nd",
+                                   is_current=True, source_type="election_results", duplicate_of_id=news.id))
+        db_session.commit()
+
+        titles = {i["title"] for i in (await get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
+        assert titles == {"Republican flips Georgia's 2nd"}

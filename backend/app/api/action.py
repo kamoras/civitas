@@ -466,8 +466,31 @@ async def get_recent_action_issues(
         .limit(RECENT_FEED_MAX_LIMIT * RECENT_FEED_POOL_MULTIPLIER)
         .all()
     )
-    issues = [i for i in pool if i.duplicate_of_id is None][:limit]
+    by_id = {p.id: p for p in pool}
+    issues = [i for i in pool if not _hidden_as_duplicate(i, by_id)][:limit]
     return {"issues": [_build_issue_response(i, db) for i in issues]}
+
+
+# ActionIssue.source_type of an election-night seat-flip issue
+# (live_results/signals.SOURCE_TYPE; not imported, to keep this module's
+# import graph clear of the live-results package's).
+_ELECTION_RESULTS_SOURCE = "election_results"
+
+
+def _hidden_as_duplicate(issue: ActionIssue, pool_by_id: dict[int, ActionIssue]) -> bool:
+    """Whether the homepage leaves a row out as a duplicate. Seat-flip
+    issues are exempt from being hidden behind ANOTHER seat-flip issue: one
+    race's count each, their titles differ only by the district ("…
+    Georgia's 2nd …" / "… Georgia's 6th …") and they share the state's
+    results page as their source, so the refresh's duplicate pass reads
+    every flip in a state as one story and kept only the newest. Behind a
+    news story about the same flip, one still gives way."""
+    if issue.duplicate_of_id is None:
+        return False
+    if issue.source_type != _ELECTION_RESULTS_SOURCE:
+        return True
+    kept = pool_by_id.get(issue.duplicate_of_id)
+    return kept is not None and kept.source_type != _ELECTION_RESULTS_SOURCE
 
 
 @router.get("/issues/{issue_id}")
