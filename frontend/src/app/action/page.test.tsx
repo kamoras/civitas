@@ -262,6 +262,30 @@ describe("focus after Back/Forward", () => {
     expect(issues).toHaveFocus();
   });
 
+  it("keeps focus on the tab Back showed when the click's own focus lands a frame late", async () => {
+    // Clicking a tab focuses it on the next frame. A Back inside that frame
+    // (or a slow frame) must not have focus pulled back to the tab it left.
+    const frames: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    try {
+      window.history.replaceState(null, "", "/action?tab=issues");
+      render(<ActionPage />);
+      await userEvent.click(await screen.findByRole("tab", { name: "TIMELINE" }));
+      await popTo("/action?tab=issues");
+      const issues = screen.getByRole("tab", { name: "ISSUES" });
+      expect(issues).toHaveFocus();
+      act(() => {
+        for (const cb of frames.splice(0)) cb(performance.now());
+      });
+      expect(issues).toHaveFocus();
+    } finally {
+      raf.mockRestore();
+    }
+  });
+
   it("leaves focus alone when it was elsewhere on the page", async () => {
     window.history.replaceState(null, "", "/action?tab=timeline");
     render(<ActionPage />);

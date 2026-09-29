@@ -1005,8 +1005,12 @@ function ActionPageInner() {
       // which meant the Arrow/Home/End handler below stopped receiving keys —
       // one arrow press worked and every one after it did nothing. The panel
       // stays tabbable (tabIndex=0), so Tab still reaches the content next.
+      // Only while it is still the tab showing: a Back/Forward inside that
+      // frame has already swapped the tab and focused the one it shows, and
+      // this late focus would pull the keyboard back to a hidden panel's tab.
       requestAnimationFrame(() => {
-        document.getElementById(`tab-${tab}`)?.focus();
+        const incoming = document.getElementById(`tab-${tab}`);
+        if (incoming?.getAttribute("aria-selected") === "true") incoming.focus();
       });
     },
     [pushUrl, activeTab]

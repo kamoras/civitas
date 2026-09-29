@@ -21,8 +21,10 @@ invented:
 import logging
 import re
 from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
 from urllib.parse import urljoin
 
+from app.pipeline.fetch.fec import general_election_day
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 
 logger = logging.getLogger(__name__)
@@ -290,6 +292,13 @@ _STATEWIDE_PHRASES = [
     # refused by the locality gate on "commissioner" otherwise.
     ("railroad_commissioner", re.compile(
         r"\bRailroad\s+Commission(?:er)?\b", re.IGNORECASE)),
+    # Oklahoma's Corporation Commission (its utilities and oil-and-gas
+    # regulator), off its 2026 November List of Elections: three
+    # commissioners elected statewide to staggered six-year terms (Okla.
+    # Const. art. IX sec. 15). Refused by the locality gate on
+    # "commissioner" otherwise.
+    ("corporation_commissioner", re.compile(
+        r"\bCorporation\s+Commission(?:er)?\b", re.IGNORECASE)),
     ("land_office_commissioner", re.compile(
         r"\bCommissioner\s+of\s+the\s+General\s+Land\s+Office\b", re.IGNORECASE)),
     # New Mexico's land office, off its 2026 general candidate list. Not
@@ -422,7 +431,12 @@ def _phrase_leads(name: str, start: int) -> bool:
 _LOCAL_QUALIFIER_RE = re.compile(
     r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|district|"
     r"municipal|school|council|mayor|alderman|commissioner|judge|justice|court|"
-    r"assembly|senate|house|representative|senator|committee|delegate)\b"
+    r"assembly|senate|house|representative|senator|committee|delegate|"
+    # A university's own board, whatever it calls its members: Michigan
+    # elects "Governor of Wayne State University" and "Trustee of
+    # Michigan State University" statewide, and neither is the governor.
+    # (Regents are read by their own phrase, which runs first.)
+    r"university|college|trustees?)\b"
     r"|:",  # "Cranston: ..." -- a real vendor prefix marking one town's race
     re.IGNORECASE,
 )
@@ -576,12 +590,64 @@ STATEWIDE_OFFICE_LABELS = {
     "school_public_lands_commissioner": "Commissioner of School and Public Lands",
     "public_utilities_commission": "Public Utilities Commission",
     "railroad_commissioner": "Railroad Commissioner",
+    "corporation_commissioner": "Corporation Commissioner",
     "land_office_commissioner": "Commissioner of the General Land Office",
     "public_lands_commissioner": "Commissioner of Public Lands",
     "governors_council": "Governor's Council",
     "executive_council": "Executive Council",
     "public_education_commission": "Public Education Commission",
 }
+
+
+# The federal floor for when a November ballot is printed and final: UOCAVA
+# requires absentee ballots to be TRANSMITTED to military and overseas
+# voters no later than 45 days before a federal election (52 U.S.C.
+# 20302(a)(8)(A)). A statute, not a calibration -- and the ballot a state
+# has already mailed is the ballot. Vermont's reader switches from primary
+# winners to its general report at this point; every certified list uses
+# it to tell "not published yet" from "broken" (not_yet).
+BALLOT_FINAL_DAYS_BEFORE = 45
+
+
+def ballot_final(held: str, today: date | None = None) -> bool:
+    """True once the general election on `held` is within the UOCAVA
+    transmission window (BALLOT_FINAL_DAYS_BEFORE), i.e. the ballot has
+    been mailed and is what voters will see. An unparseable date is never
+    final."""
+    try:
+        election_day = date.fromisoformat(str(held or "")[:10])
+    except ValueError:
+        return False
+    today = today or datetime.now(UTC).date()
+    return today >= election_day - timedelta(days=BALLOT_FINAL_DAYS_BEFORE)
+
+
+def in_ballot_window(year: int, today: date | None = None) -> bool:
+    """True from the day `year`'s general-election ballot must be final
+    (BALLOT_FINAL_DAYS_BEFORE out) THROUGH election day itself. After the
+    election a state's list pages move on to the next cycle, which says
+    nothing about this one being broken."""
+    election_day = general_election_day(year)
+    today = today or datetime.now(UTC).date()
+    return ballot_final(election_day.isoformat(), today) and today <= election_day
+
+
+def not_yet(year: int, state: str, why: str, today: date | None = None) -> list | None:
+    """The answer for a certified list that is not the November ballot yet
+    (its page names another election, it still holds primary filers): []
+    -- healthy, "not published yet" -- except inside the ballot window
+    (in_ballot_window), when every state has mailed its ballot and a list
+    still not answering is broken (a moved page, a changed layout): None
+    there is what reports fetch_failed and raises the alarm, where [] all
+    cycle long would be indistinguishable from "not yet" forever. After
+    election day the pages move to the next cycle, and that is not a
+    failure either."""
+    if in_ballot_window(year, today):
+        logger.warning("%s %d certified list is still not the ballot %d days before the election: %s",
+                       state, year, BALLOT_FINAL_DAYS_BEFORE, why)
+        return None
+    logger.info("%s %d certified list is not the ballot (yet, or any more): %s", state, year, why)
+    return []
 
 
 class SourceRecords(list):
@@ -806,6 +872,10 @@ _STATE_LEG_CHAMBERS = [
     #   "STATE SENATOR DISTRICT 7", off its certified 2026 primary canvass
     #   (99 Assembly contests). No federal office is called that.
     ("lower", re.compile(r"\bRepresentative\s+to\s+the\s+Assembly\b", re.IGNORECASE)),
+    #   Michigan: "1st District Representative in State Legislature", beside
+    #   "1st District State Senator", off its 2026 Official Candidate
+    #   Listing (110 House districts).
+    ("lower", re.compile(r"\bRepresentative\s+in\s+State\s+Legislature\b", re.IGNORECASE)),
 ]
 
 # Some districts elect SEVERAL members from a single contest, with no

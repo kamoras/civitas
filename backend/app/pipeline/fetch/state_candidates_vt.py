@@ -134,12 +134,13 @@ at-large House seat.
 """
 
 import logging
-from datetime import UTC, date, datetime, timedelta
 
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    BALLOT_FINAL_DAYS_BEFORE,
+    ballot_final,
     runoff_threshold,
     SourceRecords,
     DiscoveryFailed,
@@ -162,14 +163,9 @@ _BASE_URL = "https://static.electionresults.vermont.gov"
 _ELECTIONS_URL = f"{_BASE_URL}/elections/elections.json"
 _NON_CANDIDATE_NAMES = {"BLANK", "FLOWERY", "OTHER WRITE-IN", "OTHER WRITE-INS"}
 
-# The federal floor for when a November ballot is printed and final: UOCAVA
-# requires absentee ballots to be TRANSMITTED to military and overseas
-# voters no later than 45 days before a federal election (52 U.S.C.
-# 20302(a)(8)(A)). A statute, not a calibration -- and the ballot a state
-# has already mailed is the ballot. Before this point the general report
-# may still carry a primary winner who has since withdrawn (see module
-# docstring: three of Vermont's six 2026 Republican statewide lines).
-_BALLOT_FINAL_DAYS_BEFORE = 45
+# The federal floor for when a November ballot is final (UOCAVA, 45 days
+# out): shared with every list reader -- see state_candidates_common.
+_BALLOT_FINAL_DAYS_BEFORE = BALLOT_FINAL_DAYS_BEFORE
 
 
 async def _current_primary_guid(client: httpx.AsyncClient, state: str, year: int) -> str | None:
@@ -299,17 +295,8 @@ def _fetch_federal_choices(
     return {key: list(candidates.values()) for key, candidates in by_group.items()}
 
 
-def _ballot_final(held: str, today: date | None = None) -> bool:
-    """True once the general election is within the UOCAVA transmission
-    window (see _BALLOT_FINAL_DAYS_BEFORE), i.e. the ballot has been
-    mailed and is what voters will see. An unparseable date is never
-    final."""
-    try:
-        election_day = date.fromisoformat(str(held or "")[:10])
-    except ValueError:
-        return False
-    today = today or datetime.now(UTC).date()
-    return today >= election_day - timedelta(days=_BALLOT_FINAL_DAYS_BEFORE)
+# Module-level so tests can pin it; the rule lives in state_candidates_common.
+_ballot_final = ballot_final
 
 
 def _general_ballot_statewide(report: dict) -> list[dict]:

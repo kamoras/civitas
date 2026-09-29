@@ -692,7 +692,7 @@ async def test_html_list_is_read_only_when_it_names_this_years_election():
         assert {(r["office"], r["district"], r["display_name"], r["party"]) for r in got} == {
             ("S", None, "BEN LUJAN", "D"), ("H", 3, "MARTIN ZAMORA", "R"),
         }
-        assert await fetch_certified_table(client, 2028, "NM", _NM_SOURCE) is None
+        assert await fetch_certified_table(client, 2028, "NM", _NM_SOURCE) == []  # not published for that year yet: "not yet", not a failure
 
 
 def test_a_row_with_a_withdrawal_date_is_off_the_ballot():
@@ -745,7 +745,7 @@ async def test_a_list_behind_the_pages_own_export_button():
     }
     async with _client(handler) as client:
         got = await fetch_certified_table(client, 2026, "HI", source)
-        assert await fetch_certified_table(client, 2028, "HI", source) is None
+        assert await fetch_certified_table(client, 2028, "HI", source) == []  # not published for that year yet: "not yet", not a failure
     assert "__VIEWSTATE=vs" in posted[0] and "export=" in posted[0]
     assert {(r["district"], r["display_name"], r["last_name"], r["party"]) for r in got} == {
         (1, "Nathan M. BERNING", "BERNING", "I"), (2, "Teresa LEGER FERNANDEZ", "LEGER FERNANDEZ", "D"),
@@ -805,7 +805,7 @@ async def test_every_linked_office_page_is_read_and_write_ins_are_not():
     }
     async with _client(handler) as client:
         got = await fetch_certified_table(client, 2026, "KY", source)
-        assert await fetch_certified_table(client, 2028, "KY", source) is None
+        assert await fetch_certified_table(client, 2028, "KY", source) == []  # not published for that year yet: "not yet", not a failure
     assert {(r["office"], r["district"], r["display_name"], r["party"]) for r in got} == {
         ("S", None, "Andy Barr", "R"), ("H", 5, "Gerardo Serrano", "I"),
     }
@@ -1097,3 +1097,46 @@ async def test_an_empty_answer_claims_nothing_about_state_offices(db_session, mo
 
     _, coverage = elections_api._statewide_section(db_session, "MA", 2026)
     assert coverage["status"] == elections_api.StatewideCoverageStatus.NOT_YET_COVERED
+
+
+# ── a list not published yet is "not yet", never a confirmed absence ──
+
+@pytest.mark.asyncio
+async def test_an_empty_answer_from_a_complete_ballot_source_changes_nothing(db_session, only, monkeypatch):
+    """Michigan's and Oklahoma's lists answer [] until they are the ballot
+    (another year's page, primary filers still listed). That must neither
+    unconfirm anyone nor prune a ballot-only row nor record the state's
+    ballot as the complete certified one -- and it is not a failed fetch."""
+    from app.api.elections import _ballot_marker
+    _race(db_session, "2026-SEN-MI", "MI")
+    _db_cand(db_session, "S6MI00001", "2026-SEN-MI", "ROGERS, MIKE", "REP", confirmed_general=True)
+    _db_cand(db_session, "ballot:2026-SEN-MI:tim-long", "2026-SEN-MI", "LONG, TIM", "U.S. TAXPAYERS PARTY",
+             confirmed_general=True)
+    db_session.commit()
+    only("MI", [])
+    monkeypatch.setitem(sc.STRATEGIES, "google_civic", AsyncMock(return_value=None))
+
+    results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert results["MI"]["status"] == "ok"
+    assert {c.id: c.confirmed_general for c in db_session.query(Candidate)} == {
+        "S6MI00001": True, "ballot:2026-SEN-MI:tim-long": True,
+    }
+    assert _ballot_marker(db_session, "MI", 2026)["complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_an_empty_general_list_is_handled_like_one_that_did_not_answer(db_session, only, monkeypatch):
+    """Colorado's certified list before it is posted: its [] must not take
+    the federal races from the primary results (it covers none)."""
+    from app.api.elections import _ballot_marker
+    _race(db_session, "2026-SEN-CO", "CO")
+    _db_cand(db_session, "S6CO00001", "2026-SEN-CO", "HICKENLOOPER, JOHN", "DEM")
+    db_session.commit()
+    only("CO", [_rec("S", None, "D", "Hickenlooper", "John Hickenlooper")])
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=[]))
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert db_session.query(Candidate).one().confirmed_general is True
+    assert _ballot_marker(db_session, "CO", 2026)["sourceName"] == sc.source_for_state("CO")["source_name"]

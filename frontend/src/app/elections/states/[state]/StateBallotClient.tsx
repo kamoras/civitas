@@ -271,7 +271,7 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
  * listed with one party's nominee while another party's is not, and no
  * independent or minor-party candidate ever appears. */
 const PRIMARY_RESULTS_CAVEAT =
-  "Names come from primary results, which often omit a nominee who ran unopposed and never include independent or minor-party candidates — so an office may be missing, or missing a party's nominee.";
+  "Names come from primary results, which can omit a nominee who ran unopposed, independent candidates (who run in no primary) and anyone a party named or replaced after the primary — so an office may be missing, or missing a party's nominee.";
 
 function StatewideOfficeRow({ race }: { race: StatewideRace }) {
   return (
