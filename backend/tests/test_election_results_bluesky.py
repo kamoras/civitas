@@ -503,3 +503,32 @@ def test_a_held_poll_owes_no_correction(db_session):
         assert _run(db_session) == []
     kinds = [e.kind for e in db_session.query(ElectionResultEvent).order_by(ElectionResultEvent.id)]
     assert er.FLIP_REVERSED not in kinds and kinds.count(er.FLIP) == 1
+
+
+def test_a_reset_then_a_held_poll_does_not_lose_the_correction(db_session):
+    """Raised while a held poll still showed the challenger ahead, the owed
+    reversal's correction was dropped as untrue, and the event then blocked
+    the correction owed once the count recovered."""
+    from tests.test_election_results_sync import _apply, _contest, _setup
+
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [(text, _)] = _run(db_session)
+    assert "leads in a seat" in text
+    # A data reset: the events and the count go; the posts stay.
+    db_session.query(ElectionResultEvent).delete()
+    db_session.query(RaceResult).delete()
+    db_session.flush()
+    t = utcnow() + timedelta(minutes=rb.RACE_COOLDOWN_MINUTES + 1)
+    with patch.object(er, "utcnow", return_value=t):
+        _apply(db_session, race, _contest(700, 500, 70))  # rebuilt: the holder leads
+        held, _ = _apply(db_session, race, _contest(300, 500, 70))  # the total fell: held
+    assert held == []
+    with patch.object(rb, "utcnow", return_value=t + timedelta(minutes=1)):
+        assert _run(db_session) == []  # the stored row still shows the flip: wait
+    with patch.object(er, "utcnow", return_value=t + timedelta(minutes=5)):
+        _apply(db_session, race, _contest(800, 520, 80))
+    with patch.object(rb, "utcnow", return_value=t + timedelta(minutes=6)):
+        [(text, _)] = _run(db_session)
+    assert "no longer shows a change of party" in text
+    assert "Dana Smith (D) is ahead again" in text

@@ -602,3 +602,18 @@ class TestRoundThree:
             kinds, result = _apply(db_session, race, contest)
         assert kinds == []
         assert json.loads(result.tallies)[0]["name"] == "Ray Jones"
+
+
+def test_a_holder_unknown_when_the_count_began_is_read_again(db_session):
+    """A data reset wipes the members a seat's holder is read from; a count
+    rebuilt before they were kept no holder all night — no flip announced."""
+    race = _setup(db_session)
+    db_session.query(Representative).delete()
+    db_session.flush()
+    kinds, result = _apply(db_session, race, _contest(400, 600, 60))
+    assert result.held_by_party is None and "flip" not in kinds
+    db_session.add(Representative(id="S000001", name="Dana Smith", state="GA", district=2, party="D"))
+    db_session.flush()
+    kinds, result = _apply(db_session, race, _contest(410, 620, 62))
+    assert result.held_by_party is not None
+    assert "flip" in kinds

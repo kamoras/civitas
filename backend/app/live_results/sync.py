@@ -371,6 +371,12 @@ def apply_count(
         # whether the total fell; what to ANNOUNCE is measured against
         # announced_state.
         before = {"tallies": json.loads(result.tallies or "[]"), "counted": result.votes_counted or 0}
+        if result.held_by_party is None:
+            # Looked up again while unknown: a data reset wipes the members
+            # a holder is read from, and a row created before they were
+            # rebuilt kept None all night — no flip announced, and none
+            # corrected. A redrawn map's seat keeps answering None.
+            result.held_by_party = seat_holder_party(db, race)
 
     old_tallies = before["tallies"] if before else []
     old_counted = before["counted"] if before else 0
