@@ -135,3 +135,15 @@ def test_the_index_lists_every_feed_and_state(client):
     georgia = next(s for s in body["states"] if s["code"] == "GA")
     assert georgia == {"code": "GA", "name": "Georgia", "path": "/feed/states/GA.xml"}
     assert len(body["states"]) == 51
+
+
+def test_a_withdrawn_issue_is_left_out_of_every_feed(client, db_session, monkeypatch):
+    """Its page answers 410; the feed must not keep serving it."""
+    from app import retractions
+
+    monkeypatch.setattr(retractions, "entries", lambda: [{"publicIds": ["i00000bad"], "issueIds": []}])
+    _post(db_session, subject="issue:i00000bad", title="Withdrawn")
+    _post(db_session, subject="issue:i0000good", title="Standing")
+    for path in ("/api/feed/all.xml", "/api/feed/issues.xml"):
+        titles = [e.findtext(f"{A}title") for e in _feed(client.get(path)).findall(f"{A}entry")]
+        assert titles == ["Standing"], path

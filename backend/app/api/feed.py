@@ -23,7 +23,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
-from app.broadcast import FEEDS, KINDS, SITE_URL
+from app.broadcast import FEEDS, KINDS, SITE_URL, withdrawn_subjects
 from app.database import get_db
 from app.models import BroadcastPost
 from app.services.senator_service import STATE_NAMES
@@ -116,9 +116,12 @@ def _atom_response(request: Request, body: bytes, posts: list[BroadcastPost]) ->
 
 
 def _newest(db: Session, *filters) -> list[BroadcastPost]:
+    """The newest posts matching `filters`, leaving out any about a
+    withdrawn issue: its page answers 410, and the feed must not keep
+    serving what Civitas retracted."""
     return (
         db.query(BroadcastPost)
-        .filter(*filters)
+        .filter(*filters, BroadcastPost.subject.notin_(withdrawn_subjects()))
         .order_by(BroadcastPost.published_at.desc(), BroadcastPost.id.desc())
         .limit(FEED_LENGTH)
         .all()

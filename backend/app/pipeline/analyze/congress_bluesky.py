@@ -29,13 +29,16 @@ from sqlalchemy.orm import Session
 
 from app import broadcast
 from app.models import CongressDay
-from app.pipeline.cache import api_cache_get
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.services.congress_service import bill_label, day_report, week_bounds, week_report
 
 logger = logging.getLogger(__name__)
 
 # The markers that recorded a Bluesky post before the feed existed. Read so
-# a day posted then isn't posted again; nothing writes them any more.
+# a day posted then isn't posted again, and still written after publishing:
+# the image before this one knows a posted day only by these, and Swarm runs
+# it again on a rollback (expand, then contract — migrations/README.md).
+# Stop writing them in a release after this one.
 _CACHE_TIER = "bsky-congress"
 _WEEK_CACHE_TIER = "bsky-congress-week"
 # A day becomes final the evening after it; two more days of slack cover a
@@ -105,6 +108,7 @@ def post_daily_congress(db: Session, today: date) -> date | None:
         report = day_report(db, day)
         broadcast.publish(db, kind="congress_day", subject=subject, title=f"Congress, {_day_label(day)}",
                           text=compose_post(report), url=url)
+        api_cache_set(db, _CACHE_TIER, key, {"posted": True}, normal_ttl_hours=24 * 30)
         return day
     return None
 
@@ -146,4 +150,5 @@ def post_weekly_congress(db: Session, today: date) -> date | None:
     report = week_report(db, start)
     broadcast.publish(db, kind="congress_week", subject=subject, title=f"Congress, week of {_week_label(start, end)}",
                       text=compose_week_post(report), url=url)
+    api_cache_set(db, _WEEK_CACHE_TIER, key, {"posted": True}, normal_ttl_hours=24 * 30)
     return start

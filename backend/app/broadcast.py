@@ -185,6 +185,7 @@ def deliver_pending(db: Session) -> int:
                 BroadcastPost.bsky_last_attempt_at.is_(None),
                 BroadcastPost.bsky_last_attempt_at <= utcnow() - RETRY_AFTER,
             ),
+            BroadcastPost.subject.notin_(withdrawn_subjects()),
             # Bounds the scan; the Eastern-day check below is the rule.
             BroadcastPost.published_at >= utcnow() - timedelta(days=1),
         )
@@ -198,6 +199,15 @@ def deliver_pending(db: Session) -> int:
         if _deliver_to_bluesky(db, post):
             sent += 1
     return sent
+
+
+def withdrawn_subjects() -> frozenset[str]:
+    """Subjects of posts about withdrawn issues (app/retractions.py): kept
+    in the table, since they were published, but never served in a feed or
+    sent anywhere again."""
+    from app.retractions import entries
+
+    return frozenset(f"issue:{public_id}" for entry in entries() for public_id in entry["publicIds"])
 
 
 def was_published(db: Session, subject: str) -> bool:

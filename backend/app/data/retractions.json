@@ -1,5 +1,5 @@
 {
-  "_about": "Issues Civitas published and withdrew, with the reason. Each entry's issues are removed from the database by an Alembic data migration (named in `migration`), and their pages answer 410 with the reason. Entries are never removed from this file: it is the public record of what was withdrawn and why.",
+  "_about": "Issues Civitas published and withdrew, with the reason. Each entry's issues are removed from the database by an Alembic data migration (named in `migration`), their pages answer 410 with the reason, and their posts are left out of the Atom feeds. Entries are never removed from this file: it is the public record of what was withdrawn and why.",
   "retractions": [
     {
       "date": "2026-09-27",

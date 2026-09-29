@@ -3834,7 +3834,8 @@ def _find_matching_issue(
 
 
 def _run_periodic_bluesky_posts(db: Session) -> None:
-    """The daily member spotlight.
+    """The daily member spotlight, and the hourly retry of posts Bluesky
+    refused (broadcast.deliver_pending).
 
     It doesn't depend on the news at all — it reads member scores — but it
     ran only as stage 6 of the refresh, downstream of the two early

@@ -146,3 +146,15 @@ def test_a_week_nobody_met_or_an_older_week_is_not_posted(db_session, week_posti
     db_session.commit()
     assert cb.post_weekly_congress(db_session, date(2026, 9, 28)) is None
     assert week_posting() == []
+
+
+def test_the_pre_feed_marker_is_still_written_for_a_rollback(db_session, posting):
+    """The image before this one knows a posted day only by its api_cache
+    marker; a rollback to it must not post the day again."""
+    from app.pipeline.cache import api_cache_get
+
+    _day(db_session, "2026-09-24", "senate")
+    _day(db_session, "2026-09-24", "house")
+    db_session.commit()
+    cb.post_daily_congress(db_session, date(2026, 9, 25))
+    assert api_cache_get(db_session, "bsky-congress", "2026-09-24", max_age_hours=24 * 30)

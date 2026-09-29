@@ -161,3 +161,22 @@ def test_was_published_and_subjects_since(db_session):
     assert broadcast.subjects_published_since(db_session, "race", since) == ["race:2026-SEN-GA"] * 2
     assert broadcast.subjects_published_since(db_session, "issue", since) == []
     assert broadcast.subjects_published_since(db_session, "race", utcnow() + timedelta(hours=1)) == []
+
+
+def test_a_withdrawn_issue_is_never_sent_late(db_session, bluesky_configured, monkeypatch):
+    from app import retractions
+
+    bluesky_configured.ok = False
+    post = _publish(db_session, subject="issue:i00000bad")
+    bluesky_configured.ok = True
+    monkeypatch.setattr(retractions, "entries", lambda: [{"publicIds": ["i00000bad"], "issueIds": []}])
+    _an_hour_passes(db_session, post)
+    assert broadcast.deliver_pending(db_session) == 0
+    assert bluesky_configured == []
+
+
+def test_withdrawn_subjects_come_from_the_retraction_log():
+    from app.retractions import entries
+
+    ids = [pid for e in entries() for pid in e["publicIds"]]
+    assert ids and broadcast.withdrawn_subjects() == {f"issue:{pid}" for pid in ids}
