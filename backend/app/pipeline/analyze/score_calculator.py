@@ -1017,7 +1017,10 @@ def _expected_pac_ratio(base: float, ref: dict) -> float | None:
     if base <= 0 or any(ref.get(k) is None for k in keys):
         return None
     x = min(max(math.log(base), ref["pac_size_log_lo"]), ref["pac_size_log_hi"])
-    return math.exp(ref["pac_size_intercept"] + ref["pac_size_slope"] * x)
+    # A share is at most 1. The fit is a line in log space, re-measured every
+    # run, and a steep enough one would put the smallest campaigns above 100%,
+    # where a member funded wholly by PACs would score above the typical 50.
+    return min(1.0, math.exp(ref["pac_size_intercept"] + ref["pac_size_slope"] * x))
 
 
 def compute_funding_reference(fundings: list[dict]) -> dict | None:

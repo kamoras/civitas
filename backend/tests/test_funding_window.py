@@ -290,6 +290,18 @@ class TestFundingReference:
         detail = _funding_independence_core(funding, "OH", None, {"senate": ref})["components"][0]["detail"]
         assert "smallest typical campaigns" in detail and "campaigns this size" not in detail
 
+    def test_the_expected_share_is_never_above_one(self):
+        # A fit steep enough to put the smallest campaigns above 100% would
+        # score a member funded wholly by PACs above the typical 50.
+        from app.pipeline.analyze.score_calculator import _expected_pac_ratio
+
+        ref = {"pac_size_slope": -1.5, "pac_size_intercept": 22.0,
+               "pac_size_log_lo": math.log(1_000_000), "pac_size_log_hi": math.log(50_000_000)}
+        assert _expected_pac_ratio(1_000_000, ref) == 1.0
+        funding = {"totalContributions": 1_000_000, "totalFromPACs": 1_000_000, "topDonors": [], "industryBreakdown": []}
+        pac = _funding_independence_core(funding, "OH", None, {"senate": ref})["components"][0]
+        assert pac["score"] == 50.0
+
     def test_members_without_pac_money_are_left_out_of_the_fit(self):
         fundings = self._sized(lambda base: 500_000) + [{"totalContributions": 5_000_000, "totalFromPACs": 0}] * 10
         assert compute_funding_reference(fundings)["pac_size_n"] <= 40
