@@ -384,6 +384,6 @@ def test_every_user_agent_names_the_real_contact_address():
     copies = [
         str(p.relative_to(backend))
         for p in code
-        if p.suffix == ".py" and p.name != "contact.py" and CONTACT_EMAIL in p.read_text()
+        if p.suffix == ".py" and p != backend / "app" / "contact.py" and CONTACT_EMAIL in p.read_text()
     ]
     assert not copies
