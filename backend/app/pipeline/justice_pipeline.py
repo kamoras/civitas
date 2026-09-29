@@ -6,6 +6,7 @@ import gzip
 import json
 import logging
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import httpx
@@ -36,6 +37,16 @@ def _bundled_rows() -> dict[str, list[tuple[int, int, int]]]:
                 (int(r["for_government"]), int(r["appointer_in_office"]), int(r["government_petitioner"])),
             )
     return rows
+
+
+# Oyez and UCSB spell a president's name nearly alike ("Donald J. Trump" /
+# "Donald Trump": 0.92 as keyed below), but presidents who share a surname
+# are close too (George W. Bush against George H. W. Bush: 0.93). So a name
+# resolves only when its best match is near-exact AND clearly ahead of the
+# runner-up; anything less falls back to the term dates, which can't be
+# ambiguous.
+_NAME_MATCH_MIN = 0.9
+_NAME_MATCH_MARGIN = 0.05
 
 
 def _name_key(name: str) -> str:
@@ -110,6 +121,49 @@ def _loyalty_fields(result: Loyalty | None, term: int, ideal: list | None) -> di
     }
 
 
+# Oyez and UCSB spell a president's name nearly alike ("Donald J. Trump" /
+# "Donald Trump": 0.92 as keyed below), but presidents who share a surname
+# are close too (George W. Bush against George H. W. Bush: 0.93). So a name
+# resolves only when its best match is near-exact AND clearly ahead of the
+# runner-up; anything less falls back to the term dates, which can't be
+# ambiguous.
+_NAME_MATCH_MIN = 0.9
+_NAME_MATCH_MARGIN = 0.05
+
+
+def _president_key(name: str) -> str:
+    return " ".join(re.sub(r"[^a-z ]", " ", name.lower()).split())
+
+
+def resolve_appointment(
+    appointing: str, date_start: str | None, presidents: list[President],
+) -> tuple[str, str]:
+    """(appointing president's name, party) from the presidents table
+    (UCSB's roster, president_pipeline) — never a hand-typed list, so a new
+    president is known the night the roster names them.
+
+    Oyez's name for the appointing president when it gives one, matched by
+    name; otherwise the president in office on the day the justice took the
+    seat (Oyez leaves the name empty for some justices). ("", "") when
+    neither resolves, which the site shows as no party."""
+    if appointing:
+        key = _president_key(appointing)
+        scored = sorted(
+            ((SequenceMatcher(None, key, _president_key(p.name)).ratio(), p) for p in presidents),
+            key=lambda t: t[0], reverse=True,
+        )
+        if scored and scored[0][0] >= _NAME_MATCH_MIN and (
+            len(scored) == 1 or scored[0][0] - scored[1][0] >= _NAME_MATCH_MARGIN
+        ):
+            return scored[0][1].name, scored[0][1].party or ""
+    if date_start:
+        in_office = president_on(date_start, [(p.id, p.term_start, p.term_end) for p in presidents if p.term_start])
+        for p in presidents:
+            if p.id == in_office:
+                return p.name, p.party or ""
+    return appointing or "", ""
+
+
 async def run_justice_pipeline(db: Session) -> dict:
     """Fetch, analyze, and persist Supreme Court justice scorecards.
 
@@ -132,20 +186,24 @@ async def run_justice_pipeline(db: Session) -> dict:
     case_votes, justice_votes = group_votes_by_case_and_justice(all_votes)
 
     active_ids = {j["id"] for j in justices}
+    presidents = db.query(President).all()
 
     for j in justices:
         jid = j["id"]
         jvotes = justice_votes.get(jid, [])
 
         analysis = analyze_justice_votes(jid, jvotes, dict(case_votes), active_ids)
+        appointing, party = resolve_appointment(
+            j.get("appointing_president") or "", j.get("date_start"), presidents,
+        )
 
         record = {
             "id": jid,
             "name": j["name"],
             "last_name": j.get("last_name", ""),
             "role_title": j.get("role_title", "Associate Justice"),
-            "appointing_president": j.get("appointing_president", ""),
-            "appointing_party": j.get("appointing_party", ""),
+            "appointing_president": appointing,
+            "appointing_party": party,
             "date_start": j.get("date_start"),
             "date_end": j.get("date_end"),
             "is_active": j.get("is_active", True),

@@ -65,8 +65,8 @@ export default function ScoresChapter() {
         <ScoreWeightBar />
         <P>
           Each part runs from 0 to 100, higher is better, and the Representation Score is their
-          weighted average. All 100 senators and 435 representatives go through identical formulas
-          in the same nightly run, so scores are comparable across both chambers.
+          weighted average. Every senator and representative goes through identical formulas in the
+          same nightly run, so scores are comparable across both chambers.
         </P>
         <P>
           Each part answers to the same yardstick: does the member carry out the will of the

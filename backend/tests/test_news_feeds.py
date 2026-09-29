@@ -31,9 +31,9 @@ class TestStateNewsFeeds:
         assert len(states) == len(set(states)), "duplicate state"
 
     def test_states_are_real(self):
-        from app.election_calendar import CLASS_I_STATES, CLASS_II_STATES, CLASS_III_STATES
+        from app.election_calendar import federal_states
         from app.pipeline.fetch.news_feeds import STATE_NEWS_FEEDS
-        valid = CLASS_I_STATES | CLASS_II_STATES | CLASS_III_STATES
+        valid = federal_states()
         assert {f["state"] for f in STATE_NEWS_FEEDS} <= valid
 
     def test_the_list_is_actually_populated(self):
