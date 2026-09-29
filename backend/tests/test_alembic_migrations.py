@@ -285,9 +285,9 @@ def test_a_new_justice_inserts_once_the_unscored_columns_are_released(patched_en
         assert s.query(Justice).count() == 1
 
 
-def test_0019_drops_the_long_unread_columns_where_a_bridged_database_has_them(patched_engine):
+def test_0020_drops_the_long_unread_columns_where_a_bridged_database_has_them(patched_engine):
     eng = patched_engine
-    database._run_migrations("0018")
+    database._run_migrations("0019")
     with eng.begin() as conn:
         conn.execute(text("ALTER TABLE senators ADD COLUMN outside_spending_for FLOAT"))
         conn.execute(text("ALTER TABLE presidents ADD COLUMN gdp_growth_adjusted FLOAT"))

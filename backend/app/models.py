@@ -1017,7 +1017,7 @@ class Justice(Base):
 
     # score_consistency, score_independence, score_bipartisan_agreement and
     # score_judicial_restraint (unscored since justice v2 and v6.13) are no
-    # longer mapped; 0019 made them nullable and the next release drops them
+    # longer mapped; 0020 made them nullable and the next release drops them
     # (migrations/README.md).
 
     # Loyalty to the appointing president (justice_loyalty): the score, the

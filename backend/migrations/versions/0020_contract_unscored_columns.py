@@ -12,16 +12,16 @@ rollback to it):
   would refuse. The previous image still maps them and keeps working.
   The release after this one drops them (migrations/README.md).
 
-Revision ID: 0019
-Revises: 0018
+Revision ID: 0020
+Revises: 0019
 Create Date: 2026-09-29
 """
 import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0019"
-down_revision = "0018"
+revision = "0020"
+down_revision = "0019"
 branch_labels = None
 depends_on = None
 
