@@ -14,6 +14,7 @@ def test_app_imports_and_has_routes():
 
     paths = set(app.openapi()["paths"].keys())
     assert "/api/health" in paths
+    assert "/api/live" in paths
     assert any(p.startswith("/api/senators") for p in paths)
     assert any(p.startswith("/api/admin") for p in paths)
 
