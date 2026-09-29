@@ -125,10 +125,12 @@ export default function DataChapter() {
               term.
             </Fact>
             <Fact label="State election offices">
-              Certified candidate lists and primary results, from each state&apos;s own site; six
-              states&apos; official voter guides for ballot measures.
+              Certified candidate lists and primary results, from each state&apos;s own site. And
+              statewide ballot measures, read directly from each state&apos;s own certified list,
+              voter guide or ballot notice and quoted verbatim with the drafter named — the only
+              source for measures. A state we don&apos;t read yet, or which publishes no list, shows
+              as not yet covered with its official lookup link.
             </Fact>
-            <Fact label="Vote Smart">Ballot measures for other states, quoted verbatim.</Fact>
             <Fact label="Census Bureau · Google Civic">
               District boundaries; and lookups run only on addresses we chose — a town hall for the
               town selector, a fixed public building per district to fill in candidate lists — never
@@ -145,7 +147,8 @@ export default function DataChapter() {
         </Sub>
         <P>
           Every source&apos;s rate limits are respected, and responses are cached for 72 hours to
-          avoid asking twice — ballot measures for only 12, since courts strike measures mid-cycle.
+          avoid asking twice — except a state&apos;s answer that it has no measures, kept for only six
+          hours, so a measure certified afterwards appears the next night.
         </P>
       </Section>
 

@@ -73,11 +73,11 @@ Every state has exactly one entry in `state_candidate_sources.json`. What
 matters is not the vendor but **what kind of document** the strategy reads,
 because that decides what the page can honestly claim.
 
-| Source kind | What it can see | States (2026-09-26) |
+| Source kind | What it can see | States (2026-09-28) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI, DE, KY, AK, MT, ND (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export), FL (`dos_canlist`), NJ (`nj_certification` official lists), IL (`grouped_list_pdf`: headed groups in a heading-less PDF) |
-| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 33 configured states — `tabular` (14), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 13 single-state strategies (WI's `canvass_summary_pdf` among them) |
-| **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK (`google_civic`) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), MI and OK (`certified_table`: Michigan's Official Candidate Listing, Oklahoma's List of Elections); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI, DE, KY, AK, MT, ND (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export), FL (`dos_canlist`), NJ (`nj_certification` official lists), IL (`grouped_list_pdf`: headed groups in a heading-less PDF) |
+| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 40 configured states — `tabular` (14), `clarity` (3), `tally_enr` (2), `totalvote_enr` (2) and 19 single-state strategies (WI's `canvass_summary_pdf` and OH's `oh_canvass_xlsx` among them) |
+| **National fallback** | Nothing until Google publishes general-election contests, close to the election | NV, NY (`google_civic`); and as a `general_list` for the races it returns in AL, AR, CT, MI, OH, OK, UT (WI's `fallback`) |
 
 The first row is the states flagged `general_ballot_complete`. Transcribed
 from the JSON on the date shown; the JSON is authoritative.
