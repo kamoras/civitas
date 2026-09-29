@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSessionToken } from "@/hooks/useSessionToken";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
+import { focusTabWhenSelected } from "@/lib/tabFocus";
 import {
   adminAuth,
   fetchAdminDashboard,
@@ -159,10 +160,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
     if (window.location.pathname + window.location.search !== url) {
       window.history.pushState(null, "", url);
     }
-    // Focus the incoming *tab*, not its panel: the Arrow/Home/End handler
-    // lives on the tablist, so moving focus into the panel would strand the
-    // keyboard after one press.
-    requestAnimationFrame(() => document.getElementById(`admin-tab-${next}`)?.focus());
+    focusTabWhenSelected(`admin-tab-${next}`);
   }, []);
 
   useEffect(() => {

@@ -24,6 +24,7 @@ import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
 import ShareButtons from "@/components/action/ShareButtons";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { focusTabWhenSelected } from "@/lib/tabFocus";
 import BackToTop from "@/components/BackToTop";
 import {
   PolicyBadge,
@@ -998,20 +999,8 @@ function ActionPageInner() {
         // prop go false here, which its arrival effect ignores.
         setDeepLink((d) => ({ ...d, date: null, issue: null }));
       }
-      // Focus the newly selected *tab*, not its panel. The tabs use a roving
-      // tabindex, so the incoming tab has to be focused explicitly or the
-      // keyboard user is stranded on an element that just became tabindex=-1.
-      // Focusing the panel instead moved focus out of the tablist entirely,
-      // which meant the Arrow/Home/End handler below stopped receiving keys —
-      // one arrow press worked and every one after it did nothing. The panel
-      // stays tabbable (tabIndex=0), so Tab still reaches the content next.
-      // Only while it is still the tab showing: a Back/Forward inside that
-      // frame has already swapped the tab and focused the one it shows, and
-      // this late focus would pull the keyboard back to a hidden panel's tab.
-      requestAnimationFrame(() => {
-        const incoming = document.getElementById(`tab-${tab}`);
-        if (incoming?.getAttribute("aria-selected") === "true") incoming.focus();
-      });
+      // The panel stays tabbable (tabIndex=0), so Tab still reaches content.
+      focusTabWhenSelected(`tab-${tab}`);
     },
     [pushUrl, activeTab]
   );
