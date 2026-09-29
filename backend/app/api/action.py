@@ -405,17 +405,16 @@ async def get_action_issues(
     # newest day, not on a day of its own, so a day holding nothing but a
     # draft (a seat flip restamped past midnight before the next refresh)
     # would page to a view the landing view already shows.
-    available_dates = [
-        row[0] for row in
-        db.query(ActionIssue.date)
-        .filter(_NOT_DEVELOPING)
-        .distinct()
-        .order_by(ActionIssue.date.desc())
-        .limit(14)
-        .all()
-    ]
-    if issue_date not in available_dates:
-        available_dates = sorted({issue_date, *available_dates}, reverse=True)[:14]
+    # The pager's days: the 14 newest, plus the day shown and the confirmed
+    # days either side of it, so a deep link to an older day (the
+    # timeline's year-in-review links) still pages to its neighbours.
+    confirmed_dates = db.query(ActionIssue.date).filter(_NOT_DEVELOPING).distinct()
+    around = {
+        confirmed_dates.filter(ActionIssue.date < issue_date).order_by(ActionIssue.date.desc()).limit(1).scalar(),
+        confirmed_dates.filter(ActionIssue.date > issue_date).order_by(ActionIssue.date.asc()).limit(1).scalar(),
+    }
+    newest = [row[0] for row in confirmed_dates.order_by(ActionIssue.date.desc()).limit(14).all()]
+    available_dates = sorted({issue_date, *newest, *around} - {None}, reverse=True)
 
     all_explore_ids: list[int] = []
     for i in issues:
@@ -846,8 +845,10 @@ async def get_my_reps(
         .all()
     )
 
-    today_str = utcnow().date().isoformat()
-    issues = _latest_current_issues(db, for_date=today_str)
+    # The Action Center's landing set, which the page intersects these with.
+    # Keyed to utcnow()'s date, it found no issues every evening from 8 PM
+    # Eastern (the next UTC day) until the first refresh after midnight.
+    issues = _latest_current_issues(db)
 
     member_ids = {s.id for s in senators} | {r.id for r in representatives}
     senator_issues: dict[str, list[dict]] = {sid: [] for sid in member_ids}

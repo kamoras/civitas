@@ -8,7 +8,7 @@ import pytest
 
 from app.api.action import _latest_current_issues
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ActionIssueStatus
+from app.models import ActionIssue, ActionIssueStatus, Senator
 
 
 def _make_issue(date: str, rank: int, title: str, is_current: bool) -> ActionIssue:
@@ -937,6 +937,65 @@ class TestElectionNightPager:
         self._seed(db_session)
         by_date = await get_action_issues(Response(), date="2026-11-03", db=db_session, db_visits=db_session)
         assert {i["title"] for i in by_date["issues"]} == {"Polls close across the East", "Republican leads Georgia's 2nd"}
+
+
+class TestPagerAroundAnOlderDay:
+    async def test_an_older_deep_link_pages_to_its_neighbours(self, db_session):
+        """The timeline's year-in-review links open a day older than the 14
+        newest: the pager still lists it and the days either side."""
+        from datetime import date, timedelta
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        days = [(date(2026, 10, 1) + timedelta(days=i)).isoformat() for i in range(20)]
+        for i, d in enumerate(days):
+            db_session.add(ActionIssue(date=d, rank=1, title=f"Issue {i}", is_current=(d == days[-1])))
+        db_session.commit()
+
+        resp = await get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
+        dates = resp["availableDates"]
+        assert resp["date"] == "2026-10-02"
+        i = dates.index("2026-10-02")
+        assert dates[i + 1] == "2026-10-01" and dates[i - 1] == "2026-10-03"
+        assert dates[0] == days[-1]
+
+
+class TestMyRepsIssueDay:
+    async def test_evening_eastern_still_finds_todays_issues(self, db_session):
+        """My Reps used utcnow()'s date: from 8 PM Eastern (the next UTC
+        day) until the next refresh it found no issues at all. It reads the
+        Action Center's landing set, which the page intersects it with."""
+        from unittest.mock import patch
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_my_reps
+
+        db_session.add(Senator(id="s1", name="Sen. Alpha", state="CA", party="D", is_current=True))
+        db_session.add(ActionIssue(date="2026-10-14", rank=1, title="Water bill", is_current=True,
+                                   related_senators='[{"id": "s1"}]'))
+        db_session.commit()
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 10, 15, 1, 30)):
+            resp = await get_my_reps(Response(), state="CA", db=db_session)
+        assert resp["issueDate"] == "2026-10-14"
+        assert [i["title"] for i in resp["senators"][0]["connectedIssues"]] == ["Water bill"]
+
+    async def test_after_midnight_on_election_night_it_is_the_landing_day(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_my_reps
+
+        db_session.add(Senator(id="s1", name="Sen. Alpha", state="CA", party="D", is_current=True))
+        db_session.add(ActionIssue(date="2026-11-03", rank=1, title="Polls close", is_current=True,
+                                   related_senators='[{"id": "s1"}]'))
+        db_session.add(ActionIssue(date="2026-11-04", rank=999, title="Republican leads", is_current=True,
+                                   source_type="election_results", status=ActionIssueStatus.DEVELOPING))
+        db_session.commit()
+        resp = await get_my_reps(Response(), state="CA", db=db_session)
+        assert resp["issueDate"] == "2026-11-03"
 
 
 class TestRecentFeedAndSeatFlips:
