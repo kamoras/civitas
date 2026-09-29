@@ -52,6 +52,7 @@ from app.pipeline.vector_store import (
     embed_explore_documents,
     explore_embed_dict,
     index_is_whole,
+    is_busy_error,
     rebuild_explore_index,
     get_embedded_explore_ids,
 )
@@ -618,7 +619,9 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # deletions above to have happened. Both are no-ops on a clean
         # corpus, so they cost one query a night once caught up.
         _purge_duplicate_floor_speeches(db)
-        _purge_orphaned_vectors(db)
+        # Off the loop, which serves summary streams and the admin status
+        # check-and-deploy polls: it scans every chunk's document id.
+        await asyncio.to_thread(_purge_orphaned_vectors, db)
 
         # An index that isn't a complete build by this model (a rebuild that
         # failed or was cut off, a model change) is rebuilt whole, here and
@@ -627,10 +630,16 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         rebuilt = None
         try:
             whole = await asyncio.to_thread(index_is_whole)
-        except Exception:
-            # Unreadable is not whole: a rebuild recreates what it can't read.
-            logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
-            whole = False
+        except Exception as error:
+            if is_busy_error(error):
+                # Locked a moment: no reason to drop an index that may well
+                # be whole. Topped up as usual; the next run looks again.
+                logger.warning("Explore pipeline: vector index busy — not checked (%s)", error)
+                whole = True
+            else:
+                # Unreadable is not whole: a rebuild recreates what it can't read.
+                logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
+                whole = False
         if not whole:
             logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
             try:
@@ -656,7 +665,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                 # Waited out a start's rebuild, which reads documents by id
                 # without this run's lease: one this run deleted meanwhile
                 # may have been embedded after the purge above.
-                _purge_orphaned_vectors(db)
+                await asyncio.to_thread(_purge_orphaned_vectors, db)
         try:
             whole_now = whole or await asyncio.to_thread(index_is_whole)
         except Exception:

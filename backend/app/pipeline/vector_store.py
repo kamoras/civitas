@@ -247,6 +247,55 @@ _rebuild_lock = threading.Lock()
 _REBUILD_BATCH = 500
 
 
+def _open_vec_conn(timeout: float, *, check_same_thread: bool = True, extension: bool = True) -> sqlite3.Connection:
+    """A new connection to the vector store, with sqlite-vec loaded unless
+    `extension` is False (get_vec_conn loads it after its WAL switch)."""
+    conn = sqlite3.connect(_VECTOR_DB_PATH, check_same_thread=check_same_thread, timeout=timeout)
+    if extension:
+        try:
+            _load_vec(conn)
+        except BaseException:
+            conn.close()
+            raise
+    return conn
+
+
+def _load_vec(conn: sqlite3.Connection) -> None:
+    import sqlite_vec
+
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.enable_load_extension(False)
+
+
+def _swap_tables(ddl: dict[str, str], *, clear_meta: bool = False) -> None:
+    """DROP and recreate each of `ddl`'s tables (name -> CREATE statement)
+    in one transaction on a connection of its own, so every other
+    connection — the shared one, whose users commit without _vec_lock, and
+    the API processes' — sees the old tables or the new, never none. (A
+    vec0 table's vector width and columns are fixed at creation: recreating
+    is the only way to change them.)"""
+    swap = _open_vec_conn(SQLITE_BUSY_TIMEOUT_S)
+    try:
+        swap.execute("BEGIN IMMEDIATE")
+        for name, create in ddl.items():
+            swap.execute(f"DROP TABLE IF EXISTS {name}")
+            swap.execute(create)
+        if clear_meta:
+            swap.execute("DELETE FROM vec_meta")
+        swap.commit()
+    finally:
+        swap.close()
+
+
+def is_busy_error(error: BaseException) -> bool:
+    """A lock another connection held past the busy timeout: a moment's
+    state of the file, not its contents — never a reason to rebuild it."""
+    return isinstance(error, sqlite3.OperationalError) and any(
+        word in str(error).lower() for word in ("locked", "busy")
+    )
+
+
 def get_vec_conn() -> sqlite3.Connection:
     """Get or create the sqlite-vec connection (singleton, extension loaded)."""
     global _vec_conn, _wal_retry_at
@@ -260,12 +309,8 @@ def get_vec_conn() -> sqlite3.Connection:
             _wal_retry_at = time.monotonic() + _WAL_RETRY_EVERY_S
             threading.Thread(target=_retry_wal, daemon=True, name="vectors-wal-switch").start()
         if _vec_conn is None:
-            import sqlite_vec
-
             logger.info("Opening vector store: %s", _VECTOR_DB_PATH)
-            conn = sqlite3.connect(
-                _VECTOR_DB_PATH, check_same_thread=False, timeout=_busy_timeout_s(),
-            )
+            conn = _open_vec_conn(_busy_timeout_s(), check_same_thread=False, extension=False)
             try:
                 # WAL, as the main database has: the pipeline process writes
                 # this file while the API processes search it (PROCESS_ROLE),
@@ -280,9 +325,7 @@ def get_vec_conn() -> sqlite3.Connection:
                 # so the default (FULL) stands until the switch takes.
                 if retry_at is None:
                     conn.execute("PRAGMA synchronous=NORMAL")
-                conn.enable_load_extension(True)
-                sqlite_vec.load(conn)
-                conn.enable_load_extension(False)
+                _load_vec(conn)
                 _ensure_schema(conn)
             except BaseException:
                 # Not kept, so closed: a caller retrying through a locked
@@ -300,22 +343,23 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # chunk_text and embed_explore_documents for why the corpus is chunked
     # at all, and search_explore_documents for how chunks are folded back
     # into document-level results.
-    conn.execute(
-        f"""CREATE VIRTUAL TABLE IF NOT EXISTS vec_explore USING vec0(
-            embedding float[{SIMILARITY_DIMENSIONS}] distance_metric=cosine,
-            doc_id integer,
-            doc_type text,
-            chamber text,
-            politician_id text,
-            +title text,
-            +date text,
-            +source text,
-            +politician_name text,
-            +snippet text
-        )"""
-    )
+    conn.execute(_EXPLORE_DDL.format(if_not_exists="IF NOT EXISTS "))
     conn.execute(_BILLS_DDL.format(if_not_exists="IF NOT EXISTS "))
     conn.commit()
+
+
+_EXPLORE_DDL = f"""CREATE VIRTUAL TABLE {{if_not_exists}}vec_explore USING vec0(
+    embedding float[{SIMILARITY_DIMENSIONS}] distance_metric=cosine,
+    doc_id integer,
+    doc_type text,
+    chamber text,
+    politician_id text,
+    +title text,
+    +date text,
+    +source text,
+    +politician_name text,
+    +snippet text
+)"""
 
 
 _BILLS_DDL = f"""CREATE VIRTUAL TABLE {{if_not_exists}}vec_bills USING vec0(
@@ -383,24 +427,8 @@ def invalidate_on_model_change(db_session=None) -> None:
     whole rebuild, and waited out a running one first.
     """
     logger.warning("Embedding model change detected — invalidating stored embeddings")
-    # DROP + recreate, not DELETE: a vec0 table's vector width is fixed at
-    # creation, and a new model may have a different one. In one
-    # transaction on a connection of its own, so every other connection
-    # (the shared one, whose users commit without _vec_lock, and the API
-    # processes') sees the old table or the new one, never none.
-    import sqlite_vec
-
-    swap = sqlite3.connect(_VECTOR_DB_PATH, timeout=SQLITE_BUSY_TIMEOUT_S)
-    try:
-        swap.enable_load_extension(True)
-        sqlite_vec.load(swap)
-        swap.enable_load_extension(False)
-        swap.execute("BEGIN IMMEDIATE")
-        swap.execute("DROP TABLE IF EXISTS vec_bills")
-        swap.execute(_BILLS_DDL.format(if_not_exists=""))
-        swap.commit()
-    finally:
-        swap.close()
+    # DROP + recreate, not DELETE: a new model may have another width.
+    _swap_tables({"vec_bills": _BILLS_DDL.format(if_not_exists="")})
 
     if db_session is not None:
         try:
@@ -917,13 +945,12 @@ def reset_vector_db() -> None:
     """Reset the entire vector index (useful for fresh starts). Waits out a
     rebuild running here: one reset under it would lose the recorded
     identity, and its next batch would record a partial index as built."""
-    conn = get_vec_conn()
-    with _rebuild_lock, _vec_lock:
-        for name in ("vec_explore", "vec_bills"):
-            conn.execute(f"DROP TABLE IF EXISTS {name}")
-        conn.execute("DELETE FROM vec_meta")
-        conn.commit()
-        _ensure_schema(conn)
+    get_vec_conn()  # the schema exists to be swapped
+    with _rebuild_lock:
+        _swap_tables({
+            "vec_explore": _EXPLORE_DDL.format(if_not_exists=""),
+            "vec_bills": _BILLS_DDL.format(if_not_exists=""),
+        }, clear_meta=True)
     logger.info("Reset vector DB")
 
 
@@ -965,9 +992,10 @@ def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | No
         if wait:
             try:
                 whole = index_is_whole()
-            except Exception:
-                # Unreadable is not whole: this rebuild recreates it.
-                logger.warning("Explore index unreadable — rebuilding it", exc_info=True)
+            except Exception as error:
+                # Unreadable is not whole: this rebuild recreates it. (Busy
+                # too, here: the caller has already decided to rebuild.)
+                logger.warning("Explore index unreadable (%s) — rebuilding it", error)
                 whole = False
             if whole:
                 return None
@@ -975,10 +1003,7 @@ def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | No
         conn = get_vec_conn()
         # Not ready from here until the last batch is in (_INDEX_MODEL).
         _set_meta(conn, _INDEX_MODEL, "")
-        with _vec_lock:
-            conn.execute("DROP TABLE IF EXISTS vec_explore")
-            _ensure_schema(conn)
-            conn.commit()
+        _swap_tables({"vec_explore": _EXPLORE_DDL.format(if_not_exists="")})
 
         db = db_session_factory()
         try:
@@ -1021,6 +1046,29 @@ def recalibrate_ranking(db_session_factory) -> None:
         db.close()
 
 
+def _refit_after_a_start_rebuild(db_session_factory) -> None:
+    """The fit in force was measured against the index a start's rebuild
+    replaced. Under the Explore lease — a run holding it is mid-ingest (the
+    corpus and keyword index moving under a fit), and refits at its own
+    end — but refused for anything else (the lease's database busy), it
+    refits anyway rather than leave the old fit in force for a day."""
+    from app.pipeline import lease
+
+    with lease.job(lease.EXPLORE, who="Explore ranking refit") as held:
+        if held:
+            recalibrate_ranking(db_session_factory)
+            return
+    db = db_session_factory()
+    try:
+        running = lease.holder(db, lease.EXPLORE) is not None or lease.held(db, lease.DATA_RESET)
+    except Exception:
+        running = False
+    finally:
+        db.close()
+    if not running:
+        recalibrate_ranking(db_session_factory)
+
+
 def is_rebuilding() -> bool:
     """Whether a rebuild of the explore index is running in this process
     (the pipeline's): check-and-deploy.sh waits it out like a run."""
@@ -1048,7 +1096,12 @@ def ensure_explore_index(db_session_factory) -> None:
     """
     try:
         whole = index_is_whole()
-    except Exception:
+    except Exception as error:
+        if is_busy_error(error):
+            # Locked a moment (a rollout's overlap): no reason to drop an
+            # index that may well be whole. The next Explore run looks again.
+            logger.warning("Explore index busy at start — not checked (%s)", error)
+            return
         # Unreadable is not whole: the rebuild recreates it.
         logger.warning("Explore index unreadable — rebuilding it", exc_info=True)
         whole = False
@@ -1067,15 +1120,7 @@ def ensure_explore_index(db_session_factory) -> None:
                 db.close()
             logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
             if rebuild_explore_index(db_session_factory) is not None:
-                # The fit in force was measured against the index this
-                # replaced. Only under the Explore lease, though: a run
-                # holding it is mid-ingest (the corpus and keyword index
-                # moving under a fit), and refits at its own end anyway.
-                from app.pipeline import lease
-
-                with lease.job(lease.EXPLORE, who="Explore ranking refit") as held:
-                    if held:
-                        recalibrate_ranking(db_session_factory)
+                _refit_after_a_start_rebuild(db_session_factory)
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
 

@@ -330,6 +330,17 @@ class TestEnsureExploreIndex:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()
 
+    def test_a_start_leaves_an_index_it_found_only_locked(self, vec_env, monkeypatch):
+        # A rollout's overlap holding the file a moment is no reason to drop
+        # an index that may well be whole and spend twenty minutes on it.
+        def locked():
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(vector_store, "index_is_whole", locked)
+        with patch.object(vector_store, "start_writer") as thread:
+            vector_store.ensure_explore_index(lambda: None)
+        thread.assert_not_called()
+
     def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
         # Two overlapping would each clear what the other built.
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
@@ -409,6 +420,7 @@ class TestEnsureExploreIndex:
                 return False
 
         monkeypatch.setattr(lease, "job", _Refused)
+        monkeypatch.setattr(lease, "holder", lambda db, tier: "Explore ingest" if tier == lease.EXPLORE else None)
         db_session.add(ExploreDocument(doc_type="House Floor Speech", source="congress.gov",
                                        title="A real doc", summary="s", body="b", date="2026-07-01"))
         db_session.commit()
@@ -418,6 +430,12 @@ class TestEnsureExploreIndex:
             if t.name == "explore-reindex":
                 t.join(timeout=10)
         assert vector_store.index_is_whole() and recalibrated == []
+
+        # Refused for anything else (the lease's database busy): refitted
+        # anyway, rather than the old fit left in force for a day.
+        monkeypatch.setattr(lease, "holder", lambda db, tier: None)
+        vector_store._refit_after_a_start_rebuild(lambda: db_session)
+        assert len(recalibrated) == 1
 
     def test_rebuild_recreates_a_stale_pre_migration_schema(self, vec_env, db_session, explore_lease):
         """Regression for a live 2026-08-30 incident: a prior deploy's

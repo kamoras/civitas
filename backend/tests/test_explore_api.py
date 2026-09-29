@@ -276,20 +276,28 @@ class TestCapAndClients:
             release.set()
             assert (await _collect_sse_events(other))[-1]["summary"] == "A test summary."
 
-    async def test_the_one_per_client_rule_holds_across_midnight(self, db_session, monkeypatch):
+    async def test_the_one_per_client_rule_keys_clients_in_process(self, db_session, monkeypatch):
+        # Not by the throttle store: its keys change at midnight, and its
+        # moments of unavailability would hand a client a second key. The
+        # rule lives only in the one pipeline process, so it needs neither.
+        import uuid
+
         from app.api import throttle
 
-        first, second = _make_doc(db_session, title="A"), _make_doc(db_session, title="B")
+        # Every store key new — a new day, or the store back from a moment
+        # away — as far as anything keyed by the store can tell.
+        monkeypatch.setattr(throttle, "client_key", lambda ip, purpose: throttle.ClientKey(uuid.uuid4().hex))
+        doc, other = _make_doc(db_session, title="A"), _make_doc(db_session, title="B")
         stream, release = _gate()
         patches, _ = _llm(stream)
-        yesterday = throttle.client_key("203.0.113.7", "explore-summary-client")
         with patches[0], patches[1], patches[2]:
-            await _ask(first, db=db_session)
-            today = throttle.ClientKey("a-new-days-key")
-            today.previous = str(yesterday)
-            monkeypatch.setattr(throttle, "client_key", lambda ip, purpose, scope="": today)
-            assert (await _refused(second, db_session)).status_code == 503
+            first = await _ask(doc, db=db_session)
+            refused = await _refused(other, db_session)
+            assert refused.status_code == 503 and refused.headers["X-Summary-Wait"] == "1"
+            elsewhere = await _ask(other, _reader("198.51.100.9"), db_session)  # another address
             release.set()
+            for response in (first, elsewhere):
+                assert (await _collect_sse_events(response))[-1]["summary"] == "A test summary."
             await _settled()
 
     async def test_a_request_limit_counts_only_uncached_requests(self, db_session, monkeypatch):
@@ -513,30 +521,6 @@ class TestCachedSummaryRead:
         with pytest.raises(HTTPException) as exc_info:
             await get_cached_explore_summary(999999, db=db_session)
         assert exc_info.value.status_code == 404
-
-
-class TestNoClientKey:
-    async def test_without_the_throttle_store_summaries_start_and_the_rule_still_holds(
-        self, db_session, monkeypatch,
-    ):
-        # Not refused for everyone while the store is down, and one address
-        # still can't hold every slot: a key of the process's own.
-        from app.api import throttle
-
-        monkeypatch.setattr(throttle, "client_key", lambda ip, purpose: None)
-        doc, other = _make_doc(db_session, title="A"), _make_doc(db_session, title="B")
-        stream, release = _gate()
-        patches, _ = _llm(stream)
-        with patches[0], patches[1], patches[2]:
-            first = await _ask(doc, db=db_session)
-            refused = await _refused(other, db_session)
-            assert refused.status_code == 503 and refused.headers["X-Summary-Wait"] == "1"
-            # Another address still starts one.
-            elsewhere = await _ask(other, _reader("198.51.100.9"), db_session)
-            release.set()
-            for response in (first, elsewhere):
-                assert (await _collect_sse_events(response))[-1]["summary"] == "A test summary."
-            await _settled()
 
 
 class TestJoining:
