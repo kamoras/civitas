@@ -163,13 +163,6 @@ function RecordColumn({ justice: j }: { justice: Justice }) {
   );
 }
 
-function titleCase(id: string) {
-  return id
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
 /**
  * A justice's scorecard, at a glance, laid out like a member's and a
  * president's: who and the Judicial Score, then the scored measure beside
@@ -188,7 +181,10 @@ export default function JusticeScorecard({
   const party = (j.appointingParty && PARTY[j.appointingParty]) || NO_PARTY;
   const overall = j.score.overall == null ? null : displayScore(j.score.overall);
   const since = formatDate(j.dateStart);
-  const agreement = Object.entries(j.agreementMatrix).sort(([, a], [, b]) => b - a);
+  // Named and ordered by the API (most agreement first). Absent from a
+  // response cached before the field replaced agreementMatrix (nginx and the
+  // browser both hold these), which must not take the page down.
+  const agreement = j.agreement ?? [];
   // What every section's share image says it is from, as on the member and
   // president scorecards.
   const shareSubject: ShareSubject = {
@@ -312,9 +308,9 @@ export default function JusticeScorecard({
                 </p>
               </div>
               <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-                {agreement.map(([id, share]) => (
+                {agreement.map(({ id, name, share }) => (
                   <div key={id} className="flex items-center gap-3">
-                    <dt className="w-40 truncate text-sm text-ink">{titleCase(id)}</dt>
+                    <dt className="w-40 truncate text-sm text-ink">{name}</dt>
                     <dd className="flex flex-1 items-center gap-3">
                       <span className="h-1.5 flex-1 bg-white/10" aria-hidden="true">
                         <span className="block h-full bg-ink-lo" style={{ width: `${share}%` }} />

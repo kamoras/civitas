@@ -19,10 +19,7 @@ def truncate_on_boundary(text: str, budget: int) -> str:
     past the midpoint, else a word boundary, else a hard cut.
 
     Used to fit a generated body under Bluesky's 300-char limit while keeping
-    the trailing URL intact. (Distinct from strip_hashtags_and_truncate below,
-    which also strips hashtags and accepts an any-position sentence cut — this
-    one runs last, on already-sanitized text immediately before posting, where
-    cutting too early would waste too much of a short post.)
+    the trailing URL intact.
     """
     trimmed = text[:budget]
     cut = -1
@@ -48,37 +45,6 @@ def strip_hashtags(text: str) -> str:
     upstream — shares the same pattern instead of a 5th independent copy
     that could drift from this one (2026-08 cleanup)."""
     return _HASHTAG_RE.sub(r"\1", text).strip()
-
-
-def strip_hashtags_and_truncate(text: str, budget: int) -> str:
-    """Convert #word to word, then trim to at most `budget` chars at the
-    nearest sentence-ending punctuation anywhere in range, falling back to
-    a word boundary, then a hard cut.
-
-    Shared by bluesky_poster's issue-post generator, bluesky_spotlight's
-    senator-spotlight and weekly-summary generators, and election_bluesky's
-    race-coverage posts — all four hand-wrote this independently before
-    (2026-08 cleanup; election_bluesky's was a plain hard-slice with no
-    boundary logic at all, upgraded here as a side benefit). Two of the
-    original three text-boundary copies had diverged into a real edge
-    case: when the truncated text has no space at all,
-    `trimmed[:trimmed.rfind(" ")]` evaluates to `trimmed[:-1]` (`rfind`
-    returns -1), silently dropping the last character instead of keeping
-    the whole trimmed text. This keeps the one copy that got it right.
-    """
-    text = strip_hashtags(text)
-    if len(text) <= budget:
-        return text
-    trimmed = text[:budget]
-    cut = -1
-    for punct in (".", "!", "?"):
-        idx = trimmed.rfind(punct)
-        if idx > 0:
-            cut = max(cut, idx + 1)
-    if cut > 0:
-        return trimmed[:cut]
-    last_space = trimmed.rfind(" ")
-    return trimmed[:last_space] if last_space > 0 else trimmed
 
 
 def publish_post(text: str, url: str, *, success_msg: str, error_context: str) -> bool:
@@ -141,26 +107,11 @@ def publish_post(text: str, url: str, *, success_msg: str, error_context: str) -
         return False
 
 
-def build_link_card(client, url: str):
-    """Fetch OG metadata from url and build a Bluesky external embed (link card).
-
-    Returns None on any failure so callers can post without an embed.
-    """
-    from atproto import models as bsky_models
-
-    try:
-        resp = httpx.get(
-            url,
-            timeout=10,
-            follow_redirects=True,
-            headers={"User-Agent": "Civitas-Bot/1.0"},
-        )
-        resp.raise_for_status()
-        html = resp.text
-    except Exception:
-        logger.debug("Link card fetch failed for %s", url)
-        return None
-
+def og_card(html: str) -> dict[str, str]:
+    """A page's link card from its Open Graph tags: {title, description,
+    image, image_alt}, each "" when the page doesn't set it. The one reading
+    of a card: the Bluesky embed and the feed entry (app/broadcast.py) both
+    come from it, so they can't disagree."""
     def _og(prop: str) -> str:
         m = re.search(
             rf'<meta[^>]+property=["\']og:{prop}["\'][^>]+content=["\']([^"\']+)["\']',
@@ -171,25 +122,51 @@ def build_link_card(client, url: str):
         )
         return unescape(m.group(1)) if m else ""
 
-    title = _og("title") or "Civitas // Public Record"
-    description = _og("description") or ""
-    image_url = _og("image")
+    return {
+        "title": _og("title"),
+        "description": _og("description"),
+        "image": _og("image"),
+        "image_alt": _og("image:alt"),
+    }
+
+
+def fetch_og_card(url: str) -> dict[str, str] | None:
+    """`url`'s link card (og_card), or None when the page can't be read."""
+    try:
+        resp = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": "Civitas-Bot/1.0"})
+        resp.raise_for_status()
+    except Exception:
+        logger.debug("Link card fetch failed for %s", url)
+        return None
+    return og_card(resp.text)
+
+
+def build_link_card(client, url: str):
+    """Fetch OG metadata from url and build a Bluesky external embed (link card).
+
+    Returns None on any failure so callers can post without an embed.
+    """
+    from atproto import models as bsky_models
+
+    card = fetch_og_card(url)
+    if card is None:
+        return None
 
     thumb = None
-    if image_url:
+    if card["image"]:
         try:
-            img_resp = httpx.get(image_url, timeout=10, follow_redirects=True)
+            img_resp = httpx.get(card["image"], timeout=10, follow_redirects=True)
             img_resp.raise_for_status()
             blob = client.upload_blob(img_resp.content)
             thumb = blob.blob
         except Exception:
-            logger.debug("Thumbnail upload failed for %s", image_url)
+            logger.debug("Thumbnail upload failed for %s", card["image"])
 
     return bsky_models.AppBskyEmbedExternal.Main(
         external=bsky_models.AppBskyEmbedExternal.External(
             uri=url,
-            title=title,
-            description=description,
+            title=card["title"] or "Civitas // Public Record",
+            description=card["description"],
             thumb=thumb,
         )
     )

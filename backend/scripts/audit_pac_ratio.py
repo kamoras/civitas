@@ -39,15 +39,14 @@ def _fetch_json(url: str):
         return json.load(resp)
 
 
-def fetch_fundings(branch: str) -> list[dict]:
+def fetch_fundings(branch: str) -> tuple[list[dict], list[str]]:
+    """(each current member's funding, their states), aligned."""
     listing = _fetch_json(f"{API_BASE}/politicians?branch={branch}")
     # Current members only, the population the pipeline measures; the
     # listing also has departed members inside the removal grace window.
     ids = [d["id"] for d in listing if d.get("hasScorecard") and d.get("isCurrent") is not False]
-    return [
-        (_fetch_json(f"{API_BASE}/politicians/{pid}").get("scorecard") or {}).get("funding") or {}
-        for pid in ids
-    ]
+    cards = [_fetch_json(f"{API_BASE}/politicians/{pid}").get("scorecard") or {} for pid in ids]
+    return [c.get("funding") or {} for c in cards], [c.get("state") or "" for c in cards]
 
 
 def main() -> None:
@@ -61,7 +60,10 @@ def main() -> None:
         ),
     }
     for branch in ("senate", "house"):
-        ref = compute_funding_reference(fetch_fundings(branch))
+        fundings, states = fetch_fundings(branch)
+        # The Senate's small-donor baseline is fitted by state population
+        # (v6.24); the House is compared with its own median.
+        ref = compute_funding_reference(fundings, states if branch == "senate" else None)
         if ref is None:
             print(f"{branch}: too few funded members; left unchanged")
             out[branch] = existing.get(branch)

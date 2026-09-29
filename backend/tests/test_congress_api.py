@@ -184,3 +184,12 @@ class TestNoRecordPublished:
         monkeypatch.setattr(cs, "digest_cursor", lambda db: date(2026, 9, 26))
         days = {d["date"]: d["noRecordPublished"] for d in cs.week_report(week_of_sept_21, date(2026, 9, 24))["days"]}
         assert days["2026-09-25"] is True and days["2026-09-24"] is False and days["2026-09-27"] is False
+
+
+def test_cloture_counts_the_senators_sworn_that_day_not_a_fixed_hundred():
+    # A vacancy (99 sworn: 58 yea, 40 nay, 1 not voting) lowers the bar to
+    # 59.4, three-fifths of those duly chosen and sworn (Rule XXII).
+    with_vacancy = RollCall(chamber="senate", yeas=58, nays=40, present=0, not_voting=1, majority_requirement="3/5")
+    assert round(cs.votes_from_threshold(with_vacancy), 2) == 1.4
+    full = RollCall(chamber="senate", yeas=58, nays=40, present=0, not_voting=2, majority_requirement="3/5")
+    assert cs.votes_from_threshold(full) == 2

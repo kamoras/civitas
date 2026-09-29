@@ -10,6 +10,7 @@ House/stock trades already have, instead of piggybacking on Senate's
 own PipelineRun row.
 """
 
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
@@ -148,6 +149,26 @@ class TestSupplementaryPipelineRunTracking:
                    return_value=datetime(2026, 7, 15)):  # a Wednesday
             result = _run(db_session, justice_result={"justices": 9})
         assert result["justices_scored"] == 9
+
+    def test_justice_step_says_when_loyalty_was_not_measured(self, db_session):
+        # The voting record refreshing is not the score being measured: a
+        # bare "9 scored" hid the SCDB 403 of 2026-09-29.
+        why = "the Supreme Court Database could not be read"
+        with patch("app.pipeline.supplementary_pipeline.send_ops_alert") as alert:
+            _run(db_session, justice_result={"justices": 9, "loyalty_unmeasured": why})
+        steps = json.loads(db_session.query(SupplementaryPipelineRun).one().progress_detail)
+        step = next(s for s in steps if s["key"] == "justice_scorecards")
+        assert step["detail"] == f"9 scored, loyalty not measured: {why}"
+        # The alert carries the reason: the logs that named it rotated away.
+        alert.assert_called_once()
+        assert why in alert.call_args.args[1]
+
+    def test_a_measured_run_sends_no_alert_and_resolves_an_open_one(self, db_session):
+        with patch("app.pipeline.supplementary_pipeline.send_ops_alert") as alert, \
+             patch("app.pipeline.supplementary_pipeline.resolve_ops_alert") as resolve:
+            _run(db_session, justice_result={"justices": 9, "loyalty_unmeasured": None})
+        alert.assert_not_called()
+        resolve.assert_called_once_with("justice-loyalty-unmeasured")
 
     def test_committee_leadership_skipped_outside_weekly_cadence_when_not_missing(self, db_session):
         with patch("app.pipeline.supplementary_pipeline.utcnow",

@@ -26,43 +26,16 @@ import httpx
 from app.atomic_write import write_text_atomic
 from app.http_client import make_async_client
 from app.ordinals import ordinal
+from app.pipeline.fetch.house_clerk import fetch_house_apportionment
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-STATE_NAMES = {
-    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
-    "CA": "California", "CO": "Colorado", "CT": "Connecticut",
-    "DE": "Delaware", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
-    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
-    "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
-    "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan",
-    "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
-    "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
-    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
-    "NY": "New York", "NC": "North Carolina", "ND": "North Dakota",
-    "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania",
-    "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
-    "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
-    "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
-    "WI": "Wisconsin", "WY": "Wyoming",
-}
-
-# Post-2020-census apportionment (118th Congress onward), 435 seats. Will
-# need updating after the 2030 census reapportions seats between states —
-# same "unavoidable one-time human step after a real-world event" class as
-# adding a new president, not a decay path this module can self-correct.
-SEATS = {
-    "AL": 7, "AK": 1, "AZ": 9, "AR": 4, "CA": 52, "CO": 8, "CT": 5,
-    "DE": 1, "FL": 28, "GA": 14, "HI": 2, "ID": 2, "IL": 17, "IN": 9,
-    "IA": 4, "KS": 4, "KY": 6, "LA": 6, "ME": 2, "MD": 8, "MA": 9,
-    "MI": 13, "MN": 8, "MS": 4, "MO": 8, "MT": 2, "NE": 3, "NV": 4,
-    "NH": 2, "NJ": 12, "NM": 3, "NY": 26, "NC": 14, "ND": 1, "OH": 15,
-    "OK": 5, "OR": 6, "PA": 17, "RI": 2, "SC": 7, "SD": 1, "TN": 9,
-    "TX": 38, "UT": 4, "VT": 1, "VA": 11, "WA": 10, "WV": 2, "WI": 8,
-    "WY": 1,
-}
+# Which districts exist comes from the House Clerk's seat list
+# (house_clerk.fetch_house_apportionment), read each refresh: a
+# reapportionment after a census, or a state's seat count changing, is
+# picked up with no edit here.
 
 API = "https://en.wikipedia.org/w/api.php"
 _PVI_PATH = "/data/district_pvi.json"
@@ -75,9 +48,8 @@ _PVI_RE = re.compile(r"(?i)\|\s*(?:cpvi|cook[_ ]?pvi)\s*=\s*([^\n|}]+)")
 _VALUE_RE = re.compile(r"(?i)\b(EVEN|[DR]\s*\+\s*\d+)\b")
 
 
-def district_title(state: str, district: int) -> str:
-    name = STATE_NAMES[state]
-    possessive = f"{name}'s"
+def district_title(state_name: str, district: int) -> str:
+    possessive = f"{state_name}'s"
     if district == 0:
         return f"{possessive} at-large congressional district"
     return f"{possessive} {ordinal(district)} congressional district"
@@ -126,21 +98,27 @@ async def _fetch_batch(titles: list[str], client: httpx.AsyncClient) -> dict[str
     return out
 
 
-def ingestion_gates(result: dict[str, int]) -> list[str]:
+def ingestion_gates(result: dict[str, int], seats: dict[str, int]) -> list[str]:
     """Structural sanity checks on the retrieved table — guard the
-    ingestion (sign convention, coverage, parse drift), not the scores."""
+    ingestion (sign convention, coverage, parse drift), not the scores.
+    `seats`: {state: voting seats}, the House's apportionment."""
     failures = []
-    if len(result) != 435:
-        failures.append(f"expected 435 districts, got {len(result)}")
+    expected = sum(seats.values())
+    if len(result) != expected:
+        failures.append(f"expected {expected} districts, got {len(result)}")
     states = {k.split("-")[0] for k in result}
-    if states != set(SEATS):
-        failures.append(f"state coverage mismatch: {sorted(set(SEATS) ^ states)}")
+    if states != set(seats):
+        failures.append(f"state coverage mismatch: {sorted(set(seats) ^ states)}")
     vals = list(result.values())
     if not all(-45 <= v <= 45 for v in vals):
         failures.append("PVI outside plausible +/-45 range — parse drift?")
     r_lean = sum(1 for v in vals if v > 0)
     d_lean = sum(1 for v in vals if v < 0)
-    if not (150 <= r_lean <= 285 and 150 <= d_lean <= 285):
+    # Neither side under about a third of the House (the bound was 150 of
+    # 435 when it was a count): a sign flip or a parse that reads every
+    # district one way lands far outside it.
+    low, high = round(expected * 0.345), round(expected * 0.655)
+    if not (low <= r_lean <= high and low <= d_lean <= high):
         failures.append(f"implausible lean split R={r_lean} D={d_lean}")
     return failures
 
@@ -157,10 +135,15 @@ async def refresh_district_pvi(client: httpx.AsyncClient | None = None) -> bool:
     if own_client:
         client = make_async_client(follow_redirects=True)
     try:
+        apportionment = await fetch_house_apportionment(client)
+        if not apportionment:
+            logger.warning("district-pvi: no apportionment from the House Clerk — keeping previous data")
+            return False
+        seats = {st: a["seats"] for st, a in apportionment.items()}
         pairs = []
-        for st, n in sorted(SEATS.items()):
+        for st, n in sorted(seats.items()):
             pairs.extend([(st, 0)] if n == 1 else [(st, i) for i in range(1, n + 1)])
-        titles = {district_title(s, d): f"{s}-{d}" for s, d in pairs}
+        titles = {district_title(apportionment[s]["name"], d): f"{s}-{d}" for s, d in pairs}
 
         result: dict[str, int] = {}
         missing: list[str] = []
@@ -184,7 +167,7 @@ async def refresh_district_pvi(client: httpx.AsyncClient | None = None) -> bool:
             )
             return False
 
-        failures = ingestion_gates(result)
+        failures = ingestion_gates(result, seats)
         if failures:
             for f in failures:
                 logger.warning("district-pvi ingestion gate failed: %s", f)

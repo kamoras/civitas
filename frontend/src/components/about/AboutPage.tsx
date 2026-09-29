@@ -272,20 +272,25 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
   );
 }
 
-/** Inline citation: prints who, links to the full entry. */
+/** Inline citation: prints who, links to the full entry. The leading space
+ * sits outside the unbreakable span: inside it, two citations in a row
+ * ("(Cover & Hart 1967) (Snell et al. 2017)") had no break between them and
+ * pushed a 320px-wide page sideways. */
 export function Cite({ id }: { id: RefId }) {
   return (
-    <span className="whitespace-nowrap text-sm text-ink-lo">
+    <>
       {" "}
-      (
-      <a
-        href={`/about/references#${id}`}
-        className="underline decoration-ink-min/50 underline-offset-2 hover:text-phos"
-      >
-        {REFERENCES[id].short}
-      </a>
-      )
-    </span>
+      <span className="whitespace-nowrap text-sm text-ink-lo">
+        (
+        <a
+          href={`/about/references#${id}`}
+          className="underline decoration-ink-min/50 underline-offset-2 hover:text-phos"
+        >
+          {REFERENCES[id].short}
+        </a>
+        )
+      </span>
+    </>
   );
 }
 

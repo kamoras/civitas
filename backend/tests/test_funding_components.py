@@ -75,3 +75,54 @@ def test_funding_diversity_keeps_its_own_grassroots_fallback():
     # still credits a grassroots campaign where industry money is too thin.
     fd = {c["label"]: c for c in _funding_diversity_core(funding(small=60, industries=THIN))["components"]}
     assert fd["Industry concentration"]["score"] == 80.0
+
+
+class TestSenateSmallDonorBaselineIsMeasured:
+    """v6.24: the Senate's small-donor baseline is fitted each run over the
+    senators being scored, never a frozen fit."""
+
+    def test_fit_recovers_a_known_line(self):
+        import math
+
+        from app.pipeline.analyze.score_calculator import small_donor_baseline_fit
+
+        # 40 senators on 10 + 5*ln(pop): each of 20 states' pair sits 2
+        # above and 2 below the line, so the residuals spread and cancel.
+        pops = [0.6 + 0.9 * k for k in range(20)]
+        pairs = [(pop, 10 + 5 * math.log(pop) + d) for pop in pops for d in (2, -2)]
+        fit = small_donor_baseline_fit(pairs)
+        assert round(fit["A"], 4) == 10.0 and round(fit["B"], 4) == 5.0
+        assert fit["n"] == 40 and fit["saturation_pt"] == 3.0
+        assert fit["min_expected_pct"] < fit["max_expected_pct"]
+
+    def test_too_few_senators_keep_the_last_fit(self):
+        from app.pipeline.analyze.score_calculator import small_donor_baseline_fit
+
+        assert small_donor_baseline_fit([(1.0, 20.0)] * 5) is None
+
+    def test_the_senate_reference_carries_the_fit_and_the_score_uses_it(self, monkeypatch):
+        from app.pipeline.analyze import score_calculator as sc
+
+        monkeypatch.setattr(sc, "_state_population", lambda: {f"S{i}": 0.5 + i for i in range(40)})
+        fundings = [
+            {"totalContributions": 1_000_000, "totalFromPACs": 100_000, "smallDonorPercentage": 30.0}
+            for _ in range(40)
+        ]
+        # Everyone at 30% but for a spread: the fit centres on the Senate.
+        for i, f in enumerate(fundings):
+            f["smallDonorPercentage"] = 30.0 + (3 if i % 2 else -3)
+        ref = sc.compute_funding_reference(fundings, [f"S{i}" for i in range(40)])
+        fit = ref["small_donor_fit"]
+        assert round(fit["national_mean_pct"], 1) == 30.0
+        # A senator exactly at what the run's fit expects for their state
+        # scores neutral, whatever the bundled file says.
+        expected = sc._state_small_donor_baseline("S5", fit)
+        score, used = sc._small_donor_capacity_score(expected, "S5", None, ref)
+        assert (score, used) == (50.0, expected)
+
+    def test_the_house_reference_has_no_state_fit(self):
+        from app.pipeline.analyze import score_calculator as sc
+
+        fundings = [{"totalContributions": 1_000_000, "totalFromPACs": 100_000, "smallDonorPercentage": 20.0 + i % 5}
+                    for i in range(40)]
+        assert "small_donor_fit" not in sc.compute_funding_reference(fundings)

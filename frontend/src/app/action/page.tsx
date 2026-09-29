@@ -9,174 +9,134 @@ import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
 import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import { useUserState } from "@/hooks/useUserState";
-import {
-  commentPeriodToday,
-  describeDaysLeft,
-  formatUtcDate,
-  isNewFact,
-  issueDateLabel,
-  issueRef,
-} from "@/lib/formatting";
-import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
-import StancePulse from "@/components/action/StancePulse";
-import { LogActionButton } from "@/components/action/CivicTracker";
+import { useAsyncData, type AsyncData } from "@/hooks/useAsyncData";
+import { commentPeriodToday, describeDaysLeft, formatUtcDate } from "@/lib/formatting";
 import ShareButtons from "@/components/action/ShareButtons";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
-import { focusTabWhenSelected } from "@/lib/tabFocus";
+import { focusTabWhenSelected, keepFocusOnSelectedTab, retryKeepingFocus } from "@/lib/tabFocus";
 import BackToTop from "@/components/BackToTop";
 import {
-  PolicyBadge,
-  TrendingBadge,
-  DevelopingBadge,
+  Coverage,
   DevelopingDisclosure,
-  NewFactTag,
-  MonitorChips,
-  RepresentativeContacts,
-  TrackLegislation,
-  OfficialLegislation,
-  RelatedDocuments,
-  SourceList,
   IssueImage,
-  billLink,
-  trackActionLink,
-  trackActionText,
-  trackableActions,
+  IssueMeta,
+  IssueTags,
+  SECTION_HEADING,
+  SourceList,
+  TEXT_LINK,
+  WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
-
-const CivicActionWidget = dynamic(() => import("@/components/action/CivicTracker"), { ssr: false });
-import type { ActionIssue } from "@/types/action";
-import { STATES } from "@/data/states";
+import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { tabControl } from "@/lib/controlStyles";
+import { issuesUrl } from "@/lib/routes";
 
-const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center py-24">
-      <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
-        LOADING GLOBE...
-      </div>
-    </div>
-  ),
-});
-
-const ElectionsTab = dynamic(() => import("@/components/action/ElectionsTab"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center py-24">
-      <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
-        LOADING ELECTIONS...
-      </div>
-    </div>
-  ),
-});
-
-const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
-  loading: () => (
-    <div className="flex items-center justify-center py-24">
-      <div className="text-signal-amber font-mono text-xs tracking-widest animate-pulse">
-        SCANNING NATIONAL CONCERNS...
-      </div>
-    </div>
-  ),
-});
-
-const TimelineTab = dynamic(() => import("./TimelineTab"), {
-  loading: () => (
-    <div className="flex items-center justify-center py-24">
-      <div className="text-ind-purple font-mono text-xs tracking-widest animate-pulse">
-        LOADING TIMELINE...
-      </div>
-    </div>
-  ),
-});
-
-const MyRepsTab = dynamic(() => import("@/components/action/MyRepsTab"), {
-  loading: () => (
-    <div className="flex items-center justify-center py-24">
-      <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
-        LOADING REPRESENTATIVES...
-      </div>
-    </div>
-  ),
-});
-
-type Tab = "issues" | "my-reps" | "monitors" | "timeline" | "elections" | "world";
-
-function StatePicker({
-  userState,
-  onSelect,
-  compact = false,
-}: {
-  userState: string | null;
-  onSelect: (s: string | null) => void;
-  compact?: boolean;
-}) {
-  if (compact && userState) {
-    return (
-      <button
-        onClick={() => onSelect(null)}
-        className="text-xs font-mono tracking-widest text-ink-lo hover:text-phos transition-colors"
-        title="Change your state"
-        aria-label="Change your state"
-      >
-        {userState} ✕
-      </button>
-    );
-  }
-
+/** Plain status line, the loading state the records pages use: no pulse. */
+function Status({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2">
-      <label htmlFor="state-picker" className="text-xs font-mono tracking-widest text-ink-min">
-        YOUR STATE
-      </label>
-      <select
-        id="state-picker"
-        value={userState || ""}
-        onChange={(e) => onSelect(e.target.value || null)}
-        autoComplete="address-level1"
-        className="appearance-none bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-2 py-1 pr-6 cursor-pointer focus:outline-none focus:border-signal-cyan/40 transition-all"
-      >
-        <option value="">SELECT</option>
-        {STATES.map((s) => (
-          <option key={s.code} value={s.code}>
-            {s.code}
-          </option>
-        ))}
-      </select>
+    <p
+      role="status"
+      aria-live="polite"
+      className="py-10 font-mono text-sm tracking-[0.12em] text-ink-min"
+    >
+      {children}
+    </p>
+  );
+}
+
+/** A load failure, with a retry when the caller has one. */
+function LoadError({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
+    >
+      <span>{message}</span>
+      {onRetry && (
+        <button onClick={retryKeepingFocus(onRetry)} className={TEXT_LINK}>
+          Try again
+        </button>
+      )}
     </div>
   );
 }
 
-/* One treatment for all six, not a different neon each.
-   Six tabs in six accent colours made the tab bar the loudest element on the
-   page and left the selected tab nowhere to go — every tab was already
-   shouting. Selection is now carried by weight plus a solid phosphor rule,
-   the same way the navbar marks the current page. */
+const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
+  loading: () => <Status>Reading the national monitors…</Status>,
+});
+
+const TimelineTab = dynamic(() => import("./TimelineTab"), {
+  loading: () => <Status>Reading the archive…</Status>,
+});
+
+/* The tab ids are what ?tab= carries, and they predate the labels: links out
+   in the wild (ACTION_CENTER_HREF, ACTION_CENTER_MONITORS_HREF, the bill
+   page's "In the Action Center" box) name them, so the labels changed and
+   the ids did not. */
+type Tab = "issues" | "monitors" | "timeline";
+
+/* One treatment for all three, carried by weight plus a solid ink rule, the
+   same way the navbar marks the current page. */
 const TABS: { id: Tab; label: string }[] = [
-  { id: "issues", label: "ISSUES" },
-  { id: "my-reps", label: "MY REPS" },
-  { id: "monitors", label: "MONITORS" },
-  { id: "timeline", label: "TIMELINE" },
-  { id: "elections", label: "ELECTIONS" },
-  { id: "world", label: "GLOBE" },
+  { id: "issues", label: "Today" },
+  { id: "monitors", label: "Ongoing" },
+  { id: "timeline", label: "Archive" },
 ];
+
+function isValidTab(s: string | null): s is Tab {
+  return s !== null && TABS.some((t) => t.id === s);
+}
+
+/**
+ * Everything below an issue's title: the same content, in the same order, for
+ * the top issue and for an expanded secondary one.
+ */
+function IssueBody({
+  issue,
+  today,
+  headingLevel,
+  onMonitor,
+}: {
+  issue: ActionIssue;
+  today: string;
+  headingLevel: "h3" | "h4";
+  onMonitor: (slug: string) => void;
+}) {
+  return (
+    <>
+      <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
+        {issue.summary}
+      </p>
+      {issue.status === "developing" && <DevelopingDisclosure />}
+      <IssueTags issue={issue} onMonitor={onMonitor} />
+
+      <WhatYouCanDo issue={issue} today={today} headingLevel={headingLevel} />
+      <Coverage issue={issue} headingLevel={headingLevel} />
+
+      <div className="mt-8 flex flex-col gap-3 border-t border-white/[0.07] pt-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+          <SourceList issue={issue} />
+          <a href={`/issue/${issue.publicId}`} className={TEXT_LINK}>
+            Read full story →
+          </a>
+        </div>
+        <ShareButtons issue={issue} />
+      </div>
+    </>
+  );
+}
 
 function HeroIssue({
   issue,
-  userState,
-  onNavigate,
+  today,
   isDeepLinked = false,
+  onMonitor,
 }: {
   issue: ActionIssue;
-  userState: string | null;
-  onNavigate?: (tab: Tab) => void;
+  today: string;
   isDeepLinked?: boolean;
+  onMonitor: (slug: string) => void;
 }) {
-  const heroRef = useRef<HTMLDivElement>(null);
-  const today = commentPeriodToday();
-  const onMonitorSelect = onNavigate ? () => onNavigate("monitors") : undefined;
+  const heroRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (isDeepLinked && heroRef.current) {
@@ -188,122 +148,33 @@ function HeroIssue({
     <article
       ref={heroRef}
       {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
-      className="border border-phos/20 bg-surface p-6 sm:p-8"
+      className="scroll-mt-[calc(var(--header-clearance)+3rem)] border border-white/25 border-t-3 bg-surface p-5 sm:p-8"
     >
-      <div className="mb-4 flex flex-wrap items-center gap-3 font-mono text-xs">
-        <span className="border border-phos/40 px-2 py-0.5 tracking-[0.14em] text-phos-mid">
-          TOP ISSUE
-        </span>
-        {issue.status === "developing" && <DevelopingBadge />}
-        {issue.isTrending && <TrendingBadge />}
-        <span className="text-ink-lo">{issueDateLabel(issue)}</span>
-        <span className="text-ink-min" aria-hidden="true">
-          ·
-        </span>
-        <span className="text-ink-min">{issueRef(issue.publicId)}</span>
-      </div>
-
-      <h2 className="mb-4 font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
+      <IssueMeta issue={issue} lead="Top issue" />
+      <h2 className="mb-4 mt-3 text-balance font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
         {issue.title}
       </h2>
-
       <IssueImage issue={issue} />
-
-      <p className="mb-6 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
-        {issue.summary}
-      </p>
-
-      {issue.status === "developing" && <DevelopingDisclosure />}
-
-      {issue.policyAreas.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap mb-6">
-          {issue.policyAreas.map((area) => (
-            <PolicyBadge key={area} area={area} />
-          ))}
-        </div>
-      )}
-
-      <MonitorChips slugs={issue.relatedMonitorSlugs} onSelect={onMonitorSelect} />
-
-      <RepresentativeContacts issue={issue} userState={userState} />
-
-      {issue.facts.length > 0 && (
-        <div className="mb-6">
-          <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-            Media coverage
-          </h3>
-          <ol className="space-y-2">
-            {issue.facts.map((fact, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="mt-0.5 shrink-0 font-mono text-xs text-phos-mid">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span className="font-display text-[15px] leading-relaxed text-ink">
-                  {fact}
-                  {issue.factSources?.[i] && (
-                    <span className="ml-2 font-mono text-xs text-ink-min">
-                      {issue.factSources[i]}
-                    </span>
-                  )}
-                  {isNewFact(issue.newFacts, fact) && <NewFactTag />}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {/* Specific actions only — representative contact handled above */}
-      <TrackLegislation issue={issue} />
-
-      <OfficialLegislation issue={issue} />
-
-      <RelatedDocuments issue={issue} today={today} />
-
-      <SourceList issue={issue} />
-
-      {/* Controls, not content: left out of a shared image of the card. */}
-      <div {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-        <StancePulse
-          issueId={issue.id}
-          initialConcerned={issue.concernedCount || 0}
-          initialNotPriority={issue.notPriorityCount || 0}
-        />
-      </div>
-      <div
-        className="mt-3 flex items-center justify-between gap-3"
-        {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-      >
-        <a
-          href={`/issue/${issue.publicId}`}
-          className="border border-phos/40 px-3 py-1.5 font-mono text-xs uppercase tracking-[0.12em] text-phos-mid transition-colors hover:border-phos hover:text-phos"
-        >
-          Read full story →
-        </a>
-        <LogActionButton issueTitle={issue.title} />
-      </div>
-
-      <ShareButtons issue={issue} />
+      <IssueBody issue={issue} today={today} headingLevel="h3" onMonitor={onMonitor} />
     </article>
   );
 }
 
 function SecondaryIssue({
   issue,
-  userState,
-  onNavigate,
+  today,
   deepLinked = false,
   onToggle,
+  onMonitor,
 }: {
   issue: ActionIssue;
-  userState: string | null;
-  onNavigate?: (tab: Tab) => void;
+  today: string;
   deepLinked?: boolean;
   onToggle?: (id: string, expanded: boolean) => void;
+  onMonitor: (slug: string) => void;
 }) {
   const [expanded, setExpanded] = useState(deepLinked);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const onMonitorSelect = onNavigate ? () => onNavigate("monitors") : undefined;
+  const cardRef = useRef<HTMLElement>(null);
 
   // If this issue is deep-linked, expand and scroll to it once data is ready
   useEffect(() => {
@@ -324,439 +195,58 @@ function SecondaryIssue({
   }
 
   return (
-    <article
-      ref={cardRef}
-      {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
-      className="border border-white/[0.09] bg-surface"
-    >
-      <button
-        onClick={handleToggle}
-        className="flex w-full items-start justify-between gap-4 p-4 text-left sm:p-5"
-        aria-expanded={expanded}
-        aria-controls={`issue-detail-${issue.id}`}
+    <li className="border-b border-white/[0.07]">
+      <article
+        ref={cardRef}
+        {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
+        className="scroll-mt-[calc(var(--header-clearance)+3rem)]"
       >
-        <IssueImage issue={issue} size="thumbnail" />
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-xs">
-            <span className="text-ink-min">
-              {issueDateLabel(issue)} · {issueRef(issue.publicId)}
+        <h3>
+          <button
+            onClick={handleToggle}
+            className="flex w-full items-start gap-4 py-4 text-left"
+            aria-expanded={expanded}
+            aria-controls={`issue-detail-${issue.id}`}
+          >
+            {!expanded && <IssueImage issue={issue} size="thumbnail" />}
+            <span className="min-w-0 flex-1">
+              <IssueMeta issue={issue} as="span" />
+              {(issue.policyAreas ?? []).length > 0 && (
+                <span className="mt-1 block font-mono text-xs tracking-[0.08em] text-ink-lo">
+                  {issue.policyAreas.join(" · ")}
+                </span>
+              )}
+              <span className="mt-1.5 block font-display text-lg font-semibold leading-snug text-ink-hi">
+                {issue.title}
+              </span>
+              {!expanded && (
+                <span className="mt-1 line-clamp-2 block font-display text-[15px] leading-relaxed text-ink-lo">
+                  {issue.summary}
+                </span>
+              )}
             </span>
-            {issue.status === "developing" && <DevelopingBadge />}
-            {issue.isTrending && <TrendingBadge />}
-            {issue.policyAreas.map((area) => (
-              <PolicyBadge key={area} area={area} />
-            ))}
-          </div>
-          <h3 className="font-display text-lg font-semibold leading-snug text-ink-hi">
-            {issue.title}
-          </h3>
-          {!expanded && (
-            <p className="mt-1 line-clamp-2 font-display text-[15px] leading-relaxed text-ink-lo">
-              {issue.summary}
-            </p>
-          )}
-          {expanded && issue.status === "developing" && <DevelopingDisclosure />}
-        </div>
-        <span
-          className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
-          aria-hidden="true"
-        >
-          {expanded ? "−" : "+"}
-        </span>
-      </button>
-
-      {expanded && (
-        <div
-          id={`issue-detail-${issue.id}`}
-          className="space-y-4 border-t border-white/[0.07] px-4 pb-4 pt-4 sm:px-5 sm:pb-5"
-        >
-          <p className="font-display text-[15px] leading-relaxed text-ink">{issue.summary}</p>
-
-          <MonitorChips slugs={issue.relatedMonitorSlugs} onSelect={onMonitorSelect} />
-
-          {issue.facts.length > 0 && (
-            <div>
-              <h4 className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-                Media coverage
-              </h4>
-              <ol className="space-y-1.5">
-                {issue.facts.map((fact, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="mt-0.5 shrink-0 font-mono text-xs text-phos-mid">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="font-display text-[15px] leading-relaxed text-ink">
-                      {fact}
-                      {issue.factSources?.[i] && (
-                        <span className="ml-2 font-mono text-xs text-ink-min">
-                          {issue.factSources[i]}
-                        </span>
-                      )}
-                      {isNewFact(issue.newFacts, fact) && <NewFactTag />}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-
-          <RepresentativeContacts issue={issue} userState={userState} />
-
-          {trackableActions(issue).length > 0 && (
-            <div>
-              <h4 className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-                Track legislation
-              </h4>
-              <div className="space-y-1.5">
-                {trackableActions(issue).map((action, i) => {
-                  const { href, internal } = trackActionLink(issue, action);
-                  const linkClass =
-                    "flex items-center gap-2 p-2 border border-white/15 bg-signal-cyan/10 hover:border-white/15 transition-colors text-sm";
-                  const inner = (
-                    <>
-                      <span className="text-ink flex-1 truncate">
-                        {trackActionText(action, internal)}
-                      </span>
-                      <span className="text-xs text-ink-lo shrink-0 ml-auto">
-                        {internal ? "→" : "↗"}
-                      </span>
-                    </>
-                  );
-                  return internal ? (
-                    <Link key={i} href={href} className={linkClass}>
-                      {inner}
-                    </Link>
-                  ) : (
-                    <a
-                      key={i}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={linkClass}
-                    >
-                      {inner}
-                    </a>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {issue.relatedBills && issue.relatedBills.length > 0 && (
-            <div>
-              <h4 className="font-mono text-xs tracking-widest text-ink-lo mb-2 uppercase">
-                Official Legislation
-              </h4>
-              <div className="space-y-1.5">
-                {issue.relatedBills.map((bill) => {
-                  const { href, internal } = billLink(bill);
-                  const linkClass =
-                    "flex items-center gap-2 p-2 border border-signal-amber/40 bg-signal-amber/10 hover:border-signal-amber/40 transition-colors text-sm";
-                  const inner = (
-                    <>
-                      <span className="text-xs font-mono tracking-wide text-ink-lo shrink-0">
-                        {bill.id}
-                      </span>
-                      <span className="text-ink truncate">{bill.name}</span>
-                      <span className="text-xs text-ink-lo shrink-0 ml-auto">
-                        {internal ? "→" : "↗"}
-                      </span>
-                    </>
-                  );
-                  return internal ? (
-                    <Link key={bill.id} href={href} className={linkClass}>
-                      {inner}
-                    </Link>
-                  ) : (
-                    <a
-                      key={bill.id}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={linkClass}
-                    >
-                      {inner}
-                    </a>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {issue.relatedSenators && issue.relatedSenators.length > 0 && (
-            <div>
-              <h4 className="font-mono text-xs tracking-widest text-ink-lo mb-2 uppercase">
-                Officials in Coverage
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {issue.relatedSenators.map((s) => (
-                  <Link
-                    key={s.id}
-                    href={`/politicians/${s.id}`}
-                    className={`flex items-start gap-1.5 px-2 py-1.5 border ${PARTY_BORDER[s.party]} bg-white/[0.03] hover:border-signal-cyan/40 transition-colors`}
-                  >
-                    <span className={`font-mono text-xs mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>
-                      {s.party}
-                    </span>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm text-ink leading-snug">{s.name}</span>
-                      {s.matchReason && (
-                        <span className="text-xs font-mono text-ink-min uppercase tracking-wide">
-                          {s.matchReason}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs font-mono tracking-wide text-ink-lo mt-0.5 shrink-0">
-                      {Math.round(s.overallScore)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <SourceList
-            issue={issue}
-            className="flex items-center gap-2 flex-wrap pt-3 border-t border-white/[0.07]"
-          />
-
-          {/* Controls, not content: left out of a shared image of the card. */}
-          <div {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-            <StancePulse
-              issueId={issue.id}
-              initialConcerned={issue.concernedCount || 0}
-              initialNotPriority={issue.notPriorityCount || 0}
-            />
-          </div>
-          <div className="mt-3 flex justify-end" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-            <LogActionButton issueTitle={issue.title} />
-          </div>
-
-          <ShareButtons issue={issue} />
-        </div>
-      )}
-    </article>
-  );
-}
-
-function IssuesTab({
-  userState,
-  setUserState,
-  onNavigate,
-  initialDate,
-  onDateChange,
-  initialIssueId,
-  onIssueChange,
-}: {
-  userState: string | null;
-  setUserState: (s: string | null) => void;
-  onNavigate?: (tab: Tab) => void;
-  initialDate?: string | null;
-  onDateChange?: (date: string | null) => void;
-  initialIssueId?: string | null;
-  onIssueChange?: (id: string | null) => void;
-}) {
-  // The selected day IS the request. Keying the fetch on it means the pager
-  // can't get out of step with what is on screen: there is no separate
-  // "which day did we last ask for" to drift from `selectedDate`.
-  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate || null);
-  const request = useAsyncData(`action-issues:${selectedDate ?? "latest"}`, () =>
-    fetchActionIssues(selectedDate || undefined)
-  );
-  const data = request.data;
-  const loading = request.loading;
-  const fetchError = request.error !== null;
-
-  const availableDates = useMemo(() => data?.availableDates || [], [data?.availableDates]);
-  const currentDate = selectedDate || data?.date || null;
-  const currentIdx = currentDate ? availableDates.indexOf(currentDate) : 0;
-
-  const goToPrev = useCallback(() => {
-    if (currentIdx < availableDates.length - 1) {
-      const d = availableDates[currentIdx + 1];
-      setSelectedDate(d);
-      onDateChange?.(d);
-    }
-  }, [currentIdx, availableDates, onDateChange]);
-
-  const goToNext = useCallback(() => {
-    if (currentIdx > 0) {
-      const d = availableDates[currentIdx - 1];
-      setSelectedDate(d);
-      onDateChange?.(d);
-    } else if (currentIdx === 0 && selectedDate) {
-      setSelectedDate(null);
-      onDateChange?.(null);
-    }
-  }, [currentIdx, availableDates, selectedDate, onDateChange]);
-
-  const generatedAt = data?.generatedAt;
-
-  function formatGeneratedAt(iso: string): string {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
-    } catch {
-      return "";
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="panel max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
-          SCANNING NEWS FEEDS...
-        </div>
-      </div>
-    );
-  }
-
-  if (fetchError) {
-    return (
-      <div className="panel max-w-lg mx-auto p-6 text-center" role="alert">
-        <div className="text-signal-red font-mono text-sm tracking-widest mb-2">
-          CONNECTION ERROR
-        </div>
-        <p className="text-ink-lo text-base mb-4">Could not load today&apos;s issues.</p>
-        <button
-          onClick={request.retry}
-          className="text-signal-cyan font-mono text-xs tracking-widest border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
-        >
-          RETRY
-        </button>
-      </div>
-    );
-  }
-
-  const heroIssue = data?.issues?.[0];
-  const secondaryIssues = data?.issues?.slice(1) || [];
-
-  if (!heroIssue) {
-    return (
-      <div className="panel max-w-lg mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-signal-amber font-mono text-sm tracking-widest mb-2">
-          NO ISSUES YET
-        </div>
-        <p className="text-ink-lo text-base">Check back soon.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Date navigation */}
-      {availableDates.length > 1 && (
-        <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-widest">
-          <button
-            onClick={goToPrev}
-            disabled={currentIdx >= availableDates.length - 1}
-            className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
-            aria-label="Previous day"
-          >
-            ← PREV
-          </button>
-          <span className="text-ink px-3 py-1 border border-white/[0.07] bg-white/[0.03] min-w-[110px] text-center">
-            {currentDate
-              ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" })
-              : "—"}
-          </span>
-          <button
-            onClick={goToNext}
-            disabled={currentIdx <= 0 && !selectedDate}
-            className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
-            aria-label="Next day"
-          >
-            NEXT →
-          </button>
-          {selectedDate && (
-            <button
-              onClick={() => {
-                setSelectedDate(null);
-                onDateChange?.(null);
-              }}
-              className="text-ink-lo hover:text-phos transition-colors ml-1"
-              aria-label="Jump to present"
+            <span
+              className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
+              aria-hidden="true"
+              {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             >
-              LATEST
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Data freshness timestamp */}
-      {generatedAt && (
-        <div className="text-center">
-          <span className="text-ink-min text-xs font-mono">
-            Updated: {formatGeneratedAt(generatedAt)}
-          </span>
-        </div>
-      )}
-
-      {/* State selector bar */}
-      <div className="flex items-center justify-between panel p-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono tracking-widest text-ink-min">PERSONALIZE</span>
-          {userState && (
-            <span className="text-xs font-mono text-signal-cyan border border-white/15 px-1.5 py-0.5 bg-signal-cyan/10">
-              {STATES.find((s) => s.code === userState)?.name || userState} — links personalized
+              {expanded ? "−" : "+"}
             </span>
-          )}
-        </div>
-        {!userState ? (
-          <StatePicker userState={userState} onSelect={setUserState} />
-        ) : (
-          <StatePicker userState={userState} onSelect={setUserState} compact />
-        )}
-      </div>
+          </button>
+        </h3>
 
-      <HeroIssue
-        issue={heroIssue}
-        userState={userState}
-        onNavigate={onNavigate}
-        isDeepLinked={initialIssueId === heroIssue.publicId}
-      />
-
-      {secondaryIssues.length > 0 && (
-        <div>
-          <h2 className="font-mono text-xs tracking-[0.3em] text-ink-min mb-3 px-1 uppercase">
-            More Issues to Watch
-          </h2>
-          <div className="space-y-3">
-            {secondaryIssues.map((issue) => (
-              <SecondaryIssue
-                key={issue.id}
-                issue={issue}
-                userState={userState}
-                onNavigate={onNavigate}
-                deepLinked={initialIssueId === issue.publicId}
-                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
-              />
-            ))}
+        {expanded && (
+          <div id={`issue-detail-${issue.id}`} className="pb-6">
+            <IssueImage issue={issue} />
+            <IssueBody issue={issue} today={today} headingLevel="h4" onMonitor={onMonitor} />
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </article>
+    </li>
   );
 }
 
-const VALID_TABS = new Set<string>([
-  "issues",
-  "my-reps",
-  "monitors",
-  "timeline",
-  "elections",
-  "world",
-]);
-function isValidTab(s: string | null): s is Tab {
-  return s !== null && VALID_TABS.has(s);
-}
-
-function OpenCommentsBanner() {
+function OpenComments() {
   // The clock is read once, when the comment periods land, and carried
   // alongside them. Reading it again on every render would make the countdown
   // depend on when React happened to re-render — a value that changes without
@@ -770,47 +260,197 @@ function OpenCommentsBanner() {
   }, []);
 
   if (!loaded || loaded.items.length === 0) return null;
-  const items = loaded.items;
-  const daysLeft = (closeDate: string) => describeDaysLeft(closeDate, loaded.asOf);
 
   return (
-    <section aria-label="Open public comment periods" className="mb-6">
-      <div className="flex items-center gap-3 mb-2">
-        <span className="w-1.5 h-1.5 bg-signal-amber/10 shrink-0" aria-hidden="true" />
-        <span className="font-mono text-xs tracking-widest text-signal-amber">
-          OPEN FOR PUBLIC COMMENT
-        </span>
-        <div className="flex-1 h-px bg-signal-amber/10" aria-hidden="true" />
-      </div>
-      <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x">
-        {items.map((item) => (
-          <div
+    <section aria-labelledby="open-comments-heading" className="mt-12">
+      <h2 id="open-comments-heading" className={SECTION_HEADING}>
+        <span>Open for public comment</span>
+        <Link
+          href="/explore"
+          className="normal-case tracking-[0.08em] text-ink-lo hover:text-ink-hi"
+        >
+          Search in Explore →
+        </Link>
+      </h2>
+      <ul>
+        {loaded.items.map((item) => (
+          <li
             key={item.id}
-            className="panel border border-signal-amber/40 bg-signal-amber/10 p-3 min-w-[220px] max-w-[260px] flex-shrink-0 snap-start flex flex-col gap-1.5"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 border-b border-white/[0.07] py-3"
           >
-            <p className="text-xs text-ink leading-snug line-clamp-3 flex-1">{item.title}</p>
-            {item.agencyName && (
-              <div className="text-xs text-signal-amber font-mono tracking-wider truncate">
-                {item.agencyName}
-              </div>
-            )}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-signal-amber font-mono">
-                {daysLeft(item.commentsCloseOn)}
+            <span className="min-w-0">
+              <span className="block font-mono text-xs uppercase tracking-[0.08em] text-ink-min">
+                {[item.agencyName, item.docType?.replace(/_/g, " ")].filter(Boolean).join(" · ")}
               </span>
-              <a
-                href={item.commentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-xs tracking-widest text-signal-amber border border-signal-amber/40 px-2 py-0.5 hover:bg-signal-amber/10 transition-colors shrink-0"
+              <Link
+                href={`/explore/${item.id}`}
+                className="mt-0.5 block font-display text-[15px] leading-snug text-ink-hi hover:underline"
               >
-                COMMENT ↗
-              </a>
-            </div>
-          </div>
+                {item.title}
+              </Link>
+            </span>
+            <span className="text-right">
+              <span className="block whitespace-nowrap font-mono text-xs tracking-[0.06em] text-signal-amber">
+                {describeDaysLeft(item.commentsCloseOn, loaded.asOf)}
+              </span>
+              <Link
+                href={`/explore/${item.id}#comment`}
+                className={`${TEXT_LINK} mt-1 inline-block`}
+              >
+                Comment →
+              </Link>
+            </span>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
+  );
+}
+
+function IssuesTab({
+  request,
+  selectedDate,
+  initialIssueId,
+  onIssueChange,
+  onMonitor,
+}: {
+  request: AsyncData<ActionIssuesResponse>;
+  selectedDate: string | null;
+  initialIssueId?: string | null;
+  onIssueChange?: (id: string | null) => void;
+  onMonitor: (slug: string) => void;
+}) {
+  // Read once per render of a loaded day, and only from the clock's date in the
+  // comment-deadline zone — the same rule the server applies on the issue page.
+  const today = commentPeriodToday();
+
+  if (request.loading) return <Status>Reading today&apos;s issues…</Status>;
+  if (request.error !== null) {
+    return <LoadError message="Could not load today's issues." onRetry={request.retry} />;
+  }
+
+  const issues = request.data?.issues ?? [];
+  const heroIssue = issues[0];
+  const secondaryIssues = issues.slice(1);
+
+  return (
+    <div>
+      {heroIssue ? (
+        <HeroIssue
+          issue={heroIssue}
+          today={today}
+          isDeepLinked={initialIssueId === heroIssue.publicId}
+          onMonitor={onMonitor}
+        />
+      ) : (
+        <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo">
+          {selectedDate
+            ? // Issues are kept for 14 days unless they were posted
+              // (action_center._cleanup_old_unposted_issues); the Archive
+              // keeps every day's top issue.
+              "Nothing from this day is still on the Action Center. Its top issue is kept in the Archive."
+            : "No issues on the record for this day yet. The Action Center refreshes hourly."}
+        </p>
+      )}
+
+      {secondaryIssues.length > 0 && (
+        <section aria-labelledby="more-issues-heading" className="mt-12">
+          <h2 id="more-issues-heading" className={SECTION_HEADING}>
+            <span>More issues this day</span>
+            <span aria-hidden="true">{secondaryIssues.length}</span>
+          </h2>
+          <ul>
+            {secondaryIssues.map((issue) => (
+              <SecondaryIssue
+                key={issue.id}
+                issue={issue}
+                today={today}
+                deepLinked={initialIssueId === issue.publicId}
+                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
+                onMonitor={onMonitor}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <OpenComments />
+    </div>
+  );
+}
+
+/** Previous/next day and the refresh time, in the masthead's aside slot. */
+function DayPager({
+  data,
+  selectedDate,
+  onSelect,
+}: {
+  data: ActionIssuesResponse | null;
+  selectedDate: string | null;
+  onSelect: (d: string | null) => void;
+}) {
+  // Newest first. The first entry is the live view (no ?date=).
+  const availableDates = useMemo(() => data?.availableDates ?? [], [data?.availableDates]);
+  const currentDate = selectedDate || data?.date || null;
+  // By comparison, not by index: a day outside the list (an old ?date= link,
+  // a day whose issues were cleaned up) still has real neighbours on it.
+  const prev = currentDate ? availableDates.find((d) => d < currentDate) : undefined;
+  // The live view has no "next": it is the newest thing there is. (Its date
+  // can trail availableDates[0] while nothing is marked current; see
+  // _latest_current_issues.) "Back to the latest" returns to it.
+  const next =
+    selectedDate && currentDate
+      ? [...availableDates].reverse().find((d) => d > currentDate)
+      : undefined;
+
+  const short = (d: string) => formatUtcDate(d, { month: "short", day: "numeric" });
+
+  const generatedAt = data?.generatedAt;
+  let updated = "";
+  if (generatedAt && !selectedDate) {
+    const d = new Date(generatedAt);
+    if (!Number.isNaN(d.getTime())) {
+      updated = d.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
+    }
+  }
+
+  const link = "text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
+
+  return (
+    <nav
+      aria-label="Day"
+      className="grid justify-items-end gap-1.5 font-mono text-xs tracking-[0.12em]"
+    >
+      <div className="flex items-baseline gap-4">
+        <button
+          onClick={() => prev && onSelect(prev)}
+          disabled={!prev}
+          className={link}
+          aria-label={prev ? `Previous day, ${short(prev)}` : "No earlier day"}
+        >
+          ← {prev ? short(prev) : "Earlier"}
+        </button>
+        <span className="uppercase text-ink-hi">
+          {currentDate
+            ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" })
+            : "—"}
+        </span>
+        <button
+          onClick={() => next && onSelect(next)}
+          disabled={!next}
+          className={link}
+          aria-label={next ? `Next day, ${short(next)}` : "No later day"}
+        >
+          {next ? short(next) : "Later"} →
+        </button>
+      </div>
+      {updated && <span className="tracking-[0.04em] text-ink-min">Updated {updated}</span>}
+      {selectedDate && (
+        <button onClick={() => onSelect(null)} className={`${link} tracking-[0.04em]`}>
+          Back to the latest
+        </button>
+      )}
+    </nav>
   );
 }
 
@@ -864,35 +504,86 @@ function ActionPageInner() {
   // Forward included — with no second copy of the answer to keep in sync.
   const paramTab = searchParams.get("tab");
   const activeTab: Tab = isValidTab(paramTab) ? paramTab : "issues";
-  const [userState, setUserState] = useUserState();
-  const [sharedIssues, setSharedIssues] = useState<ActionIssue[]>([]);
+  // Back and Forward change the tab with focus still on the tab bar.
+  useEffect(() => keepFocusOnSelectedTab(`tab-${activeTab}`), [activeTab]);
 
-  useEffect(() => {
-    fetchActionIssues()
-      .then((d) => setSharedIssues(d.issues))
-      .catch(() => {
-        /* silently ignore — IssuesTab has its own error handling */
-      });
-  }, []);
-
-  // ?date= and ?issue=<id> are read once, from the URL the page was opened
-  // with, and deliberately not re-read afterwards. The page writes those same
-  // params back as the user pages through days and expands cards, and Next
-  // feeds a history.replaceState straight back through useSearchParams — so
-  // re-reading them would make IssuesTab treat the user's own click as a fresh
-  // arrival: SecondaryIssue would smooth-scroll the card out from under them,
-  // and the day pager would reload the day it just loaded.
+  // ?issue= and ?monitor= describe how the page was opened: an item to
+  // expand and scroll to on arrival. They are read once, from the URL the page
+  // was opened with, and not re-read: the page writes ?issue= back as cards
+  // are expanded, and Next feeds a history.replaceState straight back through
+  // useSearchParams, so re-reading it would treat the user's own click as a
+  // fresh arrival and smooth-scroll the card out from under them.
   const [deepLink] = useState(() => ({
-    date: searchParams.get("date"),
     issue: searchParams.get("issue"),
+    monitor: searchParams.get("monitor"),
   }));
+
+  // Arrivals are one-shot. Any ordinary tab switch or day change clears them,
+  // or every return to a tab would re-open the item, scroll to it and pull
+  // focus off the tab bar, killing arrow-key navigation.
+  const [issueLink, setIssueLink] = useState<string | null>(deepLink.issue);
+  const [monitorSlug, setMonitorSlug] = useState<string | null>(deepLink.monitor);
+
+  // The day, by contrast, is view state, and the address bar is its source on
+  // Today, like the tab: Back and Forward land on the day the URL names. Away
+  // from Today, `todayDate` keeps the day Today was last showing, so switching
+  // back returns to it (and says so in the URL).
+  //
+  // The selected day IS the request. Keying the fetch on it means the pager
+  // can't get out of step with what is on screen.
+  const urlDate = searchParams.get("date");
+  const [todayDate, setTodayDate] = useState<string | null>(urlDate);
+  // While Today is showing it follows the URL, however the URL got there
+  // (a click, Back, Forward). Adjusted during render, React's pattern for
+  // state derived from a changing input, so no render shows the two apart.
+  if (activeTab === "issues" && todayDate !== urlDate) setTodayDate(urlDate);
+  const selectedDate = activeTab === "issues" ? urlDate : todayDate;
+  const request = useAsyncData(`action-issues:${selectedDate ?? "latest"}`, () =>
+    fetchActionIssues(selectedDate || undefined)
+  );
+
+  const selectDate = useCallback(
+    (d: string | null) => {
+      setIssueLink(null);
+      replaceUrl(issuesUrl(d, null));
+    },
+    [replaceUrl]
+  );
 
   const setActiveTab = useCallback(
     (tab: Tab) => {
-      const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
-      pushUrl(url);
+      // Re-selecting the showing tab is not a navigation: no history entry,
+      // and nothing it shows is reset.
+      if (tab !== activeTab) {
+        setMonitorSlug(null);
+        setIssueLink(null);
+        pushUrl(tab === "issues" ? issuesUrl(todayDate, null) : `/action?tab=${tab}`);
+      }
       // The panel stays tabbable (tabIndex=0), so Tab still reaches content.
       focusTabWhenSelected(`tab-${tab}`);
+    },
+    [pushUrl, activeTab, todayDate]
+  );
+
+  // Opening a monitor or a day from inside the page. Both are links out in the
+  // wild (?tab=monitors&monitor=, ?date=), but a <Link> to this same route is
+  // a soft navigation that the latched deep link above never sees, so the
+  // in-page versions set the state directly and write the URL themselves.
+  const openMonitor = useCallback(
+    (slug: string) => {
+      setMonitorSlug(slug);
+      setIssueLink(null);
+      pushUrl(`/action?tab=monitors&monitor=${encodeURIComponent(slug)}`);
+    },
+    [pushUrl]
+  );
+  const openDay = useCallback(
+    (d: string) => {
+      setTodayDate(d);
+      setIssueLink(null);
+      pushUrl(issuesUrl(d, null));
+      window.scrollTo({ top: 0 });
+      focusTabWhenSelected("tab-issues");
     },
     [pushUrl]
   );
@@ -900,10 +591,9 @@ function ActionPageInner() {
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
     (id: string | null) => {
-      const url = id ? `/action?issue=${id}` : "/action";
-      replaceUrl(url);
+      replaceUrl(issuesUrl(selectedDate, id));
     },
-    [replaceUrl]
+    [replaceUrl, selectedDate]
   );
 
   return (
@@ -912,16 +602,17 @@ function ActionPageInner() {
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-4xl mx-auto relative z-10">
           <PageMasthead
-            className="mb-6"
             eyebrow="Action Center · what is moving right now"
             title="Today on the record"
+            aside={
+              activeTab === "issues" ? (
+                <DayPager data={request.data} selectedDate={selectedDate} onSelect={selectDate} />
+              ) : undefined
+            }
           >
-            Issues surfaced from news and social coverage, the monitors tracking them, and the
-            members of Congress who can act. Every item links back to its source.
+            Issues surfaced from news and social coverage, the ongoing concerns they belong to, and
+            the members of Congress who can act. Every item links back to its source.
           </PageMasthead>
-
-          {/* Open comment periods banner */}
-          <OpenCommentsBanner />
 
           {/* Tab bar.
 
@@ -934,7 +625,7 @@ function ActionPageInner() {
           <div
             role="tablist"
             aria-label="Action Center sections"
-            className="sticky top-[82px] z-30 -mx-4 mb-8 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
+            className="sticky top-[82px] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);
@@ -959,7 +650,9 @@ function ActionPageInner() {
                 role="tab"
                 id={`tab-${tab.id}`}
                 aria-selected={activeTab === tab.id}
-                aria-controls={`tabpanel-${tab.id}`}
+                // Only the selected tab's panel is rendered, so only it can
+                // name one; the others would point at an id that isn't there.
+                aria-controls={activeTab === tab.id ? `tabpanel-${tab.id}` : undefined}
                 tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
                 className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors sm:px-5 ${tabControl(
@@ -980,31 +673,28 @@ function ActionPageInner() {
           >
             {activeTab === "issues" && (
               <IssuesTab
-                userState={userState}
-                setUserState={setUserState}
-                onNavigate={setActiveTab}
-                initialDate={deepLink.date}
-                onDateChange={(d) => {
-                  const url = d ? `/action?date=${d}` : "/action";
-                  replaceUrl(url);
-                }}
-                initialIssueId={deepLink.issue}
+                request={request}
+                selectedDate={selectedDate}
+                initialIssueId={issueLink}
                 onIssueChange={handleIssueChange}
+                onMonitor={openMonitor}
               />
             )}
-            {activeTab === "my-reps" && (
-              <MyRepsTab userState={userState} setUserState={setUserState} issues={sharedIssues} />
+            {activeTab === "monitors" && (
+              <MonitorsTab key={monitorSlug ?? ""} initialSlug={monitorSlug} />
             )}
-            {activeTab === "monitors" && <MonitorsTab />}
-            {activeTab === "timeline" && <TimelineTab />}
-            {activeTab === "elections" && <ElectionsTab />}
-            {activeTab === "world" && <GlobeTab />}
+            {activeTab === "timeline" && (
+              <TimelineTab
+                onOpenDay={openDay}
+                onOpenMonitor={openMonitor}
+                openableDates={request.data ? (request.data.availableDates ?? []) : null}
+              />
+            )}
           </div>
         </div>
       </main>
       <Footer />
       <BackToTop />
-      <CivicActionWidget />
     </>
   );
 }

@@ -5,8 +5,11 @@ import json
 from datetime import timedelta
 from unittest.mock import patch
 
+import numpy as np
+
 from app.models import ActionIssue, ActionIssueStatus, Senator, SponsoredBill
 from app.pipeline.analyze import early_signal as es
+from app.pipeline.analyze.action_center import mark_recent_duplicates
 from app.time_utils import utcnow
 
 
@@ -145,9 +148,6 @@ class TestVoteMarginRatio:
 
 
 class TestCheckRollCallSignals:
-    def _mock_llm_result(self, title="Senate passes the bill", summary="text", facts=None):
-        return {"title": title, "summary": summary, "facts": facts or ["A fact stated in the record."]}
-
     def test_procedural_vote_is_rejected(self, db_session):
         with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
                 patch.object(es, "classify_policy_area", return_value=("PROCEDURAL", 0.9)):
@@ -164,8 +164,7 @@ class TestCheckRollCallSignals:
 
     def test_qualifying_vote_creates_a_developing_issue(self, db_session):
         with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
             created = es.check_roll_call_signals(db_session)
         assert created == 1
         row = db_session.query(ActionIssue).one()
@@ -177,8 +176,7 @@ class TestCheckRollCallSignals:
 
     def test_same_vote_is_not_created_twice(self, db_session):
         with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
             es.check_roll_call_signals(db_session)
             created_second_pass = es.check_roll_call_signals(db_session)
         assert created_second_pass == 0
@@ -186,8 +184,7 @@ class TestCheckRollCallSignals:
 
     def test_qualifying_house_vote_creates_a_developing_issue(self, db_session):
         with patch.object(es, "_fetch_recent_votes", return_value=[_house_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
             created = es.check_roll_call_signals(db_session)
         assert created == 1
         row = db_session.query(ActionIssue).one()
@@ -202,8 +199,7 @@ class TestCheckRollCallSignals:
         with patch.object(
             es, "_fetch_recent_votes",
             return_value=[_vote(roll_number=42), _house_vote(roll_number=42)],
-        ), patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+        ), patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
             created = es.check_roll_call_signals(db_session)
         assert created == 2
         source_types = {row.source_type for row in db_session.query(ActionIssue).all()}
@@ -301,15 +297,42 @@ class TestCoveredVotes:
         _reported(db_session, "The Senate passes the Protect College Sports Act")
         assert es.retire_covered_developing_issues(db_session) == 1
 
+    def test_a_retired_draft_stays_off_the_homepage_record(self, db_session):
+        # Issue 762 (2026-09-29): retiring flipped is_current, which the
+        # homepage's record ignores by design, so the draft stayed listed
+        # beside 761. It is marked a duplicate of the covering issue, even
+        # once that issue has left the Action Center too.
+        self._bill(db_session)
+        draft = ActionIssue(
+            date="2026-09-28", rank=3, title="Senate vote on S. 4668", summary="The Senate voted 77 in favor.",
+            facts="[]", source_urls="[]", source_names="[]", is_current=False,
+            status=ActionIssueStatus.DEVELOPING, source_type="senate_roll_call_vote",
+        )
+        db_session.add(draft)
+        news = _reported(db_session, "The Senate passes the Protect College Sports Act, but the bill's future is unclear")
+        news.is_current = False
+        db_session.commit()
+        with patch("app.pipeline.analyze.action_center._embed_texts_sim", return_value=np.eye(2)):
+            assert mark_recent_duplicates(db_session) == 1
+        assert (draft.duplicate_of_id, news.duplicate_of_id) == (news.id, None)
+
+    def test_a_draft_no_issue_covers_stays_on_the_record(self, db_session):
+        self._bill(db_session)
+        draft = ActionIssue(
+            date="2026-09-28", rank=3, title="Senate vote on S. 4668", summary="", facts="[]", source_urls="[]",
+            source_names="[]", is_current=True, status=ActionIssueStatus.DEVELOPING, source_type="senate_roll_call_vote",
+        )
+        db_session.add(draft)
+        _reported(db_session, "US, China agree to cut tariffs on $60B worth of products")
+        with patch("app.pipeline.analyze.action_center._embed_texts_sim", return_value=np.eye(2)):
+            assert mark_recent_duplicates(db_session) == 0
+        assert draft.duplicate_of_id is None
+
 
 class TestCheckFederalRegisterSignals:
-    def _mock_llm_result(self, title="Interior changes hunting process", summary="text", facts=None):
-        return {"title": title, "summary": summary, "facts": facts or ["A fact stated in the record."]}
-
     def test_qualifying_rule_creates_a_developing_issue(self, db_session):
-        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
-            created = es.check_federal_register_signals(db_session)
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]):
+            created = es.check_federal_register_signals(db_session, "2026-08-31")
         assert created == 1
         row = db_session.query(ActionIssue).one()
         assert row.status == ActionIssueStatus.DEVELOPING
@@ -317,6 +340,7 @@ class TestCheckFederalRegisterSignals:
         assert row.primary_source_url == _rule()["htmlUrl"]
         assert row.confirmation_deadline is not None
         assert row.is_current is True
+        assert row.date == "2026-08-31"
 
     def test_missing_document_number_is_skipped(self, db_session):
         with patch.object(es, "_fetch_recent_rules", return_value=[_rule(document_number="")]):
@@ -325,37 +349,41 @@ class TestCheckFederalRegisterSignals:
         assert db_session.query(ActionIssue).count() == 0
 
     def test_same_rule_is_not_created_twice(self, db_session):
-        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
-                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]):
             es.check_federal_register_signals(db_session)
             created_second_pass = es.check_federal_register_signals(db_session)
         assert created_second_pass == 0
         assert db_session.query(ActionIssue).count() == 1
 
-    def test_generation_that_never_grounds_creates_nothing(self, db_session):
-        bad_result = {
-            "title": "Interior changes hunting process",
-            "summary": "The rule affects 10 million acres nationwide.",
-            "facts": ["It affects 10 million acres."],
-        }
-        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
-                patch.object(es, "call_llm", return_value=bad_result):
-            created = es.check_federal_register_signals(db_session)
-        assert created == 0
-        assert db_session.query(ActionIssue).count() == 0
 
+class TestRuleDraft:
+    """A rule's draft is the Federal Register record in a template: nothing
+    in it the record doesn't state (the model's drafts were dropped with
+    the vote drafts', after one called a 77-22 vote "narrow")."""
 
-class TestRuleSourceText:
-    def test_includes_agencies_title_and_abstract(self):
-        text = es._rule_source_text(_rule())
-        assert "2026-17733" in text
-        assert "Interior Department" in text
-        assert "Process for Authorizing Seasonal Migratory Game Bird Hunting" in text
-        assert "changing the administrative process" in text
+    def test_states_the_record_and_nothing_else(self):
+        title, summary, facts = es._compose_developing_rule_issue(_rule())
+        assert title == "Interior Department final rule: Process for Authorizing Seasonal Migratory Game Bird Hunting"
+        assert summary == (
+            'Interior Department published the final rule "Process for Authorizing Seasonal Migratory Game '
+            'Bird Hunting" in the Federal Register on 2026-08-31. The Service is changing the administrative '
+            "process. This is from the Federal Register; news coverage of the rule has not appeared yet."
+        )
+        assert facts == [
+            "Agency: Interior Department.",
+            "Federal Register document 2026-17733, published 2026-08-31.",
+            "Abstract: The Service is changing the administrative process.",
+        ]
+
+    def test_a_long_abstract_is_quoted_by_whole_sentences(self):
+        abstract = "First sentence. " + "Second sentence runs on " * 30 + "and ends."
+        _, summary, facts = es._compose_developing_rule_issue(_rule(abstract=abstract))
+        assert "First sentence. This is from the Federal Register" in summary
+        assert facts[-1] == f"Abstract: {' '.join(abstract.split())}"
 
     def test_missing_agencies_falls_back(self):
-        text = es._rule_source_text(_rule(agencies=[]))
-        assert "an unspecified agency" in text
+        title, _, _ = es._compose_developing_rule_issue(_rule(agencies=[]))
+        assert title.startswith("A federal agency final rule:")
 
 
 class TestExpireStaleDevelopingIssues:
@@ -398,3 +426,32 @@ class TestExpireStaleDevelopingIssues:
         expired = es.expire_stale_developing_issues(db_session, utcnow())
         assert expired == 0
         assert row.is_current is True
+
+
+class TestRuleAbstractSentences:
+    """The summary quotes the abstract by whole sentences: a period inside
+    "U.S." or after an initial is not the end of one."""
+
+    def test_a_dotted_abbreviation_does_not_end_the_quote(self):
+        # The only ". " inside the limit is the one in "U.S.": quoting up to
+        # it would present "The rule applies across the U.S." as a sentence.
+        abstract = "The rule applies across the U.S. Fish and Wildlife Service " + "lands and waters " * 30 + "alike."
+        assert es._first_sentences(abstract, 400) == ""
+
+    def test_an_initial_or_a_title_does_not_end_the_quote(self):
+        abstract = "Rules by John Q. Public and Acme Inc. Holdings take effect. " + "More text " * 60
+        assert es._first_sentences(abstract, 400) == (
+            "Rules by John Q. Public and Acme Inc. Holdings take effect."
+        )
+
+    def test_a_citation_before_a_number_is_not_a_sentence_end(self):
+        abstract = "It implements 42 U.S.C. 7401 as amended. " + "More text " * 60
+        assert es._first_sentences(abstract, 400) == "It implements 42 U.S.C. 7401 as amended."
+
+    def test_no_whole_sentence_within_the_limit_quotes_nothing(self):
+        assert es._first_sentences("word " * 200, 400) == ""
+
+
+def test_a_rule_record_missing_its_number_and_date_leaves_them_out():
+    _, _, facts = es._compose_developing_rule_issue(_rule(document_number="", publication_date=""))
+    assert facts[1] == "Federal Register document."

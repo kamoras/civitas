@@ -12,6 +12,14 @@ The opposite case — a step that fails inside a run that carries on and ends
 step failed that way on Sundays, invisibly, until the scorecards were seen to
 be stale.
 
+Every alert (`ops_alerts.send_ops_alert`) is logged at ERROR, kept (the last
+fifty) for the admin Overview's **Ops alerts** panel, and pushed to ntfy when
+`ALERT_NTFY_URL` is set. The panel only arrived on 2026-09-29: the dashboard
+API had served the alerts since July with nothing showing them, so without
+ntfy an alert reached only logs that rotate within the day. An alert about a
+condition stays active until the code that raised it sees the condition gone
+(`resolve_ops_alert`), so the panel's Active list is what is wrong now.
+
 ```mermaid
 flowchart TB
     START(["APScheduler cron tick"]) --> LOCK{"a running row in<br/>this pipeline's run table?"}

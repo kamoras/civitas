@@ -1022,7 +1022,7 @@ async def test_a_late_cycle_notice_for_documents_that_may_never_come(monkeypatch
     from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
     sent = []
-    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda subject, body, dedupe_key=None: sent.append(dedupe_key))
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda subject, body, dedupe_key=None, condition=None: sent.append(dedupe_key))
     monkeypatch.setattr(election_pipeline, "_past_expected_by", lambda src, day: True)
     _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
     _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
@@ -1067,7 +1067,7 @@ async def test_the_ingest_alert_fires_every_night_a_state_fails(monkeypatch, db_
     import app.ops_alerts as ops_alerts
 
     keys = []
-    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None: keys.append(dedupe_key))
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None, condition=None: keys.append(dedupe_key))
     election_pipeline._alert_ingest_failures(["CA"], "2026-11-03")
     election_pipeline._alert_ingest_failures(["CA", "MI"], "2026-11-03")
     assert len(set(keys)) == 2
@@ -1299,7 +1299,7 @@ async def test_a_state_with_no_direct_source_is_not_yet_covered(monkeypatch, db_
 
     election = _page_election()
     _direct_source(monkeypatch, [["1"]])
-    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "GA", "OR"})
+    monkeypatch.setattr(election_pipeline, "federal_states", lambda: frozenset({"CA", "GA", "OR"}))
     election_pipeline._set_coverage(
         db_session, "GA", election, MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart",
     )
@@ -1389,7 +1389,7 @@ async def test_an_unregistered_state_keeps_the_date_of_measures_still_on_file(mo
     until the election passes; the date that read happened still dates them."""
     election = _page_election()
     _direct_source(monkeypatch, [["1"]])
-    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "OR"})
+    monkeypatch.setattr(election_pipeline, "federal_states", lambda: frozenset({"CA", "OR"}))
     _measure(db_session, f"OR-{election}-1", state="OR", date=election, number="1", source_name="Oregon SoS")
     election_pipeline._set_coverage(db_session, "OR", election, MeasureCoverage.COVERED, 1, source_name="Oregon SoS")
     db_session.commit()
@@ -1413,7 +1413,7 @@ def test_every_unread_state_has_a_reason_and_no_read_state_claims_one():
     sources.invalidate_cache()
     registry = sources._load()
     unread = set(registry["unread"])
-    expected = (election_pipeline.STATES_WITH_FEDERAL_RACES | {"DC"}) - sources.configured_states()
+    expected = (election_pipeline.federal_states() | {"DC"}) - sources.configured_states()
     assert unread == expected
     assert not unread & sources.configured_states()
     for state, entry in registry["unread"].items():
@@ -1471,7 +1471,7 @@ def test_the_page_gives_an_unread_states_reason(db_session):
 @pytest.mark.asyncio
 async def test_an_unread_states_coverage_records_its_reason(monkeypatch, db_session):
     _direct_source(monkeypatch, [["1"]])
-    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"CA", "MS"})
+    monkeypatch.setattr(election_pipeline, "federal_states", lambda: frozenset({"CA", "MS"}))
     from app.pipeline.fetch import ballot_measure_pdf_sources as sources
 
     monkeypatch.setattr(sources, "unread_reason", lambda st: "Mississippi publishes no list." if st == "MS" else None)

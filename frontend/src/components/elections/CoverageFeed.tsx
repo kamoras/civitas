@@ -8,8 +8,8 @@ import type { RaceCoverageItem } from "@/types/election";
 const RECENT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 // true after hydration, false during SSR and the first client render —
-// the useSyncExternalStore server/client-snapshot idiom (see StancePulse.tsx
-// for repo precedent), which avoids a setState-in-effect.
+// the useSyncExternalStore server/client-snapshot idiom, which avoids a
+// setState-in-effect.
 const noopSubscribe = () => () => {};
 export function useMounted(): boolean {
   return useSyncExternalStore(

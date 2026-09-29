@@ -10,6 +10,7 @@ and an empty date, and is skipped.
 """
 
 import logging
+import re
 from datetime import date
 
 import httpx
@@ -66,3 +67,45 @@ async def fetch_house_sworn_dates(client: httpx.AsyncClient, db: Session) -> dic
     else:
         logger.warning("House Clerk member list had no sworn-in dates — layout changed?")
     return dates
+
+
+# A voting seat's <district> is "At Large" or an ordinal ("20th"); a
+# delegate's reads "Delegate" or "Resident Commissioner" (DC, the
+# territories). The Clerk's own wording, read as a form value.
+_VOTING_DISTRICT = re.compile(r"At Large|\d+(?:st|nd|rd|th)")
+
+
+def parse_apportionment(xml: bytes) -> dict[str, dict]:
+    """{postal code: {"name": state name, "seats": voting seats}} from
+    MemberData.xml, which lists every seat of the House, vacant ones
+    included. The apportionment is read here rather than typed in, so a
+    new census's reapportionment, or a new state, reaches every consumer
+    the night the Clerk's list changes. {} when the list can't be read."""
+    try:
+        root = etree.fromstring(xml)
+    except etree.XMLSyntaxError:
+        return {}
+    out: dict[str, dict] = {}
+    for info in root.iterfind("members/member/member-info"):
+        state = info.find("state")
+        code = (state.get("postal-code") or "").strip() if state is not None else ""
+        name = (state.findtext("state-fullname") or "").strip() if state is not None else ""
+        if not code or not name or not _VOTING_DISTRICT.fullmatch((info.findtext("district") or "").strip()):
+            continue
+        out.setdefault(code, {"name": name, "seats": 0})["seats"] += 1
+    return out
+
+
+async def fetch_house_apportionment(client: httpx.AsyncClient) -> dict[str, dict]:
+    """The House's apportionment (parse_apportionment), or {} when the
+    Clerk's list can't be read — the caller then keeps what it has."""
+    try:
+        resp = await client.get(MEMBER_DATA_URL, timeout=DEFAULT_FETCH_TIMEOUT_S)
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.warning("House Clerk member list unavailable: %s", e)
+        return {}
+    seats = parse_apportionment(resp.content)
+    if not seats:
+        logger.warning("House Clerk member list had no voting seats — layout changed?")
+    return seats

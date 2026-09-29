@@ -62,7 +62,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
-- **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab
+- **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
 All services, models, and data run on-device. No data leaves the server.
@@ -99,7 +99,7 @@ civitas/
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline/elections/branches/globe],
+│   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline tabs, labelled Today/Ongoing/Archive],
 │   │   │                        #   elections [state index, states/[ST] ballot, [raceId] detail],
 │   │   │                        #   politicians [directory + per-member profile], bills, compare, explore, leaderboard,
 │   │   │                        #   about, changelog, accessibility, environmental, feedback, admin)
@@ -233,7 +233,7 @@ string constants (prototypes, prompts) and thresholds do. A short, tested
 exemption list covers what cannot affect classification or scoring:
 `_NOT_ANALYSIS_PATHS` (the holdings ingest, filer matching, the run-coordination
 modules, the election run's orchestration, the LDA bill-name matcher
-`analyze/lobbying_records.py`) and
+`analyze/lobbying_records.py`, the modules that word and publish posts) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
 both in `senate_pipeline.py`. This fingerprint is
 compared to the stored hash from the last pipeline run:
@@ -338,8 +338,9 @@ The correct pattern, established by `_district_pvi()` /
    is about to score (`compute_les_reference`), persisted to
    `/data/les_reference.json` for the API's breakdowns, with
    `app/data/les_reference.json` (`scripts/calibrate_les_credit_scale.py`)
-   as the pre-first-run fallback. Funding Independence's PAC-share
-   reference (the chamber's size fit, v6.22) works the same way (`compute_funding_reference`,
+   as the pre-first-run fallback. Funding Independence's references
+   (the chamber's PAC-share size fit, v6.22, and the Senate's small-donor
+   baseline by state population, v6.24) work the same way (`compute_funding_reference`,
    `funding_reference.json`, `scripts/audit_pac_ratio.py`), and so does
    Constituent Alignment's per-party expected break rate by seat lean
    (`compute_constituent_reference`, `constituent_reference.json`,
@@ -590,6 +591,11 @@ What this rules in and out:
   crosswalk is real work — `scripts/fetch_state_leg_crosswalk.py`
   documents why three obvious sources give wrong answers — and doing it
   is the price of not asking.
+- **In:** following Civitas without an account. The Atom feeds (`/feeds`)
+  are pulled, and a topic or state is chosen by which URL a reader
+  subscribes to, so there is no subscriber list to keep. A push channel
+  that would need one (email, web push, per-server webhooks) is out, for
+  the same reason as an address box.
 - **In, server-side only:** the Census geocoder and Google Civic's
   `voterInfoQuery`, called from the pipeline (and, for the town selector,
   from the API, cached 12 hours) with **our own** fixed,
@@ -611,6 +617,14 @@ Timing, and the server keeps only a counter per (day, route template, metric,
 bucket) — no hash, no User-Agent, no exact duration. The endpoint reads nothing
 about the caller at all. Keep it that way: a timing row that could be joined to
 a `SiteVisit` would turn a performance histogram into a per-visitor log.
+
+The same line covers the visitor's own browser. The Action Center used to
+remember a "your state" pick in `localStorage` (also read by the compare
+page), a "log my action" diary with streaks, and which issues the browser had
+voted on; all three were removed in 2026-09, and `ForgetLegacyStorage` clears
+what earlier visits left behind. Browser storage is for a per-tab convenience
+at most (`sessionStorage`, as the admin token uses), never a record of the
+visitor.
 
 A feature that can only work by asking where the visitor lives is a feature
 this project doesn't ship. State the resulting limitation as content (see
@@ -927,9 +941,10 @@ the pending list).
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
 | Action Center API | `backend/app/api/action.py` |
+| Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`) decide what and when |
 | Representative API routes | `backend/app/api/representatives.py` |
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
-| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
+| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline tabs], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/`, `frontend/src/app/photo/bioguide/[id]/route.ts` |
@@ -937,7 +952,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Interactive globe component | `frontend/src/components/action/GlobeTab.tsx` |
+| Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Homepage (masthead, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `RecordIndex.tsx`, `Holdings.tsx` |
 
 ## Conventions
@@ -981,7 +996,7 @@ the pending list).
   - Set `Cache-Control` headers on relatively static endpoints (config,
     leaderboards, action issues) to enable browser and nginx proxy caching
   - Backend runs **one** uvicorn worker (`backend/Dockerfile`'s `CMD`); it
-    always has. The write rate limiter, the pulse dedup and the summary
+    always has. The write rate limiter and the summary
     cooldown are in-process state that assumes this. Two backend
     *processes* still meet during a Swarm start-first rollout, when the
     old and new tasks overlap on the same database, which is what the
@@ -1045,10 +1060,16 @@ the pending list).
   " — Civitas". Search-facing wording lives in `src/lib/seo.ts`, not in
   `page.tsx` (Next rejects extra exports there).
 - A missing record is a real 404 via `notFound()` plus `noindex`, never a
-  200 page that says "not found".
+  200 page that says "not found". The converse holds too: an unreachable
+  backend or a 5xx is an error page (`app/error.tsx`), never a 404 — fetch
+  detail records through `fetchRecord` (`src/lib/ssrPayload.ts`), which
+  returns null only for a 404.
 - `sitemap.xml` is rendered per request from `GET /api/sitemap` — never
   prerendered, since `next build` can't reach the backend. Add a new
   detail-page type there, or search engines have no way to find it.
+  Explore documents have no upper bound, so they are listed a page at a
+  time (`/sitemaps/explore/{n}`, from `GET /api/sitemap/explore`), and
+  `robots.txt` names `/sitemap-index.xml`, which lists both.
 - `robots.txt` must not disallow `/api/`: Googlebot's renderer honours it for
   the XHRs the client-rendered pages make, and would index them empty.
 

@@ -4,13 +4,24 @@ between-justice spread. See justice_loyalty's module docstring and
 docs/research/justice-scores.md.
 """
 
+import asyncio
+from unittest.mock import AsyncMock, patch
+
 import numpy as np
 import pytest
 
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
+from app.models import Justice
 from app.pipeline.analyze.justice_loyalty import Vote, fit, label, loyalty_by_justice, president_on, score
-from app.pipeline.fetch.justice_records import fjc_appointments, scdb_president_votes
-from app.pipeline.justice_pipeline import _appointers, _bundled_rows, _database_name
+from app.pipeline.fetch.justice_records import fetch_scdb, fjc_appointments, scdb_president_votes
+from app.pipeline.justice_pipeline import (
+    _appointers,
+    _bundled_rows,
+    _database_name,
+    _measure_loyalty,
+    run_justice_pipeline,
+)
+from app.services.justice_service import get_justice
 
 TERMS = [("P1", "2000-01-20", "2008-01-20"), ("P2", "2008-01-20", None)]
 
@@ -124,3 +135,90 @@ def test_the_bundle_reads_and_every_row_is_binary():
     rows = _bundled_rows()
     assert sum(len(r) for r in rows.values()) == 29585
     assert all(set(v) <= {0, 1} for r in rows.values() for v in r)
+
+
+def test_an_unreadable_scdb_archive_is_none_not_an_empty_release_list(caplog):
+    # A 403 from the archive (2026-09-29) read as "no release found".
+    with patch("app.pipeline.fetch.justice_records._get", AsyncMock(return_value=None)):
+        assert asyncio.run(fetch_scdb(None, None)) is None
+    assert "could not be read" in caplog.text
+
+
+def test_the_run_reports_when_loyalty_was_not_measured(db_session):
+    justice = {"id": "clarence_thomas", "name": "Clarence Thomas", "last_name": "Thomas"}
+    with patch("app.pipeline.justice_pipeline.fetch_current_justices", AsyncMock(return_value=[justice])), \
+         patch("app.pipeline.justice_pipeline.fetch_case_votes", AsyncMock(return_value=[])), \
+         patch("app.pipeline.justice_pipeline._measure_loyalty", AsyncMock(return_value=(None, "x could not be read"))):
+        result = asyncio.run(run_justice_pipeline(db_session))
+    assert result == {"justices": 1, "votes": 0, "loyalty_unmeasured": "x could not be read"}
+
+
+def test_unmeasured_loyalty_names_every_source_that_was_down(db_session):
+    # No presidents stored, the Database down, the FJC file fine.
+    with patch("app.pipeline.justice_pipeline.fetch_scdb", AsyncMock(return_value=None)), \
+         patch("app.pipeline.justice_pipeline.fetch_fjc", AsyncMock(return_value=[{"last": "thomas"}])):
+        measured, why = asyncio.run(_measure_loyalty(None, db_session))
+    assert measured is None
+    assert why == "the Supreme Court Database and the presidents table could not be read"
+
+
+def test_agreement_is_served_with_each_justices_name(db_session):
+    """The scorecard showed "Brett M Kavanaugh" by splitting the id
+    "brett_m_kavanaugh" on underscores; the API names each justice itself."""
+    db_session.add_all([
+        Justice(id="samuel_a_alito_jr", name="Samuel A. Alito, Jr.", last_name="Alito", is_active=True,
+                agreement_matrix='{"brett_m_kavanaugh": 88.0, "clarence_thomas": 91.2, "gone": 50.0}'),
+        Justice(id="brett_m_kavanaugh", name="Brett M. Kavanaugh", last_name="Kavanaugh", is_active=True),
+        Justice(id="clarence_thomas", name="Clarence Thomas", last_name="Thomas", is_active=True),
+    ])
+    db_session.commit()
+    agreement = get_justice(db_session, "samuel_a_alito_jr").agreement
+    assert [(a.name, a.share) for a in agreement] == [("Clarence Thomas", 91.2), ("Brett M. Kavanaugh", 88.0)]
+
+
+class TestResolveAppointment:
+    """The appointing president and party come from the presidents table,
+    never a hand-typed list: a new president is known the night the roster
+    names them."""
+
+    @staticmethod
+    def _presidents():
+        from types import SimpleNamespace as P
+
+        return [
+            P(id="bush-41", name="George H. W. Bush", party="R", term_start="1989-01-20", term_end="1993-01-20"),
+            P(id="bush-43", name="George W. Bush", party="R", term_start="2001-01-20", term_end="2009-01-20"),
+            P(id="obama-44", name="Barack Obama", party="D", term_start="2009-01-20", term_end="2017-01-20"),
+            P(id="trump-45", name="Donald J. Trump", party="R", term_start="2017-01-20", term_end="2021-01-20"),
+            P(id="biden-46", name="Joseph R. Biden", party="D", term_start="2021-01-20", term_end="2025-01-20"),
+            P(id="new-48", name="A. New President", party="X", term_start="2029-01-20", term_end=None),
+        ]
+
+    def test_oyez_names_the_president(self):
+        from app.pipeline.justice_pipeline import resolve_appointment
+
+        assert resolve_appointment("Barack Obama", "2010-08-07", self._presidents()) == ("Barack Obama", "D")
+        assert resolve_appointment("George H. W. Bush", "1991-10-23", self._presidents()) == ("George H. W. Bush", "R")
+
+    def test_no_name_resolves_by_who_was_in_office(self):
+        # Oyez leaves Ketanji Brown Jackson's appointing president empty;
+        # the old table then gave no party, and the Action Center filled "R".
+        from app.pipeline.justice_pipeline import resolve_appointment
+
+        assert resolve_appointment("", "2022-06-30", self._presidents()) == ("Joseph R. Biden", "D")
+
+    def test_a_president_the_code_never_heard_of_is_known_from_the_table(self):
+        from app.pipeline.justice_pipeline import resolve_appointment
+
+        assert resolve_appointment("", "2030-03-01", self._presidents()) == ("A. New President", "X")
+
+    def test_a_close_but_ambiguous_name_falls_back_to_the_dates(self):
+        # "George Bush" is as near one Bush as the other: the date decides.
+        from app.pipeline.justice_pipeline import resolve_appointment
+
+        assert resolve_appointment("George Bush", "2006-01-31", self._presidents()) == ("George W. Bush", "R")
+
+    def test_unresolvable_gives_no_party(self):
+        from app.pipeline.justice_pipeline import resolve_appointment
+
+        assert resolve_appointment("", "1700-01-01", self._presidents()) == ("", "")

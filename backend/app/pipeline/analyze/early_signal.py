@@ -14,8 +14,8 @@ Nothing in this module posts anything publicly. It only ever creates an
 ActionIssue with status=DEVELOPING; action_center.py is responsible for
 excluding those from Bluesky posting until promoted.
 
-A vote's draft is filled from the vote record by a fixed template, not
-written by the model: the model's drafts characterized the record ("a
+A draft is filled from its record (the roll call, or the Federal Register
+entry) by a fixed template, not written by the model: the model's drafts characterized the record ("a
 narrow 77-22", 2026-09-28) in ways no check lists in advance. A vote on a
 bill a current issue already covers is not drafted, and a draft whose bill
 news coverage has since reached as a separate issue is retired
@@ -25,6 +25,7 @@ news coverage has since reached as a separate issue is retired
 import asyncio
 import json
 import logging
+import re
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -34,12 +35,6 @@ from app.http_client import make_async_client
 from app.models import ActionIssue, ActionIssueStatus, RepSponsoredBill, SponsoredBill
 from app.pipeline.analyze import action_metrics
 from app.pipeline.analyze.bill_analyzer import classify_policy_area, recent_roll_call_key
-from app.pipeline.analyze.grounding import (
-    grounding_violations,
-    hedge_and_editorializing_violations,
-    validate_facts,
-)
-from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.fetch.congress import fetch_recent_house_roll_calls, fetch_recent_roll_calls
 from app.pipeline.fetch.daily_digest import first_bill_id
 from app.pipeline.fetch.federal_register import fetch_recent_significant_rules
@@ -51,7 +46,6 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-EARLY_SIGNAL_RULE_PROMPT_VERSION = "early-signal-rule-v1"
 
 # Deliberately conservative and NOT calibrated from data — there is no
 # history yet. action_metrics logs early_signal_confirmed/_expired so a
@@ -67,8 +61,8 @@ _ROLL_CALL_POLL_MAX_AGE_HOURS = 1
 
 # Only the two most recent votes per session — this poll runs hourly, so
 # anything further back would already have been seen (or gated out) on a
-# prior run. Kept small to bound the LLM/grounding cost of a stage that
-# runs every hour regardless of whether Congress is in session.
+# prior run. Kept small to bound the requests of a stage that runs every
+# hour regardless of whether Congress is in session.
 _ROLL_CALL_POLL_COUNT_PER_SESSION = 2
 
 # Same reasoning as _ROLL_CALL_POLL_MAX_AGE_HOURS, for the Federal Register
@@ -90,8 +84,8 @@ _HOUSE_FINAL_PASSAGE_MARKERS = ("on passage", "suspend the rules and pass")
 
 
 def _chamber_labels(vote: dict) -> tuple[str, str]:
-    """(display chamber name, plural noun for its members) for prompt text
-    and source-text grounding — the vote dict only ever tags House votes
+    """(display chamber name, plural noun for its members) for the draft's
+    text — the vote dict only ever tags House votes
     with chamber="House" (see parse_house_vote_xml), so absence means
     Senate."""
     if vote.get("chamber") == "House":
@@ -186,15 +180,20 @@ def _issue_bill_ids(issue: ActionIssue) -> set[str]:
     return {e["id"].upper() for e in entries if isinstance(e, dict) and e.get("id")}
 
 
-def _covering_issue(db: Session, bill_id: str, names: list[str], exclude_id: int | None = None) -> ActionIssue | None:
-    """A current, reported (not developing) issue about the bill: one that
-    records it among its related bills, or names it in its title, summary
-    or facts."""
-    issues = db.query(ActionIssue).filter(
+def _covering_issue(
+    db: Session, bill_id: str, names: list[str], exclude_id: int | None = None,
+    candidates: list[ActionIssue] | None = None,
+) -> ActionIssue | None:
+    """A reported (not developing) issue about the bill, among `candidates`
+    (by default the current issues): one that records it among its related
+    bills, or names it in its title, summary or facts."""
+    issues = candidates if candidates is not None else db.query(ActionIssue).filter(
         ActionIssue.is_current == True,  # noqa: E712
         ActionIssue.status != ActionIssueStatus.DEVELOPING,
     ).all()
     for issue in issues:
+        if issue.status == ActionIssueStatus.DEVELOPING:
+            continue
         if issue.id == exclude_id:
             continue
         if bill_id in _issue_bill_ids(issue):
@@ -354,125 +353,104 @@ def expire_stale_developing_issues(db: Session, now) -> int:
     return len(stale)
 
 
+ROLL_CALL_SOURCES = ("senate_roll_call_vote", "house_roll_call_vote")
+
+
+def covering_issue(db: Session, draft: ActionIssue, candidates: list[ActionIssue] | None = None) -> ActionIssue | None:
+    """The reported issue that covers a vote draft's bill, or None. The
+    draft's bill is the one it recorded, or for a draft from before it
+    recorded one, the first bill its text names."""
+    bill_id = next(iter(_issue_bill_ids(draft)), None) or first_bill_id(f"{draft.title} {draft.summary}")
+    if not bill_id:
+        return None
+    return _covering_issue(db, bill_id, _bill_names(db, bill_id), exclude_id=draft.id, candidates=candidates)
+
+
 def retire_covered_developing_issues(db: Session) -> int:
     """Retire a current vote draft whose bill a reported issue now covers.
     News that the matching pass didn't join to the draft (it reads as its
     own story) otherwise leaves two issues about one vote, the draft's the
-    thinner. The draft's bill is the one it recorded, or for a draft from
-    before it recorded one, the first bill its text names."""
+    thinner. Retiring only takes the draft off the Action Center; the
+    homepage's record keeps retired rows, and leaves the draft out as a
+    duplicate of the covering issue (action_center.mark_recent_duplicates)."""
     retired = 0
     drafts = db.query(ActionIssue).filter(
         ActionIssue.status == ActionIssueStatus.DEVELOPING,
         ActionIssue.is_current == True,  # noqa: E712
-        ActionIssue.source_type.in_(("senate_roll_call_vote", "house_roll_call_vote")),
+        ActionIssue.source_type.in_(ROLL_CALL_SOURCES),
     ).all()
     for draft in drafts:
-        bill_id = next(iter(_issue_bill_ids(draft)), None) or first_bill_id(f"{draft.title} {draft.summary}")
-        if not bill_id:
-            continue
-        covering = _covering_issue(db, bill_id, _bill_names(db, bill_id), exclude_id=draft.id)
+        covering = covering_issue(db, draft)
         if covering is None:
             continue
         draft.is_current = False
         retired += 1
         action_metrics.increment("early_signal_retired_covered")
-        logger.info("Retired developing issue %d: issue %d covers %s", draft.id, covering.id, bill_id)
+        logger.info("Retired developing issue %d: issue %d covers its bill", draft.id, covering.id)
     return retired
 
 
-def _rule_source_text(rule: dict) -> str:
-    """The ground-truth text a hedged draft's grounding check runs against
-    — everything the Federal Register record itself states, nothing more."""
-    agencies = ", ".join(rule.get("agencies") or []) or "an unspecified agency"
-    return (
-        f"Federal Register document {rule.get('documentNumber', '')}, published "
-        f"{rule.get('publicationDate', '')} by {agencies}. "
-        f"Title: {rule.get('title', '')}. "
-        f"Abstract: {rule.get('abstract') or '(none provided)'}."
+# A summary quotes the rule's abstract up to this many characters, ending
+# at a sentence; the whole abstract is among the facts.
+_ABSTRACT_SUMMARY_CHARS = 400
+
+
+# A period that ends a word like these doesn't end the sentence. The dotted
+# forms ("U.S.", "U.S.C.") and initials are caught by shape in _ends_sentence.
+_ABBREVIATIONS = frozenset({
+    "mr", "mrs", "ms", "dr", "st", "jr", "sr", "inc", "co", "corp", "ltd",
+    "no", "nos", "sec", "secs", "pub", "vol", "fig", "dept", "gov", "gen",
+})
+_SENTENCE_END = re.compile(r"[.?!](?=\s+[\"“(]?[A-Z])")
+
+
+def _ends_sentence(text: str, at: int) -> bool:
+    """Whether the mark at `at` (followed by a capitalised word) ends a
+    sentence: not the period of an initial ("John Q. Public"), a dotted
+    abbreviation ("the U.S. Fish and Wildlife Service") or a title."""
+    if text[at] != ".":
+        return True
+    word = text[:at].rsplit(" ", 1)[-1].lstrip("(\"“")
+    return not ("." in word or len(word) == 1 or word.lower() in _ABBREVIATIONS)
+
+
+def _first_sentences(text: str, limit: int) -> str:
+    """The abstract's opening sentences, whole, within `limit` characters;
+    empty when even the first is longer."""
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    ends = [m.start() for m in _SENTENCE_END.finditer(text, 0, limit) if _ends_sentence(text, m.start())]
+    return text[:ends[-1] + 1] if ends else ""
+
+
+def _compose_developing_rule_issue(rule: dict) -> tuple[str, str, list[str]]:
+    """(title, summary, facts) for a significant final rule, every word
+    either the template's or the Federal Register record's own: the
+    agency, the rule's title, its abstract, the publication date and the
+    document number. The model's drafts were dropped with the vote
+    drafts', for the same reason (the module docstring)."""
+    agencies = ", ".join(rule.get("agencies") or []) or "A federal agency"
+    rule_title = " ".join((rule.get("title") or "").split())
+    day = rule.get("publicationDate") or ""
+    number = rule.get("documentNumber") or ""
+    abstract = " ".join((rule.get("abstract") or "").split())
+    opening = _first_sentences(abstract, _ABSTRACT_SUMMARY_CHARS)
+
+    title = f"{agencies} final rule: {rule_title}"
+    summary = (
+        f"{agencies} published the final rule \"{rule_title}\" in the Federal Register"
+        f"{f' on {day}' if day else ''}. {opening + ' ' if opening else ''}"
+        "This is from the Federal Register; news coverage of the rule has not appeared yet."
     )
-
-
-_RULE_SYSTEM_PROMPT = """\
-You are a nonpartisan civic information analyst. You are drafting a \
-PROVISIONAL report about a federal regulatory action that was just \
-published in the Federal Register, based ONLY on the official record \
-below — no news coverage of this rule exists yet. Report only what the \
-record states: the agency involved, what the rule does, and when it was \
-published. Do not speculate about what happens next, why the agency \
-acted, or how this will be covered. State plainly that broader press \
-coverage has not yet appeared. Never advocate for or against the rule, \
-and never state or imply that it was warranted, justified, or expected."""
-
-_RULE_PROMPT_TEMPLATE = """\
-A federal agency just published a final rule in the Federal Register. \
-Below is the official record. Produce a JSON object with these fields:
-
-- "title": A concise, neutral headline for this rule (max 15 words), \
-naming the agency and the actual action taken.
-- "summary": 2-3 factual sentences describing what the rule does, stated \
-directly from the record below. Include one sentence noting this is \
-based on the official record and that broader news coverage has not yet \
-appeared.
-- "facts": An array of 2-4 factual bullet points — the agency, the \
-rule's official title, the publication date, and what it does. Every \
-fact must be directly stated in the record below — never infer intent \
-or predict impact.
-
-Official record:
-{rule_text}
-
-Respond with ONLY the JSON object, no other text.
-"""
-
-
-def _draft_developing_rule_issue(rule: dict, db: Session) -> tuple[str, str, list[str]] | None:
-    """Generate a hedged, grounded (title, summary, facts) from a Federal
-    Register rule record — same two-attempt retry shape as
-    _draft_developing_issue, this domain's own prompt/source text."""
-    source_text = _rule_source_text(rule)
-    user_prompt = _RULE_PROMPT_TEMPLATE.format(rule_text=source_text)
-
-    for attempt in range(1, 3):
-        prompt = user_prompt
-        if attempt > 1:
-            prompt += (
-                "\n\nYour previous response was rejected. Use ONLY the "
-                "record above: do not state any fact not in it, do not "
-                "predict what happens next, do not evaluate whether the "
-                "rule was warranted, and do not omit the note that "
-                "broader coverage has not yet appeared."
-            )
-        result = call_llm(
-            prompt_version=EARLY_SIGNAL_RULE_PROMPT_VERSION,
-            system_prompt=_RULE_SYSTEM_PROMPT,
-            user_prompt=prompt,
-            cache_key=None,
-            db_session=db,
-            max_tokens=512,
-            num_ctx=2048,
-        )
-        if isinstance(result, str):
-            result = extract_json(result)
-        if not isinstance(result, dict):
-            continue
-
-        title = (result.get("title") or "").strip()
-        summary = (result.get("summary") or "").strip()
-        facts = validate_facts(result.get("facts", []), source_text=source_text)
-        combined = f"{title} {summary} " + " ".join(facts)
-
-        reasons = (
-            grounding_violations(combined, source_text)
-            + hedge_and_editorializing_violations(combined, allow_hedging=True)
-        )
-        if title and summary and not reasons:
-            return title, summary, facts
-        logger.warning(
-            "Federal Register draft failed grounding (attempt %d): %s",
-            attempt, "; ".join(reasons) or "empty title/summary",
-        )
-
-    return None
+    # A record missing its number or date says less, not "document , published ."
+    where = ["Federal Register document" + (f" {number}" if number else "")]
+    if day:
+        where.append(f"published {day}")
+    facts = [f"Agency: {agencies}.", ", ".join(where) + "."]
+    if abstract:
+        facts.append(f"Abstract: {abstract}")
+    return title[:500], summary, facts
 
 
 def _fetch_recent_rules(db: Session) -> list[dict]:
@@ -521,11 +499,7 @@ def check_federal_register_signals(db: Session, today: str | None = None) -> int
         if already_exists:
             continue
 
-        drafted = _draft_developing_rule_issue(rule, db)
-        if drafted is None:
-            action_metrics.increment("early_signal_rule_gate_grounding_failed")
-            continue
-        title, summary, facts = drafted
+        title, summary, facts = _compose_developing_rule_issue(rule)
 
         row = ActionIssue(
             date=today or utcnow().strftime("%Y-%m-%d"),

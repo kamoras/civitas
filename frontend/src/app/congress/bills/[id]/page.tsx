@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { BillDetail } from "@/types/bill";
 import type { BillRecord } from "@/types/congress";
-import { usableRecord } from "@/lib/ssrPayload";
+import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { describeBill, legislationJsonLd } from "@/lib/seo";
 import { fetchBillRecord } from "@/lib/congressServer";
@@ -15,18 +15,16 @@ const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
 /** The site's own record of a bill a current member sponsored (stage,
  * policy areas, Action Center mentions); null for any other bill, which
- * the Congress.gov record still covers. */
-async function fetchTrackedBill(id: string, congress: number | null): Promise<BillDetail | null> {
-  try {
-    const query = congress ? `?congress=${congress}` : "";
-    const res = await fetch(`${BACKEND}/api/bills/${encodeURIComponent(id)}${query}`, {
-      next: { revalidate: 120 },
-    });
-    if (!res.ok) return null;
-    return usableRecord<BillDetail>(await res.json(), "billId", "title");
-  } catch {
-    return null;
-  }
+ * the Congress.gov record still covers. Throws when the backend can't be
+ * reached (fetchRecord); load() decides what that means for the page. */
+function fetchTrackedBill(id: string, congress: number | null): Promise<BillDetail | null> {
+  const query = congress ? `?congress=${congress}` : "";
+  return fetchRecord<BillDetail>(
+    `${BACKEND}/api/bills/${encodeURIComponent(id)}${query}`,
+    { next: { revalidate: 120 } },
+    "billId",
+    "title"
+  );
 }
 
 async function fetchStageNames(): Promise<Record<string, { name: string }>> {
@@ -52,10 +50,20 @@ async function load(
   id: string,
   congress: number | null
 ): Promise<{ record: BillRecord | null; detail: BillDetail | null }> {
-  const [record, tracked] = await Promise.all([
+  const [{ record, failed: recordFailed }, trackedOrError] = await Promise.all([
     fetchBillRecord(id, congress),
-    fetchTrackedBill(id, congress),
+    fetchTrackedBill(id, congress).catch((e: unknown) =>
+      e instanceof Error ? e : new Error(String(e))
+    ),
   ]);
+  // With the Congress.gov record in hand, a failed read of the site's own is
+  // only a missing panel. With neither, the backend is down: that is an
+  // error page, never a 404 for a bill that exists.
+  if (trackedOrError instanceof Error && !record) throw trackedOrError;
+  const tracked = trackedOrError instanceof Error ? null : trackedOrError;
+  // Neither record, and Congress.gov's side failed rather than saying "no
+  // such bill": the bill may well exist, so this is not a 404 either.
+  if (!record && !tracked && recordFailed) throw new Error(`bill ${id}: record unavailable`);
   const detail = tracked && record && tracked.congress !== record.congress ? null : tracked;
   return { record, detail };
 }

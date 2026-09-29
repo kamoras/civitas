@@ -12,36 +12,62 @@ problems. Delivery is best-effort across every configured channel:
 
 Alerts never raise: a broken alert channel must not take down the
 pipeline it is reporting on.
+
+An alert about an ongoing condition names it (``condition``) and stays
+open until the code that detects the condition sees it gone and calls
+``resolve_ops_alert``: a watchdog on its next clean tick, a step when it
+next succeeds. The dashboard shows open alerts as active and the rest as
+history. An alert with no condition reports a one-off event and is
+history from the start.
 """
 
 import json
 import logging
+import uuid
 from datetime import date, datetime, timedelta
 
 import httpx
 
 from app.config import settings
+from app.database import SessionLocal
+from app.models import (
+    ApiCache,
+    ElectionPipelineRun,
+    HousePipelineRun,
+    PipelineRun,
+    PipelineStatus,
+    StockTradesPipelineRun,
+    SupplementaryPipelineRun,
+)
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
 _HISTORY_TIER = "_ops_alerts"
 _HISTORY_KEEP = 50
+# How far back the dashboard lists alerts that are no longer open. A week
+# spans one cycle of the slowest regular jobs (the Sunday justice and
+# committee refreshes), so every job's latest outcome stays in view.
+HISTORY_SHOWN_FOR = timedelta(days=7)
 
 
-def send_ops_alert(subject: str, body: str, *, dedupe_key: str | None = None) -> bool:
+def send_ops_alert(
+    subject: str, body: str, *, dedupe_key: str | None = None, condition: str | None = None,
+) -> bool:
     """Send an operator alert on every configured channel.
 
     ``dedupe_key``: if given, the alert fires at most once per key
     (tracked in the DB) — used e.g. so an overrunning pipeline alerts
-    once, not every watchdog tick. Returns True if the alert fired.
+    once, not every watchdog tick. ``condition``: the ongoing problem the
+    alert reports, open until ``resolve_ops_alert(condition)``; a newer
+    alert for it supersedes the older. Returns True if the alert fired.
     """
     try:
         if dedupe_key and _already_sent(dedupe_key):
             return False
 
         logger.error("OPS ALERT: %s — %s", subject, body)
-        _record(subject, body, dedupe_key)
+        _record(subject, body, dedupe_key, condition)
 
         if settings.ALERT_NTFY_URL:
             _send_ntfy(subject, body)
@@ -52,20 +78,31 @@ def send_ops_alert(subject: str, body: str, *, dedupe_key: str | None = None) ->
 
 
 def recent_alerts(limit: int = 10) -> list[dict]:
-    """Most recent alerts, newest first — consumed by the admin API."""
-    from app.database import SessionLocal
-    from app.models import ApiCache
-
+    """Every open alert, then the newest ``limit`` others from the last
+    HISTORY_SHOWN_FOR, each newest first — consumed by the admin API. An
+    open alert is never pushed off, however old. Each is {subject, body, at,
+    condition, resolvedAt, supersededAt, open}: open while its condition is
+    unresolved and no newer alert has replaced it."""
     db = SessionLocal()
     try:
         rows = (
             db.query(ApiCache)
             .filter(ApiCache.tier == _HISTORY_TIER)
             .order_by(ApiCache.cached_at.desc())
-            .limit(limit)
             .all()
         )
-        return [json.loads(r.data_json) for r in rows]
+        alerts = [
+            {"condition": None, "resolvedAt": None, "supersededAt": None, **json.loads(r.data_json)}
+            for r in rows
+        ]
+        for a in alerts:
+            a["open"] = _is_open(a)
+        since = (utcnow() - HISTORY_SHOWN_FOR).isoformat()
+        history = [
+            a for a in alerts
+            if not a["open"] and (a["resolvedAt"] or a["supersededAt"] or a["at"]) >= since
+        ]
+        return [a for a in alerts if a["open"]] + history[:limit]
     except Exception:
         logger.exception("Failed to read ops alert history")
         return []
@@ -74,9 +111,6 @@ def recent_alerts(limit: int = 10) -> list[dict]:
 
 
 def _already_sent(dedupe_key: str) -> bool:
-    from app.database import SessionLocal
-    from app.models import ApiCache
-
     db = SessionLocal()
     try:
         return (
@@ -92,21 +126,80 @@ def _already_sent(dedupe_key: str) -> bool:
         db.close()
 
 
-def _record(subject: str, body: str, dedupe_key: str | None) -> None:
-    from app.database import SessionLocal
-    from app.models import ApiCache
+def resolve_ops_alert(condition: str) -> int:
+    """Close every open alert for ``condition``: the code that detects it
+    found it gone. Frees their dedupe keys, so the condition alerts again
+    if it comes back. Never raises. Returns how many were closed."""
+    db = SessionLocal()
+    try:
+        closed = _close_open(db, condition, utcnow())
+        db.commit()
+        if closed:
+            logger.info("Ops alert resolved: %s", condition)
+        return closed
+    except Exception:
+        logger.exception("Failed to resolve ops alert %s", condition)
+        return 0
+    finally:
+        db.close()
 
+
+def _is_open(data: dict) -> bool:
+    return bool(data.get("condition")) and not data.get("resolvedAt") and not data.get("supersededAt")
+
+
+def _close_open(db, condition: str, now: datetime) -> int:
+    """Resolve: the condition is gone. Closes the open alert and frees the
+    dedupe key of every alert raised for it — the superseded ones' too,
+    since a recurrence the same day may come back under any of them."""
+    closed = 0
+    for row in db.query(ApiCache).filter(ApiCache.tier == _HISTORY_TIER).all():
+        data = json.loads(row.data_json)
+        if data.get("condition") != condition:
+            continue
+        if _is_open(data):
+            row.data_json = json.dumps({**data, "resolvedAt": now.isoformat()})
+            closed += 1
+        if row.cache_key.startswith("dedupe-"):
+            row.cache_key = f"resolved-{row.cache_key[len('dedupe-'):]}-{now.isoformat()}"
+    return closed
+
+
+def _supersede_open(db, condition: str, now: datetime) -> None:
+    """A newer alert for a condition still open replaces the open one. It
+    is not resolved — the problem never went away — and keeps its dedupe
+    key: freeing it would re-send that alert whenever the condition's
+    details swing back (a failing set of states A, then B, then A again),
+    once per swing."""
+    for row in db.query(ApiCache).filter(ApiCache.tier == _HISTORY_TIER).all():
+        data = json.loads(row.data_json)
+        if data.get("condition") == condition and _is_open(data):
+            row.data_json = json.dumps({**data, "supersededAt": now.isoformat()})
+
+
+def _record(subject: str, body: str, dedupe_key: str | None, condition: str | None = None) -> None:
     now = utcnow()
     payload = json.dumps({
         "subject": subject,
         "body": body,
         "at": now.isoformat(),
+        "condition": condition,
+        "resolvedAt": None,
+        "supersededAt": None,
     })
     db = SessionLocal()
     try:
-        key = f"dedupe-{dedupe_key}" if dedupe_key else f"alert-{now.isoformat()}"
+        if condition:
+            # Superseded by this one: the condition is still open, and one
+            # alert for it says so.
+            _supersede_open(db, condition, now)
+        # An event without a dedupe key is unique by its own id: a timestamp
+        # alone collided when two alerts landed in the same microsecond.
+        key = f"dedupe-{dedupe_key}" if dedupe_key else f"alert-{now.isoformat()}-{uuid.uuid4().hex[:12]}"
         db.add(ApiCache(tier=_HISTORY_TIER, cache_key=key, data_json=payload, cached_at=now))
-        # Prune old history so the table stays bounded.
+        # Prune old history so the table stays bounded — never an open
+        # alert, which would silently drop a live problem off the panel.
+        db.flush()  # the session doesn't autoflush; count this one in the prune
         cutoff_rows = (
             db.query(ApiCache)
             .filter(ApiCache.tier == _HISTORY_TIER)
@@ -115,7 +208,8 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> None:
             .all()
         )
         for row in cutoff_rows:
-            db.delete(row)
+            if not _is_open(json.loads(row.data_json)):
+                db.delete(row)
         db.commit()
     except Exception:
         logger.exception("Failed to record ops alert")
@@ -152,18 +246,21 @@ def check_current_congress_staleness() -> None:
 
     configured = settings.CURRENT_CONGRESS
     expected = expected_current_congress()
-    if expected > configured:
-        send_ops_alert(
-            "CURRENT_CONGRESS is stale",
-            f"CURRENT_CONGRESS is set to {configured}, but the {expected}th "
-            f"Congress is now in session. The Senate pipeline pins its "
-            f"roll-call window to CURRENT_CONGRESS while the House derives "
-            f"its window from the calendar year, so they are now scoring "
-            f"different Congresses and the Senate is scoring a dead one. "
-            f"Bump CURRENT_CONGRESS to {expected} (env or config) and re-run "
-            f"the pipeline.",
-            dedupe_key=f"stale-congress-{expected}",
-        )
+    if expected <= configured:
+        resolve_ops_alert("stale-congress")
+        return
+    send_ops_alert(
+        "CURRENT_CONGRESS is stale",
+        f"CURRENT_CONGRESS is set to {configured}, but the {expected}th "
+        f"Congress is now in session. The Senate pipeline pins its "
+        f"roll-call window to CURRENT_CONGRESS while the House derives "
+        f"its window from the calendar year, so they are now scoring "
+        f"different Congresses and the Senate is scoring a dead one. "
+        f"Bump CURRENT_CONGRESS to {expected} (env or config) and re-run "
+        f"the pipeline.",
+        dedupe_key=f"stale-congress-{expected}",
+        condition="stale-congress",
+    )
 
 
 def check_feedback_token_expiration() -> None:
@@ -204,7 +301,9 @@ def check_feedback_token_expiration() -> None:
     except ValueError:
         return
     days_left = (expires_at - utcnow()).days
-    if days_left <= 30:
+    if days_left > 30:
+        resolve_ops_alert("feedback-token-expiring")  # rotated
+    else:
         send_ops_alert(
             "FEEDBACK_TOKEN is expiring soon",
             f"The GitHub fine-grained PAT in FEEDBACK_TOKEN expires "
@@ -214,6 +313,7 @@ def check_feedback_token_expiration() -> None:
             f"scoped to Issues: write on {settings.GITHUB_FEEDBACK_REPO} "
             f"and update FEEDBACK_TOKEN before then.",
             dedupe_key=f"feedback-token-expiring-{expiration}",
+            condition="feedback-token-expiring",
         )
 
 
@@ -247,7 +347,9 @@ def check_state_pvi_staleness() -> None:
     # Presidential county-level canvass data is reliably compiled within a
     # few weeks of the election; mid-December of the election year is a
     # comfortable buffer before alerting.
-    if date.today() >= date(next_cycle, 12, 15):
+    if date.today() < date(next_cycle, 12, 15):
+        resolve_ops_alert("stale-state-pvi")  # regenerated for the new cycle
+    else:
         send_ops_alert(
             "state_pvi.json window is stale",
             f"state_pvi.json is still windowed to {window}, but the "
@@ -258,6 +360,7 @@ def check_state_pvi_staleness() -> None:
             f"needs no such update — it refreshes automatically from "
             f"Wikipedia's current Cook PVI figures.)",
             dedupe_key=f"stale-state-pvi-{next_cycle}",
+            condition="stale-state-pvi",
         )
 
 
@@ -270,6 +373,12 @@ def stock_trades_overrun_budget() -> timedelta:
     from app.holdings_schedule import HOLDINGS_STEPS, PHASE_CEILING, PTR_REREAD_BUDGET
 
     return timedelta(hours=2) + PTR_REREAD_BUDGET + len(HOLDINGS_STEPS) * PHASE_CEILING
+
+
+def overrun_condition(label: str) -> str:
+    """The open-alert condition for a pipeline running past its budget,
+    shared with the action refresh's own overrun alerts (scheduler.py)."""
+    return f"overrun-{label.lower().replace(' ', '-')}"
 
 
 def check_pipeline_overrun() -> None:
@@ -287,11 +396,6 @@ def check_pipeline_overrun() -> None:
     tighter stock_trades_overrun_budget() — its weekly SCOTUS-refresh day includes an uncached
     Oyez crawl that took 5h+ in run 69).
     """
-    from app.database import SessionLocal
-    from app.models import (
-        HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
-    )
-
     from app.pipeline.run_tracker import live_run
 
     default_budget = timedelta(hours=settings.PIPELINE_OVERRUN_ALERT_HOURS)
@@ -313,10 +417,13 @@ def check_pipeline_overrun() -> None:
         db.close()
 
     for label, run, budget in checks:
-        if run is None:
-            continue
-        age = utcnow() - run.started_at
-        if age > budget:
+        condition = overrun_condition(label)
+        age = utcnow() - run.started_at if run is not None else None
+        if age is None or age <= budget:
+            # Finished, or still inside its budget: an overrun alert from
+            # this watchdog or the action refresh's (scheduler.py) is over.
+            resolve_ops_alert(condition)
+        else:
             hours = age.total_seconds() / 3600
             send_ops_alert(
                 f"{label} pipeline overrunning",
@@ -326,6 +433,7 @@ def check_pipeline_overrun() -> None:
                 f"a run past 12h will be marked stale and the next attempt of "
                 f"this pipeline may start concurrently.",
                 dedupe_key=f"overrun-{label.lower().replace(' ', '-')}-{run.id}",
+                condition=condition,
             )
 
 
@@ -356,12 +464,6 @@ def check_pipeline_staleness() -> None:
     deployment, not a stall. One that has runs but has never completed
     successfully IS reported, since that is a real never-worked state.
     """
-    from app.database import SessionLocal
-    from app.models import (
-        ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus,
-        StockTradesPipelineRun, SupplementaryPipelineRun,
-    )
-
     budget = timedelta(days=settings.PIPELINE_STALE_ALERT_DAYS)
     models = [
         ("Senate", PipelineRun),
@@ -394,6 +496,10 @@ def check_pipeline_staleness() -> None:
     finally:
         db.close()
 
+    stale = {label for label, _ in findings}
+    for label, _ in models:
+        if label not in stale:
+            resolve_ops_alert(f"stale-pipeline-{label.lower().replace(' ', '-')}")
     for label, age in findings:
         if age is None:
             detail = "has never completed successfully"
@@ -412,4 +518,5 @@ def check_pipeline_staleness() -> None:
             # Per pipeline per day: a genuine multi-day stall should keep
             # reminding, but not once per watchdog tick.
             dedupe_key=f"stale-pipeline-{label.lower().replace(' ', '-')}-{utcnow():%Y-%m-%d}",
+            condition=f"stale-pipeline-{label.lower().replace(' ', '-')}",
         )

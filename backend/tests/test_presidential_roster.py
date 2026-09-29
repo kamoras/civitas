@@ -118,6 +118,18 @@ class TestFetchPresidentialRosterSanityFloor:
         assert entries == []
 
 
-if __name__ == "__main__":
-    test_roster_parser_edge_cases()
-    print("OK")
+def test_a_president_the_id_table_does_not_list_is_kept_with_a_derived_id():
+    # Sworn in after NAME_TO_ID was written: skipping them left the sitting
+    # president off the site while the row count still passed the floor.
+    newest = """<div class="views-row"><div class="views-field views-field-title">
+<span class="field-content"><a href="/people/president/jane-q-public">Jane Q. Public, Jr.<span property="dc:date" datatype="xsd:dateTime" content="2029-01-20T12:00:00+00:00" class="date-display-single">2029</span></a></span>
+</div></div>"""
+    html = _FIXTURE_HTML.replace('<div class="view-content">', '<div class="view-content">' + newest, 1)
+    entries = _parse_roster(html)
+    newest_entry = entries[-1]
+    assert newest_entry.id == f"public-{newest_entry.number}"
+    assert newest_entry.name == "Jane Q. Public, Jr."
+    assert newest_entry.term_end is None
+    # The listed ids are untouched, and the previous president's term now ends.
+    assert {e.id for e in entries} >= {"trump-45", "trump-47", "cleveland-22"}
+    assert next(e for e in entries if e.id == "trump-47").term_end == "2029-01-20"

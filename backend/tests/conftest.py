@@ -214,3 +214,50 @@ def start_senate_run_then_stop_beating(db, beat_ago=None):
         )
         db.commit()
     return run
+
+
+class BlueskyOutbox(list):
+    """What would have been sent to Bluesky, as (text, url) pairs. Set
+    `ok = False` to have Bluesky refuse every post."""
+    ok = True
+
+
+@pytest.fixture(autouse=True)
+def bluesky_outbox(monkeypatch):
+    """No test ever reaches Bluesky: app.broadcast is the one place that
+    sends a post, and its sender is replaced here for every test. A test
+    that sets BSKY_* credentials to exercise delivery reads what was sent
+    from this list."""
+    from app import broadcast
+
+    outbox = BlueskyOutbox()
+
+    def send(text, url, **_kw):
+        if outbox.ok:
+            outbox.append((text, url))
+        return outbox.ok
+
+    monkeypatch.setattr(broadcast, "publish_post", send)
+    return outbox
+
+
+@pytest.fixture(autouse=True)
+def link_cards(monkeypatch):
+    """No test reads a live page for a post's card (broadcast.capture_card).
+    Pages answer from this dict by URL; any other URL reads as unreachable,
+    so the card is left for the hourly pass, as for a page that is down."""
+    from app import broadcast
+
+    cards: dict[str, dict[str, str]] = {}
+    monkeypatch.setattr(broadcast, "fetch_og_card", lambda url: cards.get(url))
+    return cards
+
+
+@pytest.fixture()
+def bluesky_configured(monkeypatch, bluesky_outbox):
+    """Bluesky credentials set, sends captured in `bluesky_outbox`."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "BSKY_HANDLE", "civitas.test", raising=False)
+    monkeypatch.setattr(settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+    return bluesky_outbox

@@ -37,3 +37,25 @@ export function usableRecord<T>(payload: unknown, ...requiredKeys: (keyof T & st
   }
   return payload as T;
 }
+
+/**
+ * A detail route's record from the backend: the record, or null when there
+ * is none (a 404, or a body without the record's shape — see usableRecord),
+ * which the route turns into notFound(). Anything else — the backend
+ * unreachable, a 5xx — throws, and app/error.tsx says the page could not be
+ * loaded. Returning null for an outage too made every member profile, state
+ * ballot, issue and document a 404 marked noindex for as long as the backend
+ * was down or restarting: a search engine drops a page it is told is gone,
+ * and a reader was told a sitting senator doesn't exist. A 5xx is the answer
+ * crawlers retry. congressServer.ts made the same change for /congress.
+ */
+export async function fetchRecord<T>(
+  url: string,
+  init: RequestInit,
+  ...requiredKeys: (keyof T & string)[]
+): Promise<T | null> {
+  const res = await fetch(url, init);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  return usableRecord<T>(await res.json(), ...requiredKeys);
+}

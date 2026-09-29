@@ -8,6 +8,7 @@ import {
   List,
   Item,
   More,
+  A,
 } from "@/components/about/AboutPage";
 
 export const metadata = pageMetadata({
@@ -116,18 +117,21 @@ export default function NewsChapter() {
         <P>
           One exception, labelled on the page as <strong className="text-ink-hi">Developing</strong>
           : when the Senate or House passes a bill, or an agency publishes a significant rule,
-          before the news has covered it, a short draft is made from the primary record itself. A
-          vote&apos;s draft is the roll-call record in a fixed template — the measure, the result,
-          the tally and the date, nothing characterized; a rule&apos;s is written from the Federal
-          Register and checked against it. It carries a note that broader coverage hasn&apos;t
-          confirmed it yet, and isn&apos;t posted anywhere else until press coverage does. A vote
-          the news already covers isn&apos;t drafted, and a draft gives way once the reporting on
-          its bill appears.
+          before the news has covered it, a short draft is made from the primary record itself, in a
+          fixed template with nothing characterized: a vote&apos;s measure, result, tally and date,
+          or a rule&apos;s agency, title, abstract and publication date. It carries a note that
+          broader coverage hasn&apos;t confirmed it yet, and isn&apos;t posted anywhere else until
+          press coverage does. A vote the news already covers isn&apos;t drafted, and a draft gives
+          way once the reporting on its bill appears: it leaves the Action Center, and the
+          homepage&apos;s record of recent issues lists the reporting in its place.
         </P>
         <P>
-          Recommended actions are procedural — contact your representatives, attend a public
-          hearing, read the primary sources — built from real bill and source links, never advocacy
-          for or against a position.
+          Each issue ends with what you can do about it, built from the record and never advocacy
+          for or against a position: contact the members of Congress the coverage names (through
+          their own contact form), follow the bills involved, and read or comment on the related
+          federal documents while their comment period is open. When the coverage names no member,
+          it points to the directory, where you pick your own state; the site never asks where you
+          live.
         </P>
         <More label="Keeping the hourly refresh running">
           <P>
@@ -142,33 +146,27 @@ export default function NewsChapter() {
         </More>
       </Section>
 
-      <Section id="action-tabs" title="The rest of the Action Center">
+      <Section id="action-tabs" title="The Action Center's tabs">
         <List>
-          <Item label="National monitors">
-            When a story persists across several days, it becomes a monitor with its own sourced
-            timeline. Separate stories about the same underlying event are merged; a monitor goes
-            quiet (&ldquo;watching&rdquo;) when coverage fades and wakes when it returns.
+          <Item label="Today">
+            The day&apos;s issues, each with what you can do about it, and below them the federal
+            documents whose comment period is open, soonest deadline first, each linking to its page
+            in Explore and the comment form there. Recent days can be paged through one at a time.
           </Item>
-          <Item label="Year in review">
-            Each day&apos;s top issue is kept permanently, building a month-by-month timeline with
-            the top themes for each month and the year.
+          <Item label="Ongoing">
+            When a story persists across several days, it becomes a national monitor with its own
+            sourced timeline. Separate stories about the same underlying event are merged; a monitor
+            goes quiet (&ldquo;watching&rdquo;) when coverage fades and wakes when it returns.
           </Item>
-          <Item label="Government activity">
-            The latest floor speeches, executive orders, proposed rules and court opinions, one tab
-            per branch.
-          </Item>
-          <Item label="Elections">
-            Upcoming election dates, Senate races with incumbents&apos; scores, and a map into each
-            state&apos;s ballot page.
-          </Item>
-          <Item label="World">
-            A globe of U.S.-related international coverage, sized by article count, linking to the
-            original reporting.
+          <Item label="Archive">
+            Each day&apos;s top issue is kept permanently, building a month-by-month record with a
+            summary of each finished week and month, and the civic dates coming up.
           </Item>
         </List>
         <P>
           When a scored politician is part of a story, it links to their scorecard; related
-          government documents are matched from the Explore index.
+          government documents are matched from the Explore index. Elections, with the countdown to
+          the next Election Day, have their own page.
         </P>
       </Section>
 
@@ -191,9 +189,10 @@ export default function NewsChapter() {
           left.
         </P>
         <P>
-          Once a day&apos;s Record is final, the Civitas Bluesky account posts that day&apos;s count
-          summary and the numbers of bills passed — never their titles, since an official short
-          title can read as advocacy — and each week, the bills that became law.
+          Once a day&apos;s Record is final, Civitas posts that day&apos;s count summary and the
+          numbers of bills passed — never their titles, since an official short title can read as
+          advocacy — and each week, the bills that became law. Posts go to the{" "}
+          <A href="/feeds">feeds</A> and the Bluesky account.
         </P>
       </Section>
 

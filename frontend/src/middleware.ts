@@ -50,8 +50,9 @@ export const config = {
   // it is part of a page view, not another one, and counting it would log
   // a second "/other" visit every time someone opened a state page. photo/
   // is the same: the member photo a share image fetches from a page already
-  // counted (app/photo/bioguide/[id]/route.ts).
+  // counted (app/photo/bioguide/[id]/route.ts). The feeds are polled by
+  // readers and bots on a schedule, which is not anyone visiting.
   matcher: [
-    "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|sitemap.xml|robots.txt|opengraph-image).*)",
+    "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|sitemap.xml|sitemap-index.xml|sitemaps/|robots.txt|opengraph-image|feed\\.xml|feed/).*)",
   ],
 };

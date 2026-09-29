@@ -120,6 +120,16 @@ def test_server_level_includes_the_security_headers():
         assert INCLUDE in server.directives
 
 
+def test_redirects_nginx_makes_are_relative():
+    # This server sees itself as http on :8081, behind the host nginx and
+    # Cloudflare. An absolute redirect (the automatic /feed -> /feed/ one,
+    # or any `return`) sent readers to http://civitas-research.org:8081/.
+    servers = [b for b in _walk(_parse(CONF.read_text())) if b.head == "server"]
+    assert servers
+    for server in servers:
+        assert "absolute_redirect off" in server.directives
+
+
 def test_security_headers_live_only_in_the_snippet():
     """One copy: a header set in civitas.conf directly would be the start of
     a second list that drifts from the first."""

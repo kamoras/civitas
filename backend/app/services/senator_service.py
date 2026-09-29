@@ -46,26 +46,7 @@ from app.schemas import (
     VotingRecordSchema,
 )
 
-# US state code -> name mapping
-STATE_NAMES: dict[str, str] = {
-    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
-    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
-    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
-    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
-    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
-    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
-    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
-    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
-    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
-    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
-    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
-    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
-    "WI": "Wisconsin", "WY": "Wyoming",
-    # Not a state, but it has a House delegate and its own ballot page, and
-    # every lookup here falls back to the bare code — which put "DC" in
-    # front of readers wherever a full name belonged.
-    "DC": "District of Columbia",
-}
+from app.state_names import STATE_NAMES  # noqa: E402  (re-exported: callers import it from here)
 
 
 
@@ -609,7 +590,8 @@ def get_senator_stock_trades(
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
-        query.order_by(StockTrade.transaction_date.desc(), StockTrade.id.desc())
+        # Undated rows (a scan's illegible dates) after the dated ones.
+        query.order_by(StockTrade.transaction_date.desc().nulls_last(), StockTrade.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()

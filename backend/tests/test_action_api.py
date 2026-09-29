@@ -281,23 +281,13 @@ class TestRelatedBillInternalLinks:
         assert resp["relatedBills"][0]["internalUrl"] == f"/congress/bills/S.55?congress={current}"
 
 
-class TestElectionsAndTimelineRoutesUseCanonicalClock:
-    """get_open_comments/get_election_info/get_timeline all compute
+class TestTimelineRoutesUseCanonicalClock:
+    """get_open_comments/get_timeline both compute
     "today" via app.time_utils.utcnow — must not silently regress to a
     local-timezone-dependent date.today()/datetime.now() call, which
     could compute a different calendar day/year right at a UTC boundary
     depending on the container's local timezone (2026-07-23 timezone-
     consistency pass)."""
-
-    async def test_get_election_info_runs_against_an_empty_db(self, db_session):
-        from fastapi import Response
-
-        from app.api.action import get_election_info
-
-        result = await get_election_info(Response(), db=db_session)
-        assert "nextElection" in result
-        assert result["nextElection"]["daysUntil"] >= 0
-        assert result["senateSeatsUp"] > 0
 
     def test_get_open_comments_runs_against_an_empty_db(self, db_session):
         from fastapi import Response
@@ -318,54 +308,6 @@ class TestElectionsAndTimelineRoutesUseCanonicalClock:
         with patch("app.api.action.utcnow", return_value=datetime(2026, 3, 15)):
             result = await get_timeline(Response(), year=None, db=db_session)
         assert result["year"] == 2026
-
-
-class TestElectionInfoSpecialSenateRaces:
-    """get_election_info merges data-derived special Senate races (Race
-    rows with is_special, synced from FEC by the election pipeline) into
-    the calendar-derived class rotation (2026-07 review F16) — so the
-    Action Center teaser and /api/elections can't disagree about which
-    states have a Senate race."""
-
-    def _fl_entry(self, result):
-        return next(s for s in result["states"] if s["state"] == "FL")
-
-    async def test_special_race_adds_state_and_seat_count(self, db_session):
-        from datetime import datetime
-        from unittest.mock import patch
-
-        from fastapi import Response
-
-        from app.api.action import get_election_info
-        from app.models import Race
-
-        # FL's Class 3 seat is NOT in the 2026 (Class II) rotation — only
-        # the pipeline-synced special race can put it on the map.
-        db_session.add(Race(
-            id="2026-SEN-FL-SPECIAL", cycle_year=2026, office="S",
-            state="FL", is_special=True,
-        ))
-        db_session.commit()
-
-        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)):
-            result = await get_election_info(Response(), db=db_session)
-
-        assert self._fl_entry(result)["hasSenateRace"] is True
-        assert result["senateSeatsUp"] == 34  # 33 Class II + FL special
-
-    async def test_without_special_race_fl_has_no_senate_race(self, db_session):
-        from datetime import datetime
-        from unittest.mock import patch
-
-        from fastapi import Response
-
-        from app.api.action import get_election_info
-
-        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)):
-            result = await get_election_info(Response(), db=db_session)
-
-        assert self._fl_entry(result)["hasSenateRace"] is False
-        assert result["senateSeatsUp"] == 33  # the Class II rotation alone
 
 
 class TestSingleIssueEnrichment:
@@ -823,3 +765,73 @@ def test_timeline_refuses_a_year_it_cannot_build_dates_for(db_session):
     client = TestClient(app)
     assert client.get("/api/action/timeline?year=0").status_code == 422
     assert client.get("/api/action/timeline?year=2026").status_code == 200
+
+
+class TestIssuesListPagerFields:
+    """The day pager and the "Updated" line read these off the list
+    endpoint (2026-09 Action Center redesign)."""
+
+    async def test_an_empty_day_still_lists_the_days_to_page_back_to(self, db_session):
+        # A reader who opens a day whose issues were cleaned up needs the
+        # pager's way back, not a dead end.
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        db_session.add(ActionIssue(date="2026-09-28", rank=1, title="Kept", summary="s"))
+        db_session.commit()
+
+        resp = await get_action_issues(
+            Response(), date="2026-06-01", db=db_session, db_visits=db_session,
+        )
+
+        assert resp["issues"] == []
+        assert resp["availableDates"] == ["2026-09-28"]
+
+    async def test_generated_at_is_the_latest_run_that_wrote_issues(self, db_session):
+        # An aborted run (feeds down) still writes a metrics row; "Updated"
+        # must not read as fresh over issues it didn't touch.
+        import json
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+        from app.models import ApiCache
+
+        def run(key, at, **counts):
+            return ApiCache(tier="action-metrics", cache_key=key,
+                            data_json=json.dumps({"counts": counts}), cached_at=at)
+
+        db_session.add(ActionIssue(date="2026-09-29", rank=1, title="Live", summary="s", is_current=True))
+        db_session.add_all([
+            run("a", datetime(2026, 9, 29, 12, 15), issues_new_topic=2),
+            run("b", datetime(2026, 9, 29, 13, 15), issues_matched_existing=3),
+            run("c", datetime(2026, 9, 29, 14, 15), articles_fetched=0),  # aborted
+            ApiCache(tier="other", cache_key="d", data_json="{}", cached_at=datetime(2026, 9, 29, 15, 0)),
+        ])
+        db_session.commit()
+
+        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        past = await get_action_issues(Response(), date="2026-09-29", db=db_session, db_visits=db_session)
+
+        assert live["generatedAt"] == "2026-09-29T13:15:00Z"
+        assert past["generatedAt"] is None
+
+    async def test_no_recent_run_wrote_issues_omits_generated_at(self, db_session):
+        import json
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+        from app.models import ApiCache
+
+        db_session.add(ActionIssue(date="2026-09-29", rank=1, title="Live", summary="s", is_current=True))
+        db_session.add(ApiCache(tier="action-metrics", cache_key="x",
+                                data_json=json.dumps({"counts": {"articles_fetched": 0}}),
+                                cached_at=datetime(2026, 9, 29, 14, 15)))
+        db_session.commit()
+
+        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        assert live["generatedAt"] is None

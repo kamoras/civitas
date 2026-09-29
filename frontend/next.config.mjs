@@ -19,6 +19,9 @@ const nextConfig = {
       { source: "/bills", destination: "/congress/bills", permanent: true },
       { source: "/bills/:id", destination: "/congress/bills/:id", permanent: true },
       { source: "/scorecard", destination: "/politicians", permanent: true },
+      // No feed is at /feed itself; the page listing them is (nginx sends
+      // /feed/ there too, before Next sees it).
+      { source: "/feed", destination: "/feeds", permanent: true },
     ];
   },
   async rewrites() {
@@ -27,6 +30,17 @@ const nextConfig = {
       {
         source: "/api/:path*",
         destination: `${backendUrl}/api/:path*`,
+      },
+      // The Atom feeds (backend/app/api/feed.py). In production nginx maps
+      // these itself and caches them; this is the same mapping for
+      // `next dev` and anything else not behind nginx.
+      {
+        source: "/feed.xml",
+        destination: `${backendUrl}/api/feed/all.xml`,
+      },
+      {
+        source: "/feed/:path*",
+        destination: `${backendUrl}/api/feed/:path*`,
       },
     ];
   },

@@ -34,6 +34,8 @@ export interface RelatedIssue {
   date: string;
   firstSurfaced: string;
   title: string;
+  /** Possibly missing on a response cached before the field existed. */
+  publicId?: string | null;
 }
 
 export interface BillDetail extends BillInFlight {

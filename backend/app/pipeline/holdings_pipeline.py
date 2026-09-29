@@ -39,7 +39,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import FinancialDisclosure, FinancialHolding
-from app.ops_alerts import send_ops_alert
+from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport, until_deadline
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
@@ -759,6 +759,7 @@ def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
     replaces the failure of one that didn't."""
     try:
         _note_later_filing(db, per_senator)
+        resolve_ops_alert("senate-holdings-notes")
     except Exception:
         logger.exception("Senate holdings: later-filing notes not updated")
         db.rollback()
@@ -768,6 +769,7 @@ def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
             "made on or after a senator's shown report, so some may be stale or missing — see the server "
             "logs for the cause. (Any reports it stored before then are kept.)",
             dedupe_key=f"senate-holdings-notes-{utcnow():%Y-%m-%d}",
+            condition="senate-holdings-notes",
         )
 
 
@@ -968,6 +970,7 @@ async def run_holdings_phases(
                 raise RuntimeError(f"no ingest registered for holdings step {step!r}")
             counts[step] = await ingest(db, client)
             progress.complete(step, detail=f"{counts[step]} holdings")
+            resolve_ops_alert(f"holdings-failed-{step}")
         except Exception:
             logger.exception("%s ingestion failed", label)
             db.rollback()
@@ -983,6 +986,7 @@ async def run_holdings_phases(
                 "other member's stored holdings stay as they were and will age until a "
                 "run succeeds — see the server logs for the cause.",
                 dedupe_key=f"{step}-failed-{utcnow():%Y-%m-%d}",
+                condition=f"holdings-failed-{step}",
             )
     return counts, errors
 

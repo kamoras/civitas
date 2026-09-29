@@ -461,6 +461,18 @@ _COORDINATION_PATHS = {
     "pipeline/progress_tracker.py",
     "pipeline/rate_limiter.py",
 }
+# What gets published and how it is worded (app/broadcast.py stores and
+# delivers it): these read finished issues, scores and records and write
+# posts, which nothing classifies or scores. Hashed modules may call their
+# post_*/process_* entry points and nothing else (tested), so a change here
+# can't reach an analysis result.
+_PUBLISHING_PATHS = {
+    "pipeline/analyze/bluesky_poster.py",
+    "pipeline/analyze/bluesky_spotlight.py",
+    "pipeline/analyze/bluesky_utils.py",
+    "pipeline/analyze/congress_bluesky.py",
+    "pipeline/analyze/election_bluesky.py",
+}
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",
     "pipeline/filer_matching.py",
@@ -476,6 +488,7 @@ _NOT_ANALYSIS_PATHS = {
     # measure different things; nothing it computes feeds a score.
     "pipeline/analyze/signal_overlap.py",
     *_COORDINATION_PATHS,
+    *_PUBLISHING_PATHS,
 }
 
 # Top-level names, per hashed file, that are display settings rather than
@@ -1915,6 +1928,7 @@ async def run_senate_pipeline(
 
         funding_reference = live_funding_reference(
             "senate", [p.get("funding") or {} for p in senator_prepared],
+            [p["senator"].get("state", "") for p in senator_prepared],
         )
         constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
             "senate",
@@ -2209,6 +2223,7 @@ async def run_senate_pipeline(
                     f"(run #{pipeline_run.id}):\n{lines}"
                 ),
                 dedupe_key=f"ground-truth-run-{pipeline_run.id}",
+                condition="ground-truth-senate",
             )
         except Exception:
             logger.exception("Ground truth check failed (non-fatal)")

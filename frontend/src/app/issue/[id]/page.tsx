@@ -6,18 +6,23 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
-import { formatUtcDate, isNewFact } from "@/lib/formatting";
+import { commentPeriodToday, formatUtcDate } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
 import {
-  PolicyBadge,
-  MonitorChips,
-  NewFactTag,
+  Coverage,
+  DevelopingDisclosure,
   IssueImage,
+  IssueMeta,
+  IssueTags,
+  SECTION_HEADING,
+  SourceList,
+  TEXT_LINK,
+  WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
+import ShareButtons from "@/components/action/ShareButtons";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
-import IssueActions from "./IssueActions";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
@@ -34,22 +39,21 @@ interface Retraction {
 async function fetchIssueOrRetraction(
   id: string
 ): Promise<{ issue: ActionIssue | null; retraction: Retraction | null }> {
-  try {
-    const res = await fetch(`${BACKEND}/api/action/issues/${encodeURIComponent(id)}`, {
-      next: { revalidate: 300 },
-    });
-    if (res.status === 410) {
-      const detail = (await res.json())?.detail;
-      return {
-        issue: null,
-        retraction: detail?.reason ? { date: detail.date, reason: detail.reason } : null,
-      };
-    }
-    if (!res.ok) return { issue: null, retraction: null };
-    return { issue: usableRecord<ActionIssue>(await res.json(), "id", "title"), retraction: null };
-  } catch {
-    return { issue: null, retraction: null };
+  const res = await fetch(`${BACKEND}/api/action/issues/${encodeURIComponent(id)}`, {
+    next: { revalidate: 300 },
+  });
+  if (res.status === 410) {
+    const detail = (await res.json())?.detail;
+    return {
+      issue: null,
+      retraction: detail?.reason ? { date: detail.date, reason: detail.reason } : null,
+    };
   }
+  if (res.status === 404) return { issue: null, retraction: null };
+  // An outage is not a missing issue: a 404 marked noindex would drop a real
+  // page from search for as long as the backend was down (fetchRecord).
+  if (!res.ok) throw new Error(`issue ${id}: HTTP ${res.status}`);
+  return { issue: usableRecord<ActionIssue>(await res.json(), "id", "title"), retraction: null };
 }
 
 function Withdrawn({ retraction }: { retraction: Retraction }) {
@@ -138,9 +142,10 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
     ? issue.fullStory.split(/\n\n+/).filter((p) => p.trim())
     : null;
 
-  // Resolved once, on the server, and handed to the client panel so a comment
-  // period reads as open/closed identically before and after hydration.
-  const today = new Date().toISOString().slice(0, 10);
+  // Resolved once, on the server, so a comment period reads as open/closed
+  // identically before and after hydration. In the comment-deadline zone,
+  // the same day the Action Center and the backend count comment periods in.
+  const today = commentPeriodToday();
   const shareUrl = absoluteUrl(`/issue/${issue.publicId}`);
 
   return (
@@ -152,55 +157,50 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
       <main
         id="main-content"
         tabIndex={-1}
-        className="min-h-screen text-ink-hi font-mono pt-[var(--header-clearance)] pb-16 px-4"
+        className="min-h-screen px-4 pb-16 pt-[var(--header-clearance)] text-ink"
       >
-        <div className="max-w-3xl mx-auto relative z-10">
-          {/* Nav */}
-          <div className="mb-8">
-            <Link
-              href={ACTION_CENTER_HREF}
-              className="text-xs text-ink-lo hover:text-phos transition-colors"
-            >
-              ← ACTION CENTER
-            </Link>
-          </div>
+        <div className="relative z-10 mx-auto max-w-3xl">
+          <Link
+            href={ACTION_CENTER_HREF}
+            className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo hover:text-ink-hi"
+          >
+            ← Action Center
+          </Link>
 
           {/* Header */}
           <header
             id="summary"
             {...{ [SHARE_SECTION_ATTR]: "summary" }}
-            className="mb-8 scroll-mt-[var(--header-clearance)] space-y-3 border-b border-white/[0.07] pb-8"
+            className="mt-6 scroll-mt-[var(--header-clearance)] border-b-3 border-ink-min/60 pb-6"
           >
-            {issue.policyAreas?.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {issue.policyAreas.map((area) => (
-                  <PolicyBadge key={area} area={area} />
-                ))}
-              </div>
-            )}
-            <h1 className="text-xl leading-tight text-ink-hi">{issue.title}</h1>
-            <p className="text-base text-ink leading-relaxed">{issue.summary}</p>
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-ink-min">
-              <span>
-                {/* firstSurfaced missing (not merely equal to date) falls back to
-                    date alone — see issueDateLabel's docstring in lib/formatting.ts
-                    for why that's a real case, not just a hypothetical. */}
-                {formatUtcDate(issue.firstSurfaced || issue.date)}
-                {issue.firstSurfaced &&
-                  issue.firstSurfaced !== issue.date &&
-                  ` · updated ${formatUtcDate(issue.date)}`}
-              </span>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              {/* issueDateLabel inside: firstSurfaced, then "updated" when the
+                  story was re-matched on a later day. */}
+              <IssueMeta issue={issue} />
               {/* The header names the issue itself: no title strip. */}
               <ShareSectionButton label="Issue summary" withStrip={false} />
             </div>
-            <MonitorChips slugs={issue.relatedMonitorSlugs} />
+            <h1 className="mt-3 text-balance font-display text-3xl font-extrabold leading-tight tracking-[-0.01em] text-ink-hi sm:text-4xl">
+              {issue.title}
+            </h1>
+            <p className="mt-4 font-display text-base leading-relaxed text-ink sm:text-[17px]">
+              {issue.summary}
+            </p>
+            {issue.status === "developing" && (
+              <div className="mt-3">
+                <DevelopingDisclosure />
+              </div>
+            )}
+            <IssueTags issue={issue} className="mt-4" />
           </header>
 
-          <IssueImage issue={issue} />
+          <div className="mt-8">
+            <IssueImage issue={issue} />
+          </div>
 
           {/* Full story */}
           {paragraphs ? (
-            <article className="space-y-5 text-sm text-ink leading-relaxed mb-12">
+            <article className="mb-4 mt-8 space-y-5 font-display text-base leading-relaxed text-ink">
               {paragraphs.map((para, i) => {
                 // claims.build_story's only structure: "## Outlet" above
                 // that outlet's verbatim claims. Everything else is a
@@ -210,7 +210,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                   return (
                     <h2
                       key={i}
-                      className="text-base text-ink-hi font-bold mt-8 first:mt-0 border-l-2 border-white/15 pl-3"
+                      className="mt-10 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min first:mt-0"
                     >
                       {para.slice(3)}
                     </h2>
@@ -223,43 +223,34 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
           {/* Media coverage: lines quoted from the sources, each with its outlet */}
           {issue.facts?.length > 0 && (
-            <section
+            <div
               id="media-coverage"
               {...{ [SHARE_SECTION_ATTR]: "media-coverage" }}
-              className="mb-10 scroll-mt-[var(--header-clearance)]"
+              className="scroll-mt-[var(--header-clearance)]"
             >
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-xs text-ink-min tracking-widest">MEDIA COVERAGE</h2>
-                <ShareSectionButton label="Media coverage" />
-              </div>
-              <ul className="space-y-3">
-                {issue.facts.map((fact, i) => (
-                  <li key={i} className="flex gap-3 text-sm text-ink">
-                    <span className="text-ink-min shrink-0 mt-0.5">▸</span>
-                    <span>
-                      {fact}
-                      {issue.factSources?.[i] && (
-                        <span className="ml-2 font-mono text-xs text-ink-min">
-                          {issue.factSources[i]}
-                        </span>
-                      )}
-                      {isNewFact(issue.newFacts, fact) && <NewFactTag />}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
+              <Coverage
+                issue={issue}
+                className="mt-10"
+                heading={
+                  <div className={SECTION_HEADING}>
+                    <h2>In the coverage</h2>
+                    <ShareSectionButton label="Media coverage" />
+                  </div>
+                }
+              />
+            </div>
           )}
 
-          <IssueActions issue={issue} today={today} shareUrl={shareUrl} />
+          <WhatYouCanDo issue={issue} today={today} headingLevel="h2" className="mt-10" />
 
-          {/* Back */}
-          <div className="pt-8 border-t border-white/[0.07]">
-            <Link
-              href={ACTION_CENTER_HREF}
-              className="text-xs text-ink-lo hover:text-phos transition-colors"
-            >
-              ← Back to Action Center
+          <div className="mt-10 flex flex-col gap-3 border-t border-white/[0.07] pt-4">
+            <SourceList issue={issue} />
+            <ShareButtons issue={issue} shareUrl={shareUrl} imageShare={false} />
+          </div>
+
+          <div className="mt-10 border-t-3 border-ink-min/60 pt-5">
+            <Link href={ACTION_CENTER_HREF} className={TEXT_LINK}>
+              ← Back to the Action Center
             </Link>
           </div>
         </div>

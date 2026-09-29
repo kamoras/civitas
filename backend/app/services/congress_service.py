@@ -77,8 +77,14 @@ def nominations_in(text: str) -> int:
 
 _FRACTION_RE = re.compile(r"^\s*(\d+)\s*/\s*(\d+)")
 # Senate Rule XXII: cloture takes three-fifths of the senators duly chosen
-# and sworn, not of those voting — 60 with no vacancy.
-_SENATE_SEATS = 100
+# and sworn, not of those voting — 60 with no vacancy, fewer with one. A
+# Senate roll call lists every sitting senator (yea, nay, present or not
+# voting), so its own totals are that count on the day of the vote, with no
+# seat count typed here.
+
+
+def _sworn(rc: RollCall) -> int:
+    return sum(n or 0 for n in (rc.yeas, rc.nays, rc.present, rc.not_voting))
 
 
 def votes_from_threshold(rc: RollCall) -> float:
@@ -92,7 +98,7 @@ def votes_from_threshold(rc: RollCall) -> float:
     m = _FRACTION_RE.match(rc.majority_requirement or "")
     num, den = (int(m.group(1)), int(m.group(2))) if m and int(m.group(2)) else (1, 2)
     if rc.chamber == "senate" and (num, den) == (3, 5):
-        needed = _SENATE_SEATS * num / den
+        needed = _sworn(rc) * num / den
     else:
         needed = (rc.yeas + rc.nays) * num / den
     return abs(rc.yeas - needed)
@@ -274,7 +280,8 @@ def chamber_day(row: CongressDay | None, events: list[CongressEvent], votes: lis
     return out
 
 
-def _session_days(db: Session) -> list[str]:
+def session_days(db: Session) -> list[str]:
+    """Every day either chamber met (in session, or held a roll call), oldest first."""
     days = {d for (d,) in db.query(CongressDay.date).filter(CongressDay.in_session.is_(True))}
     days |= {d for (d,) in db.query(RollCall.date).distinct()}
     return sorted(d for d in days if d)
@@ -282,7 +289,7 @@ def _session_days(db: Session) -> list[str]:
 
 def latest_day(db: Session) -> date | None:
     today = eastern_today().isoformat()
-    past = [d for d in _session_days(db) if d <= today]
+    past = [d for d in session_days(db) if d <= today]
     return date.fromisoformat(past[-1]) if past else None
 
 
@@ -298,9 +305,9 @@ def day_report(db: Session, day: date) -> dict:
                        [v for v in votes if v.chamber == c], run, iso, c, no_record_published=unpublished)
         for c in CHAMBERS
     }
-    session_days = _session_days(db)
-    earlier = [d for d in session_days if d < iso]
-    later = [d for d in session_days if d > iso]
+    met = session_days(db)
+    earlier = [d for d in met if d < iso]
+    later = [d for d in met if d > iso]
     return {
         "date": iso,
         "sentence": (

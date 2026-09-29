@@ -22,4 +22,26 @@ def test_every_link_is_a_page_the_site_has():
     events = _upcoming_civic_events(2029, date(2029, 1, 1))  # inauguration, Congress, Court, no election
     links = {e["link"].split("?")[0] for e in events}
     assert "/scorecard" not in links
-    assert links <= {"/politicians", "/leaderboard", "/action"}
+    assert links <= {"/politicians", "/leaderboard", "/elections"}
+
+
+def test_election_day_links_to_the_elections_page():
+    """The Action Center's elections tab is gone (2026-09); Election Day
+    points at /elections, which carries the countdown and every state's
+    ballot."""
+    events = _upcoming_civic_events(2026, date(2026, 1, 1))
+    election = next(e for e in events if e["category"] == "election")
+    assert election["link"] == "/elections"
+
+
+def test_election_day_counts_its_seats_from_the_data(monkeypatch):
+    """The seat counts come from the House's apportionment and the Senate
+    class up that year, never a typed "435" or "33-34"."""
+    from datetime import date
+
+    from app.api import action
+
+    monkeypatch.setattr(action, "get_district_pvi_map", lambda: {f"S{i}-1": 0 for i in range(7)})
+    monkeypatch.setattr(action, "seats_up_for_year", lambda year: frozenset({"AA", "BB"}))
+    [event] = [e for e in action._upcoming_civic_events(2026, date(2026, 9, 1)) if e["category"] == "election"]
+    assert event["description"] == "Federal election day — all 7 House seats and 2 Senate seats are on the ballot."

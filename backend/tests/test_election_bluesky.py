@@ -10,9 +10,10 @@ process_issues_for_bluesky tests.
 from datetime import timedelta
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Candidate, Race, RaceCoverageItem
+from app.models import BroadcastPost, Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import election_bluesky
 from app.pipeline.analyze import election_bluesky as eb
 from app.time_utils import utcnow
@@ -23,11 +24,6 @@ def _stub_relevance(monkeypatch, relevant=True):
     race_relevance has its own tests."""
     from app.pipeline.analyze import race_relevance
     monkeypatch.setattr(race_relevance, "is_relevant", lambda *a, **k: relevant)
-
-
-def _creds(monkeypatch):
-    monkeypatch.setattr(election_bluesky.settings, "BSKY_HANDLE", "test.handle", raising=False)
-    monkeypatch.setattr(election_bluesky.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
 
 
 def _race(db, race_id="2026-SEN-GA", state="GA", office="S"):
@@ -58,21 +54,23 @@ def _item(db, race_id="2026-SEN-GA", **overrides):
 
 
 class TestPostRaceCoverageUpdates:
-    def test_no_credentials_returns_zero(self, db_session, monkeypatch):
-        monkeypatch.setattr(election_bluesky.settings, "BSKY_HANDLE", "", raising=False)
-        monkeypatch.setattr(election_bluesky.settings, "BSKY_APP_PASSWORD", "", raising=False)
+    def test_published_to_the_feed_without_a_bluesky_account(self, db_session, monkeypatch, bluesky_outbox):
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
-        _item(db_session)
+        item = _item(db_session)
         db_session.commit()
 
-        posted = election_bluesky.post_race_coverage_updates(db_session)
-        assert posted == 0
-        # Not even considered — credentials check short-circuits first.
-        assert db_session.query(RaceCoverageItem).one().bsky_posted_at is None
+        with patch.object(election_bluesky, "_generate_post_text", return_value="Ossoff holds a narrow lead."):
+            assert election_bluesky.post_race_coverage_updates(db_session) == 1
+
+        post = db_session.query(BroadcastPost).one()
+        assert (post.kind, post.state, post.text, post.bsky_status) == ("race", "GA", "Ossoff holds a narrow lead.", "off")
+        assert (post.title, post.subject) == ("Update on the GA Senate race", "race:2026-SEN-GA")
+        assert item.bsky_posted is True
+        assert bluesky_outbox == []
 
     def test_successful_post_marks_item_and_increments(self, db_session, monkeypatch):
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -89,7 +87,6 @@ class TestPostRaceCoverageUpdates:
         assert item.bsky_posted is True  # actually published, counts toward the daily budget
 
     def test_grounding_failure_marks_considered_but_not_posted(self, db_session, monkeypatch):
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -104,7 +101,6 @@ class TestPostRaceCoverageUpdates:
         assert item.bsky_posted is False
 
     def test_missing_race_is_skipped_gracefully(self, db_session, monkeypatch):
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         # No Race row at all for this race_id — a real-world edge case if a
         # race got deleted between coverage ingestion and posting.
@@ -119,7 +115,6 @@ class TestPostRaceCoverageUpdates:
         """No roster row to build the grounding roster-fact from — the race
         framing would be an ungrounded claim, so the item is considered but
         never published."""
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         item = _item(db_session, matched_candidate_id="S6GA-GONE")
@@ -137,7 +132,6 @@ class TestPostRaceCoverageUpdates:
         automated post asserts the race association in Civitas's own voice,
         which requires the full_name basis. The item is still marked
         considered eventually (by the stale drain), just never published."""
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -158,7 +152,6 @@ class TestPostRaceCoverageUpdates:
         assert item.bsky_posted is False
 
     def test_respects_max_posts_per_run_cap(self, db_session, monkeypatch):
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         monkeypatch.setattr(election_bluesky, "MAX_POSTS_PER_RUN", 2)
         # Distinct races — the per-race cooldown would otherwise stop a
@@ -186,7 +179,6 @@ class TestPostRaceCoverageUpdates:
         (bsky_posted, not merely considered), the run must not post — the
         per-run cap alone multiplied to 480/day at the 15-minute
         election-season cadence (2026-07 review M4)."""
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -210,7 +202,6 @@ class TestPostRaceCoverageUpdates:
         assert fresh.bsky_posted_at is None
 
     def test_daily_budget_ignores_posts_older_than_24h(self, db_session, monkeypatch):
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -235,7 +226,6 @@ class TestPostRaceCoverageUpdates:
         assert posted == 1
 
     def test_race_cooldown_skips_second_post_within_window(self, db_session, monkeypatch):
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -258,7 +248,6 @@ class TestPostRaceCoverageUpdates:
 
     def test_race_cooldown_applies_within_a_single_run(self, db_session, monkeypatch):
         # Two fresh items about one busy race — only the first posts.
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -277,7 +266,6 @@ class TestPostRaceCoverageUpdates:
         """At-most-once for a public account: the considered marker must be
         durable BEFORE the publish attempt, so a failed/crashed publish can
         never lead to a duplicate post on the next run."""
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -287,7 +275,7 @@ class TestPostRaceCoverageUpdates:
         other_session_factory = sessionmaker(bind=db_session.get_bind())
         seen_at_publish_time = {}
 
-        def failing_publish(text, race):
+        def crashing_publish(db, text, race, source_url=None):
             # A separate session sees only COMMITTED state — this is the
             # exact record a crashed process would leave behind.
             other = other_session_factory()
@@ -296,13 +284,14 @@ class TestPostRaceCoverageUpdates:
                 seen_at_publish_time["bsky_posted_at"] = row.bsky_posted_at
             finally:
                 other.close()
-            return False  # publish fails
+            raise RuntimeError("process died mid-publish")
 
         with patch.object(election_bluesky, "_generate_post_text", return_value="A grounded sentence."), \
-             patch.object(election_bluesky, "_publish", side_effect=failing_publish):
-            posted = election_bluesky.post_race_coverage_updates(db_session)
+             patch.object(election_bluesky, "_publish", side_effect=crashing_publish):
+            with pytest.raises(RuntimeError):
+                election_bluesky.post_race_coverage_updates(db_session)
+        db_session.rollback()
 
-        assert posted == 0
         assert seen_at_publish_time["bsky_posted_at"] is not None  # committed pre-publish
         assert item.bsky_posted is False
 
@@ -312,7 +301,6 @@ class TestPostRaceCoverageUpdates:
         mock_gen.assert_not_called()
 
     def test_already_considered_items_skipped(self, db_session, monkeypatch):
-        _creds(monkeypatch)
         _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
@@ -402,15 +390,15 @@ class TestPublishUrl:
     straight there instead of through the redirect that keeps old links
     working."""
 
-    def test_links_to_the_race_s_section_of_its_state_ballot_page(self, db_session):
+    def test_links_to_the_race_s_section_of_its_state_ballot_page(self, db_session, bluesky_configured):
         race = _race(db_session, race_id="2026-HOUSE-GA-6", state="GA", office="H")
         db_session.commit()
 
-        with patch("app.pipeline.analyze.election_bluesky.publish_post", return_value=True) as mock_publish:
-            assert election_bluesky._publish("some text", race) is True
+        election_bluesky._publish(db_session, "some text", race)
 
-        url = mock_publish.call_args.args[1]
-        assert url == "https://civitas-research.org/elections/states/GA#race-2026-HOUSE-GA-6"
+        url = "https://civitas-research.org/elections/states/GA#race-2026-HOUSE-GA-6"
+        assert db_session.query(BroadcastPost).one().url == url
+        assert bluesky_configured == [("some text", url)]
 
 
 class TestOnlyVettedSourcesArePosted:
@@ -421,11 +409,9 @@ class TestOnlyVettedSourcesArePosted:
     source, not in the wording."""
 
     def test_an_arbitrary_social_post_is_never_eligible(self, db_session, monkeypatch):
-        monkeypatch.setattr(eb.settings, "BSKY_HANDLE", "h")
-        monkeypatch.setattr(eb.settings, "BSKY_APP_PASSWORD", "p")
         _stub_relevance(monkeypatch)
         published = []
-        monkeypatch.setattr(eb, "_publish", lambda text, race: published.append(text) or True)
+        monkeypatch.setattr(eb, "_publish", lambda db, text, race, source_url=None: published.append(text))
         monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
         monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
 
@@ -441,11 +427,9 @@ class TestOnlyVettedSourcesArePosted:
         assert published == []
 
     def test_a_news_item_still_posts(self, db_session, monkeypatch):
-        monkeypatch.setattr(eb.settings, "BSKY_HANDLE", "h")
-        monkeypatch.setattr(eb.settings, "BSKY_APP_PASSWORD", "p")
         _stub_relevance(monkeypatch)
         published = []
-        monkeypatch.setattr(eb, "_publish", lambda text, race: published.append(text) or True)
+        monkeypatch.setattr(eb, "_publish", lambda db, text, race, source_url=None: published.append(text))
         monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
         monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
 
@@ -466,7 +450,6 @@ def test_no_item_is_started_past_the_deadline(db_session, monkeypatch):
     never awaits, so it stops itself, leaving the rest for the next run."""
     import time
 
-    _creds(monkeypatch)
     _stub_relevance(monkeypatch)
     _race(db_session)
     _candidate(db_session)
@@ -478,3 +461,92 @@ def test_no_item_is_started_past_the_deadline(db_session, monkeypatch):
     assert posted == 0
     mock_publish.assert_not_called()
     assert item.bsky_posted_at is None
+
+
+def test_a_data_reset_does_not_reset_the_budget_or_the_cooldown(db_session, monkeypatch):
+    """A reset wipes the coverage items (and their posted marks) but keeps
+    what was published, so re-ingested coverage of a race posted an hour
+    ago is still inside its cooldown, and the day's posts still count."""
+    from app import broadcast
+
+    _stub_relevance(monkeypatch)
+    race = _race(db_session)
+    _candidate(db_session)
+    db_session.commit()
+    broadcast.publish(db_session, kind="race", subject=f"race:{race.id}", title="t", text="x", url="u", state="GA")
+    for i in range(election_bluesky.MAX_POSTS_PER_DAY - 1):
+        broadcast.publish(db_session, kind="race", subject=f"race:other-{i}", title="t", text="x", url="u")
+
+    assert election_bluesky._races_posted_recently(db_session) >= {race.id}
+    assert election_bluesky._posts_in_last_day(db_session) == election_bluesky.MAX_POSTS_PER_DAY
+
+    _item(db_session)  # re-ingested after the reset: no posted mark
+    db_session.commit()
+    with patch.object(election_bluesky, "_generate_post_text", return_value="A sentence.") as gen:
+        assert election_bluesky.post_race_coverage_updates(db_session) == 0
+    gen.assert_not_called()
+
+
+def test_an_old_article_fetched_again_is_drained_by_its_own_date(db_session):
+    """After a data reset the same articles come back with a fresh fetch
+    time; their own publication date still says how old the story is."""
+    _race(db_session)
+    old = _item(db_session, url="https://apnews.com/old", published_at=utcnow() - timedelta(days=3))
+    fresh = _item(db_session, url="https://apnews.com/new", published_at=utcnow() - timedelta(hours=2))
+    undated = _item(db_session, url="https://apnews.com/undated")
+    db_session.commit()
+
+    assert election_bluesky._drain_stale_unconsidered(db_session) == 1
+    assert old.bsky_posted_at is not None
+    assert fresh.bsky_posted_at is None and undated.bsky_posted_at is None
+
+
+def test_an_article_already_published_about_is_never_published_again(db_session, monkeypatch):
+    """An undated article posted about three days ago, re-ingested after a
+    data reset: past the race's cooldown and with no date to drain it by,
+    it is still the same article."""
+    from app import broadcast
+    from app.models import BroadcastPost
+
+    _stub_relevance(monkeypatch)
+    race = _race(db_session)
+    _candidate(db_session)
+    db_session.commit()
+    old = broadcast.publish(db_session, kind="race", subject=f"race:{race.id}", title="t", text="x",
+                            url="u", state="GA", source_url="https://apnews.com/a1")
+    old.published_at = utcnow() - timedelta(days=3)
+    db_session.commit()
+
+    _item(db_session, url="https://apnews.com/a1")  # same article, fresh fetch, no date
+    db_session.commit()
+    with patch.object(election_bluesky, "_generate_post_text", return_value="A sentence.") as gen:
+        assert election_bluesky.post_race_coverage_updates(db_session) == 0
+    gen.assert_not_called()
+
+    _item(db_session, url="https://apnews.com/a2")  # a different article about the race
+    db_session.commit()
+    with patch.object(election_bluesky, "_generate_post_text", return_value="A sentence."):
+        assert election_bluesky.post_race_coverage_updates(db_session) == 1
+    assert db_session.query(BroadcastPost).order_by(BroadcastPost.id.desc()).first().source_url == (
+        "https://apnews.com/a2")
+
+
+class TestGeneratePostText:
+    """The composed sentence is published whole or not at all."""
+
+    def _generate(self, monkeypatch, predicate):
+        monkeypatch.setattr(eb, "call_llm", lambda **k: {"actor": "Jon Ossoff", "predicate": predicate})
+        race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
+        item = RaceCoverageItem(race_id=race.id, title=f"Jon Ossoff {predicate}", summary="", url="https://apnews.com/a1")
+        return eb._generate_post_text(item, race, "FEC filings list OSSOFF, JON as a candidate in the GA Senate race.")
+
+    def test_a_post_that_fits_is_returned_whole(self, monkeypatch):
+        assert self._generate(monkeypatch, "leads the race") == "Jon Ossoff leads the race."
+
+    def test_a_post_too_long_for_bluesky_beside_its_link_is_not_cut(self, monkeypatch):
+        # Cut at a word boundary, this read "...said Sens." or stopped before
+        # the object its verb needs, and the feed stored the cut text.
+        clause = "said Sens. Warnock and Ossoff " + "would fund rural hospitals and roads " * 7 + "this year"
+        race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
+        assert len(f"Jon Ossoff {clause}.") > eb._post_budget(race)
+        assert self._generate(monkeypatch, clause) is None

@@ -2,8 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import type { ActionIssue } from "@/types/action";
-import { useCopyFeedback } from "@/hooks/useCopyFeedback";
-import { BOXED_CONTROL } from "@/lib/controlStyles";
+import { CopyStatus, useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { absoluteUrl } from "@/lib/site";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
@@ -13,9 +12,9 @@ interface ShareButtonsProps {
   issue: ActionIssue;
   className?: string;
   /**
-   * Override the URL being shared. Defaults to the Action Center deep link;
-   * the standalone /issue/{id} full-story page passes its own URL so a share
-   * from that page points back at the page the sharer was actually reading.
+   * Override the URL being shared. Defaults to the issue's own page,
+   * /issue/{id}: server-rendered and indexable, where an Action Center deep
+   * link only resolves while the issue is still on a day's board.
    */
   shareUrl?: string;
   /**
@@ -28,15 +27,15 @@ interface ShareButtonsProps {
 }
 
 function buildShareText(title: string, shareUrl: string): string {
-  const full = `${title} — Track this issue and your reps' stances: ${shareUrl} via @civitasvote #CivicTransparency`;
+  const full = `${title} — the record and what you can do: ${shareUrl} via @civitasvote #CivicTransparency`;
   if (full.length <= 240) return full;
 
   // Try without hashtag first
-  const noHashtag = `${title} — Track this issue and your reps' stances: ${shareUrl} via @civitasvote`;
+  const noHashtag = `${title} — the record and what you can do: ${shareUrl} via @civitasvote`;
   if (noHashtag.length <= 240) return noHashtag;
 
   // Try without handle either
-  const noHandle = `${title} — Track this issue and your reps' stances: ${shareUrl}`;
+  const noHandle = `${title} — the record and what you can do: ${shareUrl}`;
   if (noHandle.length <= 240) return noHandle;
 
   // Hard trim as last resort
@@ -49,13 +48,16 @@ export default function ShareButtons({
   shareUrl: shareUrlOverride,
   imageShare = true,
 }: ShareButtonsProps) {
-  const shareUrl = shareUrlOverride ?? absoluteUrl(`/action?issue=${issue.publicId}`);
+  const shareUrl = shareUrlOverride ?? absoluteUrl(`/issue/${issue.publicId}`);
   const shareText = buildShareText(issue.title, shareUrl);
   const encodedText = encodeURIComponent(shareText);
 
   const [mastodonInstance, setMastodonInstance] = useState("mastodon.social");
   const [showMastodonInput, setShowMastodonInput] = useState(false);
-  const [copied, copy] = useCopyFeedback(1500);
+  const [copied, copy, copyFeedback] = useCopyFeedback(1500, {
+    copied: "Link copied.",
+    failed: "This browser wouldn't copy the link.",
+  });
 
   function handleCopy() {
     copy(shareUrl);
@@ -68,107 +70,100 @@ export default function ShareButtons({
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  const linkCls =
+    "font-mono text-xs tracking-[0.08em] text-ink-lo underline decoration-white/20 underline-offset-4 transition-colors hover:text-ink-hi";
+
   return (
     <div
-      className={`pt-4 border-t border-white/[0.07] ${className}`}
+      className={`flex flex-wrap items-baseline gap-x-3 gap-y-2 font-mono text-xs tracking-[0.08em] text-ink-min ${className}`}
       {...{ [SHARE_EXCLUDE_ATTR]: "" }}
     >
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-xs font-mono text-ink-min mr-1">SHARE:</span>
+      <span>Share</span>
 
-        {/* X / Twitter */}
-        <a
-          href={`https://x.com/intent/tweet?text=${encodedText}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors bg-transparent"
-          aria-label="Share on X (Twitter) (opens in new tab)"
-        >
-          [ X ]
-        </a>
+      <a
+        href={`https://x.com/intent/tweet?text=${encodedText}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkCls}
+        aria-label="Share on X (opens in new tab)"
+      >
+        X
+      </a>
 
-        {/* Bluesky */}
-        <a
-          href={`https://bsky.app/intent/compose?text=${encodedText}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors bg-transparent"
-          aria-label="Share on Bluesky (opens in new tab)"
-        >
-          [ BSKY ]
-        </a>
+      <a
+        href={`https://bsky.app/intent/compose?text=${encodedText}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkCls}
+        aria-label="Share on Bluesky (opens in new tab)"
+      >
+        Bluesky
+      </a>
 
-        {/* Mastodon — toggle inline form */}
-        {!showMastodonInput ? (
-          <button
-            onClick={() => setShowMastodonInput(true)}
-            className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors"
-            aria-label="Share on Mastodon"
-          >
-            [ MASTODON ]
-          </button>
-        ) : (
-          <span className="flex items-center gap-1">
-            <input
-              type="text"
-              value={mastodonInstance}
-              onChange={(e) => setMastodonInstance(e.target.value)}
-              onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-                if (e.key === "Enter") handleMastodonShare();
-                if (e.key === "Escape") setShowMastodonInput(false);
-              }}
-              placeholder="mastodon.social"
-              aria-label="Mastodon instance"
-              className="text-xs font-mono bg-surface-base border border-white/15 text-signal-cyan px-2 py-1 w-32 focus:outline-none focus:border-signal-cyan/40"
-              autoFocus
-            />
-            <button
-              onClick={handleMastodonShare}
-              className="text-xs font-mono px-2 py-1 border border-white/15 text-signal-cyan hover:text-phos hover:border-signal-cyan/40 transition-colors"
-              aria-label="Open Mastodon share"
-            >
-              GO
-            </button>
-            <button
-              onClick={() => setShowMastodonInput(false)}
-              className="text-xs font-mono text-ink-min hover:text-phos transition-colors px-1"
-              aria-label="Cancel Mastodon share"
-            >
-              ✕
-            </button>
-          </span>
-        )}
-
-        {/* An image of the issue card this row sits in (its enclosing
-            `data-share-section`). The card names the issue itself, so no
-            title strip. Labelled by the issue, so each card's button has
-            its own name. */}
-        {imageShare && (
-          <ShareSubjectProvider subject={{ title: issue.title, url: shareUrl }}>
-            <ShareSectionButton
-              label={issue.title}
-              withStrip={false}
-              anchor={null}
-              className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors"
-            >
-              [ IMAGE ]
-            </ShareSectionButton>
-          </ShareSubjectProvider>
-        )}
-
-        {/* Copy link */}
+      {/* Mastodon has no single host, so it asks which instance first. */}
+      {!showMastodonInput ? (
         <button
-          onClick={handleCopy}
-          className={`text-xs font-mono px-2 py-1 border transition-colors ${
-            copied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
-          }`}
-          // The visible "COPIED!" is the only confirmation; a fixed label hid it
-          // from screen readers.
-          aria-label={copied ? "Link copied" : "Copy link to clipboard"}
+          onClick={() => setShowMastodonInput(true)}
+          className={linkCls}
+          aria-label="Share on Mastodon"
         >
-          {copied ? "[ COPIED! ]" : "[ COPY LINK ]"}
+          Mastodon
         </button>
-      </div>
+      ) : (
+        <span className="flex items-baseline gap-2">
+          <input
+            type="text"
+            value={mastodonInstance}
+            onChange={(e) => setMastodonInstance(e.target.value)}
+            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+              if (e.key === "Enter") handleMastodonShare();
+              if (e.key === "Escape") setShowMastodonInput(false);
+            }}
+            placeholder="mastodon.social"
+            aria-label="Mastodon instance"
+            className="w-36 border border-white/15 bg-surface-base px-2 py-1 font-mono text-xs text-ink-hi focus:border-ink-lo focus:outline-none"
+            autoFocus
+          />
+          <button onClick={handleMastodonShare} className={linkCls}>
+            Share
+          </button>
+          <button
+            onClick={() => setShowMastodonInput(false)}
+            className={linkCls}
+            aria-label="Cancel Mastodon share"
+          >
+            Cancel
+          </button>
+        </span>
+      )}
+
+      {/* An image of the issue card this row sits in (its enclosing
+          `data-share-section`). The card names the issue itself, so no
+          title strip. Labelled by the issue, so each card's button has
+          its own name. */}
+      {imageShare && (
+        <ShareSubjectProvider subject={{ title: issue.title, url: shareUrl }}>
+          <ShareSectionButton
+            label={issue.title}
+            withStrip={false}
+            anchor={null}
+            className={linkCls}
+          >
+            Image
+          </ShareSectionButton>
+        </ShareSubjectProvider>
+      )}
+
+      <button
+        onClick={handleCopy}
+        className={linkCls}
+        // A fixed name: the result is announced by CopyStatus, since a
+        // change to the focused button's own name usually isn't.
+        aria-label="Copy link to clipboard"
+      >
+        {copied ? "Copied" : "Copy link"}
+      </button>
+      <CopyStatus feedback={copyFeedback} />
     </div>
   );
 }
