@@ -661,7 +661,7 @@ async def fetch_committee_meta(
     if cached is not None:
         return cached.get("meta")
     # The type-only entries this replaced are still warm (90-day TTL). One
-    # answers the PAC-cap question without a request; the designation is
+    # answers the committee-type question without a request; the designation is
     # then unknown, so the leadership-PAC half of the political rule can't
     # fire for it until the entry ages out, but party and candidate
     # committees (by type) still do. Only reached when the bulk master

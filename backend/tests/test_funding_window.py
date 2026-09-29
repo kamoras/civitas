@@ -14,6 +14,7 @@ right population reference (v6.13).
   the hand-typed multipliers 3.2 / 1.35.
 """
 
+import math
 from datetime import date, datetime
 from unittest.mock import patch
 
@@ -238,17 +239,60 @@ class TestFundingReference:
     def test_too_few_members_yields_no_reference(self):
         assert compute_funding_reference(self._fundings([0.2] * 5)) is None
 
-    def test_the_median_member_scores_fifty_on_pac_share(self):
+    def test_without_a_size_fit_the_median_member_scores_fifty_on_pac_share(self):
         ref = {"senate": {"pac_ratio_median": 0.2}, "house": {"pac_ratio_median": 0.4}}
         for district, share in ((None, 0.2), (5, 0.4)):
             funding = {"totalContributions": 100, "totalFromPACs": 100 * share,
                        "topDonors": [], "industryBreakdown": []}
-            core = _funding_independence_core(funding, "OH", district, ref)
-            # No committee-type data -> the fallback volume factor applies;
-            # divide it out to read the share-based score itself.
-            pac = core["components"][0]
-            factor = float(pac["detail"].split("scaled ×")[1].split(" ")[0])
-            assert abs(pac["score"] / factor - 50.0) < 0.2
+            pac = _funding_independence_core(funding, "OH", district, ref)["components"][0]
+            assert pac["score"] == 50.0
+            assert "chamber median" in pac["detail"]
+
+    def _sized(self, dollars_at):
+        """Forty members from $1M to $40M whose PAC dollars follow
+        dollars_at(size), with a +/-10% spread around it."""
+        out = []
+        for i in range(40):
+            base = 1_000_000 * (i + 1)
+            out.append({"totalContributions": base, "totalFromPACs": dollars_at(base) * (1.1 if i % 2 else 0.9)})
+        return out
+
+    def test_the_size_fit_recovers_how_pac_share_falls_with_size(self):
+        # Flat PAC dollars: the share falls as 1/size, slope -1.
+        flat = compute_funding_reference(self._sized(lambda base: 500_000))
+        assert abs(flat["pac_size_slope"] + 1.0) < 0.05
+        # PAC dollars proportional to size: the share doesn't move.
+        proportional = compute_funding_reference(self._sized(lambda base: 0.2 * base))
+        assert abs(proportional["pac_size_slope"]) < 0.05
+
+    def test_a_member_at_the_size_fit_scores_fifty_whatever_their_size(self):
+        ref = {"senate": compute_funding_reference(self._sized(lambda base: 500_000))}
+        scores = []
+        for base in (3_000_000, 30_000_000):
+            funding = {"totalContributions": base, "totalFromPACs": 500_000,
+                       "topDonors": [], "industryBreakdown": []}
+            pac = _funding_independence_core(funding, "OH", None, ref)["components"][0]
+            scores.append(pac["score"])
+            assert "campaigns this size" in pac["detail"]
+        # The same PAC dollars read the same in a small and a large
+        # campaign: share alone would have put the large one far ahead.
+        assert all(abs(x - 50.0) < 6 for x in scores)
+
+    def test_sizes_beyond_the_fitted_range_are_read_at_its_edge(self):
+        ref = compute_funding_reference(self._sized(lambda base: 500_000))
+        from app.pipeline.analyze.score_calculator import _expected_pac_ratio
+        edge = _expected_pac_ratio(math.exp(ref["pac_size_log_lo"]), ref)
+        # A tiny, partly reported campaign is not extrapolated to an
+        # expected share near 100%.
+        assert _expected_pac_ratio(20_000, ref) == edge
+        # And the breakdown says which size it was compared with.
+        funding = {"totalContributions": 20_000, "totalFromPACs": 20_000, "topDonors": [], "industryBreakdown": []}
+        detail = _funding_independence_core(funding, "OH", None, {"senate": ref})["components"][0]["detail"]
+        assert "smallest typical campaigns" in detail and "campaigns this size" not in detail
+
+    def test_members_without_pac_money_are_left_out_of_the_fit(self):
+        fundings = self._sized(lambda base: 500_000) + [{"totalContributions": 5_000_000, "totalFromPACs": 0}] * 10
+        assert compute_funding_reference(fundings)["pac_size_n"] <= 40
 
     def test_pinned_reference_reproduces_the_old_multipliers(self, pinned_funding_reference):
         # 0.5 / 0.157 ≈ 3.2 and 0.5 / 0.371 ≈ 1.35 — the values previously

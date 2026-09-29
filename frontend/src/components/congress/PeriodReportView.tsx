@@ -45,13 +45,13 @@ function DayStrip({ days }: { days: PeriodDay[] }) {
   );
 }
 
-function BillList({ items }: { items: { billId: string | null; billLabel: string | null; name: string; date: string; chamber?: string }[] }) {
+function BillList({ items }: { items: { billId: string | null; billLabel: string | null; congress?: number | null; name: string; date: string; chamber?: string }[] }) {
   return (
     <ul className="flex flex-col">
       {items.map((e, i) => (
         <li key={`${e.billId}-${i}`} className="flex gap-3 border-b border-white/[0.09] py-2 text-[15px]">
           {e.billId ? (
-            <Link href={billHref(e.billId)} className="min-w-24 shrink-0 font-mono text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos">
+            <Link href={billHref(e.billId, e.congress)} className="min-w-24 shrink-0 font-mono text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos">
               {e.billLabel ?? e.billId}
             </Link>
           ) : (
@@ -174,7 +174,7 @@ export default function PeriodReportView({ report, kind }: { report: PeriodRepor
                         {v.billLabel && v.billId && (
                           <>
                             {" · "}
-                            <Link href={billHref(v.billId)} className="underline decoration-white/30 underline-offset-4 hover:text-phos">
+                            <Link href={billHref(v.billId, v.congress)} className="underline decoration-white/30 underline-offset-4 hover:text-phos">
                               {v.billLabel}
                             </Link>
                           </>

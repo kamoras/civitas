@@ -3,15 +3,7 @@
  * All links point to official .gov domains or the Federal Register.
  */
 
-/**
- * The Congress currently in session, derived from the wall clock — a new
- * Congress convenes Jan 3 of each odd year (off by one for ~2 days before
- * that in an odd January, same as the backend's congress_for_year). Computed
- * rather than hardcoded so this label/fallback never needs a manual bump.
- */
-function currentCongress(): number {
-  return 1 + Math.floor((new Date().getFullYear() - 1789) / 2);
-}
+import { currentCongress } from "./congress";
 
 /**
  * Ordinal form ("119th", "101st", "112th").

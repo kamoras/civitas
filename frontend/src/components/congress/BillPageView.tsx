@@ -68,11 +68,14 @@ const shareSection = (id: string) => ({ [SHARE_SECTION_ATTR]: id });
 
 export default function BillPageView({
   billId,
+  canonicalPath,
   record,
   detail,
   stageName,
 }: {
   billId: string;
+  /** The page's own URL path, with ?congress= for an earlier Congress's bill. */
+  canonicalPath: string;
   record: BillRecord | null;
   detail: BillDetail | null;
   stageName: string | null;
@@ -88,7 +91,7 @@ export default function BillPageView({
     subtitle: [record?.congress ? `${ordinal(record.congress)} Congress` : null, stageName ?? detail?.stage]
       .filter(Boolean)
       .join(" · "),
-    url: absoluteUrl(`/congress/bills/${encodeURIComponent(billId)}`),
+    url: absoluteUrl(canonicalPath),
   };
 
   return (

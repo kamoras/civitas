@@ -108,11 +108,16 @@ export default function ScoresChapter() {
         </P>
         <Steps>
           <Step n={1} title="PAC dependency">
-            The share of the member&apos;s contributions that came from PACs, scored so the
-            chamber&apos;s median member lands at 50 — House candidates rely on PAC money far more
-            than Senate candidates, a structural difference rather than a choice. It is then scaled
-            by how close the contributing PACs came to their legal per-election limits, because a
-            very large campaign can dilute millions of PAC dollars into a small share.
+            The share of the member&apos;s contributions that came from PACs, against the share
+            campaigns of the same size typically take in the member&apos;s chamber (re-measured
+            every update): the typical share scores 50, no PAC money 100, twice the typical share 0.
+            Per chamber, because House candidates rely on PAC money far more than Senate
+            candidates, a structural difference rather than a choice. Per size, because PAC checks
+            are capped by law and individual money isn&apos;t, so a bigger campaign dilutes the same
+            PAC dollars to a smaller share. Measured in September 2026, a senator&apos;s PAC dollars
+            barely grow with campaign size; against one chamber-wide median the score tracked
+            campaign size (a correlation of 0.58 in the Senate), and against campaigns of the same
+            size it doesn&apos;t (0.05).
           </Step>
           <Step n={2} title="Small-donor share">
             Money in gifts under $200 — the broadest possible funding base. A senator is compared

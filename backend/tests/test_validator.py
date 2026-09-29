@@ -318,11 +318,9 @@ class TestValidateSenator:
 
 class TestCommitteeTypePreserved:
     def test_committee_type_survives_validation(self):
-        """committeeType feeds the PAC-utilization signal in
-        _funding_independence_core and is persisted to Donor.committee_type.
-        The validator's donor rebuild used to drop it, silently NULLing the
-        column for every senator and desyncing the score-breakdown endpoint
-        from the stored score."""
+        """committeeType is persisted to Donor.committee_type. The
+        validator's donor rebuild used to drop it, silently NULLing the
+        column for every senator while the House path kept it."""
         senator = _make_senator(funding={
             "totalRaised": 1_000_000,
             "totalFromPACs": 200_000,

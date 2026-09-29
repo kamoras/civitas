@@ -71,7 +71,7 @@ function TallyBar({ yeas, nays }: { yeas: number; nays: number }) {
 }
 
 export function voteHref(v: { chamber: string; congress: number; session: number; number: number; billId: string | null }) {
-  return v.billId ? `${billHref(v.billId)}#vote-${v.chamber}-${v.session}-${v.number}` : null;
+  return v.billId ? `${billHref(v.billId, v.congress)}#vote-${v.chamber}-${v.session}-${v.number}` : null;
 }
 
 export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; showDate?: boolean }) {
@@ -110,7 +110,7 @@ export function MeasureRow({ event, tag }: { event: CongressEvent; tag?: string 
       <div className="flex items-baseline justify-between gap-3">
         <p className="min-w-0 text-base font-bold text-ink-hi">
           {event.billId && event.billLabel ? (
-            <Link href={billHref(event.billId)} className="hover:text-phos">
+            <Link href={billHref(event.billId, event.congress)} className="hover:text-phos">
               <span className="mr-2 font-mono font-normal text-ink-lo">{event.billLabel}</span>
               {event.name}
             </Link>
