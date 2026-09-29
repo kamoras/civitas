@@ -37,6 +37,11 @@ const PARTY: Record<string, { label: string; text: string; border: string }> = {
 };
 const NO_PARTY = { label: "No party", text: "text-ink", border: "border-white/30" };
 
+/** A president's party label and colours (also the leaderboard's summary). */
+export function presidentParty(code: string) {
+  return PARTY[code] ?? NO_PARTY;
+}
+
 const LINK = "font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos";
 
 function tone(score: number | null | undefined) {
@@ -287,7 +292,7 @@ export default function PresidentScorecard({
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const s = president.score;
-  const party = PARTY[president.party] ?? NO_PARTY;
+  const party = presidentParty(president.party);
   const overall = displayScore(s.overall);
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "present";
   // What every section's share image says it is from, as on the member
