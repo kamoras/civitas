@@ -26,7 +26,7 @@ import pathlib
 import urllib.request
 
 from app.pipeline.analyze.score_calculator import compute_funding_reference
-from app.pipeline.fetch.http_utils import CONTACT_EMAIL
+from app.contact import CONTACT_EMAIL
 
 API_BASE = "https://civitas-research.org/api"
 UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (PAC-ratio audit; contact: {CONTACT_EMAIL})"}

@@ -69,7 +69,7 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.pipeline.fetch.http_utils import CONTACT_EMAIL  # noqa: E402
+from app.contact import CONTACT_EMAIL  # noqa: E402
 
 # MEDSL 1976-2020 president state-level returns (version 20210113), pinned
 # to an immutable commit so a regeneration years from now fetches the exact

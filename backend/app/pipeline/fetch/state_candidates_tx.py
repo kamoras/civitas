@@ -57,7 +57,8 @@ import re
 
 import httpx
 
-from app.pipeline.fetch.http_utils import CONTACT_EMAIL, fetch_with_retry
+from app.contact import CONTACT_EMAIL
+from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
     clean_display_name,

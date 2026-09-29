@@ -13,8 +13,9 @@ import logging
 import httpx
 from sqlalchemy.orm import Session
 
+from app.contact import CONTACT_EMAIL
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import CONTACT_EMAIL, DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
 

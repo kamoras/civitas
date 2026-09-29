@@ -30,7 +30,7 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.pipeline.fetch.http_utils import CONTACT_EMAIL  # noqa: E402
+from app.contact import CONTACT_EMAIL  # noqa: E402
 
 STATE_NAMES = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
