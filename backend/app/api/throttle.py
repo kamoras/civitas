@@ -56,7 +56,7 @@ live-lookup routes, bills/{id}/record and explore/{id}/comments
 The limits fail open: a limiter that can't reach its store lets the
 request through and logs it, rather than turning a locked database into an
 outage of every endpoint behind it. The exceptions say so and raise
-Unavailable instead — claim(fail_open=False), hold and held — for work that
+Unavailable instead — claim(fail_open=False) and hold — for work that
 must not start unchecked (a pulse vote's dedup, an LLM generation).
 """
 
@@ -626,16 +626,41 @@ def claim(bucket: str, key: str | None, *, period: float, fail_open: bool = True
     return won
 
 
-def hold(bucket: str, keys: list[str], *, period: float) -> tuple[str, float] | None:
+class Blocked:
+    """hold's answer when one of its `blocked_by` claims is held: `bucket`
+    is that claim's."""
+
+    def __init__(self, bucket: str):
+        self.bucket = bucket
+
+
+def hold(
+    bucket: str,
+    keys: list[str],
+    *,
+    period: float,
+    blocked_by: tuple[tuple[str, str, float], ...] = (),
+) -> tuple[str, float] | Blocked | None:
     """Claim the first of `keys` not claimed in the last `period` seconds —
     one transaction however many there are (a document, or one of a few
     slots). (the key, its token) when one was free, None when all are held;
     Unavailable when the store can't answer — for work that must not start
     unchecked. The token gives back exactly this claim (release), never one
-    another caller made after it lapsed."""
+    another caller made after it lapsed.
+
+    `blocked_by` — (bucket, key, period) claims that hold this one off
+    while any is held (a document marked as not worth generating again
+    yet) — is checked in the same transaction: Blocked(that bucket), and
+    nothing claimed."""
     now = time.time()
     try:
         with _Txn() as conn:
+            for other_bucket, other_key, other_period in blocked_by:
+                if conn.execute(
+                    "SELECT 1 FROM claims WHERE bucket = ? AND key = ? AND claimed_at > ?",
+                    (other_bucket, other_key, now - other_period),
+                ).fetchone() is not None:
+                    return Blocked(other_bucket)
             for key in keys:
                 won = conn.execute(
                     "INSERT INTO claims (bucket, key, claimed_at, expires_at) VALUES (?, ?, ?, ?) "
@@ -651,21 +676,6 @@ def hold(bucket: str, keys: list[str], *, period: float) -> tuple[str, float] | 
     except sqlite3.Error as error:
         raise Unavailable(bucket) from error
     return None
-
-
-def held(bucket: str, key: str, *, period: float) -> bool:
-    """Whether `key` was claimed (claim or hold) in the last `period`
-    seconds — read only, claiming nothing: a plain read (the connections
-    autocommit), never the write lock. Unavailable when the store can't
-    answer."""
-    try:
-        with _using() as conn:
-            return conn.execute(
-                "SELECT 1 FROM claims WHERE bucket = ? AND key = ? AND claimed_at > ?",
-                (bucket, key, time.time() - period),
-            ).fetchone() is not None
-    except sqlite3.Error as error:
-        raise Unavailable(bucket) from error
 
 
 def release(bucket: str, key: str | None, *, token: float | None = None) -> None:

@@ -230,3 +230,15 @@ class TestEnsureExploreIndex:
 
         results = vector_store.search_explore_documents("A real doc", n_results=1)
         assert results is not None and results[0]["title"] == "A real doc"
+
+
+@pytest.mark.parametrize("role,expected", [("api", vector_store._API_BUSY_TIMEOUT_S),
+                                           ("worker", vector_store.SQLITE_BUSY_TIMEOUT_S),
+                                           ("all", vector_store.SQLITE_BUSY_TIMEOUT_S)])
+def test_only_the_read_only_api_waits_briefly_on_the_vector_store(monkeypatch, role, expected):
+    # A search behind a pipeline write gives up rather than holding a
+    # worker thread for the writers' full wait; the writers keep it.
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "PROCESS_ROLE", role)
+    assert vector_store._busy_timeout_s() == expected

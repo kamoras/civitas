@@ -346,6 +346,7 @@ _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
 _BUSY_RETRY_AFTER_S = 30
 _HELD_RETRY_AFTER_S = 10
+_SLOW_RETRY_AFTER_S = 60
 # How often a stream waiting on the LLM sends an SSE comment: nginx drops a
 # proxied response that sends nothing for proxy_read_timeout (120s), which
 # a busy LLM's prompt processing can exceed before the first delta.
@@ -394,9 +395,11 @@ async def get_explore_document_summary(
     once the full text is parsed (also what a cache hit returns
     immediately, as a single event, with no intermediate deltas).
     """
+    import hashlib
+
     from app.api import throttle
-    from app.pipeline.analyze.ollama_client import get_cached_llm_result, set_cached_llm_result, stream_llm
-    from app.pipeline.analyze.prompts import explore_document_summary_prompt, parse_explore_document_summary
+    from app.pipeline.analyze.ollama_client import get_cached_llm_result
+    from app.pipeline.analyze.prompts import explore_document_summary_prompt
 
     doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
     if not doc:
@@ -411,7 +414,15 @@ async def get_explore_document_summary(
         "date": doc.date,
     }
     prompt = explore_document_summary_prompt(doc_dict)
-    cache_key = {"doc_id": doc_id, "v": _SUMMARY_CACHE_KEY_VERSION}
+    # Keyed on what the LLM is given, not the document's id alone: a
+    # document whose text or metadata changes in place (a body backfilled,
+    # a re-ingest, a data reset reusing the id) is summarised afresh, and a
+    # generation that outlasts such a change files its summary under the
+    # text it read.
+    prompt_hash = hashlib.sha256(
+        f"{prompt['systemPrompt']}\x00{prompt['userPrompt']}".encode()
+    ).hexdigest()[:32]
+    cache_key = {"doc_id": doc_id, "v": _SUMMARY_CACHE_KEY_VERSION, "prompt": prompt_hash}
 
     # A summary already made costs nothing to hand out: no cooldown.
     cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], cache_key)
@@ -424,8 +435,7 @@ async def get_explore_document_summary(
     # Claimed, checked and generated in a task of its own, which the
     # request only waits on: a request cancelled mid-claim (a disconnect)
     # can't leave a claim behind that nothing will give back.
-    generation = _Generation(doc_id, prompt, cache_key, get_cached_llm_result, set_cached_llm_result, stream_llm,
-                             parse_explore_document_summary, db.get_bind(), (doc.title, doc.body))
+    generation = _Generation(doc_id, prompt, cache_key)
     task = asyncio.create_task(generation.run())
     _generations.add(task)
     task.add_done_callback(_generations.discard)
@@ -450,6 +460,14 @@ async def get_explore_document_summary(
             status_code=503,
             detail="Summaries are busy right now; please try again shortly.",
             headers={"Retry-After": str(_BUSY_RETRY_AFTER_S)},
+        )
+    if outcome == "slow":
+        # Its last generation ran out of time — perhaps only because the
+        # LLM was busy: a refusal to wait out, not an answer.
+        raise HTTPException(
+            status_code=503,
+            detail="This summary took too long a moment ago; please try again shortly.",
+            headers={"Retry-After": str(_SLOW_RETRY_AFTER_S)},
         )
     if outcome == "unusable":
         # Nothing is being written and nothing will come of retrying soon:
@@ -483,24 +501,19 @@ class _Generation:
     given back. `outcome` settles once the claims are decided — "go" (the
     events follow on `events`, None last), "held" (another generation of
     the document is under way), "busy" (the cap is reached), "unusable"
-    (its last output couldn't be used, recently), "unavailable"
-    (the claim store can't answer: fails closed, since the claims are what
-    stand between repeated POSTs and the device's one LLM), or the summary
-    itself when another request made it meanwhile."""
+    (its last output couldn't be used, recently), "slow" (its last
+    generation ran out of time, recently), "unavailable" (the claim store
+    can't answer: fails closed, since the claims are what stand between
+    repeated POSTs and the device's one LLM), or the summary itself when
+    another request made it meanwhile.
 
-    def __init__(self, doc_id, prompt, cache_key, get_cached, set_cached, stream, parse, bind, content):
+    The LLM calls are looked up on ollama_client when used, not bound at
+    import, as the endpoint's are."""
+
+    def __init__(self, doc_id: int, prompt: dict, cache_key: dict):
         self.doc_id = doc_id
-        # The database the document was read from, and what it said: the
-        # summary is kept only if the document still says it when the
-        # generation ends (_still_current).
-        self._bind = bind
-        self._content = content
         self.prompt = prompt
         self.cache_key = cache_key
-        self._get_cached = get_cached
-        self._set_cached = set_cached
-        self._stream = stream
-        self._parse = parse
         self.outcome: asyncio.Future = asyncio.get_running_loop().create_future()
         self.events: asyncio.Queue[str | None] = asyncio.Queue()
         # (bucket, key, token) for each claim held.
@@ -510,12 +523,15 @@ class _Generation:
         if not self.outcome.done():
             self.outcome.set_result(outcome)
 
-    async def _claim(self, bucket: str, keys: list[str]) -> bool:
-        """The first free one of `keys` (Unavailable when the store can't
-        answer)."""
+    async def _claim(self, bucket: str, keys: list[str], blocked_by=()):
+        """The first free one of `keys`: True, False when all are held, or
+        throttle.Blocked (hold's blocked_by). Unavailable when the store
+        can't answer."""
         from app.api import throttle
 
-        claiming = asyncio.ensure_future(throttle.run(throttle.hold, bucket, keys, period=_SUMMARY_CLAIM_S))
+        claiming = asyncio.ensure_future(
+            throttle.run(throttle.hold, bucket, keys, period=_SUMMARY_CLAIM_S, blocked_by=blocked_by)
+        )
         try:
             held = await asyncio.shield(claiming)
         except asyncio.CancelledError:
@@ -526,28 +542,13 @@ class _Generation:
                 held = await claiming
             except Exception:
                 held = None
-            if held is not None:
+            if isinstance(held, tuple):
                 self._held.append((bucket, *held))
             raise
-        if held is None:
-            return False
+        if held is None or isinstance(held, throttle.Blocked):
+            return held or False
         self._held.append((bucket, *held))
         return True
-
-    def _still_current(self) -> bool:
-        """Whether the document still reads as it did when the generation
-        began — not replaced by a data reset (in the pipeline process, which
-        this generation, in the API's, can outlast) or re-ingested with new
-        text. A summary of a document that has changed is not kept."""
-        from app.database import SessionLocal
-
-        with SessionLocal(bind=self._bind) as session:
-            row = (
-                session.query(ExploreDocument.title, ExploreDocument.body)
-                .filter(ExploreDocument.id == self.doc_id)
-                .first()
-            )
-        return row is not None and (row.title, row.body) == self._content
 
     async def _give_back(self) -> None:
         from app.api import throttle
@@ -564,11 +565,15 @@ class _Generation:
 
         try:
             try:
-                for bucket, period in ((_UNUSABLE_BUCKET, _UNUSABLE_FOR_S), (_SLOW_BUCKET, _SLOW_FOR_S)):
-                    if await throttle.run(throttle.held, bucket, str(self.doc_id), period=period):
-                        self._settle("unusable")
-                        return
-                if not await self._claim(_SUMMARY_BUCKET, [str(self.doc_id)]):
+                key = str(self.doc_id)
+                claimed = await self._claim(
+                    _SUMMARY_BUCKET, [key],
+                    blocked_by=((_UNUSABLE_BUCKET, key, _UNUSABLE_FOR_S), (_SLOW_BUCKET, key, _SLOW_FOR_S)),
+                )
+                if isinstance(claimed, throttle.Blocked):
+                    self._settle("slow" if claimed.bucket == _SLOW_BUCKET else "unusable")
+                    return
+                if not claimed:
                     self._settle("held")
                     return
                 if not await self._claim(_SLOT_BUCKET, [str(slot) for slot in range(_MAX_GENERATIONS)]):
@@ -579,7 +584,10 @@ class _Generation:
                 return
             # Checked again now the claim is won: a generation that just
             # finished elsewhere cached it and gave the claim back.
-            made = await asyncio.to_thread(self._get_cached, self.prompt["promptVersion"], self.cache_key)
+            from app.pipeline.analyze import ollama_client
+
+            made = await asyncio.to_thread(ollama_client.get_cached_llm_result, self.prompt["promptVersion"],
+                                           self.cache_key)
             if made is not None:
                 self._settle(made)
                 return
@@ -596,14 +604,15 @@ class _Generation:
         reader asking again the moment it arrives is served or may start
         one."""
         from app.api import throttle
-        from app.pipeline.analyze.ollama_client import StreamCutOff
+        from app.pipeline.analyze import ollama_client
+        from app.pipeline.analyze.prompts import parse_explore_document_summary
 
         text = ""
         finished = at_limit = timed_out = False
         deadline = asyncio.timeout(_SUMMARY_GENERATION_LIMIT_S)
         try:
             async with deadline:
-                async for delta in self._stream(
+                async for delta in ollama_client.stream_llm(
                     system_prompt=self.prompt["systemPrompt"],
                     user_prompt=self.prompt["userPrompt"],
                     max_tokens=512,
@@ -611,7 +620,7 @@ class _Generation:
                     text += delta
                     self.events.put_nowait(_sse({"delta": delta}))
             finished = True
-        except StreamCutOff:
+        except ollama_client.StreamCutOff:
             # At the token limit: as far as it will ever get (the same
             # prompt stops at the same place).
             at_limit = True
@@ -626,16 +635,16 @@ class _Generation:
 
         # Anything but a natural end stopped mid-sentence: the section it was
         # writing is dropped, for its reader as for the cache.
-        parsed = self._parse(text, cut_off=not finished) if text else {"summary": "", "keyPoints": [], "impact": ""}
+        parsed = parse_explore_document_summary(text, cut_off=not finished) if text else {"summary": "", "keyPoints": [], "impact": ""}
         # A generation that ended, naturally or at its limit, is the
-        # document's summary — kept if the document hasn't changed under it.
+        # document's summary (under the text it read: cache_key).
         # One that failed or ran out of time is shown to its reader, marked
         # partial, and not kept; one that ran out of time (or made nothing
         # usable) holds the document off for a while.
         ended = finished or at_limit
         if ended and parsed["summary"]:
-            if await asyncio.to_thread(self._still_current):
-                await asyncio.to_thread(self._set_cached, self.prompt["promptVersion"], self.cache_key, parsed)
+            await asyncio.to_thread(ollama_client.set_cached_llm_result, self.prompt["promptVersion"],
+                                    self.cache_key, parsed)
         elif ended or timed_out:
             bucket, period = (_SLOW_BUCKET, _SLOW_FOR_S) if timed_out else (_UNUSABLE_BUCKET, _UNUSABLE_FOR_S)
             try:

@@ -314,14 +314,19 @@ class TestSummaryEndpointGuards:
             assert events[-1] == {"done": True, "summary": "The rule would apply.", "keyPoints": ["One"],
                                   "impact": "", "partial": True}
             assert not mock_set_cache.called
-            again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
-        if ending == "fails":
-            # The LLM may be back: the next reader may make it afresh at once.
-            assert any("delta" in event for event in again)
-        else:
-            # The same prompt would take as long again: held off for a while,
-            # answered rather than generated over and over.
-            assert again == [{"done": True, "summary": "", "keyPoints": [], "impact": ""}]
+            if ending == "fails":
+                # The LLM may be back: the next reader may make it afresh at once.
+                again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+                assert any("delta" in event for event in again)
+            else:
+                # Held off for a while rather than generated over and over —
+                # as a refusal to wait out (the LLM may only have been busy),
+                # not an answer.
+                from fastapi import HTTPException
+
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_explore_document_summary(doc.id, None, db=db_session)
+                assert exc_info.value.status_code == 503 and exc_info.value.headers["Retry-After"] == "60"
 
     async def test_a_generation_at_its_token_limit_is_cached_without_the_cut_section(self, db_session):
         # The same prompt stops at the same place every time: what came out
@@ -362,30 +367,33 @@ class TestSummaryEndpointGuards:
             again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
         assert any("delta" in event for event in again)
 
-    async def test_a_summary_of_a_document_that_changed_meanwhile_is_not_kept(self, db_session):
-        # A data reset (or a re-ingest) replaced the document while the
-        # generation ran: its summary would describe another text.
-        import asyncio
-
+    async def test_a_summary_is_filed_under_the_text_it_was_made_from(self, db_session):
+        # A document changed in place (a body backfilled, a data reset
+        # reusing the id) is summarised afresh, not served the old text's
+        # summary — including one whose generation outlasted the change.
         doc = _make_doc(db_session)
-        replaced = asyncio.Event()
+        written = {}
 
-        async def _meanwhile(*_args, **_kwargs):
-            yield "SUMMARY: Old text.\n"
-            await replaced.wait()
+        def remember(version, key, data):
+            written[json.dumps(key, sort_keys=True)] = data
+
+        def lookup(version, key):
+            return written.get(json.dumps(key, sort_keys=True))
 
         with (
-            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
-            patch("app.pipeline.analyze.ollama_client.stream_llm", _meanwhile),
-            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", side_effect=lookup),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result", side_effect=remember),
         ):
-            response = await get_explore_document_summary(doc.id, None, db=db_session)
+            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            first = dict(written)
+            again = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            assert again == [{"done": True, **next(iter(first.values()))}]  # unchanged: served
             doc.body = "A different document now."
             db_session.commit()
-            replaced.set()
-            events = await _collect_sse_events(response)
-        assert events[-1]["summary"] == "Old text."  # its reader still sees it
-        assert not mock_set_cache.called
+            changed = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+        assert any("delta" in event for event in changed)  # made afresh
+        assert len(written) == 2
 
     async def test_a_claim_made_as_the_generation_is_stopped_is_still_given_back(self, db_session, monkeypatch):
         import asyncio
@@ -427,6 +435,14 @@ class TestSummaryEndpointGuards:
         assert throttle.hold("explore-summary", ["7"], period=300) is None
         throttle.release("explore-summary", "7", token=second[1])
         assert throttle.hold("explore-summary", ["7"], period=300) is not None
+
+    async def test_a_blocking_claim_refuses_in_the_same_step_and_claims_nothing(self, db_session):
+        from app.api import throttle
+
+        throttle.hold("unusable", ["9"], period=300)
+        blocked = throttle.hold("doc", ["9"], period=300, blocked_by=(("unusable", "9", 300),))
+        assert isinstance(blocked, throttle.Blocked) and blocked.bucket == "unusable"
+        assert throttle.hold("doc", ["9"], period=300) is not None  # nothing was claimed
 
     async def test_the_cap_takes_the_first_free_slot_in_one_step(self, db_session):
         from app.api import throttle

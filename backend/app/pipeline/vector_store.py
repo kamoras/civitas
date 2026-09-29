@@ -214,6 +214,19 @@ def _retry_wal() -> None:
             _wal_retry_at = None
 
 
+# The read-only API process only searches this file: a search that can't
+# get in (the file still in the rollback journal, behind a pipeline write)
+# gives up after sqlite's own default rather than holding a worker thread
+# for the writers' full wait.
+_API_BUSY_TIMEOUT_S = 5.0
+
+
+def _busy_timeout_s() -> float:
+    from app.config import settings
+
+    return _API_BUSY_TIMEOUT_S if settings.PROCESS_ROLE == "api" else SQLITE_BUSY_TIMEOUT_S
+
+
 def get_vec_conn() -> sqlite3.Connection:
     """Get or create the sqlite-vec connection (singleton, extension loaded)."""
     global _vec_conn, _wal_retry_at
@@ -231,7 +244,7 @@ def get_vec_conn() -> sqlite3.Connection:
 
             logger.info("Opening vector store: %s", _VECTOR_DB_PATH)
             conn = sqlite3.connect(
-                _VECTOR_DB_PATH, check_same_thread=False, timeout=SQLITE_BUSY_TIMEOUT_S,
+                _VECTOR_DB_PATH, check_same_thread=False, timeout=_busy_timeout_s(),
             )
             # WAL, as the main database has: the pipeline process writes
             # this file while the API processes search it (PROCESS_ROLE),
