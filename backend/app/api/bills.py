@@ -58,6 +58,12 @@ def get_bill(
     return _cached_json(detail.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
 
 
+# How long a reader's bill page waits on Congress.gov before it is served
+# with what arrived (fetch_bill_record's deadline_s). The limiter is shared
+# with the nightly pipeline: without a bound, a page took over a minute.
+_RECORD_DEADLINE_S = 10.0
+
+
 @router.get("/bills/{bill_id}/record")
 async def get_bill_record(
     _rl: UpstreamRouteLimit,
@@ -79,7 +85,13 @@ async def get_bill_record(
     if congress > current:
         raise HTTPException(status_code=404, detail="That Congress hasn't convened")
     async with make_async_client() as client:
-        raw = await fetch_bill_record(client, db, congress, bill_id, spend=spend_upstream)
+        raw = await fetch_bill_record(
+            client, db, congress, bill_id, spend=spend_upstream, deadline_s=_RECORD_DEADLINE_S,
+        )
     if raw["not_found"]:
         raise HTTPException(status_code=404, detail="Bill not found")
-    return _cached_json(shape_record(db, congress, bill_id, raw), max_age=CACHE_TTL_DETAIL_S)
+    shaped = shape_record(db, congress, bill_id, raw)
+    if raw["unavailable"]:
+        # Partial: a browser or nginx must not keep it once the rest arrives.
+        return JSONResponse(content=shaped, headers={"Cache-Control": "no-store"})
+    return _cached_json(shaped, max_age=CACHE_TTL_DETAIL_S)
