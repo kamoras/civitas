@@ -674,6 +674,13 @@ def search_explore_documents(
     if count == 0:
         logger.warning("explore index empty — not ready")
         return None
+    # Built by another model (a deploy changed it, and the pipeline process —
+    # which rebuilds the index — hasn't yet): its vectors don't live in this
+    # model's space, and ranking against them would be noise presented as a
+    # whole answer. Not ready, like a rebuild in progress.
+    if _get_meta(conn, "explore_index_model") != index_identity():
+        logger.warning("explore index built by another model — not ready until it is rebuilt")
+        return None
 
     model = get_similarity_model()
     query_embedding = model.encode([query], show_progress_bar=False, normalize_embeddings=True)[0]

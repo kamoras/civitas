@@ -136,33 +136,33 @@ async def search_explore(
 
 
 def _explore_counts(db: Session) -> tuple[int, dict[str, int], dict[str, int], int]:
-    """(total, by type, by chamber, open for comment) — on a worker thread
-    (explore_stats' off_loop)."""
-    from sqlalchemy import func
+    """(total, by type, by chamber, open for comment), in one pass over the
+    table — on a worker thread (explore_stats' off_loop)."""
+    from sqlalchemy import case, func
 
-    total = db.query(ExploreDocument).count()
+    open_now = case(
+        (
+            (ExploreDocument.comment_url.isnot(None))
+            & (ExploreDocument.comment_url != "")
+            & (ExploreDocument.comments_close_on >= comment_period_today()),
+            1,
+        ),
+        else_=0,
+    )
+    rows = (
+        db.query(ExploreDocument.doc_type, ExploreDocument.chamber, func.count(), func.sum(open_now))
+        .group_by(ExploreDocument.doc_type, ExploreDocument.chamber)
+        .all()
+    )
+    total = open_for_comment = 0
     type_counts: dict[str, int] = {}
     chamber_counts: dict[str, int] = {}
-    open_for_comment = 0
-    if total > 0:
-        for doc_type, count in db.query(ExploreDocument.doc_type, func.count()).group_by(
-            ExploreDocument.doc_type
-        ):
-            type_counts[doc_type] = count
-        for chamber, count in db.query(ExploreDocument.chamber, func.count()).group_by(
-            ExploreDocument.chamber
-        ):
-            if chamber:
-                chamber_counts[chamber] = count
-        open_for_comment = (
-            db.query(ExploreDocument)
-            .filter(
-                ExploreDocument.comment_url.isnot(None),
-                ExploreDocument.comment_url != "",
-                ExploreDocument.comments_close_on >= comment_period_today(),
-            )
-            .count()
-        )
+    for doc_type, chamber, count, open_count in rows:
+        total += count
+        open_for_comment += open_count or 0
+        type_counts[doc_type] = type_counts.get(doc_type, 0) + count
+        if chamber:
+            chamber_counts[chamber] = chamber_counts.get(chamber, 0) + count
     return total, type_counts, chamber_counts, open_for_comment
 
 
@@ -497,46 +497,8 @@ async def get_explore_document_summary(
     task.add_done_callback(_generations.discard)
     outcome = await asyncio.shield(generation.outcome)
 
-    if isinstance(outcome, throttle.Decision):  # the write limit refused it
-        # A wait too: a refused charge isn't counted, so asking again once
-        # the budget resets costs nothing more.
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded — too many requests per minute per IP.",
-            headers={"Retry-After": retry_after(outcome.reset_at), **_WAIT_OUT},
-        )
-    if outcome == "unavailable":
-        raise HTTPException(
-            status_code=503,
-            detail="Summaries are unavailable right now; please try again shortly.",
-            headers={"Retry-After": str(throttle.UNAVAILABLE_RETRY_AFTER_S), **_WAIT_OUT},
-        )
-    if outcome == "held":
-        # Another reader's generation of this document: cached when it
-        # ends, so a retry soon is usually served straight from the cache.
-        raise HTTPException(
-            status_code=429,
-            detail="This summary is being written; please try again shortly.",
-            headers={"Retry-After": str(_HELD_RETRY_AFTER_S), **_WAIT_OUT},
-        )
-    if outcome == "busy" or (isinstance(outcome, tuple) and outcome[0] == "busy"):
-        # The cap, or the LLM itself said it was busy (for as long as that
-        # hold-off has left).
-        wait = _BUSY_RETRY_AFTER_S if outcome == "busy" else max(1, math.ceil(outcome[1]))
-        raise HTTPException(
-            status_code=503,
-            detail="Summaries are busy right now; please try again shortly.",
-            headers={"Retry-After": str(wait), **_WAIT_OUT},
-        )
-    if isinstance(outcome, tuple) and outcome[0] == "slow":
-        # Its last generation ran out of time — perhaps only because the
-        # LLM was busy: a refusal to wait out, not an answer, for as long
-        # as the hold-off has left.
-        raise HTTPException(
-            status_code=503,
-            detail="This summary took too long a moment ago; please try again shortly.",
-            headers={"Retry-After": str(max(1, math.ceil(outcome[1]))), **_WAIT_OUT},
-        )
+    if isinstance(outcome, _Refusal):
+        raise outcome.error()
     if outcome == "unusable":
         # Nothing is being written and nothing will come of retrying soon:
         # the answer, not a refusal to wait out.
@@ -564,18 +526,62 @@ async def get_explore_document_summary(
     return StreamingResponse(event_stream(), media_type="text/event-stream", headers=_STREAM_HEADERS)
 
 
+class _Refusal:
+    """A summary request turned away for now: a wait (X-Summary-Wait), with
+    the Retry-After the page waits before asking again."""
+
+    def __init__(self, status: int, detail: str, retry_after: float):
+        self.status, self.detail = status, detail
+        self.retry_after = max(1, math.ceil(retry_after))
+
+    def error(self) -> HTTPException:
+        return HTTPException(
+            status_code=self.status,
+            detail=self.detail,
+            headers={"Retry-After": str(self.retry_after), **_WAIT_OUT},
+        )
+
+
+# Why a request is turned away. Held: another reader's generation of this
+# document — cached when it ends, so a retry soon is usually served from
+# the cache. Busy: the site's generations, this client's one, or the LLM
+# itself said so. Slow: its last generation ran out of time, perhaps only
+# because the LLM was busy. Unavailable: the claim store can't answer —
+# fail closed, since the claims are what stand between repeated POSTs and
+# the device's one LLM. The write limit: a refused charge isn't counted, so
+# asking again once the budget resets costs nothing more.
+def _held() -> _Refusal:
+    return _Refusal(429, "This summary is being written; please try again shortly.", _HELD_RETRY_AFTER_S)
+
+
+def _busy(retry_after: float = _BUSY_RETRY_AFTER_S) -> _Refusal:
+    return _Refusal(503, "Summaries are busy right now; please try again shortly.", retry_after)
+
+
+def _slow(retry_after: float) -> _Refusal:
+    return _Refusal(503, "This summary took too long a moment ago; please try again shortly.", retry_after)
+
+
+def _unavailable() -> _Refusal:
+    from app.api import throttle
+
+    return _Refusal(503, "Summaries are unavailable right now; please try again shortly.",
+                    throttle.UNAVAILABLE_RETRY_AFTER_S)
+
+
+def _over_write_limit(decision) -> _Refusal:
+    import time
+
+    return _Refusal(429, "Rate limit exceeded — too many requests per minute per IP.",
+                    decision.reset_at - time.time())
+
+
 class _Generation:
     """One summary generation: its claims, the generation, and the claims
     given back. `outcome` settles once the claims are decided — "go" (the
-    events follow on `events`, None last), "held" (another generation of
-    the document is under way), "busy" (the cap is reached, or this
-    client's one generation is under way), ("busy", seconds left) (the
-    LLM said it was busy, recently), "unusable"
-    (its last output couldn't be used, recently), ("slow", seconds left)
-    (its last generation ran out of time, recently), "unavailable" (the claim store
-    can't answer: fails closed, since the claims are what stand between
-    repeated POSTs and the device's one LLM), or the summary itself when
-    another request made it meanwhile.
+    events follow on `events`, None last), a _Refusal (a wait), "unusable"
+    (its last output couldn't be used, recently: the answer is none), or
+    the summary itself when another request made it meanwhile.
 
     The LLM calls are looked up on ollama_client when used, not bound at
     import, as the endpoint's are."""
@@ -648,12 +654,12 @@ class _Generation:
                 )
                 if isinstance(claimed, throttle.Blocked):
                     self._settle({
-                        _SLOW_BUCKET: ("slow", claimed.lifts_in),
-                        _LLM_BUSY_BUCKET: ("busy", claimed.lifts_in),
-                    }.get(claimed.bucket, "unusable"))
+                        _SLOW_BUCKET: lambda: _slow(claimed.lifts_in),
+                        _LLM_BUSY_BUCKET: lambda: _busy(claimed.lifts_in),
+                    }.get(claimed.bucket, lambda: "unusable")())
                     return
                 if not claimed:
-                    self._settle("held")
+                    self._settle(_held())
                     return
                 # One in flight per client: the slots are the whole site's,
                 # and a generation outlives its reader, so one address must
@@ -666,13 +672,13 @@ class _Generation:
                     raise throttle.Unavailable(_CLIENT_BUCKET)
                 previous = ((_CLIENT_BUCKET, client.previous, _SUMMARY_CLAIM_S),) if client.previous else ()
                 if await self._claim(_CLIENT_BUCKET, [str(client)], blocked_by=previous) is not True:
-                    self._settle("busy")
+                    self._settle(_busy())
                     return
                 if not await self._claim(_SLOT_BUCKET, [str(slot) for slot in range(_MAX_GENERATIONS)]):
-                    self._settle("busy")
+                    self._settle(_busy())
                     return
             except throttle.Unavailable:
-                self._settle("unavailable")
+                self._settle(_unavailable())
                 return
             # Checked again now the claim is won: a generation that just
             # finished elsewhere cached it and gave the claim back.
@@ -689,12 +695,12 @@ class _Generation:
             # back below.
             decision = await throttle.run(rate_limit.charge_write, self.write_key)
             if not decision.allowed:
-                self._settle(decision)
+                self._settle(_over_write_limit(decision))
                 return
             self._settle("go")
             await self._generate()
         finally:
-            self._settle("unavailable")  # a no-op once settled
+            self._settle(_unavailable())  # a no-op once settled
             await self._give_back()  # a no-op once given back
             self.events.put_nowait(None)
 

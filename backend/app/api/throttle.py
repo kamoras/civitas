@@ -456,12 +456,16 @@ async def run_maintenance() -> None:
         await asyncio.sleep(_PURGE_INTERVAL_S)
 
 
-def derived_salt(purpose: str) -> bytes | None:
-    """A salt for today, the same in every process of this container, in RAM
-    and deleted when this UTC day ends: for a caller whose shared salt is
-    unavailable (visits' fallback). Not derived from the key salts, which
-    outlive their day. None if the store can't give one either."""
+def derived_salt(purpose: str, date: str) -> bytes | None:
+    """A salt for `date`, the same in every process of this container, in
+    RAM and deleted when that UTC day ends: for a caller whose shared salt
+    is unavailable (visits' fallback). Not derived from the key salts, which
+    outlive their day. None if the store can't give one — or if `date` isn't
+    today: today's salt outlives an earlier day, so a hash under it would
+    stay recomputable after that day's salt is gone."""
     today = datetime.now(timezone.utc).date().isoformat()
+    if date != today:
+        return None
     try:
         salt, _previous = _salts_for(_DAY_SALT, today)
     except sqlite3.Error:

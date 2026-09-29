@@ -371,11 +371,18 @@ def _fallback_salt_for(date: str) -> bytes:
     deleted when the day ends) — or, while that store is down too, this process's own, kept
     only until the shared one can be made: a private salt kept all day
     would count this worker's visitors apart from every other worker's."""
+    from datetime import datetime, timezone
+
     global _fallback_salt
+    if date != datetime.now(timezone.utc).date().isoformat():
+        # A visit from a day that has ended: hashed with a salt nobody keeps,
+        # as _daily_salt does once the day's salt is gone — never with a
+        # salt that outlives its day.
+        return secrets.token_bytes(32)
     if _fallback_salt is None or _fallback_salt[0] != date or not _fallback_salt[2]:
         from app.api import throttle
 
-        shared = throttle.derived_salt(f"visits:{date}")
+        shared = throttle.derived_salt(f"visits:{date}", date)
         if shared is not None:
             _fallback_salt = (date, shared, True)
         elif _fallback_salt is None or _fallback_salt[0] != date:

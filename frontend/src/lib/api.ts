@@ -993,7 +993,18 @@ export async function streamExploreDocumentSummary(
       continue;
     }
     if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
-    const result = await readSummaryStream(res.body, onDelta);
+    let result: Awaited<ReturnType<typeof readSummaryStream>>;
+    try {
+      result = await readSummaryStream(res.body, onDelta);
+    } catch (error) {
+      // The stream was cut before its last event — the API restarting under
+      // a deploy, most often. Asked again: the generation it was part of
+      // finishes on its own, so the retry is usually served from the cache.
+      if (signal?.aborted || Date.now() >= giveUpAt) throw error;
+      onDelta("");
+      await waitFor(null);
+      continue;
+    }
     // This reader's own generation ran out of time before writing anything
     // usable: asked again after the brief hold-off, as a waiting reader is.
     if (result.retryAfter !== undefined && !result.summary && Date.now() < giveUpAt) {

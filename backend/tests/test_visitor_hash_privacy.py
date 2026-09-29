@@ -64,10 +64,11 @@ class TestDailySalt:
             raise RuntimeError("db down")
 
         monkeypatch.setattr(visits, "_load_or_create_salt", boom)
-        a = asyncio.run(_daily_salt("2026-09-24"))
-        b = asyncio.run(_daily_salt("2026-09-24"))
+        today = _today()
+        a = asyncio.run(_daily_salt(today))
+        b = asyncio.run(_daily_salt(today))
         assert a == b and visits._salt_cache is None
-        assert asyncio.run(_daily_salt("2026-09-25")) != a
+        assert asyncio.run(_daily_salt("1999-01-01")) != a
 
 
 class TestHash:
@@ -217,8 +218,32 @@ def test_a_private_fallback_gives_way_to_the_shared_one(monkeypatch):
     monkeypatch.setattr(visits, "_salt_cache", None)
     monkeypatch.setattr(visits, "_fallback_salt", None)
     monkeypatch.setattr(visits, "_load_or_create_salt", boom)
-    monkeypatch.setattr(throttle, "derived_salt", lambda purpose: None)
-    private = asyncio.run(_daily_salt("2026-09-24"))
-    assert asyncio.run(_daily_salt("2026-09-24")) == private  # stable meanwhile
-    monkeypatch.setattr(throttle, "derived_salt", lambda purpose: b"s" * 32)
-    assert asyncio.run(_daily_salt("2026-09-24")) == b"s" * 32
+    monkeypatch.setattr(throttle, "derived_salt", lambda purpose, date: None)
+    today = _today()
+    private = asyncio.run(_daily_salt(today))
+    assert asyncio.run(_daily_salt(today)) == private  # stable meanwhile
+    monkeypatch.setattr(throttle, "derived_salt", lambda purpose, date: b"s" * 32)
+    assert asyncio.run(_daily_salt(today)) == b"s" * 32
+
+
+def _today() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def test_a_fallback_for_an_ended_day_is_never_todays(monkeypatch):
+    # Today's salt outlives yesterday: a visit from before midnight hashed
+    # under it would stay recomputable after yesterday's salt is gone.
+    from app.api import throttle
+
+    def boom(date):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(visits, "_salt_cache", None)
+    monkeypatch.setattr(visits, "_fallback_salt", None)
+    monkeypatch.setattr(visits, "_load_or_create_salt", boom)
+    asked = []
+    monkeypatch.setattr(throttle, "derived_salt", lambda purpose, date: asked.append(date) or b"s" * 32)
+    ended = asyncio.run(_daily_salt("1999-01-01"))
+    assert ended != b"s" * 32 and asked == []

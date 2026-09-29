@@ -804,3 +804,24 @@ class TestCommentsCaching:
         # No header of its own: the middleware's default applies.
         resp = await self._get(db_session, {"comments": [{"id": "1"}], "totalElements": 1})
         assert "Cache-Control" not in resp.headers
+
+
+async def test_stats_count_every_group_in_one_pass(db_session):
+    import json as _json
+
+    from app.api.explore import explore_stats
+
+    _make_doc(db_session)
+    for chamber, url, closes in (("Executive", "https://www.regulations.gov/document/X-1", "2999-01-01"),
+                                 ("", "https://www.regulations.gov/document/X-2", "2000-01-01")):
+        db_session.add(ExploreDocument(doc_type="Proposed Rule", source="Federal Register", title="Rule",
+                                       body="b", date="2026-07-01", chamber=chamber, comment_url=url,
+                                       comments_close_on=closes))
+    db_session.commit()
+    body = _json.loads((await explore_stats(db=db_session)).body)
+    assert body == {
+        "totalDocuments": 3,
+        "byType": {"Executive Order": 1, "Proposed Rule": 2},
+        "byChamber": {"Executive": 2},
+        "openForComment": 1,
+    }

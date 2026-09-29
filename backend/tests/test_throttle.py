@@ -520,14 +520,16 @@ def test_the_visit_fallbacks_salt_is_gone_at_midnight_though_key_salts_stay(thro
     the key salts' extra day."""
     TestAcrossMidnight._at(monkeypatch, 1, 12)
     throttle.client_key("203.0.113.1", "write")
-    first = throttle.derived_salt("visits:2099-01-01")
+    first = throttle.derived_salt("visits:2099-01-01", "2099-01-01")
     day_salt = _rows(throttle_store, "SELECT salt FROM salt_days WHERE kind = 'day'")[0][0]
     TestAcrossMidnight._at(monkeypatch, 2, 0, 0, 30)
     monkeypatch.setattr(throttle, "_last_forget", -1e9)
     throttle.forget_stale_salt()
     assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'day'") == [("2099-01-02",)]
     assert ("2099-01-01",) in _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'")  # still needed today
-    assert throttle.derived_salt("visits:2099-01-01") != first
+    # The ended day's can't be had at all now — not derived from today's.
+    assert throttle.derived_salt("visits:2099-01-01", "2099-01-01") is None
+    assert throttle.derived_salt("visits:2099-01-02", "2099-01-02") not in (None, first)
     import os
 
     for suffix in ("", "-wal"):
@@ -540,12 +542,12 @@ def test_a_worker_behind_midnight_never_brings_back_a_deleted_day_salt(throttle_
     # The visit fallback's salt is deleted when its day ends; a worker that
     # read the clock just before midnight must not make that day's again.
     TestAcrossMidnight._at(monkeypatch, 1, 23)
-    throttle.derived_salt("visits:2099-01-01")
+    throttle.derived_salt("visits:2099-01-01", "2099-01-01")
     TestAcrossMidnight._at(monkeypatch, 2, 0)
-    throttle.derived_salt("visits:2099-01-02")  # drops the 1st's
+    throttle.derived_salt("visits:2099-01-02", "2099-01-02")  # drops the 1st's
     throttle.use_path(throttle_store)  # the lagging worker: nothing cached
     TestAcrossMidnight._at(monkeypatch, 1, 23, 59, 59)
-    assert throttle.derived_salt("visits:2099-01-01") is None
+    assert throttle.derived_salt("visits:2099-01-01", "2099-01-01") is None
     assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'day'") == [("2099-01-02",)]
 
 
@@ -553,7 +555,7 @@ async def test_maintenance_drops_stale_salts_without_any_traffic(throttle_store,
     import asyncio
 
     TestAcrossMidnight._at(monkeypatch, 1, 12)
-    throttle.derived_salt("visits:2099-01-01")
+    throttle.derived_salt("visits:2099-01-01", "2099-01-01")
     TestAcrossMidnight._at(monkeypatch, 2, 0, 0, 30)
     monkeypatch.setattr(throttle, "_last_forget", -1e9)
     task = asyncio.create_task(throttle.run_maintenance())
@@ -637,13 +639,13 @@ def test_the_sweep_never_leaves_an_ended_day_recreatable(throttle_store, monkeyp
     """An ended day's salt goes only with a later day's in place: that row
     is what stops a worker behind midnight from making the ended one again."""
     TestAcrossMidnight._at(monkeypatch, 1, 12)
-    throttle.derived_salt("visits:2099-01-01")
+    throttle.derived_salt("visits:2099-01-01", "2099-01-01")
     TestAcrossMidnight._at(monkeypatch, 2, 0, 0, 30)
     monkeypatch.setattr(throttle, "_last_forget", -1e9)
     throttle.forget_stale_salt()
     throttle.use_path(throttle_store)  # the lagging worker: nothing cached
     TestAcrossMidnight._at(monkeypatch, 1, 23, 59, 59)
-    assert throttle.derived_salt("visits:2099-01-01") is None
+    assert throttle.derived_salt("visits:2099-01-01", "2099-01-01") is None
 
 
 def test_the_sweep_writes_once_a_day(throttle_store, monkeypatch):

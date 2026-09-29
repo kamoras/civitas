@@ -530,3 +530,29 @@ describe("streamExploreDocumentSummary after its own generation timed out", () =
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("streamExploreDocumentSummary when its stream is cut", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks again rather than reporting no summary", async () => {
+    const cut = new Response('data: {"delta": "SUMMARY: half"}\n\n', { status: 200 });
+    const whole = new Response(
+      'data: {"done": true, "summary": "S", "keyPoints": [], "impact": ""}\n\n',
+      {
+        status: 200,
+      }
+    );
+    const fetchMock = vi.fn().mockResolvedValueOnce(cut).mockResolvedValueOnce(whole);
+    vi.stubGlobal("fetch", fetchMock);
+    const seen: string[] = [];
+    const result = await streamExploreDocumentSummary(
+      1,
+      (text) => seen.push(text),
+      undefined,
+      async () => {}
+    );
+    expect(result.summary).toBe("S");
+    expect(seen).toEqual(["SUMMARY: half", ""]); // the cut text is cleared before asking again
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});

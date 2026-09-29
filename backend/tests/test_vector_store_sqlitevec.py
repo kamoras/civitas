@@ -62,6 +62,14 @@ class TestEmbedAndSearch:
         assert results[0]["id"] in (1, 2)
         assert 0.0 <= results[0]["distance"] <= 2.0
 
+    def test_an_index_built_by_another_model_is_not_searched(self, vec_env, monkeypatch):
+        # The API process never rebuilds it: after a model change, until the
+        # pipeline process does, its vectors are another space's.
+        vector_store.embed_explore_documents([_doc(1, "Pentagon appropriations act")])
+        assert vector_store.search_explore_documents("Pentagon") is not None
+        monkeypatch.setattr(vector_store, "index_identity", lambda: "another-model|v9")
+        assert vector_store.search_explore_documents("Pentagon") is None
+
     def test_empty_index_returns_none_not_empty_list(self, vec_env):
         assert vector_store.search_explore_documents("anything") is None
 
