@@ -24,7 +24,7 @@ from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.config_definitions import HOLDING_CATEGORIES
-from app.models import FinancialDisclosure, FinancialHolding, Representative, Senator
+from app.models import FinancialDisclosure, FinancialHolding, President, Representative, Senator
 from app.schemas import HoldingCategorySchema, HoldingSchema, HoldingsSchema, is_open_ended
 from app.services.pagination import paginate_bounds
 
@@ -233,6 +233,19 @@ def get_rep_holdings(
     if db.query(Representative.id).filter(Representative.id == rep_id).first() is None:
         return None
     disclosure = _latest_disclosure(db, representative_id=rep_id)
+    if disclosure is None:
+        return HoldingsSchema(available=False)
+    return _build(db, disclosure, page, per_page, category)
+
+
+def get_president_holdings(
+    db: Session, president_id: str, page: int = 1, per_page: int = 15, category: str | None = None,
+) -> HoldingsSchema | None:
+    """See get_senator_holdings. Only the sitting president's annual report
+    is ingested (holdings_pipeline.ingest_president_holdings)."""
+    if db.query(President.id).filter(President.id == president_id).first() is None:
+        return None
+    disclosure = _latest_disclosure(db, president_id=president_id)
     if disclosure is None:
         return HoldingsSchema(available=False)
     return _build(db, disclosure, page, per_page, category)
