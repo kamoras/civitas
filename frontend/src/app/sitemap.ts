@@ -25,6 +25,9 @@ interface SitemapIndex {
   politicians: SitemapEntry[];
   bills: SitemapEntry[];
   issues: SitemapEntry[];
+  /** Days either chamber met. Optional only for a backend image older than
+   * this field; the Explore documents are listed by /sitemap-index.xml. */
+  congressDays?: string[];
 }
 
 async function fetchIndex(): Promise<SitemapIndex | null> {
@@ -102,5 +105,39 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...entries(index.politicians, (id) => `/politicians/${id}`, "weekly", 0.8),
     ...entries(index.bills, (id) => `/congress/bills/${id}`, "weekly", 0.5),
     ...entries(index.issues, (id) => `/issue/${id}`, "weekly", 0.5),
+    ...congressReports(index.congressDays ?? []),
   ];
+}
+
+/** The day, week and month reports for the days Congress met. A day's
+ * page is that day's record; a week or month page covers the days in it,
+ * so it changes as long as the latest of them does. */
+function congressReports(days: string[]): MetadataRoute.Sitemap {
+  const weeks = new Map<string, string>();
+  const months = new Map<string, string>();
+  for (const day of days) {
+    const week = mondayOf(day);
+    if (!weeks.has(week) || weeks.get(week)! < day) weeks.set(week, day);
+    const month = day.slice(0, 7);
+    if (!months.has(month) || months.get(month)! < day) months.set(month, day);
+  }
+  const page = (path: string, lastmod: string) => ({
+    url: `${SITE_URL}${path}`,
+    lastModified: lastmod,
+    changeFrequency: "weekly" as const,
+    priority: 0.4,
+  });
+  return [
+    ...days.map((d) => page(`/congress/${d}`, d)),
+    ...[...weeks].map(([w, last]) => page(`/congress/week/${w}`, last)),
+    ...[...months].map(([m, last]) => page(`/congress/month/${m}`, last)),
+  ];
+}
+
+/** YYYY-MM-DD of the Monday starting the week that contains `day` — the
+ * week page's own address (congress_service.week_bounds). */
+function mondayOf(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
 }

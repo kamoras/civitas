@@ -52,6 +52,6 @@ export const config = {
   // is the same: the member photo a share image fetches from a page already
   // counted (app/photo/bioguide/[id]/route.ts).
   matcher: [
-    "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|sitemap.xml|robots.txt|opengraph-image).*)",
+    "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|sitemap.xml|sitemap-index.xml|sitemaps/|robots.txt|opengraph-image).*)",
   ],
 };
