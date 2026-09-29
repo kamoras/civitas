@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.models import Justice, JusticeVote
 from app.schemas import (
+    JusticeAgreementSchema,
     JusticeLeaderboardEntry,
     JusticeLoyaltySchema,
     JusticeSchema,
@@ -40,12 +41,27 @@ def _loyalty(j: Justice) -> JusticeLoyaltySchema | None:
     )
 
 
-def _build_justice_response(j: Justice) -> JusticeSchema:
-    score = _build_score(j)
+def _agreement(j: Justice, names: dict[str, str]) -> list[JusticeAgreementSchema]:
+    """The stored agreement shares ({justice id: share}), named, most
+    first. A justice the table no longer holds is left out rather than
+    shown by id."""
     try:
-        agreement = json.loads(j.agreement_matrix or "{}")
+        shares = json.loads(j.agreement_matrix or "{}")
     except (json.JSONDecodeError, TypeError):
-        agreement = {}
+        return []
+    rows = [
+        JusticeAgreementSchema(id=jid, name=names[jid], share=share)
+        for jid, share in shares.items() if jid in names and isinstance(share, (int, float))
+    ]
+    return sorted(rows, key=lambda r: (-r.share, r.name))
+
+
+def _justice_names(db: Session) -> dict[str, str]:
+    return dict(db.query(Justice.id, Justice.name).all())
+
+
+def _build_justice_response(j: Justice, names: dict[str, str]) -> JusticeSchema:
+    score = _build_score(j)
 
     return JusticeSchema(
         id=j.id,
@@ -66,7 +82,7 @@ def _build_justice_response(j: Justice) -> JusticeSchema:
         authored_dissent=j.authored_dissent,
         authored_concurrence=j.authored_concurrence,
         close_case_majority_pct=j.close_case_majority_pct,
-        agreement_matrix=agreement,
+        agreement=_agreement(j, names),
         loyalty=_loyalty(j),
         ideal_points=_ideal_points(j),
     )
@@ -84,14 +100,15 @@ def get_all_justices(db: Session) -> list[JusticeSchema]:
     rows: Sequence[Justice] = (
         db.query(Justice).filter(Justice.is_active.is_(True)).all()
     )
-    return [_build_justice_response(j) for j in rows]
+    names = _justice_names(db)
+    return [_build_justice_response(j, names) for j in rows]
 
 
 def get_justice(db: Session, justice_id: str) -> JusticeSchema | None:
     j = db.query(Justice).filter(Justice.id == justice_id).first()
     if not j:
         return None
-    return _build_justice_response(j)
+    return _build_justice_response(j, _justice_names(db))
 
 
 def get_justice_leaderboard(db: Session) -> list[JusticeLeaderboardEntry]:
