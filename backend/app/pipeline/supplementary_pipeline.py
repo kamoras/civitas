@@ -15,6 +15,7 @@ from datetime import timedelta
 
 from app.database import SessionLocal
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
+from app.ops_alerts import send_ops_alert
 from app.pipeline import lease
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
@@ -127,7 +128,21 @@ async def run_supplementary_pipeline() -> dict:
                         justice_result = await run_justice_pipeline(db)
                         run.justices_scored = justice_result.get("justices", 0)
                         logger.info("Justice pipeline scored %d justices", run.justices_scored)
-                        progress.complete("justice_scorecards", detail=f"{run.justices_scored} scored")
+                        # The voting record can refresh while loyalty (the score)
+                        # can't be measured. A bare "9 scored" hid the SCDB 403
+                        # that left every justice unscored on 2026-09-29, and
+                        # the logs naming the source rotated away within the
+                        # day, so the alert carries the reason.
+                        detail = f"{run.justices_scored} scored"
+                        if why := justice_result.get("loyalty_unmeasured"):
+                            detail += f", loyalty not measured: {why}"
+                            send_ops_alert(
+                                "Justice loyalty not measured",
+                                f"The justice step refreshed the voting record but not the score: {why}. "
+                                "The stored scores stand until a later run can read it.",
+                                dedupe_key=f"justice-loyalty-unmeasured-{utcnow():%Y-%m-%d}",
+                            )
+                        progress.complete("justice_scorecards", detail=detail)
             except Exception:
                 db.rollback()  # drop partial justice upserts before the next commit
                 logger.exception("Justice pipeline failed — continuing")
