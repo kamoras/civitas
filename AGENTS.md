@@ -491,6 +491,12 @@ congress a snapshot falls in is a pure function of its date
 marks `ALGORITHM_VERSION` changes, so a score reset at the start of a new
 congress reads as intentional, not a bug.
 
+A member who joined mid-congress (a special election) has had less of that
+window, so Legislative Effectiveness prorates its bar by the share of the
+congress they have served (`congress_exposure`, v6.23), using the sworn-in
+date from the House Clerk's member list (`fetch/house_clerk.py`). No source
+gives a senator's date, so the Senate is not prorated.
+
 Narrower windows mean less data backs each dimension by design, not because
 coverage got worse — `calculate_confidence`'s vote/bill thresholds are
 recalibrated accordingly (see `score_calculator.py`), and `ground_truth.py`'s

@@ -86,6 +86,7 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
                     attracted_bipartisanship=row.attracted_bipartisanship_score,
                     les_reference=reference,
                     chamber=chamber,
+                    sworn_date=getattr(row, "sworn_date", None),
                 )
             db.commit()
             # Persisted only once the scores it describes are committed: a

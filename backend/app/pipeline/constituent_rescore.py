@@ -122,6 +122,12 @@ def rescore_stale_constituent_alignment(session_factory) -> list[str]:
             # writing it first would strand the scores on a failure.
             CONSTITUENT_REFERENCE.write(chamber, ref)
             done.append(chamber)
+            # The overlap check reads these breakdowns; re-measure it so
+            # /about/scores doesn't show the pre-rescore reading until the
+            # next nightly run. Never raises.
+            from app.pipeline.analyze.signal_overlap import record_signal_overlap
+
+            record_signal_overlap(db, chamber)
             logger.info(
                 "Constituent Alignment rescore (%s): %d members moved to the current reference",
                 chamber, len(rows),

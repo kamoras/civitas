@@ -16,6 +16,7 @@ vi.mock("@/lib/api", () => ({
   fetchSenatorStockTrades: vi.fn(),
   fetchPresidentStockTrades: vi.fn(),
   fetchRepHoldings: vi.fn().mockResolvedValue({ available: false }),
+  fetchPresidentHoldings: vi.fn(),
   fetchSenatorHoldings: vi.fn(),
   fetchRepresentativeHistory: vi.fn().mockResolvedValue({ snapshots: [] }),
   fetchSenatorHistory: vi.fn(),

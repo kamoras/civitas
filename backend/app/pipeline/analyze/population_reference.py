@@ -46,8 +46,14 @@ class ChamberReference:
     {"senate": {...}, "house": {...}}; the presidential reference has the
     single key "presidents"."""
 
-    def __init__(self, name: str, keys: tuple[str, ...] = CHAMBERS, statistic: str | None = None):
+    def __init__(
+        self, name: str, keys: tuple[str, ...] = CHAMBERS, statistic: str | None = None,
+        required: bool = True,
+    ):
         self.name = name
+        # False for a reading nothing is scored against (signal_overlap):
+        # having none before the first run is normal, not an error.
+        self.required = required
         self.keys = keys
         # When set, a per-chamber entry counts only if its "statistic" field
         # equals this: a reference measured on a different statistic (left
@@ -111,7 +117,7 @@ class ChamberReference:
                         source, self.name, k, warn_key[2], self.statistic,
                     )
         if not merged:
-            logger.error(
+            (logger.error if self.required else logger.info)(
                 "No %s reference (neither %s nor the bundled %s)",
                 self.name, self.live_path, self.bundled_path,
             )

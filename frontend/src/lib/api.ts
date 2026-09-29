@@ -5,7 +5,7 @@ import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
-import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
+import type { PresidentScoreBreakdown, RepresentationScoreBreakdown, SignalOverlap } from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -369,7 +369,7 @@ export async function fetchSenatorStockTrades(
  * by-category breakdown plus one page of holdings, largest first, optionally
  * narrowed to one category. */
 async function fetchHoldings(
-  chamber: Chamber,
+  segment: string,
   memberId: string,
   options?: HoldingsOptions
 ): Promise<Holdings> {
@@ -380,7 +380,7 @@ async function fetchHoldings(
   // Loaded like the stock-trade and vote pages, outside cachedFetch's
   // client cache.
   return requestJson(
-    `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`,
+    `${API_BASE}/${segment}/${memberId}/holdings?${params}`,
     "Failed to load holdings",
   );
 }
@@ -388,11 +388,20 @@ async function fetchHoldings(
 type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };
 
 export async function fetchSenatorHoldings(senatorId: string, options?: HoldingsOptions): Promise<Holdings> {
-  return fetchHoldings(Chamber.Senate, senatorId, options);
+  return fetchHoldings(CHAMBER_PATH[Chamber.Senate], senatorId, options);
 }
 
 export async function fetchRepHoldings(repId: string, options?: HoldingsOptions): Promise<Holdings> {
-  return fetchHoldings(Chamber.House, repId, options);
+  return fetchHoldings(CHAMBER_PATH[Chamber.House], repId, options);
+}
+
+/** The assets on the sitting president's latest annual report (OGE 278e),
+ * in the members' shape. */
+export async function fetchPresidentHoldings(
+  presidentId: string,
+  options?: HoldingsOptions
+): Promise<Holdings> {
+  return fetchHoldings("presidents", presidentId, options);
 }
 
 /** Disclosed buy/sell/exchange transactions from a president's OGE Form
@@ -1524,6 +1533,12 @@ export async function setPoliticianVacancy(
     throw new Error(body.detail || `Vacancy update failed: ${res.status}`);
   }
   return res.json();
+}
+
+/** The post-run check that related score components still measure
+ * different things. Refreshed by each pipeline run. */
+export async function fetchSignalOverlap(): Promise<SignalOverlap> {
+  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.LONG);
 }
 
 export async function fetchConfig(): Promise<AppConfig> {

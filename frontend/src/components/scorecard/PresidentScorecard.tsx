@@ -16,6 +16,7 @@ import { fetchPresidentStockTrades } from "@/lib/api";
 import { displayScore } from "@/lib/formatting";
 import { getPresidentLabel, getScoreBgColor, getScoreColor } from "@/lib/representation";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
+import Holdings from "@/components/checker/Holdings";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import StockTrades from "@/components/checker/StockTrades";
 import ComparisonScale from "./ComparisonScale";
@@ -445,6 +446,12 @@ export default function PresidentScorecard({
               weight={weights?.historicalLegacy}
             />
           </div>
+
+          {/* Only the sitting president's annual report is read; a former
+              president's page shows nothing here rather than an empty panel. */}
+          {president.isCurrent && (
+            <Holdings memberId={president.id} filer="president" variant="panel" />
+          )}
 
           <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
             <h2

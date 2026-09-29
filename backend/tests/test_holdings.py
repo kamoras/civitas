@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import FinancialDisclosure, FinancialHolding, Representative, Senator
+from app.models import FinancialDisclosure, FinancialHolding, President, Representative, Senator
 from app.pipeline import holdings_pipeline
 from app.pipeline.fetch.fd_common import HoldingRow
 from app.pipeline.fetch.house_fd import AnnualReport
@@ -400,12 +400,13 @@ class TestHoldingsRoutes:
         # in the embedding stack, which the fast suite runs without.
         from fastapi import FastAPI
 
-        from app.api import representatives, senators
+        from app.api import presidents, representatives, senators
         from app.database import get_db
 
         app = FastAPI()
         app.include_router(senators.router, prefix="/api")
         app.include_router(representatives.router, prefix="/api")
+        app.include_router(presidents.router, prefix="/api")
         app.dependency_overrides[get_db] = lambda: db_session
         return TestClient(app)
 
@@ -423,6 +424,16 @@ class TestHoldingsRoutes:
         assert client.get("/api/representatives/nope/holdings").status_code == 404
         assert client.get("/api/representatives/R1/holdings?category=bogus").status_code == 422
         assert client.get("/api/representatives/R1/holdings").json()["available"] is False
+
+    def test_president_route(self, client, db_session):
+        db_session.add(President(id="trump-47", name="Donald J. Trump", party="R", number=47,
+                                 term_start="2025-01-20", is_current=True))
+        db_session.commit()
+        assert client.get("/api/presidents/trump-47/holdings").json()["available"] is False
+        _store(db_session, [_h("CARNIVAL CORP", "UNSTATED", 1000001.0, 5000000.0)], president_id="trump-47")
+        body = client.get("/api/presidents/trump-47/holdings?category=UNSTATED").json()
+        assert body["holdingsCount"] == 1 and body["categories"][0]["label"] == "Type not stated"
+        assert client.get("/api/presidents/nope/holdings").status_code == 404
 
 
 class TestTransientParseFailures:
@@ -1631,12 +1642,20 @@ class TestPhaseTable:
             calls.append("senate")
             return 2
 
+        async def president(_db, _client):
+            calls.append("president")
+            return 3
+
         steps = list(reversed(holdings_pipeline.HOLDINGS_STEPS))
         with patch.object(holdings_pipeline, "HOLDINGS_STEPS", steps), \
              patch.object(holdings_pipeline, "ingest_house_holdings", house), \
-             patch.object(holdings_pipeline, "ingest_senate_holdings", senate):
+             patch.object(holdings_pipeline, "ingest_senate_holdings", senate), \
+             patch.object(holdings_pipeline, "ingest_president_holdings", president):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
-        assert (calls, counts, errors) == (["senate", "house"], {"senate_holdings": 2, "house_holdings": 1}, [])
+        assert (calls, counts, errors) == (
+            ["president", "senate", "house"],
+            {"president_holdings": 3, "senate_holdings": 2, "house_holdings": 1}, [],
+        )
 
 
 class TestNoteAndPhaseEdges:
@@ -1655,13 +1674,14 @@ class TestNoteAndPhaseEdges:
         async def house(_db, _client):
             return 1
 
-        steps = [*holdings_pipeline.HOLDINGS_STEPS, ("president_holdings", "fetch", "x")]
+        steps = [*holdings_pipeline.HOLDINGS_STEPS, ("unregistered_holdings", "fetch", "x")]
         with patch.object(holdings_pipeline, "HOLDINGS_STEPS", steps), \
              patch.object(holdings_pipeline, "ingest_house_holdings", house), \
              patch.object(holdings_pipeline, "ingest_senate_holdings", house), \
+             patch.object(holdings_pipeline, "ingest_president_holdings", house), \
              patch.object(holdings_pipeline, "send_ops_alert"):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
-        assert counts["house_holdings"] == 1 and len(errors) == 1 and "president_holdings" in errors[0]
+        assert counts["house_holdings"] == 1 and len(errors) == 1 and "unregistered_holdings" in errors[0]
 
 
 class TestIndexAndMatchEdges:

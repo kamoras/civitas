@@ -65,9 +65,6 @@ function seatLine(race: RaceWithCandidates): string {
 
 export type StatewideGroup = { key: string; race?: StatewideRace; seats?: StatewideRace[] };
 
-/** Statewide rows in the backend's order, with every seat of one body (the
- * rows sharing an officeCode that carry a seat) gathered under that body:
- * New Hampshire's five Executive Council districts are one office, not five. */
 /** A contest listing two nominees of one major party fills more than one
  * seat. Major parties only: two nonpartisan ("N") or two minor-party
  * ("OTH") nominees can be rivals for a single seat. */
@@ -76,6 +73,9 @@ function fillsSeveralSeats(race: StatewideRace): boolean {
   return new Set(majors).size < majors.length;
 }
 
+/** Statewide rows in the backend's order, with every seat of one body (the
+ * rows sharing an officeCode that carry a seat) gathered under that body:
+ * New Hampshire's five Executive Council districts are one office, not five. */
 export function groupStatewideRaces(races: StatewideRace[]): StatewideGroup[] {
   const groups: StatewideGroup[] = [];
   for (const race of races) {
