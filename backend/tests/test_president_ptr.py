@@ -72,8 +72,8 @@ _SAMPLE_ROWS = [
 
 
 class TestIndexParsing:
-    def test_keeps_only_this_presidents_periodic_transaction_reports(self):
-        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
+    def test_keeps_only_this_presidents_periodic_and_annual_reports(self):
+        filings = [f for f in _parse_index(_SAMPLE_ROWS, "Donald Trump") if f["kind"] == "periodic"]
 
         assert len(filings) == 1
         assert filings[0]["doc_id"].startswith("trump-278t-111425-")
@@ -82,12 +82,11 @@ class TestIndexParsing:
             "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/AAA/$FILE/trump-278t-111425.pdf"
         )
 
-    def test_annual_report_is_not_ingested_as_transactions(self):
-        """The annual report lists holdings and income in ranges, not
-        buy/sell transactions — parsing it into this table would invent
-        transactions that were never disclosed."""
+    def test_annual_report_is_never_read_as_a_periodic_report(self):
+        """The annual report is read by president_fd (its Part 7), never as
+        a 278-T: its holdings tables would read as transactions."""
         filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
-        assert all("annual" not in f["doc_id"] for f in filings)
+        assert [f["kind"] for f in filings if "annual" in f["doc_id"]] == ["annual"]
 
     def test_another_officials_filing_is_not_attributed_to_the_president(self):
         filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
@@ -212,7 +211,7 @@ class TestFetchIndex:
         ) as mock_fetch, patch("app.pipeline.fetch.president_ptr.api_cache_set") as mock_cache_set:
             filings = await fetch_ptr_filing_index(db_session, "Donald Trump")
 
-        assert len(filings) == 1
+        assert [f["kind"] for f in filings] == ["periodic", "annual"]
         assert "trump-278t-111425" in filings[0]["pdf_url"]
         mock_cache_set.assert_called_once()
         # Server-side filtered on surname so the ~16k-row full index is
@@ -298,7 +297,8 @@ class TestIngestPresident:
                 "app.pipeline.stock_pipeline.fetch_president_ptr_index",
                 new_callable=AsyncMock,
                 return_value=filings if filings is not None else [
-                    {"doc_id": "f1", "filing_date": "2025-11-14", "pdf_url": "https://www.whitehouse.gov/x.pdf"},
+                    {"doc_id": "f1", "filing_date": "2025-11-14", "pdf_url": "https://www.whitehouse.gov/x.pdf",
+                     "kind": "periodic"},
                 ],
             ),
             patch(
