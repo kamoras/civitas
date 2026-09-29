@@ -566,64 +566,6 @@ async def record_pulse_vote(
     }
 
 
-_BRANCH_CHAMBERS = {
-    "senate": ["Senate"],
-    "house": ["House"],
-    "executive": ["Executive", "Regulatory"],
-}
-
-
-@router.get("/recent/{branch}")
-async def get_recent_by_branch(
-    response: Response,
-    branch: str,
-    limit: int = Query(15, ge=1, le=50),
-    db: Session = Depends(get_db),
-):
-    """Return the most recent explore documents for a government branch."""
-    # New documents land continuously as the explore index ingests them —
-    # shorter than most action.py endpoints since "most recent" is the
-    # whole point here.
-    response.headers["Cache-Control"] = "public, max-age=120"
-    chambers = _BRANCH_CHAMBERS.get(branch.lower())
-    if not chambers:
-        raise HTTPException(400, f"Unknown branch: {branch}. Use senate, house, or executive.")
-
-    docs = (
-        db.query(
-            ExploreDocument.id, ExploreDocument.title, ExploreDocument.doc_type,
-            ExploreDocument.date, ExploreDocument.url, ExploreDocument.chamber,
-            ExploreDocument.summary, ExploreDocument.politician_name,
-        )
-        .filter(ExploreDocument.chamber.in_(chambers))
-        .order_by(ExploreDocument.date.desc())
-        .limit(limit * 3)
-        .all()
-    )
-
-    seen_titles: set[str] = set()
-    results: list[dict] = []
-    for d in docs:
-        key = d.title.strip().lower()
-        if key in seen_titles:
-            continue
-        seen_titles.add(key)
-        results.append({
-            "id": d.id,
-            "title": d.title,
-            "docType": d.doc_type,
-            "date": d.date,
-            "url": d.url or "",
-            "chamber": d.chamber,
-            "summary": (d.summary or "")[:300],
-            "politicianName": d.politician_name or "",
-        })
-        if len(results) >= limit:
-            break
-
-    return {"branch": branch, "documents": results, "count": len(results)}
-
-
 @router.get("/country-news")
 async def get_country_news(response: Response):
     """Return recent news articles grouped by country mentioned."""

@@ -42,7 +42,6 @@ CACHEABLE_PREFIXES = (
     "/api/elections",
     "/api/explore",
     "/api/action",
-    "/api/highlights",
     "/api/public/",
     "/api/congress",
 )
