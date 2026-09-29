@@ -515,6 +515,8 @@ def normalize_votes(
             ),
             "voteCategory": "recent",
             "rcKey": bill.get("rcKey"),
+            # What the roll call decided (bill_learning.stamp_motion_type).
+            "motionType": bill.get("motionType"),
             "rollCall": bill.get("rollCall"),
         })
 
@@ -612,6 +614,9 @@ def normalize_recent_votes(
             ),
             "voteCategory": "recent",
             "rcKey": bill.get("rcKey"),
+            # What the roll call decided (passage, cloture, amendment ...;
+            # classify_recent_votes): lets a display say which vote it shows.
+            "motionType": bill.get("motionType"),
             "rollCall": bill.get("rollCall"),
         })
 

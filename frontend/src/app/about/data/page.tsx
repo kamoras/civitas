@@ -81,8 +81,9 @@ export default function DataChapter() {
               Senate&apos;s eFD system; the sitting president&apos;s trade reports from the Office
               of Government Ethics.
             </Fact>
-            <Fact label="Senate LDA database">
-              Registered lobbying spending by organizations that appear among donors.
+            <Fact label="Lobbying Disclosure Act registry (lda.gov)">
+              Registered lobbying spending by organizations that appear among donors, and the bills
+              their filings name.
             </Fact>
             <Fact label="Partisan lean">
               State and district Cook PVI, computed from official presidential returns (MIT Election

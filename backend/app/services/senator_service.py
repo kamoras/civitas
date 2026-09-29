@@ -317,6 +317,9 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
                 bills_influenced=json.loads(lm.bills_influenced) if lm.bills_influenced else [],
                 senator_vote_aligned=lm.senator_vote_aligned,
                 description=lm.description,
+                lobbied_bills=json.loads(lm.lobbied_bills) if lm.lobbied_bills else [],
+                lobbying_clients=json.loads(lm.lobbying_clients) if lm.lobbying_clients else [],
+                lobbying_checked=lm.lobbying_checked,
             )
             for lm in lobbying_matches
         ],
