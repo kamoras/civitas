@@ -542,8 +542,10 @@ export default function ExploreDetailPage() {
     streamExploreDocumentSummary(docId, setLiveText, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
-        // An empty summary is the server saying none could be made.
-        setSummary(result.summary ? result : SUMMARY_UNAVAILABLE);
+        // An empty result is the server saying none could be made.
+        setSummary(
+          result.summary || result.keyPoints.length || result.impact ? result : SUMMARY_UNAVAILABLE
+        );
       })
       .catch(() => {
         if (!controller.signal.aborted) setSummary(SUMMARY_UNAVAILABLE);

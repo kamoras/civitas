@@ -156,8 +156,10 @@ def test_every_cached_location_rate_limits_its_misses_and_not_its_hits():
     server, whose location for that path does — a cache-busting query
     string gets no unlimited path to the backend or the OG renderer."""
     public, internal = _servers()
-    cached = [loc for loc in _locations(public) if "proxy_cache " in loc[3] and loc[1].startswith("/api/")]
-    assert {loc[1] for loc in cached} >= {"/api/", "/api/explore", "/api/config", "/api/og"}
+    # The Atom feeds are the API's too, under public paths of their own.
+    cached = [loc for loc in _locations(public)
+              if "proxy_cache " in loc[3] and loc[1].startswith(("/api/", "/feed"))]
+    assert {loc[1] for loc in cached} >= {"/api/", "/api/explore", "/api/config", "/api/og", "/feed.xml", "/feed/"}
     for modifier, pattern, upstream, body in cached:
         assert "limit_req" not in body and upstream == _MISSES_HOP, pattern
         inner = _match(_locations(internal), pattern)

@@ -59,6 +59,9 @@ class TestResetAllDataTables:
         db_session.add(models.ActionIssue(date="2026-09-01", rank=1, title="An issue", related_explore_ids="[12, 40]"))
         db_session.add(models.ApiCache(tier="action-refresh-lock", cache_key="lock", data_json="{}"))
         db_session.add(models.ApiCache(tier="fec", cache_key="k", data_json="{}"))
+        db_session.add(models.ApiCache(tier="bsky-congress", cache_key="2026-09-24", data_json="{}"))
+        db_session.add(models.BroadcastPost(kind="congress_day", subject="congress-day:2026-09-24",
+                                            title="t", text="x", url="u"))
         db_session.commit()
         monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
         with patch("app.pipeline.vector_store.reset_vector_db"):
@@ -67,12 +70,17 @@ class TestResetAllDataTables:
         assert RESET_KEEPS <= tables  # a renamed table must not drop out of the keep list unnoticed
         assert set(summary) >= tables - RESET_KEEPS
         assert db_session.query(models.PipelineRun).count() == 1  # run history is kept
+        # What was published stays published: the feeds keep their entries,
+        # and the posting modules still know not to post it again.
+        assert db_session.query(models.BroadcastPost).count() == 1
         # A kept issue no longer links to Explore rowids the rebuild reuses.
         db_session.expire_all()
         assert db_session.query(models.ActionIssue).one().related_explore_ids == "[]"
-        # The refresh lease the reset holds while it runs is the one row it
-        # leaves in api_cache.
-        assert [r.tier for r in db_session.query(models.ApiCache).all()] == ["action-refresh-lock"]
+        # What a reset leaves in api_cache: the refresh lease it holds while
+        # it runs...
+        # and the pre-feed Congress post markers, which nothing can rebuild.
+        assert sorted(r.tier for r in db_session.query(models.ApiCache).all()) == [
+            "action-refresh-lock", "bsky-congress"]
         for table in Base.metadata.sorted_tables:
             if table.name not in RESET_KEEPS | {"api_cache"}:
                 assert db_session.execute(select(func.count()).select_from(table)).scalar_one() == 0, table.name
@@ -897,3 +905,10 @@ async def test_a_reset_tells_the_api_processes_their_bills_are_stale(db_session,
     with patch("app.database.reset_all_data", return_value={"senators": 0}):
         await admin_reset_data()
     assert warmed == [1]
+
+
+def test_the_kept_cache_tiers_are_the_congress_post_markers():
+    from app.database import RESET_KEEPS_CACHE_TIERS
+    from app.pipeline.analyze import congress_bluesky
+
+    assert set(RESET_KEEPS_CACHE_TIERS) == {congress_bluesky._CACHE_TIER, congress_bluesky._WEEK_CACHE_TIER}

@@ -1013,6 +1013,11 @@ RESET_KEEPS = frozenset({
     # Which members the Bluesky account has already spotlighted — posts
     # that were really made. Wiped, the rotation would repeat them.
     "bsky_senator_spotlights",
+    # Everything Civitas published: the feeds' entries, and the record the
+    # posting modules check before publishing again (broadcast.py). Wiped,
+    # every feed would empty, and the Congress days and races posted in
+    # the last few days would be posted a second time.
+    "broadcast_posts",
     # LLM generations captured as fine-tuning data, accumulated over months.
     "llm_generation_samples",
     # Run history. ops_alerts.check_pipeline_staleness reads a pipeline with
@@ -1023,6 +1028,13 @@ RESET_KEEPS = frozenset({
     "stock_trades_pipeline_runs", "election_pipeline_runs",
     "pipeline_phase_timings", "pipeline_rate_limit_stats",
 })
+
+
+# api_cache tiers a reset leaves alone, besides the leases: the markers that
+# recorded Congress posts made before broadcast_posts existed. Wiped, a reset
+# in the days after that deploy would post those days again
+# (congress_bluesky._already_published).
+RESET_KEEPS_CACHE_TIERS = ("bsky-congress", "bsky-congress-week")
 
 
 def reset_all_data() -> dict:
@@ -1053,7 +1065,7 @@ def reset_all_data() -> dict:
                 # any other that may be live.
                 from app.pipeline import lease
 
-                wipe = wipe.where(table.c.tier.notin_(lease.TIERS))
+                wipe = wipe.where(table.c.tier.notin_([*lease.TIERS, *RESET_KEEPS_CACHE_TIERS]))
             summary[table.name] = db.execute(wipe).rowcount
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the
