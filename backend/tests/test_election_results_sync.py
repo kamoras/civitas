@@ -404,6 +404,28 @@ class TestIssueLifecycle:
         assert sources[-1] == signals.HOLDER_SOURCE and facts[-1].startswith("The seat is held by")
         assert set(sources[:-1]) == {"Georgia Secretary of State"}
 
+    def test_a_held_poll_leaves_the_issues_time_and_official_flag_with_its_figures(self, db_session):
+        """A poll whose total fell is stored on the count row but never
+        rewrites the issue; the issue's time and flag must not move either."""
+        race = _setup(db_session)
+        first = datetime(2026, 11, 4, 2)
+        with patch.object(er, "utcnow", return_value=first):
+            _apply(db_session, race, _contest(900, 1000, 60))
+        [issue] = _issues(db_session)
+        assert issue.count_as_of == first and issue.count_official is False
+        with patch.object(er, "utcnow", return_value=first + timedelta(hours=1)):
+            _apply(db_session, race, _contest(800, 900, 60), official=True)  # total fell: held
+        assert db_session.get(RaceResult, race.id).official is True
+        assert issue.count_as_of == first and issue.count_official is False
+
+    def test_an_official_revert_does_not_say_not_final(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 60))
+        [issue] = _issues(db_session)
+        _apply(db_session, race, _contest(1300, 1100, 100), official=True)
+        assert "The state lists this count as official." in issue.summary
+        assert "not final" not in issue.summary
+
     def test_a_reverted_flip_says_so_where_it_is_still_shown(self, db_session):
         """The homepage record and the issue's own address show retired
         rows; retiring alone left "leads in a seat Democrats hold" there."""

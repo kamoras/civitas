@@ -30,7 +30,7 @@ from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
 from app.models import (
-    ActionIssue, ActionIssueStatus, ExploreDocument, RaceResult, IssueView, MonitorStatus,
+    ActionIssue, ActionIssueStatus, ExploreDocument, IssueView, MonitorStatus,
     NationalMonitor, Race, RepSponsoredBill, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
@@ -301,13 +301,15 @@ def _build_issue_response(
     # meaningless (of course they are, the issue just appeared).
     new_facts = new_facts_since(current_facts, previous_facts) if previous_facts else []
 
+    # Stamped on the issue with its facts (live_results/signals.py), never
+    # read from the live count row: a held poll moves that row's time and
+    # official flag without rewriting the issue's figures.
     count_as_of = count_official = None
     if (getattr(issue, "source_type", None) == _ELECTION_RESULTS_SOURCE
-            and (getattr(issue, "status", None) or "confirmed") == ActionIssueStatus.DEVELOPING):
-        count = db.query(RaceResult).filter(RaceResult.developing_issue_id == issue.id).first()
-        if count is not None:
-            count_as_of = count.fetched_at.isoformat() + "Z"
-            count_official = bool(count.official)
+            and (getattr(issue, "status", None) or "confirmed") == ActionIssueStatus.DEVELOPING
+            and getattr(issue, "count_as_of", None) is not None):
+        count_as_of = issue.count_as_of.isoformat() + "Z"
+        count_official = bool(issue.count_official)
 
     return ActionIssueSchema(
         id=issue.id,

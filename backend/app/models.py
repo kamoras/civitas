@@ -1331,6 +1331,13 @@ class ActionIssue(Base):
     # _expire_stale_developing_issues retires the row unconfirmed — never
     # deletes it (see ActionIssueStatus docstring).
     confirmation_deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    # A seat-flip issue (source_type "election_results"): when the count
+    # its facts quote was read, and whether the state called that count
+    # official — stamped by live_results/signals.py in the same write as
+    # the facts, so the page never pairs one poll's figures with another
+    # poll's time or flag. NULL for every other issue.
+    count_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    count_official: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
     # Set only by _promote_developing_issue. confirmed_at - created_at is
     # the real per-row lead time (how long the signal ran before press
     # coverage matched it) — durable, queryable success-metric data, not

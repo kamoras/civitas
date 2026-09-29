@@ -944,16 +944,12 @@ class TestCountIssuePayload:
         from datetime import datetime
 
         from app.api.action import _build_issue_response
-        from app.models import Race, RaceResult
 
         issue = ActionIssue(date="2026-11-04", rank=999, title="Republican leads", is_current=True,
-                            source_type="election_results", status=ActionIssueStatus.DEVELOPING)
+                            source_type="election_results", status=ActionIssueStatus.DEVELOPING,
+                            count_as_of=datetime(2026, 11, 4, 2, 44), count_official=True)
         news = ActionIssue(date="2026-11-04", rank=1, title="News", is_current=True)
         db_session.add_all([issue, news])
-        db_session.flush()
-        db_session.add(Race(id="2026-HOUSE-GA-2", cycle_year=2026, office="H", state="GA", district=2))
-        db_session.add(RaceResult(race_id="2026-HOUSE-GA-2", election_date="2026-11-03", source_name="GA SOS",
-                                  official=True, developing_issue_id=issue.id, fetched_at=datetime(2026, 11, 4, 2, 44)))
         db_session.commit()
 
         data = _build_issue_response(issue, db_session)

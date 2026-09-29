@@ -137,8 +137,10 @@ def _reverted_content(result: RaceResult) -> dict:
         now = f"{publisher(result.source_name)}'s latest count shows {_person(leader)} ahead."
     else:
         now = f"{publisher(result.source_name)}'s latest count shows the top two tied."
+    status = ("The state lists this count as official." if result.official
+              else "The count is not final.")
     summary = (f"The count earlier showed a candidate from another party leading in a seat {holders} "
-               f"hold. {now} The count is not final.")
+               f"hold. {now} {status}")
     facts = [f"{_person(p)}: {p['votes']:,} votes, {p['pct']}%" for p in (leader, runner) if p]
     if d["totalUnits"]:
         share = round(100 * (d["reportingUnits"] or 0) / d["totalUnits"])
@@ -179,6 +181,11 @@ def _fill(issue: ActionIssue, result: RaceResult, *, content: dict | None = None
     issue.source_urls = json.dumps([result.source_url] if result.source_url else [])
     issue.source_names = json.dumps([publisher(result.source_name)])
     issue.primary_source_url = result.source_url
+    # Stamped with the facts, from the same poll: the page's "count as of"
+    # line and OFFICIAL/NOT FINAL tag describe exactly these figures, not
+    # a later poll the issue never took (a held one, for instance).
+    issue.count_as_of = result.fetched_at
+    issue.count_official = bool(result.official)
 
 
 def _create(db: Session, result: RaceResult) -> ActionIssue:

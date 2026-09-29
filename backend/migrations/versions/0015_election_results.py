@@ -1,8 +1,8 @@
 """race_results / election_result_events / live_result_reads: live
-general-election counts
+general-election counts; action_issues.count_as_of / count_official
 
-New tables only, so the previous image runs unchanged against the
-migrated schema.
+New tables and two nullable columns only, so the previous image runs
+unchanged against the migrated schema.
 
 Revision ID: 0015
 Revises: 0014
@@ -69,9 +69,17 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_race_results_election_date'), ['election_date'], unique=False)
         batch_op.create_index(batch_op.f('ix_race_results_last_change_at'), ['last_change_at'], unique=False)
 
+    with op.batch_alter_table('action_issues', schema=None) as batch_op:
+        batch_op.add_column(sa.Column('count_as_of', sa.DateTime(), nullable=True))
+        batch_op.add_column(sa.Column('count_official', sa.Boolean(), nullable=True))
+
 
 
 def downgrade() -> None:
+    with op.batch_alter_table('action_issues', schema=None) as batch_op:
+        batch_op.drop_column('count_official')
+        batch_op.drop_column('count_as_of')
+
     with op.batch_alter_table('race_results', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_race_results_last_change_at'))
         batch_op.drop_index(batch_op.f('ix_race_results_election_date'))
