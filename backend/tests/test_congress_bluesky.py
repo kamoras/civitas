@@ -4,8 +4,9 @@ from datetime import date
 
 import pytest
 
-from app.models import CongressDay
+from app.models import BroadcastPost, CongressDay
 from app.pipeline.analyze import congress_bluesky as cb
+from app.pipeline.cache import api_cache_set
 
 
 def _report(senate_passed, house_passed=()):
@@ -41,13 +42,10 @@ def _day(db, iso, chamber, in_session=True, final=True):
 
 
 @pytest.fixture
-def posting(monkeypatch):
-    sent = []
-    monkeypatch.setattr(cb.settings, "BSKY_HANDLE", "civitas.test", raising=False)
-    monkeypatch.setattr(cb.settings, "BSKY_APP_PASSWORD", "x", raising=False)
+def posting(db_session, monkeypatch):
+    """Returns a function listing the urls published so far, in order."""
     monkeypatch.setattr(cb, "day_report", lambda db, day: {**_report(["S.1"]), "date": day.isoformat()})
-    monkeypatch.setattr(cb, "publish_post", lambda text, url, **kw: sent.append(url) or True)
-    return sent
+    return lambda: [r.url for r in db_session.query(BroadcastPost).order_by(BroadcastPost.id)]
 
 
 def test_posts_the_newest_final_session_day_once(db_session, posting):
@@ -59,7 +57,7 @@ def test_posts_the_newest_final_session_day_once(db_session, posting):
     assert cb.post_daily_congress(db_session, today) == date(2026, 9, 24)
     assert cb.post_daily_congress(db_session, today) == date(2026, 9, 23)
     assert cb.post_daily_congress(db_session, today) is None
-    assert posting == ["https://civitas-research.org/congress/2026-09-24", "https://civitas-research.org/congress/2026-09-23"]
+    assert posting() == ["https://civitas-research.org/congress/2026-09-24", "https://civitas-research.org/congress/2026-09-23"]
 
 
 def test_never_a_day_still_on_the_floor_log_a_day_nobody_met_or_an_old_day(db_session, posting):
@@ -71,22 +69,39 @@ def test_never_a_day_still_on_the_floor_log_a_day_nobody_met_or_an_old_day(db_se
     _day(db_session, "2026-06-10", "house")
     db_session.commit()
     assert cb.post_daily_congress(db_session, date(2026, 9, 27)) is None
-    assert posting == []
+    assert posting() == []
 
 
-def test_a_failed_publish_is_tried_again(db_session, posting, monkeypatch):
+def test_a_day_bluesky_refused_is_still_published_once(db_session, posting, bluesky_configured):
+    """The feed is the record: Bluesky refusing a post doesn't unpublish it
+    or publish it again (app.broadcast retries the Bluesky send itself)."""
     _day(db_session, "2026-09-24", "senate")
     _day(db_session, "2026-09-24", "house")
     db_session.commit()
-    monkeypatch.setattr(cb, "publish_post", lambda *a, **k: False)
-    assert cb.post_daily_congress(db_session, date(2026, 9, 25)) is None
-    monkeypatch.setattr(cb, "publish_post", lambda *a, **k: True)
+    bluesky_configured.ok = False
     assert cb.post_daily_congress(db_session, date(2026, 9, 25)) == date(2026, 9, 24)
-
-
-def test_no_credentials_no_post(db_session, monkeypatch):
-    monkeypatch.setattr(cb.settings, "BSKY_HANDLE", "", raising=False)
     assert cb.post_daily_congress(db_session, date(2026, 9, 25)) is None
+    assert db_session.query(BroadcastPost).one().bsky_status == "failed"
+
+
+def test_published_without_a_bluesky_account(db_session, posting):
+    _day(db_session, "2026-09-24", "senate")
+    _day(db_session, "2026-09-24", "house")
+    db_session.commit()
+    assert cb.post_daily_congress(db_session, date(2026, 9, 25)) == date(2026, 9, 24)
+    post = db_session.query(BroadcastPost).one()
+    assert (post.kind, post.subject, post.title, post.bsky_status) == (
+        "congress_day", "congress-day:2026-09-24", "Congress, Thursday, September 24", "off")
+    assert post.text.startswith("Congress, Thursday, September 24. ")
+
+
+def test_a_day_posted_to_bluesky_before_the_feed_existed_is_not_posted_again(db_session, posting):
+    _day(db_session, "2026-09-24", "senate")
+    _day(db_session, "2026-09-24", "house")
+    db_session.commit()
+    api_cache_set(db_session, "bsky-congress", "2026-09-24", {"posted": True}, normal_ttl_hours=24 * 30)
+    assert cb.post_daily_congress(db_session, date(2026, 9, 25)) is None
+    assert posting() == []
 
 
 def _week(sentence="The Senate met 3 days and took 12 record votes. The House did not meet.", laws=()):
@@ -122,7 +137,7 @@ def test_last_week_posts_once_when_every_day_of_it_is_final(db_session, week_pos
     db_session.commit()
     assert cb.post_weekly_congress(db_session, monday) == date(2026, 9, 21)
     assert cb.post_weekly_congress(db_session, date(2026, 9, 30)) is None  # once
-    assert week_posting == ["https://civitas-research.org/congress/week/2026-09-21"]
+    assert week_posting() == ["https://civitas-research.org/congress/week/2026-09-21"]
 
 
 def test_a_week_nobody_met_or_an_older_week_is_not_posted(db_session, week_posting):
@@ -130,4 +145,16 @@ def test_a_week_nobody_met_or_an_older_week_is_not_posted(db_session, week_posti
     _day(db_session, "2026-09-15", "senate")
     db_session.commit()
     assert cb.post_weekly_congress(db_session, date(2026, 9, 28)) is None
-    assert week_posting == []
+    assert week_posting() == []
+
+
+def test_the_pre_feed_marker_is_still_written_for_a_rollback(db_session, posting):
+    """The image before this one knows a posted day only by its api_cache
+    marker; a rollback to it must not post the day again."""
+    from app.pipeline.cache import api_cache_get
+
+    _day(db_session, "2026-09-24", "senate")
+    _day(db_session, "2026-09-24", "house")
+    db_session.commit()
+    cb.post_daily_congress(db_session, date(2026, 9, 25))
+    assert api_cache_get(db_session, "bsky-congress", "2026-09-24", max_age_hours=24 * 30)

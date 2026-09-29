@@ -8,6 +8,7 @@ import {
   List,
   Item,
   More,
+  A,
 } from "@/components/about/AboutPage";
 
 export const metadata = pageMetadata({
@@ -187,9 +188,10 @@ export default function NewsChapter() {
           left.
         </P>
         <P>
-          Once a day&apos;s Record is final, the Civitas Bluesky account posts that day&apos;s count
-          summary and the numbers of bills passed — never their titles, since an official short
-          title can read as advocacy — and each week, the bills that became law.
+          Once a day&apos;s Record is final, Civitas posts that day&apos;s count summary and the
+          numbers of bills passed — never their titles, since an official short title can read as
+          advocacy — and each week, the bills that became law. Posts go to the{" "}
+          <A href="/feeds">feeds</A> and the Bluesky account.
         </P>
       </Section>
 

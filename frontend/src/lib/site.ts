@@ -17,6 +17,20 @@ export const SITE_NAME = "Civitas";
 export const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
 export const GITHUB_REPO_URL = "https://github.com/kamoras/civitas";
 
+/** Everything Civitas publishes, as Atom (backend/app/api/feed.py). Topic
+ *  and per-state feeds are listed on /feeds. */
+export const FEED_PATH = "/feed.xml";
+
+/**
+ * The feed, advertised in every page's <head> so a feed reader given any
+ * Civitas URL finds it. Part of `alternates`, which Next merges shallowly:
+ * a route that sets `alternates` (every route, through `pageMetadata`)
+ * drops its parent's, so the root layout and `pageMetadata` both carry it.
+ */
+export const FEED_ALTERNATES = {
+  "application/atom+xml": [{ url: FEED_PATH, title: "Civitas" }],
+};
+
 /** Absolute URL for a site path ("/bills/S.1" → "https://…/bills/S.1"). */
 export function absoluteUrl(path: string): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
@@ -83,7 +97,7 @@ export function pageMetadata({
   return {
     title: absoluteTitle ? { absolute: title } : title,
     description: desc,
-    alternates: { canonical: path },
+    alternates: { canonical: path, types: FEED_ALTERNATES },
     openGraph: {
       title: fullTitle,
       description: desc,

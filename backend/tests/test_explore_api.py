@@ -122,12 +122,25 @@ class TestSummaryEndpointGuards:
             await get_explore_document_summary(999999, None, db=db_session)
         assert exc_info.value.status_code == 404
 
-    async def test_cooldown_blocks_repeat_request_for_same_doc(self, db_session):
+    async def test_cooldown_blocks_a_second_generation_for_the_same_doc(self, db_session):
         from fastapi import HTTPException
 
         doc = _make_doc(db_session)
-        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value={"summary": "s", "keyPoints": [], "impact": ""}):
+        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None), \
+             patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream), \
+             patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"):
             await get_explore_document_summary(doc.id, None, db=db_session)
             with pytest.raises(HTTPException) as exc_info:
                 await get_explore_document_summary(doc.id, None, db=db_session)
         assert exc_info.value.status_code == 429
+
+    async def test_a_cached_summary_is_served_inside_the_cooldown(self, db_session):
+        """A second reader (or a reload) within the cooldown gets the stored
+        summary. The cooldown used to be checked first, so they got a 429,
+        shown as "Analysis unavailable", with the summary already cached."""
+        doc = _make_doc(db_session)
+        cached = {"summary": "s", "keyPoints": [], "impact": ""}
+        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=cached):
+            first = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            second = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+        assert first == second == [{"done": True, **cached}]

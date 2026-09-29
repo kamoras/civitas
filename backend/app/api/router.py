@@ -6,6 +6,7 @@ from app.api.bills import router as bills_router
 from app.api.congress import router as congress_router
 from app.api.elections import router as elections_router
 from app.api.explore import router as explore_router
+from app.api.feed import router as feed_router
 from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
 from app.api.justices import router as justices_router
@@ -37,3 +38,4 @@ api_router.include_router(admin_router, tags=["admin"])
 api_router.include_router(public_router, prefix="/public/v1", tags=["public"])
 api_router.include_router(visits_router, tags=["visits"])
 api_router.include_router(sitemap_router, tags=["sitemap"])
+api_router.include_router(feed_router, tags=["feed"])
