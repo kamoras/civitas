@@ -662,7 +662,7 @@ Counties are pickable instead, because a person knows theirs without
 looking it up where almost nobody knows their district NUMBER. The index
 is built from the rows already on the page (every race carries its county
 list), so it needs no new data, no lookup service and no network call.
-**13% of US counties span more than one district** (409 of 3,142) — those
+**13% of US counties span more than one district** (414 of 3,142 on the 2026 lines) — those
 offer the two or three as a second tap rather than sending the reader
 elsewhere. The text filter stays for anyone who prefers it.
 
@@ -671,16 +671,36 @@ city holding several — a **map of the districts themselves** does. Every
 multi-district state page draws its districts, shaded by the same PVI
 rule as the district list (red R, blue D, paler = closer); hovering or
 tabbing to one previews its race, and clicking narrows the page to it.
-The outlines are the Census 119th-Congress cartographic boundary file,
-split per state and vendored under `frontend/public/data/cd/` (all 50
-states, 435 districts, ~207KB total; a page loads only its own state) by
+The outlines are the lines each state votes on this cycle, split per
+state and vendored under `frontend/public/data/cd/` (all 50 states, 435
+districts, ~206KB total; a page loads only its own state) by
 `backend/scripts/build_district_topology.py`, which refuses to write
 unless every state's district numbers match
 `county_district_crosswalk.json` and none was lost to simplification.
 At-large states get no map — one shape is nothing to choose between.
-Regenerate after redistricting:
+
+**The 2026 lines are not the 2024 lines.** Nine states redrew between the
+two elections (AL, CA, FL, LA, NC, OH, TN, TX, UT); until 2026-09 every page
+drew and listed those states' districts on the old lines under the new
+district numbers — Utah's 1st, now almost all Salt Lake County, still read
+as the old northern-Utah seat. Which map each state votes on is one
+checked-in list, `backend/app/data/redrawn_congressional_maps.json`, with the
+enacting act or court order per state; Missouri is listed on its old map on
+purpose (its 2025 map was stayed by the U.S. Supreme Court on 2026-09-25).
+Both files are generated from the Census Bureau's block equivalency files
+(119th Congress, and the 120th-Congress file its Redistricting Data Office
+published 2026-08-31, which every state's own official block file matches):
+the crosswalk by `build_county_district_crosswalk.py`, and the redrawn
+states' outlines by dissolving 2020 Census blocks on those lines (the Census
+publishes no cartographic file for them yet), clipped to the same shoreline.
+The crosswalk script refuses to write if a state not on the list differs
+between the two files, so a later redraw can't slip through on stale lines.
+The same list tells the election-night sync that a redrawn seat has no
+holder to measure a flip against, and lets an incumbent running under a new
+number link to their record. Regenerate after any redistricting:
 
 ```bash
+python backend/scripts/build_county_district_crosswalk.py
 python backend/scripts/build_district_topology.py
 ```
 

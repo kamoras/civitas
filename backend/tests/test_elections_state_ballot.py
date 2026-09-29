@@ -330,12 +330,12 @@ def test_pvi_fallback_matches_race_detail_behavior(db_session):
     back to statewide, flagged 'state' — same contract race_detail
     already has, verified consistent rather than reimplemented
     differently here."""
-    _race(db_session, "2026-HOUSE-CA-12", "CA", office="H", district=12)
+    _race(db_session, "2026-HOUSE-IL-7", "IL", office="H", district=7)
     db_session.commit()
 
-    data = _body(elections.state_ballot("CA", db_session))
+    data = _body(elections.state_ballot("IL", db_session))
     house = data["houseRaces"][0]
-    assert house["pvi"] == elections.get_district_pvi_map()["CA-12"]
+    assert house["pvi"] == elections.get_district_pvi_map()["IL-7"]
     assert house["pviLevel"] == "district"
 
 
@@ -421,6 +421,28 @@ class TestIncumbentRecordLink:
 
         data = _body(elections.state_ballot("MO", db_session))
         assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-ONDER"
+
+    def test_an_incumbent_renumbered_by_a_redrawn_map_still_links(self, db_session):
+        """Utah's 2026 map renumbers seats; an incumbent running in a
+        district another member holds today is matched across the state's
+        delegation — uniquely, or not at all."""
+        _race(db_session, "2026-HOUSE-UT-3", "UT", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-UT-3", "MOVER, PAT", incumbent_challenge="I")
+        _representative(db_session, "R-MOVER", "Pat Mover", "UT", 1)
+        _representative(db_session, "R-OTHER", "Sam Other", "UT", 3)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("UT", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-MOVER"
+
+    def test_an_unchanged_map_never_links_across_districts(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-3", "GA", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-3", "MOVER, PAT", incumbent_challenge="I")
+        _representative(db_session, "R-MOVER", "Pat Mover", "GA", 1)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"] is None
 
     def test_house_non_incumbent_gets_no_link(self, db_session):
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
@@ -877,3 +899,15 @@ class TestJudicialConfirmedNone:
         data = _body(elections.state_ballot("GA", db_session))
         assert data["judicialCoverage"]["status"] == "not_yet_covered"
         assert "Judicial contests and retention questions" in data["omits"]
+
+
+def test_a_redrawn_states_house_race_takes_the_flagged_statewide_lean(db_session):
+    """district_pvi.json describes today's seats; on Utah's 2026 map UT-1
+    is a different district, so its race carries the statewide number,
+    flagged, never the old seat's."""
+    from app.api.elections import _pvi_for_race
+
+    race = Race(id="2026-HOUSE-UT-1", cycle_year=2026, office="H", state="UT", district=1)
+    assert _pvi_for_race(race, {"UT": 11}, {"UT-1": 10}) == (11, "state")
+    kept = Race(id="2026-HOUSE-GA-1", cycle_year=2026, office="H", state="GA", district=1)
+    assert _pvi_for_race(kept, {"GA": 3}, {"GA-1": 9}) == (9, "district")

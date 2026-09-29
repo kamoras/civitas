@@ -31,9 +31,12 @@ import {
  * wander the state seeing which seats are close without declaring where
  * they live — which is both more fun and strictly less data than asking.
  *
- * Geometry is the Census cartographic boundary file for the 119th
- * Congress, split per state and vendored under public/data/cd/ by
- * backend/scripts/build_district_topology.py. Each file carries its own
+ * Geometry is the lines each state votes on this cycle — the Census
+ * cartographic file for the 119th Congress, and for the nine states that
+ * redrew for 2026 (backend/app/data/redrawn_congressional_maps.json) their
+ * new lines, dissolved from Census blocks — split per state and vendored
+ * under public/data/cd/ by backend/scripts/build_district_topology.py.
+ * Each file carries its own
  * bbox, so fitting the projection is the few lines of Mercator arithmetic
  * below rather than another geo library in the bundle.
  *
@@ -232,7 +235,9 @@ export default function DistrictMap({
                     fill: !counted && answered ? `url(#${hatchId})` : resultFill(counted, true),
                     opacity: 1,
                   }
-                : leanFill(race?.pvi ?? null);
+                : // A statewide stand-in says nothing about one district:
+                  // painting every seat the state's colour would.
+                  leanFill(race?.pviLevel === "state" ? null : (race?.pvi ?? null));
               const isPicked = district === pickedDistrict;
               const isHovered = district === hovered;
               const label = district === 0 ? `${state} at-large` : `${state}-${district}`;
@@ -301,7 +306,10 @@ function DistrictPreview({ state, race }: { state: string; race: RaceWithCandida
       <span className="text-ink-hi">
         {race.district === 0 ? `${state} at-large` : `${state}-${race.district}`}
       </span>
-      <span className="text-ink-min">{formatPvi(race.pvi)}</span>
+      <span className="text-ink-min">
+        {formatPvi(race.pvi)}
+        {race.pviLevel === "state" && " (statewide)"}
+      </span>
       {top.map((c) => {
         const major = majorPartyOf(c);
         return (

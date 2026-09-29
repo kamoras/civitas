@@ -64,14 +64,23 @@ class TestListRaces:
         assert top["PETERS"]["incumbentChallenge"] is None
 
     def test_house_race_uses_district_pvi_not_state_pvi(self, db_session):
+        _race(db_session, "2026-HOUSE-IL-7", "IL", office="H", district=7)
+        db_session.commit()
+
+        data = _body(elections.list_races(db_session))
+        assert data[0]["pvi"] == elections.get_district_pvi_map()["IL-7"]
+        # The provenance flag tells the frontend which map the number came
+        # from — a district figure, not the statewide fallback.
+        assert data[0]["pviLevel"] == "district"
+
+    def test_a_redrawn_states_house_race_is_flagged_as_state_level(self, db_session):
+        """CA redrew for 2026: CA-12 is a different district now, so the
+        old seat's number would be a claim about the wrong place."""
         _race(db_session, "2026-HOUSE-CA-12", "CA", office="H", district=12)
         db_session.commit()
 
         data = _body(elections.list_races(db_session))
-        assert data[0]["pvi"] == elections.get_district_pvi_map()["CA-12"]
-        # The provenance flag tells the frontend which map the number came
-        # from — a district figure, not the statewide fallback.
-        assert data[0]["pviLevel"] == "district"
+        assert data[0]["pviLevel"] == "state"
 
     def test_senate_race_pvi_is_flagged_as_state_level(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA")

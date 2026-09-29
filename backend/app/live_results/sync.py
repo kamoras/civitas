@@ -101,13 +101,15 @@ _redrawn_cache: dict | None = None
 
 
 def redrawn_states(cycle: int) -> set[str]:
-    """States whose congressional map changed for `cycle`
-    (app/data/redrawn_congressional_maps.json)."""
+    """States voting in `cycle` on a map other than the one sitting members
+    were elected on (app/data/redrawn_congressional_maps.json — the same
+    list the district crosswalk and outlines are built from)."""
     global _redrawn_cache
     if _redrawn_cache is None:
         path = Path(__file__).resolve().parent.parent / "data" / "redrawn_congressional_maps.json"
         _redrawn_cache = json.loads(path.read_text())
-    return set(_redrawn_cache.get(str(cycle), []))
+    entries = _redrawn_cache.get("cycles", {}).get(str(cycle), {})
+    return {st for st, e in entries.items() if e.get("map") != "CD119"}
 
 
 def seat_holder_party(db: Session, race: Race) -> str | None:
