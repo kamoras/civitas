@@ -153,7 +153,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                           }`}
                         >
                           {d.system.vectorDb.indexRebuild === "failed"
-                            ? "rebuild failed: index partial until the pipeline restarts"
+                            ? "rebuild failed: semantic search off until the next Explore run completes the index"
                             : "rebuilding…"}
                         </div>
                       )}

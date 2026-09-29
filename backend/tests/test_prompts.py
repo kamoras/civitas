@@ -99,8 +99,8 @@ class TestCutOff:
         }
 
     def test_cut_just_after_the_summary_or_impact_line_keeps_it(self):
-        # The format is a line per part: a line break ends the summary and
-        # the impact as it does a key point.
+        # The format is a line per part: a line break after a finished
+        # sentence ends the summary and the impact as it does a key point.
         assert parse_explore_document_summary("SUMMARY: The bill does X.\n", cut_off=True)["summary"] == (
             "The bill does X."
         )
@@ -108,3 +108,9 @@ class TestCutOff:
         assert parse_explore_document_summary(text, cut_off=True) == {
             "summary": "s.", "keyPoints": ["a"], "impact": "It matters.",
         }
+
+    def test_a_sentence_wrapped_onto_the_next_line_is_not_taken_as_finished(self):
+        text = "SUMMARY: The rule sets new limits on\n"
+        assert parse_explore_document_summary(text, cut_off=True)["summary"] == ""
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\nIMPACT: Drivers will pay\n"
+        assert parse_explore_document_summary(text, cut_off=True)["impact"] == ""

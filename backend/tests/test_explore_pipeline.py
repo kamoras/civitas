@@ -220,6 +220,7 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
              patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking",
                    new_callable=AsyncMock, return_value=[]), \
              patch("app.pipeline.explore_pipeline.embed_explore_documents", blocking_embed), \
+             patch("app.pipeline.explore_pipeline.clear_failed_rebuild") as cleared, \
              patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
              patch("app.pipeline.explore_pipeline.update_document_authority",
                    return_value={"documents": 0, "cited": 0}), \
@@ -233,6 +234,8 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
             after = ticks
             beat.cancel()
 
+        # After the embed step: a rebuild a failure left partial is whole.
+        cleared.assert_called_once()
         assert after - before > 5, (
             f"event loop only ticked {after - before} times while the CPU-bound "
             "embed step ran — it is blocking the loop, which is what got the "

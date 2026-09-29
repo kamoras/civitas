@@ -201,10 +201,13 @@ class TestEnsureExploreIndex:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()
 
-    def test_a_rebuild_that_raised_leaves_the_partial_index_searchable(self, vec_env, db_session, monkeypatch):
-        # Not "not ready" until someone restarts the pipeline: the partial
-        # index is searched, the dashboard says so, and the next start
-        # rebuilds it.
+    def test_a_rebuild_that_raised_is_not_ready_until_the_index_is_completed(
+        self, vec_env, db_session, monkeypatch,
+    ):
+        # A partial index is not the index: keyword-only (and saying so),
+        # the dashboard shows the failure, the next start rebuilds it — and
+        # the Explore run's embed step, which embeds every missing document,
+        # completes it.
         db_session.add(ExploreDocument(
             doc_type="House Floor Speech", source="congress.gov",
             title="A real doc", summary="s", body="b", date="2026-07-01",
@@ -224,10 +227,21 @@ class TestEnsureExploreIndex:
         monkeypatch.setattr(vector_store, "embed_explore_documents", real_embed)
 
         assert vector_store.collection_stats()["indexRebuild"] == "failed"
-        assert vector_store.search_explore_documents("A real doc", n_results=1) is not None
+        assert vector_store.search_explore_documents("A real doc", n_results=1) is None
         with patch.object(vector_store.threading, "Thread") as thread:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()
+
+        vector_store.clear_failed_rebuild()
+        assert vector_store.collection_stats()["indexRebuild"] == ""
+        assert vector_store.search_explore_documents("A real doc", n_results=1) is not None
+
+    def test_clearing_a_failed_rebuild_leaves_a_running_one_marked(self, vec_env):
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        conn = vector_store.get_vec_conn()
+        vector_store._set_meta(conn, vector_store._REBUILDING, vector_store.index_identity())
+        vector_store.clear_failed_rebuild()
+        assert vector_store.collection_stats()["indexRebuild"] == "running"
 
     def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session):
         db_session.add(ExploreDocument(

@@ -46,10 +46,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/action")
 
 # The one lifetime for /api/action/issues: nginx takes its cache lifetime
-# from this header (nginx/civitas.conf has no per-route block), and so does
-# the browser's own HTTP cache — which is why it stays short (2026-08 incident: a
+# from this header, and so does the browser's own HTTP cache — which is why
+# it stays short, with no stale-while-revalidate (2026-08 incident: a
 # response cached before a deploy added a field crashed the whole Action
 # Center for any visitor whose BROWSER, not nginx, was still holding it).
+# nginx serves the two lists stale while it refreshes them on its own
+# (nginx/civitas.conf), which a browser never sees.
 _ACTION_ISSUES_CACHE_TTL_S = 30
 
 
@@ -614,6 +616,9 @@ async def record_pulse_vote(
 # alike (AGENTS.md); nginx's path-keyed cache and its lock stand in front.
 _COUNTRY_NEWS_TTL_S = 600.0
 _country_news: tuple[float, dict] | None = None
+# When the last fetch found every feed down: the requests queued behind it
+# don't each fetch again, one after another, for FAILURE_RETRY_S.
+_country_news_failed_at: float | None = None
 _country_news_lock = asyncio.Lock()
 
 
@@ -627,20 +632,35 @@ async def get_country_news(response: Response):
     # holding a worker thread that search and the rest of the API share,
     # and a way to get this server rate-limited by the outlets. So the
     # answer is also held here, and concurrent misses share one fetch.
-    global _country_news
-    response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=600"
+    global _country_news, _country_news_failed_at
+    from app.api.response_helpers import FAILURE_RETRY_S, retry_soon_json
+
     async with _country_news_lock:
-        if _country_news is None or time.monotonic() - _country_news[0] >= _COUNTRY_NEWS_TTL_S:
-            from app.api.response_helpers import retry_soon_json
+        now = time.monotonic()
+        fresh = _country_news is not None and now - _country_news[0] < _COUNTRY_NEWS_TTL_S
+        failed_lately = _country_news_failed_at is not None and now - _country_news_failed_at < FAILURE_RETRY_S
+        if not fresh and not failed_lately:
             from app.pipeline.fetch.news_feeds import fetch_news_articles
 
             articles = await asyncio.to_thread(fetch_news_articles)
-            if not articles:
+            if articles:
+                _country_news = (time.monotonic(), {"countries": _extract_country_mentions(articles)})
+                _country_news_failed_at = None
+                fresh = True
+            else:
                 # Every feed failed (a working feed always has items): an
-                # outage, not a quiet news day — never kept for the
-                # success's ten minutes, here or in nginx.
-                return retry_soon_json({"countries": []})
-            _country_news = (time.monotonic(), {"countries": _extract_country_mentions(articles)})
+                # outage, not a quiet news day.
+                _country_news_failed_at = time.monotonic()
+        if not fresh:
+            # Never kept for a success's ten minutes, here or in nginx; the
+            # last answer the feeds gave meanwhile, if there is one.
+            return retry_soon_json(_country_news[1] if _country_news else {"countries": []})
+        # Its lifetime counts from the fetch, not from this request, so a
+        # held answer isn't cached for ten minutes more.
+        remaining = max(1, int(_COUNTRY_NEWS_TTL_S - (time.monotonic() - _country_news[0])))
+        response.headers["Cache-Control"] = (
+            f"public, max-age={remaining}, stale-while-revalidate={int(_COUNTRY_NEWS_TTL_S)}"
+        )
         return _country_news[1]
 
 

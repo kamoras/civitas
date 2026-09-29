@@ -229,9 +229,10 @@ def _busy_timeout_s() -> float:
 
 # vec_meta key: set while ensure_explore_index rebuilds the index from
 # scratch, cleared when the last batch is in. A rebuild that raised leaves
-# _REBUILD_FAILED instead: the partial index is searched again (with the
-# keyword channel, a partial answer beats none until someone restarts the
-# pipeline), and the next start rebuilds it.
+# _REBUILD_FAILED: the index holds only the batches it finished, so search
+# still reports it not ready (keyword-only, and says so) until the next
+# nightly Explore run embeds every document it is missing
+# (clear_failed_rebuild), or the next start rebuilds it.
 _REBUILDING = "explore_index_rebuilding"
 _REBUILD_FAILED = "failed"
 
@@ -688,8 +689,8 @@ def search_explore_documents(
     # model's space, and ranking against them would be noise presented as a
     # whole answer. Nor while a rebuild is partway: a few hundred documents
     # are not the index. Not ready, either way.
-    if _get_meta(conn, _REBUILDING) not in (None, "", _REBUILD_FAILED):
-        logger.warning("explore index being rebuilt — not ready")
+    if _get_meta(conn, _REBUILDING):
+        logger.warning("explore index being rebuilt, or partial after a failed rebuild — not ready")
         return None
     if _get_meta(conn, "explore_index_model") != index_identity():
         logger.warning("explore index built by another model — not ready until it is rebuilt")
@@ -894,6 +895,16 @@ def reset_vector_db() -> None:
     logger.info("Reset vector DB")
 
 
+def clear_failed_rebuild() -> None:
+    """After every document missing from the index has been embedded (the
+    Explore run's embed step, an admin re-embed): a rebuild that failed
+    partway is complete now. A rebuild still running keeps its mark."""
+    conn = get_vec_conn()
+    if _get_meta(conn, _REBUILDING) == _REBUILD_FAILED:
+        _set_meta(conn, _REBUILDING, "")
+        logger.info("Explore index completed after a failed rebuild")
+
+
 def ensure_explore_index(db_session_factory) -> None:
     """Rebuild the explore index in the background when it is missing or
     was built by a different model — the migration/upgrade path.
@@ -968,7 +979,7 @@ def ensure_explore_index(db_session_factory) -> None:
             _set_meta(conn, _REBUILDING, "")
             logger.info("Explore index rebuild complete: %d documents", total)
         except Exception:
-            logger.exception("Explore index rebuild failed — searching the partial index until the next start")
+            logger.exception("Explore index rebuild failed — not ready until the next Explore run completes it")
             try:
                 _set_meta(conn, _REBUILDING, _REBUILD_FAILED)
             except Exception:

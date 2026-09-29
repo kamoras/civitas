@@ -49,6 +49,7 @@ from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
 from app.pipeline.vector_store import (
     delete_explore_vectors,
+    clear_failed_rebuild,
     embed_explore_documents,
     get_embedded_explore_ids,
 )
@@ -661,6 +662,12 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # donor_classifier_ai.py and api/explore.py already give their own
         # CPU-bound calls.
         embedded = await asyncio.to_thread(embed_explore_documents, doc_dicts)
+        # Every document missing from the index is in it now, so one a
+        # failed rebuild left partial is whole.
+        try:
+            await asyncio.to_thread(clear_failed_rebuild)
+        except Exception:
+            logger.exception("Explore pipeline: could not clear a failed index rebuild's mark")
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill

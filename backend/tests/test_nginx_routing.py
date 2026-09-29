@@ -204,3 +204,18 @@ def test_a_summary_read_goes_through_the_miss_hop_and_is_never_served_stale_whil
     # stale-while-revalidate (api/cache_headers.py).
     for path in ("/api/senators", "/api/explore", "/api/action/country-news"):
         assert "updating" not in _match(_locations(public), path)[3], path
+
+
+def test_only_the_action_center_lists_are_served_stale_while_updating():
+    # nginx alone may serve these stale while one request refreshes: their
+    # 30s Cache-Control leaves stale-while-revalidate out for browsers, and
+    # they answer every request with a cacheable 200, so a refresh always
+    # replaces the stale copy. A single issue (a 404 once gone) is not one.
+    public, internal = _servers()
+    for path in ("/api/action/issues", "/api/action/issues/recent"):
+        location = _match(_locations(public), path)
+        assert "updating" in location[3] and location[2] == _MISSES_HOP, path
+        assert "limit_req" not in location[3], path
+        assert "limit_req zone=" in _match(_locations(internal), path)[3], path
+    for path in ("/api/action/issues/i123", "/api/action/issues/recent/x", "/api/action/monitors"):
+        assert "updating" not in _match(_locations(public), path)[3], path

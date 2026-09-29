@@ -1230,7 +1230,8 @@ export interface VectorDbStats {
    * classification-side model. Empty until the first reindex completes. */
   indexModelVersion?: string;
   /** "running" while the search index is rebuilt, "failed" when a rebuild
-   * raised and the index is partial (the next pipeline start rebuilds it). */
+   * raised and the index is partial — semantic search stays off until the
+   * next Explore run embeds the rest (or the next pipeline start rebuilds it). */
   indexRebuild?: "" | "running" | "failed";
   learningStore?: LearningStoreStats;
   error?: string;

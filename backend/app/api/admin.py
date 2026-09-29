@@ -1389,6 +1389,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     from app.pipeline.vector_store import (
         _write_model_version,
         clear_explore,
+        clear_failed_rebuild,
         embed_explore_documents,
     )
 
@@ -1426,6 +1427,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
             def _run():
                 count = embed_explore_documents(doc_dicts)
                 _write_model_version()
+                clear_failed_rebuild()
                 return count
 
             count = await asyncio.to_thread(_run)

@@ -375,8 +375,8 @@ async def get_cached_explore_summary(doc_id: int, db: Session = Depends(get_db))
     if cached is None:
         # Not made yet — and may be made any moment: never kept.
         return Response(status_code=204, headers={"Cache-Control": "no-store"})
-    # Kept briefly (and served stale at most as long again, the bound
-    # cache_headers.py adds): this URL names the document, not the text
+    # Kept briefly, and never served stale while refreshing (no
+    # stale-while-revalidate): this URL names the document, not the text
     # summarised, so a document changed in place (a body backfilled, a data
     # reset reusing its id) must stop being answered with the old text's
     # summary soon.
