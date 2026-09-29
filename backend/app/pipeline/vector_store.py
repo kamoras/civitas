@@ -385,21 +385,22 @@ def invalidate_on_model_change(db_session=None) -> None:
     logger.warning("Embedding model change detected — invalidating stored embeddings")
     # DROP + recreate, not DELETE: a vec0 table's vector width is fixed at
     # creation, and a new model may have a different one. In one
-    # transaction, so a reader that doesn't take _vec_lock (the kNN
-    # reference read, the dashboard's counts) sees the old table or the new
-    # one, never none.
-    conn = get_vec_conn()
-    with _vec_lock:
-        if conn.in_transaction:
-            conn.commit()
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            conn.execute("DROP TABLE IF EXISTS vec_bills")
-            conn.execute(_BILLS_DDL.format(if_not_exists=""))
-        except BaseException:
-            conn.rollback()
-            raise
-        conn.commit()
+    # transaction on a connection of its own, so every other connection
+    # (the shared one, whose users commit without _vec_lock, and the API
+    # processes') sees the old table or the new one, never none.
+    import sqlite_vec
+
+    swap = sqlite3.connect(_VECTOR_DB_PATH, timeout=SQLITE_BUSY_TIMEOUT_S)
+    try:
+        swap.enable_load_extension(True)
+        sqlite_vec.load(swap)
+        swap.enable_load_extension(False)
+        swap.execute("BEGIN IMMEDIATE")
+        swap.execute("DROP TABLE IF EXISTS vec_bills")
+        swap.execute(_BILLS_DDL.format(if_not_exists=""))
+        swap.commit()
+    finally:
+        swap.close()
 
     if db_session is not None:
         try:
@@ -1045,7 +1046,13 @@ def ensure_explore_index(db_session_factory) -> None:
     that starts meanwhile — since the rebuild reads documents by id
     (rebuild_explore_index) and one rebuild at a time is the lock's job.
     """
-    if index_is_whole() or is_rebuilding():
+    try:
+        whole = index_is_whole()
+    except Exception:
+        # Unreadable is not whole: the rebuild recreates it.
+        logger.warning("Explore index unreadable — rebuilding it", exc_info=True)
+        whole = False
+    if whole or is_rebuilding():
         return
 
     def _reindex() -> None:
@@ -1061,10 +1068,14 @@ def ensure_explore_index(db_session_factory) -> None:
             logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
             if rebuild_explore_index(db_session_factory) is not None:
                 # The fit in force was measured against the index this
-                # replaced. The keyword index it also measures is kept live
-                # by its triggers; a run mid-ingest meanwhile refits at its
-                # own end.
-                recalibrate_ranking(db_session_factory)
+                # replaced. Only under the Explore lease, though: a run
+                # holding it is mid-ingest (the corpus and keyword index
+                # moving under a fit), and refits at its own end anyway.
+                from app.pipeline import lease
+
+                with lease.job(lease.EXPLORE, who="Explore ranking refit") as held:
+                    if held:
+                        recalibrate_ranking(db_session_factory)
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
 

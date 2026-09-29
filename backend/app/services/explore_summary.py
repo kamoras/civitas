@@ -175,8 +175,8 @@ class _Run:
 
 # This process's state — the pipeline process is always one process.
 _runs: dict[str, _Run] = {}
-# The run each client started, by the client's key (an HMAC of its address,
-# throttle.client_key — never the address).
+# The run each client started, by the client's key (_client_key: an HMAC
+# of its address — never the address).
 _by_client: dict[str, str] = {}
 # Text key -> (why, monotonic time it lifts): "unusable" or "slow".
 _holds: dict[str, tuple[str, float]] = {}
@@ -204,8 +204,6 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
     """The event stream for a text with no summary cached (lookup): a
     generation joined, one started, or the answer that none can be made for
     now. `limit()` raises to refuse. Raises Refusal."""
-    from app.api import throttle
-
     key = f"{doc_id}:{key_['prompt']}"
 
     def joined() -> AsyncIterator[str] | None:
@@ -224,15 +222,11 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
     # open them without limit either (nginx also caps each address's).
     if limit is not None:
         await limit()
-    # Joining needs no key: nothing new starts.
+    # From here on everything decides and registers without yielding to
+    # another request, so two can't both pass the same check.
     if (stream := joined()) is not None:
         return stream
-    client = await throttle.run(throttle.client_key, ip, "explore-summary-client")
-    # Looked at again after those awaits; from here on everything decides
-    # and registers without yielding to another request, so two can't both
-    # pass the same check.
-    if (stream := joined()) is not None:
-        return stream
+    client = _client_key(ip)
     now = time.monotonic()
     held = _holds.get(key)
     if held is not None:
@@ -244,21 +238,14 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
     # the LLM.
     if _llm_busy_until > now:
         raise _busy(_llm_busy_until - now)
-    if client is None:
-        # The throttle store unreadable: a key of this process's own, so the
-        # rule still holds (one address mustn't hold every slot) without
-        # refusing everyone meanwhile.
-        client = _fallback_key(ip)
-    # Under yesterday's key too, so the rule doesn't reset at midnight.
     # Only runs still generating count: one whose last event is out is only
     # writing its cache.
-    previous = getattr(client, "previous", None)
-    if any(k in _by_client and not _runs[_by_client[k]].done for k in (str(client), previous) if k):
+    if client in _by_client and not _runs[_by_client[client]].done:
         raise _busy()
     if sum(not r.done for r in _runs.values()) >= MAX_GENERATIONS:
         raise _busy()
 
-    run = _Run(key, doc_id, prompt, key_, str(client))
+    run = _Run(key, doc_id, prompt, key_, client)
     _runs[key] = run
     _by_client[run.client] = key
     run.task = asyncio.create_task(_generate(run))
@@ -266,16 +253,19 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
     return run.follow()
 
 
-# For _fallback_key: this process's alone, never stored — gone with the
-# process, as the keys it made are with their runs.
-_FALLBACK_SALT = secrets.token_bytes(32)
+# For _client_key: this process's alone, never stored — gone with the
+# process, as are the runs keyed by it. The rule lives only here (the
+# pipeline process is always one), so it needs no key the API workers
+# share, and none from the throttle store, whose moments of unavailability
+# would otherwise hand one client a second key.
+_CLIENT_SALT = secrets.token_bytes(32)
 
 
-def _fallback_key(ip: str) -> str:
-    """A client key made without the throttle store: an HMAC of the address
-    under a salt only this process holds (never the address itself, AGENTS.md
-    §8), marked so it can't equal one of the store's."""
-    return "local:" + hmac.new(_FALLBACK_SALT, ip.encode(), hashlib.sha256).hexdigest()[:32]
+def _client_key(ip: str) -> str:
+    """The key the one-generation-per-client rule knows a client by: an
+    HMAC of the address under a salt only this process holds (never the
+    address itself, AGENTS.md §8)."""
+    return hmac.new(_CLIENT_SALT, ip.encode(), hashlib.sha256).hexdigest()[:32]
 
 
 def _forget(run: _Run) -> None:

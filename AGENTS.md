@@ -1035,7 +1035,8 @@ the pending list).
     cache) are fine per process. So is state in the pipeline process, which
     is always exactly one process (it refuses to start as several):
     `services/explore_summary.py` keeps its one-generation-per-client rule
-    there, keyed by `throttle.client_key`, whole by construction.
+    there, whole by construction, keyed by an HMAC of the address under a
+    salt only that process holds (never the address).
   - A module cache of a file the pipeline rewrites must notice the rewrite
     from the API process: keep a `file_cache.files_stamp` of it and reload
     when it moves. Clearing the cache from the writer only clears the

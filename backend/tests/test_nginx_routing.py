@@ -197,6 +197,8 @@ def test_a_summary_read_goes_through_the_miss_hop_and_is_never_served_stale_whil
     assert location is not None and location[2] == _MISSES_HOP
     assert "proxy_cache civitas_cache" in location[3] and "limit_req" not in location[3]
     assert "updating" not in location[3]
+    # Nor stale on an error: the page asks the pipeline instead.
+    assert "proxy_cache_use_stale off;" in location[3]
     assert "limit_req zone=" in _match(_locations(internal), "/api/explore/1/cached-summary")[3]
     # Nor does any location that follows the backend's Cache-Control: stale
     # while refreshing comes only from a response's own

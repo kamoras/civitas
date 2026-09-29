@@ -321,6 +321,15 @@ class TestEnsureExploreIndex:
         reset.join(timeout=5)
         assert not reset.is_alive()
 
+    def test_a_start_rebuilds_an_index_it_cannot_read(self, vec_env, monkeypatch):
+        def unreadable():
+            raise sqlite3.OperationalError("database disk image is malformed")
+
+        monkeypatch.setattr(vector_store, "index_is_whole", unreadable)
+        with patch.object(vector_store, "start_writer") as thread:
+            vector_store.ensure_explore_index(lambda: None)
+        thread.assert_called_once()
+
     def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
         # Two overlapping would each clear what the other built.
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
@@ -368,7 +377,7 @@ class TestEnsureExploreIndex:
         assert vector_store._get_meta(conn, vector_store._INDEX_MODEL) == "old-model|v1"
         assert vector_store.search_explore_documents("New") is None
 
-    def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session, recalibrated):
+    def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session, recalibrated, explore_lease):
         db_session.add(ExploreDocument(
             doc_type="House Floor Speech", source="congress.gov",
             title="A real doc", summary="s", body="b", date="2026-07-01",
@@ -387,6 +396,28 @@ class TestEnsureExploreIndex:
         # And the ranking is refitted: the one in force was measured against
         # the index this replaced.
         assert len(recalibrated) == 1
+
+    def test_a_start_leaves_the_refit_to_a_run_holding_the_explore_lease(
+        self, vec_env, db_session, recalibrated, monkeypatch,
+    ):
+        # That run is mid-ingest — the corpus and keyword index moving under
+        # a fit — and refits at its own end.
+        from app.pipeline import lease
+
+        class _Refused(_Granted):
+            def __enter__(self):
+                return False
+
+        monkeypatch.setattr(lease, "job", _Refused)
+        db_session.add(ExploreDocument(doc_type="House Floor Speech", source="congress.gov",
+                                       title="A real doc", summary="s", body="b", date="2026-07-01"))
+        db_session.commit()
+        vector_store.ensure_explore_index(lambda: db_session)
+        import threading as _t
+        for t in _t.enumerate():
+            if t.name == "explore-reindex":
+                t.join(timeout=10)
+        assert vector_store.index_is_whole() and recalibrated == []
 
     def test_rebuild_recreates_a_stale_pre_migration_schema(self, vec_env, db_session, explore_lease):
         """Regression for a live 2026-08-30 incident: a prior deploy's
@@ -505,3 +536,12 @@ async def test_the_admin_re_embed_runs_in_the_background_and_refuses_when_it_can
     with pytest.raises(HTTPException) as refused:
         await admin_reembed_explore(db=db_session)
     assert refused.value.status_code == 409 and "Explore ingest" in refused.value.detail
+
+
+@pytest.mark.slow
+def test_each_tables_width_is_its_models_own():
+    # A vec0 table's width is fixed at creation from these constants: one
+    # left behind by a model change recreates the table at the wrong width,
+    # and every insert into it fails.
+    assert vector_store.get_similarity_model().get_sentence_embedding_dimension() == vector_store.SIMILARITY_DIMENSIONS
+    assert vector_store.get_embedding_model().get_sentence_embedding_dimension() == vector_store.EMBEDDING_DIMENSIONS
