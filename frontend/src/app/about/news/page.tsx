@@ -152,7 +152,8 @@ export default function NewsChapter() {
           <Item label="Today">
             The day&apos;s issues, each with what you can do about it, and below them the federal
             documents whose comment period is open, soonest deadline first, each linking to its page
-            in Explore and the comment form there. Recent days can be paged through one at a time.
+            in Explore and the comment form there. Every day still on the record can be paged
+            through, one at a time.
           </Item>
           <Item label="Ongoing">
             When a story persists across several days, it becomes a national monitor with its own
