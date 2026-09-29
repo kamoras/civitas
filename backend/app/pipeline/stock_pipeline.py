@@ -125,12 +125,12 @@ def _other_pipeline_running(db: Session) -> bool:
     return any(run_in_progress(db, model) for model in (PipelineRun, HousePipelineRun))
 
 
-def _compute_days_to_disclose(transaction_date: str, disclosure_date: str) -> int:
+def _compute_days_to_disclose(transaction_date: str | None, disclosure_date: str) -> int:
     try:
         t = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         d = datetime.strptime(disclosure_date, "%Y-%m-%d").date()
         return (d - t).days
-    except ValueError:
+    except (TypeError, ValueError):  # no date, or not one: shown as unknown (StockTradeSchema)
         return 0
 
 
@@ -438,7 +438,9 @@ async def _read_president_filing(db: Session, filing: dict) -> list[TradeRow]:
         filing = {**filing, "filing_date": dates.get(filing["doc_id"])}
     rows = await fetch_president_ptr(db, {**filing, "not_before": president.term_start})
     covered = _annual_covered_through(db, president.id)
-    return [r for r in rows if not covered or r.transaction_date > covered]
+    # An undated row is the annual report's when its whole filing is: filed
+    # by the year's end the report covers.
+    return [r for r in rows if not covered or (r.transaction_date or r.disclosure_date) > covered]
 
 
 async def _ingest_president_annual(db: Session, client: httpx.AsyncClient, president: President, filings: list[dict]) -> int:
@@ -461,6 +463,14 @@ async def _ingest_president_annual(db: Session, client: httpx.AsyncClient, presi
         PresidentTrade.president_id == president.id,
         PresidentTrade.transaction_date <= f"{year}-12-31",
         (PresidentTrade.report_kind == "periodic") | (PresidentTrade.transaction_date >= f"{year}-01-01"),
+    ).delete(synchronize_session=False)
+    # An undated periodic row filed by the year's end is one of the year's
+    # (_read_president_filing's rule); one filed later may be of the next.
+    db.query(PresidentTrade).filter(
+        PresidentTrade.president_id == president.id,
+        PresidentTrade.transaction_date.is_(None),
+        PresidentTrade.report_kind == "periodic",
+        PresidentTrade.disclosure_date <= f"{year}-12-31",
     ).delete(synchronize_session=False)
     for row in rows:
         db.add(_trade(PresidentTrade, president_id=president.id, row=row))
