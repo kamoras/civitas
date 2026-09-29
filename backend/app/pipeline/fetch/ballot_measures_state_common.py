@@ -23,6 +23,7 @@ Nothing here reads or rewrites ballot content.
 
 import io
 import logging
+import re
 from datetime import date
 
 import httpx
@@ -43,6 +44,17 @@ from app.pipeline.rate_limiter import RateLimiter
 logger = logging.getLogger(__name__)
 
 _rate_limiter = RateLimiter(rps=1.0)
+
+# BROWSER_HEADERS with the User-Agent's trailing "(+contact@...)" comment
+# dropped (still ending "Civitas/1.0"). Akamai-fronted state sites refuse
+# that bracketed crawler-contact form with a 403 and serve the same
+# request without it: michigan.gov (ballot_measures_mi.py) and nh.gov —
+# www.sos.nh.gov and mm.nh.gov both measured 403 with it, 200 without,
+# 2026-09-28.
+HEADERS_NO_CONTACT = {
+    **BROWSER_HEADERS,
+    "User-Agent": re.sub(r"\s*\(\+[^)]*\)\s*$", "", BROWSER_HEADERS["User-Agent"]),
+}
 
 
 def election_day(year: int) -> date:
@@ -66,11 +78,13 @@ async def get_text(client: httpx.AsyncClient, url: str, label: str, **kwargs) ->
     return await fetch_text_with_retry(client, _rate_limiter, url, label, **kwargs)
 
 
-async def get_text_or_missing(client: httpx.AsyncClient, url: str, label: str) -> tuple[str | None, bool]:
+async def get_text_or_missing(
+    client: httpx.AsyncClient, url: str, label: str, *, headers: dict = BROWSER_HEADERS,
+) -> tuple[str | None, bool]:
     """(body, missing): body None with missing True is a 404 (the page
     isn't there); with missing False, any other failure."""
     resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS,
+        client, _rate_limiter, "GET", url, log_label=label, headers=headers,
         expected_statuses=(404,),
     )
     if resp is None:
@@ -95,8 +109,8 @@ async def get_text_unless_missing(
     return text
 
 
-async def get_bytes(client: httpx.AsyncClient, url: str, label: str) -> bytes | None:
-    return await fetch_bytes_with_retry(client, _rate_limiter, url, label)
+async def get_bytes(client: httpx.AsyncClient, url: str, label: str, **kwargs) -> bytes | None:
+    return await fetch_bytes_with_retry(client, _rate_limiter, url, label, **kwargs)
 
 
 async def get_json(client: httpx.AsyncClient, url: str, label: str) -> dict | list | None:
@@ -120,3 +134,10 @@ def pdf_text(raw: bytes) -> str:
     plain text rather than binary PDFs."""
     with pdfplumber.open(io.BytesIO(raw)) as pdf:
         return "\n".join(page.extract_text() or "" for page in pdf.pages)
+
+
+def pdf_pages(raw: bytes) -> list[str]:
+    """Each page's extract_text(), one string per page — for a reader
+    that needs page boundaries (running headers and footers to drop)."""
+    with pdfplumber.open(io.BytesIO(raw)) as pdf:
+        return [page.extract_text() or "" for page in pdf.pages]
