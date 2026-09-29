@@ -450,14 +450,26 @@ class TestPublishing:
 
 def test_a_flip_that_reverted_during_a_reset_still_gets_its_correction(db_session):
     """The sync measures against its own events, which a reset wipes: a flip
-    that reverted before the rebuilt count's first read raised nothing."""
+    that reverted before the rebuilt count's first read raised only first
+    returns."""
     _race(db_session, "2026-SEN-GA", flip=False)
     _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
+    _event(db_session, "2026-SEN-GA", er.FIRST_RETURNS, _detail(leader_party="DEM"),
+           bsky_posted_at=utcnow())  # considered: first returns never post
     [(text, _)] = _run(db_session)
     assert "no longer shows a change of party" in text
     assert _run(db_session) == []  # owed once
-    events = db_session.query(ElectionResultEvent).filter_by(kind=er.FLIP_REVERSED).all()
-    assert len(events) == 1
+    assert db_session.query(ElectionResultEvent).filter_by(kind=er.FLIP_REVERSED).count() == 1
+
+
+def test_no_correction_for_a_seat_whose_holder_is_not_known_yet(db_session):
+    """A reset also wipes the members a seat's holder is looked up from."""
+    _race(db_session, "2026-SEN-GA", flip=False)
+    _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
+    _event(db_session, "2026-SEN-GA", er.FIRST_RETURNS, _detail(leader_party="REP", held=None),
+           bsky_posted_at=utcnow())
+    assert _run(db_session) == []
+    assert db_session.query(ElectionResultEvent).filter_by(kind=er.FLIP_REVERSED).count() == 0
 
 
 def test_a_standing_flip_owes_nothing(db_session):
@@ -465,3 +477,29 @@ def test_a_standing_flip_owes_nothing(db_session):
     _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
     assert _run(db_session) == []
     assert db_session.query(ElectionResultEvent).count() == 0
+
+
+def test_a_held_poll_owes_no_correction(db_session):
+    """A poll whose total fell is stored but announces nothing; a
+    correction raised from it was followed by the same flip again once the
+    count recovered."""
+    from tests.test_election_results_sync import DAY as SYNC_DAY, _apply, _contest, _setup
+
+    assert SYNC_DAY.isoformat() == DAY
+    race = _setup(db_session)
+    kinds, _ = _apply(db_session, race, _contest(400, 600, 60))
+    assert "flip" in kinds
+    [(text, _)] = _run(db_session)
+    assert "leads in a seat" in text
+    later = utcnow() + timedelta(minutes=rb.RACE_COOLDOWN_MINUTES + 1)
+    with patch.object(er, "utcnow", return_value=later):
+        held, _ = _apply(db_session, race, _contest(400, 300, 60))  # the total fell: held
+    assert held == []
+    with patch.object(rb, "utcnow", return_value=later):
+        assert _run(db_session) == []
+    with patch.object(er, "utcnow", return_value=later + timedelta(minutes=5)):
+        _apply(db_session, race, _contest(400, 700, 70))
+    with patch.object(rb, "utcnow", return_value=later + timedelta(minutes=6)):
+        assert _run(db_session) == []
+    kinds = [e.kind for e in db_session.query(ElectionResultEvent).order_by(ElectionResultEvent.id)]
+    assert er.FLIP_REVERSED not in kinds and kinds.count(er.FLIP) == 1

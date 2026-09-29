@@ -261,23 +261,46 @@ def _as_of_now(result: RaceResult, d: dict) -> dict:
 
 
 def _owed_reversals(db: Session, election_date: str, h: _History) -> list[ElectionResultEvent]:
-    """A reversal the sync can't raise: a posted flip whose count has since
-    reverted, with no reversal event since the post. The sync measures new
-    events against its own events, and a data reset wipes those — a flip
-    that reverted before the rebuilt count's first read raised nothing,
-    leaving the flip as the account's last word on the race. Raised once per
-    flip post: the event, once stored, is the guard."""
+    """A reversal the sync can't raise: a posted flip whose ANNOUNCED count
+    has since gone back to the seat's party (or a tie), with no reversal
+    event since the post. The sync measures new events against its own
+    events, and a data reset wipes those — a flip that reverted before the
+    rebuilt count's first read raised nothing, leaving the flip as the
+    account's last word on the race.
+
+    Decided from the events, never the stored row: a held poll (a total
+    that fell, sync.apply_count) is stored but announces nothing, and a
+    correction raised from it was followed by the same flip again once the
+    count recovered. And only with the seat's holder known — a reset also
+    wipes the members a holder is looked up from, and "no longer shows a
+    change of party" about a seat with no known holder was false. Raised
+    once per flip post: the event, once stored, is the guard."""
     raised = []
     for race_id, (kind, _) in h.last_claim.items():
-        result = db.get(RaceResult, race_id)
-        if kind != er.FLIP or result is None or result.election_date != election_date or er.is_flip(result):
+        if kind != er.FLIP:
             continue
         since = h.claim_at[race_id]
-        if db.query(ElectionResultEvent.id).filter(
+        latest = (
+            db.query(ElectionResultEvent)
+            .filter(ElectionResultEvent.race_id == race_id, ElectionResultEvent.election_date == election_date,
+                    ElectionResultEvent.created_at >= since)
+            .order_by(ElectionResultEvent.created_at.desc(), ElectionResultEvent.id.desc())
+            .first()
+        )
+        if latest is None or db.query(ElectionResultEvent.id).filter(
             ElectionResultEvent.race_id == race_id, ElectionResultEvent.election_date == election_date,
             ElectionResultEvent.kind == er.FLIP_REVERSED, ElectionResultEvent.created_at >= since,
-        ).first() is None:
-            raised.append(er._event(db, result, er.FLIP_REVERSED))
+        ).first() is not None:
+            continue
+        d = json.loads(latest.detail or "{}")
+        held, leader = d.get("heldBy"), d.get("leader")
+        back = (leader and leader.get("party") == held) or (not leader and (d.get("votesCounted") or 0) > 0)
+        if not held or not back:
+            continue
+        event = ElectionResultEvent(race_id=race_id, election_date=election_date, kind=er.FLIP_REVERSED,
+                                    detail=latest.detail, created_at=utcnow())
+        db.add(event)
+        raised.append(event)
     if raised:
         db.flush()
     return raised
