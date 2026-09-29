@@ -381,8 +381,13 @@ async def get_explore_document_summary(
 
     if not writers_allowed():
         # nginx sends this route to the pipeline service; one that reached
-        # the read-only API anyway is refused rather than generated here.
-        raise HTTPException(status_code=503, detail="Summaries are served by the pipeline service")
+        # the read-only API anyway is refused rather than generated here —
+        # as a wait, like the pipeline being down, not a failure.
+        raise HTTPException(
+            status_code=503,
+            detail="Summaries are served by the pipeline service; please try again shortly.",
+            headers={"Retry-After": str(explore_summary.BUSY_RETRY_AFTER_S), **explore_summary.WAIT_OUT},
+        )
 
     doc = await _load_document(db, doc_id)
     if doc is None:

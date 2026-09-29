@@ -316,3 +316,34 @@ async def test_a_refusal_is_not_remembered_as_gone(db_session, monkeypatch):
         await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
         await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
     assert len(fetched) == 2
+
+
+async def test_a_fetch_the_cache_cant_answer_is_charged_and_a_refusal_fetches_nothing(db_session, monkeypatch):
+    # The route passes rate_limit.spend_upstream, a coroutine function: a
+    # charge that isn't awaited charges nothing and refuses nothing.
+    import httpx
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
+        "url": f"https://example.com/{town}.pdf", "column_bounds": [[0, 1]],
+    })
+    fetched = []
+
+    def handler(request):
+        fetched.append(request.url)
+        return httpx.Response(404)
+
+    charged = []
+
+    async def spend(n):
+        charged.append(n)
+
+    async def refuse(n):
+        raise HTTPException(status_code=503, detail="budget spent")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville", spend=spend)
+        assert charged == [1] and len(fetched) == 1
+        with pytest.raises(HTTPException):
+            await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Cambridge", spend=refuse)
+    assert len(fetched) == 1

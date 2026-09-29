@@ -56,7 +56,7 @@ later should cost us a field, not the whole lookup.
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import httpx
 
@@ -167,7 +167,7 @@ def _parse_contests(payload: dict) -> list[dict]:
 
 async def fetch_town_ballot(
     client: httpx.AsyncClient, db, state: str, town: str,
-    spend: Callable[[int], None] | None = None,
+    spend: Callable[[int], Awaitable[None]] | None = None,
 ) -> dict | None:
     """Contests and measures at `town`'s representative address, or None
     on missing config, an unknown town, or a fetch/parse failure.
@@ -193,7 +193,7 @@ async def fetch_town_ballot(
         return _to_result(cached, address)
 
     if spend is not None:
-        spend(1)
+        await spend(1)
     try:
         response = await client.get(
             f"{CIVIC_BASE}/voterinfo",

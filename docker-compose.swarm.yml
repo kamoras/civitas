@@ -99,11 +99,12 @@ services:
     environment:
       - PROCESS_ROLE=api
       # Read-only work scales across processes: each worker has its own
-      # interpreter lock. Each also holds its own copy of both embedding
-      # models, preloaded so no request loads one (main._preload_models).
-      # Measured 2026-09: ~0.9 GB a worker (the app ~800 MB, the search
-      # model ~28 MB, /api/qa's ~10 MB), 1.8 GB for two plus the
-      # supervisor, under the 4G limit docker-compose.yml gives backend.
+      # interpreter lock. Each also holds its own copy of the search
+      # embedding model, preloaded so no request loads one
+      # (main._preload_models). Measured 2026-09: ~0.9 GB a worker (the app
+      # ~800 MB, the search model ~28 MB; /api/qa's ~10 MB model has since
+      # gone with that route), 1.8 GB for two plus the supervisor, under the
+      # 4G limit docker-compose.yml gives backend.
       # Raise only after checking memory under load (`docker stats`).
       - WEB_CONCURRENCY=2
     deploy:

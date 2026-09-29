@@ -321,7 +321,13 @@ async def _daily_salt(date: str) -> bytes:
         # its last instant, is hashed with a salt nobody keeps — it may count
         # as one more unique for that day, never as a recoverable address.
         return secrets.token_bytes(32)
-    _salt_cache = (date, salt)
+    # Cached only while its day lasts: a salt loaded just before midnight
+    # and returned after it, once the sweep has cleared the cache, must not
+    # put the ended day's salt back in memory.
+    from datetime import datetime, timezone
+
+    if date == datetime.now(timezone.utc).date().isoformat():
+        _salt_cache = (date, salt)
     return salt
 
 

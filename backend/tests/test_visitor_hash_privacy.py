@@ -247,3 +247,14 @@ def test_a_fallback_for_an_ended_day_is_never_todays(monkeypatch):
     monkeypatch.setattr(throttle, "derived_salt", lambda purpose, date: asked.append(date) or b"s" * 32)
     ended = asyncio.run(_daily_salt("1999-01-01"))
     assert ended != b"s" * 32 and asked == []
+
+
+def test_an_ended_days_salt_is_not_cached_after_its_day(monkeypatch):
+    # Loaded just before midnight, returned after the sweep cleared the
+    # cache: the ended day's salt must not go back into memory.
+    monkeypatch.setattr(visits, "_salt_cache", None)
+    monkeypatch.setattr(visits, "_load_or_create_salt", lambda date: b"y" * 32)
+    assert asyncio.run(_daily_salt("1999-01-01")) == b"y" * 32
+    assert visits._salt_cache is None
+    assert asyncio.run(_daily_salt(_today())) == b"y" * 32
+    assert visits._salt_cache == (_today(), b"y" * 32)

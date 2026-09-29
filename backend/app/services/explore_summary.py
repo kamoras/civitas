@@ -339,8 +339,3 @@ def reset() -> None:
     _strikes.clear()
     _finished.clear()
     _llm_busy_until = 0.0
-# Text key -> (monotonic time it's forgotten, its final event): a run just
-# over, kept briefly — a reader whose cache read raced its cache write (and
-# missed it) gets this rather than generating the same text again.
-_finished: dict[str, tuple[float, dict]] = {}
-FINISHED_KEPT_S = 60.0
