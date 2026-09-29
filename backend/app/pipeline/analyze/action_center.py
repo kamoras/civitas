@@ -60,7 +60,6 @@ from app.pipeline.analyze.grounding import (
     hedge_and_editorializing_violations,
     log_intensifier_usage,
     proposal_stated_as_fact,
-    validate_facts,
 )
 from app.pipeline.analyze import claims as claim_layer
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
@@ -1866,74 +1865,6 @@ def _deduplicate_top_clusters(
         len(selected), len(ranked_clusters),
     )
     return [ranked_clusters[i] for i in selected]
-
-
-# validate_facts now lives in grounding.py (early_signal.py needs it too,
-# and importing it from here would be a circular import). Aliased under
-# its original private name since every call site and test in this file
-# already uses it.
-_validate_facts = validate_facts
-
-
-_ROLE_PATTERNS = [
-    # Matches "U.S. Senator Name", "Senator Name", "Sen. Name"
-    (re.compile(
-        r'\b(?:U\.?S\.?\s+)?(?:Senator|Sen\.)\s+([A-Z][a-zA-Z\.\'-]+(?:\s+[A-Z][a-zA-Z\.\'-]+){0,2})',
-    ), "Senator"),
-    # Matches "U.S. Representative Name", "Representative Name", "Rep. Name",
-    # "Congressman Name", "Congresswoman Name"
-    (re.compile(
-        r'\b(?:U\.?S\.?\s+)?(?:Representative|Rep\.|Congressman|Congresswoman)\s+'
-        r'([A-Z][a-zA-Z\.\'-]+(?:\s+[A-Z][a-zA-Z\.\'-]+){0,2})',
-    ), "Representative"),
-]
-
-# Words stripped before comparing extracted names to DB names
-_ROLE_STRIP = {"senator", "sen", "rep", "representative", "congressman", "congresswoman",
-               "u.s", "us", "former", "the", "honorable", "hon"}
-
-
-def _name_in_table(extracted: str, known_names: list[str]) -> bool:
-    """Return True if extracted name shares at least one substantive token with any known name."""
-    tokens = {t.lower().rstrip(".") for t in extracted.split()} - _ROLE_STRIP
-    if not tokens:
-        return False
-    for known in known_names:
-        known_tokens = {t.lower().rstrip(".") for t in known.split()}
-        if tokens & known_tokens:
-            return True
-    return False
-
-
-
-
-# Both prompts this feeds run at a default num_ctx=4096. An 8-article
-# cluster where every article is full-length (news_feeds.MAX_FULL_TEXT_
-# CHARS=3000, vs. a short teaser) exceeds that at this cap — ollama_client.
-# call_llm detects the overflow and raises num_ctx accordingly (capped at
-# 8192), so this doesn't fail, but a full-text-heavy cluster now runs a
-# meaningfully larger/slower call than before on the Pi's hardware. Was
-# 300 before articles could carry full text at all — now high enough that
-# a rich source's actual substance reaches the model instead of being cut
-# back down to teaser length.
-_ARTICLE_BLOCK_CHARS = 1200
-
-
-def _format_articles_block(cluster: list[NewsArticle]) -> str:
-    """[source] title + summary (teaser or full text — see news_feeds'
-    content:encoded handling), one block per article — the raw-text
-    material both the real issue prompt and the claim-extraction shadow
-    prompt are built from."""
-    parts: list[str] = []
-    for a in cluster[:8]:
-        line = f"[{a.source_name}] {a.title}"
-        if a.summary:
-            line += f"\n  {a.summary[:_ARTICLE_BLOCK_CHARS]}"
-        parts.append(line)
-    return "\n\n".join(parts)
-
-
-
 
 
 # Last names that are also common English words — require a full-name match

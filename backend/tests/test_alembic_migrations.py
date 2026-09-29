@@ -33,10 +33,25 @@ def patched_engine(monkeypatch):
     eng.dispose()
 
 
+# Columns this image no longer maps but the database keeps, because the
+# image before it still reads them (migrations/README.md, "expand, then
+# contract"). The next release's revision drops each and removes it here.
+UNMAPPED_PENDING_DROP = {
+    ("justices", "score_consistency"),
+    ("justices", "score_independence"),
+    ("justices", "score_bipartisan_agreement"),
+    ("justices", "score_judicial_restraint"),
+    ("candidates", "last_coverage_search"),
+}
+
+
 def _diff(eng):
     with eng.connect() as conn:
         ctx = MigrationContext.configure(conn, opts={"compare_type": True})
-        return compare_metadata(ctx, Base.metadata)
+        return [
+            d for d in compare_metadata(ctx, Base.metadata)
+            if not (d[0] == "remove_column" and (d[2], d[3].name) in UNMAPPED_PENDING_DROP)
+        ]
 
 
 def _revision(eng):
@@ -243,4 +258,40 @@ def test_a_database_that_ran_the_sworn_date_change_as_0016_converges(patched_eng
     assert _revision(eng) == _head()
     assert "president_id" in {c["name"] for c in inspect(eng).get_columns("financial_disclosures")}
     assert "sworn_date" in {c["name"] for c in inspect(eng).get_columns("representatives")}
+    assert _diff(eng) == []
+
+
+def test_every_pending_drop_is_still_there_and_nullable(patched_engine):
+    # An entry the database no longer has is stale; one still NOT NULL would
+    # refuse this image's inserts, which leave it out.
+    database._run_migrations()
+    insp = inspect(patched_engine)
+    for table, column in UNMAPPED_PENDING_DROP:
+        cols = {c["name"]: c for c in insp.get_columns(table)}
+        assert column in cols, f"{table}.{column} is gone: remove it from UNMAPPED_PENDING_DROP"
+        assert cols[column]["nullable"], f"{table}.{column} is NOT NULL but no longer mapped"
+
+
+def test_a_new_justice_inserts_once_the_unscored_columns_are_released(patched_engine):
+    from sqlalchemy.orm import Session
+
+    from app.models import Justice
+
+    database._run_migrations()
+    with Session(patched_engine) as s:
+        s.add(Justice(id="new", name="New Justice", last_name="Justice",
+                      appointing_president="X", appointing_party="D"))
+        s.commit()
+        assert s.query(Justice).count() == 1
+
+
+def test_0020_drops_the_long_unread_columns_where_a_bridged_database_has_them(patched_engine):
+    eng = patched_engine
+    database._run_migrations("0019")
+    with eng.begin() as conn:
+        conn.execute(text("ALTER TABLE senators ADD COLUMN outside_spending_for FLOAT"))
+        conn.execute(text("ALTER TABLE presidents ADD COLUMN gdp_growth_adjusted FLOAT"))
+    database._run_migrations()
+    assert "outside_spending_for" not in {c["name"] for c in inspect(eng).get_columns("senators")}
+    assert "gdp_growth_adjusted" not in {c["name"] for c in inspect(eng).get_columns("presidents")}
     assert _diff(eng) == []

@@ -19,7 +19,6 @@ it. The run's per-source outcome is stored so the API can show a source as
 unavailable rather than empty.
 """
 
-import asyncio
 import logging
 import re
 from datetime import date, datetime, timedelta
@@ -548,7 +547,3 @@ async def run_congress_sync() -> dict:
 
 def last_run(db: Session) -> dict | None:
     return api_cache_get(db, _CACHE_TIER, _LAST_RUN_KEY, max_age_hours=24 * 30)
-
-
-def run_congress_sync_blocking() -> dict:
-    return asyncio.run(run_congress_sync())

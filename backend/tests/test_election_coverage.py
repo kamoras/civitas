@@ -10,7 +10,7 @@ more than one race is dropped entirely rather than guessed or fanned out.
 
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from app.models import Candidate, Race, RaceCoverageItem
 from app.api.elections import _coverage_is_displayable
@@ -175,9 +175,8 @@ class TestIngestRaceCoverage:
             source_name="AP News",
             summary="Polling shows a tight contest.",
         )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
+            ingested = await election_coverage.ingest_race_coverage(db_session)
 
         assert ingested == 1
         item = db_session.query(RaceCoverageItem).one()
@@ -200,9 +199,8 @@ class TestIngestRaceCoverage:
             url="https://apnews.com/article/ozone",
             source_name="AP News",
         )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
+            ingested = await election_coverage.ingest_race_coverage(db_session)
 
         assert ingested == 0
 
@@ -219,9 +217,8 @@ class TestIngestRaceCoverage:
             url="https://apnews.com/article/smith-ad",
             source_name="AP News",
         )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
+            ingested = await election_coverage.ingest_race_coverage(db_session)
 
         assert ingested == 0
         assert db_session.query(RaceCoverageItem).count() == 0
@@ -241,40 +238,11 @@ class TestIngestRaceCoverage:
             url="https://apnews.com/article/smith-v-smith",
             source_name="AP News",
         )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
+            ingested = await election_coverage.ingest_race_coverage(db_session)
 
         assert ingested == 0
         assert db_session.query(RaceCoverageItem).count() == 0
-
-
-
-
-    async def test_unavailable_source_does_not_advance_the_watermark(self, db_session):
-        """An unavailable source is not a finding of no coverage.
-
-        last_coverage_search is a rotation cursor: "never searched first,
-        then longest-unsearched first". Stamping it while the source is
-        down rotates candidates past as searched having never been
-        searched — which is exactly what happened for weeks after Bluesky
-        withdrew unauthenticated searchPosts and every call 403'd.
-        """
-        _race(db_session, "2026-SEN-GA", "GA")
-        active = _candidate(
-            db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
-            has_raised_funds=True,
-        )
-        db_session.commit()
-
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])), \
-             patch.object(election_coverage, "search_is_available", return_value=False):
-            ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
-
-        assert ingested == 0
-        assert active.last_coverage_search is None, \
-            "watermark advanced despite the source being unavailable"
 
     async def test_aware_published_at_stored_naive_utc(self, db_session):
         """Sources hand us aware datetimes; the DB convention is naive UTC
@@ -291,9 +259,8 @@ class TestIngestRaceCoverage:
             source_name="AP News",
             published=published,
         )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
+            await election_coverage.ingest_race_coverage(db_session)
 
         item = db_session.query(RaceCoverageItem).one()
         assert item.published_at.tzinfo is None
@@ -309,10 +276,9 @@ class TestIngestRaceCoverage:
             url="https://apnews.com/article/ossoff-1",
             source_name="AP News",
         )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            first = await election_coverage.ingest_race_coverage(db_session, client=None)
-            second = await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
+            first = await election_coverage.ingest_race_coverage(db_session)
+            second = await election_coverage.ingest_race_coverage(db_session)
 
         assert first == 1
         assert second == 0
@@ -320,7 +286,7 @@ class TestIngestRaceCoverage:
 
     async def test_no_candidates_returns_zero_without_fetching(self, db_session):
         with patch.object(election_coverage, "fetch_news_articles") as mock_news:
-            ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
+            ingested = await election_coverage.ingest_race_coverage(db_session)
         assert ingested == 0
         mock_news.assert_not_called()
 
@@ -389,9 +355,8 @@ class TestStoredItemsAreRevalidated:
     the rules and the stored data drift apart permanently."""
 
     async def _run(self, db_session):
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            return await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[]):
+            return await election_coverage.ingest_race_coverage(db_session)
 
     async def test_a_stored_false_positive_is_dropped(self, db_session):
         """The live NE-3 case: a government-shutdown article attached
@@ -549,9 +514,8 @@ class TestStateOutletSurnameMatchesMustEarnTheirPlace:
             source_name="Georgia Recorder",
             summary="Georgia coverage mentioning Ossoff.",
         )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
+            await election_coverage.ingest_race_coverage(db_session)
 
         assert db_session.query(RaceCoverageItem).count() == 1
 
@@ -563,9 +527,8 @@ class TestSyndicatedReprintsAreCollapsed:
     stories, and one race held 22 copies of one headline."""
 
     async def _run(self, db_session):
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            return await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[]):
+            return await election_coverage.ingest_race_coverage(db_session)
 
     def _reprint(self, outlet, url, title="Flock surveillance cameras raise questions"):
         return RaceCoverageItem(
@@ -612,9 +575,8 @@ class TestSyndicatedReprintsAreCollapsed:
             source_name="Ohio Capital Journal",
             summary="Jon Ossoff pressed the company in Georgia.",
         )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
-            await election_coverage.ingest_race_coverage(db_session, client=None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
+            await election_coverage.ingest_race_coverage(db_session)
 
         kept = db_session.query(RaceCoverageItem).all()
         assert len(kept) == 1
@@ -719,9 +681,8 @@ class TestBlueskySearchIsDisabled:
 
     Four filters were built against this feed and each failed
     differently; the last one, a domain-handle rule, does not catch
-    @crowbar.wtf because that IS a domain. This test exists so the
-    search cannot be quietly switched back on without a decision — the
-    matcher and the search module are deliberately still there.
+    @crowbar.wtf because that IS a domain. The search and its module were
+    then removed; ingestion reads news outlets only.
     """
 
     @pytest.mark.asyncio
@@ -734,11 +695,9 @@ class TestBlueskySearchIsDisabled:
                             office="H", state="MN", district=7))
         db_session.commit()
 
-        with patch.object(election_coverage, "search_posts", new=AsyncMock()) as searched, \
-             patch.object(election_coverage, "fetch_news_articles", return_value=[]):
-            await election_coverage.ingest_race_coverage(db_session, None)
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[]):
+            await election_coverage.ingest_race_coverage(db_session)
 
-        searched.assert_not_awaited()
         stored = db_session.query(RaceCoverageItem).filter(
             RaceCoverageItem.source_type == "bluesky").count()
         assert stored == 0

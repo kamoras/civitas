@@ -63,7 +63,6 @@ from app.time_utils import utcnow
 logger = logging.getLogger(__name__)
 
 ENTITY_BILL_POLICY = "bill_policy"
-ENTITY_MOTION_TYPE = "motion_type"
 
 class _ReferenceCorpusCache:
     """In-memory cache of the vector store's reference corpus (embeddings +

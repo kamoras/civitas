@@ -7,10 +7,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
-from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.database import SessionLocal, get_db
 from app.api.response_helpers import (
-    CACHE_TTL_CONFIG_S,
     CACHE_TTL_DETAIL_S,
     CACHE_TTL_LIST_S,
     cached_json as _cached_json,
@@ -32,15 +30,6 @@ def leaderboard(db: Session = Depends(get_db)):
     """All active justices ranked by weighted impartiality score."""
     data = get_justice_leaderboard(db)
     return _cached_json([e.model_dump(by_alias=True) for e in data], max_age=CACHE_TTL_LIST_S)
-
-
-@router.get("/weights")
-def weights():
-    """Score weight breakdown for the justice scorecard."""
-    w = JUSTICE_SCORE_WEIGHTS
-    return _cached_json({
-        "loyalty": {"weight": w["loyalty"], "label": "Independence from the appointing president", "description": "How much more often a justice sides with the government while the president who appointed them is in office than under other presidents (Epstein & Posner 2016). 100 is no difference either way."},
-    }, max_age=CACHE_TTL_CONFIG_S)
 
 
 @router.post("/pipeline/trigger")

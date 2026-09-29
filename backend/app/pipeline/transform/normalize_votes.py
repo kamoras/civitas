@@ -574,7 +574,7 @@ def normalize_recent_votes(
 
         # Find this senator's vote in the roll call
         senator_vote = extract_senator_vote(
-            roll_call, "", senator_last_name, senator_state
+            roll_call, senator_last_name, senator_state
         )
         if not senator_vote:
             continue
@@ -683,7 +683,6 @@ def compute_party_split(roll_call_data: dict) -> str | None:
 
 def extract_senator_vote(
     roll_call_data: dict | None,
-    bioguide_id: str,
     last_name: str | None = None,
     state: str | None = None,
 ) -> str | None:
@@ -695,7 +694,6 @@ def extract_senator_vote(
 
     Args:
         roll_call_data: Parsed roll call vote data from senate.gov.
-        bioguide_id: Senator's Bioguide ID (unused, kept for signature compat).
         last_name: Senator's last name for matching (may be multi-word).
         state: Senator's state code for matching.
 
