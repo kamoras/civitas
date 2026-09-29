@@ -594,6 +594,71 @@ async def admin_set_vacancy(
     }
 
 
+@router.post(
+    "/ballot-measures/{state}/{election_date}/accept-absence", dependencies=[Depends(require_admin)],
+)
+def admin_accept_measure_absence(
+    state: str,
+    election_date: str,
+    note: str = Query(..., min_length=10, max_length=1000),
+    force: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Accept that `state`'s measures for `election_date` are gone, for a
+    source that can only report its document missing.
+
+    Some sources say "measure gone" (Florida's Status "Removed", Oklahoma's
+    register re-dating a State Question) and the pipeline marks those
+    removed itself. Others can only stop publishing: Michigan's November
+    document disappears when its only proposal is struck. Then the nightly
+    sync sees measures on file and a document missing, and alerts every
+    night — correctly, since it can't tell a struck measure from a broken
+    source. This is the operator's answer once they've checked the state's
+    own announcement: the source's rows for the election are marked
+    removed (rendered as removed through the grace window), coverage reads
+    confirmed none with `note` recorded verbatim, and the nightly sync
+    leaves that standing while the reader keeps finding nothing. A real
+    answer from the reader later replaces it. Every row for the election
+    is marked removed, whatever its source: no row may render as current
+    under an operator's "none". Only a state with a registered direct
+    source can be accepted (400 otherwise): every other state reads "not
+    yet covered", which the nightly sync would restore anyway.
+
+    Refused (409) while the latest read of this state's source COVERED the
+    election — a freshly read list — unless `force=true`. Every action is
+    logged and kept in measure_coverage.operator_actions. The public page
+    shows this answer as the operator's determination, never as the
+    state's own statement.
+
+    `note` is required: say what was checked (e.g. "SOS release 2026-10-02:
+    Proposal 2026-2 removed by court order").
+    """
+    from app.pipeline.election_pipeline import AbsenceRefused, accept_state_absence
+    from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
+
+    from app.api.elections import BALLOT_STATE_CODES
+
+    state = state.upper()
+    if state not in BALLOT_STATE_CODES:
+        raise HTTPException(status_code=404, detail="Unknown state")
+    try:
+        datetime.strptime(election_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="election_date must be YYYY-MM-DD") from None
+    source = source_for_state(state)
+    if source is None:
+        raise HTTPException(status_code=400, detail=f"{state} has no registered direct source")
+    source_name = source["source_name"]
+    try:
+        marked = accept_state_absence(db, state, election_date, source_name, note.strip(), force=force)
+    except AbsenceRefused as refused:
+        raise HTTPException(status_code=409, detail=str(refused)) from None
+    return {
+        "state": state, "electionDate": election_date, "sourceName": source_name,
+        "markedRemoved": marked, "force": force,
+    }
+
+
 @router.get("/dashboard", dependencies=[Depends(require_admin)])
 async def admin_dashboard(db: Session = Depends(get_db)):
     """Comprehensive admin dashboard with system health, data stats, and pipeline info."""

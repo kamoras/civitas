@@ -77,7 +77,7 @@ civitas/
 │   │   ├── services/            # Business logic (senator_service, representative_service with paginated vote APIs)
 │   │   ├── pipeline/
 │   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register,
-│   │   │   │                    #   Vote Smart ballot measures)
+│   │   │   │                    #   per-state ballot-measure readers)
 │   │   │   ├── transform/       # Data normalization, embedding-based industry classification
 │   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, action center LLM synthesis, justice scoring
 │   │   │   ├── assemble/        # Scorecard builder + validator
@@ -951,7 +951,7 @@ the pending list).
 | Seat-flip DEVELOPING issues + election-night Bluesky posts | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
-| Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures.py` |
+| Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |

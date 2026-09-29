@@ -99,7 +99,7 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     houseRaces: [houseRace()],
     coverage: [],
     measures: [],
-    measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
+    measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null, lastAttemptAt: null },
     statewideRaces: [],
     statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
     stateLegRaces: [],

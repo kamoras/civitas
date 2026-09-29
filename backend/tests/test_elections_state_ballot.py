@@ -780,7 +780,7 @@ class TestBallotMeasures:
             id="ga-measure-1", state="GA", election_date=self._election_day(db_session),
             number="Amendment 1", title="Property tax exemption",
             official_title="An act relating to property tax exemptions.",
-            source_name="Vote Smart",
+            source_name="Georgia Secretary of State",
         ))
         db_session.commit()
 
@@ -805,14 +805,14 @@ class TestBallotMeasures:
         _race(db_session, "2026-SEN-GA", "GA")
         db_session.add(MeasureCoverage(
             state="GA", election_date=self._election_day(db_session),
-            status=MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart",
+            status=MeasureCoverage.CONFIRMED_NONE, source_name="Georgia Secretary of State",
         ))
         db_session.commit()
 
         data = _body(elections.state_ballot("GA", db_session))
         assert data["measures"] == []
         assert data["measureCoverage"]["status"] == MeasureCoverage.CONFIRMED_NONE
-        assert data["measureCoverage"]["sourceName"] == "Vote Smart"
+        assert data["measureCoverage"]["sourceName"] == "Georgia Secretary of State"
 
     def test_official_lookup_and_omits_are_always_present(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA")

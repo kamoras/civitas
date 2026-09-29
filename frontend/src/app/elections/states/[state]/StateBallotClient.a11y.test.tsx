@@ -50,7 +50,7 @@ const ballot: StateBallot = {
     summary: "What happened.", author: null, publishedAt: "2026-09-20T00:00:00Z",
     race: { id: "2026-SEN-NC", office: "S", district: null },
   }],
-  measures: [], measureCoverage: { status: "confirmed_none", sourceName: "NC SBE", checkedAt: null },
+  measures: [], measureCoverage: { status: "confirmed_none", sourceName: "NC SBE", checkedAt: null, lastAttemptAt: null },
   statewideRaces: [], statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
   stateLegRaces: [], judicialRaces: [], judicialCoverage: { status: "not_yet_covered", checkedAt: null, sourceName: null },
   officialLookup: { url: "https://www.usa.gov/election-office", label: "Find your election office", sourceName: "USA.gov", isStateSpecific: false, verifiedAt: null },
