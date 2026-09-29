@@ -1239,7 +1239,9 @@ justice alert when loyalty is next measured, and so on for every alert. The
 panel lists active alerts first, then resolved ones (with when) and one-off
 events. A newer alert for the same condition supersedes the older, and
 resolving frees the dedupe key so a recurrence alerts again. Open alerts are
-never pushed off the panel by newer history.
+never pushed off the panel by newer history, and never pruned from storage.
+Resolved alerts and events stay listed for seven days (the slowest regular
+jobs run weekly, so every job's latest outcome stays in view), at most ten.
 
 ### Docker Swarm Architecture
 
@@ -1387,6 +1389,8 @@ npm run lint     # eslint, including jsx-a11y
 npm test         # vitest
 npm run build    # type errors block CI
 ```
+
+The build makes no network requests for fonts. The site's three typefaces (Archivo, Press Start 2P, Share Tech Mono; SIL OFL) are committed under `frontend/src/app/fonts/`, one file per script subset, and loaded with `next/font/local`. `next/font/google` fetched them during every build, and about one build in five failed when Google answered with a URL Turbopack rejects. `backend/scripts/fetch_site_fonts.py` refetches them the way `next/font/google` did and rewrites `manifest.json` and `fallback.css`; `fonts.test.ts` fails if `fonts.ts` drifts from the manifest.
 
 ### Project Structure
 

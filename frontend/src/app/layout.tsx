@@ -1,33 +1,12 @@
 import type { Metadata } from "next";
-import { Archivo, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import NavigationBeacon from "@/components/NavigationBeacon";
 import ForgetLegacyStorage from "@/components/ForgetLegacyStorage";
 import { FEED_ALTERNATES, HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
+import { fontVariables } from "./fonts";
+import "./fonts/fallback.css";
 import "./globals.css";
-
-// Display and prose. 400 for body, 600 for headings, 800 for the blunt
-// statement type the masthead is built on — a grotesque at heavy weight
-// reads broadsheet and poster, where a bookish serif reads endowment.
-const archivo = Archivo({
-  weight: ["400", "600", "800"],
-  subsets: ["latin"],
-  variable: "--font-archivo",
-  display: "swap",
-});
-
-const pressStart = Press_Start_2P({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-press-start",
-});
-
-const shareTech = Share_Tech_Mono({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-share-tech",
-});
 
 // Site-wide defaults only. No `alternates.canonical` and no `openGraph.url`
 // here — both are inherited by every route that doesn't set its own, which
@@ -98,7 +77,8 @@ export default function RootLayout({
            the ink ramp and 12px). Letting the platform use its default
            smoothing renders the same text perceptibly heavier at zero layout
            cost. */
-        className={`${archivo.variable} ${pressStart.variable} ${shareTech.variable} font-mono`}
+        className="font-mono"
+        style={fontVariables}
       >
         <ConfigProvider>
           <a

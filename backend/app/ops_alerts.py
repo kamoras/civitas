@@ -23,6 +23,7 @@ history from the start.
 
 import json
 import logging
+import uuid
 from datetime import date, datetime, timedelta
 
 import httpx
@@ -44,6 +45,10 @@ logger = logging.getLogger(__name__)
 
 _HISTORY_TIER = "_ops_alerts"
 _HISTORY_KEEP = 50
+# How far back the dashboard lists alerts that are no longer open. A week
+# spans one cycle of the slowest regular jobs (the Sunday justice and
+# committee refreshes), so every job's latest outcome stays in view.
+HISTORY_SHOWN_FOR = timedelta(days=7)
 
 
 def send_ops_alert(
@@ -76,10 +81,10 @@ def send_ops_alert(
 
 
 def recent_alerts(limit: int = 10) -> list[dict]:
-    """Every open alert, then the newest ``limit`` others, each newest
-    first — consumed by the admin API. An open alert is never pushed off
-    by newer resolved ones. Each is {subject, body, at, condition,
-    resolvedAt, open}: open while its condition is unresolved."""
+    """Every open alert, then the newest ``limit`` others from the last
+    HISTORY_SHOWN_FOR, each newest first — consumed by the admin API. An
+    open alert is never pushed off, however old. Each is {subject, body, at,
+    condition, resolvedAt, open}: open while its condition is unresolved."""
     db = SessionLocal()
     try:
         rows = (
@@ -91,7 +96,9 @@ def recent_alerts(limit: int = 10) -> list[dict]:
         alerts = [{"condition": None, "resolvedAt": None, **json.loads(r.data_json)} for r in rows]
         for a in alerts:
             a["open"] = bool(a["condition"]) and not a["resolvedAt"]
-        return [a for a in alerts if a["open"]] + [a for a in alerts if not a["open"]][:limit]
+        since = (utcnow() - HISTORY_SHOWN_FOR).isoformat()
+        history = [a for a in alerts if not a["open"] and (a["resolvedAt"] or a["at"]) >= since]
+        return [a for a in alerts if a["open"]] + history[:limit]
     except Exception:
         logger.exception("Failed to read ops alert history")
         return []
@@ -198,7 +205,9 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
     db = None
     try:
         db = SessionLocal()
-        key = f"dedupe-{dedupe_key}" if dedupe_key else f"alert-{now.isoformat()}"
+        # An event without a dedupe key is unique by its own id: a timestamp
+        # alone collided when two alerts landed in the same microsecond.
+        key = f"dedupe-{dedupe_key}" if dedupe_key else f"alert-{now.isoformat()}-{uuid.uuid4().hex[:12]}"
         inserted = db.execute(
             sqlite_insert(ApiCache)
             .values(tier=_HISTORY_TIER, cache_key=key, data_json=payload, cached_at=now)
@@ -206,14 +215,14 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
         ).rowcount
         if not inserted:
             db.rollback()
-            # Only a dedupe key's conflict means "already sent"; two plain
-            # alerts in one timestamp are both sent.
-            return dedupe_key is None
+            return False  # its dedupe key: already recorded, and sent
         if condition:
             # Superseded by this one: the condition is still open, and one
-            # alert for it says so. (Not this row: it isn't loaded yet.)
+            # alert for it says so — not this one, which the query finds too.
             _close_open(db, condition, now, keep=key)
-        # Prune old history so the table stays bounded.
+        # Prune old history so the table stays bounded — never an open
+        # alert, which would silently drop a live problem off the panel.
+        db.flush()
         cutoff_rows = (
             db.query(ApiCache)
             .filter(ApiCache.tier == _HISTORY_TIER)
@@ -222,6 +231,9 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
             .all()
         )
         for row in cutoff_rows:
+            data = json.loads(row.data_json)
+            if data.get("condition") and not data.get("resolvedAt"):
+                continue
             db.delete(row)
         db.commit()
     except Exception:

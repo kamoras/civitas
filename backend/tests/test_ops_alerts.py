@@ -394,6 +394,27 @@ class TestOpenAndResolved:
         assert alerts[0]["subject"] == "Still broken"
         assert len(alerts) == 11  # the open one, then the ten newest others
 
+    def test_history_ages_out_after_a_week_but_an_open_alert_never_does(self, db_session):
+        long_ago = utcnow() - timedelta(days=8)
+        with patch("app.ops_alerts.utcnow", return_value=long_ago):
+            self._send(db_session, "Old event")
+            self._send(db_session, "Old but still broken", condition="still")
+            self._send(db_session, "Old and fixed", condition="fixed")
+            self._resolve(db_session, "fixed")
+        self._send(db_session, "Recent event")
+        assert [a["subject"] for a in self._alerts(db_session)] == ["Old but still broken", "Recent event"]
+
+    def test_pruning_keeps_every_open_alert(self, db_session):
+        from app import ops_alerts
+
+        with patch.object(ops_alerts, "_HISTORY_KEEP", 3):
+            self._send(db_session, "Open", condition="open")
+            for i in range(5):
+                self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
+            subjects = [a["subject"] for a in self._alerts(db_session)]
+        # The newest three, plus the open one the cap would have dropped.
+        assert subjects == ["Open", "event 4", "event 3", "event 2"]
+
     def test_the_overrun_watchdog_resolves_once_the_run_is_over(self, db_session):
         self._send(db_session, "House pipeline overrun", condition="overrun-house")
         _check(db_session)  # no House run is running any more
