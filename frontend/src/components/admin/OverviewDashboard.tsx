@@ -168,6 +168,7 @@ export function OverviewDashboard({
           actions={<MoreLink onClick={() => goTo("pipelines")}>Pipelines</MoreLink>}
         >
           <table className="w-full text-xs font-mono">
+            <caption className="sr-only">Latest run of each pipeline</caption>
             <thead>
               <tr className="text-ink-lo border-b border-white/[0.07]">
                 <th scope="col" className="text-left py-1 pr-3 font-normal">
