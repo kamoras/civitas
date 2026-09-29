@@ -120,6 +120,7 @@ from app.pipeline.fetch.state_candidates_me import fetch_confirmed_candidates as
 from app.pipeline.fetch.state_candidates_ms import fetch_confirmed_candidates as _fetch_ms
 from app.pipeline.fetch.state_candidates_nh import fetch_confirmed_candidates as _fetch_nh
 from app.pipeline.fetch.state_candidates_nj import fetch_confirmed_candidates as _fetch_nj
+from app.pipeline.fetch.state_candidates_oh import fetch_confirmed_candidates as _fetch_oh
 from app.pipeline.fetch.state_candidates_or import fetch_confirmed_candidates as _fetch_or
 from app.pipeline.fetch.state_candidates_sd_vip import fetch_confirmed_candidates as _fetch_sd_vip
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
@@ -171,6 +172,7 @@ STRATEGIES = {
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
+    "oh_canvass_xlsx": _fetch_oh,
 }
 
 # The strategies whose rows are a state's list of who is on the November
@@ -185,7 +187,7 @@ STRATEGIES = {
 # the general report once final, primary winners before). Not listed:
 # nj_certification (party nominees only) and every results reader.
 BALLOT_LIST_STRATEGIES = frozenset({
-    "certified_table",    # the certified general lists (AK CO DE HI IA MD ME ND NE NM TN WY)
+    "certified_table",    # the certified general lists (AK CO DE HI IA MD ME ND NE NM OK TN WY)
     "grouped_list_pdf",   # Illinois's website candidate list
     "dos_canlist",        # Florida's general candidate list
     "certified_pdf",      # Missouri's certification of candidates
@@ -1695,6 +1697,13 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         general_records = None
         if general:
             general_records = await _fetch(client, cycle, state, general, "Certified general list")
+            if general_records is not None and not general_records:
+                # A list not published yet (its page does not name this
+                # year's election, or it is not due until after the
+                # primary) answers [] -- healthy, not a failed fetch. It
+                # speaks for no race, so it is handled exactly like one
+                # that did not answer.
+                general_records = None
 
         records = await _fetch(client, cycle, state, source, "Confirmed-candidate")
 
@@ -1827,14 +1836,21 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 races=covered & races_here,
             )
         else:
+            # An empty answer is a ballot not published yet: it names no
+            # race, so it may neither unconfirm anyone nor record the state's
+            # ballot as the complete certified one (general_ballot_complete
+            # describes the document once it exists, not its absence).
+            published = bool(records)
             applied = _apply_ballot(
                 db, cycle, state, records,
                 keep_unlisted=not ballot_is_elsewhere,
-                authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
-                prune=_may_prune(configured, source),
+                authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere and published,
+                prune=_may_prune(configured, source) and published,
             )
             if not ballot_is_elsewhere:
-                _record_ballot_basis(db, cycle, state, source)
+                _record_ballot_basis(
+                    db, cycle, state, source if published else {**source, "general_ballot_complete": False},
+                )
         confirmed, unmatched = applied["confirmed"], applied["unmatched"]
 
         results[state] = {
