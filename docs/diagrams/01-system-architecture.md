@@ -19,7 +19,7 @@ flowchart TB
         VOTEVIEW["Voteview<br/>Nokken-Poole ideal points"]
         RSS["RSS — AP · NPR · PBS · BBC<br/>The Hill · Politico · Roll Call<br/>8 feeds, 7 newsrooms<br/>+ 41 per-state newsrooms (elections)"]
         SOCIAL["Google Trends · Bluesky"]
-        VSMART["Vote Smart<br/>statewide ballot measures<br/>optional, keyed"]
+        STATEBM["State election offices<br/>statewide ballot measures<br/>read directly, verbatim"]
         GCIVIC["Google Civic Info<br/>town-level local races + candidate fallback<br/>for states with no usable source<br/>keyed, fixed address only"]
     end
 
@@ -49,7 +49,7 @@ flowchart TB
     RSS --> HOURLY
     SOCIAL --> HOURLY
     VOTEVIEW --> NIGHTLY
-    VSMART --> ELECT
+    STATEBM --> ELECT
 
     PIPE -->|writes| SQLITE
     PIPE -->|upserts embeddings| VECDB

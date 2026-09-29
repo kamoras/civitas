@@ -451,19 +451,59 @@ MEASURE_REMOVAL_GRACE_DAYS = 45
 # does not look like "12 measures became 1".
 MEASURE_SHRINK_FLOOR = 0.5
 
+# ... but a shorter list that comes back unchanged this many runs in a row
+# (the pipeline runs nightly, so three nights) is the state's real answer,
+# not a bad response, and is written (_shrink_held_back). A truncated
+# response is a one-off; a measure struck by a court is struck every night
+# after. Without this, a floor that could never be passed would keep the
+# struck measures on the page as current until election day.
+MEASURE_SHRINK_CONFIRM_RUNS = 3
+
+# How many days before the election a document a state publishes for
+# EVERY general election (a voter guide, a sample ballot) must exist by.
+# Until then its absence is "not yet published"; after, it is a failure
+# that alerts (a moved file, a renamed link) rather than a quiet wait until
+# November. A registry entry's own "expected_by_days_before" overrides this
+# where a statute sets the date; this default is the fallback for the rest
+# — two weeks, after every state's early voting has begun. Documents that
+# exist only in a year with a measure (NotYetPublished(deadline_applies=
+# False)) never hit it: their absence can be the real answer.
+DEFAULT_EXPECTED_BY_DAYS_BEFORE = 14
+
+
+def _iso_election_date(value) -> str | None:
+    """An election date as the ISO "YYYY-MM-DD" every measure query keys on
+    (the state page's election filter, reconciliation, pruning compare
+    these as strings), or None when it can't be read as a date. Accepts ISO
+    (optionally with a time after it) and US "MM/DD/YYYY" — every reader
+    writes ISO today, and anything else is refused rather than stored under
+    a date string no query would match."""
+    from datetime import datetime
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    for fmt, part in (("%Y-%m-%d", text[:10]), ("%m/%d/%Y", text.split(" ")[0])):
+        try:
+            return datetime.strptime(part, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
 
 def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: str) -> None:
     """Insert or update one measure. Every text field is verbatim source."""
     from app.models import BallotMeasure
 
     detail = detail or {}
-    election_date = detail.get("election_date") or raw.get("election_date")
+    given = detail.get("election_date") or raw.get("election_date")
+    election_date = _iso_election_date(given)
     if not election_date:
-        # No election date means we cannot say WHICH ballot this is on, and
-        # a measure rendered under the wrong election is worse than one
-        # not rendered at all (Ohio can run an "Issue 1" in both a May
-        # primary and a November general).
-        logger.warning("Skipping measure %s — no election date", raw.get("id"))
+        # No readable election date means we cannot say WHICH ballot this
+        # is on, and a measure rendered under the wrong election is worse
+        # than one not rendered at all (Ohio can run an "Issue 1" in both
+        # a May primary and a November general).
+        logger.warning("Skipping measure %s — no readable election date (%r)", raw.get("id"), given)
         return
 
     measure = db.query(BallotMeasure).filter(BallotMeasure.id == raw["id"]).first()
@@ -482,6 +522,12 @@ def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: st
     measure.no_means = detail.get("no_means")
     measure.measure_type = detail.get("measure_type")
     measure.origin = detail.get("origin")
+    # Who drafted the title and fiscal statement. Every direct-from-state
+    # strategy has always produced these, and the API and card render
+    # them ("Drafted by ..."), but nothing wrote them to the row, so the
+    # drafter never reached a reader.
+    measure.title_authority = detail.get("title_authority")
+    measure.fiscal_authority = detail.get("fiscal_authority")
     measure.source_url = detail.get("source_url")
     measure.source_name = source_name
     # A measure that had been marked removed and is now back in the feed
@@ -546,46 +592,406 @@ def _set_coverage(
         # one state. Flushing makes the insert visible to the next
         # lookup without committing it.
         db.flush()
+    now = utcnow()
     row.status = status
     row.measure_count = count
     row.source_name = source_name
     row.error_detail = error
-    row.checked_at = utcnow()
+    row.checked_at = now
+    # Only a read that established an answer (covered, or confirmed none)
+    # is a successful check. A failure, or a document not published, never
+    # refreshes the date the page reports as "last read successfully" —
+    # measures still on file after tonight's read are from that last
+    # successful one, and the page says so.
+    if status in (MeasureCoverage.COVERED, MeasureCoverage.CONFIRMED_NONE):
+        row.last_success_at = now
+
+
+def _coverage_row(db: Session, state: str, election_date: str):
+    from app.models import MeasureCoverage
+
+    return (
+        db.query(MeasureCoverage)
+        .filter(MeasureCoverage.state == state, MeasureCoverage.election_date == election_date)
+        .first()
+    )
+
+
+def _supersede_rows(db: Session, state: str, election_date: str, source_name: str, items: list[dict]) -> int:
+    """Delete this election's rows that the read about to be written
+    replaces. Returns rows deleted. Two kinds, both for `election_date`
+    only — never another election (a primary's measures in the same year
+    stay, which a same-year match once deleted):
+
+    - rows from any OTHER source name (a state whose registry entry was
+      renamed or re-pointed): superseded, not struck from the ballot —
+      reconciling them would show "no longer on the ballot" beside the
+      same measure's new card.
+    - rows from this source whose non-empty number an incoming item
+      carries under a different id (a re-keyed record). BallotMeasure is
+      unique on (state, election_date, number), so leaving either kind in
+      place makes the incoming insert fail.
+
+    Called inside the same transaction as the upserts that replace them
+    (_write_direct_answer): the delete and the inserts commit together or
+    roll back together, so a failed insert can never leave the state with
+    neither its old rows nor its new ones.
+    """
+    from app.models import BallotMeasure
+
+    ids = {i["id"] for i in items}
+    numbers = {i["number"] for i in items if i.get("number")}
+    rows = (
+        db.query(BallotMeasure)
+        .filter(BallotMeasure.state == state, BallotMeasure.election_date == election_date)
+        .all()
+    )
+    deleted = 0
+    for row in rows:
+        other_source = row.source_name != source_name
+        rekeyed = row.number and row.number in numbers and row.id not in ids
+        if other_source or rekeyed:
+            db.delete(row)
+            deleted += 1
+    if deleted:
+        db.flush()
+    return deleted
+
+
+def _live_measure_count(db: Session, state: str, source_name: str, election_dates: set[str]) -> int:
+    """Measures currently shown as on the ballot for `state` from
+    `source_name`, for these elections only — the baseline
+    MEASURE_SHRINK_FLOOR compares against. Scoped to the elections the
+    read covers: an earlier cycle's rows would inflate it and hold a real,
+    shorter list back."""
+    from app.models import BallotMeasure
+
+    return (
+        db.query(BallotMeasure)
+        .filter(
+            BallotMeasure.state == state,
+            BallotMeasure.source_name == source_name,
+            BallotMeasure.status != "removed",
+            BallotMeasure.election_date.in_(election_dates),
+        )
+        .count()
+    )
+
+
+def _shrink_held_back(
+    db: Session, state: str, election_day: str, listed_ids: list[str], listed: int, explained: int,
+    existing: int, *, fresh: bool = True,
+) -> bool:
+    """Whether a read that returned fewer measures than are on file must
+    be held back (True) rather than written.
+
+    Not a shrink below MEASURE_SHRINK_FLOOR (after counting the drops the
+    state itself reports, e.g. Florida's Status "Removed"): write it. A
+    shrink the source explains in full: write it. Otherwise hold it back —
+    until the SAME shorter list has come back on MEASURE_SHRINK_CONFIRM_RUNS
+    consecutive runs, when it is the state's real answer and is written.
+    A floor that could never be passed would keep struck measures on the
+    page as current forever.
+
+    Only a FRESH read counts toward that streak (`fresh`): a list served
+    from the cache is the same one-off response again, and three nights of
+    it is one truncated read, not three. The caller also drops a held-back
+    list's cache entry, so the next night asks the state again.
+    """
+    import json
+
+    row = _coverage_row(db, state, election_day)
+    if not existing or listed + explained >= existing * MEASURE_SHRINK_FLOOR:
+        if row is not None:
+            row.pending_shrink, row.shrink_streak = None, 0
+        return False
+    fingerprint = json.dumps(sorted(listed_ids))
+    if row is None:
+        # Just somewhere to keep the streak: no status claim, and no
+        # last_success_at — nothing has been read successfully.
+        from app.models import MeasureCoverage
+
+        row = MeasureCoverage(state=state, election_date=election_day)
+        db.add(row)
+        db.flush()
+    if not fresh:
+        return True
+    if row.pending_shrink == fingerprint:
+        row.shrink_streak = (row.shrink_streak or 0) + 1
+    else:
+        row.pending_shrink, row.shrink_streak = fingerprint, 1
+    if row.shrink_streak >= MEASURE_SHRINK_CONFIRM_RUNS:
+        logger.warning(
+            "Measure list for %s has shrunk to %d (from %d) on %d consecutive runs — accepting it",
+            state, listed, existing, row.shrink_streak,
+        )
+        row.pending_shrink, row.shrink_streak = None, 0
+        return False
+    return True
+
+
+def _live_ids(db: Session, state: str, source_name: str, election_dates: set[str]) -> set[str]:
+    """Ids of the measures shown as on the ballot for these elections from
+    `source_name`."""
+    from app.models import BallotMeasure
+
+    return {
+        mid for (mid,) in db.query(BallotMeasure.id).filter(
+            BallotMeasure.state == state,
+            BallotMeasure.source_name == source_name,
+            BallotMeasure.status != "removed",
+            BallotMeasure.election_date.in_(election_dates),
+        )
+    }
+
+
+def _struck_ids(state: str, election_day: str, removed: list[dict]) -> set[str]:
+    from app.pipeline.fetch.ballot_measures_pdf import _to_measure
+
+    return {_to_measure(state, parsed, election_day, "")["id"] for parsed in removed or []}
+
+
+def _mark_removed(db: Session, state: str, election_day: str, source_name: str, ids: set[str]) -> int:
+    """Mark these of `source_name`'s rows for the election removed (they
+    render as removed through the grace window). Returns rows marked."""
+    from app.models import BallotMeasure
+
+    marked = 0
+    for row in db.query(BallotMeasure).filter(
+        BallotMeasure.state == state,
+        BallotMeasure.election_date == election_day,
+        BallotMeasure.source_name == source_name,
+        BallotMeasure.id.in_(ids),
+        BallotMeasure.status != "removed",
+    ):
+        row.status = "removed"
+        row.as_of = utcnow()
+        marked += 1
+    return marked
+
+
+class AbsenceRefused(Exception):
+    """accept_state_absence declined without force (see its docstring)."""
+
+
+def accept_state_absence(
+    db: Session, state: str, election_day: str, source_name: str, note: str, *, force: bool = False,
+) -> int:
+    """The operator's path for a measure gone from a source that can only
+    report its document missing (Michigan's November document disappears
+    when its only proposal is struck): mark EVERY row for the state and
+    election removed — any source's, so no row can go on rendering as
+    current under an operator's "none" — and
+    record confirmed none with the operator's note. The nightly sync
+    restores that answer whenever the reader reports the document absent,
+    and a real answer from the reader replaces it. Returns rows marked.
+
+    Refused (AbsenceRefused) unless `force` while the latest read of this
+    source covered the state for this election — that is a freshly read,
+    certified list, and removing it is almost certainly the wrong state or
+    election. Every action is logged at WARNING and appended to
+    operator_actions, which nothing clears.
+    """
+    import json
+
+    from app.models import BallotMeasure, MeasureCoverage
+
+    prior = _coverage_row(db, state, election_day)
+    if (
+        not force and prior is not None and prior.status == MeasureCoverage.COVERED
+        and prior.source_name == source_name
+    ):
+        raise AbsenceRefused(
+            f"{source_name}'s latest read covered {state} for {election_day}; pass force=true to override"
+        )
+    logger.warning(
+        "Operator accepted the absence of %s's measures for %s (force=%s): %s",
+        state, election_day, force, note,
+    )
+    marked = 0
+    for row in db.query(BallotMeasure).filter(
+        BallotMeasure.state == state,
+        BallotMeasure.election_date == election_day,
+        BallotMeasure.status != "removed",
+    ):
+        row.status = "removed"
+        row.as_of = utcnow()
+        marked += 1
+    _set_coverage(
+        db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+        count=0, source_name=source_name, error=f"operator accepted absence: {note}",
+    )
+    row = _coverage_row(db, state, election_day)
+    row.operator_note = note
+    row.pending_shrink, row.shrink_streak = None, 0
+    actions = json.loads(row.operator_actions) if row.operator_actions else []
+    actions.append({"at": utcnow().isoformat(), "note": note, "force": force, "marked": marked})
+    row.operator_actions = json.dumps(actions)
+    db.commit()
+    return marked
+
+
+def _has_read_this_election(db: Session, prior, state: str, election_day: str, source_name: str) -> bool:
+    """Whether THIS source has already given a real answer for this
+    election — the durable facts, not last night's status: measures of its
+    on file for the election, or a successful check it recorded
+    (last_success_at is set only by covered / confirmed none). A document
+    that was read and now reads as not published is a failure every night
+    until it is back, not just the first. Coverage another source left
+    (a renamed registry entry) says nothing about this one."""
+    if _live_ids(db, state, source_name, {election_day}):
+        return True
+    return prior is not None and prior.source_name == source_name and prior.last_success_at is not None
+
+
+def _late_cycle_notice(state: str, election_day: str, source_name: str, awaited) -> None:
+    """A low-severity notice, once per state and election, that a document
+    which exists only in a year with a measure still isn't published at
+    the default expected-by date. Not a coverage change — "not yet
+    covered" is still the honest status, and may be the real answer — but
+    a reader that broke before it ever read anything this cycle would
+    otherwise sit there silently until election day."""
+    try:
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(
+            f"[notice] {state} ballot measures still not published",
+            f"{source_name}: {awaited} — still not published {DEFAULT_EXPECTED_BY_DAYS_BEFORE} days "
+            f"before {election_day}. That can be the real answer (the document exists only in a year "
+            f"with a measure); worth a manual look at the source in case the reader has broken.",
+            dedupe_key=f"ballot-measure-late-{state}-{election_day}",
+        )
+    except Exception:
+        logger.exception("Could not send late-cycle ballot-measure notice for %s", state)
+
+
+def _past_expected_by(source: dict, election_day: str) -> bool:
+    """Whether today is on or after the date this state's awaited document
+    should exist by (see DEFAULT_EXPECTED_BY_DAYS_BEFORE and each registry
+    entry's expected_by_days_before)."""
+    from datetime import date
+
+    days = source.get("expected_by_days_before", DEFAULT_EXPECTED_BY_DAYS_BEFORE)
+    due = date.fromisoformat(election_day) - timedelta(days=days)
+    return utcnow().date() >= due
 
 
 async def _sync_pdf_measures(
-    db: Session, client: httpx.AsyncClient, election_day: str,
+    db: Session, client: httpx.AsyncClient, election_day: str, failing: list[str] | None = None,
 ) -> tuple[int, int, int]:
-    """Every state with a registered direct-PDF ballot-measure source
-    (ballot_measure_pdf_sources.json — currently just CA, more states get
-    added there as they're researched and a parsing strategy is built for
-    them; see ballot_measures_pdf.py). Runs independently of
-    VOTESMART_API_KEY and does NOT fall back to Vote Smart on failure —
-    a state with a registered PDF source treats that source as its
-    record of truth, so a failure reads as ingest_failed rather than
-    silently serving a stale Vote Smart snapshot. Returns
-    (synced, failed_states, marked_removed), same shape the caller
-    accumulates for every other state.
+    """Every state with a registered direct source
+    (ballot_measure_pdf_sources.json; see ballot_measures_pdf.py) — the
+    only way Civitas reads ballot measures. A state's registered source is
+    its record of truth; a failure reads as ingest_failed. Returns
+    (synced, failed_states, marked_removed).
 
-    Every field ballot_measures_pdf.fetch_state_measures_pdf returns is
-    already the full raw+detail shape _upsert_measure expects (one PDF
-    pass gets everything Vote Smart would need two calls for), so each
-    item is passed as both `raw` and `detail` directly — no separate
-    detail fetch.
+    Outcomes per state:
+    - NotYetPublished: not_yet_covered — unless this election was already
+      covered or confirmed none (a document that was there and is now
+      missing is a failure, not a wait), or the state's expected-by cutoff
+      has passed for a document it publishes every election; both are
+      ingest_failed.
+    - None: ingest_failed; the rows on file are left as they are.
+    - a list: guarded by MEASURE_SHRINK_FLOOR (_shrink_held_back), then
+      written in one transaction (_write_direct_answer): superseded rows
+      deleted, measures upserted, this source's unseen rows reconciled to
+      removed, coverage set. A failure anywhere in it rolls the whole
+      state back and reads as ingest_failed.
     """
-    from app.models import MeasureCoverage
+    from app.models import BallotMeasure, MeasureCoverage
     from app.pipeline.fetch.ballot_measure_pdf_sources import (
         configured_states,
         source_for_state,
     )
-    from app.pipeline.fetch.ballot_measures_pdf import fetch_state_measures_pdf
+    from app.pipeline.fetch.ballot_measures_pdf import (
+        cached_answer,
+        fetch_state_measures_pdf,
+        forget_cached,
+    )
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
     year = int(election_day[:4])
     synced = failed = marked_removed = 0
+    if failing is None:
+        failing = []
     for state in sorted(configured_states()):
-        source_name = source_for_state(state)["source_name"]
+        source = source_for_state(state)
+        source_name = source["source_name"]
+        fresh = cached_answer(db, state, year) is None
         try:
             listed = await fetch_state_measures_pdf(client, db, state, year, election_day)
+        except NotYetPublished as awaited:
+            prior = _coverage_row(db, state, election_day)
+            # Measures the source itself reports as no longer on this
+            # ballot (Oklahoma: a State Question now dated otherwise) are
+            # marked removed first. That is the source saying "measure
+            # gone", not "document gone", so it is never the lost-document
+            # alarm below.
+            struck = _struck_ids(state, election_day, awaited.removed)
+            if struck:
+                marked_removed += _mark_removed(db, state, election_day, source_name, struck)
+                db.commit()
+            if prior is not None and prior.operator_note:
+                # An operator accepted this absence (admin accept-absence),
+                # and the reader again finds the document absent: that
+                # answer stands — restored, whatever last night's status
+                # was. operator_note is the durable fact; a night whose
+                # fetch genuinely failed (ingest_failed, alerted) doesn't
+                # clear it, only a real answer from the reader does.
+                _set_coverage(
+                    db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+                    count=0, source_name=prior.source_name,
+                    error=f"operator accepted absence: {prior.operator_note}",
+                )
+                db.commit()
+                continue
+            explained_all = bool(struck) and not _live_ids(db, state, source_name, {election_day})
+            if not explained_all and _has_read_this_election(db, prior, state, election_day, source_name):
+                reason = (
+                    f"{source_name} was read successfully for this election before "
+                    f"({prior.status if prior else 'rows on file'}), now reads as not published: {awaited}"
+                )
+            elif awaited.deadline_applies and _past_expected_by(source, election_day):
+                reason = f"expected by now, still not published: {awaited}"
+            else:
+                # Not a failure and not an answer: the state has not
+                # published the document yet. No alert, no claim.
+                logger.info("Ballot measures for %s not published yet: %s", state, awaited)
+                if not awaited.deadline_applies and _past_expected_by({}, election_day):
+                    _late_cycle_notice(state, election_day, source_name, awaited)
+                # Until this source answers, the measures on the page (if
+                # any) are still the previous source's — a registry entry
+                # renamed or re-pointed — so the coverage row keeps naming
+                # that source rather than crediting its cards to this one.
+                # Only while its rows are still on file: with none, the old
+                # name would credit an empty page to it.
+                keep_source = source_name
+                if prior is not None and prior.source_name and prior.source_name != source_name:
+                    still_on_file = (
+                        db.query(BallotMeasure.id)
+                        .filter(
+                            BallotMeasure.state == state,
+                            BallotMeasure.election_date == election_day,
+                            BallotMeasure.source_name == prior.source_name,
+                        )
+                        .first()
+                    )
+                    if still_on_file is not None:
+                        keep_source = prior.source_name
+                _set_coverage(
+                    db, state, election_day, MeasureCoverage.NOT_YET_COVERED,
+                    source_name=keep_source, error=f"not yet published: {awaited}",
+                )
+                db.commit()
+                continue
+            logger.warning("Ballot measures for %s: %s", state, reason)
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.INGEST_FAILED,
+                count=prior.measure_count if prior else 0, source_name=source_name, error=reason,
+            )
+            failed += 1
+            failing.append(state)
+            db.commit()
+            continue
         except Exception:
             logger.exception("PDF measure fetch raised for %s", state)
             listed = None
@@ -596,169 +1002,254 @@ async def _sync_pdf_measures(
                 source_name=source_name, error="fetch failed",
             )
             failed += 1
+            failing.append(state)
             db.commit()
             continue
 
-        if not listed:
-            _set_coverage(
-                db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
-                count=0, source_name=source_name,
-            )
-            db.commit()
-            continue
-
-        seen_ids: set[str] = set()
-        dates: set[str] = set()
-        for item in listed:
-            try:
-                _upsert_measure(db, item, item, source_name)
-                seen_ids.add(item["id"])
-                dates.add(item["election_date"])
-                synced += 1
-                db.commit()
-            except Exception:
-                db.rollback()
-                logger.exception("Failed to sync %s measure %s — skipping", state, item.get("id"))
-
-        if dates:
-            marked_removed += _reconcile_state_measures(db, state, dates, seen_ids)
-        _set_coverage(
-            db, state, election_day, MeasureCoverage.COVERED,
-            count=len(seen_ids), source_name=source_name,
-        )
-        db.commit()
-
-    return synced, failed, marked_removed
-
-
-async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
-    """Sync statewide ballot measures for every state with federal races.
-
-    The distinction this function exists to preserve: a state with no
-    measures and a state we failed to ingest must never render the same
-    way. `fetch_state_measures` returns [] for the former and None for the
-    latter, and those map onto CONFIRMED_NONE and INGEST_FAILED here. An
-    empty measures section on a page titled as a state's ballot reads as
-    "nothing to research", so "we don't know" has to be able to say so.
-    """
-    from app.models import BallotMeasure, MeasureCoverage
-    from app.pipeline.fetch.ballot_measure_pdf_sources import configured_states
-    from app.pipeline.fetch.ballot_measures import (
-        fetch_measure_detail,
-        fetch_state_measures,
-        is_configured,
-    )
-
-    election_day = next_election_day(utcnow().date()).isoformat()
-
-    # Every state with a registered direct-PDF source runs on that path
-    # regardless of whether Vote Smart is configured — the whole point is
-    # that these states no longer depend on it. No fallback to Vote Smart
-    # on a PDF-path failure either: a registered PDF source is that
-    # state's source of record, so a failure there should read as
-    # ingest_failed, not silently serve a stale Vote Smart snapshot.
-    pdf_states = configured_states()
-    synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day)
-
-    if not is_configured():
-        # Leave every OTHER state NOT_YET_COVERED rather than writing
-        # CONFIRMED_NONE — with no key we have learned nothing about them,
-        # and recording "no measures" would be a claim we never checked.
-        # PDF-sourced states above are unaffected by this key entirely.
-        logger.info("Ballot measure sync for other states skipped — VOTESMART_API_KEY not set")
-        return {
-            "synced": synced, "failed_states": failed, "marked_removed": marked_removed,
-            "skipped_other_states": True,
-        }
-
-    source_name = "Vote Smart"
-    for state in sorted(STATES_WITH_FEDERAL_RACES - pdf_states):
-        try:
-            listed = await fetch_state_measures(client, db, state, cycle)
-        except Exception:
-            logger.exception("Measure fetch raised for %s", state)
-            listed = None
-
-        if listed is None:
-            _set_coverage(
-                db, state, election_day, MeasureCoverage.INGEST_FAILED,
-                source_name=source_name, error="fetch failed",
-            )
-            failed += 1
-            db.commit()
-            continue
-
-        if not listed:
-            _set_coverage(
-                db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
-                count=0, source_name=source_name,
-            )
-            db.commit()
-            continue
-
-        existing = (
-            db.query(BallotMeasure).filter(BallotMeasure.state == state).count()
-        )
-        if existing and len(listed) < existing * MEASURE_SHRINK_FLOOR:
+        active = [m for m in listed if not m.get("removed")]
+        struck = [m for m in listed if m.get("removed")]
+        dates = {election_day} | {m["election_date"] for m in active}
+        existing = _live_measure_count(db, state, source_name, dates)
+        # Only struck measures that are actually on file explain a drop: a
+        # "Removed" row the state never listed for us removes nothing.
+        explained = _live_ids(db, state, source_name, dates) & {m["id"] for m in struck}
+        if _shrink_held_back(
+            db, state, election_day, [m["id"] for m in active], len(active), len(explained), existing,
+            fresh=fresh,
+        ):
+            # The next night must ask the state again, not replay this.
+            forget_cached(db, state, year)
             # Implausible shrink — keep what we have, say so loudly, and do
             # NOT reconcile. See MEASURE_SHRINK_FLOOR.
             logger.warning(
                 "Measure sync for %s returned %d rows against %d on file — "
-                "keeping existing data", state, len(listed), existing,
+                "keeping existing data", state, len(active), existing,
             )
             _set_coverage(
                 db, state, election_day, MeasureCoverage.INGEST_FAILED,
                 count=existing, source_name=source_name,
-                error=f"implausible shrink: {len(listed)} vs {existing}",
+                error=f"implausible shrink: {len(active)} vs {existing}",
             )
             failed += 1
+            failing.append(state)
             db.commit()
             continue
 
-        seen_ids: set[str] = set()
-        dates: set[str] = set()
-        for raw in listed:
-            try:
-                detail = await fetch_measure_detail(client, db, raw["source_measure_id"])
-                _upsert_measure(db, raw, detail, source_name)
-                date = (detail or {}).get("election_date") or raw.get("election_date")
-                if date:
-                    seen_ids.add(raw["id"])
-                    dates.add(date)
-                    synced += 1
-                db.commit()
-            except Exception:
-                db.rollback()
-                logger.exception("Failed to sync measure %s — skipping", raw.get("id"))
-
-        if dates:
-            marked_removed += _reconcile_state_measures(db, state, dates, seen_ids)
-        _set_coverage(
-            db, state, election_day, MeasureCoverage.COVERED,
-            count=len(seen_ids), source_name=source_name,
-        )
-        db.commit()
-
-    if failed:
-        # Fail loud: a silently-broken adapter and a quiet week look
-        # identical from the outside, and this is the one dataset where
-        # that ambiguity costs a vote.
         try:
-            from app.ops_alerts import send_ops_alert
-            send_ops_alert(
-                "Ballot measure ingest failed",
-                f"{failed} state(s) failed to ingest statewide ballot measures "
-                f"for {election_day}. Those states render as 'not yet covered' "
-                f"rather than 'no measures' until this clears.",
-                dedupe_key="ballot-measure-ingest",
-            )
+            written, marked = _write_direct_answer(db, state, election_day, source_name, active, dates)
         except Exception:
-            logger.exception("Could not send ballot-measure ops alert")
+            db.rollback()
+            logger.exception("Writing %s's measures failed — nothing written", state)
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.INGEST_FAILED,
+                source_name=source_name, error="write failed",
+            )
+            failed += 1
+            failing.append(state)
+            db.commit()
+            continue
+        synced += written
+        marked_removed += marked
+
+    return synced, failed, marked_removed
+
+
+def _write_direct_answer(
+    db: Session, state: str, election_day: str, source_name: str, active: list[dict], dates: set[str],
+) -> tuple[int, int]:
+    """One state's successful read, as one transaction: superseded rows
+    deleted, measures upserted, unseen rows reconciled, coverage set, then
+    one commit. Raises (the caller rolls back) on any failure, so nothing
+    is counted as synced or seen unless it was actually written."""
+    from app.models import MeasureCoverage
+
+    retired = _supersede_rows(db, state, election_day, source_name, active)
+    if retired:
+        logger.info("Superseded %d %s measure row(s)", retired, state)
+    for item in active:
+        _upsert_measure(db, item, item, source_name)
+    db.flush()
+    seen_ids = {item["id"] for item in active}
+    marked = _reconcile_state_measures(db, state, dates, seen_ids)
+    _set_coverage(
+        db, state, election_day,
+        MeasureCoverage.COVERED if active else MeasureCoverage.CONFIRMED_NONE,
+        count=len(seen_ids), source_name=source_name,
+    )
+    # The reader answered: an operator's accepted absence is superseded.
+    _coverage_row(db, state, election_day).operator_note = None
+    db.commit()
+    return len(seen_ids), marked
+
+
+def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
+    """One ops alert per night per set of failing states. The dedupe key
+    carries the date and a digest of the states: send_ops_alert dedupes
+    for as long as the key is remembered, so a constant key would make the
+    first failure ever the last one anyone hears about — every later lost
+    document, missed cutoff, held-back shrink or write failure silent.
+    Same shape as state_candidates' recurring alerts."""
+    import hashlib
+
+    if not failing:
+        return
+    states = sorted(set(failing))
+    digest = hashlib.sha1("|".join(states).encode()).hexdigest()[:12]
+    # Fail loud: a silently-broken adapter and a quiet week look identical
+    # from the outside, and this is the one dataset where that ambiguity
+    # costs a vote.
+    try:
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(
+            "Ballot measure ingest failed",
+            f"{len(states)} state(s) failed to ingest statewide ballot measures "
+            f"for {election_day}: {', '.join(states)}. Those states render as 'not yet covered' "
+            f"rather than 'no measures' until this clears.",
+            dedupe_key=f"ballot-measure-ingest-{election_day}-{utcnow().date().isoformat()}-{digest}",
+        )
+    except Exception:
+        logger.exception("Could not send ballot-measure ops alert")
+
+
+def _prune_past_measures(db: Session) -> int:
+    """Delete measures whose election is more than the removal grace
+    window in the past. The state page shows only its current election
+    (api/elections.state_ballot), and nothing else reads them; leaving
+    them would let every past cycle's rows pile up under the state."""
+    from app.models import BallotMeasure
+
+    cutoff = (utcnow().date() - timedelta(days=MEASURE_REMOVAL_GRACE_DAYS)).isoformat()
+    deleted = (
+        db.query(BallotMeasure)
+        .filter(BallotMeasure.election_date < cutoff)
+        .delete(synchronize_session=False)
+    )
+    if deleted:
+        db.commit()
+        logger.info("Pruned %d ballot measures from past elections", deleted)
+    return deleted
+
+
+# The source name every row from the retired Vote Smart integration carries
+# (its ids were "vs-<measureId>"). Civitas has no Vote Smart key and reads
+# measures only from each state's own office now; _purge_retired_source
+# deletes any such row still in a database, so none can render.
+RETIRED_SOURCE_NAME = "Vote Smart"
+
+
+def _purge_retired_source(db: Session) -> int:
+    """Delete every ballot measure left by the retired Vote Smart
+    integration. Idempotent (a no-op once they're gone). Such a row was
+    never re-checked against the state and must not render as current —
+    or as "removed", which would claim the state struck it."""
+    from app.models import BallotMeasure, MeasureCoverage
+
+    deleted = (
+        db.query(BallotMeasure)
+        .filter(or_(BallotMeasure.source_name == RETIRED_SOURCE_NAME, BallotMeasure.id.like("vs-%")))
+        .delete(synchronize_session=False)
+    )
+    # Its coverage rows go back to "nothing checked": a "last successful
+    # read" date, a shrink streak or an operator's "none" recorded against
+    # it describe reads this site no longer makes. The status itself is
+    # rewritten by tonight's sync for every state.
+    reset = 0
+    for row in db.query(MeasureCoverage).filter(MeasureCoverage.source_name == RETIRED_SOURCE_NAME):
+        if row.status in (MeasureCoverage.COVERED, MeasureCoverage.CONFIRMED_NONE):
+            row.status = MeasureCoverage.NOT_YET_COVERED
+            row.measure_count = 0
+        row.source_name = None
+        row.last_success_at = None
+        row.pending_shrink = None
+        row.shrink_streak = 0
+        row.operator_note = None
+        reset += 1
+    if deleted or reset:
+        db.commit()
+        logger.info(
+            "Retired Vote Smart source: deleted %d ballot measure rows, reset %d coverage rows",
+            deleted, reset,
+        )
+    return deleted
+
+
+def _record_unread_state(db: Session, state: str, election_day: str) -> None:
+    """Record a state no reader covers as NOT_YET_COVERED.
+
+    Anything the row carried from an earlier source's read is cleared: no
+    reader is running, so a shrink streak can't continue and an operator's
+    "none" (accept-absence needs a registered source) can't stand. The
+    "last successful read" date (and the source it names) is kept only
+    while measures from that read are still on file — it is what dates them; with none on file (the
+    retired source's rows are purged) it would date a check this site no
+    longer makes, beside a status saying nothing was checked.
+    """
+    from app.models import BallotMeasure, MeasureCoverage
+
+    from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
+
+    reason = unread_reason(state) or "Civitas does not read this state's official measure list automatically yet."
+    prior = _coverage_row(db, state, election_day)
+    prior_source = prior.source_name if prior is not None else None
+    _set_coverage(
+        db, state, election_day, MeasureCoverage.NOT_YET_COVERED, error=f"no direct source: {reason}",
+    )
+    row = _coverage_row(db, state, election_day)
+    row.pending_shrink = None
+    row.shrink_streak = 0
+    row.operator_note = None
+    has_rows = (
+        db.query(BallotMeasure.id)
+        .filter(BallotMeasure.state == state, BallotMeasure.election_date == election_day)
+        .first()
+        is not None
+    )
+    if has_rows:
+        # A reader de-registered mid-cycle: its rows stay as they are,
+        # certified — marking them removed would claim the state struck
+        # them, which nobody checked. The coverage row keeps naming their
+        # source so the page can date them as that source's last read, and
+        # the page words them from unreadReason ("no longer read"), never
+        # as a check that failed. They are pruned with the election.
+        row.source_name = prior_source
+    else:
+        row.last_success_at = None
+
+
+async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
+    """Sync statewide ballot measures: every state is read from its own
+    office (ballot_measure_pdf_sources.json, _sync_pdf_measures), or not at
+    all.
+
+    The distinction this function exists to preserve: a state with no
+    measures and a state we don't know about must never render the same
+    way. A state with no registered direct source — Civitas does not
+    read its official list automatically yet, or it publishes no list of
+    what is certified — is recorded NOT_YET_COVERED, never CONFIRMED_NONE (nothing
+    was checked), and raises no alert (nothing broke): its page says so and
+    links the official lookup.
+    """
+    from app.pipeline.fetch.ballot_measure_pdf_sources import configured_states
+
+    election_day = next_election_day(utcnow().date()).isoformat()
+    _prune_past_measures(db)
+    _purge_retired_source(db)
+
+    failing: list[str] = []
+    synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day, failing)
+
+    unread = sorted((STATES_WITH_FEDERAL_RACES | {"DC"}) - configured_states())
+    for state in unread:
+        _record_unread_state(db, state, election_day)
+    db.commit()
+
+    _alert_ingest_failures(failing, election_day)
 
     return {
         "synced": synced,
         "failed_states": failed,
         "marked_removed": marked_removed,
+        "not_read_states": len(unread),
     }
 
 

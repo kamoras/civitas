@@ -50,8 +50,21 @@ def source_for_state(state: str) -> dict[str, str] | None:
 
 
 def configured_states() -> set[str]:
-    """Every state with a registered PDF source — used to skip these
-    states in the Vote Smart loop (election_pipeline._sync_ballot_measures)
-    and to drive the direct-PDF sync loop."""
+    """Every state with a registered direct source — the states whose
+    measures are read (election_pipeline._sync_pdf_measures). Every other
+    state is recorded not yet covered."""
     data = _load()
     return set((data.get("states") or {}).keys())
+
+
+def unread_reason(state: str) -> str | None:
+    """Why `state`'s measures are not read — the `reason` of its registry
+    'unread' entry, written for a voter and shown on the state's page.
+    Only `reason` leaves this function: the entry's `dev_note` records what
+    a developer found from one particular network and is never served.
+    None for a state with a registered source (the registry's 'states'
+    wins)."""
+    if source_for_state(state) is not None:
+        return None
+    entry = ((_load().get("unread") or {}).get(state.upper())) or {}
+    return entry.get("reason") if isinstance(entry, dict) else None

@@ -173,12 +173,14 @@ export default function LimitationsChapter() {
         </Limitation>
         <Limitation title="Ballot-measure coverage is still filling in">
           <P>
-            Six states&apos; measures are read from their own official voter guides; the rest depend
-            on Vote Smart. Where a state hasn&apos;t been covered, or an update failed, the page
-            says so rather than showing an empty section — which would read as &ldquo;no
-            measures&rdquo;, a different and potentially damaging claim. Reading every state
-            directly means a separate reader for each state&apos;s own publication, added as each is
-            researched. Until then, the official link on every page is the complete answer.
+            Measures are read only from the states themselves, each through a reader built for
+            that state&apos;s own publication, with no third-party source behind them. A
+            few states publish no official list of what they have certified, and the rest
+            aren&apos;t read automatically yet. Those pages say the state isn&apos;t covered and
+            which of the two reasons applies, as do pages where an update failed, rather than
+            showing an empty section — which would read as &ldquo;no measures&rdquo;, a different
+            and potentially damaging claim. There, the official link on every page is the complete
+            answer.
           </P>
         </Limitation>
       </Section>
