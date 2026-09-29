@@ -263,7 +263,7 @@ describe("MemberScorecard", () => {
     // Each break opens its bill's page.
     expect(await screen.findByRole("link", { name: "H.R. 8800" })).toHaveAttribute(
       "href",
-      "/congress/bills/HR.8800"
+      "/congress/bills/HR.8800?congress=119"
     );
     expect(screen.getByText("VOTED YEA")).toBeInTheDocument();
     expect(

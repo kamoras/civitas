@@ -5,6 +5,7 @@ import { BillInFlight } from "@/types/bill";
 import { useConfig } from "@/hooks/useConfig";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { billStageStyle } from "@/lib/billStages";
+import { billHref } from "@/lib/congress";
 
 function timeAgo(dateStr: string): string {
   if (!dateStr) return "";
@@ -43,7 +44,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-start gap-2">
           <Link
-            href={`/congress/bills/${encodeURIComponent(bill.billId)}`}
+            href={billHref(bill.billId, bill.congress)}
             // min-h-6 (24px): WCAG 2.2 target size. The row is deliberately
             // dense, so the height comes from the tap target rather than from
             // padding that would space the list out.

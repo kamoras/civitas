@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
 import type { RaceWithCandidates, StateBallot } from "@/types/election";
@@ -328,13 +328,81 @@ describe("statewide executive offices", () => {
     expect(drawer.getByText(/Rhode Island Board of Elections · last checked 2026-09-21/)).toBeInTheDocument();
   });
 
-  it("says the list is what the state published, not every office", async () => {
-    // An office whose primary nobody contested is often not itemised in
-    // a results feed at all — Arkansas publishes two of its seven that
-    // way — so the list must not read as exhaustive.
+  it("says names from primary results may be incomplete, office by office", async () => {
+    // A nomination nobody contested is often not itemised in a results
+    // feed at all — Arkansas publishes two of its seven offices that way,
+    // and Alabama none of its unopposed nominees — so neither the list of
+    // offices nor the names under one may read as exhaustive.
     render(<StateBallotClient ballot={ballot(covered)} />);
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/Only offices named in the state's own results feed appear/)).toBeInTheDocument();
+    expect(drawer.getByText(/an office may be missing, or missing a party's nominee/)).toBeInTheDocument();
+  });
+
+  const council = (district: string, towns: string[], name: string) => ({
+    office: `executive_council-${district}`,
+    label: `Executive Council, District ${district}`,
+    officeCode: "executive_council",
+    officeLabel: "Executive Council",
+    seat: district,
+    electedBy: "district" as const,
+    areas: towns,
+    termYears: 2,
+    nominees: [{ party: "REP", name }],
+  });
+
+  it("says a district-elected body's voter votes in one seat, and finds it by town", async () => {
+    const seats = [
+      council("1", ["Albany", "Alexandria"], "Joseph D. Kenney"),
+      council("2", ["Acworth", "Concord"], "Tobin Menard"),
+      council("3", ["Atkinson"], "Janet Stevens"),
+      council("4", ["Allenstown", "Auburn"], "John Stephen"),
+    ];
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/EXECUTIVE COUNCIL — 4 SEATS/)).toBeInTheDocument();
+    expect(drawer.getByText(/Each voter votes in one district's seat only/)).toBeInTheDocument();
+    fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), { target: { value: "concord" } });
+    expect(drawer.getByText("Tobin Menard")).toBeInTheDocument();
+    expect(drawer.queryByText("John Stephen")).not.toBeInTheDocument();
+  });
+
+  it("groups a body's seats in the ballot box, which is shared as an image on its own", () => {
+    const seats = [council("1", ["Albany"], "Joseph D. Kenney"), council("2", ["Concord"], "Tobin Menard")];
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })} />);
+    const box = within(screen.getByTestId("ballot-columns"));
+    // Governor, Secretary of State and the Council: three offices, not four rows.
+    expect(box.getByText(/^3 offices · from primary results$/)).toBeInTheDocument();
+    expect(box.getByText(/Executive Council/)).toBeInTheDocument();
+    expect(box.getByText(/You vote in your district's seat only/)).toBeInTheDocument();
+    expect(box.getByText("District 2")).toBeInTheDocument();
+    expect(box.getByText("Tobin Menard")).toBeInTheDocument();
+  });
+
+  it("points a district seat with no published towns to the official lookup", async () => {
+    const seat = { ...council("2", [], "Dennis McCann"), office: "public_service_commission-2",
+      label: "Public Service Commission, District 2", officeCode: "public_service_commission",
+      officeLabel: "Public Service Commission" };
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [seat] })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/Find yours with/)).toBeInTheDocument();
+    expect(drawer.getByRole("link", { name: "the official lookup" })).toBeInTheDocument();
+  });
+
+  it("says every voter votes for each seat of a statewide-elected body", async () => {
+    const seat = { ...council("3", [], "Tim Echols"), office: "public_service_commission-3",
+      label: "Public Service Commission, District 3", officeCode: "public_service_commission",
+      officeLabel: "Public Service Commission", electedBy: "statewide" as const };
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [seat] })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/Every voter in the state votes for each seat/)).toBeInTheDocument();
+    expect(drawer.queryByText(/one district's seat only/)).not.toBeInTheDocument();
+  });
+
+  it("says a certified ballot list is the whole list", async () => {
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideCoverage: { ...covered.statewideCoverage, ballotList: true } })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/Every candidate on the state's list for the November ballot/)).toBeInTheDocument();
+    expect(drawer.queryByText(/missing a party's nominee/)).not.toBeInTheDocument();
   });
 
   it("says plainly that no money or score exists for these offices", async () => {
@@ -400,6 +468,55 @@ describe("statewide executive offices", () => {
     const el = drawer.getByText("Someone Unaffiliated");
     expect(el.className).not.toContain("text-dem-blue");
     expect(el.className).not.toContain("text-rep-red");
+  });
+
+  it("shows a party with no code as the state printed it, not as OTH", async () => {
+    // Real 2026 Vermont general-ballot lines.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideCoverage: covered.statewideCoverage,
+          statewideRaces: [
+            {
+              office: "governor",
+              label: "Governor",
+              nominees: [
+                { party: "OTH", partyLabel: "FREEDOM AND UNITY", name: "DEAN ROY" },
+                { party: "REP", partyLabel: null, name: "PHIL SCOTT" },
+              ],
+            },
+          ],
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide offices/);
+    const roy = drawer.getByText("DEAN ROY").closest("span")!.parentElement!;
+    expect(roy.textContent).toContain("FREEDOM AND UNITY");
+    expect(roy.textContent).not.toContain("OTH");
+    const scott = drawer.getByText("PHIL SCOTT").closest("span")!.parentElement!;
+    expect(scott.textContent).toContain("REP");
+  });
+
+  it("shows a non-partisan candidate as non-partisan, not as a party code", async () => {
+    // North Dakota's real 2026 Superintendent of Public Instruction line.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideCoverage: covered.statewideCoverage,
+          statewideRaces: [
+            {
+              office: "school_superintendent",
+              label: "Superintendent of Public Instruction",
+              nominees: [{ party: "N", partyLabel: "Nonpartisan", name: "Levi Bachmeier" }],
+            },
+          ],
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide offices/);
+    const row = drawer.getByText("Levi Bachmeier").closest("span")!.parentElement!;
+    expect(row.textContent).toContain("Nonpartisan");
+    expect(row.textContent).not.toContain("IND");
   });
 });
 
@@ -945,5 +1062,37 @@ describe("state office terms", () => {
     );
     const drawer = await openContest(/State Senate/);
     expect(drawer.getByText(/STATE SENATE — 1 SEAT CONTESTED/).textContent).toContain("4-YEAR TERMS");
+  });
+});
+
+describe("a state with no executive offices up this cycle", () => {
+  const basis = "Virginia elects its Governor in odd-numbered years (next in 2029), so none is on a 2026 ballot.";
+
+  it("says why it knows, instead of crediting a feed nobody read for these offices", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideRaces: [],
+          statewideCoverage: { status: "confirmed_none", sourceName: "Virginia Department of Elections", checkedAt: null, basis },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(basis)).toBeInTheDocument();
+    expect(drawer.getByText(/From the state's election calendar/)).toBeInTheDocument();
+    expect(drawer.queryByText(/as published by/)).not.toBeInTheDocument();
+  });
+
+  it("credits the source as before when a feed was read", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideRaces: [],
+          statewideCoverage: { status: "confirmed_none", sourceName: "Ohio Secretary of State", checkedAt: null },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/as published by Ohio Secretary of State/)).toBeInTheDocument();
   });
 });

@@ -1398,6 +1398,33 @@ class TestDedupeNearIdenticalIssues:
         assert dedupe_near_identical_issues([]) == []
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_the_refresh_records_each_duplicate_for_the_feed(self, mock_embed, db_session):
+        from app.pipeline.analyze.action_center import mark_recent_duplicates
+
+        rows = [
+            ActionIssue(date="2026-08-22", rank=1, title="Trump defends beef import plan", facts="[]",
+                        created_at=datetime(2026, 8, 22, 2)),
+            ActionIssue(date="2026-08-22", rank=2, title="Trump defends beef import plan", facts="[]",
+                        created_at=datetime(2026, 8, 21, 23)),
+            ActionIssue(date="2026-08-21", rank=1, title="Senate confirms new EPA administrator", facts="[]",
+                        created_at=datetime(2026, 8, 21, 10)),
+        ]
+        db_session.add_all(rows)
+        db_session.commit()
+        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+
+        assert mark_recent_duplicates(db_session) == 1
+        fresh, older, other = rows
+        assert (fresh.duplicate_of_id, older.duplicate_of_id, other.duplicate_of_id) == (None, fresh.id, None)
+
+        # A later run that no longer finds the pair clears the mark.
+        older.title = "House passes a defense funding bill"
+        db_session.commit()
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0], [0.6, 0.8]])
+        mark_recent_duplicates(db_session)
+        assert older.duplicate_of_id is None
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     def test_kept_issues_preserve_their_original_relative_order(self, mock_embed):
         # Freshest-of-cluster is issue b (middle position) — it must stay
         # in b's original slot relative to c, not jump to wherever a was.

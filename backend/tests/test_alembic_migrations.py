@@ -188,19 +188,19 @@ def test_an_owner_this_image_does_not_know_reads_as_unknown():
     assert StockTradeSchema(owner="spouse", **fields).owner == "spouse"
 
 
-def test_0011_backfills_a_successful_check_only_for_established_answers(patched_engine):
+def test_0016_backfills_a_successful_check_only_for_established_answers(patched_engine):
     """last_success_at means an answer was established (covered or
     confirmed none). A not_yet_covered or ingest_failed row established
     nothing, so the backfill must not give it a "last read successfully"
     date."""
-    database._run_migrations("0010")
+    database._run_migrations("0015")
     with patched_engine.begin() as conn:
         for n, status in enumerate(["covered", "confirmed_none", "not_yet_covered", "ingest_failed"]):
             conn.execute(text(
                 "INSERT INTO measure_coverage (state, election_date, status, measure_count, checked_at) "
                 f"VALUES ('S{n}', '2026-11-03', '{status}', 0, '2026-09-01 00:00:00')"
             ))
-    database._run_migrations("0011")
+    database._run_migrations("0016")
     with patched_engine.connect() as conn:
         rows = conn.execute(text(
             "SELECT status, last_success_at IS NOT NULL FROM measure_coverage ORDER BY state"
@@ -208,3 +208,23 @@ def test_0011_backfills_a_successful_check_only_for_established_answers(patched_
     assert [tuple(r) for r in rows] == [
         ("covered", 1), ("confirmed_none", 1), ("not_yet_covered", 0), ("ingest_failed", 0),
     ]
+
+
+def test_a_database_that_ran_the_justice_change_as_0012_converges(patched_engine):
+    # Two branches each merged a "0012" (action_issues.duplicate_of_id and
+    # the justice loyalty columns); prod ran the justice one under that
+    # number. Stamped 0012 but without the other's column, the upgrade must
+    # still end at the models' schema.
+    eng = patched_engine
+    database._run_migrations("0011")
+    with eng.begin() as conn:
+        for name, kind in (("score_loyalty", "FLOAT"), ("loyalty", "FLOAT"), ("loyalty_se", "FLOAT"),
+                           ("loyalty_votes_in", "INTEGER"), ("loyalty_votes_out", "INTEGER"),
+                           ("loyalty_rate_in", "FLOAT"), ("loyalty_rate_out", "FLOAT"),
+                           ("loyalty_through_term", "INTEGER"), ("ideal_points", "TEXT")):
+            conn.execute(text(f"ALTER TABLE justices ADD COLUMN {name} {kind}"))
+        conn.execute(text("UPDATE alembic_version SET version_num = '0012'"))
+    database._run_migrations()
+    assert _revision(eng) == _head()
+    assert "duplicate_of_id" in {c["name"] for c in inspect(eng).get_columns("action_issues")}
+    assert "score_loyalty" in {c["name"] for c in inspect(eng).get_columns("justices")}

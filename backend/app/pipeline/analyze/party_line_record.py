@@ -168,6 +168,11 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             if label not in ("R", "D") or vote is None:
                 continue
             party = parties[i] if i is not None else p.party
+            if party not in ("R", "D"):
+                # A party line is either party's: a member of neither (a
+                # roll call's "I" with no caucus resolved, an unusual code)
+                # has none to break with, and toward[] below knows only these.
+                continue
             switch = is_reconsider_switch({"motionRejected": rc.rejected, "rollCallDate": rc.date}, spans[i]) if i is not None else None
             with_party = _determine_party_alignment(party, vote, label, reconsider_switch=switch)
             if with_party is None:

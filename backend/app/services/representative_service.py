@@ -155,6 +155,9 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
                 "billsInfluenced": json.loads(lm.bills_influenced) if lm.bills_influenced else [],
                 "senatorVoteAligned": lm.representative_vote_aligned,  # key shared with senator schema
                 "description": lm.description,
+                "lobbiedBills": json.loads(lm.lobbied_bills) if lm.lobbied_bills else [],
+                "lobbyingClients": json.loads(lm.lobbying_clients) if lm.lobbying_clients else [],
+                "lobbyingChecked": lm.lobbying_checked,
             }
             for lm in lobbying_matches
         ],
@@ -542,6 +545,9 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             representative_vote_aligned=lm.get("senatorVoteAligned") or lm.get("representativeVoteAligned"),
             is_consensus_vote=lm.get("isConsensusVote"),
             description=lm.get("description") or "",
+            lobbied_bills=json.dumps(lm.get("lobbiedBills") or []),
+            lobbying_clients=json.dumps(lm.get("lobbyingClients") or []),
+            lobbying_checked=lm.get("lobbyingChecked"),
         ))
 
     db.query(RepCampaignPromise).filter(RepCampaignPromise.representative_id == rid).delete()
@@ -689,7 +695,10 @@ def get_rep_stock_trades(
 
     query = db.query(RepStockTrade).filter(RepStockTrade.representative_id == rep_id)
     total = query.count()
-    late_count = query.filter(RepStockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
+    # Only trades whose timeliness is known (StockTradeSchema).
+    late_count = query.filter(
+        RepStockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS, RepStockTrade.parse_confidence == "text",
+    ).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (

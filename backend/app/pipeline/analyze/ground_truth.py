@@ -121,6 +121,11 @@ _DIM_LABEL = {
 _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
     ("pac_ratio", "score_funding_independence", -1,
      "PAC share of receipts (FEC)"),
+    # Raw PAC dollars as well as the share: since v6.22 the share is judged
+    # against campaigns of the same size, which leaves the dollars as what
+    # it mostly measures (Spearman -0.88 Senate, -0.79 House, 2026-09-28).
+    ("pac_dollars", "score_funding_independence", -1,
+     "PAC dollars received (FEC)"),
     ("small_donor_pct", "score_funding_independence", +1,
      "small-donor share of receipts (FEC unitemized)"),
     # Constituent Alignment's vote component recomputed from the stored
@@ -247,6 +252,7 @@ def evaluate_derived_checks(
         {"name": str,
          "scores": {score_attr: float | None},
          "metrics": {"pac_ratio": float | None,
+                     "pac_dollars": float | None,
                      "small_donor_pct": float | None,
                      "seat_relative_vote": float | None,
                      "beyond_saturation": bool | None},
@@ -515,6 +521,7 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
             "scores": {dim: getattr(m, dim, None) for dim in _DIM_LABEL},
             "metrics": {
                 "pac_ratio": (m.total_from_pacs or 0) / base if base > 0 else None,
+                "pac_dollars": (m.total_from_pacs or 0) if base > 0 else None,
                 "small_donor_pct": m.small_donor_percentage if base > 0 else None,
                 **constituent,
             },

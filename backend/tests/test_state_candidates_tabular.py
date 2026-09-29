@@ -340,6 +340,118 @@ class TestRunoffOverride:
         records = await self._run(monkeypatch, [self._PRIMARY, close])
         assert [r["last_name"] for r in records] == ["Collins"]
 
+    async def _run_one_pending(self, monkeypatch, source):
+        dem = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "Governor\tAbigail Spanberger\tDemocratic\t900\n"
+            "Member, U.S. House of Representatives District 2\tElaine Luria\tDemocratic\t900\n"
+        ).encode()
+
+        async def fake_discover(client, state, year, discovery):
+            # The Democratic election is certified; the Republican one,
+            # held the same day, is not yet.
+            return [
+                {"url": "https://example.gov/dem", "runoff": False, "held": "2026-06-16", "official": True},
+                {"url": "https://example.gov/rep", "runoff": False, "held": "2099-06-16", "official": False},
+            ]
+
+        async def fake_get(client, url, label):
+            assert url.endswith("/dem"), url
+            return _Resp(content=dem)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        return await tb.fetch_confirmed_candidates(None, 2026, "VA", {
+            "format": self._FMT, "discovery": {"require_official": True, "settle_days": 30}, **source,
+        })
+
+    @pytest.mark.asyncio
+    async def test_a_runoff_owed_but_not_yet_listed_marks_the_state_offices_incomplete(self, monkeypatch):
+        """Georgia-style: the primary has settled and the runoff election
+        is not listed yet. A state contest short of the majority is owed
+        it, so the primary alone is not the state-office ballot."""
+        primary = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "US Senate - Rep\tMike Collins\tREP\t600000\n"
+            "US Senate - Rep\tDerek Dooley\tREP\t300000\n"
+            "Lieutenant Governor - Rep\tBurt Jones\tREP\t400\n"
+            "Lieutenant Governor - Rep\tSomeone Else\tREP\t350\n"
+            "Lieutenant Governor - Rep\tA Third\tREP\t250\n"
+        ).encode()
+
+        async def fake_discover(client, state, year, discovery):
+            return [{"url": "https://example.gov/p", "runoff": False}]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=primary)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        source = {"runoff_threshold_pct": 50.0, "format": self._FMT, "statewide_offices": True,
+                  "discovery": {"runoff_name_regex": "General Primary Runoff"}}
+        result = await tb.fetch_confirmed_candidates(None, 2026, "GA", source)
+        assert [(r["office"], r["last_name"]) for r in result] == [("S", "Collins")]
+        assert result.state_offices_incomplete is True
+        # A state with no runoff stage (North Carolina's second primary is
+        # only on request) is not held open by a short contest.
+        no_stage = {**source, "discovery": {}}
+        result = await tb.fetch_confirmed_candidates(None, 2026, "NC", no_stage)
+        assert not getattr(result, "state_offices_incomplete", False)
+
+    async def _run_ga_judicial(self, monkeypatch, justice_votes):
+        rows = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "US Senate - Rep\tMike Collins\tREP\t600000\n"
+            "US Senate - Rep\tDerek Dooley\tREP\t300000\n"
+            "Lieutenant Governor - Rep\tBurt Jones\tREP\t900\n"
+            "Lieutenant Governor - Rep\tSomeone Else\tREP\t100\n"
+            f"Justice of the Supreme Court - Bethel\tCharlie Bethel\t\t{justice_votes[0]}\n"
+            f"Justice of the Supreme Court - Bethel\tA Challenger\t\t{justice_votes[1]}\n"
+        ).encode()
+
+        async def fake_discover(client, state, year, discovery):
+            return [{"url": "https://example.gov/p", "runoff": False}]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=rows)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        return await tb.fetch_confirmed_candidates(None, 2026, "GA", {
+            "runoff_threshold_pct": 50.0, "format": self._FMT, "statewide_offices": True,
+            "judicial_offices": True, "judicial_resolution": "decided_before_general",
+            "discovery": {"runoff_name_regex": "General Primary Runoff"},
+        })
+
+    @pytest.mark.asyncio
+    async def test_a_judgeship_decided_outright_is_not_owed_a_runoff(self, monkeypatch):
+        """Georgia publishes no judgeship (decided_before_general), so its
+        rule names nobody for every one. That is not a runoff owed: with a
+        majority winner (87.5%), the state offices are the whole read."""
+        result = await self._run_ga_judicial(monkeypatch, (875, 125))
+        assert not getattr(result, "state_offices_incomplete", False)
+        assert {(r["office"], r["last_name"]) for r in result} == {("S", "Collins"), ("lt_governor", "Burt Jones")}
+
+    @pytest.mark.asyncio
+    async def test_a_judgeship_with_no_majority_is_owed_its_runoff(self, monkeypatch):
+        result = await self._run_ga_judicial(monkeypatch, (500, 500))
+        assert result.state_offices_incomplete is True
+
+    @pytest.mark.asyncio
+    async def test_one_stage_pending_publishes_no_state_offices(self, monkeypatch):
+        """Read alone, the settled party's election would be taken for
+        the whole ballot and the pending party's nominees deleted. Its
+        federal rows still stand."""
+        result = await self._run_one_pending(monkeypatch, {"statewide_offices": True})
+        assert [(r["office"], r["last_name"]) for r in result] == [("H", "Luria")]
+        assert result.state_offices_incomplete is True
+
+    @pytest.mark.asyncio
+    async def test_one_stage_pending_still_confirms_federal_only(self, monkeypatch):
+        result = await self._run_one_pending(monkeypatch, {})
+        assert [(r["office"], r["last_name"]) for r in result] == [("H", "Luria")]
+        assert not getattr(result, "state_offices_incomplete", False)
+
 
 class TestHouseFromColumns:
     """Virginia's export names its federal races "Member, House of

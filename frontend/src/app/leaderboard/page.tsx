@@ -12,13 +12,12 @@ import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
-import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
+import PresidentSummary from "@/components/scorecard/PresidentSummary";
 import {
   fetchLeaderboard,
   fetchRepLeaderboard,
   fetchPresidentLeaderboard,
   fetchCurrentPresident,
-  fetchPresidentScoreBreakdown,
   fetchJusticeLeaderboard,
 } from "@/lib/api";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
@@ -28,7 +27,7 @@ import { BOXED_CONTROL, boxedControl } from "@/lib/controlStyles";
 import { competitionRanks, displayScore, formatCurrency } from "@/lib/formatting";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
-import type { JusticeLeaderboardEntry } from "@/types/justice";
+import type { JusticeLeaderboardEntry, JusticeLoyalty } from "@/types/justice";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology" | "leadership";
@@ -271,8 +270,8 @@ function termYears(start: string, end: string | null): string {
 }
 
 // The ranked table below excludes the currently-serving president
-// entirely (see fetchCurrentPresident's comment); their scorecard is shown
-// above it, the same one their profile opens with.
+// entirely (see fetchCurrentPresident's comment); a summary of their
+// scorecard is shown above it, linking to the full one.
 function CurrentPresidentSpotlight({
   president,
   loading,
@@ -280,10 +279,6 @@ function CurrentPresidentSpotlight({
   president: President | null;
   loading: boolean;
 }) {
-  const breakdown = useAsyncData(
-    `president-breakdown-${president?.id ?? ""}`,
-    president ? () => fetchPresidentScoreBreakdown(president.id) : null
-  );
   if (loading) {
     return (
       <div className="panel p-6 text-center mb-6" role="status" aria-live="polite">
@@ -307,7 +302,7 @@ function CurrentPresidentSpotlight({
           under one ordinal position isn&apos;t a fair fight.
         </p>
       </div>
-      <PresidentScorecard president={president} breakdown={breakdown.data ?? null} titleAs="h2" />
+      <PresidentSummary president={president} />
     </div>
   );
 }
@@ -490,6 +485,12 @@ function apptParty(party: string | null) {
   );
 }
 
+// "+14.5 ± 5.0": the loyalty estimate and its standard error, in points.
+function loyaltyPoints(l: JusticeLoyalty) {
+  const est = l.estimate * 100;
+  return `${est >= 0 ? "+" : "−"}${Math.abs(est).toFixed(1)} ± ${(l.se * 100).toFixed(1)}`;
+}
+
 function JusticeLeaderboard({
   entries,
   loading,
@@ -502,7 +503,9 @@ function JusticeLeaderboard({
   const router = useRouter();
   if (loading) return <LeaderboardLoading label="LOADING SCOTUS DATA..." />;
   if (error) return <LeaderboardError message={error} />;
-  const ranks = competitionRanks(entries, (e) => displayScore(e.score.overall));
+  const ranks = competitionRanks(entries, (e) =>
+    e.score.overall == null ? null : displayScore(e.score.overall)
+  );
 
   return (
     <>
@@ -532,8 +535,8 @@ function JusticeLeaderboard({
                 <th scope="col" className="px-3 py-3 text-right w-24">
                   MAJORITY
                 </th>
-                <th scope="col" className="px-3 py-3 text-right w-24">
-                  CROSS-BLOC
+                <th scope="col" className="px-3 py-3 text-right w-36">
+                  POINTS TOWARD APPOINTER
                 </th>
               </tr>
             </thead>
@@ -553,7 +556,11 @@ function JusticeLeaderboard({
                     {...rowNavProps(router, `/politicians/${entry.id}`)}
                   >
                     <td className="px-4 py-3">
-                      <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
+                      {score == null ? (
+                        <span className="text-ink-min">—</span>
+                      ) : (
+                        <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -563,14 +570,6 @@ function JusticeLeaderboard({
                         {entry.roleTitle.includes("Chief") && (
                           <span className="text-signal-amber text-xs">CHIEF</span>
                         )}
-                        {entry.casesDecided < 100 && (
-                          <span
-                            className="text-xs font-mono tracking-wide text-ink-lo border border-white/15 px-1 shrink-0"
-                            title={`Score based on ${entry.casesDecided} cases — may shift significantly as more decisions are issued`}
-                          >
-                            ~{entry.casesDecided}
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-3 py-3 text-center">
@@ -579,7 +578,11 @@ function JusticeLeaderboard({
                       </span>
                     </td>
                     <td className="px-3 py-3">
-                      <ScoreBar score={score} />
+                      {score == null ? (
+                        <span className="text-xs text-ink-min">not yet measured</span>
+                      ) : (
+                        <ScoreBar score={score} />
+                      )}
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums text-ink">
                       {entry.casesDecided}
@@ -587,18 +590,8 @@ function JusticeLeaderboard({
                     <td className="px-3 py-3 text-right tabular-nums text-ink">
                       {entry.majorityPct.toFixed(0)}%
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums">
-                      <span
-                        className={
-                          entry.crossBlocPct >= 15
-                            ? "text-ink-hi"
-                            : entry.crossBlocPct >= 8
-                              ? "text-signal-cyan"
-                              : "text-ink-lo"
-                        }
-                      >
-                        {entry.crossBlocPct.toFixed(1)}%
-                      </span>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink">
+                      {entry.loyalty ? loyaltyPoints(entry.loyalty) : "—"}
                     </td>
                   </tr>
                 );
@@ -620,7 +613,7 @@ function JusticeLeaderboard({
                 className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
               >
                 <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
-                  #{rank}
+                  {score == null ? "—" : `#${rank}`}
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -628,15 +621,18 @@ function JusticeLeaderboard({
                     <span className={`text-xs px-1 border shrink-0 ${pp.bg} ${pp.color}`}>
                       {pp.label}
                     </span>
-                    {entry.casesDecided < 100 && (
-                      <span className="text-xs font-mono text-ink-lo border border-white/15 px-1 shrink-0">
-                        ~{entry.casesDecided}
-                      </span>
-                    )}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">
-                    <ScoreBar score={score} />
-                    <span className="text-xs text-ink-lo">{entry.casesDecided} cases</span>
+                    {score == null ? (
+                      <span className="text-xs text-ink-min">not yet measured</span>
+                    ) : (
+                      <ScoreBar score={score} />
+                    )}
+                    {entry.loyalty && (
+                      <span className="text-xs text-ink-lo">
+                        {loyaltyPoints(entry.loyalty)} points toward appointer
+                      </span>
+                    )}
                   </div>
                 </div>
               </Link>
@@ -647,13 +643,10 @@ function JusticeLeaderboard({
 
       <div className="mt-4 space-y-1 text-center">
         <p className="font-sans text-xs text-ink-lo">
-          Higher score = more impartial jurisprudence. Computed from ideological consistency and
-          independence from the appointing party&apos;s bloc (weights on the About page). Click any
-          row to view full profile.
-        </p>
-        <p className="font-sans text-xs text-ink-min">
-          <span className="text-ink-lo border border-white/15 px-1 mr-1.5">~N</span>= fewer than 100
-          cases decided; score has higher variance and may shift as more decisions are issued
+          Higher score = more independent of the president who made the appointment: siding with the
+          federal government about as often under that president as under any other (Epstein and
+          Posner, 2016). Points toward appointer is how much more often, give or take one standard
+          error. Click any row to view full profile.
         </p>
       </div>
     </>

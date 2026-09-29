@@ -97,7 +97,9 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     clean_display_name,
+    federal_only,
     federal_record,
     normalize_party,
     parse_office,
@@ -234,17 +236,32 @@ async def fetch_confirmed_candidates(
     # genuinely diverge.
     results_scope = source.get("results_scope", contest_type_filter)
 
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     settle_days = source.get("settle_days", DEFAULT_SETTLE_DAYS)
     primary, runoff = await _discover_elections(client, state, base_url, cid, primary_re, runoff_re, year)
     if primary is None:
         return []  # not published yet this cycle — healthy unknown
 
+    # The primary has settled and its runoff has not. Every office the
+    # runoff decides is missing from a read of the primary alone, and under
+    # the state-office opt-in the sync would take that list for the whole
+    # ballot (deleting what it does not name). The primary's federal rows
+    # stand -- a runoff-owed federal seat names nobody from it anyway --
+    # and the state offices are marked incomplete (federal_only), as
+    # Alabama withholds them while a runoff is owed.
+    runoff_pending = (
+        state_offices and runoff is not None and _settled(primary["date"], settle_days)
+        and not _settled(runoff["date"], settle_days)
+    )
+
     by_seat: dict[tuple, list[tuple[str, float]]] = {}
+    short: set = set()  # state-office contests the primary left to a runoff
+    runoff_read = False
     # Runoff processed second so its answer for a seat overrides the primary's.
     for election, stage_threshold in ((primary, threshold), (runoff, None)):
         if election is None or not _settled(election["date"], settle_days):
             continue  # no stage yet, or this stage's count isn't settled
+        runoff_read = runoff_read or election is runoff
         fetched = await _federal_contests_and_results(
             client, state, base_url, cid, election["id"], contest_type_filter,
             results_scope, year, state_offices,
@@ -306,6 +323,8 @@ async def fetch_confirmed_candidates(
             won = pick_nominees(choices, stage_threshold, advance)
             if won:
                 by_seat[key] = [(n, pct) for n, pct in won if n]
+            elif stage_threshold is not None and not federal_race and pick_nominees(choices, None, advance):
+                short.add(key)
 
     records = []
     for (o, d, p, st_seat), winners in by_seat.items():
@@ -319,4 +338,13 @@ async def fetch_confirmed_candidates(
             if st_seat is not None:
                 record["seat"] = st_seat
             records.append(record)
+    # A primary contest fell short of the threshold and no settled runoff
+    # was read -- the runoff election is not even listed yet. Same outcome
+    # as runoff_pending: without it the primary alone, missing every office
+    # still owed a runoff, would be published as the ballot and frozen
+    # (Alabama's _runoff_owed). Only for a state that has a runoff stage.
+    runoff_owed = state_offices and runoff_re is not None and bool(short) and not runoff_read
+    if runoff_pending or runoff_owed:
+        logger.info("%s: the %d runoff has not settled yet -- state offices incomplete", state, year)
+        return federal_only(records)
     return records

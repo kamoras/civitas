@@ -134,7 +134,9 @@ def seed(db) -> None:
                            score_agency_alignment=rng.randint(30, 90), score_historical_legacy=rng.randint(30, 90)))
     for i, name in enumerate(("Jane Example", "John Sample", "Ruth Placeholder")):
         db.add(M.Justice(id=f"J{i}", name=name, last_name=name.split()[-1], is_active=True,
-                         score_consistency=rng.randint(30, 90), score_independence=rng.randint(30, 90)))
+                         score_loyalty=rng.randint(30, 90), loyalty=rng.uniform(-0.1, 0.2), loyalty_se=0.04,
+                         loyalty_votes_in=rng.randint(100, 400), loyalty_votes_out=rng.randint(100, 400),
+                         loyalty_rate_in=0.55, loyalty_rate_out=0.5, loyalty_through_term=2025))
 
     db.commit()
 

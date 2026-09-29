@@ -283,6 +283,69 @@ PSC_5_D = {"office": "public_service_commission", "district": "5", "party": "D",
            "last_name": "Fifth District Dem"}
 
 
+class TestMinorPartyLabel:
+    """A certified list's party with no code of ours or FEC's (Vermont's
+    "FREEDOM AND UNITY", South Carolina's "Workers") is stored under the
+    neutral "O" with the party exactly as printed, and sent as such."""
+
+    def _record(self, office, name, label, **extra):
+        return {"office": office, "district": extra.pop("district", None), "party": "O",
+                "last_name": name, "party_label": label, **extra}
+
+    def test_statewide_row_keeps_the_printed_party(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "VT", SOURCE, [
+            self._record("governor", "DEAN ROY", "FREEDOM AND UNITY"),
+            self._record("governor", "JUNE GOODBAND", "PEACE AND JUSTICE"),
+            {"office": "governor", "district": None, "party": "R", "last_name": "PHIL SCOTT"},
+        ])
+        races, _ = _statewide_section(db_session, "VT", CYCLE)
+        nominees = {(n["party"], n["partyLabel"], n["name"]) for n in races[0]["nominees"]}
+        assert nominees == {
+            ("OTH", "FREEDOM AND UNITY", "DEAN ROY"),
+            ("OTH", "PEACE AND JUSTICE", "JUNE GOODBAND"),
+            ("REP", None, "PHIL SCOTT"),
+        }
+
+    def test_a_label_beside_a_recognised_code_is_not_stored(self, db_session):
+        """The code is the whole fact for a party we can name; a second
+        spelling of it would be a second vocabulary."""
+        _sync_statewide_nominees(db_session, CYCLE, "VT", SOURCE, [
+            {**GOVERNOR_R, "party_label": "Republican"},
+        ])
+        assert db_session.query(StatewideNominee).one().party_label is None
+
+    def test_legislative_row_keeps_the_printed_party(self, db_session):
+        _sync_state_leg_nominees(db_session, CYCLE, "SC", SOURCE, [
+            self._record("lower", "Kiral Mace", "Workers", district="26"),
+        ])
+        seats = _state_leg_section(db_session, "SC", CYCLE, marker={"checkedAt": "x"})
+        nominee = seats[0]["districts"][0]["nominees"][0]
+        assert (nominee["party"], nominee["partyLabel"]) == ("OTH", "Workers")
+
+    def test_judicial_row_keeps_the_printed_party(self, db_session):
+        _sync_judicial_nominees(db_session, CYCLE, "XX", {**SOURCE, "judicial_offices": True}, [
+            {"office": "supreme", "district": None, "seat": "3", "party": "O",
+             "last_name": "Pat Doe", "party_label": "Working Families"},
+        ])
+        races, _ = _judicial_section(db_session, "XX", CYCLE, marker={"checkedAt": "x"})
+        nominee = races[0]["seats"][0]["nominees"][0]
+        assert (nominee["party"], nominee["partyLabel"]) == ("OTH", "Working Families")
+
+    def test_a_non_partisan_row_keeps_its_word(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "ND", SOURCE, [
+            {"office": "school_superintendent", "district": None, "party": "N",
+             "last_name": "Levi Bachmeier", "party_label": "Nonpartisan"},
+        ])
+        races, _ = _statewide_section(db_session, "ND", CYCLE)
+        nominee = races[0]["nominees"][0]
+        assert (nominee["party"], nominee["partyLabel"]) == ("N", "Nonpartisan")
+
+    def test_a_recognised_party_sends_a_null_label(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [GOVERNOR_D])
+        races, _ = _statewide_section(db_session, "RI", CYCLE)
+        assert races[0]["nominees"][0]["partyLabel"] is None
+
+
 class TestStatewideBodySeatedByDistrict:
     """Georgia's Public Service Commission is elected statewide, but a
     commissioner holds the seat for a district and each seat is its own
@@ -540,3 +603,234 @@ class TestJudicialCoverageStatus:
         assert _sync_judicial_nominees(
             db_session, CYCLE, "GA", {**SOURCE, "judicial_offices": False}, []) == 0
         assert _judicial_marker(db_session, "GA", CYCLE) is None
+
+
+class TestCalendarBasis:
+    """A state that elects no executive officers this cycle (Virginia
+    chooses its governor in odd years) can say so without its feed ever
+    being read for those offices — but the page must then say WHY it
+    knows, not "as published by" a source that was never read for them."""
+
+    BASIS = "Virginia elects its Governor in odd-numbered years."
+
+    def test_the_basis_rides_the_marker_to_the_page(self, db_session):
+        source = {**SOURCE, "source_name": "Virginia Department of Elections",
+                  "statewide_offices_basis": self.BASIS}
+        _sync_statewide_nominees(db_session, CYCLE, "VA", source, [])
+        races, coverage = _statewide_section(db_session, "VA", CYCLE)
+        assert races == []
+        assert coverage["status"] == StatewideCoverageStatus.CONFIRMED_NONE
+        assert coverage["basis"] == self.BASIS
+
+    def test_a_state_whose_feed_was_read_carries_no_basis(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [])
+        _, coverage = _statewide_section(db_session, "RI", CYCLE)
+        assert coverage["basis"] is None
+
+    def test_a_basis_says_nothing_about_the_legislature(self, db_session):
+        """Kentucky elects its governor in odd years but its House every
+        even year. The calendar settles the executive offices only; with
+        no legislative rows the chamber stays in the page's omissions."""
+        source = {**SOURCE, "statewide_offices_basis": self.BASIS}
+        _sync_statewide_nominees(db_session, CYCLE, "KY", source, [])
+        _sync_state_leg_nominees(db_session, CYCLE, "KY", source, [])
+        assert _state_leg_section(db_session, "KY", CYCLE, _statewide_marker(db_session, "KY", CYCLE)) == []
+
+
+class TestSourcesFileOptIns:
+    """The opt-in is a claim about the state's feed, so the sources file
+    must never make it for an adapter that cannot read executive
+    contests at all — unless the state's calendar says there are none."""
+
+    # Adapters that pass contest labels through parse_statewide_office.
+    READS_STATEWIDE = {
+        "al_special_primary", "canvass_summary_pdf", "certified_pdf", "certified_table",
+        "clarity", "ct_enr", "dos_canlist", "enhanced_voting", "grouped_list_pdf", "ks_official_totals",
+        "ma_pd43", "me_results", "nh_results", "or_abstract_pdf",
+        "pa_returns", "sd_vip", "tabular", "tally_enr",
+        "totalvote_enr", "tx_civix", "vrems", "vt_enr",
+    }
+
+    def _states(self):
+        import json
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / "app" / "data" / "state_candidate_sources.json"
+        return json.loads(path.read_text())["states"]
+
+    def test_every_opt_in_is_read_or_explained(self):
+        for state, entry in self._states().items():
+            if entry.get("statewide_offices"):
+                assert entry["strategy"] in self.READS_STATEWIDE or entry.get("statewide_offices_basis"), state
+
+    def test_a_general_lists_opt_in_is_read(self):
+        """A certified November list can carry the claim itself (Wyoming,
+        New Mexico, Tennessee): its strategy must read the labels, and it
+        must read them through the shared gates -- from the office column,
+        or for a list keyed by the state's own office codes (Maine,
+        Colorado) through state_office_codes spelling them out -- never
+        from a federal code map alone. The two non-table strategies name
+        where their state offices are."""
+        needs = {
+            "certified_table": lambda g: g.get("format", {}).get("office_parse")
+            or g.get("format", {}).get("state_office_codes"),
+            "grouped_list_pdf": lambda g: g.get("discovery", {}).get("state_url_templates"),
+            "dos_canlist": lambda g: g.get("state_office_groups") and g.get("special_index_url"),
+        }
+        for state, entry in self._states().items():
+            general = entry.get("general_list") or {}
+            if general.get("statewide_offices"):
+                assert general["strategy"] in self.READS_STATEWIDE, state
+                assert needs.get(general["strategy"], lambda g: True)(general), state
+                assert not general.get("statewide_offices_basis"), state
+
+    def test_a_basis_is_never_set_without_the_opt_in(self):
+        for state, entry in self._states().items():
+            if entry.get("statewide_offices_basis"):
+                assert entry.get("statewide_offices") is True, state
+
+    def test_the_readers_list_matches_the_code(self):
+        import inspect
+        from app.pipeline.fetch import state_candidates as sc
+        for strategy in self.READS_STATEWIDE:
+            assert "parse_statewide_office" in inspect.getsource(inspect.getmodule(sc.STRATEGIES[strategy])), strategy
+
+
+class TestStatewideSeatNamedByPlace:
+    """Alabama's two associate PSC seats are Places, elected statewide with
+    no district at all; labelling one "District Place 1" would be wrong."""
+
+    def test_a_place_renders_as_a_place(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "AL", SOURCE, [
+            {"office": "public_service_commission", "district": "Place 2", "party": "R", "last_name": "Jim Zig Zeigler"},
+            {"office": "public_service_commission", "district": "Place 1", "party": "R", "last_name": "Matt Gentry"},
+        ])
+        races, _ = _statewide_section(db_session, "AL", CYCLE)
+        assert [r["label"] for r in races] == [
+            "Public Service Commission, Place 1",
+            "Public Service Commission, Place 2",
+        ]
+
+
+
+def test_one_rule_for_district_seated_bodies():
+    """Every statewide body seated by district is listed per district
+    (like the legislature), so no entry hides one behind statewide_omits.
+    What an entry may omit is an office its adapter does not read at all
+    -- Louisiana's and Montana's district-elected PSCs -- and then the
+    page must say so."""
+    import json
+    from pathlib import Path
+
+    from app.pipeline.fetch.state_candidates_common import parse_statewide_office
+
+    sources = json.loads(
+        (Path(__file__).resolve().parents[1] / "app" / "data" / "state_candidate_sources.json").read_text()
+    )["states"]
+    assert "statewide_omits" not in sources["NH"]
+    assert parse_statewide_office("Executive Council District 2") == ("executive_council", "2")
+    assert parse_statewide_office("Governor's Council 3rd District") == ("governors_council", "3")
+    for state in ("LA", "MT"):
+        assert sources[state]["statewide_omits"] == ["Public Service Commission districts"], state
+
+
+class TestHowASeatIsElected:
+    """A district-elected seat and a statewide-elected one read alike
+    ("…, District 3"), so the page is told which it is -- from cited data,
+    never the label -- and, where the state publishes them, the places a
+    district seat covers."""
+
+    def _races(self, db_session, state, rows):
+        _sync_statewide_nominees(db_session, CYCLE, state, SOURCE, rows)
+        races, _ = _statewide_section(db_session, state, CYCLE)
+        return {r["office"]: r for r in races}
+
+    def test_new_hampshires_council_seat_is_district_elected_with_its_towns(self, db_session):
+        races = self._races(db_session, "NH", [
+            {"office": "executive_council", "district": "4", "party": "R", "last_name": "John Stephen"},
+            {"office": "governor", "district": None, "party": "R", "last_name": "Kelly Ayotte"},
+        ])
+        seat = races["executive_council-4"]
+        assert seat["electedBy"] == "district" and seat["seat"] == "4"
+        # From the state's own District 4 results workbook.
+        assert "Allenstown" in seat["areas"] and "Albany" not in seat["areas"]  # Albany is District 1
+        assert races["governor"]["electedBy"] is None and races["governor"]["areas"] == []
+
+    def test_georgias_psc_seat_is_elected_statewide(self, db_session):
+        races = self._races(db_session, "GA", [
+            {"office": "public_service_commission", "district": "3", "party": "D", "last_name": "A Name"},
+        ])
+        seat = races["public_service_commission-3"]
+        assert seat["electedBy"] == "statewide" and seat["areas"] == []
+
+    def test_colorados_regent_districts_are_its_congressional_districts(self, db_session):
+        races = self._races(db_session, "CO", [
+            {"office": "university_regent", "district": "3", "party": "D", "last_name": "A Regent"},
+        ])
+        seat = races["university_regent-3"]
+        assert seat["electedBy"] == "district"
+        assert "Alamosa County" in seat["areas"]
+
+    def test_an_office_the_data_does_not_cite_says_nothing(self, db_session):
+        races = self._races(db_session, "ND", [
+            {"office": "public_service_commission", "district": "2", "party": "R", "last_name": "A Name"},
+        ])
+        assert races["public_service_commission-2"]["electedBy"] is None
+
+
+def test_every_seated_office_the_page_can_show_is_cited():
+    """Each state/office in statewide_seats.json names a real seated
+    office and one of the two answers, with its citation."""
+    import json
+    from pathlib import Path
+
+    from app.pipeline.fetch.state_candidates_common import _STATEWIDE_DISTRICT_SEATS
+
+    data = json.loads((Path(__file__).resolve().parents[1] / "app" / "data" / "statewide_seats.json").read_text())
+    for state, offices in data["states"].items():
+        for code, spec in offices.items():
+            assert code in _STATEWIDE_DISTRICT_SEATS, (state, code)
+            assert spec["electedBy"] in ("district", "statewide"), (state, code)
+            assert f"{state} {code}" in data["_sources"], (state, code)
+
+
+def test_statewide_district_towns_is_generated_data_for_district_seats_only():
+    """statewide_district_towns.json names where it came from (AGENTS.md
+    3a) and covers only offices statewide_seats.json says are elected by
+    district: a statewide-elected seat has no 'your district' to find."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "app" / "data"
+    towns = json.loads((root / "statewide_district_towns.json").read_text())
+    seats = json.loads((root / "statewide_seats.json").read_text())["states"]
+    assert "fetch_statewide_district_towns.py" in towns["_source"]
+    for key, places in towns["districts"].items():
+        state, code, _n = key.split("-")
+        assert seats[state][code]["electedBy"] == "district", key
+        assert places and all(p.strip() for p in places), key
+    assert len([k for k in towns["districts"] if k.startswith("NH-")]) == 5
+    assert len([k for k in towns["districts"] if k.startswith("MA-")]) == 8
+
+
+def test_every_district_town_is_an_official_place_name():
+    """A reader types the real name. PD43 prints "N. Andover" and "W.
+    Springfield", New Hampshire's workbooks "At.& Gil. Ac. Gt.": each must
+    have been resolved to its Census county-subdivision name (a city ward
+    keeps its ward), or typing the town finds nothing -- or the neighbour."""
+    import json
+    import re
+    from pathlib import Path
+
+    towns = json.loads(
+        (Path(__file__).resolve().parents[1] / "app" / "data" / "statewide_district_towns.json").read_text()
+    )
+    official = {state: set(names) for state, names in towns["officialPlaces"].items()}
+    for key, places in towns["districts"].items():
+        for place in places:
+            base = re.sub(r"\s+Ward\s+\d+$", "", place)
+            assert base in official[key[:2]], (key, place)
+            assert "." not in place and "&" not in place, (key, place)
+    everywhere = {p for places in towns["districts"].values() for p in places}
+    for name in ("North Andover", "West Springfield", "North Attleborough", "South Hadley",
+                 "Atkinson and Gilmanton Academy grant"):
+        assert name in everywhere, name

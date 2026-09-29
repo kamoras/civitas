@@ -5,7 +5,7 @@ import { AboutPage, Summary, Point, Section, P, More, Cite, A } from "@/componen
 export const metadata = pageMetadata({
   title: "Known Limitations of Civitas Scores",
   description:
-    "What Civitas's scores and pages can't tell you, stated plainly — funding and party, partisan lean as a stand-in for opinion, ballot coverage, news sources — with the reason each gap is still open.",
+    "What Civitas's scores and pages can't tell you, stated plainly — campaign size and funding windows, partisan lean as a stand-in for opinion, ballot coverage, news sources — with the reason each gap is still open.",
   path: "/about/limitations",
 });
 
@@ -39,16 +39,12 @@ export default function LimitationsChapter() {
     >
       <Summary>
         <Point>
-          Average scores differ by party because the parties fundraise differently — not because the
-          formula treats them differently.
+          Funding covers six years for a senator but two for a representative, so the two are
+          best read side by side, not ranked.
         </Point>
         <Point>
           &ldquo;What a seat expects&rdquo; comes from how it votes for president: a broad stand-in
           for local opinion, not a measure of it.
-        </Point>
-        <Point>
-          Donations that line up with votes show where money and votes meet, not that one caused the
-          other.
         </Point>
         <Point>
           Ballot pages show local contests only for a few hand-picked towns; anywhere else it would
@@ -57,58 +53,20 @@ export default function LimitationsChapter() {
       </Summary>
 
       <Section id="money" title="Money">
-        <Limitation title="Scores follow funding style, and funding style follows party">
-          <P>
-            In July 2026 data, Democratic senators took roughly half the PAC share Republican
-            senators did (median about 10% against 17%) and about twice the small-donor share (about
-            24% against 12%), measured then as shares of total receipts. Funding Independence
-            measures those behaviors directly, so average scores differ by party. The formulas
-            contain no party term; the gap is in the fundraising.
-          </P>
-        </Limitation>
-        <Limitation title="Bigger campaigns look more independent by percentage">
-          <P>
-            PAC checks are capped by law and individual money isn&apos;t, so a larger campaign
-            naturally has a smaller PAC share. Scaling PAC dependency by how close each PAC came to
-            its legal limit measures the depth of that money directly, but no single number fully
-            separates &ldquo;independent&rdquo; from &ldquo;big&rdquo;.
-          </P>
-        </Limitation>
         <Limitation title="Funding windows differ by chamber">
           <P>
-            Funding covers the election that won the current seat — six years of fundraising for a
-            senator, two for a representative — so cross-chamber comparisons weigh different spans
-            of time. FEC filings also lag donations by weeks or months.
+            Funding covers a member&apos;s most recent completed election: six years of fundraising
+            for a senator, two for a representative. The PAC share and top-donor concentration are
+            each scored against the member&apos;s own chamber, but industry concentration is not, and
+            no adjustment makes six years and two years the same span. Within a chamber members are
+            measured over the same length of time, except a member with no completed election yet
+            (appointed, or seated by a special election), who is measured on the campaign still in
+            progress; across chambers the scores are best read side by side, not ranked, which is
+            why the compare page names no winner when a senator and a representative are compared.
+            The window itself is deliberate: a strict two-year window would leave most senators
+            with little or no fundraising to measure. FEC filings also lag donations by weeks or
+            months.
           </P>
-        </Limitation>
-        <Limitation title="Donor–vote connections are overlaps, not proof of influence">
-          <P>
-            Profiles link a donor&apos;s industry to votes on related topics by similarity of
-            subject, aggregating employee and PAC money associated with an organization. That shows
-            where money and legislation intersect; it doesn&apos;t show a donation changed a vote
-            <Cite id="ansolabehere2003" />. Lobbying figures from the Senate&apos;s disclosure
-            database are order-of-magnitude signals, not audited totals.
-          </P>
-        </Limitation>
-        <Limitation title="A home-state industry counts as concentration too">
-          <P>
-            A senator funded heavily by the auto industry in Michigan, or agriculture in Kansas,
-            scores the same on industry concentration as one funded by an unrelated out-of-state
-            interest. That&apos;s deliberate.
-          </P>
-          <More label="Why there’s no exemption for a state’s main industries">
-            <P>
-              We considered and rejected a &ldquo;this industry matters to the state&rdquo;
-              exemption, for the same reason an earlier exemption for donor-industry votes was
-              removed (see the <A href="/changelog">scoring changelog</A>): local economic dominance
-              plausibly gives an industry <em>more</em> leverage over a senator, not less, so
-              exempting it would weaken the signal exactly where capture matters most. No public
-              dataset can separate genuine local interest from capture that happens to track local
-              economic weight, so concentration is scored as risk, following the
-              industrial-organization logic the measure is built on
-              <Cite id="rhoades1993" />.
-            </P>
-          </More>
         </Limitation>
       </Section>
 
@@ -202,7 +160,8 @@ export default function LimitationsChapter() {
           <P>
             Ballots are printed per precinct, so there&apos;s no single &ldquo;ballot&rdquo; for a
             whole state. Pages show federal contests, statewide measures and — where a state&apos;s
-            own results name them — statewide offices, state legislative seats and judgeships.
+            own results or candidate list name them — statewide offices, state legislative seats
+            and judgeships.
             County and city offices and local measures are shown only for a small, hand-picked list
             of towns (looked up from each town hall&apos;s address); anywhere else, showing them
             would mean taking a home address to a lookup service, and we won&apos;t do that. Every

@@ -317,6 +317,9 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
                 bills_influenced=json.loads(lm.bills_influenced) if lm.bills_influenced else [],
                 senator_vote_aligned=lm.senator_vote_aligned,
                 description=lm.description,
+                lobbied_bills=json.loads(lm.lobbied_bills) if lm.lobbied_bills else [],
+                lobbying_clients=json.loads(lm.lobbying_clients) if lm.lobbying_clients else [],
+                lobbying_checked=lm.lobbying_checked,
             )
             for lm in lobbying_matches
         ],
@@ -595,7 +598,10 @@ def get_senator_stock_trades(
 
     query = db.query(StockTrade).filter(StockTrade.senator_id == senator_id)
     total = query.count()
-    late_count = query.filter(StockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
+    # Only trades whose timeliness is known (StockTradeSchema).
+    late_count = query.filter(
+        StockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS, StockTrade.parse_confidence == "text",
+    ).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (

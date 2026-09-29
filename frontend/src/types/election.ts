@@ -220,12 +220,34 @@ export interface StatewideRace {
    * data/office_terms.json; null where that file does not list it (never a
    * default). Optional: an older backend omits it. */
   termYears?: number | null;
+  /** The office this row is a seat of ("executive_council") and its bare
+   * label, for grouping a body's seats under one heading. Optional: an
+   * older backend omits them. */
+  officeCode?: string;
+  officeLabel?: string;
+  /** The seat ("3", "Place 1"); null for an office with no seats. */
+  seat?: string | null;
+  /** "district": each voter votes in one district's seat only.
+   * "statewide": every voter votes for each seat (Georgia's PSC).
+   * Null where the backend cites neither (data/statewide_seats.json). */
+  electedBy?: "district" | "statewide" | null;
+  /** Towns or counties a district seat covers, where the state publishes
+   * them; empty otherwise. */
+  areas?: string[];
 }
 
 export interface StatewideNominee {
   /** FEC's own 3-letter code, so majorPartyOf() applies here exactly as
-   * it does to every federal candidate on the page. */
+   * it does to every federal candidate on the page. "OTH" for a party
+   * neither we nor FEC have a code for, "N" (FEC's Nonpartisan) for a
+   * candidate the list calls non-partisan — see partyLabel. */
   party: string;
+  /** The party exactly as the state's certified list printed it (or, for
+   * a code, as the state's own party legend names it), sent only when
+   * `party` is "OTH" or "N" (Vermont's "FREEDOM AND UNITY", Florida's
+   * "MGTOW Party", North Dakota's "Nonpartisan"); null otherwise.
+   * Rendered in place of the code. Optional: an older backend omits it. */
+  partyLabel?: string | null;
   name: string;
 }
 
@@ -253,6 +275,8 @@ export interface JudicialCoverage {
   /** When the pipeline last read this state's judicial contests. */
   checkedAt: string | null;
   sourceName: string | null;
+  /** As StatewideCoverage.ballotList. Optional for an older API. */
+  ballotList?: boolean;
 }
 
 /** One court's seats on this state's ballot. */
@@ -298,6 +322,18 @@ export interface StatewideCoverage {
   status: "covered" | "confirmed_none" | "not_yet_covered";
   sourceName: string | null;
   checkedAt: string | null;
+  /** Set only when "none" rests on the state's constitutional calendar
+   * (Virginia elects its governor in odd years) rather than on a feed
+   * that was read for these offices — the sentence saying so, shown in
+   * place of "as published by". Optional: an API older than this field
+   * omits it. */
+  basis?: string | null;
+  /** True when the names are the state's own list of who is on the
+   * November ballot; false when they are primary results, which itemise
+   * only contested nominations — so an office (or seat) may be missing a
+   * party's unopposed nominee, and never shows an independent. Optional:
+   * an API older than this field omits it, read as false. */
+  ballotList?: boolean;
 }
 
 /** Where to go for the parts of the ballot this page cannot show. */

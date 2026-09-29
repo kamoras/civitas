@@ -108,11 +108,16 @@ export default function ScoresChapter() {
         </P>
         <Steps>
           <Step n={1} title="PAC dependency">
-            The share of the member&apos;s contributions that came from PACs, scored so the
-            chamber&apos;s median member lands at 50 — House candidates rely on PAC money far more
-            than Senate candidates, a structural difference rather than a choice. It is then scaled
-            by how close the contributing PACs came to their legal per-election limits, because a
-            very large campaign can dilute millions of PAC dollars into a small share.
+            The share of the member&apos;s contributions that came from PACs, against the share
+            campaigns of the same size typically take in the member&apos;s chamber (re-measured
+            every update): the typical share scores 50, no PAC money 100, twice the typical share 0.
+            Per chamber, because House candidates rely on PAC money far more than Senate
+            candidates, a structural difference rather than a choice. Per size, because PAC checks
+            are capped by law and individual money isn&apos;t, so a bigger campaign dilutes the same
+            PAC dollars to a smaller share. Measured in September 2026, a senator&apos;s PAC dollars
+            barely grow with campaign size; against one chamber-wide median the score tracked
+            campaign size (a correlation of 0.58 in the Senate), and against campaigns of the same
+            size it doesn&apos;t (0.05).
           </Step>
           <Step n={2} title="Small-donor share">
             Money in gifts under $200 — the broadest possible funding base. A senator is compared
@@ -128,7 +133,11 @@ export default function ScoresChapter() {
             index
             <Cite id="rhoades1993" />. Funding concentrated in one industry suggests a risk of
             regulatory capture. When too little of the money can be assigned to an industry to tell,
-            this counts as neutral.
+            this counts as neutral. Money from a party, candidate, joint-fundraising or leadership
+            committee is political money, not an industry&apos;s: the FEC&apos;s own registration of
+            each committee decides that, not its name. A state&apos;s home industry counts as
+            concentration like any other, because local economic weight plausibly gives an industry
+            more leverage over a member, not less.
           </Step>
         </Steps>
         <P>
@@ -137,6 +146,11 @@ export default function ScoresChapter() {
           committees whose sources aren&apos;t broken out. Money that can&apos;t be attributed at
           all (committee transfers, donations with no employer listed; a median of about a third of
           senators&apos; funding) is scored as neutral, not as a sign of concentration.
+        </P>
+        <P>
+          Democrats and Republicans raise money differently on average — in July 2026 Senate data,
+          Democrats took roughly half the PAC share and twice the small-donor share — so average
+          scores differ by party too, though the formula has no party term.
         </P>
         <More label="The evidence, and two inputs we removed">
           <P>
@@ -499,6 +513,33 @@ export default function ScoresChapter() {
             and only the roll call can say that.
           </P>
         </More>
+      </Section>
+
+      <Section id="donor-vote" title="Donor-vote connections">
+        <P>
+          Not scored. An industry that makes up at least a quarter of a member&apos;s classifiable
+          donor money is matched to the member&apos;s votes on legislation in that industry&apos;s
+          policy area. For the industry&apos;s largest donor we look up the Lobbying Disclosure Act
+          registry (lda.gov) under the donor&apos;s name — the
+          sponsoring company&apos;s when the donor is its PAC. A PAC the FEC lists no separate
+          sponsor for is searched under its own name, and finding nothing there is reported as
+          unknown, not as no lobbying.
+        </P>
+        <P>
+          Profiles show registered lobbying spend for every client the search matched, each with its
+          amount, and any bill the member voted on that those filings name, linked to the filing and
+          the client it was for. A client sharing the name can be a subsidiary or a separate company
+          (an independent bottler beside The Coca-Cola Company), and no name rule can tell which, so
+          the client is always shown rather than assumed to be the donor. Filings cite bills by
+          number and often name earlier congresses&apos; bills, so a number counts only when the
+          filer&apos;s wording around it also matches that bill&apos;s title in the current
+          Congress.
+        </P>
+        <P>
+          A filing records that an organization lobbied on a bill, not which way, so none of this
+          says whether a vote went the donor&apos;s way, and none of it shows influence
+          <Cite id="ansolabehere2003" />.
+        </P>
       </Section>
 
       <Section id="trades-and-holdings" title="Stock trades and holdings">

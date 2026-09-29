@@ -24,6 +24,30 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.22",
+    date: "2026-09-30",
+    title: "Funding Independence compares PAC money with campaigns of the same size",
+    tldr: "A member's PAC share is now judged against the share campaigns of the same size typically take in their chamber, not against one chamber-wide typical share. A bigger campaign no longer looks independent just for being bigger. Most members move a few points up; senators with large campaigns and above-typical PAC money move down.",
+    changes: [
+      "Why: PAC checks are capped by law and individual money is not, so a larger campaign dilutes the same PAC dollars to a smaller share. In September 2026 a senator's PAC dollars barely grew with campaign size at all, and Funding Independence tracked campaign size (a correlation of 0.58 in the Senate). The About page listed this as a known limitation.",
+      "Now: each update fits, per chamber, the PAC share campaigns of each size typically take, and the member is scored against the share at their size: the typical share scores 50, no PAC money 100, twice the typical share 0. Campaign sizes outside the range most members fall in are compared with the edge of that range. The correlation with campaign size falls to 0.05 (Senate) and -0.06 (House).",
+      "Removed: the adjustment for how close each contributing PAC came to its legal limit. It measured how hard each PAC gave, not how much the campaign relied on PACs, and it compared totals covering a primary and a general election with a single election's limit. It also held every member's PAC score down, so the typical member scored about 33 (House) to 35 (Senate) on it rather than 50; that is why most scores rise.",
+      "Effect on September 2026 data: Senate average 46.5 to 51.4, House 50.4 to 55.0. The Senate gap between the parties narrows from 13.2 to 8.2 points. 37 senators and 35 representatives move by more than 10 points, from +27 (small-state senators with typical PAC money for their campaign size) to -15 (large campaigns taking more PAC money than campaigns their size do).",
+    ],
+  },
+  {
+    version: "v6.21",
+    date: "2026-09-29",
+    title: "Funding: party, candidate and leadership committees are political money, not an industry",
+    tldr: "Money from a party committee, a candidate's campaign, a joint-fundraising committee or a leadership PAC no longer counts toward any industry. The FEC's own registration of each committee decides it, not the committee's name. Funding Independence moves by under two points for anyone; donor-vote connections built on such money are gone.",
+    changes: [
+      "Why: industries were assigned to committees by their names, and some names read like an industry. The NRSC (the Senate Republicans' campaign committee) was filed under GUNS for 19 senators, $919,000 in all, and headed Lindsey Graham's gun-industry donor-vote connection. Leadership PACs with names like Pineapple PAC, Giddy Up PAC and Velvet Hammer PAC were filed under lobbyists, finance and labor unions. Across the September 2026 Senate, 57 of 101 senators had some of this money counted as an industry's.",
+      "Now: every contributing committee is looked up in the FEC's committee master file. Committee types H, S and P (candidate campaigns) and X, Y and Z (party committees), and designations A, P and J (authorized by a candidate, principal campaign committee, joint fundraiser) and D (leadership PAC), are political money. That is the FEC's classification, read from the filing; no name is interpreted.",
+      "Effect on the September 2026 Senate, recomputed from the live breakdowns: Funding Independence falls by up to 1.7 points (Bill Hagerty, Mike Lee, Chuck Grassley) where political money had made industry funding look more spread out, and moves by under 0.2 points for everyone else.",
+      "Unscored, same release: donor-vote connections now show the organization's registered lobbying again (the registry moved to lda.gov, and every lookup since had failed and read as $0), look a PAC's sponsor up under the company's own name, and link any bill the member voted on that a lobbying filing under the donor's name names, showing the client each filing was for (a name can be shared by a separate company).",
+    ],
+  },
+  {
     version: "v6.20",
     date: "2026-09-29",
     title: "Breaks with the party: the whole Congress, toward the other party, each measure once",
@@ -33,6 +57,18 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "Tim Burchett (R-TN-2) had 6 breaks in 76 sampled votes (7.9%). Over the whole Congress, counting only breaks toward Democrats and each measure once, it is 2 of 298 (0.7%), the House Republican median; 14 more votes came from the party's right flank.",
       "Tested against Senate general elections and House primaries (research note, sections 11 and 12): at least as predictive as counting every break, and counting each measure once changes nothing measurable.",
       "In the 119th Senate 37% of roll calls repeat a measure already voted on, nearly all of them cloture on nominations.",
+    ],
+  },
+  {
+    version: "Justice v2",
+    date: "2026-09-29",
+    title: "Justices scored on independence from the president who appointed them",
+    tldr: "Supreme Court justices are now scored on one question: do they side with the federal government more often while the president who appointed them is in office than under other presidents? The two old measures, based on agreeing with the other party's appointees, turned out to rank justices by how close they sit to the Court's center. Each score is shown with its margin of error.",
+    changes: [
+      "The measure is Epstein and Posner's (2016): each justice's votes in cases the federal government argued, since 1937, comparing the share for the government under the appointing president with the share under others, with whether the government brought the case held fixed.",
+      "Each justice's estimate is pulled toward the average of all 42 justices measured by how uncertain it is, and shown with its standard error. The score is 100 at no favoritism either way and 0 at twice the spread between justices.",
+      "Consistency and Independence were removed. On today's Court every Republican appointee sits right of every Democratic appointee, so both ranked justices by distance from the Court's median (Spearman -0.82 and -0.75 against 2024 Martin-Quinn positions). The new measure's correlation with that distance is 0.28.",
+      "Martin-Quinn positions and the Oyez voting record are shown, not scored. The short profile written by the site's language model was removed. The study is in docs/research/justice-scores.md.",
     ],
   },
   {

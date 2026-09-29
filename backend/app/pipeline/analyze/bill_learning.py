@@ -332,6 +332,18 @@ def _purge_reference_entries(bill_ids: list[str]) -> None:
         logger.debug("Failed to purge stale reference-corpus entries", exc_info=True)
 
 
+def stamp_motion_type(vote: dict, roll_call: dict) -> None:
+    """Record what a roll call decided ("passage", "cloture", "amendment",
+    "procedural" ...; classify_motion_type) on the classified vote dict for
+    it, from the chamber's own question text, unless already known. Both
+    chambers, key and recent votes: a bill's key vote is the roll call its
+    actions name first, which can be a motion to recommit, and a lobbying
+    link shows one of a member's votes on a bill and must say which."""
+    if vote.get("motionType") is None:
+        question = roll_call.get("question") or ""
+        vote["motionType"] = classify_motion_type(question) if question else None
+
+
 def classify_motion_type(question: str) -> str:
     """Classify a Senate.gov question field as a motion type.
 

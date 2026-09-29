@@ -116,17 +116,27 @@ def test_get_rep_stock_trades_pagination(db_session):
         owner="spouse", transaction_type="sale_full", transaction_date="2026-02-01",
         disclosure_date="2026-04-01", days_to_disclose=59, amount_low=15001.0,
         amount_high=50000.0, industry="TECH", source_url="https://example.com/ptr.pdf",
-        filing_id="F2", parse_confidence="ocr",
+        filing_id="F2", parse_confidence="text",
+    ))
+    # The same late trade read by OCR from a scan: its date may be misread
+    # by a digit, so it supports no timeliness figure.
+    db_session.add(RepStockTrade(
+        representative_id="R1", ticker="AAPL", asset_name="Apple Inc.",
+        owner="spouse", transaction_type="sale_full", transaction_date="2026-01-01",
+        disclosure_date="2026-04-01", days_to_disclose=90, amount_low=15001.0,
+        amount_high=50000.0, industry="TECH", source_url="https://example.com/scan.pdf",
+        filing_id="F3", parse_confidence="ocr",
     ))
     db_session.commit()
 
     result = get_rep_stock_trades(db_session, "R1")
     # Schema object, not a hand-built dict — the House serializer used to
     # be its own copy and had already drifted from the shared one.
-    assert result.total == 1
+    assert result.total == 2
     assert result.late_count == 1
     assert result.trades[0].late is True
-    assert result.trades[0].parse_confidence == "ocr"
+    assert (result.trades[1].late, result.trades[1].days_to_disclose) == (None, None)
+    assert result.trades[1].parse_confidence == "ocr"
 
 
 def test_all_three_chambers_serialize_trades_identically(db_session):

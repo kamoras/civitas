@@ -1,5 +1,5 @@
-import type { RaceCoverageItem, RaceWithCandidates, StateBallot } from "@/types/election";
-import { candidateName, isActiveCandidate } from "@/lib/elections";
+import type { RaceCoverageItem, RaceWithCandidates, StateBallot, StatewideRace } from "@/types/election";
+import { candidateName, isActiveCandidate, majorPartyOf } from "@/lib/elections";
 
 /** One contest as the ballot page lays it out: a box in one of three
  * printed-ballot columns on desktop, a row in the index on a phone, and
@@ -63,6 +63,48 @@ function seatLine(race: RaceWithCandidates): string {
   return race.isSpecial ? `Special election · ${seat} · ${SPECIAL_TERM}` : `${seat} · ${SENATE_TERM}`;
 }
 
+export type StatewideGroup = { key: string; race?: StatewideRace; seats?: StatewideRace[] };
+
+/** Statewide rows in the backend's order, with every seat of one body (the
+ * rows sharing an officeCode that carry a seat) gathered under that body:
+ * New Hampshire's five Executive Council districts are one office, not five. */
+/** A contest listing two nominees of one major party fills more than one
+ * seat. Major parties only: two nonpartisan ("N") or two minor-party
+ * ("OTH") nominees can be rivals for a single seat. */
+function fillsSeveralSeats(race: StatewideRace): boolean {
+  const majors = (race.nominees ?? []).map(majorPartyOf).filter((party) => party !== null);
+  return new Set(majors).size < majors.length;
+}
+
+export function groupStatewideRaces(races: StatewideRace[]): StatewideGroup[] {
+  const groups: StatewideGroup[] = [];
+  for (const race of races) {
+    const last = groups[groups.length - 1];
+    if (race.seat && race.officeCode) {
+      if (last?.seats && last.seats[0].officeCode === race.officeCode) {
+        last.seats.push(race);
+      } else {
+        groups.push({ key: race.officeCode, seats: [race] });
+      }
+    } else {
+      groups.push({ key: race.office, race });
+    }
+  }
+  return groups;
+}
+
+/** How many statewide contests one voter marks: each office, and for a
+ * body with seats, one seat where each voter votes in a single district's
+ * (New Hampshire's Executive Council) or every seat where each voter votes
+ * for all of them (Georgia's PSC). A body whose election the backend does
+ * not cite counts each seat, as every row did before seats were grouped. */
+export function countStatewideContests(races: StatewideRace[]): number {
+  return groupStatewideRaces(races).reduce(
+    (n, g) => n + (g.seats ? (g.seats[0].electedBy === "district" ? 1 : g.seats.length) : 1),
+    0,
+  );
+}
+
 export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): BallotContest[] {
   const contests: BallotContest[] = [];
 
@@ -96,26 +138,36 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
   // Optional-chained: an API response is a trust boundary, and a partial
   // one must cost this contest, not the whole page.
   if (ballot.statewideCoverage?.status && ballot.statewideCoverage.status !== "not_yet_covered") {
-    const n = ballot.statewideRaces.length;
+    // Offices, not rows: a body's seats are one office (groupStatewideRaces).
+    const n = groupStatewideRaces(ballot.statewideRaces ?? []).length;
+    const offices = plural(n, "office");
+    // Primary results itemise only contested nominations; the box (and any
+    // image shared of it) says which kind of list it is, as the drawer does.
+    const basis = ballot.statewideCoverage.ballotList ? "" : " · from primary results";
     contests.push({
       key: "statewide",
       kind: "statewide",
       column: "state",
       title: "Statewide offices",
-      subtitle: n === 0 ? "None on this ballot" : plural(n, "office"),
-      instruction: n === 0 ? null : "Vote for one in each",
-      summary: n === 0 ? "None on this ballot" : plural(n, "office"),
+      subtitle: n === 0 ? "None on this ballot" : `${offices}${basis}`,
+      // Not where one contest fills several seats (North Dakota's PSC lists
+      // two nominees per party, and a voter marks two): the API carries no
+      // seat count per contest, so the box can't say how many to mark.
+      instruction: n === 0 || (ballot.statewideRaces ?? []).some(fillsSeveralSeats) ? null : "Vote for one in each",
+      summary: n === 0 ? "None on this ballot" : offices,
     });
   }
 
   if (ballot.stateLegRaces.length > 0) {
     const seats = ballot.stateLegRaces.reduce((sum, c) => sum + c.districts.length, 0);
+    // The legislature is read from the same list as the statewide offices.
+    const basis = ballot.statewideCoverage?.ballotList ? "" : " · from primary results";
     contests.push({
       key: "stateleg",
       kind: "stateleg",
       column: "state",
       title: ballot.stateLegRaces.map((c) => c.label).join(" · "),
-      subtitle: "Your seats depend on where you live",
+      subtitle: `Your seats depend on where you live${basis}`,
       instruction: "One seat per chamber",
       summary: `${plural(seats, "seat")} contested · find yours`,
     });
@@ -123,12 +175,13 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
 
   if (ballot.judicialCoverage && ballot.judicialCoverage.status !== "not_yet_covered") {
     const courts = ballot.judicialRaces.length;
+    const basis = ballot.judicialCoverage.ballotList ? "" : " · from primary results";
     contests.push({
       key: "judicial",
       kind: "judicial",
       column: "state",
       title: "Judges",
-      subtitle: courts === 0 ? "None on this ballot" : plural(courts, "court"),
+      subtitle: courts === 0 ? "None on this ballot" : `${plural(courts, "court")}${basis}`,
       instruction: null,
       summary: courts === 0 ? "None on this ballot" : plural(courts, "court"),
     });
@@ -230,7 +283,8 @@ export function contestForHash(
 
 /**
  * How many contests a voter in this state marks on the ballot: each Senate
- * race, one House race (a voter is in one district), each statewide office,
+ * race, one House race (a voter is in one district), each statewide office
+ * (one seat of a body elected by district; see countStatewideContests),
  * one seat per state legislative chamber, each court, and each measure.
  * The page's sections are not contests — "News coverage", the local-contests
  * pointer and the "not loaded yet" placeholders used to be counted as ones,
@@ -240,7 +294,7 @@ export function countBallotContests(contests: BallotContest[], ballot: StateBall
   let n = 0;
   for (const c of contests) {
     if (c.kind === "senate" || c.kind === "house") n += 1;
-    else if (c.kind === "statewide") n += ballot.statewideRaces.length;
+    else if (c.kind === "statewide") n += countStatewideContests(ballot.statewideRaces);
     else if (c.kind === "stateleg") n += ballot.stateLegRaces.length;
     else if (c.kind === "judicial") n += ballot.judicialRaces.length;
     else if (c.kind === "measures")
