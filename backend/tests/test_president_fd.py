@@ -58,11 +58,14 @@ def _row(date, **kw):
 async def test_the_annual_report_replaces_its_years_periodic_rows(db_session):
     db_session.add(President(id="trump-47", name="Donald Trump", party="R", number=47,
                              term_start="2025-01-20", is_current=True))
-    # A periodic row inside 2025 (replaced) and one in 2026 (kept).
-    for date, filing in (("2025-11-14", "t-2025"), ("2026-02-02", "t-2026")):
+    # A periodic row inside 2025 (replaced) and one in 2026 (kept); rows
+    # whose date isn't legible go by their filing's date: filed in 2025
+    # (the annual report's), filed in 2026 (kept).
+    for date, filed, filing in (("2025-11-14", "2025-11-14", "t-2025"), ("2026-02-02", "2026-02-02", "t-2026"),
+                                (None, "2025-12-10", "t-2025-dec"), (None, "2026-05-14", "t-2026-may")):
         db_session.add(PresidentTrade(
             president_id="trump-47", asset_name="Scan", transaction_type="purchase", transaction_date=date,
-            disclosure_date=date, amount_low=1001, amount_high=15000, filing_id=filing, parse_confidence="ocr",
+            disclosure_date=filed, amount_low=1001, amount_high=15000, filing_id=filing, parse_confidence="ocr",
         ))
     db_session.commit()
     index = [
@@ -72,7 +75,8 @@ async def test_the_annual_report_replaces_its_years_periodic_rows(db_session):
     # A later 278-T that also reports a 2025 transaction: the annual report
     # holds it already.
     periodic = [_row("2025-12-30", kind="periodic", filing="t-2026-later", confidence="ocr"),
-                _row("2026-02-20", kind="periodic", filing="t-2026-later", confidence="ocr")]
+                _row("2026-02-20", kind="periodic", filing="t-2026-later", confidence="ocr"),
+                _row(None, kind="periodic", filing="t-2026-later", confidence="ocr", filed="2026-03-01")]
     with (
         patch("app.pipeline.stock_pipeline.fetch_president_ptr_index", new_callable=AsyncMock, return_value=index),
         patch("app.pipeline.stock_pipeline.fetch_annual_transactions", new_callable=AsyncMock,
@@ -88,6 +92,8 @@ async def test_the_annual_report_replaces_its_years_periodic_rows(db_session):
         ("2025-11-14", "annual-2025", "annual"),
         ("2026-02-02", "t-2026", "periodic"),
         ("2026-02-20", "t-2026-later", "periodic"),
+        (None, "t-2026-may", "periodic"),
+        (None, "t-2026-later", "periodic"),
     }
 
 

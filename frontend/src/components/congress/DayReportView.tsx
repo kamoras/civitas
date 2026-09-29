@@ -15,10 +15,25 @@ const STATUS_LINE: Record<ChamberDay["status"], string> = {
   no_record_published: "No Record for this day",
 };
 
+// When each chamber publishes its floor log: the House's is written live
+// through the day, the Senate's posted once the day's session is over.
+// Until then a chamber that met shows only its record votes, which both
+// post as they are cast.
+const LOG_POSTED: Record<ChamberDay["chamber"], string> = {
+  house: "The House publishes its floor log as the day goes on",
+  senate: "The Senate publishes its floor log after the day's session ends",
+};
+
 function passedTag(e: CongressEvent): string | null {
   if (e.nextStep === "both") return "Passed both chambers";
   if (e.nextStep) return `Goes to the ${CHAMBER_NAME[e.nextStep]}`;
   return null;
+}
+
+/** A chamber that met (it has record votes) whose floor log for the day
+ *  isn't published yet. */
+function awaitingLog(day: ChamberDay): boolean {
+  return day.status === "live" && day.floorLogStatus === "absent";
 }
 
 function ChamberHead({ day }: { day: ChamberDay }) {
@@ -40,7 +55,7 @@ function ChamberHead({ day }: { day: ChamberDay }) {
             live ? "border-phos-mid text-phos-mid" : "border-white/20 text-ink-lo"
           }`}
         >
-          {STATUS_LINE[day.status]}
+          {awaitingLog(day) ? "Record votes so far" : STATUS_LINE[day.status]}
           {times && day.status !== "not_in_session" ? ` · ${times}` : ""}
         </span>
       </div>
@@ -50,6 +65,12 @@ function ChamberHead({ day }: { day: ChamberDay }) {
       {day.nextMeeting && (
         <p className="text-sm leading-relaxed text-ink-lo">
           Next meeting: {day.nextMeeting}.{day.nextProgram ? ` ${day.nextProgram}` : ""}
+        </p>
+      )}
+      {awaitingLog(day) && (
+        <p className="text-sm leading-relaxed text-ink-lo">
+          {LOG_POSTED[day.chamber]}, and it isn&apos;t out yet for this day. Its record votes are
+          below as they are cast; the log follows here when it is published.
         </p>
       )}
       {day.floorLogStatus === "failed" && day.status !== "final" && (
@@ -85,8 +106,8 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
       {day.status === "live" && (
         <p className="border border-white/15 bg-surface px-3 py-2 text-sm text-ink-lo">
           Measures passed, reported and confirmed appear here when the Congressional Record&apos;s
-          Daily Digest for this day is published, usually the next day. Until then this is the
-          chamber&apos;s own floor log.
+          Daily Digest for this day is published, usually the next day. Until then this is what the
+          chamber itself has published{awaitingLog(day) ? "" : ": its floor log"}.
         </p>
       )}
       {day.passed.length > 0 && (
