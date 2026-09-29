@@ -331,13 +331,16 @@ class TestConfiguredAddressesAreParseable:
         path = (pathlib.Path(__file__).resolve().parent.parent
                 / "app" / "data" / "state_candidate_sources.json")
         states = json.loads(path.read_text())["states"]
-        for code, entry in states.items():
-            if entry.get("strategy") != "google_civic":
-                continue
-            if entry.get("address"):
-                yield f"{code} statewide", entry["address"]
-            for district, addr in (entry.get("house_addresses") or {}).items():
-                yield f"{code}-{district}", addr
+        for code, state in states.items():
+            # Google Civic is a state's main source, its general_list or
+            # its fallback -- the address is read the same way in each.
+            for entry in (state, state.get("general_list") or {}, state.get("fallback") or {}):
+                if entry.get("strategy") != "google_civic":
+                    continue
+                if entry.get("address"):
+                    yield f"{code} statewide", entry["address"]
+                for district, addr in (entry.get("house_addresses") or {}).items():
+                    yield f"{code}-{district}", addr
 
     def test_every_address_starts_with_a_street_number(self):
         bad = [(label, addr) for label, addr in self._entries()
