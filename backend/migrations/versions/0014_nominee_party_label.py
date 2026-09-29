@@ -9,16 +9,16 @@ the state printed it in this column.
 Expand only: three nullable columns. An image without them never reads
 them, and an "O" row renders as its code there.
 
-Revision ID: 0012
-Revises: 0011
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-09-28
 """
 import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0012"
-down_revision = "0011"
+revision = "0014"
+down_revision = "0013"
 branch_labels = None
 depends_on = None
 
