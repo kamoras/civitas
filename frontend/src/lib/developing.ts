@@ -11,7 +11,16 @@ const DEVELOPING_SOURCE: Record<string, string> = {
   election_results: "the state's own election-night count, which is not final",
 };
 
-export function developingSource(sourceType: string | null | undefined): string {
+/** `countOfficial`: whether an election-results issue's count is the one
+ * the state lists as official (countIsOfficial) — then "not final" would
+ * contradict the "wins … in the official count" title right above it. */
+export function developingSource(
+  sourceType: string | null | undefined,
+  { countOfficial = false }: { countOfficial?: boolean } = {}
+): string {
+  if (sourceType === "election_results" && countOfficial) {
+    return "the state's own count, which the state lists as official";
+  }
   return (sourceType && DEVELOPING_SOURCE[sourceType]) || "a primary source";
 }
 

@@ -71,3 +71,19 @@ describe("contestHash", () => {
     expect(contestForHash(hash, contests, b)).toEqual({ key: "house", houseRaceId: "2026-H-CT-03" });
   });
 });
+
+describe("the House contest's subtitle", () => {
+  const house = (resultsMode?: boolean) =>
+    buildBallotContests(ballot(), false, resultsMode === undefined ? undefined : { resultsMode }).find(
+      (c) => c.key === "house",
+    )!.subtitle;
+
+  it("tells a voter they vote in one district during the campaign", () => {
+    expect(house()).toMatch(/^5 districts · you vote in one · /);
+    expect(house(false)).toBe(house());
+  });
+
+  it("is worded for results mode from election day on", () => {
+    expect(house(true)).toMatch(/^5 districts · one per voter · /);
+  });
+});

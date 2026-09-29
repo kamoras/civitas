@@ -44,7 +44,7 @@ import {
   trackActionText,
   trackableActions,
 } from "@/components/action/IssueEnrichment";
-import { factsHeading } from "@/lib/developing";
+import { countIsOfficial, factsHeading } from "@/lib/developing";
 
 const CivicActionWidget = dynamic(() => import("@/components/action/CivicTracker"), { ssr: false });
 import type { ActionIssue } from "@/types/action";
@@ -215,7 +215,12 @@ function HeroIssue({
         {issue.summary}
       </p>
 
-      {issue.status === "developing" && <DevelopingDisclosure sourceType={issue.sourceType} />}
+      {issue.status === "developing" && (
+        <DevelopingDisclosure
+          sourceType={issue.sourceType}
+          countOfficial={countIsOfficial(issue)}
+        />
+      )}
 
       {issue.policyAreas.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap mb-6">
@@ -358,7 +363,12 @@ function SecondaryIssue({
               {issue.summary}
             </p>
           )}
-          {expanded && issue.status === "developing" && <DevelopingDisclosure sourceType={issue.sourceType} />}
+          {expanded && issue.status === "developing" && (
+            <DevelopingDisclosure
+              sourceType={issue.sourceType}
+              countOfficial={countIsOfficial(issue)}
+            />
+          )}
         </div>
         <span
           className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
@@ -759,6 +769,14 @@ function isValidTab(s: string | null): s is Tab {
   return s !== null && VALID_TABS.has(s);
 }
 
+/** A search string in one canonical spelling, so a URL the page wrote and the
+ *  same URL read back through useSearchParams compare equal. */
+function searchKey(params: URLSearchParams): string {
+  const sorted = new URLSearchParams(params);
+  sorted.sort();
+  return sorted.toString();
+}
+
 function OpenCommentsBanner() {
   // The clock is read once, when the comment periods land, and carried
   // alongside them. Reading it again on every render would make the countdown
@@ -848,18 +866,43 @@ function ActionPageInner() {
   //
   // The History API is Next's supported path for search-param-only updates and
   // keeps usePathname/useSearchParams in sync without a navigation.
-  const replaceUrl = useCallback((url: string) => {
-    window.history.replaceState(null, "", url);
+  //
+  // Every URL the page writes itself is noted in `ownWrites` first, so the
+  // arrival logic below can tell the page's own writes (which must not
+  // re-fire an arrival) from a navigation the user made to a different day
+  // or issue (which must).
+  //
+  // State, not a ref: it is read during render below. Noted before the
+  // History call, so the note is committed no later than the router update
+  // Next dispatches for it (a transition, which renders after it).
+  const [ownWrites, setOwnWrites] = useState<string[]>([]);
+  const noteOwnWrite = useCallback((url: string) => {
+    const key = searchKey(new URL(url, window.location.href).searchParams);
+    // Rewriting the URL already showing changes no search params, so nothing
+    // would ever come back to match (and clear) the note.
+    if (key === searchKey(new URLSearchParams(window.location.search))) return;
+    setOwnWrites((w) => [...w, key]);
   }, []);
+  const replaceUrl = useCallback(
+    (url: string) => {
+      noteOwnWrite(url);
+      window.history.replaceState(null, "", url);
+    },
+    [noteOwnWrite]
+  );
 
   // Switching tabs is a destination, so it gets a history entry and Back
   // returns to the tab you came from. Expanding a card or paging a day stays
   // on replaceState above: those refine what you are already looking at, and
   // pushing them would make Back walk through every card someone opened
   // before it left the page.
-  const pushUrl = useCallback((url: string) => {
-    window.history.pushState(null, "", url);
-  }, []);
+  const pushUrl = useCallback(
+    (url: string) => {
+      noteOwnWrite(url);
+      window.history.pushState(null, "", url);
+    },
+    [noteOwnWrite]
+  );
 
   // The address bar is the single source of truth for which tab is showing.
   // Tab clicks write ?tab= through the History API and Next feeds that back
@@ -885,10 +928,60 @@ function ActionPageInner() {
   // re-reading them would make IssuesTab treat the user's own click as a fresh
   // arrival: SecondaryIssue would smooth-scroll the card out from under them,
   // and the day pager would reload the day it just loaded.
-  const [deepLink] = useState(() => ({
+  //
+  // That latch is per *arrival*, not per mount, though. An in-app <Link> to
+  // this same route (a Timeline entry's /action?date=…, My Reps'
+  // /action?issue=…, the navbar's ACTION_CENTER_HREF) is a soft navigation:
+  // the page never remounts, so a mount-only latch kept the day the page was
+  // opened on and showed today's issues under a ?date= URL — only under
+  // `next build`; a cold load was fine. So a search the page did not write
+  // itself (a <Link>, Back/Forward) is a new arrival: it is latched afresh and
+  // IssuesTab remounts on it (`seq`), while the page's own writes, matched
+  // against `ownWrites`, change nothing.
+  const currentSearch = searchKey(searchParams);
+  const [deepLink, setDeepLink] = useState(() => ({
     date: searchParams.get("date"),
     issue: searchParams.get("issue"),
+    seq: 0,
+    search: currentSearch,
   }));
+  // Adjusted during render, not in an effect, so IssuesTab never mounts
+  // once more on the previous arrival (a stale fetch, a stale scroll)
+  // before the new one lands.
+  if (currentSearch !== deepLink.search) {
+    const own = ownWrites.indexOf(currentSearch);
+    if (own !== -1) {
+      // Next may report rapid writes one by one; anything written before
+      // this one has been superseded either way.
+      setOwnWrites(ownWrites.slice(own + 1));
+      setDeepLink({ ...deepLink, search: currentSearch });
+    } else {
+      setDeepLink({
+        date: searchParams.get("date"),
+        issue: searchParams.get("issue"),
+        seq: deepLink.seq + 1,
+        search: currentSearch,
+      });
+    }
+  }
+
+  // Back/Forward swaps the tab under a keyboard user whose focus is still on
+  // the tab they left, now tabindex=-1 (roving tabindex): move it to the tab
+  // that is showing. Only from inside the tablist — focus elsewhere is not
+  // ours to take.
+  const tablistRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const focused = document.activeElement;
+    const incoming = document.getElementById(`tab-${activeTab}`);
+    if (
+      incoming &&
+      focused !== incoming &&
+      focused instanceof HTMLElement &&
+      tablistRef.current?.contains(focused)
+    ) {
+      incoming.focus();
+    }
+  }, [activeTab]);
 
   const setActiveTab = useCallback(
     (tab: Tab) => {
@@ -896,7 +989,15 @@ function ActionPageInner() {
       // /action entry is what Next's router cache later answers an in-app
       // <Link href="/action"> with, restoring whatever search it last saw.
       const url = tab === "issues" ? ACTION_CENTER_HREF : `/action?tab=${tab}`;
-      pushUrl(url);
+      if (tab !== activeTab) {
+        pushUrl(url);
+        // Leaving for another tab ends the arrival: coming back to ISSUES
+        // (whose URL names no day or issue) shows the latest day, not the
+        // day the page was opened on, and doesn't re-scroll to the card it
+        // was opened at. A still-mounted card can only see its deepLinked
+        // prop go false here, which its arrival effect ignores.
+        setDeepLink((d) => ({ ...d, date: null, issue: null }));
+      }
       // Focus the newly selected *tab*, not its panel. The tabs use a roving
       // tabindex, so the incoming tab has to be focused explicitly or the
       // keyboard user is stranded on an element that just became tabindex=-1.
@@ -908,7 +1009,7 @@ function ActionPageInner() {
         document.getElementById(`tab-${tab}`)?.focus();
       });
     },
-    [pushUrl]
+    [pushUrl, activeTab]
   );
 
   // Update URL when a secondary issue is expanded/collapsed
@@ -946,6 +1047,7 @@ function ActionPageInner() {
               full-strength phosphor, so it rendered as a bright green 4px bar
               parked beside the tab row, reading as a deliberate accent. */}
           <div
+            ref={tablistRef}
             role="tablist"
             aria-label="Action Center sections"
             className="sticky top-[82px] z-30 -mx-4 mb-8 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
@@ -994,6 +1096,7 @@ function ActionPageInner() {
           >
             {activeTab === "issues" && (
               <IssuesTab
+                key={deepLink.seq}
                 userState={userState}
                 setUserState={setUserState}
                 onNavigate={setActiveTab}

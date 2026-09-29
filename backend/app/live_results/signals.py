@@ -16,8 +16,8 @@ The issue follows the count. Each sync refreshes its facts while the flip
 holds; if the lead reverts to the holder's party (or ties) the issue is
 retired (is_current=False, never deleted) AND rewritten to say the count no
 longer shows a change of party — a retired row still shows on the
-homepage's record and at its own address — and it comes back if the flip
-does, until its confirmation deadline has passed.
+homepage's record and at its own address. If the seat flips again, that is
+a new issue, drafted fresh; the old one keeps its record of the reversal.
 """
 
 import json
@@ -211,12 +211,12 @@ def update_developing_issues(db: Session, applied: list) -> int:
     sync_state stored (`Applied`s; a held poll never reaches here). Returns
     how many issues were created, retired or brought back.
 
-    A retired issue comes back only on a NEW flip — the lead having
-    reverted and then flipped again. Anything else that retired it (the
-    Action Center's own refresh retires an unmatched developing issue after
-    a day) stays retired: resurrecting on every poll while the flip merely
+    A NEW flip — the lead having reverted and then flipped again — opens a
+    new issue; the retired one keeps its record. Anything else that retired
+    an issue (the Action Center's own refresh retires an unmatched
+    developing issue a day after it was created) leaves it retired, its
+    figures kept current: resurrecting on every poll while the flip merely
     held made the issue vanish and reappear every hour."""
-    now = utcnow()
     changed = 0
     for outcome in applied:
         result = outcome.result
@@ -231,14 +231,20 @@ def update_developing_issues(db: Session, applied: list) -> int:
                 changed += 1
                 continue
             if not issue.is_current:
-                expired = issue.confirmation_deadline and issue.confirmation_deadline < now
-                if not outcome.new_flip or expired:
-                    # Stays retired (or expired unconfirmed), but its own
-                    # page keeps showing the count as it stands.
-                    _fill(issue, result, touch_date=False)
+                if outcome.new_flip:
+                    # A flip after a reversal is a new story, drafted fresh:
+                    # the Action Center's refresh retires an unmatched
+                    # developing row a day after it was CREATED, so reviving
+                    # the old one after that lived only until the next hour.
+                    # The old row keeps saying the count no longer showed a
+                    # change of party — which it didn't, then.
+                    _create(db, result)
+                    changed += 1
                     continue
-                issue.is_current = True
-                changed += 1
+                # Stays retired, but its own page keeps showing the count
+                # as it stands.
+                _fill(issue, result, touch_date=False)
+                continue
             _fill(issue, result)
         elif issue is not None:
             # The lead went back (or is tied): say so, on the row the

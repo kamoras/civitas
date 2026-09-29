@@ -410,6 +410,10 @@ describe("U.S. Representative", () => {
     // house.gov answers for the district today's member holds.
     expect(drawer.queryByRole("link", { name: /house\.gov/ })).not.toBeInTheDocument();
     expect(drawer.getByText(/new congressional district lines/)).toBeInTheDocument();
+    // Campaign wording, addressed to someone who is about to vote.
+    expect(drawer.getByText(/new congressional district lines/).closest("p")).toHaveTextContent(
+      /^You vote in exactly one of these\. Texas votes on new congressional district lines this year, so your district/,
+    );
     expect(drawer.getByText(/lookups by representative show today's districts, not these/)).toBeInTheDocument();
     // The state's own lookup does know the new lines.
     expect(drawer.getByRole("link", { name: "Texas voter portal (opens in new tab)" })).toHaveAttribute(

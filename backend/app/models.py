@@ -1088,6 +1088,10 @@ class LiveResultRead(Base):
     checked_at: Mapped[datetime] = mapped_column(default=utcnow)
     # The last read that was stored — NULL until one is.
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # For a refused read: which kind of refusal (sync.refusal_kind), so an
+    # alert fires on the same refusal twice in a row, not on two different
+    # one-off ones.
+    reason_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
 
 class Justice(Base):

@@ -625,6 +625,12 @@ function HouseDistrictOption({
   );
 }
 
+/** Campaign wording, and the wording from election day on (resultsMode):
+ * neutral, not past tense — results mode starts on election day, while
+ * polls are still open, and runs for weeks after. */
+const HOUSE_ONE_EACH = "You vote in exactly one of these.";
+const HOUSE_ONE_EACH_RESULTS = "Each voter has exactly one of these on the ballot.";
+
 /** The U.S. Representative contest: pick your district, then research it.
  *
  * Civitas never asks a visitor for their address, so finding "your"
@@ -710,9 +716,20 @@ function HouseDetail({
     <div>
       {newLines ? (
         <p className="mb-3 text-[13px] text-ink-lo">
-          You vote in exactly one of these. {stateName} votes on{" "}
-          <strong className="font-semibold text-ink-hi">new congressional district lines</strong> this
-          year, so your district may not be the one your current representative was elected in, and
+          {resultsMode ? (
+            <>
+              {HOUSE_ONE_EACH_RESULTS} This year&apos;s election in {stateName} is on{" "}
+              <strong className="font-semibold text-ink-hi">new congressional district lines</strong>,
+              so
+            </>
+          ) : (
+            <>
+              {HOUSE_ONE_EACH} {stateName} votes on{" "}
+              <strong className="font-semibold text-ink-hi">new congressional district lines</strong>{" "}
+              this year, so
+            </>
+          )}{" "}
+          your district may not be the one your current representative was elected in, and
           lookups by representative show today&apos;s districts, not these. Point at the map, pick
           your county, or filter by a county or district number
           {ballot.officialLookup.isStateSpecific ? (
@@ -733,8 +750,8 @@ function HouseDetail({
         </p>
       ) : (
         <p className="mb-3 text-[13px] text-ink-lo">
-          You vote in exactly one of these. Point at the map, pick your county, or filter by a
-          county, a candidate&apos;s name or a district number — or{" "}
+          {resultsMode ? HOUSE_ONE_EACH_RESULTS : HOUSE_ONE_EACH} Point at the map, pick your
+          county, or filter by a county, a candidate&apos;s name or a district number — or{" "}
           <a
             href="https://www.house.gov/representatives/find-your-representative"
             target="_blank"
@@ -1095,7 +1112,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // none of its own is "no count from the feed", not "no votes yet".
   const feedAnswered = !!live && live.races.length > 0;
 
-  const contests = useMemo(() => buildBallotContests(ballot, towns.length > 0), [ballot, towns.length]);
+  const contests = useMemo(
+    () => buildBallotContests(ballot, towns.length > 0, { resultsMode }),
+    [ballot, towns.length, resultsMode]
+  );
   // undefined = no choice made yet, so defer to the URL; null = closed.
   // Collapsing the two meant a contest opened by a link could never be
   // closed (setting null over null changes nothing).

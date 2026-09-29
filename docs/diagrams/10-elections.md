@@ -395,7 +395,7 @@ current interval.
 
 **The DEVELOPING issue** (`signals.py`) opens when a seat's leader is from
 another party than its holder (fixed at the first read), is refreshed while
-the flip holds, and returns only on a new flip. When the lead reverts (or
+the flip holds; a flip after a reversal opens a new issue. When the lead reverts (or
 ties) it is retired AND rewritten to say the count no longer shows a change
 of party, since the homepage record and its own address still show retired
 rows; a retired issue keeps its figures current without moving up the

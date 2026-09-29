@@ -9,6 +9,19 @@ describe("developing issue wording", () => {
     expect(developingSource(null)).toBe("a primary source");
   });
 
+  it("never calls an official count 'not final'", () => {
+    expect(developingSource("election_results", { countOfficial: false })).toMatch(
+      /which is not final$/
+    );
+    const official = developingSource("election_results", { countOfficial: true });
+    expect(official).not.toMatch(/not final/);
+    expect(official).toMatch(/which the state lists as official$/);
+    // The flag is about counts only.
+    expect(developingSource("house_roll_call_vote", { countOfficial: true })).toBe(
+      "a House roll-call vote record"
+    );
+  });
+
   it("heads a count's facts as the count, not as media coverage", () => {
     expect(factsHeading({ sourceType: "election_results", status: "developing" })).toBe(
       "From the count"
@@ -34,7 +47,9 @@ describe("developing issue wording", () => {
 
   it("takes the backend's own official flag when it sends one", () => {
     expect(countIsOfficial({ title: "Democrat leads …", countOfficial: true })).toBe(true);
-    expect(countIsOfficial({ title: "Democrat wins … in the official count, …", countOfficial: false })).toBe(false);
+    expect(
+      countIsOfficial({ title: "Democrat wins … in the official count, …", countOfficial: false })
+    ).toBe(false);
   });
 
   it("reads a count as official only from the backend's official-count title", () => {

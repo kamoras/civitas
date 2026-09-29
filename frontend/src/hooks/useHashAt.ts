@@ -24,7 +24,8 @@ export function useHashAt(path: string): string | null {
   return useSyncExternalStore(subscribe, getSnapshot, serverSnapshot);
 }
 
-const RECHECK_FRAMES = 30;
+/** Exported for tests that must outlast every re-check frame. */
+export const RECHECK_FRAMES = 30;
 
 function subscribe(onChange: () => void): () => void {
   window.addEventListener("popstate", onChange);

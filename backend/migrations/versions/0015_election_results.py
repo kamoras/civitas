@@ -42,6 +42,7 @@ def upgrade() -> None:
     sa.Column('status', sa.String(length=20), nullable=False),
     sa.Column('checked_at', sa.DateTime(), nullable=False),
     sa.Column('last_ok_at', sa.DateTime(), nullable=True),
+    sa.Column('reason_kind', sa.String(length=16), nullable=True),
     sa.PrimaryKeyConstraint('state', 'election_date')
     )
     op.create_table('race_results',

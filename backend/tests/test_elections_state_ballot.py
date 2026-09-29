@@ -20,6 +20,17 @@ from app.models import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _campaign_clock(monkeypatch):
+    """These tests build a 2026-cycle roster. Pinned inside the 2026
+    campaign: on the real clock, once the results window closes (Nov 18,
+    2026) the site's cycle is 2028 and they read an empty roster. A test
+    that needs another date patches election_today itself."""
+    from datetime import date
+
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 10, 1))
+
+
 def _body(response):
     return json.loads(response.body)
 

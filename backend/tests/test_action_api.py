@@ -417,7 +417,13 @@ class TestElectionInfoSpecialSenateRaces:
         ))
         db_session.commit()
 
-        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)):
+        # get_election_info reads the Eastern election date (election_today),
+        # not utcnow: pin that, or the test runs on the real clock.
+        from datetime import date
+
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)), \
+                patch("app.api.action.election_today", return_value=date(2026, 7, 24)), \
+                patch("app.election_phase.election_today", return_value=date(2026, 7, 24)):
             result = await get_election_info(Response(), db=db_session)
 
         assert self._fl_entry(result)["hasSenateRace"] is True
@@ -431,7 +437,13 @@ class TestElectionInfoSpecialSenateRaces:
 
         from app.api.action import get_election_info
 
-        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)):
+        # get_election_info reads the Eastern election date (election_today),
+        # not utcnow: pin that, or the test runs on the real clock.
+        from datetime import date
+
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)), \
+                patch("app.api.action.election_today", return_value=date(2026, 7, 24)), \
+                patch("app.election_phase.election_today", return_value=date(2026, 7, 24)):
             result = await get_election_info(Response(), db=db_session)
 
         assert self._fl_entry(result)["hasSenateRace"] is False

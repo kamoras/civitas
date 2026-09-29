@@ -331,7 +331,7 @@ export default function MyRepsTab({
             {repIssues.map((iss) => (
               <Link
                 key={iss.id}
-                href={`/action?issue=${iss.id}`}
+                href={`/action?issue=${iss.publicId}`}
                 className="flex items-start gap-3 group hover:bg-signal-magenta/10 transition-colors p-2 -mx-2"
               >
                 <span className="text-xs font-mono text-ink-lo shrink-0 mt-0.5">#{iss.rank}</span>

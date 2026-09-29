@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
+import { RECHECK_FRAMES } from "@/hooks/useHashAt";
 import type { LiveResults, RaceWithCandidates, StateBallot } from "@/types/election";
 
 /* The state page from election day on: the live count above the ballot
@@ -154,7 +155,10 @@ function live(overrides: Partial<LiveResults> = {}): LiveResults {
 }
 
 /** Let the hash hook's animation-frame re-checks run (useHashAt), so a
- * "never scrolled" assertion can fail when a scroll is merely late. */
+ * "never scrolled" assertion can fail when a scroll is merely late. A
+ * "never"/"only once" claim waits out every re-check (ALL_RECHECKS); the
+ * default is short on purpose, for a test that needs re-checks left over. */
+const ALL_RECHECKS = RECHECK_FRAMES + 5;
 async function afterFrames(n = 5) {
   await act(async () => {
     for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => r(null)));
@@ -193,6 +197,9 @@ describe("the state page in results mode", () => {
     fetchLiveResults.mockResolvedValue(live());
     render(<StateBallotClient ballot={ballot()} />);
     await screen.findByRole("region", { name: "U.S. House" });
+    // Only a few frames, not ALL_RECHECKS: pushState fires no event, so it is
+    // the hook's still-running re-check frames that must notice the push
+    // below. Waiting them all out would leave nothing to see it.
     await afterFrames();
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     await act(async () => {
@@ -346,7 +353,7 @@ describe("the state page in results mode", () => {
     await screen.findByRole("region", { name: "U.S. House" });
     await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1));
     rerender(<StateBallotClient ballot={ballot()} />);
-    await afterFrames();
+    await afterFrames(ALL_RECHECKS);
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
@@ -373,7 +380,7 @@ describe("the state page in results mode", () => {
     expect(fetchLiveResults).toHaveBeenCalledTimes(2);
     // Decided once: the drawer stays, and the page doesn't jump to the count.
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    await afterFrames();
+    await afterFrames(ALL_RECHECKS);
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 
@@ -399,6 +406,37 @@ describe("the state page in results mode", () => {
     await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
     expect(districtMapProps.length).toBeGreaterThan(0);
     expect(districtMapProps.every((p) => p.results === undefined)).toBe(true);
+  });
+
+  it("words the House drawer for results mode, not as a voter's instruction", async () => {
+    fetchLiveResults.mockResolvedValue(live());
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ houseRaces: two, newDistrictLines: true })} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    expect(screen.getAllByText(/2 districts · one per voter/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/you vote in one/)).not.toBeInTheDocument();
+    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const drawer = within(screen.getByRole("dialog"));
+    const intro = drawer.getByText(/new congressional district lines/).closest("p");
+    expect(intro).toHaveTextContent(
+      /^Each voter has exactly one of these on the ballot\. This year's election in Ohio is on new congressional district lines, so your district/
+    );
+    expect(intro).not.toHaveTextContent(/You vote in|votes on new/);
+  });
+
+  it("words the House drawer for results mode on today's lines too", async () => {
+    fetchLiveResults.mockResolvedValue(live());
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const drawer = within(screen.getByRole("dialog"));
+    expect(
+      drawer.getByText(/Each voter has exactly one of these on the ballot\./)
+    ).toBeInTheDocument();
+    expect(drawer.queryByText(/You vote in/)).not.toBeInTheDocument();
   });
 
   it("says the count has ended when the results window closes while the page is open", async () => {

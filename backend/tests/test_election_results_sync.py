@@ -127,9 +127,15 @@ class TestFlip:
         kinds, _ = _apply(db_session, race, _contest(1800, 1700, 90))
         assert er.FLIP_REVERSED in kinds
         assert issue.is_current is False
-        # The flip coming back brings the same issue back — never a second one.
+        # The flip coming back is a new story: a fresh issue (the refresh
+        # retires an unmatched developing row a day after it was created,
+        # so reviving the old one didn't last), the old one kept as the
+        # record of the reversal.
         _apply(db_session, race, _contest(1800, 1900, 95))
-        assert _issues(db_session) == [issue] and issue.is_current is True
+        old, new = sorted(_issues(db_session), key=lambda i: i.id)
+        assert old is issue and old.is_current is False and "no longer shows" in old.title
+        assert new.is_current is True and "leads" in new.title
+        assert db_session.get(RaceResult, race.id).developing_issue_id == new.id
 
     def test_an_expired_issue_is_not_resurrected(self, db_session):
         race = _setup(db_session)
@@ -139,6 +145,7 @@ class TestFlip:
         issue.confirmation_deadline = utcnow() - timedelta(hours=1)
         _apply(db_session, race, _contest(1800, 1900, 95))
         assert issue.is_current is False
+        assert len(_issues(db_session)) == 2  # the new flip is its own issue
 
     def test_a_promoted_issue_is_left_to_the_news(self, db_session):
         race = _setup(db_session)
@@ -239,7 +246,10 @@ class TestTrustGates:
         _sync(db_session, UntrustedCount("GA changed version mid-read (v8 then v9)"))
         first = er.refusal_kind("GA changed version mid-read (v7 then v8)")
         assert first == er.refusal_kind("GA changed version mid-read (v8 then v9)")
-        _sync(db_session, UntrustedCount("GA results site is in demo mode"))
+        # A different refusal after the transient one is its first
+        # occurrence: no alert yet.
+        _, alert = _sync(db_session, UntrustedCount("GA results site is in demo mode"))
+        assert not alert.called
         _, alert = _sync(db_session, UntrustedCount("GA results site is in demo mode"))
         assert alert.called
         assert alert.call_args.kwargs["dedupe_key"].endswith(er.refusal_kind("GA results site is in demo mode"))
@@ -440,9 +450,10 @@ class TestIssueLifecycle:
         # Tied: nobody named as ahead.
         _apply(db_session, race, _contest(1300, 1300, 85))
         assert "top two tied" in issue.summary
-        # Flipped again: the flip story, current again.
+        # Flipped again: a new flip story; this one keeps the reversal.
         _apply(db_session, race, _contest(1300, 1500, 90))
-        assert issue.is_current is True and "leads" in issue.title
+        assert issue.is_current is False and "no longer shows" in issue.title
+        assert any(i.is_current and "leads" in i.title for i in _issues(db_session))
 
 
 class TestWholePass:

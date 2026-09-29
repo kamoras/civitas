@@ -510,7 +510,7 @@ async def read_state(client: httpx.AsyncClient, state: str, election_day: date) 
     return StateRead("read", count=count)
 
 
-def _record_read(db: Session, state: str, election_day: date, status: str) -> None:
+def _record_read(db: Session, state: str, election_day: date, status: str, reason: str | None = None) -> None:
     now = utcnow()
     row = db.get(LiveResultRead, (state, election_day.isoformat()))
     if row is None:
@@ -518,6 +518,7 @@ def _record_read(db: Session, state: str, election_day: date, status: str) -> No
         db.add(row)
         db.flush()  # found by the next read's db.get, even before a commit
     row.status = status
+    row.reason_kind = refusal_kind(reason) if status == "untrusted" else None
     row.checked_at = now
     if status == "ok":
         row.last_ok_at = now
@@ -526,7 +527,7 @@ def _record_read(db: Session, state: str, election_day: date, status: str) -> No
 def apply_state(db: Session, state: str, election_day: date, read: StateRead) -> dict:
     """Store what one state's read says, and record how the read went."""
     outcome = _apply_state(db, state, election_day, read)
-    _record_read(db, state, election_day, outcome["status"])
+    _record_read(db, state, election_day, outcome["status"], outcome.get("reason"))
     return outcome
 
 
@@ -542,7 +543,8 @@ def _apply_state(db: Session, state: str, election_day: date, read: StateRead) -
         # kind of refusal, not just the state and day — one transient
         # refusal used to spend the only alert, so a later persistent one
         # (demo mode, two same-day generals) was never raised.
-        if previous is not None and previous.status == "untrusted":
+        if (previous is not None and previous.status == "untrusted"
+                and previous.reason_kind == refusal_kind(read.reason)):
             send_ops_alert(
                 f"Live results: {state} feed refused",
                 f"{read.reason}. Refused on consecutive reads; nothing from it was stored or published, and "

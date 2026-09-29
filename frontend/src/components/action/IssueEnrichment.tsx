@@ -123,8 +123,15 @@ export function DevelopingBadge() {
 /** One-line disclosure paired with DevelopingBadge — explains what
  *  "developing" means, and names what the story was drafted from, rather
  *  than leaving readers to guess. */
-export function DevelopingDisclosure({ sourceType }: { sourceType?: string | null }) {
-  const source = developingSource(sourceType);
+export function DevelopingDisclosure({
+  sourceType,
+  countOfficial = false,
+}: {
+  sourceType?: string | null;
+  /** countIsOfficial(issue) — an official count must not read "not final". */
+  countOfficial?: boolean;
+}) {
+  const source = developingSource(sourceType, { countOfficial });
   return (
     <p className="mb-4 font-mono text-xs text-ink-min">
       Based on {source}; broader news coverage has not yet confirmed this story.
