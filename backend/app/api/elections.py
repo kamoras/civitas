@@ -162,11 +162,13 @@ def _pvi_for_race(race: Race, state_pvi: dict, district_pvi: dict) -> tuple[int 
     (2026-07 review F7).
 
     A state that redrew for the race's cycle (redrawn_states) has no
-    district number to look up: district_pvi.json describes the seats
-    today's members hold, and the same number is a different district on
-    the new map. Its House races take the flagged statewide number rather
-    than the old seat's lean (TX-35 read D+19, the old Austin-San Antonio
-    seat, for a district now outside both cities)."""
+    district number to look up: district_pvi.json keys a lean by district
+    number, and on the new map that number is a different district, so no
+    value filed under it can be trusted for the 2026 race (TX-35 read D+19,
+    the old Austin-San Antonio seat, for a district now outside both
+    cities; the file itself mixes old- and new-map values while Wikipedia's
+    infoboxes are being updated). Its House races take the flagged
+    statewide number instead."""
     if race.office == "H" and race.state not in redrawn_states(race.cycle_year):
         key = f"{race.state}-{race.district if race.district is not None else 0}"
         if key in district_pvi:
@@ -1024,8 +1026,13 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     # Senator inside _incumbent_link per candidate would be exactly the
     # N+1 shape the .candidates selectinload above already exists to
     # avoid for a different relationship.
+    # Current members only: a member who left within the retirement grace
+    # period shares a district number with their successor, and the dict
+    # kept whichever the query returned last.
     reps_by_district = {
-        r.district: r for r in db.query(Representative).filter(Representative.state == state).all()
+        r.district: r for r in db.query(Representative).filter(
+            Representative.state == state, Representative.is_current.is_(True),
+        ).all()
     }
     senators = db.query(Senator).filter(Senator.state == state, Senator.is_current).all()
     marker = _ballot_marker(db, state, cycle)
@@ -1080,6 +1087,13 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # must not re-derive this from primaryDate itself.
         "ballotBasis": _ballot_basis(senate_races + house_races, primary_date(state, cycle)),
         "statePvi": state_pvi.get(state),
+        # The state votes this cycle on congressional lines other than the
+        # ones its sitting members were elected on
+        # (app/data/redrawn_congressional_maps.json): a district number
+        # names a different place than today's member's, so a lookup by
+        # representative (house.gov, a member's name) answers for the
+        # old map.
+        "newDistrictLines": state in redrawn_states(cycle),
         "senateRaces": senate_races,
         # Only meaningful (and only computed) when this state's seat
         # genuinely ISN'T up this cycle — gated on the calendar
@@ -1275,6 +1289,9 @@ def live_results(
         # Which states elect a senator this cycle, so the Senate map can
         # tell "no race here" from "a race we have no count for".
         "senateStates": senate_states,
+        # States voting on new congressional lines: their House seats have
+        # no holder going in, so none can count as changing party.
+        "redrawnStates": sorted(redrawn_states(election.cycle)),
         # How the last read of each live state's feed went, so a state with
         # no stored count can say whether it hasn't started or couldn't be
         # read (LiveResultRead).

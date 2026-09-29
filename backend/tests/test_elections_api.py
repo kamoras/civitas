@@ -525,6 +525,7 @@ class TestLiveResults:
         assert data["updates"][0]["kind"] == "flip"
         assert "GA" in data["liveStates"] and "TX" not in data["liveStates"]
         assert data["senateStates"] == ["CO"]
+        assert "UT" in data["redrawnStates"] and "MO" not in data["redrawnStates"]
         assert data["pollsClose"]["GA"] == "2026-11-04T00:00:00Z"  # 7 PM ET
 
     def test_says_how_each_feed_read_went(self, db_session):

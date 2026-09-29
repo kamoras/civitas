@@ -461,6 +461,8 @@ class TestRoundTwo:
         db_session.add(Representative(id="U3", name="Holder", state="UT", district=3, party="R"))
         db_session.flush()
         assert "UT" in er.redrawn_states(2026)
+        # Listed, but on its old map (its redraw was stayed): its seats keep a holder.
+        assert "MO" not in er.redrawn_states(2026)
         assert er.seat_holder_party(db_session, race) is None
 
     def test_first_returns_that_are_already_a_flip_are_one_story(self, db_session):

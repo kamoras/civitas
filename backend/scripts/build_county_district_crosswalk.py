@@ -146,6 +146,30 @@ def choose_assignment(
     problems += [
         f"{st}: {n} blocks missing from CD120" for st, n in sorted(stale.items())
     ]
+    # An unlisted state's blocks must all be in CD120 too: one missing
+    # there says the two files disagree about that state, listed or not.
+    unlisted_missing = defaultdict(int)
+    for geoid in cd119:
+        state = fips_to_state.get(geoid[:2], geoid[:2])
+        if state not in cycle_maps and geoid not in seen120:
+            unlisted_missing[state] += 1
+    problems += [
+        f"{st}: {n} blocks in CD119 missing from CD120 but {st} has no CYCLE_MAPS entry"
+        for st, n in sorted(unlisted_missing.items())
+    ]
+    # A state listed as CD120 whose lines didn't change is a stale entry:
+    # it would tell the live-results sync its seats have no holder.
+    present: set[str] = set()
+    changed: set[str] = set()
+    for g, cd in chosen.items():
+        st = fips_to_state.get(g[:2], g[:2])
+        present.add(st)
+        if cd119.get(g) != cd:
+            changed.add(st)
+    listed_same = [
+        st for st, (bef, _) in cycle_maps.items() if bef == CD120 and st in present and st not in changed
+    ]
+    problems += [f"{st}: listed as CD120 but its lines are identical to CD119" for st in sorted(listed_same)]
     return chosen, problems
 
 

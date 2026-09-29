@@ -244,6 +244,10 @@ def _build_from_blocks(
             str(assignment_csv),
             "keys=GEOID20,GEOID",
             "string-fields=GEOID,CDFP",
+            # Same exclusions as the 119th-Congress path: delegate seats
+            # and unassigned water are not House districts on a ballot.
+            "-filter",
+            'CDFP !== "98" && CDFP !== "ZZ"',
             "-dissolve",
             "CDFP",
             "-o",

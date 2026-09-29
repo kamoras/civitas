@@ -83,6 +83,22 @@ def test_choose_assignment_flags_cd120_state_missing_blocks():
     assert problems == ["UT: 1 blocks missing from CD120"]
 
 
+def test_choose_assignment_flags_an_unlisted_state_missing_from_cd120():
+    cd119 = {"500010001001000": "00", "500010001001001": "00"}
+    cd120 = [("500010001001000", "00")]
+    _, problems = cw.choose_assignment(cd119, cd120, FIPS, MAPS)
+    assert problems == ["VT: 1 blocks in CD119 missing from CD120 but VT has no CYCLE_MAPS entry"]
+
+
+def test_choose_assignment_flags_a_cd120_entry_whose_lines_did_not_change():
+    """A stale entry would tell the live-results sync the state's seats
+    have no holder."""
+    cd119 = {"490010001001000": "01"}
+    cd120 = [("490010001001000", "01")]
+    _, problems = cw.choose_assignment(cd119, cd120, FIPS, MAPS)
+    assert problems == ["UT: listed as CD120 but its lines are identical to CD119"]
+
+
 def test_part_tag_is_any_block_in_a_second_district():
     assignment = {
         # Salt Lake County: blocks in two districts -> "(part)" in both.

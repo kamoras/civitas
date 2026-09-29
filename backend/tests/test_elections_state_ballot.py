@@ -356,6 +356,15 @@ def test_state_pvi_is_included_at_top_level(db_session):
     assert isinstance(data["statePvi"], int)
 
 
+def test_a_redrawn_state_says_its_district_lines_are_new(db_session):
+    _race(db_session, "2026-SEN-TX", "TX")
+    _race(db_session, "2026-SEN-GA", "GA")
+    db_session.commit()
+
+    assert _body(elections.state_ballot("TX", db_session))["newDistrictLines"] is True
+    assert _body(elections.state_ballot("GA", db_session))["newDistrictLines"] is False
+
+
 def test_house_race_includes_its_district_counties(db_session):
     """Lets a voter who knows their county but not their district number
     recognize their district in the picker (real Census-sourced data —
@@ -434,6 +443,18 @@ class TestIncumbentRecordLink:
 
         data = _body(elections.state_ballot("UT", db_session))
         assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-MOVER"
+
+    def test_a_departed_member_sharing_the_district_number_is_never_linked(self, db_session):
+        """A member within the retirement grace period shares the district
+        number with their successor; only current members are matched."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I")
+        _representative(db_session, "R-NEW", "Lucy McBath", "GA", 6)
+        _representative(db_session, "R-OLD", "Old McBath", "GA", 6, is_current=False)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-NEW"
 
     def test_an_unchanged_map_never_links_across_districts(self, db_session):
         _race(db_session, "2026-HOUSE-GA-3", "GA", office="H", district=3)
