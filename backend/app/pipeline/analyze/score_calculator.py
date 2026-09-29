@@ -2752,10 +2752,6 @@ def load_les_reference() -> dict:
     return LES_REFERENCE.load()
 
 
-def write_les_reference(chamber: str, reference: dict) -> None:
-    LES_REFERENCE.write(chamber, reference)
-
-
 def _les_component_score(
     sponsored_bills: list[dict],
     party: str | None,

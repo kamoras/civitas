@@ -1642,7 +1642,6 @@ async def run_senate_pipeline(
                     if roll_call_data:
                         vote = extract_senator_vote(
                             roll_call_data,
-                            senator.get("bioguideId", ""),
                             last_name,
                             senator["state"],
                         )
@@ -1657,7 +1656,6 @@ async def run_senate_pipeline(
                     if roll_call_data:
                         vote = extract_senator_vote(
                             roll_call_data,
-                            senator.get("bioguideId", ""),
                             last_name,
                             senator["state"],
                         )
