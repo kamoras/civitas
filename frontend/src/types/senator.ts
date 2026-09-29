@@ -138,7 +138,8 @@ export interface StockTrade {
   assetName: string;
   owner: DisclosureOwner;
   transactionType: "purchase" | "sale_full" | "sale_partial" | "exchange";
-  transactionDate: string;
+  /** Null for a scanned presidential row whose date isn't legible. */
+  transactionDate: string | null;
   disclosureDate: string;
   /** Null (both) where the row can't support a timeliness figure: a date
    * read by OCR from a scan, or a transaction from a president's annual

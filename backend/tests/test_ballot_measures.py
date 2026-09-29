@@ -1489,12 +1489,12 @@ def test_the_page_gives_an_unread_states_reason(db_session):
     from app.pipeline.fetch import ballot_measure_pdf_sources as sources
 
     sources.invalidate_cache()
-    ga = _body(elections.state_ballot("GA", db=db_session))["measureCoverage"]
-    assert ga["status"] == MeasureCoverage.NOT_YET_COVERED
-    assert ga["unreadReason"] == "Civitas does not read Georgia's official measure list automatically yet."
-    assert "dev_note" not in json.dumps(ga) and "Cloudflare" not in json.dumps(ga)
-    ms = _body(elections.state_ballot("MS", db=db_session))["measureCoverage"]
-    assert ms["unreadReason"].startswith("Mississippi publishes no official list")
+    ny = _body(elections.state_ballot("NY", db=db_session))["measureCoverage"]
+    assert ny["status"] == MeasureCoverage.NOT_YET_COVERED
+    assert ny["unreadReason"] == "Civitas does not read New York's official measure list automatically yet."
+    assert "dev_note" not in json.dumps(ny) and "Cloudflare" not in json.dumps(ny)
+    de = _body(elections.state_ballot("DE", db=db_session))["measureCoverage"]
+    assert de["unreadReason"].startswith("Delaware publishes no statewide list")
     assert _body(elections.state_ballot("CA", db=db_session))["measureCoverage"]["unreadReason"] is None
 
 

@@ -42,7 +42,7 @@ _DISCOVERY_JSON = {
         "Results": (
             '<div><a href="https&#58;//records.sos.state.or.us/ORSOSCMSearch/'
             'Search/RecordViewer.aspx?uri=16180585" target="_blank">'
-            "Official Results of May Primary​</a><br></div>"
+            "Official Results of May Primary\u200b</a><br></div>"
         ),
     }],
 }

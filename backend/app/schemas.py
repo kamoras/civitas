@@ -162,7 +162,8 @@ class StockTradeSchema(CamelModel):
     asset_name: str
     owner: DisclosureOwner = "self"
     transaction_type: Literal["purchase", "sale_full", "sale_partial", "exchange"]
-    transaction_date: str
+    # None: a scanned presidential row whose date isn't legible.
+    transaction_date: str | None
     disclosure_date: str
     # None where the row can't support a timeliness figure (below).
     days_to_disclose: int | None
