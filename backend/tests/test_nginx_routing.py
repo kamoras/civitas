@@ -19,16 +19,9 @@ CONF = Path(__file__).resolve().parents[2] / "nginx" / "civitas.conf"
 # Mutating routes (POST, PUT, PATCH, DELETE) served by the API process.
 # Adding a route here is a claim that it starts no background writer
 # (app.background.start_writer / writing) — the API process would refuse it.
-# The Explore summary is the one that outlives its request: its LLM
-# generation finishes after a reader leaves (api/explore.py, _Generation).
-# It is not a writer in that sense — it writes only its own cache row and
-# claims, keyed on the text it read, so a data reset in the pipeline process
-# can't be undone by it — and it must stream from the process serving the
-# reader.
 SERVED_BY_API = {
     "/api/action/pulse",
     "/api/explore/{doc_id}/comments",
-    "/api/explore/{doc_id}/summary",
     "/api/feedback",
     "/api/track-visit",
     "/api/track-timing",
@@ -173,3 +166,11 @@ def test_every_cached_location_rate_limits_its_misses_and_not_its_hits():
     # The hop mustn't append itself to X-Forwarded-For: its last entry is
     # how the backend identifies clients.
     assert "$proxy_add_x_forwarded_for" not in internal
+
+
+def test_explore_summaries_stream_from_the_pipeline_process():
+    # A generation outlives its request and is shared by every reader of
+    # the text: background work, in the one pipeline process.
+    assert route("/api/explore/123/summary") == "pipeline_upstream"
+    assert route("/api/explore/123") == "backend_upstream"
+    assert route("/api/explore/123/comments") == "backend_upstream"
