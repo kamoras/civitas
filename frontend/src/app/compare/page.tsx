@@ -26,7 +26,7 @@ import { BOXED_CONTROL } from "@/lib/controlStyles";
 type Chamber = "senate" | "house";
 
 // v6.5: fundingDiversity folded into fundingIndependence — no longer its
-// own scored dimension (see RepresentationScore.tsx's matching comment).
+// own scored dimension.
 const SCORE_KEYS = [
   "fundingIndependence",
   "constituentAlignment",
