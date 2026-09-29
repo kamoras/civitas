@@ -1521,26 +1521,3 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],
         "coverage": [_coverage_item(item) for item in coverage],
     }, max_age=CACHE_TTL_DETAIL_S)
-
-
-@router.get("/candidates/{candidate_id}")
-def candidate_detail(candidate_id: str, db: Session = Depends(get_db)):
-    """Single candidate profile, with its parent race's identity."""
-    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if cand is None:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-
-    race = cand.race
-    stale_incumbent_ids = _stale_incumbent_ids(race.candidates) if race else frozenset()
-    return cached_json({
-        **_candidate_summary(cand, stale_incumbent_ids),
-        "disbursements": cand.disbursements,
-        "individualItemizedContributions": cand.individual_itemized_contributions,
-        "race": {
-            "id": race.id,
-            "office": race.office,
-            "state": race.state,
-            "district": race.district,
-        } if race else None,
-    }, max_age=CACHE_TTL_DETAIL_S)
-

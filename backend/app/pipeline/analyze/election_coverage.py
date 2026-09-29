@@ -1,5 +1,5 @@
-"""Match already-fetched news + freshly-searched Bluesky posts to Races by
-candidate-name match with mandatory corroboration.
+"""Match already-fetched news articles to Races by candidate-name match with
+mandatory corroboration.
 
 Deliberately deterministic string matching, not embedding similarity —
 but a bare surname is NOT treated as identifying (2026-07 review F8: with
@@ -39,20 +39,17 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import httpx
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import race_relevance
-from app.pipeline.fetch.bluesky_search import search_is_available, search_posts
 from app.pipeline.fetch.news_feeds import (
     STATE_OUTLET_NAMES,
     fetch_news_articles,
     fetch_state_news_articles,
 )
 from app.pipeline.run_tracker import PipelineRunTracker
-from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +57,6 @@ logger = logging.getLogger(__name__)
 # matches in general news/social text ("OZ", "LEE", "ROE") to trust even
 # with corroboration.
 MIN_SURNAME_LENGTH = 4
-
-# Bluesky searches per ingestion pass — a rotating, watermarked batch
-# (Candidate.last_coverage_search), same bounded-batch design as the FEC
-# financial refresh. One pass never searches the whole roster: at the
-# 15-minute election-season cadence that would be thousands of requests
-# per run (2026-07 review B1).
-BLUESKY_SEARCH_BATCH = 50
 
 # In-process guard shared by the 15-minute election-season refresh and the
 # nightly pipeline's coverage phase (behind the COVERAGE_REFRESH lease, see
@@ -510,43 +500,8 @@ def _store_if_new(
     return True
 
 
-def _candidates_for_bluesky_search(db: Session, limit: int) -> list[Candidate]:
-    """Rotating watermarked batch: active candidates only (statutory
-    status, raised funds, or incumbent — paper filers don't get search
-    traffic), never-searched first, then longest-unsearched first.
-
-    Deliberately not deduped against app/candidate_dedup.py's merge rule:
-    this is a flat, cross-race batch, and applying dedupe here would mean
-    grouping it by race first. It wouldn't even reliably save a request —
-    this module's own _surname (raw "before the comma", unlike
-    candidate_dedup's normalized_surname) doesn't strip generational
-    suffixes, so a real duplicate pair like "ONDER JR, ROBERT FRANK" /
-    "ONDER, ROBERT FOR JR." still produces two different search strings
-    ("ROBERT ONDER JR" vs "ROBERT ONDER"). Any overlap in results is
-    absorbed downstream anyway (_store_if_new's per-race URL check). Not
-    worth the restructuring for a savings this inconsistent — unlike
-    _roster_fact (election_bluesky.py), which resolves a stored id
-    because posting a wrong/dropped one is a correctness problem, not
-    just wasted work.
-    """
-    return (
-        db.query(Candidate)
-        .filter(or_(
-            Candidate.candidate_status == "C",
-            Candidate.has_raised_funds.is_(True),
-            Candidate.incumbent_challenge == "I",
-        ))
-        .order_by(
-            Candidate.last_coverage_search.is_(None).desc(),
-            Candidate.last_coverage_search.asc(),
-        )
-        .limit(limit)
-        .all()
-    )
-
-
-async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
-    """Match existing RSS articles + fresh Bluesky search results to races.
+async def ingest_race_coverage(db: Session) -> int:
+    """Match news articles (the national feeds and the per-state outlets) to races.
     Returns the number of NEW coverage items stored (a url already
     ingested for that race is skipped, not duplicated).
     """
@@ -560,8 +515,7 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
 
     ingested = 0
     # Rows added in THIS pass, invisible to _already_ingested because
-    # SessionLocal sets autoflush=False. Shared by both loops: a news
-    # article and a Bluesky post can resolve to the same race+url.
+    # SessionLocal sets autoflush=False.
     #
     # Primed with every stored (race, title) by the reprint sweep, which
     # has just scanned the table anyway, so the per-article syndication
@@ -592,74 +546,6 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
             matched_candidate_id=matcher.candidate_id, match_basis=basis,
         ):
             ingested += 1
-
-    searched = 0
-    # ── Bluesky candidate-name search: DISABLED 2026-09-24 ──
-    #
-    # An open keyword search of the whole network for a candidate's name
-    # produced 7,740 of the 8,239 stored coverage items — 94% — and the
-    # content was not coverage. Minnesota's page carried "Dave Hughes
-    # still a whiny cunt", and directly beneath it a post about the
-    # AUSTRALIAN comedian of the same name defending Pauline Hanson's One
-    # Nation, filed as MN-7 election coverage.
-    #
-    # Four successive filters were built against this feed and each
-    # failed in a different direction: source-type discarded real local
-    # newsrooms; relevance admitted campaign material (maximally on-topic
-    # for a campaign); no-advocacy still admitted mockery and a Celtic
-    # football post; and the domain-handle rule — shipped the same day —
-    # does not catch @crowbar.wtf, which is a domain.
-    #
-    # The signal being searched for is not there. A name mention is not
-    # coverage, four filters could not make it one, and every hour this
-    # ran it added more rows nobody should see. The search module and its
-    # matcher are kept intact for a future use with a real source list;
-    # what is removed is pointing it at the open network.
-    for cand in []:
-        first = _first_name(cand.name or "")
-        surname = _surname(cand.name or "")
-        if not first or len(surname) < MIN_SURNAME_LENGTH:
-            # Without a usable first name the search query would degrade
-            # to the bare surname — exactly the noise source the matcher
-            # exists to reject; skip the search (the news path still
-            # covers this candidate via corroborated matching). The
-            # watermark still advances: this candidate is unsearchable by
-            # name every run, so leaving it would wedge the queue's head.
-            cand.last_coverage_search = utcnow()
-            continue
-
-        posts = await search_posts(client, f"{first} {surname}")
-
-        # An unavailable SOURCE is not a finding of no coverage. Bluesky
-        # withdrew unauthenticated searchPosts in 2026-09 and every call
-        # 403'd for weeks, while this loop kept stamping the watermark —
-        # so candidates were rotated past as "searched" having never been
-        # searched. Stop the pass instead, leaving the watermark untouched
-        # so the same candidates come back first once the source returns.
-        if not search_is_available():
-            logger.warning(
-                "Bluesky search unavailable — ending this pass after %d "
-                "candidates; watermarks left unchanged so none are skipped",
-                searched,
-            )
-            break
-
-        cand.last_coverage_search = utcnow()
-        searched += 1
-        for post in posts:
-            resolved = resolve_item_race(matchers, post.text)
-            if resolved is None:
-                continue
-            post_matcher, basis = resolved
-            if _store_if_new(
-                db, post_matcher.race_id, seen,
-                source_type="bluesky", source_name=f"@{post.author_handle}",
-                title=post.text[:200], url=post.url,
-                summary=post.text, author=post.author_handle,
-                published_at=_to_naive_utc(post.published),
-                matched_candidate_id=post_matcher.candidate_id, match_basis=basis,
-            ):
-                ingested += 1
 
     db.commit()
     score_unscored_items(db)

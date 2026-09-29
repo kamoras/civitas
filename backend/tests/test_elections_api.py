@@ -265,37 +265,6 @@ class TestRaceDetail:
         assert data["candidateSource"] == "nominees"
 
 
-class TestCandidateDetail:
-    def test_404_for_unknown_candidate(self, db_session):
-        with pytest.raises(HTTPException) as exc_info:
-            elections.candidate_detail("nonexistent", db_session)
-        assert exc_info.value.status_code == 404
-
-    def test_returns_candidate_with_parent_race(self, db_session):
-        _race(db_session, "2026-SEN-GA", "GA")
-        _candidate(db_session, "S1", "2026-SEN-GA", "OSSOFF, JON", cash_on_hand=500.0)
-        db_session.commit()
-
-        data = _body(elections.candidate_detail("S1", db_session))
-        assert data["id"] == "S1"
-        assert data["cashOnHand"] == 500.0
-        assert data["race"]["id"] == "2026-SEN-GA"
-
-    def test_stale_incumbent_flag_is_dropped_here_too(self, db_session):
-        """A visitor landing directly on a stale-incumbent's own candidate
-        page (see test_elections_state_ballot.py's TestStaleIncumbentFlag
-        for the ballot-page half of this) must not see a trustworthy "I"
-        either — same correction, same race-mate-shape signal, just
-        reached through a different route."""
-        _race(db_session, "2026-SEN-MI", "MI")
-        _candidate(db_session, "PETERS", "2026-SEN-MI", "PETERS, GARY", incumbent_challenge="I")
-        _candidate(db_session, "ROGERS", "2026-SEN-MI", "ROGERS, MICHAEL J", party="REP", incumbent_challenge="O")
-        db_session.commit()
-
-        data = _body(elections.candidate_detail("PETERS", db_session))
-        assert data["incumbentChallenge"] is None
-
-
 class TestPviMap:
     def test_returns_both_state_and_district_maps(self):
         data = _body(elections.pvi_map())

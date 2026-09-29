@@ -42,7 +42,6 @@ CACHEABLE_PREFIXES = (
     "/api/elections",
     "/api/explore",
     "/api/action",
-    "/api/highlights",
     "/api/public/",
     "/api/congress",
 )
@@ -53,7 +52,6 @@ CACHEABLE_PREFIXES = (
 #   /api/pipeline   — run status changes continuously during a run
 #   /api/feedback   — POST only
 #   /api/visits     — per-visitor by definition
-#   /api/qa         — question-specific; would need the query in the key
 
 # How long a client may reuse a response without revalidating, for a route
 # that hasn't set its own. Revalidation is what keeps it correct; this only

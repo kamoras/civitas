@@ -174,7 +174,8 @@ export default function NewsChapter() {
           The Congress pages answer what the Senate and House did on a given day, week or month,
           from the Congressional Record&apos;s Daily Digest — the Record&apos;s own summary of each
           day, published by the Government Publishing Office the next day. Until it appears, the
-          page shows each chamber&apos;s live floor log. Record votes come from each chamber&apos;s
+          page shows each chamber&apos;s floor log: the House writes its log through the day, the
+          Senate posts its log after the session ends. Record votes come from each chamber&apos;s
           roll-call files, with every member&apos;s vote, back to the start of the 119th Congress.
         </P>
         <P>

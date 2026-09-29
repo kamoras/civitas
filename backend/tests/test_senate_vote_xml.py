@@ -94,7 +94,7 @@ SCHUMER = majority_leader_spans("Senate Minority Leader", [
 def _alignment(rc, last, state, party, spans):
     bill = {"billId": rc["documentName"], "partyLeaning": compute_party_vote_split(rc)["label"]}
     stamp_roll_call_outcome(bill, rc)
-    vote = extract_senator_vote(rc, "", last, state)
+    vote = extract_senator_vote(rc, last, state)
     return _determine_party_alignment(
         party, vote, bill["partyLeaning"],
         reconsider_switch=is_reconsider_switch(bill, spans),

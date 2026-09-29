@@ -34,7 +34,7 @@ class PromiseAlignment(StrEnum):
     RepCampaignPromise — was independently redefined as bare string
     literals across promise_quality.py, policy_alignment.py,
     cross_reference.py, senate_pipeline.py, score_calculator.py,
-    senator_service.py, representative_service.py, and highlights.py.
+    and senator_service.py / representative_service.py.
 
     A StrEnum: members compare and serialize identically to plain
     strings, so this is a drop-in replacement for the existing
@@ -800,7 +800,9 @@ class PresidentTrade(Base):
     asset_name: Mapped[str] = mapped_column(String, nullable=False)
     owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent | unknown
     transaction_type: Mapped[str] = mapped_column(String, nullable=False)  # purchase | sale_full | sale_partial | exchange
-    transaction_date: Mapped[str] = mapped_column(String, nullable=False)
+    # NULL for a scanned row whose date isn't legible (ptr_common.
+    # ocr_extract_rows, keep_undated): its filing's date is still known.
+    transaction_date: Mapped[str | None] = mapped_column(String, nullable=True)
     disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
     days_to_disclose: Mapped[int] = mapped_column(Integer, default=0)
     amount_low: Mapped[float] = mapped_column(Float, default=0.0)
@@ -922,10 +924,8 @@ class Candidate(Base):
     # them, and never set from a "Last, First" printing (see
     # state_candidates._note_ballot_name).
     ballot_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    # Watermark for the rotating per-candidate Bluesky coverage search
-    # (election_coverage.py) — same bounded-batch design as
-    # last_financials_sync for the FEC totals refresh.
-    last_coverage_search: Mapped[datetime | None] = mapped_column(nullable=True)
+    # last_coverage_search (the removed Bluesky candidate search's watermark)
+    # is no longer mapped; the next release drops it (migrations/README.md).
 
     # Fundraising totals from FEC's /candidate/{id}/totals/ endpoint — NULL
     # until this candidate's financial-refresh turn comes up (see
@@ -1026,14 +1026,10 @@ class Justice(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     thumbnail_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Unscored since justice v2 (Consistency and Independence) and v6.13
-    # (the other two; justice_analyzer's module docstring), but NOT NULL
-    # columns the previous image reads, so kept until the contract release
-    # drops them (migrations/README.md). Never read.
-    score_consistency: Mapped[float] = mapped_column(Float, default=0.0)
-    score_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_bipartisan_agreement: Mapped[float] = mapped_column(Float, default=0.0)
-    score_judicial_restraint: Mapped[float] = mapped_column(Float, default=0.0)
+    # score_consistency, score_independence, score_bipartisan_agreement and
+    # score_judicial_restraint (unscored since justice v2 and v6.13) are no
+    # longer mapped; 0020 made them nullable and the next release drops them
+    # (migrations/README.md).
 
     # Loyalty to the appointing president (justice_loyalty): the score, the
     # shrunk effect (a share: 0.145 is 14.5 points) and its standard error,
