@@ -165,4 +165,4 @@ async def run_justice_pipeline(db: Session) -> dict:
 
     db.commit()
     logger.info("=== Justice pipeline complete: %d justices, %d votes ===", len(justices), len(all_votes))
-    return {"justices": len(justices), "votes": len(all_votes)}
+    return {"justices": len(justices), "votes": len(all_votes), "loyalty_measured": measured is not None}

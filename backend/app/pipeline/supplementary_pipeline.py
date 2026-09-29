@@ -127,7 +127,13 @@ async def run_supplementary_pipeline() -> dict:
                         justice_result = await run_justice_pipeline(db)
                         run.justices_scored = justice_result.get("justices", 0)
                         logger.info("Justice pipeline scored %d justices", run.justices_scored)
-                        progress.complete("justice_scorecards", detail=f"{run.justices_scored} scored")
+                        # The voting record can refresh while loyalty (the score)
+                        # can't be measured; a bare "9 scored" hid the SCDB 403
+                        # that left every justice unscored on 2026-09-29.
+                        detail = f"{run.justices_scored} scored"
+                        if not justice_result.get("loyalty_measured", True):
+                            detail += ", loyalty not measured (a source is down)"
+                        progress.complete("justice_scorecards", detail=detail)
             except Exception:
                 db.rollback()  # drop partial justice upserts before the next commit
                 logger.exception("Justice pipeline failed — continuing")
