@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { billCanonicalPath, billHref, billPageHref, currentCongress, parseCongressParam } from "./congress";
+import {
+  billCanonicalPath,
+  billHref,
+  billPageHref,
+  currentCongress,
+  parseCongressParam,
+} from "./congress";
 
 describe("bill links name their Congress", () => {
   it("adds ?congress= whenever the Congress is known", () => {
@@ -24,6 +30,7 @@ describe("bill links name their Congress", () => {
   it("reads only a plausible ?congress=", () => {
     expect(parseCongressParam("118")).toBe(118);
     expect(parseCongressParam(["117", "118"])).toBe(117);
-    for (const bad of [undefined, "", "abc", "5", "9999", "118.5"]) expect(parseCongressParam(bad)).toBeNull();
+    for (const bad of [undefined, "", "abc", "5", "9999", "118.5"])
+      expect(parseCongressParam(bad)).toBeNull();
   });
 });

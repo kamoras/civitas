@@ -17,7 +17,11 @@ describe("pageMetadata", () => {
   it("sets canonical, og:url and og:site_name together", () => {
     const m = pageMetadata({ title: "Bills", description: "d", path: "/bills" });
     expect(m.alternates?.canonical).toBe("/bills");
-    expect(m.openGraph).toMatchObject({ url: "/bills", siteName: "Civitas", title: "Bills — Civitas" });
+    expect(m.openGraph).toMatchObject({
+      url: "/bills",
+      siteName: "Civitas",
+      title: "Bills — Civitas",
+    });
     expect(m.title).toBe("Bills");
     expect(m.robots).toBeUndefined();
   });
@@ -35,7 +39,9 @@ describe("pageMetadata", () => {
   });
 
   it("marks missing records noindex", () => {
-    expect(pageMetadata({ title: "t", description: "d", path: "/x", noindex: true }).robots).toEqual({
+    expect(
+      pageMetadata({ title: "t", description: "d", path: "/x", noindex: true }).robots
+    ).toEqual({
       index: false,
       follow: true,
     });

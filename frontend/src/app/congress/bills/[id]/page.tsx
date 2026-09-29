@@ -19,7 +19,9 @@ const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 async function fetchTrackedBill(id: string, congress: number | null): Promise<BillDetail | null> {
   try {
     const query = congress ? `?congress=${congress}` : "";
-    const res = await fetch(`${BACKEND}/api/bills/${encodeURIComponent(id)}${query}`, { next: { revalidate: 120 } });
+    const res = await fetch(`${BACKEND}/api/bills/${encodeURIComponent(id)}${query}`, {
+      next: { revalidate: 120 },
+    });
     if (!res.ok) return null;
     return usableRecord<BillDetail>(await res.json(), "billId", "title");
   } catch {
@@ -46,8 +48,14 @@ type PageProps = {
  * without it): a bill number is a different bill in each Congress. The
  * site's own record is used only when it is of the same Congress as the
  * Congress.gov record, so the page never mixes two bills. */
-async function load(id: string, congress: number | null): Promise<{ record: BillRecord | null; detail: BillDetail | null }> {
-  const [record, tracked] = await Promise.all([fetchBillRecord(id, congress), fetchTrackedBill(id, congress)]);
+async function load(
+  id: string,
+  congress: number | null
+): Promise<{ record: BillRecord | null; detail: BillDetail | null }> {
+  const [record, tracked] = await Promise.all([
+    fetchBillRecord(id, congress),
+    fetchTrackedBill(id, congress),
+  ]);
   const detail = tracked && record && tracked.congress !== record.congress ? null : tracked;
   return { record, detail };
 }
@@ -57,7 +65,12 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   const congress = parseCongressParam((await searchParams).congress);
   const { record, detail } = await load(id, congress);
   if (!record && !detail) {
-    return pageMetadata({ title: "Bill not found", description: "No record for this bill.", path: billHref(id, congress), noindex: true });
+    return pageMetadata({
+      title: "Bill not found",
+      description: "No record for this bill.",
+      path: billHref(id, congress),
+      noindex: true,
+    });
   }
   const billId = record?.billId ?? detail!.billId;
   // Canonical from the record, not the request: "/congress/bills/s.1" and
@@ -68,8 +81,13 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     return pageMetadata({ ...describeBill(detail), path, type: "article" });
   }
   return pageMetadata({
-    title: record!.title ? `${record!.billLabel ?? billId}: ${record!.title}` : record!.billLabel ?? billId,
-    description: record!.summary?.paragraphs[1] ?? record!.latestAction?.text ?? `${record!.billLabel} in the ${ordinal(record!.congress)} Congress.`,
+    title: record!.title
+      ? `${record!.billLabel ?? billId}: ${record!.title}`
+      : (record!.billLabel ?? billId),
+    description:
+      record!.summary?.paragraphs[1] ??
+      record!.latestAction?.text ??
+      `${record!.billLabel} in the ${ordinal(record!.congress)} Congress.`,
     path,
     type: "article",
   });
@@ -95,7 +113,13 @@ export default async function BillPage({ params, searchParams }: PageProps) {
           ]),
         ]}
       />
-      <BillPageView billId={billId} canonicalPath={canonical} record={record} detail={detail} stageName={detail ? stages[detail.stage]?.name ?? null : null} />
+      <BillPageView
+        billId={billId}
+        canonicalPath={canonical}
+        record={record}
+        detail={detail}
+        stageName={detail ? (stages[detail.stage]?.name ?? null) : null}
+      />
     </>
   );
 }

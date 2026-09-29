@@ -178,10 +178,7 @@ function PartisanDepthPanel({
   );
 }
 
-export default function PlatformTracker({
-  partisanDepth,
-  senatorParty,
-}: PlatformTrackerProps) {
+export default function PlatformTracker({ partisanDepth, senatorParty }: PlatformTrackerProps) {
   const hasPartisan = partisanDepth && partisanDepth.totalPositions > 0;
   if (!hasPartisan) return null;
 

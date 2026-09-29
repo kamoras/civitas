@@ -29,7 +29,11 @@ export default function BallotRaceRows({ race }: { race: RaceWithCandidates }) {
   const leader = rows[0]?.contributions ?? 0;
 
   if (active.length === 0) {
-    return <p className="px-4 py-3 text-[13px] text-ink-lo">No candidates on record for this race yet.</p>;
+    return (
+      <p className="px-4 py-3 text-[13px] text-ink-lo">
+        No candidates on record for this race yet.
+      </p>
+    );
   }
 
   return (
@@ -49,9 +53,13 @@ export default function BallotRaceRows({ race }: { race: RaceWithCandidates }) {
                     </span>
                   )}
                 </span>
-                <span className={`font-mono text-[11px] tracking-[0.08em] ${party.color}`}>{party.label}</span>
+                <span className={`font-mono text-[11px] tracking-[0.08em] ${party.color}`}>
+                  {party.label}
+                </span>
               </span>
-              <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">{raisedLabel(c)}</span>
+              <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
+                {raisedLabel(c)}
+              </span>
             </div>
             <div className="mt-1.5 h-1 bg-white/[0.07]" aria-hidden="true">
               <div className={`h-1 ${party.rule}`} style={{ width: `${pct}%` }} />

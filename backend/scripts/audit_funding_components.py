@@ -14,8 +14,8 @@ Questions it answers:
   2. How much of "source breadth" is the small-donor share again?
   3. How many incumbents does breadth's treatment of self-funding touch?
 
-Research-only dependencies, not in requirements.txt:
-    pip install pandas scipy
+Research-only dependencies (scripts/requirements-research.txt):
+    pip install -r requirements.txt -r scripts/requirements-research.txt
 Run:
     python backend/scripts/audit_funding_components.py [--cache DIR]
 """

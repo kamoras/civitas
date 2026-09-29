@@ -7,7 +7,6 @@ import { ACTION_CENTER_HREF } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import RecordsBand from "./RecordsBand";
 
-
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
   { href: ACTION_CENTER_HREF, label: "ACTION CENTER", accent: true },
   { href: "/congress", label: "CONGRESS" },
