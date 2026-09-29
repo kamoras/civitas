@@ -86,6 +86,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     normalize_party as _parse_party,
     clean_display_name as _clean_display_name,
     parse_office as _parse_office,
@@ -248,7 +249,7 @@ async def fetch_confirmed_candidates(
     by the caller (state_candidates.py), not here.
     """
     st = state.upper()
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     state_offices = bool(source.get("statewide_offices"))
 
     election_id = await _discover_election_id(client, st, year, source.get("discovery") or {})

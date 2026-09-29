@@ -141,7 +141,11 @@ import httpx
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
+    JUDICIAL_RESOLUTION_DECIDED_EARLY,
+    JUDICIAL_RESOLUTION_ELECTS,
     clean_display_name,
+    federal_only,
     normalize_party,
     office_from_columns,
     parse_office,
@@ -801,10 +805,31 @@ def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
     # the label, unless the state's config names the columns that say so.
     office_spec = fmt.get("house_from_columns")
 
+    # Where the contest is keyed by its party column too (a party primary
+    # named only by "ContestName" + "PartyName"), one party must make ONE
+    # contest however each row spells it. Illinois's per-precinct export
+    # spells its Republicans four ways across jurisdictions ("REPUBLICAN",
+    # "Republican", "REPUBLICAN PARTY", "Republican Party" -- read live
+    # from the 2026 Secretary of State file): keyed on the raw text, that
+    # was four contests for one primary, each resolved on its own, and the
+    # last one written won. It named Walter Adamczyk, who took 53-47 no
+    # part of the statewide total (Diane M. Harris won, 279,727 to
+    # 248,198). So a recognised party is keyed on the first spelling seen
+    # for its code; an unrecognised one stays as printed.
+    party_in_key = bool(party_col) and party_col in (
+        contest_col if isinstance(contest_col, list) else [contest_col]
+    )
+    spelling: dict[str, str] = {}
+
     tally: dict[str, dict] = defaultdict(
         lambda: {"votes": defaultdict(int), "party": {}, "office": None},
     )
     for row in rows:
+        if party_in_key:
+            raw_party = (row.get(party_col) or "").strip()
+            code = normalize_party(raw_party)
+            if code is not None:
+                row = {**row, party_col: spelling.setdefault(code, raw_party)}
         contest = _cell(row, contest_col)
         choice = _cell(row, choice_col)
         if not contest or not choice or choice.casefold() in excluded:
@@ -834,7 +859,7 @@ async def fetch_confirmed_candidates(
     Civitas's FEC-derived Candidate rows by state_candidates.py, not here.
     """
     st = state.upper()
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     advance_count = int(source.get("advance_count") or 1)
     fmt = source.get("format") or {}
 
@@ -844,6 +869,16 @@ async def fetch_confirmed_candidates(
         logger.warning("No %d results file discoverable for %s — skipping", year, st)
         return None
     usable = [s for s in stages if s.get("url") and not _withheld(s, discovery)]
+    state_offices = bool(source.get("statewide_offices"))
+    # Some stages settled, others not: one party's election certified and
+    # the other's still counting (Virginia runs one per party), or a
+    # primary settled with its runoff still open. The settled stages'
+    # federal rows stand; under the state-office opt-in their state rows
+    # would be taken for the whole ballot -- the sync deletes every stored
+    # nominee it does not list and records the state as checked -- so the
+    # state offices are marked incomplete instead (federal_only), the rule
+    # Alabama and Connecticut follow too.
+    partial = bool(usable) and len(usable) < len(stages)
     if not usable:
         logger.info(
             "%s has %d %d election(s) published but none settled enough to name "
@@ -859,6 +894,8 @@ async def fetch_confirmed_candidates(
     by_seat: dict[tuple, list[dict]] = {}
     parsed_any = False
     withheld_any = False
+    short: set = set()
+    runoff_read = False
 
     for stage in usable:
         resp = await _get(client, stage["url"], f"{st} results export")
@@ -885,20 +922,57 @@ async def fetch_confirmed_candidates(
                 withheld_any = True
                 continue
         parsed_any = True
+        runoff_read = runoff_read or bool(stage["runoff"])
         _collect(
             rows, fmt, by_seat,
             None if stage["runoff"] else threshold,
             advance_count,
-            state_offices=bool(source.get("statewide_offices")),
+            state_offices=state_offices,
             judicial_resolution=source.get("judicial_resolution"),
             judicial_advance_count=source.get("judicial_advance_count"),
+            short=None if stage["runoff"] else short,
         )
 
     if not parsed_any:
         # Withheld is healthy and empty; nothing parsed at all is a
         # failure. Same distinction the discovery gate makes.
         return [] if withheld_any else None
-    return [record for records in by_seat.values() for record in records]
+    records = [record for records in by_seat.values() for record in records]
+    # A runoff is owed and no settled runoff has been read: the runoff
+    # election is not listed yet, or lists no results file. The stages
+    # above cannot see it, so without this the primary alone -- missing
+    # every office short of the threshold -- would be published as the
+    # ballot and frozen there (Alabama's _runoff_owed, for every state
+    # that configures a runoff stage). Only where one is configured: North
+    # Carolina's second primary happens only if the runner-up asks for
+    # one, so a short contest there may never be decided by another stage
+    # (the page's primary-results caveat covers its missing nominee).
+    runoff_owed = bool(short) and bool(discovery.get("runoff_name_regex")) and not runoff_read
+    if state_offices and (partial or withheld_any or runoff_owed):
+        # The same partial read as above, withheld_any found only once a
+        # file dated itself.
+        logger.info("%s %d: a stage has not settled yet -- state offices incomplete", st, year)
+        return federal_only(records)
+    return records
+
+
+def _owed_a_runoff(votes: list[tuple[str, int]], majority_rule: str | None, advance: int) -> bool:
+    """Whether a contest that named nobody is still owed a runoff, rather
+    than refused for another reason. A party-primary contest (no majority
+    rule) is owed one when only the threshold stopped a leader from being
+    named. A judicial contest is judged by its OWN rule, never the party
+    primary's: under "decided_before_general" (Georgia) or "elects" it is
+    owed a runoff only when no candidate reached a majority -- Georgia
+    publishes no judgeship by design, and re-asking without the rule
+    found a leader in every one, holding the state's offices open forever
+    whenever no runoff stage was listed. Any other rule has no runoff."""
+    if majority_rule is None:
+        return bool(pick_nominees(votes, None, advance))
+    if majority_rule in (JUDICIAL_RESOLUTION_DECIDED_EARLY, JUDICIAL_RESOLUTION_ELECTS):
+        counts = [v for _n, v in votes if isinstance(v, (int, float))]
+        total = sum(counts)
+        return total > 0 and max(counts) * 2 <= total
+    return False
 
 
 def _collect(
@@ -910,9 +984,12 @@ def _collect(
     state_offices: bool = False,
     judicial_resolution: str | None = None,
     judicial_advance_count: int | None = None,
+    short: set | None = None,
 ) -> None:
     """Fold one results file into `by_seat`, replacing (not appending to)
-    any seat it covers so a later stage's answer wins outright."""
+    any seat it covers so a later stage's answer wins outright. `short`, when
+    given, collects each STATE-office contest whose leader fell short of the
+    threshold -- a nomination a runoff still has to decide."""
     for contest, entry in _tally(rows, fmt).items():
         seat = None
         parsed = entry["office"] or parse_office(contest)
@@ -985,6 +1062,10 @@ def _collect(
             judicial_resolution=majority_rule,
         )
         if not won:
+            if short is not None and threshold is not None and not federal and _owed_a_runoff(
+                list(entry["votes"].items()), majority_rule, seats_filled or effective_advance,
+            ):
+                short.add((office, district, seat, contest_party))
             continue
 
         records = []

@@ -1,0 +1,43 @@
+{
+  "_about": "How each statewide body the ballot page lists seat by seat is elected: 'district' (each voter votes in the one seat for their district, so the page must help them find it) or 'statewide' (every voter votes for each seat; the seat is only a residency district or a numbered place). A constitutional or statutory fact per state and office, cited in _sources -- never inferred from a contest label, which reads the same either way ('Public Service Commission, District 3' is statewide-elected in Georgia and district-elected in Nebraska). An office missing here gets no such line. 'districts': 'congressional' says the body's districts are the state's congressional districts, so their counties come from county_district_crosswalk.json; other district bodies' places come from statewide_district_towns.json (scripts/fetch_statewide_district_towns.py) where the state publishes them.",
+  "_sources": {
+    "GA public_service_commission": "Elected statewide; a commissioner must reside in the district whose seat they hold (O.C.G.A. 46-2-1).",
+    "AL public_service_commission": "Two associate commissioners, Place 1 and Place 2, elected statewide (Ala. Code 37-1-2).",
+    "AL state_board_of_education": "Eight members elected from districts (Ala. Code 16-3-1).",
+    "CA board_of_equalization": "Four members, each elected by the voters of one district (Cal. Const. art. XIII sec. 17).",
+    "CO state_board_of_education": "One member elected from each congressional district, plus an at-large seat (Colo. Const. art. IX sec. 1); the at-large seat carries no district.",
+    "CO university_regent": "One regent from each congressional district and the rest at large (Colo. Const. art. IX sec. 12); an at-large seat carries no district.",
+    "KS state_board_of_education": "Ten members, one elected by each board district (Kan. Const. art. 6 sec. 2).",
+    "MA governors_council": "Eight councillors, each chosen by the voters of one council district (Mass. Const. amend. art. 16).",
+    "NE public_service_commission": "Five commissioners, each elected from a district (Neb. Rev. Stat. 75-101).",
+    "NE state_board_of_education": "Eight members elected from districts (Neb. Const. art. VII sec. 3).",
+    "NE university_regent": "Eight regents elected from districts (Neb. Const. art. VII sec. 10).",
+    "NH executive_council": "Five councillors, each chosen by the voters of one district (N.H. Const. Pt. II Art. 60).",
+    "NM public_education_commission": "Ten commissioners, each elected from a district (N.M. Const. art. XII sec. 6).",
+    "TX state_board_of_education": "Fifteen members elected from districts (Tex. Educ. Code 7.103).",
+    "UT state_board_of_education": "Fifteen members elected from districts (Utah Code 20A-14-101.5)."
+  },
+  "states": {
+    "GA": {"public_service_commission": {"electedBy": "statewide"}},
+    "AL": {
+      "public_service_commission": {"electedBy": "statewide"},
+      "state_board_of_education": {"electedBy": "district"}
+    },
+    "CA": {"board_of_equalization": {"electedBy": "district"}},
+    "CO": {
+      "state_board_of_education": {"electedBy": "district", "districts": "congressional"},
+      "university_regent": {"electedBy": "district", "districts": "congressional"}
+    },
+    "KS": {"state_board_of_education": {"electedBy": "district"}},
+    "MA": {"governors_council": {"electedBy": "district"}},
+    "NE": {
+      "public_service_commission": {"electedBy": "district"},
+      "state_board_of_education": {"electedBy": "district"},
+      "university_regent": {"electedBy": "district"}
+    },
+    "NH": {"executive_council": {"electedBy": "district"}},
+    "NM": {"public_education_commission": {"electedBy": "district"}},
+    "TX": {"state_board_of_education": {"electedBy": "district"}},
+    "UT": {"state_board_of_education": {"electedBy": "district"}}
+  }
+}
