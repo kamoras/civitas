@@ -19,64 +19,6 @@ from app.pipeline.fetch.oyez_common import OYEZ_BASE, unix_to_date as _unix_to_d
 
 logger = logging.getLogger(__name__)
 
-_PRESIDENT_PARTY: dict[str, str] = {
-    "George Washington": "",
-    "John Adams": "F",
-    "Thomas Jefferson": "DR",
-    "James Madison": "DR",
-    "James Monroe": "DR",
-    "John Quincy Adams": "DR",
-    "Andrew Jackson": "D",
-    "Martin Van Buren": "D",
-    "John Tyler": "W",
-    "James K. Polk": "D",
-    "Millard Fillmore": "W",
-    "Franklin Pierce": "D",
-    "James Buchanan": "D",
-    "Abraham Lincoln": "R",
-    "Ulysses S. Grant": "R",
-    "Rutherford B. Hayes": "R",
-    "James A. Garfield": "R",
-    "Chester A. Arthur": "R",
-    "Grover Cleveland": "D",
-    "Benjamin Harrison": "R",
-    "William McKinley": "R",
-    "Theodore Roosevelt": "R",
-    "William Howard Taft": "R",
-    "Woodrow Wilson": "D",
-    "Warren G. Harding": "R",
-    "Calvin Coolidge": "R",
-    "Herbert Hoover": "R",
-    "Franklin D. Roosevelt": "D",
-    "Harry S. Truman": "D",
-    "Dwight D. Eisenhower": "R",
-    "John F. Kennedy": "D",
-    "Lyndon B. Johnson": "D",
-    "Richard Nixon": "R",
-    "Gerald Ford": "R",
-    "Jimmy Carter": "D",
-    "Ronald Reagan": "R",
-    "George H. W. Bush": "R",
-    "Bill Clinton": "D",
-    "George W. Bush": "R",
-    "Barack Obama": "D",
-    "Donald J. Trump": "R",
-    "Donald Trump": "R",
-    "Joe Biden": "D",
-    "Joseph R. Biden": "D",
-}
-
-_OYEZ_DATA_GAPS: dict[str, tuple[str, str]] = {
-    "ketanji_brown_jackson": ("Joe Biden", "D"),
-}
-
-
-def _appointing_party(president_name: str | None) -> str:
-    if not president_name:
-        return ""
-    return _PRESIDENT_PARTY.get(president_name, "")
-
-
 async def fetch_current_justices(client: httpx.AsyncClient) -> list[dict]:
     """Fetch the list of current (active) Supreme Court justices from Oyez."""
     resp = await client.get(f"{OYEZ_BASE}/justices", timeout=DEFAULT_FETCH_TIMEOUT_S)
@@ -100,18 +42,16 @@ async def fetch_current_justices(client: httpx.AsyncClient) -> list[dict]:
         thumb = (j.get("thumbnail") or {}).get("href", "")
 
         jid = j.get("identifier", "")
-        party = _appointing_party(appointing)
-
-        if (not appointing or not party) and jid in _OYEZ_DATA_GAPS:
-            appointing, party = _OYEZ_DATA_GAPS[jid]
 
         current.append({
             "id": jid,
             "name": j.get("name", ""),
             "last_name": j.get("last_name", ""),
             "role_title": active_role.get("role_title", "Associate Justice"),
+            # Oyez leaves this empty for some justices (Ketanji Brown
+            # Jackson); justice_pipeline.resolve_appointment fills it, and
+            # the party, from the presidents table.
             "appointing_president": appointing,
-            "appointing_party": party,
             "date_start": _unix_to_date(active_role.get("date_start")),
             "date_end": None,
             "is_active": True,

@@ -161,7 +161,7 @@ def _atom_response(request: Request, body: bytes, posts: list[BroadcastPost]) ->
 
 def _newest(db: Session, *filters) -> list[BroadcastPost]:
     """The newest posts matching `filters`, leaving out any about a
-    withdrawn issue: its page answers 410, and the feed must not keep
+    withdrawn issue: its page now shows only the withdrawal, and the feed must not keep
     serving what Civitas retracted."""
     return (
         db.query(BroadcastPost)

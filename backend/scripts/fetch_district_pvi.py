@@ -9,7 +9,8 @@ fallback served before a fresh deployment's first ingest completes.
 It runs the exact same fetch and gates, from the same pinned sources
 (app/data/district_pvi_sources.json): one immutable revision of
 Wikipedia's "Cook Partisan Voting Index" article per Congress's district
-lines. See the fetch module's docstring for why the source is pinned
+lines, each gated against the House Clerk's apportionment (network
+required for both). See the fetch module's docstring for why the source is pinned
 rather than scraped from each district's live infobox.
 
 Output: "districts" is the sitting Congress's table (what member scoring

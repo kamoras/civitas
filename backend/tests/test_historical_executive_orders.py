@@ -64,3 +64,17 @@ def test_eo_table_parser_extracts_party():
 if __name__ == "__main__":
     test_eo_table_parser_extracts_party()
     print("OK")
+
+
+def test_a_president_without_an_id_is_kept_under_their_name_and_joins_the_roster():
+    from app.pipeline.fetch.historical_executive_orders import eo_entry
+
+    html = """<table><tbody>
+    <tr><td>Barack Obama (D)</td><td></td><td>276</td><td>34.6</td><td>8</td></tr>
+    <tr><td>Jane Q. Public (X)</td><td></td><td>12</td><td>24.0</td><td>0.5</td></tr>
+    </tbody></table>"""
+    data = _parse_eo_table(html)
+    assert data["obama-44"]["party"] == "D"
+    # The roster derives this president's id; the EO row joins by name.
+    assert eo_entry(data, "public-48", "Jane Q. Public")["party"] == "X"
+    assert eo_entry(data, "public-48", "Someone Else") == {}

@@ -48,10 +48,10 @@ from app.pipeline.analyze.president_scorer import (
 from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_survey
 from app.pipeline.fetch.economic_data import fetch_jobs_for_president
 from app.pipeline.fetch.federal_register import fetch_all_rulemaking_stats
-from app.pipeline.fetch.historical_executive_orders import fetch_historical_eo_counts
+from app.pipeline.fetch.historical_executive_orders import eo_entry, fetch_historical_eo_counts
 from app.pipeline.fetch.historical_gdp import compute_term_gdp_growth, fetch_historical_real_gdp
 from app.pipeline.fetch.presidential_approval import (
-    PRESIDENT_APPROVAL_SLUGS,
+    approval_slugs,
     fetch_president_approval_history,
     recent_polls,
 )
@@ -110,7 +110,7 @@ def _sync_roster(db: Session, roster, eo_data: dict) -> int:
     for entry in roster:
         try:
             p = db.query(President).filter(President.id == entry.id).first()
-            party = eo_data.get(entry.id, {}).get("party")
+            party = eo_entry(eo_data, entry.id, entry.name).get("party")
             is_current = entry.term_end is None
             if p is None:
                 if not party:
@@ -186,8 +186,9 @@ async def run_president_pipeline(db: Session) -> dict:
         approval_avg_data: dict[str, float] = {}
         approval_trend_data: dict[str, float] = {}
         recent_avg_approval_data: dict[str, float] = {}
-        for pid in PRESIDENT_APPROVAL_SLUGS:
-            polls = await fetch_president_approval_history(db, pid)
+        slugs = await approval_slugs(db, presidents)
+        for pid, slug in slugs.items():
+            polls = await fetch_president_approval_history(db, pid, slug)
             if not polls:
                 continue
             values = [poll.approving for poll in polls if poll.approving is not None]
@@ -233,7 +234,7 @@ async def run_president_pipeline(db: Session) -> dict:
             # dimension it used to feed, was removed entirely (see
             # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py), so
             # this no longer goes into `live`, just the profile's raw stat.
-            eo = eo_data.get(president.id)
+            eo = eo_entry(eo_data, president.id, president.name) or None
             if eo is not None:
                 president.eo_count = eo["total_orders"]
 
@@ -267,7 +268,7 @@ async def run_president_pipeline(db: Session) -> dict:
             if president.id in approval_avg_data:
                 president.avg_approval = approval_avg_data[president.id]
                 president.approval_trend = approval_trend_data.get(president.id)
-            elif president.id not in PRESIDENT_APPROVAL_SLUGS and president.id in election_margin_data:
+            elif president.id not in slugs and president.id in election_margin_data:
                 # Election margin is only ever the Public Mandate basis for
                 # a president with no approval-polling source at all
                 # (pre-Truman) — never a stand-in for a modern president

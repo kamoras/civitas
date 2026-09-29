@@ -4,9 +4,15 @@ Extracted from api/action.py (2026-07, midterm-elections feature) so the
 election pipeline can share them without a pipeline->api import: the
 statutory election-day rule (2 U.S.C. §7 — first Tuesday after the first
 Monday in November of even years) and the Senate's three-class rotation
-(U.S. Const. art. I §3). These are constitutional/statutory structure,
-not calibrated constants — there is no data file they could be generated
-from that wouldn't itself be a transcription of the same clauses.
+(U.S. Const. art. I §3).
+
+Which states sit in which class is data, read from the Senate's own member
+list (pipeline/fetch/senate_classes.py, refreshed each election run into
+/data/senate_classes.json, with app/data/senate_classes.json as the
+pre-first-run fallback), not typed here: a new state, or any change to the
+assignments, reaches every caller without a code change. The union of the
+three classes is the set of states (senate_classes' docstring says why a
+vacancy doesn't drop one).
 
 The class sets are the authoritative cross-check for FEC-derived Senate
 race data: a cycle's regular Senate races occur exactly in that cycle's
@@ -16,28 +22,51 @@ mid-term) or bad data — election_pipeline._sync_roster uses this to
 label specials instead of trusting any single upstream field.
 """
 
+import json
+import logging
+import pathlib
 from datetime import date
 
 from app.time_utils import utcnow
 
-CLASS_I_STATES = frozenset({
-    "AZ", "CA", "CT", "DE", "FL", "HI", "IN", "ME", "MD", "MA",
-    "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NJ", "NM", "NY",
-    "ND", "OH", "PA", "RI", "TN", "TX", "UT", "VT", "VA", "WA",
-    "WV", "WI", "WY",
-})
-CLASS_II_STATES = frozenset({
-    "AK", "AL", "AR", "CO", "DE", "GA", "ID", "IL", "IA", "KS",
-    "KY", "LA", "ME", "MA", "MI", "MN", "MS", "MT", "NE", "NH",
-    "NJ", "NM", "NC", "OK", "OR", "RI", "SC", "SD", "TN", "TX",
-    "VA", "WV", "WY",
-})
-CLASS_III_STATES = frozenset({
-    "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "FL", "GA", "HI",
-    "ID", "IL", "IN", "IA", "KS", "KY", "LA", "MD", "MO", "NV",
-    "NH", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "SC", "SD",
-    "UT", "VT", "WA", "WI",
-})
+logger = logging.getLogger(__name__)
+
+_CLASS_FILES = (
+    pathlib.Path("/data/senate_classes.json"),
+    pathlib.Path(__file__).resolve().parent / "data" / "senate_classes.json",
+)
+_senate_classes_cache: dict[int, frozenset[str]] | None = None
+
+
+def senate_classes() -> dict[int, frozenset[str]]:
+    """{1: states, 2: states, 3: states}: which states hold a seat in each
+    Senate class, from the refreshed file, else the bundled one."""
+    global _senate_classes_cache
+    if _senate_classes_cache is None:
+        for path in _CLASS_FILES:
+            try:
+                raw = json.loads(path.read_text())["classes"]
+                _senate_classes_cache = {int(k): frozenset(v) for k, v in raw.items()}
+                break
+            except Exception:
+                continue
+        else:
+            logger.error("senate_classes.json unavailable in /data and the bundled fallback")
+            _senate_classes_cache = {1: frozenset(), 2: frozenset(), 3: frozenset()}
+    return _senate_classes_cache
+
+
+def reset_senate_classes() -> None:
+    """Drop the cached sets, after a refresh wrote new ones."""
+    global _senate_classes_cache
+    _senate_classes_cache = None
+
+
+def federal_states() -> frozenset[str]:
+    """Every state: the jurisdictions with Senate seats, which are exactly
+    the ones with voting House seats and federal races. DC and the
+    territories have neither."""
+    return frozenset().union(*senate_classes().values())
 
 
 def next_election_day(after: date) -> date:
@@ -71,7 +100,6 @@ def next_election_day(after: date) -> date:
 # copies is exactly how one gets corrected (a typo fix, a rare mid-decade
 # reassignment) without the other, and silently drifts them apart.
 _CLASS_BASE_YEARS = {1: 2018, 2: 2020, 3: 2022}
-_CLASS_STATES = {1: CLASS_I_STATES, 2: CLASS_II_STATES, 3: CLASS_III_STATES}
 
 
 def seats_up_for_year(year: int) -> frozenset[str]:
@@ -82,7 +110,7 @@ def seats_up_for_year(year: int) -> frozenset[str]:
     """
     for cls, base_year in _CLASS_BASE_YEARS.items():
         if (year - base_year) % 6 == 0:
-            return _CLASS_STATES[cls]
+            return senate_classes().get(cls, frozenset())
     return frozenset()
 
 
@@ -100,7 +128,7 @@ def next_senate_election_year(state: str, after_year: int) -> int | None:
     aren't covered here — like seats_up_for_year, they only exist when a
     seat is vacated and aren't derivable from the calendar alone.
     """
-    classes = [c for c, states in _CLASS_STATES.items() if state in states]
+    classes = [c for c, states in senate_classes().items() if state in states]
     if not classes:
         return None
     candidates = []

@@ -17,9 +17,7 @@ from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cache
 from app.database import get_db
 from app.office_terms import term_years
 from app.election_calendar import (
-    CLASS_I_STATES,
-    CLASS_II_STATES,
-    CLASS_III_STATES,
+    federal_states,
     next_election_day,
     next_senate_election_year,
     seats_up_for_year,
@@ -78,19 +76,16 @@ from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
 from app.services.senator_service import STATE_NAMES
 from app.time_utils import utcnow
 
-# The 50 states, from the same class sets election_pipeline.py derives its
-# roster filter from — one source for "which jurisdictions hold federal
-# elections", not a second hand-typed list that can drift from it.
-STATE_CODES = CLASS_I_STATES | CLASS_II_STATES | CLASS_III_STATES
-
 # DC is a valid BALLOT jurisdiction even though it has no voting member of
 # Congress and is deliberately absent from the candidate roster (see
-# election_pipeline.STATES_WITH_FEDERAL_RACES). It votes on statewide
-# initiatives, and — decisively — the frontend's own map renders DC as a
-# clickable, keyboard-focusable region, so refusing it here would 404 a
-# link the site itself hands the user. The territories are not included:
-# the map doesn't render them, so nothing links there.
-BALLOT_STATE_CODES = STATE_CODES | {"DC"}
+# election_calendar.federal_states, the states, read from the Senate's own
+# list). It votes on statewide initiatives, and — decisively — the
+# frontend's own map renders DC as a clickable, keyboard-focusable region,
+# so refusing it here would 404 a link the site itself hands the user. The
+# territories are not included: the map doesn't render them, so nothing
+# links there.
+def ballot_state_codes() -> frozenset[str]:
+    return federal_states() | {"DC"}
 
 logger = logging.getLogger(__name__)
 
@@ -103,11 +98,13 @@ _district_counties_cache: dict[str, list[str]] | None = None
 def _district_counties() -> dict[str, list[str]]:
     """"ST-N" -> sorted county names (a "(part)" suffix means that county
     also has population in another district) — lets a voter who doesn't
-    know their district number recognize their county instead. District
-    boundaries only change after redistricting (once a decade), so this
-    is a static bundled file, not an auto-refreshed one like
-    district_pvi.json. Empty dict (never a guess) if the file is
-    missing."""
+    know their district number recognize their county instead. A static
+    bundled file of the Census Bureau's 119th Congress block equivalency
+    (scripts/fetch_statewide_district_towns.py and its peers name the
+    sources): it describes the districts in force for that Congress, so a
+    state that draws a new map mid-decade (several did for 2026) needs the
+    file regenerated from that map before these counties describe its
+    ballot. Empty dict (never a guess) if the file is missing."""
     global _district_counties_cache
     if _district_counties_cache is None:
         try:
@@ -1092,12 +1089,12 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     with 17 amendments that there is nothing to research.
 
     DC is a valid ballot jurisdiction despite having no voting member of
-    Congress and being absent from STATES_WITH_FEDERAL_RACES — it votes on
+    Congress and being absent from election_calendar.federal_states() — it votes on
     statewide initiatives, and the frontend's own map renders it as a
     clickable region.
     """
     state = state.upper()
-    if state not in BALLOT_STATE_CODES:
+    if state not in ballot_state_codes():
         raise HTTPException(status_code=404, detail="Unknown state")
 
     cycle = current_election_cycle()
@@ -1369,7 +1366,7 @@ def state_towns(state: str):
     JSON file, never the database — unlike town_ballot below, which
     needs `db` for the response caches."""
     state = state.upper()
-    if state not in BALLOT_STATE_CODES:
+    if state not in ballot_state_codes():
         raise HTTPException(status_code=404, detail="Unknown state")
 
     civic_towns = towns_for_state(state) if civic_is_configured() else []
@@ -1441,7 +1438,7 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
     cycle"), unlike a fetch failure.
     """
     state = state.upper()
-    if state not in BALLOT_STATE_CODES:
+    if state not in ballot_state_codes():
         raise HTTPException(status_code=404, detail="Unknown state")
 
     async with make_async_client(timeout=30.0) as client:

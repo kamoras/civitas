@@ -18,8 +18,9 @@ A pinned revision cannot drift. The ingest then refuses a table unless:
 
 - the revision fetched is the one pinned, and its text carries the pinned
   label (the Cook release / map the citation names);
-- every one of the 435 seats parses exactly once, with each state's seat
-  count right, values in range and a plausible R/D split;
+- every seat in the House's apportionment (the House Clerk's member list,
+  read each refresh — house_seats) parses exactly once, with each state's
+  seat count right, values in range and a plausible R/D split;
 - the revision's own prose summary agrees with its table (districts more
   R / more D / EVEN, and the stated median). An editor part-way through
   swapping in a new release leaves the prose on the old one — the
@@ -73,44 +74,18 @@ from datetime import date
 
 from app.atomic_write import write_text_atomic
 from app.ordinals import ordinal
+from app.pipeline.fetch.house_clerk import fetch_house_apportionment
+from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
+from app.state_names import STATE_NAME_TO_CODE, STATE_NAMES
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-STATE_NAMES = {
-    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
-    "CA": "California", "CO": "Colorado", "CT": "Connecticut",
-    "DE": "Delaware", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
-    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
-    "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
-    "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan",
-    "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
-    "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
-    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
-    "NY": "New York", "NC": "North Carolina", "ND": "North Dakota",
-    "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania",
-    "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
-    "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
-    "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
-    "WI": "Wisconsin", "WY": "Wyoming",
-}
-_STATE_CODES = {v.lower(): k for k, v in STATE_NAMES.items()}
-
-# Post-2020-census apportionment (118th Congress onward), 435 seats. Will
-# need updating after the 2030 census reapportions seats between states —
-# same "unavoidable one-time human step after a real-world event" class as
-# adding a new president, not a decay path this module can self-correct.
-SEATS = {
-    "AL": 7, "AK": 1, "AZ": 9, "AR": 4, "CA": 52, "CO": 8, "CT": 5,
-    "DE": 1, "FL": 28, "GA": 14, "HI": 2, "ID": 2, "IL": 17, "IN": 9,
-    "IA": 4, "KS": 4, "KY": 6, "LA": 6, "ME": 2, "MD": 8, "MA": 9,
-    "MI": 13, "MN": 8, "MS": 4, "MO": 8, "MT": 2, "NE": 3, "NV": 4,
-    "NH": 2, "NJ": 12, "NM": 3, "NY": 26, "NC": 14, "ND": 1, "OH": 15,
-    "OK": 5, "OR": 6, "PA": 17, "RI": 2, "SC": 7, "SD": 1, "TN": 9,
-    "TX": 38, "UT": 4, "VT": 1, "VA": 11, "WA": 10, "WV": 2, "WI": 8,
-    "WY": 1,
-}
+# Which districts exist comes from the House Clerk's seat list
+# (house_clerk.fetch_house_apportionment), read each refresh: a
+# reapportionment after a census, or a state's seat count changing, is
+# picked up with no edit here.
 
 API = "https://en.wikipedia.org/w/api.php"
 # Generic, and deliberately carries no personal contact detail.
@@ -159,6 +134,9 @@ _MEDIAN_RE = re.compile(
 )
 
 
+_STATE_CODES = {name.lower(): code for name, code in STATE_NAME_TO_CODE.items()}
+
+
 def district_title(state: str, district: int) -> str:
     """Wikipedia's article title for a district (used by callers that link
     to it; the ingest itself reads the PVI article's table)."""
@@ -171,7 +149,7 @@ def district_title(state: str, district: int) -> str:
 
 def _state_code(raw: str) -> str | None:
     raw = raw.strip()
-    if raw.upper() in SEATS:
+    if raw.upper() in STATE_NAMES:
         return raw.upper()
     return _STATE_CODES.get(raw.lower())
 
@@ -283,24 +261,26 @@ def parse_stated_summary(wikitext: str) -> dict:
 
 # ── Gates ──────────────────────────────────────────────────────────────
 
-def ingestion_gates(result: dict[str, int]) -> list[str]:
+def ingestion_gates(result: dict[str, int], seats: dict[str, int]) -> list[str]:
     """Structural sanity checks on one table — guard the ingestion (sign
-    convention, coverage, parse drift), not the scores."""
+    convention, coverage, parse drift), not the scores. `seats`: {state:
+    voting seats}, the House's apportionment (house_seats)."""
     failures = []
-    if len(result) != 435:
-        failures.append(f"expected 435 districts, got {len(result)}")
+    expected = sum(seats.values())
+    if len(result) != expected:
+        failures.append(f"expected {expected} districts, got {len(result)}")
     per_state: dict[str, int] = {}
     for k in result:
         st = k.split("-")[0]
         per_state[st] = per_state.get(st, 0) + 1
-    if set(per_state) != set(SEATS):
-        failures.append(f"state coverage mismatch: {sorted(set(SEATS) ^ set(per_state))}")
-    wrong = sorted(st for st in SEATS if st in per_state and per_state[st] != SEATS[st])
+    if set(per_state) != set(seats):
+        failures.append(f"state coverage mismatch: {sorted(set(seats) ^ set(per_state))}")
+    wrong = sorted(st for st in seats if st in per_state and per_state[st] != seats[st])
     if wrong:
         failures.append(f"seat count mismatch in {wrong}")
     for k in result:
         st, _, dn = k.partition("-")
-        n = SEATS.get(st)
+        n = seats.get(st)
         if n is not None and not (dn == "0" if n == 1 else dn.isdigit() and 1 <= int(dn) <= n):
             failures.append(f"district {k} does not exist in the apportionment")
     vals = list(result.values())
@@ -310,7 +290,11 @@ def ingestion_gates(result: dict[str, int]) -> list[str]:
     # parser that flipped D/R or dropped a sign can't produce that.
     r_lean = sum(1 for v in vals if v > 0)
     d_lean = sum(1 for v in vals if v < 0)
-    if not (150 <= r_lean <= 285 and 150 <= d_lean <= 285):
+    # Neither side under about a third of the House (the bound was 150 of
+    # 435 when it was a count): a sign flip or a parse that reads every
+    # district one way lands far outside it.
+    low, high = round(expected * 0.345), round(expected * 0.655)
+    if not (low <= r_lean <= high and low <= d_lean <= high):
         failures.append(f"implausible lean split R={r_lean} D={d_lean}")
     return failures
 
@@ -370,7 +354,7 @@ REDRAW_MEAN_SHIFT_MAX = 1.5
 
 
 def cross_congress_gates(
-    table: dict[str, int], base: dict[str, int], redrawn_states: list[str],
+    table: dict[str, int], base: dict[str, int], redrawn_states: list[str], seats: dict[str, int],
     *, window: str | None = None, base_window: str | None = None,
 ) -> list[str]:
     """A Congress whose lines were redrawn from `base`'s.
@@ -404,7 +388,7 @@ def cross_congress_gates(
         failures.append(f"districts differ from the base Congress in states that did not redraw: {unchanged_diff[:10]}")
     same, incomplete, shifted = [], [], []
     for st in sorted(redrawn):
-        n = SEATS.get(st, 0)
+        n = seats.get(st, 0)
         keys = [f"{st}-0"] if n == 1 else [f"{st}-{i}" for i in range(1, n + 1)]
         if not keys or any(k not in table or k not in base for k in keys):
             incomplete.append(st)
@@ -446,18 +430,19 @@ def provenance_gates(source: dict, revision: dict | None, page: str) -> list[str
 
 def check_table(source: dict, revision: dict | None, page: str,
                 base: dict[str, int] | None = None,
-                base_source: dict | None = None) -> tuple[dict[str, int], list[str]]:
+                base_source: dict | None = None, *,
+                seats: dict[str, int]) -> tuple[dict[str, int], list[str]]:
     """Every gate for one Congress's pinned revision. Returns (table,
     failures); the table is only usable when failures is empty.
     `base_source` is the redrawn_from Congress's sources entry (for its
-    Cook window)."""
+    Cook window); `seats` the House's apportionment (house_seats)."""
     failures = provenance_gates(source, revision, page)
     if revision is None:
         return {}, failures
     content = revision.get("content") or ""
     table, problems = parse_district_table(content)
     failures += problems
-    failures += ingestion_gates(table)
+    failures += ingestion_gates(table, seats)
     tolerance = int(source.get("median_tolerance", 0))
     if tolerance and not source.get("_why_median_tolerance"):
         failures.append("median_tolerance is set without a _why_median_tolerance saying what moved the median")
@@ -467,7 +452,7 @@ def check_table(source: dict, revision: dict | None, page: str,
             failures.append(f"base Congress {source['redrawn_from']} table unavailable for comparison")
         else:
             failures += cross_congress_gates(
-                table, base, source.get("redrawn_states", []),
+                table, base, source.get("redrawn_states", []), seats,
                 window=source.get("window"), base_window=(base_source or {}).get("window"),
             )
     return table, failures
@@ -533,9 +518,24 @@ def _ordered_congresses(sources: dict) -> list[str]:
     return sorted(sources["congresses"], key=int)
 
 
-async def build_payload(sources: dict, sitting_congress: int) -> tuple[dict | None, list[str]]:
+async def house_seats() -> dict[str, int]:
+    """{state: voting seats} from the House Clerk's member list
+    (house_clerk.fetch_house_apportionment), or {} when it can't be read.
+    Every pinned table is gated against it, so a reapportionment reaches
+    the gates with no edit here; the pins from before one describe the
+    old apportionment and are retired from the sources file with it."""
+    async with make_async_client(follow_redirects=True) as client:
+        apportionment = await fetch_house_apportionment(client)
+    return {st: a["seats"] for st, a in apportionment.items()}
+
+
+async def build_payload(
+    sources: dict, sitting_congress: int, seats: dict[str, int] | None = None,
+) -> tuple[dict | None, list[str]]:
     """Fetch and gate every configured Congress's pinned table. Returns
     (payload, failures); payload is None unless every table passed.
+    `seats` defaults to the House Clerk's apportionment (house_seats); an
+    unreadable one is a failure, never a guess.
 
     A sitting Congress with no entry in the sources file is NOT a failure
     here: the configured tables are still written (so the weekly refresh
@@ -543,6 +543,10 @@ async def build_payload(sources: dict, sitting_congress: int) -> tuple[dict | No
     below the sitting Congress as the top-level one — the latest lines
     known. _ensure_sitting_lines raises the ops alert for the missing
     entry, once per Congress."""
+    if seats is None:
+        seats = await house_seats()
+    if not seats:
+        return None, ["no apportionment from the House Clerk's member list"]
     page = sources["page"]
     tables: dict[str, dict[str, int]] = {}
     failures: list[str] = []
@@ -552,7 +556,7 @@ async def build_payload(sources: dict, sitting_congress: int) -> tuple[dict | No
         rev = await _fetch_revision(revid=src["revid"])
         base = tables.get(src["redrawn_from"]) if src.get("redrawn_from") else None
         base_src = sources["congresses"].get(src["redrawn_from"]) if src.get("redrawn_from") else None
-        table, fails = check_table(src, rev, page, base, base_src)
+        table, fails = check_table(src, rev, page, base, base_src, seats=seats)
         if fails:
             failures += [f"{ordinal(int(c))} Congress: {f}" for f in fails]
             continue

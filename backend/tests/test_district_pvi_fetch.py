@@ -12,6 +12,7 @@ shapes match the real article's table ({{ushr|State|N|X}} then
 """
 
 import json
+from collections import Counter
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
@@ -19,9 +20,14 @@ import pytest
 
 from app.pipeline.analyze import score_calculator
 from app.pipeline.fetch import district_pvi as dp
+from app.state_names import STATE_NAMES
 
 PAGE = "Cook Partisan Voting Index"
 BUNDLED = dp.SOURCES_PATH.parent / "district_pvi.json"
+# The real apportionment, counted from the bundled 119th-Congress table (the
+# module reads it from the House Clerk's member list, house_seats): these
+# tests build tables for real states, TN and UT among them.
+SEATS = dict(Counter(k.split("-")[0] for k in json.loads(BUNDLED.read_text())["congresses"]["119"]["districts"]))
 
 
 class _Unclosable:
@@ -42,11 +48,12 @@ def _leases_on_the_test_database(db_session, monkeypatch):
     """The refresh and every House run take the DISTRICT_LINES lease (a
     row in api_cache): give them the test's database."""
     monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+    monkeypatch.setattr(dp, "house_seats", AsyncMock(return_value=SEATS))
 
 
 def _pairs():
     out = []
-    for st, n in sorted(dp.SEATS.items()):
+    for st, n in sorted(SEATS.items()):
         out.extend([(st, 0)] if n == 1 else [(st, i) for i in range(1, n + 1)])
     return out
 
@@ -65,7 +72,7 @@ def _redraw(base: dict[str, int], states) -> dict[str, int]:
     synthetic seats alternate R+10/D+10, so the last two differ."""
     new = dict(base)
     for st in states:
-        n = dp.SEATS[st]
+        n = SEATS[st]
         a, b = f"{st}-{n - 1}", f"{st}-{n}"
         new[a], new[b] = base[b], base[a]
     return new
@@ -98,7 +105,7 @@ def _wikitext(table: dict[str, int], label: str, *, counts=None, median=None) ->
     for i, (key, v) in enumerate(sorted(table.items())):
         s, n = key.split("-")
         rows.append(
-            f"|-\n| {{{{ushr|{dp.STATE_NAMES[s]}|{'AL' if n == '0' else n}|X}}}}\n| {_cell(v, i)}\n"
+            f"|-\n| {{{{ushr|{STATE_NAMES[s]}|{'AL' if n == '0' else n}|X}}}}\n| {_cell(v, i)}\n"
             "|{{Party shading/Text/Republican}}"
         )
     return (
@@ -177,28 +184,28 @@ class TestParse:
 
 class TestIngestionGates:
     def test_clean_synthetic_population_passes_gates(self):
-        assert dp.ingestion_gates(_synthetic_result()) == []
+        assert dp.ingestion_gates(_synthetic_result(), SEATS) == []
 
     def test_missing_districts_fails_coverage_gate(self):
         result = _synthetic_result()
         del result["CA-1"]
-        assert any("expected 435" in f for f in dp.ingestion_gates(result))
+        assert any("expected 435" in f for f in dp.ingestion_gates(result, SEATS))
 
     def test_district_outside_apportionment_fails(self):
         result = _synthetic_result()
         del result["CA-1"]
         result["CA-53"] = 5
-        failures = dp.ingestion_gates(result)
+        failures = dp.ingestion_gates(result, SEATS)
         assert any("CA-53" in f for f in failures)
 
     def test_out_of_range_value_fails_gate(self):
         result = _synthetic_result()
         result["CA-1"] = 90
-        assert any("plausible" in f for f in dp.ingestion_gates(result))
+        assert any("plausible" in f for f in dp.ingestion_gates(result, SEATS))
 
     def test_lopsided_lean_split_fails_gate(self):
         result = {k: 10 for k in _synthetic_result()}
-        assert any("lean split" in f for f in dp.ingestion_gates(result))
+        assert any("lean split" in f for f in dp.ingestion_gates(result, SEATS))
 
 
 class TestSelfConsistency:
@@ -241,10 +248,10 @@ class TestSelfConsistency:
     def test_a_tolerance_without_its_reason_is_refused(self):
         table = _synthetic_result()
         rev = _revision(table, "L", 5)
-        _, failures = dp.check_table(_source(5, "L", median_tolerance=1), rev, PAGE)
+        _, failures = dp.check_table(_source(5, "L", median_tolerance=1), rev, PAGE, seats=SEATS)
         assert any("_why_median_tolerance" in f for f in failures)
         _, failures = dp.check_table(
-            _source(5, "L", median_tolerance=1, _why_median_tolerance="a stated reason"), rev, PAGE,
+            _source(5, "L", median_tolerance=1, _why_median_tolerance="a stated reason"), rev, PAGE, seats=SEATS,
         )
         assert failures == []
 
@@ -267,18 +274,18 @@ class TestCrossCongress:
         new = dict(base)
         new["TN-9"] = 9
         new["MO-5"] = 9  # a blocked map's value slipping in
-        failures = dp.cross_congress_gates(new, base, ["TN"])
+        failures = dp.cross_congress_gates(new, base, ["TN"], SEATS)
         assert any("did not redraw" in f and "MO-5" in f for f in failures)
 
     def test_redrawn_state_left_on_old_lines_fails(self):
         base = _synthetic_result()
         new = _redraw(base, ["TN"])
-        failures = dp.cross_congress_gates(new, base, ["TN", "UT"])
+        failures = dp.cross_congress_gates(new, base, ["TN", "UT"], SEATS)
         assert failures == ["redrawn states identical to the base Congress (old lines?): ['UT']"]
 
     def test_clean_redraw_passes(self):
         base = _synthetic_result()
-        assert dp.cross_congress_gates(_redraw(base, ["TN", "UT"]), base, ["TN", "UT"]) == []
+        assert dp.cross_congress_gates(_redraw(base, ["TN", "UT"]), base, ["TN", "UT"], SEATS) == []
 
     def test_a_redraw_that_moves_only_two_seats_passes(self):
         """No minimum share of changed districts: North Carolina's 2025
@@ -286,7 +293,7 @@ class TestCrossCongress:
         base = _synthetic_result()
         new = _redraw(base, ["NC"])
         assert sum(new[k] != base[k] for k in new if k.startswith("NC-")) == 2
-        assert dp.cross_congress_gates(new, base, ["NC"]) == []
+        assert dp.cross_congress_gates(new, base, ["NC"], SEATS) == []
 
     def test_a_half_updated_redrawn_state_fails(self):
         """One district of a redrawn state on the new lines, the rest on
@@ -294,14 +301,14 @@ class TestCrossCongress:
         so the state's mean lean moves — a redraw alone can't do that."""
         base = _synthetic_result()
         new = dict(base, **{"UT-1": base["UT-1"] - 22})
-        failures = dp.cross_congress_gates(new, base, ["UT"])
+        failures = dp.cross_congress_gates(new, base, ["UT"], SEATS)
         assert len(failures) == 1 and "mean district lean" in failures[0] and "UT -5.50" in failures[0]
 
     def test_a_redrawn_state_missing_a_seat_fails(self):
         base = _synthetic_result()
         new = _redraw(base, ["UT"])
         del new["UT-4"]
-        assert dp.cross_congress_gates(new, base, ["UT"]) == [
+        assert dp.cross_congress_gates(new, base, ["UT"], SEATS) == [
             "redrawn states missing seats in this or the base table: ['UT']"
         ]
 
@@ -312,7 +319,7 @@ class TestCookWindow:
         redraw" check would list hundreds of seats — say what is wrong."""
         base = _synthetic_result()
         failures = dp.cross_congress_gates(
-            {k: v + 1 for k, v in base.items()}, base, ["TN"], window="2024+2028", base_window="2020+2024",
+            {k: v + 1 for k, v in base.items()}, base, ["TN"], SEATS, window="2024+2028", base_window="2020+2024",
         )
         assert len(failures) == 1 and "Cook window 2024+2028 differs" in failures[0]
         assert "drop redrawn_from" in failures[0]
@@ -321,10 +328,10 @@ class TestCookWindow:
         base = _synthetic_result()
         new = _redraw(base, ["TN"])
         src = _source(202, "2026 Cook PVI", redrawn_from="119", redrawn_states=["TN"], window="2024+2028")
-        _, failures = dp.check_table(src, _revision(new, "2026 Cook PVI", 202), PAGE, base, _source(101, "x"))
+        _, failures = dp.check_table(src, _revision(new, "2026 Cook PVI", 202), PAGE, base, _source(101, "x"), seats=SEATS)
         assert any("Cook window 2024+2028 differs from the base Congress's 2020+2024" in f for f in failures)
         _, failures = dp.check_table(
-            dict(src, window="2020+2024"), _revision(new, "2026 Cook PVI", 202), PAGE, base, _source(101, "x"),
+            dict(src, window="2020+2024"), _revision(new, "2026 Cook PVI", 202), PAGE, base, _source(101, "x"), seats=SEATS,
         )
         assert failures == []
 
@@ -425,6 +432,27 @@ class TestRefresh:
         rev = _revision(mixed, "2026 Cook PVI", 202)
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, rev120=rev)
         out.write_text(json.dumps({"districts": {"KEEP-0": 5}}))
+        assert await dp.refresh_district_pvi() is False
+        assert json.loads(out.read_text())["districts"] == {"KEEP-0": 5}
+
+    async def test_unreadable_apportionment_keeps_previous_data(self, monkeypatch, tmp_path):
+        """The gates need the House's seats; with the Clerk's list
+        unreadable there is nothing to check a table against, so nothing is
+        written — never a fallback seat count."""
+        out, _, _ = _two_congress_setup(monkeypatch, tmp_path)
+        out.write_text(json.dumps({"districts": {"KEEP-0": 5}}))
+        monkeypatch.setattr(dp, "house_seats", AsyncMock(return_value={}))
+        assert await dp.refresh_district_pvi() is False
+        assert json.loads(out.read_text())["districts"] == {"KEEP-0": 5}
+        payload, failures = await dp.build_payload(dp.load_sources(), 119)
+        assert payload is None and failures == ["no apportionment from the House Clerk's member list"]
+
+    async def test_a_changed_apportionment_fails_the_gates(self, monkeypatch, tmp_path):
+        """Seats come from the Clerk each refresh: a table that no longer
+        matches the House's apportionment is refused."""
+        out, _, _ = _two_congress_setup(monkeypatch, tmp_path)
+        out.write_text(json.dumps({"districts": {"KEEP-0": 5}}))
+        monkeypatch.setattr(dp, "house_seats", AsyncMock(return_value=dict(SEATS, TX=SEATS["TX"] + 1)))
         assert await dp.refresh_district_pvi() is False
         assert json.loads(out.read_text())["districts"] == {"KEEP-0": 5}
 
@@ -753,8 +781,8 @@ class TestBundledTablesAreOnTheRightLines:
         sources = dp.load_sources()
         t119 = bundled["congresses"]["119"]["districts"]
         t120 = bundled["congresses"]["120"]["districts"]
-        assert dp.ingestion_gates(t119) == [] and dp.ingestion_gates(t120) == []
-        assert dp.cross_congress_gates(t120, t119, sources["congresses"]["120"]["redrawn_states"]) == []
+        assert dp.ingestion_gates(t119, SEATS) == [] and dp.ingestion_gates(t120, SEATS) == []
+        assert dp.cross_congress_gates(t120, t119, sources["congresses"]["120"]["redrawn_states"], SEATS) == []
         for c in ("119", "120"):
             assert bundled["congresses"][c]["_revision"]["revid"] == sources["congresses"][c]["revid"]
 
@@ -765,9 +793,9 @@ class TestBundledTablesAreOnTheRightLines:
         t119 = bundled["congresses"]["119"]["districts"]
         t120 = bundled["congresses"]["120"]["districts"]
         redrawn = dp.load_sources()["congresses"]["120"]["redrawn_states"]
-        assert dp.cross_congress_gates(t120, t119, redrawn) == []
+        assert dp.cross_congress_gates(t120, t119, redrawn, SEATS) == []
         half = dict(t119, **{"TN-9": t120["TN-9"]})
-        failures = dp.cross_congress_gates(half, t119, redrawn)
+        failures = dp.cross_congress_gates(half, t119, redrawn, SEATS)
         assert any("mean district lean" in f and "TN +3.56" in f for f in failures)
 
     def test_scoring_reads_the_bundled_top_level_table(self, bundled, monkeypatch, tmp_path):

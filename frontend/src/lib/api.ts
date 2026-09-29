@@ -1152,6 +1152,9 @@ export interface OpsAlert {
   /** The ongoing problem it reports; null for a one-off event. */
   condition?: string | null;
   resolvedAt?: string | null;
+  /** A newer alert for the same condition replaced it; the condition was
+   *  still open, so this is not a resolution. */
+  supersededAt?: string | null;
   /** Its condition is unresolved (the backend decides; never derived here). */
   open?: boolean;
 }
