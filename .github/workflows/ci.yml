@@ -94,12 +94,12 @@ jobs:
       - run: "pip install --only-binary=:all: -r requirements.txt"
 
       - name: Lint (ruff)
-        # Pinned: ruff 0.16.0 (released 2026-07-23) flags 345 pre-existing
-        # violations repo-wide, breaking every PR the moment it hit PyPI.
-        # Upgrade deliberately (bump the pin + fix the new findings in one
-        # PR), not implicitly via whatever version `pip install ruff` grabs.
+        # Pinned, and the rule selection lives in backend/ruff.toml: ruff
+        # 0.16.0 (2026-07-23) widened its *default* selection and broke every
+        # PR the moment it hit PyPI, because nothing here named the rules.
+        # Now a version bump changes the checker, never the rule set.
         run: |
-          pip install "ruff==0.15.4"
+          pip install "ruff==0.16.9"
           # scripts/ too, not just app/. It was excluded, and a plain
           # NameError sat in scripts/rescore.py's return statement — past
           # every line of work the script does, so it only ever surfaced
