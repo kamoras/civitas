@@ -10,7 +10,7 @@ updates:
       - dependencies
       - python
     # requirements.txt pins the *whole resolved tree*, not just direct
-    # dependencies. That means Dependabot sees ~130 pinned lines and treats
+    # dependencies. That means Dependabot sees ~80 pinned lines and treats
     # each as independently upgradable — but many of them are not. Some are
     # held to an exact version by the package that pulls them in, so bumping
     # one line on its own produces a requirements file that pip cannot
@@ -27,22 +27,22 @@ updates:
     #            up to 5.14.1, has that same cap.
     #
     # Auditing the installed tree for this shape (an exact `==` imposed by
-    # another pinned package) turns up the same trap waiting on the whole
-    # OpenTelemetry family, on pdfminer.six, and on torch's CUDA siblings.
-    # The two settings below handle the two distinct cases.
+    # another pinned package) turns up the same trap waiting on pdfminer.six
+    # and on torch's CUDA siblings. The two settings below handle the two
+    # distinct cases.
+    #
+    # (There was also an `opentelemetry` group here for the OTel family,
+    # whose members pin each other exactly. Removed 2026-09-28 along with
+    # the packages themselves: nothing in the app, scripts, CI or deploy
+    # configured OpenTelemetry, and no pinned package required it. The
+    # family, grpcio, protobuf and the rest of the 42 pins removed with it
+    # match ChromaDB's dependency tree (OTel, the kubernetes client,
+    # onnxruntime's flatbuffers), i.e. most likely left behind by the
+    # sqlite-vec migration, and were still installed into every backend
+    # image. If OTel is ever wired up
+    # for real, restore the group with it: grouping is what lets a family
+    # with mutual `==` pins bump as one resolvable unit.)
     groups:
-      # Families whose members pin each other exactly. Grouping makes
-      # Dependabot bump the family as one unit, so the PR resolves; these
-      # never move independently in reality, only together.
-      #
-      #   opentelemetry-api  <- ==  opentelemetry-sdk, -semantic-conventions
-      #   opentelemetry-proto <- == -exporter-otlp-proto-{grpc,common}
-      #   opentelemetry-instrumentation <- == -instrumentation-{asgi,fastapi}
-      #   opentelemetry-util-http <- == -instrumentation-{asgi,fastapi}
-      #   (plus -semantic-conventions from four separate siblings)
-      opentelemetry:
-        patterns:
-          - "opentelemetry*"
       # Deliberately NOT grouped, though the audit flagged them: torch pins
       # cuda-toolkit/nvidia-*/triton exactly, and pdfplumber pins
       # pdfminer.six exactly — but none of those children are themselves
@@ -54,9 +54,9 @@ updates:
       #
       # This family is grouped because its members move together in
       # practice (transformers, huggingface_hub, safetensors, hf-xet and
-      # sentence-transformers all constrain one another). Note that
-      # tokenizers is deliberately NOT in this list — see the ignore
-      # section for why grouping turned out not to be the answer there.
+      # sentence-transformers all constrain one another). tokenizers joined
+      # the list on 2026-08-30 after first being ignored — see its entry
+      # below and the ignore section for that history.
       huggingface:
         patterns:
           - "transformers"
@@ -139,6 +139,18 @@ updates:
     labels:
       - dependencies
       - javascript
+    ignore:
+      # TypeScript (2026-09-28): typescript-eslint — pulled in by
+      # eslint-config-next — declares `typescript >=4.8.4 <6.1.0` on every
+      # release up to the newest published one (8.71.0), so anything past
+      # 6.0.x, the 7.x native-compiler major or a 6.1 minor alike, would lint
+      # against an unsupported compiler. package.json holds `~6.0.3` for the
+      # same reason, so a fresh install can't drift there either. Lift both
+      # (this entry and the tilde) once typescript-eslint's peer range admits
+      # the new version — `npm view typescript-eslint peerDependencies` —
+      # and bump typescript-eslint alongside it.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: /

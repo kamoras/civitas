@@ -114,6 +114,35 @@ class TestNormalizedSource:
                 for py in (app_dir / "pipeline").rglob("*.py"):
                     assert name not in _referenced_names(py.read_text()), (py, name)
 
+    def test_lobbying_records_is_read_only_by_the_lda_fetch(self):
+        """Exempt because it only decides which filing-named bills are shown
+        beside donor-vote connections: if a hashed analysis module imported
+        it, a retune could change a result the hash no longer notices."""
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        import ast
+
+        def imports_it(tree: ast.AST) -> bool:
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and (
+                    (node.module or "").endswith("lobbying_records")
+                    or any(a.name == "lobbying_records" for a in node.names)
+                ):
+                    return True
+                if isinstance(node, ast.Import) and any(a.name.endswith("lobbying_records") for a in node.names):
+                    return True
+            return False
+
+        importers = {
+            str(py.relative_to(app_dir))
+            for py in (app_dir / "pipeline").rglob("*.py")
+            if imports_it(ast.parse(py.read_text()))
+        }
+        assert importers == {"pipeline/fetch/lda.py"}
+
     def test_exempt_coordination_modules_import_no_analysis_code(self):
         """Exempt because they classify and score nothing: an import of
         analysis code (or config_definitions, its constants) would mean an

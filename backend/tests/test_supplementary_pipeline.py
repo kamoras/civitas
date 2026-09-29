@@ -125,7 +125,7 @@ class TestSupplementaryPipelineRunTracking:
         assert supplementary_pipeline.is_supplementary_pipeline_running() is False
 
     def test_justices_skipped_outside_weekly_cadence_when_not_missing(self, db_session):
-        db_session.add(Justice(id="j1", name="Test Justice", last_name="Justice"))
+        db_session.add(Justice(id="j1", name="Test Justice", last_name="Justice", loyalty_through_term=2025))
         db_session.commit()
 
         # Pin "now" to a Wednesday (weekday() == 2), not Sunday (6).
@@ -137,6 +137,17 @@ class TestSupplementaryPipelineRunTracking:
         run = db_session.query(SupplementaryPipelineRun).one()
         assert run.justices_skipped is True
         assert run.justices_scored == 0
+
+    def test_justices_run_off_cadence_until_loyalty_is_first_measured(self, db_session):
+        # A sitting justice whose loyalty was never measured (the release
+        # that adds it, or a source down on the last run) must not wait for
+        # Sunday to be scored.
+        db_session.add(Justice(id="j1", name="Test Justice", last_name="Justice"))
+        db_session.commit()
+        with patch("app.pipeline.supplementary_pipeline.utcnow",
+                   return_value=datetime(2026, 7, 15)):  # a Wednesday
+            result = _run(db_session, justice_result={"justices": 9})
+        assert result["justices_scored"] == 9
 
     def test_committee_leadership_skipped_outside_weekly_cadence_when_not_missing(self, db_session):
         with patch("app.pipeline.supplementary_pipeline.utcnow",

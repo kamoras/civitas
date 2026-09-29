@@ -232,7 +232,8 @@ editing a comment or docstring does not count as a code change — only code,
 string constants (prototypes, prompts) and thresholds do. A short, tested
 exemption list covers what cannot affect classification or scoring:
 `_NOT_ANALYSIS_PATHS` (the holdings ingest, filer matching, the run-coordination
-modules, the election run's orchestration) and
+modules, the election run's orchestration, the LDA bill-name matcher
+`analyze/lobbying_records.py`) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
 both in `senate_pipeline.py`. This fingerprint is
 compared to the stored hash from the last pipeline run:
@@ -1095,6 +1096,11 @@ state in the query string is exposed to them.
   and runs the stack-deploy command above. There's no separate
   frontend-only/backend-only deploy anymore; Swarm only rolls the services
   whose image tag actually changed.
+- nginx's security headers (nosniff, X-Frame-Options, Referrer-Policy,
+  Permissions-Policy) live in `nginx/security-headers.conf`. nginx drops the
+  server-level `add_header`s from any location that sets one of its own, so
+  **every location that adds a header must also include that file**;
+  `backend/tests/test_nginx_config.py` fails when one doesn't.
 - Docker images built from `backend/Dockerfile`, `frontend/Dockerfile`,
   `nginx/Dockerfile`
 - Data persists in the `civitas_app_data` Docker named volume, which survives
