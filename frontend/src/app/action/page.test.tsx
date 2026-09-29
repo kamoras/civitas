@@ -371,6 +371,74 @@ describe("the day pager while a day loads", () => {
   });
 });
 
+describe("the day pager after a failed load", () => {
+  it("doesn't page from the previous day's list when a day fails to load", async () => {
+    vi.mocked(fetchActionIssues).mockImplementation((() =>
+      Promise.reject(new Error("502"))) as unknown as typeof fetchActionIssues);
+    window.history.replaceState(null, "", `/action?tab=issues&date=${DATES[1]}`);
+    render(<ActionPage />);
+    expect(await screen.findByText("CONNECTION ERROR")).toBeInTheDocument();
+    const next = screen.getByRole("button", { name: "Next day" });
+    expect(next).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(next);
+    expect(window.location.search).toContain(`date=${DATES[1]}`);
+  });
+
+  it("keeps focus in the tab when RETRY is pressed", async () => {
+    let fail = true;
+    vi.mocked(fetchActionIssues).mockImplementation(((date?: string) =>
+      fail
+        ? Promise.reject(new Error("502"))
+        : Promise.resolve({
+            date: date ?? LATEST,
+            availableDates: DATES,
+            generatedAt: `${LATEST}T12:00:00Z`,
+            issues: [issueFor(date ?? LATEST, "a")],
+          })) as unknown as typeof fetchActionIssues);
+    window.history.replaceState(null, "", "/action?tab=issues");
+    render(<ActionPage />);
+    const retry = await screen.findByRole("button", { name: "RETRY" });
+    fail = false;
+    retry.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText(`Issue a of ${LATEST}`)).toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.closest('[role="tabpanel"]')).not.toBeNull();
+  });
+});
+
+describe("an issue expanded on an older day", () => {
+  it("keeps the day in the URL beside the issue", async () => {
+    serveIssues();
+    window.history.replaceState(null, "", `/action?tab=issues&date=${DATES[1]}`);
+    render(<ActionPage />);
+    const card = await screen.findByRole("button", { name: new RegExp(`Issue b of ${DATES[1]}`) });
+    await userEvent.click(card);
+    expect(window.location.search).toBe(`?date=${DATES[1]}&issue=pub-b-${DATES[1]}`);
+    await userEvent.click(card);
+    expect(window.location.search).toBe(`?date=${DATES[1]}`);
+  });
+});
+
+describe("a site with a single day of issues", () => {
+  it("keeps the pager (and focus) after LATEST", async () => {
+    vi.mocked(fetchActionIssues).mockImplementation(((date?: string) =>
+      Promise.resolve({
+        date: date ?? LATEST,
+        availableDates: [LATEST],
+        generatedAt: `${LATEST}T12:00:00Z`,
+        issues: [issueFor(LATEST, "a")],
+      })) as unknown as typeof fetchActionIssues);
+    window.history.replaceState(null, "", `/action?tab=issues&date=${LATEST}`);
+    render(<ActionPage />);
+    const latest = await screen.findByRole("button", { name: "Jump to present" });
+    latest.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText(`Issue a of ${LATEST}`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Jump to present" })).toHaveFocus();
+  });
+});
+
 describe("focus after Back/Forward", () => {
   async function popTo(url: string) {
     await act(async () => {

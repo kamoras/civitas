@@ -578,7 +578,7 @@ function IssuesTab({
   initialDate?: string | null;
   onDateChange?: (date: string | null) => void;
   initialIssueId?: string | null;
-  onIssueChange?: (id: string | null) => void;
+  onIssueChange?: (id: string | null, date: string | null) => void;
 }) {
   // The selected day IS the request. Keying the fetch on it means the pager
   // can't get out of step with what is on screen: there is no separate
@@ -614,11 +614,15 @@ function IssuesTab({
     [onDateChange]
   );
 
-  // While a day loads the list is the previous day's, which (14 newest plus
-  // that day's neighbours) may not hold the true next day, and on a cold
-  // deep link is empty: the pager waits for the day it is on.
-  const canPrev = !loading && currentIdx >= 0 && currentIdx < availableDates.length - 1;
-  const canNext = !loading && (currentIdx > 0 || !!selectedDate);
+  // While a day loads (or after it failed to) the list is the previous
+  // day's, which (14 newest plus that day's neighbours) may not hold the
+  // true next day, and on a cold deep link is empty: the pager waits for
+  // the day it is on.
+  // Only once the day on screen has its own list: not while it loads, and
+  // not after its load failed (the list is then still the previous day's).
+  const listIsCurrent = !!freshDates;
+  const canPrev = listIsCurrent && currentIdx >= 0 && currentIdx < availableDates.length - 1;
+  const canNext = listIsCurrent && (currentIdx > 0 || !!selectedDate);
   const goToPrev = useCallback(() => {
     if (canPrev) goTo(availableDates[currentIdx + 1]);
   }, [canPrev, availableDates, currentIdx, goTo]);
@@ -633,6 +637,15 @@ function IssuesTab({
   }, [selectedDate, goTo]);
 
   const generatedAt = data?.generatedAt;
+
+  // RETRY sits in the error panel, which the loading panel replaces the
+  // moment it is pressed: focus goes to the tab's own wrapper, which every
+  // state renders, instead of falling to the page body.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const retry = useCallback(() => {
+    rootRef.current?.focus();
+    request.retry();
+  }, [request]);
 
   function formatGeneratedAt(iso: string): string {
     try {
@@ -651,7 +664,11 @@ function IssuesTab({
   // Shown on an empty day too: a day whose issues all moved on (a
   // re-matched issue is restamped to the day that matched it) is reached
   // by the timeline's links, and without a pager it strands the reader.
-  const pager = (availableDates.length > 1 || selectedDate) && (
+  // Once shown, the pager stays: LATEST or NEXT on a site with a single
+  // day would otherwise unmount it under the reader's focus.
+  const [pagerShown, setPagerShown] = useState(false);
+  if (!pagerShown && (availableDates.length > 1 || selectedDate)) setPagerShown(true);
+  const pager = pagerShown && (
     <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-widest">
       {/* aria-disabled, not disabled: a button that turns disabled while
           focused (paging to the oldest or newest day) drops focus to the
@@ -695,7 +712,7 @@ function IssuesTab({
   // loading, error, empty and loaded.
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div ref={rootRef} tabIndex={-1} className="space-y-6 outline-none">
         {pager}
         <div className="panel max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
           <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
@@ -708,7 +725,7 @@ function IssuesTab({
 
   if (fetchError) {
     return (
-      <div className="space-y-6">
+      <div ref={rootRef} tabIndex={-1} className="space-y-6 outline-none">
         {pager}
         <div className="panel max-w-lg mx-auto p-6 text-center" role="alert">
           <div className="text-signal-red font-mono text-sm tracking-widest mb-2">
@@ -716,7 +733,7 @@ function IssuesTab({
           </div>
           <p className="text-ink-lo text-base mb-4">Could not load these issues.</p>
           <button
-            onClick={request.retry}
+            onClick={retry}
             className="text-signal-cyan font-mono text-xs tracking-widest border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
           >
             RETRY
@@ -731,7 +748,7 @@ function IssuesTab({
 
   if (!heroIssue) {
     return (
-      <div className="space-y-6">
+      <div ref={rootRef} tabIndex={-1} className="space-y-6 outline-none">
         {pager}
         <div className="panel max-w-lg mx-auto p-6 text-center" role="status" aria-live="polite">
           {selectedDate ? (
@@ -750,7 +767,7 @@ function IssuesTab({
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={rootRef} tabIndex={-1} className="space-y-6 outline-none">
       {pager}
 
       {/* Data freshness timestamp */}
@@ -799,7 +816,7 @@ function IssuesTab({
                 userState={userState}
                 onNavigate={onNavigate}
                 deepLinked={issueArrival === issue.publicId}
-                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
+                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null, selectedDate)}
               />
             ))}
           </div>
@@ -1058,8 +1075,14 @@ function ActionPageInner() {
 
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
-    (id: string | null) => {
-      const url = id ? `/action?issue=${id}` : ACTION_CENTER_HREF;
+    (id: string | null, date: string | null) => {
+      // The day stays in the URL: an issue on an older day, reloaded or
+      // shared as ?issue= alone, opened on the latest day, where it isn't.
+      const url = date
+        ? `/action?date=${date}${id ? `&issue=${id}` : ""}`
+        : id
+          ? `/action?issue=${id}`
+          : ACTION_CENTER_HREF;
       replaceUrl(url);
     },
     [replaceUrl]
