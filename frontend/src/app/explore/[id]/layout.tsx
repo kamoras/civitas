@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { usableRecord } from "@/lib/ssrPayload";
+import { fetchRecord } from "@/lib/ssrPayload";
 import { pageMetadata } from "@/lib/site";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -15,15 +15,15 @@ interface ExploreDocMeta {
   agencyName: string;
 }
 
+/** Null only when there is no such document; an outage throws (fetchRecord). */
 async function fetchDoc(id: string): Promise<ExploreDocMeta | null> {
   if (!/^\d+$/.test(id)) return null;
-  try {
-    const res = await fetch(`${BACKEND}/api/explore/${id}`, { next: { revalidate: 3600 } });
-    if (!res.ok) return null;
-    return usableRecord<ExploreDocMeta>(await res.json(), "id", "title");
-  } catch {
-    return null;
-  }
+  return fetchRecord<ExploreDocMeta>(
+    `${BACKEND}/api/explore/${id}`,
+    { next: { revalidate: 3600 } },
+    "id",
+    "title"
+  );
 }
 
 /**

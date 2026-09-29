@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
-import { usableRecord } from "@/lib/ssrPayload";
+import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import { describeProfile, personJsonLd } from "@/lib/seo";
@@ -10,16 +10,14 @@ import PoliticianProfileClient from "./PoliticianProfileClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
-async function fetchProfile(id: string): Promise<PoliticianProfile | null> {
-  try {
-    const res = await fetch(`${BACKEND}/api/politicians/${encodeURIComponent(id)}`, {
-      next: { revalidate: 120 },
-    });
-    if (!res.ok) return null;
-    return usableRecord<PoliticianProfile>(await res.json(), "identity", "branch");
-  } catch {
-    return null;
-  }
+/** Null only when there is no such politician; an outage throws (fetchRecord). */
+function fetchProfile(id: string): Promise<PoliticianProfile | null> {
+  return fetchRecord<PoliticianProfile>(
+    `${BACKEND}/api/politicians/${encodeURIComponent(id)}`,
+    { next: { revalidate: 120 } },
+    "identity",
+    "branch"
+  );
 }
 
 /** A member's score, component by component, with the numbers each

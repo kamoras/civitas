@@ -1045,10 +1045,16 @@ the pending list).
   " — Civitas". Search-facing wording lives in `src/lib/seo.ts`, not in
   `page.tsx` (Next rejects extra exports there).
 - A missing record is a real 404 via `notFound()` plus `noindex`, never a
-  200 page that says "not found".
+  200 page that says "not found". The converse holds too: an unreachable
+  backend or a 5xx is an error page (`app/error.tsx`), never a 404 — fetch
+  detail records through `fetchRecord` (`src/lib/ssrPayload.ts`), which
+  returns null only for a 404.
 - `sitemap.xml` is rendered per request from `GET /api/sitemap` — never
   prerendered, since `next build` can't reach the backend. Add a new
   detail-page type there, or search engines have no way to find it.
+  Explore documents have no upper bound, so they are listed a page at a
+  time (`/sitemaps/explore/{n}`, from `GET /api/sitemap/explore`), and
+  `robots.txt` names `/sitemap-index.xml`, which lists both.
 - `robots.txt` must not disallow `/api/`: Googlebot's renderer honours it for
   the XHRs the client-rendered pages make, and would index them empty.
 

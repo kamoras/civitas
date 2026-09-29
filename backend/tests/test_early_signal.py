@@ -426,3 +426,32 @@ class TestExpireStaleDevelopingIssues:
         expired = es.expire_stale_developing_issues(db_session, utcnow())
         assert expired == 0
         assert row.is_current is True
+
+
+class TestRuleAbstractSentences:
+    """The summary quotes the abstract by whole sentences: a period inside
+    "U.S." or after an initial is not the end of one."""
+
+    def test_a_dotted_abbreviation_does_not_end_the_quote(self):
+        # The only ". " inside the limit is the one in "U.S.": quoting up to
+        # it would present "The rule applies across the U.S." as a sentence.
+        abstract = "The rule applies across the U.S. Fish and Wildlife Service " + "lands and waters " * 30 + "alike."
+        assert es._first_sentences(abstract, 400) == ""
+
+    def test_an_initial_or_a_title_does_not_end_the_quote(self):
+        abstract = "Rules by John Q. Public and Acme Inc. Holdings take effect. " + "More text " * 60
+        assert es._first_sentences(abstract, 400) == (
+            "Rules by John Q. Public and Acme Inc. Holdings take effect."
+        )
+
+    def test_a_citation_before_a_number_is_not_a_sentence_end(self):
+        abstract = "It implements 42 U.S.C. 7401 as amended. " + "More text " * 60
+        assert es._first_sentences(abstract, 400) == "It implements 42 U.S.C. 7401 as amended."
+
+    def test_no_whole_sentence_within_the_limit_quotes_nothing(self):
+        assert es._first_sentences("word " * 200, 400) == ""
+
+
+def test_a_rule_record_missing_its_number_and_date_leaves_them_out():
+    _, _, facts = es._compose_developing_rule_issue(_rule(document_number="", publication_date=""))
+    assert facts[1] == "Federal Register document."

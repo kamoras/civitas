@@ -90,3 +90,33 @@ def test_bills_match_the_bills_feed_and_are_deduped(db_session):
 )
 def test_iso_date_never_emits_an_invalid_lastmod(value, expected):
     assert _iso_date(value) == expected
+
+
+def test_lists_the_days_congress_met(db_session):
+    from app.models import CongressDay
+
+    db_session.add_all([
+        CongressDay(date="2026-09-22", chamber="senate", in_session=True, source="digest"),
+        CongressDay(date="2026-09-21", chamber="house", in_session=False, source="digest"),
+    ])
+    db_session.commit()
+
+    assert _body(db_session)["congressDays"] == ["2026-09-22"]
+
+
+def test_explore_documents_are_counted_and_listed_a_page_at_a_time(db_session, monkeypatch):
+    from app.api import sitemap
+    from app.models import ExploreDocument
+
+    monkeypatch.setattr(sitemap, "EXPLORE_SITEMAP_PAGE", 2)
+    for n in range(3):
+        db_session.add(ExploreDocument(doc_type="Final Rule", source="Federal Register", title=f"R{n}",
+                                       summary="", body="", date=f"2026-01-0{n + 1}", chamber="Regulatory"))
+    db_session.commit()
+
+    body = _body(db_session)
+    assert (body["exploreDocuments"], body["explorePageSize"]) == (3, 2)
+    first = json.loads(sitemap.sitemap_explore(page=0, db=db_session).body)["documents"]
+    second = json.loads(sitemap.sitemap_explore(page=1, db=db_session).body)["documents"]
+    assert [d["lastmod"] for d in first + second] == ["2026-01-01", "2026-01-02", "2026-01-03"]
+    assert len(first) == 2 and len(second) == 1
