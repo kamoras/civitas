@@ -224,9 +224,10 @@ def calibrate_and_store(db) -> dict | None:
     try:
         whole = index_is_whole()
     except Exception as error:
-        if not is_busy_error(error):
-            raise
-        logger.warning("Explore vector index busy — keeping the previous ranking calibration")
+        if is_busy_error(error):
+            logger.warning("Explore vector index busy — keeping the previous ranking calibration")
+        else:
+            logger.exception("Explore vector index unreadable — keeping the previous ranking calibration")
         return None
     if not whole:
         # The semantic channel answers nothing while its index isn't a

@@ -393,6 +393,15 @@ class TestEnsureExploreIndex:
         monkeypatch.setattr(vector_store, "start_writer", held)
         vector_store.ensure_explore_index(lambda: None)  # doesn't raise
 
+    def test_a_runs_top_up_holds_the_rebuild_lock(self, vec_env, monkeypatch):
+        # A start's rebuild waits for it rather than embed the same
+        # documents beside it.
+        seen = []
+        monkeypatch.setattr(vector_store, "embed_explore_documents",
+                            lambda docs: seen.append(vector_store.is_rebuilding()) or 0)
+        vector_store.top_up_explore_index([_doc(1, "x")])
+        assert seen == [True] and not vector_store.is_rebuilding()
+
     def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
         # Two overlapping would each clear what the other built.
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")

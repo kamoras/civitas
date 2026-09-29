@@ -49,11 +49,11 @@ from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
 from app.pipeline.vector_store import (
     delete_explore_vectors,
-    embed_explore_documents,
     explore_embed_dict,
     index_is_whole,
     is_busy_error,
     rebuild_explore_index,
+    top_up_explore_index,
     wait_for_rebuild,
     get_embedded_explore_ids,
 )
@@ -371,13 +371,133 @@ def _purge_duplicate_floor_speeches(db: Session) -> list[int]:
     return doomed
 
 
-# api_cache: ids whose re-embed a skipped embed step still owes, kept until
-# a run pays it.
+async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
+    """Step 7: bring the vector index up to the corpus; returns how many
+    documents were embedded.
+
+    An index that isn't a complete build by this model (a rebuild that
+    failed or was cut off, a model change) is rebuilt whole, here and under
+    this run's lease, rather than topped up: an incremental pass can't make
+    it whole, and calibration measures it. Otherwise only documents not yet
+    in it (plus ones whose body was backfilled) are encoded — re-encoding
+    the whole corpus every night is what made the old 72h skip gate look
+    necessary.
+
+    A look or a rebuild that only meets a lock skips the step: the index may
+    well be whole (no reason to drop it) and may not be (a top-up beside a
+    rebuild would insert chunks twice). What the backfill changed is then
+    owed to the next run, since nothing else would re-embed it — the
+    backfill won't return those documents again, and they are in the index
+    already.
+    """
+    from app.ops_alerts import resolve_ops_alert, send_ops_alert
+    from app.time_utils import utcnow
+
+    owed = await asyncio.to_thread(_owed_reembeds, db)
+    refreshed_ids = refreshed_ids | owed
+    whole = await _index_is_whole_or_none()
+    outcome = "skipped"  # or "failed", "rebuilt", "topped up"
+    embedded = 0
+    if whole is False:
+        logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
+        try:
+            # Waiting out one already running (a start's): embedding beside
+            # it would insert every missing document's chunks twice.
+            rebuilt = await asyncio.to_thread(rebuild_explore_index, SessionLocal, wait=True)
+        except Exception as exc:
+            if is_busy_error(exc):
+                logger.warning("Explore pipeline: vector index busy — rebuild left to the next run (%s)", exc)
+            else:
+                logger.exception("Explore pipeline: vector index rebuild failed")
+                outcome = "failed"
+                await asyncio.to_thread(
+                    send_ops_alert,
+                    "Explore vector index rebuild failed",
+                    f"The Explore run's rebuild of the search vector index raised ({type(exc).__name__}: "
+                    f"{exc}). Semantic search stays off (keyword-only) until a rebuild completes; the next "
+                    "Explore run or pipeline start tries again.",
+                    dedupe_key=f"explore-index-rebuild-{utcnow():%Y-%m-%d}",
+                    condition="explore-index-rebuild",
+                )
+        else:
+            if rebuilt is not None:
+                outcome, embedded = "rebuilt", rebuilt
+            else:
+                # A start's rebuild finished it while this waited: topped up
+                # below. That rebuild reads documents by id without this
+                # run's lease, so one this run deleted meanwhile may have
+                # been embedded after the purge above.
+                await asyncio.to_thread(_purge_orphaned_vectors, db)
+                whole = True
+    if whole is True:
+        embedded = await _top_up(db, refreshed_ids)
+        outcome = "topped up"
+
+    if outcome == "skipped" or outcome == "failed":
+        if refreshed_ids:
+            await asyncio.to_thread(_owe_reembeds, db, refreshed_ids)
+        if outcome == "skipped":
+            logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
+    else:
+        if owed:
+            await asyncio.to_thread(_owe_reembeds, db, set())
+        # Whole now, by this run or a start's: a failed rebuild's alert ends.
+        await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
+    return embedded
+
+
+def _to_embed(db: Session, refreshed_ids: set[int]) -> list[dict]:
+    all_docs = db.query(ExploreDocument).all()
+    try:
+        already = get_embedded_explore_ids()
+    except Exception:
+        already = set()
+    return [explore_embed_dict(d) for d in all_docs if d.id not in already or d.id in refreshed_ids]
+
+
+async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
+    logger.info("Explore pipeline: embedding documents into vector store...")
+    doc_dicts = await asyncio.to_thread(_to_embed, db, refreshed_ids)
+    # Off the event loop: encoding is pure CPU inside sentence-transformers
+    # and ran for 23 MINUTES in one call against the real corpus (1,557
+    # documents / 11,022 chunks, measured on the Pi 2026-09-20). Awaiting it
+    # inline froze the whole FastAPI process, so /api/health stopped
+    # answering, Swarm's healthcheck (every 30s, 5s timeout, 3 retries -- so
+    # ~90s of unresponsiveness is fatal) failed, and the container was
+    # SIGKILLed mid-run (exit 137, "unhealthy container") -- which is what
+    # actually broke every nightly run from 2026-09-02 onward. The killed
+    # process left its run row stuck "active", so the 12h "hang" in the
+    # admin view was the NEXT night's staleness sweep, not real running
+    # time; House/Stock/Election never ran again because they are chained
+    # behind this phase. Same asyncio.to_thread treatment
+    # donor_classifier_ai.py and api/explore.py already give their own
+    # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
+    # start's rebuild waits for it rather than embed beside it.
+    return await asyncio.to_thread(top_up_explore_index, doc_dicts)
+
+
+# api_cache: ids whose re-embed a skipped embed step still owes. Rewritten by
+# every run that skips again, so the api_cache prune (by age) can't take it
+# while it is still owed.
 _REEMBED_OWED_KEY = "reembed_owed"
 _OWED_KEPT_H = 24 * 365
 
 
-async def _index_is_whole_or_none(*, quiet: bool = False) -> bool | None:
+def _owed_reembeds(db: Session) -> set[int]:
+    return set(api_cache_get(db, "explore", _REEMBED_OWED_KEY, max_age_hours=_OWED_KEPT_H) or [])
+
+
+def _owe_reembeds(db: Session, ids: set[int]) -> None:
+    """Record `ids` as owed — or, empty, clear the record (deleted: an empty
+    payload never overwrites one in api_cache)."""
+    if ids:
+        api_cache_set(db, "explore", _REEMBED_OWED_KEY, sorted(ids))
+    else:
+        db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _REEMBED_OWED_KEY).delete()
+        db.commit()
+
+
+async def _index_is_whole_or_none() -> bool | None:
     """Whether the vector index is a complete build: False when it can't be
     read (a rebuild recreates it), None when it is only locked — after
     waiting out any rebuild in this process and looking once more."""
@@ -386,8 +506,7 @@ async def _index_is_whole_or_none(*, quiet: bool = False) -> bool | None:
             return await asyncio.to_thread(index_is_whole)
         except Exception as error:
             if not is_busy_error(error):
-                if not quiet:
-                    logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
+                logger.exception("Explore pipeline: could not read the vector index — rebuilding it")
                 return False
             if attempt == 1:
                 await asyncio.to_thread(wait_for_rebuild)
@@ -647,94 +766,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # check-and-deploy polls: it scans every chunk's document id.
         await asyncio.to_thread(_purge_orphaned_vectors, db)
 
-        # An index that isn't a complete build by this model (a rebuild that
-        # failed or was cut off, a model change) is rebuilt whole, here and
-        # under this run's lease, rather than topped up: an incremental pass
-        # can't make it whole, and calibration below measures it.
-        # Documents whose bodies an earlier run backfilled while its embed
-        # step was skipped: nothing else would re-embed them — the backfill
-        # won't return them again, and they are in the index already.
-        refreshed_ids |= set(api_cache_get(db, "explore", _REEMBED_OWED_KEY, max_age_hours=_OWED_KEPT_H) or [])
-        rebuilt, rebuild_failed = None, False
-        whole = await _index_is_whole_or_none()
-        if whole is None:
-            # Busy even after waiting out any rebuild here: neither rebuilt
-            # (it may well be whole) nor topped up (it may not be, and a
-            # rebuild could start beside it). The next run looks again, and
-            # re-embeds what this one's backfill changed.
-            logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
-            if refreshed_ids:
-                api_cache_set(db, "explore", _REEMBED_OWED_KEY, sorted(refreshed_ids))
-            rebuilt = 0
-        elif not whole:
-            logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
-            try:
-                # Waiting out one already running (a start's): embedding beside
-                # it would insert every missing document's chunks twice.
-                rebuilt = await asyncio.to_thread(rebuild_explore_index, SessionLocal, wait=True)
-            except Exception as exc:
-                logger.exception("Explore pipeline: vector index rebuild failed")
-                from app.ops_alerts import send_ops_alert
-                from app.time_utils import utcnow
-
-                await asyncio.to_thread(
-                    send_ops_alert,
-                    "Explore vector index rebuild failed",
-                    f"The Explore run's rebuild of the search vector index raised ({type(exc).__name__}: "
-                    f"{exc}). Semantic search stays off (keyword-only) until a rebuild completes; the next "
-                    "Explore run or pipeline start tries again.",
-                    dedupe_key=f"explore-index-rebuild-{utcnow():%Y-%m-%d}",
-                    condition="explore-index-rebuild",
-                )
-                rebuilt, rebuild_failed = 0, True
-            if rebuilt is None:
-                # Waited out a start's rebuild, which reads documents by id
-                # without this run's lease: one this run deleted meanwhile
-                # may have been embedded after the purge above.
-                await asyncio.to_thread(_purge_orphaned_vectors, db)
-        # Resolved only on a look that answered: a busy one says nothing.
-        if whole or (whole is False and await _index_is_whole_or_none(quiet=True)):
-            from app.ops_alerts import resolve_ops_alert
-
-            await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
-        if rebuilt is not None:
-            embedded = rebuilt
-        else:
-            # Only documents not yet in the collection (plus ones whose body
-            # was just backfilled) are encoded — re-encoding the whole corpus
-            # every night is what made the old 72h skip gate look necessary.
-            logger.info("Explore pipeline: embedding documents into vector store...")
-            all_docs = db.query(ExploreDocument).all()
-            try:
-                _already_embedded = get_embedded_explore_ids()
-            except Exception:
-                _already_embedded = set()
-            all_docs = [
-                d for d in all_docs
-                if d.id not in _already_embedded or d.id in refreshed_ids
-            ]
-            doc_dicts = [explore_embed_dict(d) for d in all_docs]
-            # Off the event loop: encoding is pure CPU inside sentence-
-            # transformers and ran for 23 MINUTES in one call against the real
-            # corpus (1,557 documents / 11,022 chunks, measured on the Pi
-            # 2026-09-20). Awaiting it inline froze the whole FastAPI process,
-            # so /api/health stopped answering, Swarm's healthcheck (every 30s,
-            # 5s timeout, 3 retries -- so ~90s of unresponsiveness is fatal)
-            # failed, and the container was SIGKILLed mid-run
-            # (exit 137, "unhealthy container") -- which is what actually
-            # broke every nightly run from 2026-09-02 onward. The killed
-            # process left its run row stuck "active", so the 12h "hang" in
-            # the admin view was the NEXT night's staleness sweep, not real
-            # running time; House/Stock/Election never ran again because they
-            # are chained behind this phase. Same asyncio.to_thread treatment
-            # donor_classifier_ai.py and api/explore.py already give their own
-            # CPU-bound calls.
-            embedded = await asyncio.to_thread(embed_explore_documents, doc_dicts)
-        if whole is not None and not rebuild_failed and refreshed_ids:
-            # Re-embedded now, by the top-up or the rebuild: owed no longer.
-            # Deleted, not set empty — an empty payload never overwrites one.
-            db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _REEMBED_OWED_KEY).delete()
-            db.commit()
+        embedded = await _embed_step(db, refreshed_ids)
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill

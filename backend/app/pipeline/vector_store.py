@@ -1060,6 +1060,14 @@ _BUSY_CHECKS = 10
 _BUSY_CHECK_EVERY_S = 30.0
 
 
+def top_up_explore_index(docs: list[dict]) -> int:
+    """embed_explore_documents for an Explore run's incremental step, under
+    the rebuild lock: a start's rebuild waits for it (and then looks again)
+    rather than embed the same documents beside it."""
+    with _rebuild_lock:
+        return embed_explore_documents(docs)
+
+
 def wait_for_rebuild() -> None:
     """Return once no rebuild is running in this process."""
     with _rebuild_lock:
@@ -1094,8 +1102,8 @@ def _refit_after_a_start_rebuild(db_session_factory) -> None:
 
 
 def is_rebuilding() -> bool:
-    """Whether a rebuild of the explore index is running in this process
-    (the pipeline's): check-and-deploy.sh waits it out like a run."""
+    """Whether the explore index is being rebuilt, or topped up, in this
+    process (the pipeline's): check-and-deploy.sh waits it out like a run."""
     return _rebuild_lock.locked()
 
 
@@ -1134,7 +1142,8 @@ def ensure_explore_index(db_session_factory) -> None:
             # Locked a moment (a rollout's overlap): no reason to drop an
             # index that may well be whole — nor to leave one that isn't for
             # a day. Looked at again shortly (main runs this on a thread).
-            logger.warning("Explore index busy at start (%s) — checking again", error)
+            if attempt < _BUSY_CHECKS - 1:
+                logger.warning("Explore index busy at start (%s) — checking again", error)
     if whole is None:
         logger.warning("Explore index stayed busy at start — the next Explore run checks it")
         return
@@ -1152,7 +1161,9 @@ def ensure_explore_index(db_session_factory) -> None:
             finally:
                 db.close()
             logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
-            if rebuild_explore_index(db_session_factory) is None:
+            # Waiting out an Explore run's top-up (or its rebuild) rather
+            # than embedding beside it; None when that left it whole.
+            if rebuild_explore_index(db_session_factory, wait=True) is None:
                 return
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
