@@ -7,7 +7,7 @@ import { focusTabWhenSelected } from "@/lib/tabFocus";
 
 export type Branch = "senate" | "house" | "president" | "scotus";
 
-const BRANCHES: { key: Branch; label: string }[] = [
+export const BRANCHES: { key: Branch; label: string }[] = [
   { key: "senate", label: "SENATE" },
   { key: "house", label: "HOUSE" },
   { key: "president", label: "PRESIDENT" },

@@ -115,6 +115,7 @@ function SenatorSelector({
       <div className="flex gap-2">
         <button
           onClick={() => handleChamberToggle("senate")}
+          aria-pressed={chamber === "senate"}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "senate" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
@@ -123,6 +124,7 @@ function SenatorSelector({
         </button>
         <button
           onClick={() => handleChamberToggle("house")}
+          aria-pressed={chamber === "house"}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "house" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
@@ -167,6 +169,7 @@ function SenatorSelector({
             <button
               key={s.id}
               onClick={() => onSelect(s, chamber)}
+              aria-pressed={s.id === selectedId}
               className={`w-full text-left px-3 py-2 border transition-colors font-mono text-xs ${
                 s.id === selectedId ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}

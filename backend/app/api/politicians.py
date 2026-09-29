@@ -21,6 +21,7 @@ Senate/House leaderboards immediately, but stay in this directory for the
 whole grace period. Presidents are never removed by any of that.
 """
 import json
+import logging
 import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -37,6 +38,8 @@ from app.pipeline.analyze.president_scorer import compute_president_overall_scor
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.services.justice_service import justice_overall
 from app.services.senator_service import STATE_NAMES
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -353,6 +356,9 @@ def _build_scorecard(branch: str, pid: str, db: Session) -> dict | None:
             j = get_justice(db, pid)
             return j.model_dump(by_alias=True) if j else None
     except Exception:
+        # The profile still renders without its scorecard, but a failure
+        # here is a bug in a service, not a missing record: say so.
+        logger.exception("Scorecard for %s (%s) failed to build", pid, branch)
         return None
     return None
 

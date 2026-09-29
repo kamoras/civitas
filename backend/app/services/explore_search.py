@@ -51,6 +51,7 @@ import re
 from sqlalchemy import text
 
 from app.config_definitions import EXPLORE_RRF_K
+from app.models import ExploreDocument
 from app.pipeline.explore_ranking import (
     candidate_pool,
     fingerprint_shape,
@@ -214,6 +215,49 @@ def _apply_diversity(ranked: list[dict], cap: int) -> list[dict]:
         seen[key] = seen.get(key, 0) + 1
         (kept if seen[key] <= cap else demoted).append(doc)
     return kept + demoted
+
+
+def browse_documents(
+    db,
+    politician_id: str,
+    *,
+    limit: int = 20,
+    doc_type: str | None = None,
+    chamber: str | None = None,
+    commentable: bool = False,
+) -> dict:
+    """One member's documents, newest first, with no query: what a profile's
+    "view all documents" link opens. Same response shape as hybrid_search,
+    with no retrieval channel involved (so no distance, no matched terms)."""
+    today = comment_period_today()
+    query = db.query(ExploreDocument.id).filter(ExploreDocument.politician_id == politician_id)
+    if doc_type:
+        query = query.filter(ExploreDocument.doc_type == doc_type)
+    if chamber or commentable:
+        query = query.filter(ExploreDocument.chamber == (chamber or "Regulatory"))
+    if commentable:
+        query = query.filter(
+            ExploreDocument.comment_url.isnot(None), ExploreDocument.comment_url != "",
+            ExploreDocument.comments_close_on >= today,
+        )
+    ids = [row.id for row in query.order_by(ExploreDocument.date.desc(), ExploreDocument.id.desc()).limit(limit)]
+    hydrated = _hydrate(db, ids)
+    results = []
+    for doc_id in ids:
+        doc = hydrated.get(doc_id)
+        if doc is None:
+            continue
+        doc.pop("_authority", None)
+        doc.pop("_bodyHead", None)
+        doc.update(matchedBy=[], distance=None, snippet=doc["summary"], duplicateCount=0)
+        results.append(doc)
+    return {
+        "results": results,
+        "count": len(results),
+        "indexReady": True,
+        "semanticUnavailable": False,
+        "channels": {"semantic": 0, "keyword": 0},
+    }
 
 
 def hybrid_search(

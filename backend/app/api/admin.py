@@ -1416,7 +1416,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
             try:
                 clear_explore()
             except Exception:
-                pass
+                logger.warning("Explore re-embed: clearing the old vectors failed", exc_info=True)
 
             all_docs = db.query(ExploreDocument).all()
             doc_dicts = [

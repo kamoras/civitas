@@ -29,8 +29,8 @@ class TestFetchMeasuresParsing:
 
     def _measures(self):
         tree = lxml_html.fromstring(FIXTURE_HTML)
-        by_number = mo._split_by_measure(mo._general_section_elements(tree))
-        return {n: mo._parse_measure(n, els) for n, els in by_number.items()}
+        by_number = mo.split_measures(mo._general_section_elements(tree))
+        return {n: mo._parse_measure(n, els, kind) for n, (kind, els) in by_number.items()}
 
     def test_finds_exactly_the_three_real_november_measures(self):
         measures = self._measures()
