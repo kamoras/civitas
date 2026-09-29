@@ -47,6 +47,7 @@ from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.election_pipeline import current_election_cycle
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
+from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
 from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
@@ -1129,10 +1130,14 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         key=lambda r: r["district"] if r["district"] is not None else -1,
     )
 
+    # Only the election this page is about. Rows from an earlier cycle
+    # (or a primary) stay in the table until pruned and must never render
+    # under this election's heading. Removed measures for THIS election
+    # are still returned, and render as removed for their grace window.
     measures = (
         db.query(BallotMeasure)
-        .filter(BallotMeasure.state == state)
-        .order_by(BallotMeasure.election_date, BallotMeasure.number)
+        .filter(BallotMeasure.state == state, BallotMeasure.election_date == election_day)
+        .order_by(BallotMeasure.number)
         .all()
     )
     coverage = (
@@ -1190,7 +1195,21 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "measureCoverage": {
             "status": coverage.status if coverage else MeasureCoverage.NOT_YET_COVERED,
             "sourceName": coverage.source_name if coverage else None,
-            "checkedAt": _iso_utc(coverage.checked_at) if coverage else None,
+            # When what is shown was last established by a read that
+            # worked. A failed read doesn't move it, so measures still on
+            # the page after tonight's failure say how old they are.
+            "checkedAt": _iso_utc(coverage.last_success_at) if coverage and coverage.last_success_at else None,
+            # When a read was last attempted, failures included.
+            "lastAttemptAt": _iso_utc(coverage.checked_at) if coverage else None,
+            # Whose determination the status is: "source" (the state's own
+            # document said so) or "operator" (our operator accepted the
+            # absence after checking — admin accept-absence). The note
+            # itself stays internal.
+            "basis": "operator" if coverage and coverage.operator_note else "source",
+            # Why this state's measures are not read at all (its official
+            # site blocks automated access, or it publishes no list),
+            # written for a voter; null for a state Civitas reads.
+            "unreadReason": unread_reason(state),
         },
         "officialLookup": lookup_for_state(state),
         "statewideRaces": statewide_races,

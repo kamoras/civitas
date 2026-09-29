@@ -1552,8 +1552,9 @@ class ElectionPipelineRun(Base):
 
 
 class BallotMeasure(Base):
-    """One statewide ballot measure, as published by an official or
-    reference source (see pipeline/fetch/ballot_measures.py).
+    """One statewide ballot measure, as published by the state's own
+    office (see pipeline/fetch/ballot_measures_pdf.py and the per-state
+    readers it dispatches to).
 
     Keyed on ELECTION DATE, not cycle year. Ohio can run an "Issue 1" in a
     May primary and a different "Issue 1" in the November general; a
@@ -1575,8 +1576,8 @@ class BallotMeasure(Base):
     __tablename__ = "ballot_measures"
     __table_args__ = (
         # Partial, not a plain UniqueConstraint: `number` defaults to ""
-        # whenever a source doesn't publish one yet (see
-        # pipeline/fetch/ballot_measures.py's `_text` fallback), and a
+        # whenever a source doesn't publish one (North Carolina, South
+        # Carolina and Kentucky print none), and a
         # state routinely has more than one such measure at once early in
         # a cycle. A non-partial constraint on (state, election_date,
         # number) collides on the second blank-numbered measure and the
@@ -1675,8 +1676,25 @@ class MeasureCoverage(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=NOT_YET_COVERED)
     source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     measure_count: Mapped[int] = mapped_column(Integer, default=0)
+    # When a read was last ATTEMPTED — failures included.
     checked_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # When the status shown was last established by a read that worked.
+    # Never advanced by an ingest failure, so a page still showing earlier
+    # measures after a failed read can say how old they are.
+    last_success_at: Mapped[datetime | None] = mapped_column(nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A read that shrank past MEASURE_SHRINK_FLOOR is held back until the
+    # same shorter list repeats (election_pipeline._accept_shrink): the
+    # ids of that list (JSON) and how many consecutive runs returned it.
+    pending_shrink: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shrink_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Set when an operator accepted this state's absence for the election
+    # (admin accept-absence): who/why, verbatim. A reader answering again
+    # clears it.
+    operator_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Every accept-absence action ever taken for this state/election (JSON
+    # list of {at, note, force, marked}) — the audit trail. Never cleared.
+    operator_actions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class PipelinePhaseTiming(Base):

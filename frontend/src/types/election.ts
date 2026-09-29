@@ -160,6 +160,9 @@ export interface BallotMeasure {
   origin: string | null;
   /** certified | removed | withdrawn | under_appeal. */
   status: string;
+  /** The state's own ballot title, only when the source supplies one —
+   * null otherwise. `title` above is a display label and may be one the
+   * reader composed ("Proposition 3"); it is never shown as official. */
   officialTitle: string | null;
   officialSummary: string | null;
   fiscalImpact: string | null;
@@ -169,10 +172,11 @@ export interface BallotMeasure {
    * "approved" retains the law under challenge). */
   yesMeans: string | null;
   noMeans: string | null;
-  /** Who drafted the title / fiscal note (legislature, attorney general,
-   * legislative staff…). Rendered with the quote: ballot titles are
-   * frequently litigated as slanted, so naming the author is more
-   * neutral than the bare quote. */
+  /** Who drafted the quoted text (legislature, attorney general,
+   * legislative staff…): the official title's drafter when there is an
+   * official title, otherwise the official summary's. Rendered with that
+   * quote: ballot titles are frequently litigated as slanted, so naming
+   * the author is more neutral than the bare quote. */
   titleAuthority: string | null;
   fiscalAuthority: string | null;
   sourceName: string;
@@ -186,7 +190,18 @@ export interface BallotMeasure {
 export interface MeasureCoverage {
   status: "covered" | "confirmed_none" | "not_yet_covered" | "ingest_failed";
   sourceName: string | null;
+  /** When the status (and any measures shown) was last established by a
+   * read that worked. A failed read never moves it. */
   checkedAt: string | null;
+  /** When a read was last attempted, failures included. */
+  lastAttemptAt: string | null;
+  /** Whose determination the status is: the state's own source, or our
+   * operator's (a "none" accepted after the source stopped publishing). */
+  basis?: "source" | "operator";
+  /** Why Civitas does not read this state's measures at all — its official
+   * site blocks automated access, or it publishes no list — written for a
+   * voter. Null for a state that is read. */
+  unreadReason?: string | null;
 }
 
 /** One statewide executive contest (Governor, Attorney General, ...) and

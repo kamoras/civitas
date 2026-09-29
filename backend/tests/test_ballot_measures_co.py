@@ -14,6 +14,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.pipeline.fetch import ballot_measures_co as co
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures_co_bluebook_page6.json").read_text())
@@ -74,3 +76,28 @@ def test_no_fiscal_impact_field_in_this_section():
 
 def test_page_with_no_measures_returns_empty():
     assert co.parse_page(_fake_page([])) == []
+
+
+def test_a_measure_without_its_ballot_title_section_fails_the_document():
+    """The regression: a measure whose "Ballot Title" row wasn't found was
+    skipped (2022's referred-amendment sub-format was documented as
+    "safely dropped"), publishing the Blue Book one measure short."""
+    words = [w for w in FIXTURE if w["text"] != "Title"]
+    with pytest.raises(ValueError):
+        co.parse_page(_fake_page(words))
+
+
+def test_a_blue_book_with_no_measure_is_a_failure_never_none():
+    with pytest.raises(ValueError):
+        co.parse_document([_fake_page([])])
+
+
+def test_the_ballot_title_is_attributed_to_whoever_wrote_it():
+    """The headline is the Legislative Council's; the quoted Ballot Title
+    of a referred measure is the General Assembly's."""
+    for r in co.parse_page(_fake_page(FIXTURE)):
+        assert r["origin"] == "the legislature"
+        assert r["title_authority"] == "Colorado General Assembly"
+        assert r.get("official_title") is None
+    assert co._ballot_title_drafter("citizen initiative") == "Colorado Title Board"
+    assert co._ballot_title_drafter(None) is None
