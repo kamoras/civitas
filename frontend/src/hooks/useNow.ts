@@ -36,10 +36,14 @@ function subscribe(onStoreChange: () => void): () => void {
 }
 
 function getSnapshot(): number {
-  // Seeded on first read, then only ever advanced by the ticker. Returning a
-  // fresh Date.now() on every call would make React see a changed snapshot on
-  // every render and loop forever.
-  if (current === 0) current = Date.now();
+  // Advanced by the ticker while anyone subscribes. With no ticker running
+  // (no subscriber yet, or only disabled readers) it is brought up to date
+  // on read, but at most once a second: returning a fresh Date.now() on
+  // every call would make React see a changed snapshot on every render and
+  // loop forever, while a value left from when the last ticker stopped
+  // could be hours old — the first render of a reader just enabled would
+  // show that stale time for a frame.
+  if (timer === null && Date.now() - current >= 1000) current = Date.now();
   return current;
 }
 

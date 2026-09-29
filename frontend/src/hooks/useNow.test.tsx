@@ -88,4 +88,13 @@ describe("useNow", () => {
     });
     expect(Number(screen.getByTestId("now").textContent)).toBe(Date.parse("2026-11-04T01:00:01Z"));
   });
+
+  it("gives a fresh time to a reader after the ticker stopped long ago", () => {
+    vi.setSystemTime(new Date("2026-11-03T15:00:00Z"));
+    const { unmount } = render(<Clock />);
+    unmount();
+    vi.setSystemTime(new Date("2026-11-04T01:00:00Z"));
+    render(<Clock enabled={false} />);
+    expect(Number(screen.getByTestId("now").textContent)).toBe(Date.parse("2026-11-04T01:00:00Z"));
+  });
 });

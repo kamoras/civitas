@@ -524,6 +524,25 @@ describe("the state page in results mode", () => {
     expect(await screen.findByRole("region", { name: "U.S. House" })).toBeInTheDocument();
   });
 
+  it("starts asking when election day comes near while a campaign page is open", async () => {
+    // Nothing re-renders an idle campaign page, so the page arms its own
+    // wake-up for 36 hours before the day.
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(new Date("2026-11-01T11:00:00Z"));
+    fetchLiveResults.mockResolvedValue(live({ phase: { ...PHASE, phase: "campaign" } }));
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          phase: { phase: "campaign", electionDate: "2026-11-03", resultsUntil: null, lastResultChange: null },
+        })}
+      />
+    );
+    await act(async () => vi.advanceTimersByTime(59 * 60_000));
+    expect(fetchLiveResults).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(1);
+  });
+
   it("asks nothing from a campaign page far from election day", () => {
     render(
       <StateBallotClient

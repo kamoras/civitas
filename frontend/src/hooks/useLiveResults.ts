@@ -37,6 +37,25 @@ export function electionIsNear(
   return now >= day - 36 * HOUR && now < day + 48 * HOUR;
 }
 
+// setTimeout's ceiling (a signed 32-bit ms count, ~24.8 days): a longer
+// wait fires at once. A page open for longer just asks again at the ceiling
+// and re-arms.
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+/** How long until election day becomes near (electionIsNear), capped at
+ * setTimeout's ceiling — so a page opened days before can wake itself then.
+ * Null when that moment has passed (the window is open, or over). */
+export function msUntilNear(
+  phase: Pick<ElectionPhaseInfo, "electionDate"> | null | undefined,
+  now: number = Date.now()
+): number | null {
+  if (!phase?.electionDate) return null;
+  const day = Date.parse(`${phase.electionDate}T00:00:00Z`);
+  if (Number.isNaN(day)) return null;
+  const wait = day - 36 * HOUR - now;
+  return wait > 0 ? Math.min(wait, MAX_TIMEOUT_MS) : null;
+}
+
 /** "every minute", "every 2 minutes" — the retry wait, for a status line
  * that has to say how often the page is really asking. */
 export function describeInterval(ms: number): string {
@@ -47,8 +66,9 @@ export function describeInterval(ms: number): string {
 /**
  * The live count, polled while the page shows results and the tab is
  * visible. Outside the results window one request answers "campaign" and
- * nothing more is asked — unless election day is near, when it asks again
- * every CAMPAIGN_POLL_MS so an open page switches to results by itself.
+ * the next ask waits for election day to come near (msUntilNear); from then
+ * it asks every CAMPAIGN_POLL_MS so an open page switches to results by
+ * itself.
  * `enabled: false` asks nothing at all (a page that already knows from its
  * server render that there are no results). A failed request is retried
  * on a growing backoff (RETRY_BACKOFF_MS; `retryMs` says the current wait).
@@ -75,8 +95,11 @@ export function useLiveResults(
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     // The wait for the next scheduled ask; null once there's nothing more
-    // to ask (a campaign far from election day).
+    // to ask (a campaign whose election has passed without results).
     let nextWait: number | null = null;
+    // The next ask is the one election day's approach is due to make, not
+    // a poll: a tab shown again doesn't bring it forward.
+    let untilNear = false;
     // When the next ask is due (ms since epoch), so a tab shown again
     // mid-backoff waits out the rest rather than asking at once.
     let nextAt = 0;
@@ -90,12 +113,14 @@ export function useLiveResults(
           setData(next);
           setError(null);
           setRetryMs(null);
+          const polling = showsResults(next.phase) || electionIsNear(next.phase);
           schedule(
             showsResults(next.phase)
               ? RESULTS_POLL_MS
-              : electionIsNear(next.phase)
+              : polling
                 ? CAMPAIGN_POLL_MS
-                : null
+                : msUntilNear(next.phase),
+            !polling
           );
         })
         .catch((err: Error) => {
@@ -108,23 +133,24 @@ export function useLiveResults(
           schedule(wait);
         });
     };
-    const schedule = (wait: number | null) => {
+    const schedule = (wait: number | null, isUntilNear = false) => {
       nextWait = wait;
+      untilNear = isUntilNear;
       nextAt = wait != null ? Date.now() + wait : 0;
       if (timer) clearTimeout(timer);
       timer = null;
       if (wait != null && document.visibilityState === "visible") timer = setTimeout(load, wait);
     };
     const onVisible = () => {
-      // Catch up only if the page was still asking — a campaign page that
-      // got its one answer asks nothing more on a tab switch. After a
-      // success a tab shown again asks at once; after a failure only once
-      // the backoff's wait is up, so a failing endpoint isn't asked again
-      // on every tab switch.
+      // Catch up only if the page was still asking. After a success a tab
+      // shown again asks at once; after a failure only once the backoff's
+      // wait is up, so a failing endpoint isn't asked again on every tab
+      // switch; and a campaign page far from election day waits for the day
+      // to come near, asking nothing on a tab switch.
       if (timer) clearTimeout(timer);
       timer = null;
       if (document.visibilityState !== "visible" || nextWait == null) return;
-      const due = failures > 0 ? nextAt - Date.now() : 0;
+      const due = failures > 0 || untilNear ? nextAt - Date.now() : 0;
       if (due <= 0) load();
       else timer = setTimeout(load, due);
     };

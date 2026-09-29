@@ -5,6 +5,7 @@ import {
   RESULTS_POLL_MS,
   describeInterval,
   electionIsNear,
+  msUntilNear,
   useLiveResults,
 } from "./useLiveResults";
 
@@ -113,6 +114,34 @@ describe("useLiveResults", () => {
     expect(fetchLiveResults).toHaveBeenCalledTimes(2);
   });
 
+  it("wakes a campaign page when election day comes near, and polls from then", async () => {
+    // Open 12 days out: one answer, then nothing until 36h before the day.
+    vi.setSystemTime(new Date("2026-10-20T12:00:00Z"));
+    fetchLiveResults.mockResolvedValue(phase("campaign"));
+    renderHook(() => useLiveResults());
+    await act(async () => {});
+    expect(fetchLiveResults).toHaveBeenCalledTimes(1);
+    const near = Date.parse("2026-11-01T12:00:00Z");
+    await act(async () => vi.advanceTimersByTime(near - Date.now() - 1));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTime(CAMPAIGN_POLL_MS));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(3);
+  });
+
+  it("re-arms at setTimeout's ceiling for an election more than 24 days out", async () => {
+    vi.setSystemTime(new Date("2026-06-01T12:00:00Z"));
+    fetchLiveResults.mockResolvedValue(phase("campaign"));
+    renderHook(() => useLiveResults());
+    await act(async () => {});
+    await act(async () => vi.advanceTimersByTime(2 ** 31 - 1));
+    // One ask at the ceiling (still far), none at once on arming.
+    expect(fetchLiveResults).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTime(1000));
+    expect(fetchLiveResults).toHaveBeenCalledTimes(2);
+  });
+
   it("asks nothing more on a tab switch once a campaign answer is in", async () => {
     fetchLiveResults.mockResolvedValue(phase("campaign"));
     renderHook(() => useLiveResults());
@@ -177,6 +206,15 @@ describe("electionIsNear", () => {
 });
 
 describe("describeInterval", () => {
+  it("says how long until election day comes near, and nothing once it has", () => {
+    const p = { electionDate: "2026-11-03" };
+    expect(msUntilNear(p, Date.parse("2026-11-01T11:00:00Z"))).toBe(3_600_000);
+    expect(msUntilNear(p, Date.parse("2026-11-01T12:00:00Z"))).toBeNull();
+    expect(msUntilNear(p, Date.parse("2026-11-10T12:00:00Z"))).toBeNull();
+    expect(msUntilNear(p, Date.parse("2025-01-01T00:00:00Z"))).toBe(2 ** 31 - 1);
+    expect(msUntilNear(null)).toBeNull();
+  });
+
   it("names the wait in minutes", () => {
     expect(describeInterval(60_000)).toBe("every minute");
     expect(describeInterval(300_000)).toBe("every 5 minutes");

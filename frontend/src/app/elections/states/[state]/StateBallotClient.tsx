@@ -17,7 +17,7 @@ import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
 import StateResults from "@/components/elections/results/StateResults";
-import { electionIsNear, useLiveResults } from "@/hooks/useLiveResults";
+import { electionIsNear, msUntilNear, useLiveResults } from "@/hooks/useLiveResults";
 import { useHashAt } from "@/hooks/useHashAt";
 import { useNow } from "@/hooks/useNow";
 import { feedFailed, pollsClosed, pollsStillOpen, showsResults } from "@/lib/results";
@@ -1243,11 +1243,24 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // From election day the page leads with the count (backend election_phase).
   // The server render (ISR) says which, so a campaign-season page asks
   // nothing — except near election day, when it keeps asking (slowly) so a
-  // page left open switches to the count by itself. An open page follows
-  // the live phase into results; one rendered in results mode stays there
-  // after the window closes, and StateResults says the count has ended.
-  // eslint-disable-next-line react-hooks/purity -- read once per render; a stale "near" only delays the first ask to the next render
-  const askForResults = showsResults(ballot.phase) || electionIsNear(ballot.phase, Date.now());
+  // page left open switches to the count by itself. A page opened before
+  // then wakes itself when the day comes near (msUntilNear): nothing else
+  // re-renders an idle campaign page. An open page follows the live phase
+  // into results; one rendered in results mode stays there after the window
+  // closes, and StateResults says the count has ended.
+  const [nearNow, setNearNow] = useState(() => electionIsNear(ballot.phase, Date.now()));
+  useEffect(() => {
+    if (nearNow) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      const wait = msUntilNear(ballot.phase, Date.now());
+      if (wait != null) timer = setTimeout(arm, wait);
+      else if (electionIsNear(ballot.phase, Date.now())) setNearNow(true);
+    };
+    timer = setTimeout(arm, 0);
+    return () => clearTimeout(timer);
+  }, [ballot.phase, nearNow]);
+  const askForResults = showsResults(ballot.phase) || nearNow;
   const {
     data: live,
     error: liveError,
