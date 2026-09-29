@@ -617,3 +617,34 @@ def test_a_holder_unknown_when_the_count_began_is_read_again(db_session):
     kinds, result = _apply(db_session, race, _contest(410, 620, 62))
     assert result.held_by_party is not None
     assert "flip" in kinds
+
+
+def test_a_reset_relinks_the_races_developing_issue(db_session):
+    """A reset wipes race_results and keeps action_issues: the rebuilt row
+    started unlinked, so a reverted count left the issue current, and a
+    later flip opened a second one."""
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [issue] = _issues(db_session)
+    assert issue.is_current
+    db_session.query(ElectionResultEvent).delete()
+    db_session.query(RaceResult).delete()
+    db_session.flush()
+    _apply(db_session, race, _contest(700, 500, 70))  # rebuilt: the holder leads
+    db_session.refresh(issue)
+    assert not issue.is_current and "no longer shows a change of party" in issue.title
+    assert db_session.get(RaceResult, race.id).developing_issue_id == issue.id
+    _apply(db_session, race, _contest(700, 900, 80))  # a new flip: a new story
+    assert len(_issues(db_session)) == 2
+    assert sum(i.is_current for i in _issues(db_session)) == 1
+
+
+def test_another_races_issue_is_never_relinked(db_session):
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [issue] = _issues(db_session)
+    other = RaceResult(race_id="2026-HOUSE-GA-12", election_date=DAY.isoformat(), source_name="x",
+                       tallies="[]", votes_counted=0)
+    assert signals._orphaned_issue(db_session, other) is None
+    assert signals._orphaned_issue(db_session, RaceResult(race_id=race.id, election_date=DAY.isoformat(),
+                                                          source_name="x", tallies="[]")).id == issue.id

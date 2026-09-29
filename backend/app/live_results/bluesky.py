@@ -268,17 +268,17 @@ def _owed_reversals(db: Session, election_date: str, h: _History) -> list[Electi
     rebuilt count's first read raised nothing, leaving the flip as the
     account's last word on the race.
 
-    Decided from the events, not the stored row alone: a held poll (a total
-    that fell, sync.apply_count) is stored but announces nothing, and a
-    correction raised from it was followed by the same flip again once the
-    count recovered. And only with the seat's holder known — a reset also
-    wipes the members a holder is looked up from, and "no longer shows a
-    change of party" about a seat with no known holder was false. Raised
-    once per flip post: the event, once stored, is the guard — so it waits
-    until the stored row agrees (no longer a flip). Raised while a held poll
-    still showed the challenger ahead, its correction was dropped as
-    untrue, and the event then blocked the one owed later. Worded from that
-    row, like every post."""
+    Owed only when both say so:
+      - the latest event since the post (what the count ANNOUNCED) shows the
+        holder's party ahead or a tie, with the holder known. A held poll (a
+        total that fell) announces nothing; a correction raised from one was
+        followed by the same flip once the count recovered. And a reset also
+        wipes the members a holder is read from — "no longer shows a change
+        of party" about a seat with no known holder was false;
+      - and the stored row (what the post is worded from) is no longer a
+        flip. The event, once stored, is the once-per-flip-post guard; raised
+        while a held row still showed the challenger ahead, its correction
+        was dropped as untrue and the event blocked the one owed later."""
     raised = []
     for race_id, (kind, _) in h.last_claim.items():
         if kind != er.FLIP:
@@ -300,7 +300,8 @@ def _owed_reversals(db: Session, election_date: str, h: _History) -> list[Electi
         held, leader = d.get("heldBy"), d.get("leader")
         back = (leader and leader.get("party") == held) or (not leader and (d.get("votesCounted") or 0) > 0)
         result = db.get(RaceResult, race_id)
-        if not held or not back or result is None or er.is_flip(result):
+        if not held or not back or result is None or result.election_date != election_date \
+                or er.is_flip(result):
             continue
         raised.append(er._event(db, result, er.FLIP_REVERSED))
     if raised:

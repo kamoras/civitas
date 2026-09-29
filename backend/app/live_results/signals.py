@@ -206,6 +206,28 @@ def _create(db: Session, result: RaceResult) -> ActionIssue:
     return issue
 
 
+def _orphaned_issue(db: Session, result: RaceResult) -> ActionIssue | None:
+    """This race's current flip issue when its count row no longer links it.
+    A data reset wipes race_results but keeps action_issues: the rebuilt row
+    started unlinked, so a reverted count left the issue saying the seat was
+    changing hands, and a later flip opened a second one beside it. Found by
+    the "Follow the count" link _content writes, which names the race, and
+    only among CURRENT developing issues of this kind — one from an earlier
+    election is long retired (the Action Center retires an unmatched
+    developing issue a day after it was created)."""
+    return (
+        db.query(ActionIssue)
+        .filter(
+            ActionIssue.source_type == SOURCE_TYPE,
+            ActionIssue.status == ActionIssueStatus.DEVELOPING,
+            ActionIssue.is_current.is_(True),
+            ActionIssue.actions.contains(f"#race-{result.race_id}\"", autoescape=True),
+        )
+        .order_by(ActionIssue.id.desc())
+        .first()
+    )
+
+
 def update_developing_issues(db: Session, applied: list) -> int:
     """Create, refresh or retire each race's flip issue, from the polls
     sync_state stored (`Applied`s; a held poll never reaches here). Returns
@@ -223,6 +245,10 @@ def update_developing_issues(db: Session, applied: list) -> int:
         if result is None:
             continue
         issue = db.get(ActionIssue, result.developing_issue_id) if result.developing_issue_id else None
+        if issue is None and result.developing_issue_id is None:
+            issue = _orphaned_issue(db, result)
+            if issue is not None:
+                result.developing_issue_id = issue.id
         if issue is not None and issue.status != ActionIssueStatus.DEVELOPING:
             continue  # promoted: news coverage owns its content now
         if is_flip(result):
