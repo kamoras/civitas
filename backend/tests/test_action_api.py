@@ -982,8 +982,9 @@ class TestEmptyDayPager:
 
         from app.api.action import get_action_issues
 
-        resp = await get_action_issues(Response(), date="not-a-day", db=db_session, db_visits=db_session)
-        assert resp == {"date": "not-a-day", "issues": [], "availableDates": []}
+        for bad in ("not-a-day", "2026-1-2", "2026-02-30", "2026-09-26\n"):
+            resp = await get_action_issues(Response(), date=bad, db=db_session, db_visits=db_session)
+            assert resp == {"date": bad, "issues": [], "availableDates": []}, bad
 
 
 class TestMyRepsIssueDay:

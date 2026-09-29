@@ -258,12 +258,53 @@ describe("a day with no issues left", () => {
     render(<ActionPage />);
     expect(await screen.findByText("No issues are recorded for this day.")).toBeInTheDocument();
     expect(screen.queryByText(/Check back soon/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Previous day" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Previous day" })).not.toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
     await userEvent.click(screen.getByRole("button", { name: "Next day" }));
     await waitFor(() =>
       expect(screen.queryByText("No issues are recorded for this day.")).not.toBeInTheDocument()
     );
     expect(vi.mocked(fetchActionIssues).mock.calls.map((c) => c[0])).toContain(undefined);
+  });
+});
+
+describe("the day pager", () => {
+  it("treats a malformed or impossible ?date= as no date", async () => {
+    serveIssues();
+    for (const bad of ["garbage", "2026-1-2", "2026-02-30"]) {
+      window.history.replaceState(null, "", `/action?tab=issues&date=${bad}`);
+      render(<ActionPage />);
+      await screen.findByRole("button", { name: "Previous day" });
+      expect(screen.queryByText("Invalid Date")).not.toBeInTheDocument();
+      expect(vi.mocked(fetchActionIssues)).not.toHaveBeenCalledWith(bad);
+      cleanup();
+      vi.mocked(fetchActionIssues).mockClear();
+    }
+  });
+
+  it("keeps keyboard focus on the button that turned the page", async () => {
+    // The loading panel used to replace the pager, dropping focus to the
+    // page body after every page turn.
+    let release: () => void = () => {};
+    serveIssues();
+    window.history.replaceState(null, "", "/action?tab=issues");
+    render(<ActionPage />);
+    const prev = await screen.findByRole("button", { name: "Previous day" });
+    const serve = vi.mocked(fetchActionIssues).getMockImplementation()!;
+    vi.mocked(fetchActionIssues).mockImplementation(
+      ((date?: string) =>
+        new Promise((resolve) => {
+          release = () => resolve(serve(date) as never);
+        })) as unknown as typeof fetchActionIssues
+    );
+    prev.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText("SCANNING NEWS FEEDS...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous day" })).toHaveFocus();
+    await act(async () => release());
+    expect(screen.getByRole("button", { name: "Previous day" })).toHaveFocus();
   });
 });
 

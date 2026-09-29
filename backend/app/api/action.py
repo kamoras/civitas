@@ -115,7 +115,17 @@ def _latest_issue_date(db: Session) -> str | None:
     )
 
 
-_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+def _is_iso_day(text: str) -> bool:
+    """A real calendar day written YYYY-MM-DD: not "2026-1-2", not
+    "2026-02-30", not a date with a trailing newline (which `$` lets
+    through)."""
+    if len(text) != 10 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return False
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
 
 
 def _pager_dates(db: Session, day: str) -> list[str]:
@@ -423,7 +433,7 @@ async def get_action_issues(
         # followed a link to it can page to the days either side.
         return {
             "date": date, "issues": [],
-            "availableDates": _pager_dates(db, date) if date and _ISO_DAY.match(date) else [],
+            "availableDates": _pager_dates(db, date) if date and _is_iso_day(date) else [],
         }
 
     issue_date = date or _latest_issue_date(db) or issues[0].date

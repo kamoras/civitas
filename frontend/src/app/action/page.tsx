@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -553,6 +553,15 @@ function SecondaryIssue({
   );
 }
 
+/** A `?date=` that names a real calendar day (YYYY-MM-DD), or null: a
+ * malformed or impossible one ("2026-1-2", "2026-02-30") would otherwise be
+ * requested as a day and labelled "Invalid Date" or a day that isn't it. */
+function isoDayOrNull(value: string | null): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value ? value : null;
+}
+
 function IssuesTab({
   userState,
   setUserState,
@@ -581,12 +590,18 @@ function IssuesTab({
   const loading = request.loading;
   const fetchError = request.error !== null;
 
-  const availableDates = useMemo(() => data?.availableDates || [], [data?.availableDates]);
+  // The last day list stays while the next day loads, so the pager (and
+  // the keyboard focus on it) stays put through a page turn instead of
+  // being unmounted by the loading panel.
+  const [lastDates, setLastDates] = useState<string[]>([]);
+  const freshDates = data?.availableDates;
+  if (freshDates && freshDates !== lastDates) setLastDates(freshDates);
+  const availableDates = freshDates ?? lastDates;
   const currentDate = selectedDate || data?.date || null;
   const currentIdx = currentDate ? availableDates.indexOf(currentDate) : 0;
 
   const goToPrev = useCallback(() => {
-    if (currentIdx < availableDates.length - 1) {
+    if (currentIdx >= 0 && currentIdx < availableDates.length - 1) {
       const d = availableDates[currentIdx + 1];
       setSelectedDate(d);
       onDateChange?.(d);
@@ -598,7 +613,9 @@ function IssuesTab({
       const d = availableDates[currentIdx - 1];
       setSelectedDate(d);
       onDateChange?.(d);
-    } else if (currentIdx === 0 && selectedDate) {
+    } else if (currentIdx <= 0 && selectedDate) {
+      // The newest day, or a chosen day the list doesn't hold: on to the
+      // latest.
       setSelectedDate(null);
       onDateChange?.(null);
     }
@@ -620,45 +637,18 @@ function IssuesTab({
     }
   }
 
-  if (loading) {
-    return (
-      <div className="panel max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
-          SCANNING NEWS FEEDS...
-        </div>
-      </div>
-    );
-  }
-
-  if (fetchError) {
-    return (
-      <div className="panel max-w-lg mx-auto p-6 text-center" role="alert">
-        <div className="text-signal-red font-mono text-sm tracking-widest mb-2">
-          CONNECTION ERROR
-        </div>
-        <p className="text-ink-lo text-base mb-4">Could not load today&apos;s issues.</p>
-        <button
-          onClick={request.retry}
-          className="text-signal-cyan font-mono text-xs tracking-widest border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
-        >
-          RETRY
-        </button>
-      </div>
-    );
-  }
-
-  const heroIssue = data?.issues?.[0];
-  const secondaryIssues = data?.issues?.slice(1) || [];
-
   // Shown on an empty day too: a day whose issues all moved on (a
   // re-matched issue is restamped to the day that matched it) is reached
   // by the timeline's links, and without a pager it strands the reader.
   const pager = (availableDates.length > 1 || selectedDate) && (
     <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-widest">
+      {/* aria-disabled, not disabled: a button that turns disabled while
+          focused (paging to the oldest or newest day) drops focus to the
+          page body. The handlers do nothing at either end. */}
       <button
         onClick={goToPrev}
-        disabled={currentIdx >= availableDates.length - 1}
-        className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
+        aria-disabled={currentIdx < 0 || currentIdx >= availableDates.length - 1}
+        className="text-ink-lo hover:text-phos aria-disabled:text-ink-min aria-disabled:cursor-not-allowed transition-colors"
         aria-label="Previous day"
       >
         ← PREV
@@ -670,8 +660,8 @@ function IssuesTab({
       </span>
       <button
         onClick={goToNext}
-        disabled={currentIdx <= 0 && !selectedDate}
-        className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
+        aria-disabled={currentIdx <= 0 && !selectedDate}
+        className="text-ink-lo hover:text-phos aria-disabled:text-ink-min aria-disabled:cursor-not-allowed transition-colors"
         aria-label="Next day"
       >
         NEXT →
@@ -690,6 +680,45 @@ function IssuesTab({
       )}
     </div>
   );
+
+  // Every state below renders the pager first in the same wrapper, so
+  // React keeps the same pager element (and its focused button) across
+  // loading, error, empty and loaded.
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        {pager}
+        <div className="panel max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
+          <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
+            SCANNING NEWS FEEDS...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="space-y-6">
+        {pager}
+        <div className="panel max-w-lg mx-auto p-6 text-center" role="alert">
+          <div className="text-signal-red font-mono text-sm tracking-widest mb-2">
+            CONNECTION ERROR
+          </div>
+          <p className="text-ink-lo text-base mb-4">Could not load these issues.</p>
+          <button
+            onClick={request.retry}
+            className="text-signal-cyan font-mono text-xs tracking-widest border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
+          >
+            RETRY
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const heroIssue = data?.issues?.[0];
+  const secondaryIssues = data?.issues?.slice(1) || [];
 
   if (!heroIssue) {
     return (
@@ -954,7 +983,7 @@ function ActionPageInner() {
   // against `ownWrites`, change nothing.
   const currentSearch = searchKey(searchParams);
   const [deepLink, setDeepLink] = useState(() => ({
-    date: searchParams.get("date"),
+    date: isoDayOrNull(searchParams.get("date")),
     issue: searchParams.get("issue"),
     seq: 0,
     search: currentSearch,
@@ -971,7 +1000,7 @@ function ActionPageInner() {
       setDeepLink({ ...deepLink, search: currentSearch });
     } else {
       setDeepLink({
-        date: searchParams.get("date"),
+        date: isoDayOrNull(searchParams.get("date")),
         issue: searchParams.get("issue"),
         seq: deepLink.seq + 1,
         search: currentSearch,
