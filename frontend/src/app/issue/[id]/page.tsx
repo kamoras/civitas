@@ -130,7 +130,12 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
   // carries no time of its own (only a date), so the section says when that
   // was and whether the state calls it official — inside the section, so a
   // shared image of it says so too, not just the frame's capture day.
-  const countReadAt = factsAreTheCount(issue) ? formatEasternTime(renderedAt.toISOString()) : null;
+  // When Civitas read these figures (the backend's countAsOf); an older
+  // backend sends none, and then the render time stands in, labelled as
+  // when this page read it.
+  const countReadAt = factsAreTheCount(issue)
+    ? formatEasternTime(issue.countAsOf ?? renderedAt.toISOString())
+    : null;
 
   return (
     <ShareSubjectProvider
@@ -245,7 +250,8 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                   ) : (
                     <span className="text-signal-amber">NOT FINAL</span>
                   )}{" "}
-                  · the count as of {countReadAt}, when this page read it. The state&apos;s own
+                  · the count as of {countReadAt},{" "}
+                  {issue.countAsOf ? "when Civitas read it" : "when this page read it"}. The state&apos;s own
                   results site has the current count.
                 </p>
               )}

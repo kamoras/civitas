@@ -64,7 +64,7 @@ export default function CandidateCard({
   redrawnSeat?: boolean;
 }) {
   const pm = getPartyMeta(candidate);
-  const incumbency = incumbencyLabel(candidate.incumbentChallenge, redrawnSeat);
+  const incumbency = incumbencyLabel(candidate.incumbentChallenge, redrawnSeat, candidate.incumbentRecord?.seat);
   const cash = cashOnHandDisplay(candidate.cashOnHand);
   // UTC date only, sliced from the ISO string — deterministic across
   // server and client renders, so no locale/hydration hazard.

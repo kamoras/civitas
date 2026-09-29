@@ -153,6 +153,14 @@ function live(overrides: Partial<LiveResults> = {}): LiveResults {
   };
 }
 
+/** Let the hash hook's animation-frame re-checks run (useHashAt), so a
+ * "never scrolled" assertion can fail when a scroll is merely late. */
+async function afterFrames(n = 5) {
+  await act(async () => {
+    for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => r(null)));
+  });
+}
+
 describe("the state page in results mode", () => {
   it("leads with the count, research below", async () => {
     fetchLiveResults.mockResolvedValue(live());
@@ -171,8 +179,11 @@ describe("the state page in results mode", () => {
     fetchLiveResults.mockResolvedValue(live());
     render(<StateBallotClient ballot={ballot()} />);
     await screen.findByRole("region", { name: "U.S. House" });
+    // The hash is read after commit and re-checked on animation frames
+    // (useHashAt), so the scroll lands a frame or more after the count
+    // renders: wait for it rather than race it.
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
   it("sends a #race- link reached by in-app navigation to the count", async () => {
@@ -182,6 +193,7 @@ describe("the state page in results mode", () => {
     fetchLiveResults.mockResolvedValue(live());
     render(<StateBallotClient ballot={ballot()} />);
     await screen.findByRole("region", { name: "U.S. House" });
+    await afterFrames();
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     await act(async () => {
       window.history.pushState(null, "", "/elections/states/OH#race-2026-HOUSE-OH-1");
@@ -334,6 +346,7 @@ describe("the state page in results mode", () => {
     await screen.findByRole("region", { name: "U.S. House" });
     await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1));
     rerender(<StateBallotClient ballot={ballot()} />);
+    await afterFrames();
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
@@ -360,6 +373,7 @@ describe("the state page in results mode", () => {
     expect(fetchLiveResults).toHaveBeenCalledTimes(2);
     // Decided once: the drawer stays, and the page doesn't jump to the count.
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await afterFrames();
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 

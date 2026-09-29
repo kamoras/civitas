@@ -49,7 +49,7 @@ export default function BallotRaceRows({ race, newLines = false }: { race: RaceW
                   {candidateName(c)}
                   {c.incumbentChallenge === "I" && (
                     <span className="ml-2 whitespace-nowrap align-middle font-mono text-[10px] font-normal tracking-[0.08em] text-ink-lo">
-                      {incumbencyLabel("I", redrawn)}
+                      {incumbencyLabel("I", redrawn, c.incumbentRecord?.seat)}
                     </span>
                   )}
                 </span>

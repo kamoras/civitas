@@ -30,7 +30,7 @@ from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
 from app.models import (
-    ActionIssue, ActionIssueStatus, ExploreDocument, IssueView, MonitorStatus,
+    ActionIssue, ActionIssueStatus, ExploreDocument, RaceResult, IssueView, MonitorStatus,
     NationalMonitor, Race, RepSponsoredBill, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
@@ -301,6 +301,14 @@ def _build_issue_response(
     # meaningless (of course they are, the issue just appeared).
     new_facts = new_facts_since(current_facts, previous_facts) if previous_facts else []
 
+    count_as_of = count_official = None
+    if (getattr(issue, "source_type", None) == _ELECTION_RESULTS_SOURCE
+            and (getattr(issue, "status", None) or "confirmed") == ActionIssueStatus.DEVELOPING):
+        count = db.query(RaceResult).filter(RaceResult.developing_issue_id == issue.id).first()
+        if count is not None:
+            count_as_of = count.fetched_at.isoformat() + "Z"
+            count_official = bool(count.official)
+
     return ActionIssueSchema(
         id=issue.id,
         public_id=to_public_id(issue.id),
@@ -326,6 +334,8 @@ def _build_issue_response(
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
         source_type=getattr(issue, "source_type", None),
+        count_as_of=count_as_of,
+        count_official=count_official,
         image_url=getattr(issue, "image_url", None),
         image_alt=getattr(issue, "image_alt", "") or "",
         image_credit=getattr(issue, "image_credit", "") or "",

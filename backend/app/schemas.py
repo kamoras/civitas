@@ -804,6 +804,12 @@ class ActionIssueSchema(CamelModel):
     # for an ordinary news-derived issue. The page names the source in its
     # disclosure rather than calling every one a vote record.
     source_type: str | None = None
+    # A seat-flip issue's count (source_type "election_results"): when its
+    # figures were read (UTC ISO) and whether the state calls that count
+    # official. None for every other issue, and once news coverage has
+    # confirmed it (its facts are then the outlets', not the count).
+    count_as_of: str | None = None
+    count_official: bool | None = None
     # Only ever set from a source article whose feed explicitly granted
     # redistribution rights — see news_feeds._rights_cleared_image. None
     # for the large majority of issues; used for the OG image and the

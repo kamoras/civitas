@@ -41,11 +41,12 @@ export function factsSectionId(issue: IssueKind): string {
   return factsAreTheCount(issue) ? "from-the-count" : "media-coverage";
 }
 
-/** Whether a count issue says the state has called its count official.
- * The issue carries no structured flag for it, only the backend's fixed
- * title template (signals._content: "... wins <race> in the official
- * count, ..."); anything that doesn't match reads as not final, the
- * conservative way to be wrong. */
-export function countIsOfficial(issue: { title: string }): boolean {
+/** Whether a count issue's figures are the state's official count: the
+ * backend's own flag (countOfficial). An older backend sends none, and
+ * then only its fixed title template (signals._content: "... wins <race>
+ * in the official count, ...") says so; anything else reads as not final,
+ * the conservative way to be wrong. */
+export function countIsOfficial(issue: { title: string; countOfficial?: boolean | null }): boolean {
+  if (typeof issue.countOfficial === "boolean") return issue.countOfficial;
   return / in the official count\b/.test(issue.title);
 }

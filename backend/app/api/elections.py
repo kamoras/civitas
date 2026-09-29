@@ -505,6 +505,11 @@ def _race_summary(race: Race, state_pvi: dict, district_pvi: dict, complete: boo
     }
 
 
+def _seat_label(state: str, district: int | None) -> str:
+    """ "TX-35", or "WY at-large" — how the page names a House seat."""
+    return f"{state}-{district}" if district else f"{state} at-large"
+
+
 def _incumbent_link(
     cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
     stale_incumbent_ids: frozenset[str] = frozenset(),
@@ -540,14 +545,19 @@ def _incumbent_link(
     if race.office == "H":
         rep = reps_by_district.get(race.district or 0)
         if rep and last_name_matches(last_name, rep.name):
-            return {"id": rep.id, "score": compute_overall_score(rep)}
+            return {"id": rep.id, "score": compute_overall_score(rep), "district": rep.district,
+                    "seat": _seat_label(race.state, rep.district)}
         if race.state in redrawn_states(race.cycle_year):
             # A redrawn map renumbers seats: an incumbent can run in a
             # district whose number another member holds today. Matched
             # across the state's delegation, and only when unique.
             same = [r for r in reps_by_district.values() if last_name_matches(last_name, r.name)]
             if len(same) == 1:
-                return {"id": same[0].id, "score": compute_overall_score(same[0])}
+                # The district they hold today, which on a redrawn map is
+                # not this race's number: the page says "sitting member,
+                # TX-35", never "incumbent" of a seat they don't hold.
+                return {"id": same[0].id, "score": compute_overall_score(same[0]), "district": same[0].district,
+                        "seat": _seat_label(race.state, same[0].district)}
         return None
 
     if race.office == "S":

@@ -572,7 +572,9 @@ function HouseDistrictOption({
   resultsMode: boolean;
 }) {
   const { leaders } = tierCandidates(race.candidates.filter(isActiveCandidate));
-  const incumbentMark = isRedrawnSeat(race, newLines) ? " (sitting member)" : " (I)";
+  const redrawn = isRedrawnSeat(race, newLines);
+  const incumbentMark = (c: { incumbentRecord?: { seat?: string | null } | null }) =>
+    redrawn ? ` (sitting member${c.incumbentRecord?.seat ? `, ${c.incumbentRecord.seat}` : ""})` : " (I)";
   const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c) === "REP");
   const countiesLabel = districtAreaLabel(race.counties);
@@ -592,7 +594,7 @@ function HouseDistrictOption({
           {dem ? (
             <span className="text-dem-blue">
               {candidateName(dem)}
-              {dem.incumbentChallenge === "I" ? incumbentMark : ""}
+              {dem.incumbentChallenge === "I" ? incumbentMark(dem) : ""}
             </span>
           ) : (
             <span className="text-ink-min">no funded Democrat</span>
@@ -601,7 +603,7 @@ function HouseDistrictOption({
           {rep ? (
             <span className="text-rep-red">
               {candidateName(rep)}
-              {rep.incumbentChallenge === "I" ? incumbentMark : ""}
+              {rep.incumbentChallenge === "I" ? incumbentMark(rep) : ""}
             </span>
           ) : (
             <span className="text-ink-min">no funded Republican</span>

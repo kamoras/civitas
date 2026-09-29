@@ -226,12 +226,12 @@ export function isRedrawnSeat(race: { office: string }, newDistrictLines: boolea
  * — the page itself says no seat on the new lines has a previous holder —
  * so "I" reads SITTING MEMBER, which is true of the person and claims
  * nothing about the district, and CHALLENGER / OPEN SEAT, which describe
- * the old seat, are not said at all. The district a member holds today is
- * not in the ballot payload (incumbentRecord is id and score), so it is not
- * named here. */
-export function incumbencyLabel(code: string | null, redrawnSeat: boolean): string | null {
+ * the old seat, are not said at all. Where the payload names the seat the
+ * member holds today (incumbentRecord.seat), it is said too:
+ * "SITTING MEMBER, TX-35". */
+export function incumbencyLabel(code: string | null, redrawnSeat: boolean, heldSeat?: string | null): string | null {
   if (!code) return null;
-  if (redrawnSeat) return code === "I" ? "SITTING MEMBER" : null;
+  if (redrawnSeat) return code === "I" ? (heldSeat ? `SITTING MEMBER, ${heldSeat}` : "SITTING MEMBER") : null;
   return FEC_INCUMBENCY[code] ?? code;
 }
 

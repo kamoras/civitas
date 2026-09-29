@@ -442,7 +442,10 @@ class TestIncumbentRecordLink:
         db_session.commit()
 
         data = _body(elections.state_ballot("UT", db_session))
-        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-MOVER"
+        record = data["houseRaces"][0]["candidates"][0]["incumbentRecord"]
+        assert record["id"] == "R-MOVER"
+        assert record["district"] == 1  # the seat held today, not this race's number
+        assert record["seat"] == "UT-1"
 
     def test_a_departed_member_sharing_the_district_number_is_never_linked(self, db_session):
         """A member within the retirement grace period shares the district

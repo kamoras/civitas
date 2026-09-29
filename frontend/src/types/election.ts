@@ -94,6 +94,11 @@ export interface IncumbentRecord {
    * compute_overall_score — the same formula the leaderboard and
    * profile page use, not a separately-derived number). */
   score: number;
+  /** House: the district the member holds today, and it as the page
+   * names it ("TX-35") — on a redrawn map, not this race's number.
+   * Optional for an older backend. */
+  district?: number | null;
+  seat?: string | null;
 }
 
 /** CandidateSummary plus incumbentRecord — only the ballot endpoint

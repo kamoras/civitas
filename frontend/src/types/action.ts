@@ -80,6 +80,11 @@ export interface ActionIssue {
    *  "election_results" — null for news-derived issues. Optional for an
    *  older backend mid-rollout. */
   sourceType?: string | null;
+  /** A seat-flip issue's count: when its figures were read (UTC ISO) and
+   * whether the state calls it official. Null otherwise; optional for an
+   * older backend. */
+  countAsOf?: string | null;
+  countOfficial?: boolean | null;
   /** Only ever set from a source article whose feed explicitly granted
    *  redistribution rights (see backend news_feeds._rights_cleared_image)
    *  — null for the large majority of issues. Used for the OG image and

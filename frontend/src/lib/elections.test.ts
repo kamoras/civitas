@@ -422,6 +422,12 @@ describe("incumbencyLabel", () => {
     expect(incumbencyLabel("O", true)).toBeNull();
   });
 
+  it("names the seat a sitting member holds today when the payload carries it", () => {
+    expect(incumbencyLabel("I", true, "TX-35")).toBe("SITTING MEMBER, TX-35");
+    // Unchanged lines: still the incumbent of this seat, whatever is passed.
+    expect(incumbencyLabel("I", false, "GA-6")).toBe("INCUMBENT");
+  });
+
   it("treats only House seats in a state on new lines as redrawn", () => {
     expect(isRedrawnSeat({ office: "H" }, true)).toBe(true);
     expect(isRedrawnSeat({ office: "S" }, true)).toBe(false);

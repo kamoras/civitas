@@ -97,6 +97,17 @@ describe("an issue's facts section", () => {
     expect(section.textContent).toMatch(/the count as of Nov 3, 9:41 PM ET/);
   });
 
+  it("says when Civitas read the figures, from the backend's own time", async () => {
+    await renderIssue(issue({ countAsOf: "2026-11-04T01:15:00Z", countOfficial: false }));
+    const section = factsSection();
+    expect(section.textContent).toMatch(/the count as of Nov 3, 8:15 PM ET, when Civitas read it/);
+  });
+
+  it("takes the backend's official flag over the title", async () => {
+    await renderIssue(issue({ countAsOf: "2026-11-04T01:15:00Z", countOfficial: true }));
+    expect(factsSection().textContent).toMatch(/OFFICIAL COUNT/);
+  });
+
   it("calls an official count official, not 'not final'", async () => {
     await renderIssue(
       issue({

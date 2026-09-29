@@ -937,3 +937,27 @@ class TestRecentFeedAndSeatFlips:
 
         titles = {i["title"] for i in (await get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
         assert titles == {"Republican flips Georgia's 2nd"}
+
+
+class TestCountIssuePayload:
+    def test_a_count_issue_says_when_its_figures_were_read_and_whether_official(self, db_session):
+        from datetime import datetime
+
+        from app.api.action import _build_issue_response
+        from app.models import Race, RaceResult
+
+        issue = ActionIssue(date="2026-11-04", rank=999, title="Republican leads", is_current=True,
+                            source_type="election_results", status=ActionIssueStatus.DEVELOPING)
+        news = ActionIssue(date="2026-11-04", rank=1, title="News", is_current=True)
+        db_session.add_all([issue, news])
+        db_session.flush()
+        db_session.add(Race(id="2026-HOUSE-GA-2", cycle_year=2026, office="H", state="GA", district=2))
+        db_session.add(RaceResult(race_id="2026-HOUSE-GA-2", election_date="2026-11-03", source_name="GA SOS",
+                                  official=True, developing_issue_id=issue.id, fetched_at=datetime(2026, 11, 4, 2, 44)))
+        db_session.commit()
+
+        data = _build_issue_response(issue, db_session)
+        assert data["countAsOf"] == "2026-11-04T02:44:00Z"
+        assert data["countOfficial"] is True
+        other = _build_issue_response(news, db_session)
+        assert other["countAsOf"] is None and other["countOfficial"] is None
