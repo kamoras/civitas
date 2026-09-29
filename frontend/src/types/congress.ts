@@ -5,6 +5,8 @@
 export type Chamber = "senate" | "house";
 
 export interface CongressEvent {
+  /** The Congress the day fell in; a bill number names a different bill in each. */
+  congress: number | null;
   kind: "passed" | "failed" | "reported" | "confirmed" | "committee" | "floor";
   name: string;
   /** The record's own wording. */
@@ -117,6 +119,7 @@ export interface PeriodChamberDay {
 export interface BecameLaw {
   billId: string;
   billLabel: string | null;
+  congress: number | null;
   name: string;
   date: string;
   text: string;

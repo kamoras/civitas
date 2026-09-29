@@ -7,14 +7,15 @@
 // after a backend scoring-dimension merge and silently mis-weighted scores
 // until /api/config loaded).
 
-// Same reasoning as getScoreLabel's bottom band: the measure is how
-// consistently a justice votes with an ideological bloc, which is a degree,
-// not a motive. "DEEPLY PARTISAN" named the motive.
+// The justice score is independence from the appointing president: 100 is
+// no favoritism either way, and it falls with favor toward that president's
+// government or against it (justice_loyalty). The label names the degree,
+// not a motive or a direction; the scorecard states the direction.
 export function getJusticeLabel(score: number): string {
-  if (score >= 75) return "HIGHLY CONSISTENT";
-  if (score >= 55) return "MODERATELY CONSISTENT";
-  if (score >= 35) return "IDEOLOGICALLY PREDICTABLE";
-  return "HIGHLY PREDICTABLE";
+  if (score >= 75) return "EVEN-HANDED";
+  if (score >= 50) return "MOSTLY EVEN-HANDED";
+  if (score >= 25) return "UNEVEN";
+  return "MARKEDLY UNEVEN";
 }
 
 // Labels describe how well a member represents their constituents, not

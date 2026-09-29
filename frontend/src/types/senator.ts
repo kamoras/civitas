@@ -203,6 +203,31 @@ export interface VoteRollCall {
   parties: VoteRollCallParty[];
 }
 
+/** A bill the member voted on that an LDA filing for a client of the donor's
+ * name names, one entry per client. */
+export interface LobbiedBill {
+  /** Canonical id ("HR.1492"); `label` is how the Record prints it. */
+  billId: string;
+  label: string;
+  billName: string;
+  vote: string | null;
+  /** What the vote shown decided: absent or "passage" for the bill itself,
+   * else the motion ("cloture", "amendment", "procedural"). */
+  motionType?: string | null;
+  /** How to say which vote is shown ("on a cloture motion"); "" when it
+   * was the vote on passage. Worded by the backend (lda.vote_context). */
+  voteContext: string;
+  filingYear: number | null;
+  filingUrl: string | null;
+  registrant: string | null;
+  /** The registry's name for the filing's client, which may be an entity
+   * sharing the donor's name rather than the donor itself. */
+  client?: string | null;
+  /** The registrant, when it isn't the client or already named in it. */
+  filedBy?: string | null;
+  filingCount: number;
+}
+
 export interface LobbyingMatch {
   lobbyistOrg: string;
   industry: string;
@@ -211,6 +236,14 @@ export interface LobbyingMatch {
   billsInfluenced: string[];
   senatorVoteAligned: boolean | null;
   description: string;
+  /** Absent from responses served before these fields existed. */
+  lobbiedBills?: LobbiedBill[];
+  /** lobbyingSpend by the registry's client names, largest first. */
+  /** complete=false: the year's filings ran past the page cap, so each
+   * amount is a floor. */
+  lobbyingClients?: { client: string; amount: number; complete?: boolean }[];
+  /** false: the registry lookup failed, so lobbyingSpend is unknown, not $0. */
+  lobbyingChecked?: boolean | null;
 }
 
 export interface PolicyAlignment {
