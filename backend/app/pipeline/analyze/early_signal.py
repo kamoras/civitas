@@ -25,6 +25,7 @@ news coverage has since reached as a separate issue is retired
 import asyncio
 import json
 import logging
+import re
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -378,14 +379,33 @@ def retire_covered_developing_issues(db: Session) -> int:
 _ABSTRACT_SUMMARY_CHARS = 400
 
 
+# A period that ends a word like these doesn't end the sentence. The dotted
+# forms ("U.S.", "U.S.C.") and initials are caught by shape in _ends_sentence.
+_ABBREVIATIONS = frozenset({
+    "mr", "mrs", "ms", "dr", "st", "jr", "sr", "inc", "co", "corp", "ltd",
+    "no", "nos", "sec", "secs", "pub", "vol", "fig", "dept", "gov", "gen",
+})
+_SENTENCE_END = re.compile(r"[.?!](?=\s+[\"“(]?[A-Z])")
+
+
+def _ends_sentence(text: str, at: int) -> bool:
+    """Whether the mark at `at` (followed by a capitalised word) ends a
+    sentence: not the period of an initial ("John Q. Public"), a dotted
+    abbreviation ("the U.S. Fish and Wildlife Service") or a title."""
+    if text[at] != ".":
+        return True
+    word = text[:at].rsplit(" ", 1)[-1].lstrip("(\"“")
+    return not ("." in word or len(word) == 1 or word.lower() in _ABBREVIATIONS)
+
+
 def _first_sentences(text: str, limit: int) -> str:
     """The abstract's opening sentences, whole, within `limit` characters;
     empty when even the first is longer."""
     text = " ".join((text or "").split())
     if len(text) <= limit:
         return text
-    cut = max(text.rfind(". ", 0, limit), text.rfind("? ", 0, limit))
-    return text[:cut + 1] if cut > 0 else ""
+    ends = [m.start() for m in _SENTENCE_END.finditer(text, 0, limit) if _ends_sentence(text, m.start())]
+    return text[:ends[-1] + 1] if ends else ""
 
 
 def _compose_developing_rule_issue(rule: dict) -> tuple[str, str, list[str]]:
@@ -407,7 +427,11 @@ def _compose_developing_rule_issue(rule: dict) -> tuple[str, str, list[str]]:
         f"{f' on {day}' if day else ''}. {opening + ' ' if opening else ''}"
         "This is from the Federal Register; news coverage of the rule has not appeared yet."
     )
-    facts = [f"Agency: {agencies}.", f"Federal Register document {number}, published {day}."]
+    # A record missing its number or date says less, not "document , published ."
+    where = ["Federal Register document" + (f" {number}" if number else "")]
+    if day:
+        where.append(f"published {day}")
+    facts = [f"Agency: {agencies}.", ", ".join(where) + "."]
     if abstract:
         facts.append(f"Abstract: {abstract}")
     return title[:500], summary, facts

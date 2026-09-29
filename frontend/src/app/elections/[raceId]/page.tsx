@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { fetchRecord } from "@/lib/ssrPayload";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -14,18 +15,14 @@ export default async function RaceDetailRedirect({
 }) {
   const { raceId } = await params;
 
-  let state: string | null = null;
-  try {
-    const res = await fetch(`${BACKEND}/api/elections/races/${encodeURIComponent(raceId)}`, {
-      next: { revalidate: 120 },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      state = typeof data?.state === "string" ? data.state : null;
-    }
-  } catch {
-    state = null;
-  }
+  // Null only for a race that doesn't exist; an outage throws (fetchRecord),
+  // so a published link isn't answered with a 404 while the backend is down.
+  const race = await fetchRecord<{ state: string }>(
+    `${BACKEND}/api/elections/races/${encodeURIComponent(raceId)}`,
+    { next: { revalidate: 120 } },
+    "state"
+  );
+  const state = typeof race?.state === "string" ? race.state : null;
 
   if (!state) notFound();
 
