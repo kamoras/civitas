@@ -123,6 +123,15 @@ def test_a_poller_with_the_current_etag_gets_a_304(client, db_session):
     assert client.get("/api/feed/all.xml", headers={"If-None-Match": first.headers["etag"]}).status_code == 200
 
 
+def test_the_weak_form_of_the_etag_and_a_list_holding_it_also_match(client, db_session):
+    # nginx's gzip hands clients the weak form; RFC 9110 compares weakly here.
+    _post(db_session)
+    etag = client.get("/api/feed/all.xml").headers["etag"]
+    for sent in (f"W/{etag}", f'"stale", {etag}', "*"):
+        assert client.get("/api/feed/all.xml", headers={"If-None-Match": sent}).status_code == 304, sent
+    assert client.get("/api/feed/all.xml", headers={"If-None-Match": '"stale"'}).status_code == 200
+
+
 def test_head_is_answered(client):
     assert client.head("/api/feed/all.xml").status_code == 200
 

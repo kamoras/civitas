@@ -45,7 +45,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import Candidate, Race, RaceCoverageItem
 from app import broadcast
-from app.pipeline.analyze.bluesky_utils import strip_hashtags_and_truncate
+from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, strip_hashtags
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
@@ -57,8 +57,6 @@ from app.pipeline.candidate_dedup import resolve_candidate_id
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
-
-MAX_POST_CHARS = 240
 
 # Hard cap per pipeline run — most matched coverage never becomes a post.
 MAX_POSTS_PER_RUN = 5
@@ -221,7 +219,15 @@ Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
             # a source with no fact in it is the correct answer.
             logger.debug("No attributable fact in item %s (attempt %d)", item.id, attempt + 1)
             continue
-        post = strip_hashtags_and_truncate(post, MAX_POST_CHARS)
+        post = strip_hashtags(post)
+        # Published whole or not at all, like an issue post
+        # (bluesky_poster._compose_new_post): cut to fit, compose's checks
+        # are undone — a cut can end the sentence on "Sens." or before the
+        # object its predicate needs — and the feed would store the cut
+        # text as the post. Whole, it fits Bluesky beside its link.
+        if len(post) > _post_budget(race):
+            logger.info("Composed post for item %s is too long to publish whole (%d chars)", item.id, len(post))
+            continue
 
         # The spans are verbatim, so this should pass; kept as a cheap
         # backstop because it is the shared combinator every other
@@ -238,15 +244,24 @@ Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
     return None
 
 
-def _publish(db: Session, text: str, race: Race, source_url: str | None = None) -> None:
-    """Publish the post: to the feed, then Bluesky if configured."""
+def _race_url(race: Race) -> str:
     # 2026-08: race detail merged into the state ballot page — old
     # /elections/{race.id} links still redirect here, but new posts go
     # straight to the merged page.
-    url = f"{broadcast.SITE_URL}/elections/states/{race.state}#race-{race.id}"
+    return f"{broadcast.SITE_URL}/elections/states/{race.state}#race-{race.id}"
+
+
+def _post_budget(race: Race) -> int:
+    """The longest post that goes to Bluesky whole, with its link after
+    one space (bluesky_utils.publish_post)."""
+    return BSKY_MAX_CHARS - 1 - len(_race_url(race))
+
+
+def _publish(db: Session, text: str, race: Race, source_url: str | None = None) -> None:
+    """Publish the post: to the feed, then Bluesky if configured."""
     broadcast.publish(
         db, kind="race", subject=f"race:{race.id}", title=f"Update on {_office_label(race)}", text=text,
-        url=url, state=race.state, source_url=source_url,
+        url=_race_url(race), state=race.state, source_url=source_url,
     )
 
 
