@@ -169,7 +169,7 @@ export default function MemberScorecard({
             />
           </div>
 
-          <Holdings memberId={member.id} chamber={chamber} variant="panel" />
+          <Holdings memberId={member.id} filer={chamber} variant="panel" />
 
           <AlsoOnRecord member={member} chamber={chamber} onOpen={setView} />
         </div>

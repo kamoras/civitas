@@ -9,11 +9,12 @@ disclosure-fetch chain — Playwright, pdfplumber, lxml — just to read them.
 
 from datetime import timedelta
 
-# Progress-tracker steps for the two phases, appended to the stock-trades
+# Progress-tracker steps for the phases, appended to the stock-trades
 # run's own (stock_pipeline.STOCK_PIPELINE_STEPS).
 HOLDINGS_STEPS = [
     ("house_holdings",  "fetch", "Ingest House annual disclosures (holdings)"),
     ("senate_holdings", "fetch", "Ingest Senate annual disclosures (holdings)"),
+    ("president_holdings", "fetch", "Ingest the president's annual disclosure (holdings)"),
 ]
 
 # Wall-clock budgets for each holdings phase, in its three steps:

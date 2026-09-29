@@ -1,8 +1,11 @@
-"""Ingest each member's latest annual financial disclosure (asset holdings).
+"""Ingest each member's, and the sitting president's, latest annual
+financial disclosure (asset holdings).
 
-Runs inside the stock-trades pipeline as two more best-effort phases (see
-stock_pipeline.run_stock_trades_pipeline): the sources are the same two
-disclosure systems the trade ingest reads, and so is the filer matching.
+Runs inside the stock-trades pipeline as three more best-effort phases (see
+stock_pipeline.run_stock_trades_pipeline): the sources are the disclosure
+systems the trade ingest reads (House Clerk, Senate eFD, OGE), and so is the
+filer matching. The president's phase (ingest_president_holdings) reads one
+report and needs no matching.
 
 For every sitting member it keeps exactly one report — the newest one —
 and replaces the member's previous report when a newer one is found. A
@@ -41,6 +44,9 @@ from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport, until
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
 from app.pipeline.fetch.house_fd import report_still_loads as house_report_still_loads
+from app.pipeline.fetch.president_fd import HOLDINGS_PARSER_VERSION as PRESIDENT_PARSER_VERSION
+from app.pipeline.fetch.president_fd import fetch_annual_holdings as fetch_president_annual
+from app.pipeline.fetch.president_ptr import fetch_ptr_filing_index as fetch_president_filing_index
 from app.pipeline.fetch.senate_fd import PARSER_VERSION as SENATE_PARSER_VERSION
 from app.pipeline.fetch.senate_fd import (
     SessionLapsed,
@@ -63,6 +69,7 @@ from app.pipeline.filer_matching import (
     match_senator,
 )
 from app.holdings_schedule import FETCH_BUDGET, HOLDINGS_STEPS, PREP_BUDGET, PROBE_BUDGET
+from app.services.president_service import current_president
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -459,7 +466,7 @@ _MEMBERS, _NOT_MEMBERS = "member", "not member"
 
 @dataclass
 class _Chamber:
-    """What differs between the two phases; _ingest_members does the rest."""
+    """What differs between the two member phases; _ingest_members does the rest."""
 
     source: str
     owner_key: str  # FinancialDisclosure column naming the member
@@ -683,6 +690,42 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     return await _ingest_members(db, chamber, per_rep)
 
 
+async def ingest_president_holdings(db: Session, _client: httpx.AsyncClient) -> int:
+    """Store the sitting president's newest annual report (OGE 278e): its
+    assets replace the report stored, unless this parser already read the
+    same filing. No filer matching: OGE indexes the filings under the
+    office, and president_ptr requires each to name this president. Returns
+    holdings stored.
+
+    A report that can't be fetched or read fails the phase (its ops alert),
+    and the stored one stays: a source down is not a president who holds
+    nothing."""
+    president = current_president(db)
+    if president is None:
+        return 0
+    filings = await _within(fetch_president_filing_index(db, president.name), PREP_BUDGET, "OGE filing index")
+    annual = sorted((f for f in filings if f["kind"] == "annual"), key=lambda f: f["filing_date"] or "")
+    if not annual:
+        return 0
+    newest = annual[-1]
+    stored = _stored_reports(db, FinancialDisclosure.president_id).get(president.id)
+    if _is_current(stored, newest["doc_id"], PRESIDENT_PARSER_VERSION):
+        return 0
+    result = await until_deadline(fetch_president_annual(db, newest), time.monotonic() + FETCH_BUDGET.total_seconds())
+    if result is None:
+        raise RuntimeError(f"presidential annual report {newest['doc_id']} could not be fetched or read")
+    year, rows = result
+    count = _replace_disclosure(
+        db, owner_filter={"president_id": president.id}, filing_id=newest["doc_id"],
+        report_label=f"{year} annual report", filed_date=newest.get("filing_date"), source_url=newest["pdf_url"],
+        report=AnnualReport(filer_status=None, holdings=rows), parser_version=PRESIDENT_PARSER_VERSION,
+        as_of_date=f"{year}-12-31", amended=False, seq=0,
+    )
+    db.commit()
+    logger.info("Presidential annual report for %d: %d holdings stored", year, count)
+    return count
+
+
 _AMENDMENT_NO_RE = re.compile(r"\bAmendment\s+(\d+)", re.I)
 _CY_RE = re.compile(r"\bCY\s*(\d{4})\b", re.I)
 _DATE_RE = re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b")
@@ -900,7 +943,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
 async def run_holdings_phases(
     db: Session, client: httpx.AsyncClient, progress,
 ) -> tuple[dict[str, int], list[str]]:
-    """Run both phases, best-effort each. Returns (holdings stored per
+    """Run every phase, best-effort each. Returns (holdings stored per
     step, error summaries for the run row).
 
     Lives here rather than in stock_pipeline.py so that later changes to how
@@ -913,6 +956,7 @@ async def run_holdings_phases(
     phases = {
         "house_holdings": ("House holdings", ingest_house_holdings),
         "senate_holdings": ("Senate holdings", ingest_senate_holdings),
+        "president_holdings": ("Presidential holdings", ingest_president_holdings),
     }
     counts = {step: 0 for step, _, _ in HOLDINGS_STEPS}
     errors: list[str] = []
