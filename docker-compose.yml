@@ -112,7 +112,9 @@ services:
         limits:
           memory: 4G
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/health"]
+      # /api/live, not /api/health: health waits on llama-server, so a slow
+      # sibling service would get this one replaced mid-pipeline.
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/live"]
       interval: 30s
       timeout: 5s
       retries: 3
