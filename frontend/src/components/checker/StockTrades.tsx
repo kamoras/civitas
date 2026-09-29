@@ -97,7 +97,9 @@ function TradeRow({ trade }: { trade: StockTrade }) {
           {formatAmountRange(trade)}
         </span>
         {trade.industry !== "UNCLASSIFIED" && <span>{trade.industry}</span>}
-        <span>{trade.transactionDate}</span>
+        <span>
+          {trade.transactionDate ?? `date not legible in the scan · filed ${trade.disclosureDate}`}
+        </span>
         {trade.late !== null && trade.daysToDisclose !== null && (
           <TimelinessBadge late={trade.late} daysToDisclose={trade.daysToDisclose} />
         )}

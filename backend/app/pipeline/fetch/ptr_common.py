@@ -39,7 +39,9 @@ class TradeRow:
     asset_name: str
     owner: str
     transaction_type: str
-    transaction_date: str
+    # None only for a scanned row whose date isn't legible (ocr_extract_rows,
+    # keep_undated): everything else on it read.
+    transaction_date: str | None
     disclosure_date: str
     amount_low: float
     amount_high: float
@@ -58,7 +60,9 @@ class TradeRow:
 # "unknown" rather than the filer.
 # 3: scanned filings read as a table by word position, amounts only as the
 # form's ranges, dates only inside the filing's window.
-PARSER_VERSION = 3
+# 4: a presidential scanned row whose date alone is illegible is kept
+# undated (ocr_extract_rows, keep_undated).
+PARSER_VERSION = 4
 
 # PTR owner codes -> our owner vocabulary (StockTrade.owner / RepStockTrade.owner).
 OWNER_CODES = {"SP": "spouse", "DC": "dependent", "JT": "joint"}
@@ -500,7 +504,9 @@ def _ocr_table_page(page, not_before: str | None, not_after: str | None) -> tupl
         )
         cell_amount = _ocr_cell(image, (int(amount_x - line), top, int(width * 0.98), bottom), "0123456789,$-Ovr ")
         amount = form_bracket(cell_amount) or form_bracket(" ".join(w["t"] for w in band if w["x"] >= amount_x - line))
-        if not (asset and txn_type and txn_date and amount):
+        # A row whose date alone didn't read is kept undated; the caller
+        # decides whether it is used (ocr_extract_rows, keep_undated).
+        if not (asset and txn_type and amount):
             unread += 1
             continue
         rows.append(TradeRow(
@@ -509,20 +515,29 @@ def _ocr_table_page(page, not_before: str | None, not_after: str | None) -> tupl
             owner="unknown",  # the form's rows state no owner
             transaction_type=txn_type,
             transaction_date=txn_date,
-            disclosure_date=not_after or txn_date,
+            disclosure_date=not_after or txn_date or "",
             amount_low=amount[0],
             amount_high=amount[1],
         ))
     return rows, unread
 
 
-def ocr_extract_rows(pdf: object, not_before: str | None = None, not_after: str | None = None) -> list[TradeRow]:
+def ocr_extract_rows(
+    pdf: object, not_before: str | None = None, not_after: str | None = None, *, keep_undated: bool = False,
+) -> list[TradeRow]:
     """Best-effort OCR for scanned (paper) PTR filings, reached only when a
     PDF has no text layer at all. Each page is read as a table
     (_ocr_table_page), or line by line when it has no transaction-type
     column. OCR'd rows are materially less reliable than a text layer:
     callers tag them parse_confidence="ocr", and a transaction date read
-    by OCR supports no timeliness figure (schemas.StockTradeSchema)."""
+    by OCR supports no timeliness figure (schemas.StockTradeSchema).
+
+    `keep_undated`: keep a table row whose asset, type and amount read but
+    whose date didn't, with transaction_date None. One presidential 278-T
+    (May 8, 2026) was scanned at 150 dpi and printed at half size: its dates
+    are ~6 px tall, and no reading of them was reliable (the best, matching
+    rendered candidates, was right 38% of the time with no usable
+    confidence), while its assets, types and amounts read."""
     try:
         import pytesseract
     except ImportError:
@@ -538,17 +553,21 @@ def ocr_extract_rows(pdf: object, not_before: str | None = None, not_after: str 
                 text = pytesseract.image_to_string(page.to_image(resolution=_OCR_DPI).original)
                 rows.extend(r for line in text.splitlines() if (r := _parse_ocr_line(line, not_before, not_after)))
                 continue
-            rows.extend(table[0])
-            unread += table[1]
+            undated = [r for r in table[0] if r.transaction_date is None]
+            rows.extend(r for r in table[0] if r.transaction_date is not None or keep_undated)
+            unread += table[1] + (0 if keep_undated else len(undated))
         except Exception as e:
             logger.warning("OCR failed on PTR page: %s", e)
     if unread:
         logger.warning("OCR: %d transaction rows of a scanned PTR could not be read (%d read)", unread, len(rows))
+    if undated := sum(r.transaction_date is None for r in rows):
+        logger.info("OCR: %d rows kept without a legible date", undated)
     return rows
 
 
 def parse_pdf_bytes(
     pdf_bytes: bytes, *, blank_owner: str = "self", not_before: str | None = None, not_after: str | None = None,
+    keep_undated: bool = False,
 ) -> tuple[list[TradeRow], str]:
     """Parse a PTR PDF's bytes into (rows, confidence).
 
@@ -556,6 +575,7 @@ def parse_pdf_bytes(
     only if no text layer exists at all (scanned/paper filings).
     `blank_owner`: see parse_table_rows. `not_before`/`not_after`: the
     window an OCR'd transaction date must fall in (window_date).
+    `keep_undated`: see ocr_extract_rows.
     """
     import io
 
@@ -571,5 +591,5 @@ def parse_pdf_bytes(
                     rows.extend(parse_table_rows(table, blank_owner=blank_owner))
         if not rows:
             confidence = "ocr"
-            rows = ocr_extract_rows(pdf, not_before, not_after)
+            rows = ocr_extract_rows(pdf, not_before, not_after, keep_undated=keep_undated)
     return rows, confidence

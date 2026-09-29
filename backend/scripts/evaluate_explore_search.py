@@ -75,7 +75,7 @@ _BOILERPLATE = {
     "part", "parts", "federal", "register", "agency", "agencies", "rule",
     "rules", "final", "proposed", "notice", "notices", "public", "comment",
     "comments", "document", "documents", "united", "states", "government",
-    "president", "secretary", "department", "office", "shall", "must",
+    "president", "secretary", "department", "office", "must",
     "will", "would", "been", "have", "from", "into", "upon", "their",
     "other", "also", "than", "when", "where", "date", "dates", "effective",
 }

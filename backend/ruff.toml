@@ -1,0 +1,16 @@
+# The rule set CI enforces, written down rather than inherited. Until
+# 2026-09-29 there was no config, so CI ran ruff's *default* selection — and
+# ruff 0.16 widened that default (345 new findings on release, 1,065 by
+# 0.16.9, mostly import order, style and FastAPI's `Depends()`-in-defaults
+# idiom), which broke every PR the day it shipped and forced a version pin.
+# With the selection explicit, a ruff upgrade changes what's checked only
+# when this file does.
+#
+# E4/E7/E9/F is ruff's long-standing default: pyflakes (undefined names,
+# unused imports/variables, redefinitions — the class that caught
+# scripts/rescore.py's NameError and tests/' duplicate helper) plus the
+# pycodestyle errors that are real errors, not layout. Adding a family is a
+# deliberate change: measure its findings first, and prefer rules that find
+# defects over rules that restyle.
+[lint]
+select = ["E4", "E7", "E9", "F"]
