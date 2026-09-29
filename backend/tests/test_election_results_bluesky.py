@@ -532,3 +532,15 @@ def test_a_reset_then_a_held_poll_does_not_lose_the_correction(db_session):
         [(text, _)] = _run(db_session)
     assert "no longer shows a change of party" in text
     assert "Dana Smith (D) is ahead again" in text
+
+
+def test_an_owed_reversal_needs_this_elections_count(db_session):
+    """A stored row from another election (a runoff re-using the race id)
+    is not evidence about this one."""
+    _race(db_session, "2026-SEN-GA", flip=False)
+    db_session.flush()
+    db_session.get(RaceResult, "2026-SEN-GA").election_date = "2026-12-01"
+    _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
+    _event(db_session, "2026-SEN-GA", er.FIRST_RETURNS, _detail(leader_party="DEM"), bsky_posted_at=utcnow())
+    assert _run(db_session) == []
+    assert db_session.query(ElectionResultEvent).filter_by(kind=er.FLIP_REVERSED).count() == 0

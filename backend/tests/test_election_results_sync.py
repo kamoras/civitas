@@ -6,6 +6,8 @@ import json
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
+import pytest
+
 from app.models import ActionIssue, ActionIssueStatus, Candidate, ElectionResultEvent, Race, RaceResult, Representative, Senator
 from app.live_results import sync as er
 from app.live_results import signals
@@ -619,17 +621,28 @@ def test_a_holder_unknown_when_the_count_began_is_read_again(db_session):
     assert "flip" in kinds
 
 
-def test_a_reset_relinks_the_races_developing_issue(db_session):
-    """A reset wipes race_results and keeps action_issues: the rebuilt row
-    started unlinked, so a reverted count left the issue current, and a
-    later flip opened a second one."""
+@pytest.fixture
+def _on_election_day():
+    """Issues are dated election_today(); relinking only takes this
+    election's."""
+    with patch("app.election_phase.election_today", return_value=DAY):
+        yield
+
+
+def _reset(db):
+    """A data reset: the count and its events go, the issues stay."""
+    db.query(ElectionResultEvent).delete()
+    db.query(RaceResult).delete()
+    db.flush()
+
+
+def test_a_reset_relinks_the_races_developing_issue(db_session, _on_election_day):
+    """The rebuilt row started unlinked, so a reverted count left the issue
+    current, and a later flip opened a second one."""
     race = _setup(db_session)
     _apply(db_session, race, _contest(400, 600, 60))
     [issue] = _issues(db_session)
-    assert issue.is_current
-    db_session.query(ElectionResultEvent).delete()
-    db_session.query(RaceResult).delete()
-    db_session.flush()
+    _reset(db_session)
     _apply(db_session, race, _contest(700, 500, 70))  # rebuilt: the holder leads
     db_session.refresh(issue)
     assert not issue.is_current and "no longer shows a change of party" in issue.title
@@ -639,12 +652,45 @@ def test_a_reset_relinks_the_races_developing_issue(db_session):
     assert sum(i.is_current for i in _issues(db_session)) == 1
 
 
-def test_another_races_issue_is_never_relinked(db_session):
+def test_a_reset_keeps_a_promoted_story_with_the_news(db_session, _on_election_day):
     race = _setup(db_session)
     _apply(db_session, race, _contest(400, 600, 60))
     [issue] = _issues(db_session)
-    other = RaceResult(race_id="2026-HOUSE-GA-12", election_date=DAY.isoformat(), source_name="x",
-                       tallies="[]", votes_counted=0)
-    assert signals._orphaned_issue(db_session, other) is None
-    assert signals._orphaned_issue(db_session, RaceResult(race_id=race.id, election_date=DAY.isoformat(),
-                                                          source_name="x", tallies="[]")).id == issue.id
+    issue.status = ActionIssueStatus.CONFIRMED
+    _reset(db_session)
+    _apply(db_session, race, _contest(400, 650, 70))
+    assert _issues(db_session) == [issue]
+
+
+def test_a_reset_does_not_revive_an_issue_retired_while_the_flip_held(db_session, _on_election_day):
+    """The Action Center retires an unmatched developing issue a day on;
+    the rebuilt count's first read raising its flip afresh is not news."""
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [issue] = _issues(db_session)
+    issue.is_current = False
+    _reset(db_session)
+    _apply(db_session, race, _contest(400, 650, 70))
+    assert _issues(db_session) == [issue] and not issue.is_current
+
+
+def test_a_reset_after_a_reversal_then_a_flip_is_a_new_story(db_session, _on_election_day):
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    _apply(db_session, race, _contest(700, 600, 65))  # reverted: the issue says so and retires
+    _reset(db_session)
+    _apply(db_session, race, _contest(700, 900, 80))
+    assert len(_issues(db_session)) == 2
+
+
+def test_the_race_link_never_matches_a_longer_id(db_session, _on_election_day):
+    """GA-1 must not read GA-12's issue: json.dumps closes the id with a
+    quote."""
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [issue] = _issues(db_session)
+    issue.actions = issue.actions.replace("#race-2026-HOUSE-GA-2", "#race-2026-HOUSE-GA-12")
+    db_session.flush()
+    by_race = signals._issues_by_race(db_session)
+    assert set(by_race) == {"2026-HOUSE-GA-12"}
+    assert "2026-HOUSE-GA-1" not in by_race

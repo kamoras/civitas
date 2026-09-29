@@ -328,6 +328,9 @@ class Applied:
     # not an attribute on the row: the session holds clean rows weakly, so
     # anything set on one may not survive to the caller's next db.get.
     held: bool = False
+    # The race's count row was created by this poll: the first read of the
+    # election — or of a count rebuilt after a data reset.
+    created: bool = False
 
     @property
     def new_flip(self) -> bool:
@@ -431,7 +434,7 @@ def apply_count(
     if ALL_REPORTING in present or FLIP in present:
         kinds = [(k, x) for k, x in kinds if k != FIRST_RETURNS]
     events = [_event(db, result, kind, **extra) for kind, extra in kinds]
-    return Applied(result, events)
+    return Applied(result, events, created=before is None)
 
 
 def _contest_race(db: Session, cycle: int, state: str, contest: ContestCount) -> Race | None:
