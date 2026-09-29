@@ -93,10 +93,10 @@ class _FakeModel:
             return text.split()
 
     def encode(self, texts, **_kwargs):
-        out = np.zeros((len(texts), vs.EMBEDDING_DIMENSIONS), dtype=np.float32)
+        out = np.zeros((len(texts), vs.SIMILARITY_DIMENSIONS), dtype=np.float32)
         for i, text in enumerate(texts):
             for word in text.lower().split():
-                out[i, hash(word) % vs.EMBEDDING_DIMENSIONS] += 1.0
+                out[i, hash(word) % vs.SIMILARITY_DIMENSIONS] += 1.0
         norms = np.linalg.norm(out, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         return out / norms

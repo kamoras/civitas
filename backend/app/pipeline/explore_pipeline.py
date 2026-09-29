@@ -624,7 +624,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # failed or was cut off, a model change) is rebuilt whole, here and
         # under this run's lease, rather than topped up: an incremental pass
         # can't make it whole, and calibration below measures it.
-        rebuilt, failed = None, False
+        rebuilt = None
         try:
             whole = await asyncio.to_thread(index_is_whole)
         except Exception:
@@ -651,8 +651,17 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                     dedupe_key=f"explore-index-rebuild-{utcnow():%Y-%m-%d}",
                     condition="explore-index-rebuild",
                 )
-                rebuilt, failed = 0, True
-        if whole or (rebuilt is not None and not failed):
+                rebuilt = 0
+            if rebuilt is None:
+                # Waited out a start's rebuild, which reads documents by id
+                # without this run's lease: one this run deleted meanwhile
+                # may have been embedded after the purge above.
+                _purge_orphaned_vectors(db)
+        try:
+            whole_now = whole or await asyncio.to_thread(index_is_whole)
+        except Exception:
+            whole_now = False
+        if whole_now:
             from app.ops_alerts import resolve_ops_alert
 
             await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")

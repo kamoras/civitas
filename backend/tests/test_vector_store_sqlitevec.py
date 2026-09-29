@@ -23,7 +23,7 @@ def vec_env(tmp_path, monkeypatch):
     def fake_encode(texts, **kwargs):
         # Deterministic unit vectors: direction keyed by simple content
         # hash so distinct texts get distinct-but-stable embeddings.
-        out = np.zeros((len(texts), vector_store.EMBEDDING_DIMENSIONS))
+        out = np.zeros((len(texts), vector_store.SIMILARITY_DIMENSIONS))
         for i, t in enumerate(texts):
             out[i, hash(t) % 8] = 1.0
         return out
@@ -293,6 +293,19 @@ class TestEnsureExploreIndex:
         assert vector_store.rebuild_explore_index(lambda: None, wait=True) is None
         embed.assert_not_called()
 
+    def test_a_run_rebuilds_an_index_it_cannot_read(self, vec_env, db_session, monkeypatch):
+        # The run decided to rebuild because the index couldn't be read: the
+        # wait's own look at it mustn't raise the same error and stop it.
+        db_session.add(ExploreDocument(doc_type="House Floor Speech", source="congress.gov",
+                                       title="A real doc", summary="s", body="b", date="2026-07-01"))
+        db_session.commit()
+
+        def unreadable():
+            raise sqlite3.OperationalError("database disk image is malformed")
+
+        monkeypatch.setattr(vector_store, "index_is_whole", unreadable)
+        assert vector_store.rebuild_explore_index(lambda: db_session, wait=True) == 1
+
     def test_an_index_a_rebuild_left_empty_reads_incomplete(self, vec_env):
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
         assert vector_store.collection_stats()["indexRebuild"] == "incomplete"
@@ -371,9 +384,9 @@ class TestEnsureExploreIndex:
                 t.join(timeout=10)
         results = vector_store.search_explore_documents("A real doc", n_results=1)
         assert results is not None and results[0]["title"] == "A real doc"
-        # Not fitted here: the fit measures the keyword index too, which only
-        # an Explore run (or a re-embed) rebuilds in step with this one.
-        assert recalibrated == []
+        # And the ranking is refitted: the one in force was measured against
+        # the index this replaced.
+        assert len(recalibrated) == 1
 
     def test_rebuild_recreates_a_stale_pre_migration_schema(self, vec_env, db_session, explore_lease):
         """Regression for a live 2026-08-30 incident: a prior deploy's
@@ -388,7 +401,7 @@ class TestEnsureExploreIndex:
         conn.execute("DROP TABLE vec_explore")
         conn.execute(
             f"""CREATE VIRTUAL TABLE vec_explore USING vec0(
-                embedding float[{vector_store.EMBEDDING_DIMENSIONS}] distance_metric=cosine,
+                embedding float[{vector_store.SIMILARITY_DIMENSIONS}] distance_metric=cosine,
                 doc_type text,
                 chamber text,
                 politician_id text,

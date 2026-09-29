@@ -26,8 +26,10 @@ its Retry-After.
 
 import asyncio
 import hashlib
+import hmac
 import logging
 import math
+import secrets
 import time
 from collections.abc import AsyncIterator
 
@@ -242,31 +244,44 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
     # the LLM.
     if _llm_busy_until > now:
         raise _busy(_llm_busy_until - now)
+    if client is None:
+        # The throttle store unreadable: a key of this process's own, so the
+        # rule still holds (one address mustn't hold every slot) without
+        # refusing everyone meanwhile.
+        client = _fallback_key(ip)
     # Under yesterday's key too, so the rule doesn't reset at midnight.
     # Only runs still generating count: one whose last event is out is only
-    # writing its cache. With no key (the throttle store unreadable) the
-    # rule fails open, as throttle's limits do; MAX_GENERATIONS still bounds
-    # what the LLM is asked for.
-    if client is None:
-        logger.warning("Explore summary: no client key (throttle store unavailable) — per-client rule skipped")
-    elif any(k in _by_client and not _runs[_by_client[k]].done for k in (str(client), client.previous) if k):
+    # writing its cache.
+    previous = getattr(client, "previous", None)
+    if any(k in _by_client and not _runs[_by_client[k]].done for k in (str(client), previous) if k):
         raise _busy()
     if sum(not r.done for r in _runs.values()) >= MAX_GENERATIONS:
         raise _busy()
 
-    run = _Run(key, doc_id, prompt, key_, str(client) if client is not None else None)
+    run = _Run(key, doc_id, prompt, key_, str(client))
     _runs[key] = run
-    if run.client is not None:
-        _by_client[run.client] = key
+    _by_client[run.client] = key
     run.task = asyncio.create_task(_generate(run))
     run.task.add_done_callback(lambda _t: _forget(run))
     return run.follow()
 
 
+# For _fallback_key: this process's alone, never stored — gone with the
+# process, as the keys it made are with their runs.
+_FALLBACK_SALT = secrets.token_bytes(32)
+
+
+def _fallback_key(ip: str) -> str:
+    """A client key made without the throttle store: an HMAC of the address
+    under a salt only this process holds (never the address itself, AGENTS.md
+    §8), marked so it can't equal one of the store's."""
+    return "local:" + hmac.new(_FALLBACK_SALT, ip.encode(), hashlib.sha256).hexdigest()[:32]
+
+
 def _forget(run: _Run) -> None:
     if _runs.get(run.key) is run:
         del _runs[run.key]
-    if run.client is not None and _by_client.get(run.client) == run.key:
+    if _by_client.get(run.client) == run.key:
         del _by_client[run.client]
     if not run.done:  # cancelled before its last event: its readers' streams end
         run.publish(None)

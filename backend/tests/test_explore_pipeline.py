@@ -413,6 +413,36 @@ class TestOrphanedVectorPurge:
         assert called == [], "must not delete anything when the index is unreadable"
 
 
+@pytest.mark.asyncio
+async def test_a_run_that_waited_out_a_rebuild_purges_again_and_resolves_the_alert(db_session):
+    # The start's rebuild reads by id without this run's lease: a document
+    # the run deleted may have been embedded after the first purge. And the
+    # index it leaves whole ends a failed rebuild's alert.
+    empty = AsyncMock(return_value={})
+    purge = MagicMock(return_value=0)
+    resolve = MagicMock()
+    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
+         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
+               new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.index_is_whole", side_effect=[False, True]), \
+         patch("app.pipeline.explore_pipeline.rebuild_explore_index", return_value=None), \
+         patch("app.pipeline.explore_pipeline.embed_explore_documents", return_value=0), \
+         patch("app.pipeline.explore_pipeline._purge_orphaned_vectors", purge), \
+         patch("app.ops_alerts.resolve_ops_alert", resolve), \
+         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
+         patch("app.pipeline.explore_pipeline.update_document_authority",
+               return_value={"documents": 0, "cited": 0}), \
+         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
+         patch("app.pipeline.explore_pipeline.api_cache_set"):
+        await run_explore_pipeline(days_back=1)
+    assert purge.call_count == 2
+    resolve.assert_called_once_with("explore-index-rebuild")
+
+
 def test_ranking_calibration_is_kept_while_the_vector_index_is_not_whole(db_session):
     # Measured against a semantic channel answering nothing, the priors come
     # out as if the channels agreed perfectly.

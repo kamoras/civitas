@@ -516,18 +516,27 @@ class TestCachedSummaryRead:
 
 
 class TestNoClientKey:
-    async def test_the_per_client_rule_fails_open_like_every_throttle_limit(self, db_session, monkeypatch):
-        # The throttle store unreadable: a summary still starts (the global
-        # cap still bounds the LLM), rather than every page waiting it out.
+    async def test_without_the_throttle_store_summaries_start_and_the_rule_still_holds(
+        self, db_session, monkeypatch,
+    ):
+        # Not refused for everyone while the store is down, and one address
+        # still can't hold every slot: a key of the process's own.
         from app.api import throttle
 
         monkeypatch.setattr(throttle, "client_key", lambda ip, purpose: None)
-        doc = _make_doc(db_session)
-        patches, _ = _llm(_fake_stream)
+        doc, other = _make_doc(db_session, title="A"), _make_doc(db_session, title="B")
+        stream, release = _gate()
+        patches, _ = _llm(stream)
         with patches[0], patches[1], patches[2]:
-            events = await _events(doc, db_session)
+            first = await _ask(doc, db=db_session)
+            refused = await _refused(other, db_session)
+            assert refused.status_code == 503 and refused.headers["X-Summary-Wait"] == "1"
+            # Another address still starts one.
+            elsewhere = await _ask(other, _reader("198.51.100.9"), db_session)
+            release.set()
+            for response in (first, elsewhere):
+                assert (await _collect_sse_events(response))[-1]["summary"] == "A test summary."
             await _settled()
-        assert events[-1]["summary"] == "A test summary."
 
 
 class TestJoining:

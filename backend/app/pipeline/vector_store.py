@@ -57,8 +57,11 @@ EMBEDDING_MODEL_NAME = "Snowflake/snowflake-arctic-embed-xs"
 EMBEDDING_MODEL_VERSION = "arctic-xs"  # short id for metadata
 EMBEDDING_DIMENSIONS = 384
 
-# Search-index side — the similarity model (same 384 dims).
+# Search-index side — the similarity model. Its own width: vec_explore holds
+# its vectors and vec_bills the classification model's, and a change of one
+# model mustn't resize the other's table.
 INDEX_MODEL_VERSION = "minilm-l6-v2"
+SIMILARITY_DIMENSIONS = 384
 
 # Layout of vec_explore, tracked separately from the model because the two
 # change for different reasons and either one invalidates the index. Bumped
@@ -299,7 +302,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # into document-level results.
     conn.execute(
         f"""CREATE VIRTUAL TABLE IF NOT EXISTS vec_explore USING vec0(
-            embedding float[{EMBEDDING_DIMENSIONS}] distance_metric=cosine,
+            embedding float[{SIMILARITY_DIMENSIONS}] distance_metric=cosine,
             doc_id integer,
             doc_type text,
             chamber text,
@@ -311,14 +314,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             +snippet text
         )"""
     )
-    conn.execute(
-        f"""CREATE VIRTUAL TABLE IF NOT EXISTS vec_bills USING vec0(
-            embedding float[{EMBEDDING_DIMENSIONS}] distance_metric=cosine,
-            policy_area text,
-            +meta_json text
-        )"""
-    )
+    conn.execute(_BILLS_DDL.format(if_not_exists="IF NOT EXISTS "))
     conn.commit()
+
+
+_BILLS_DDL = f"""CREATE VIRTUAL TABLE {{if_not_exists}}vec_bills USING vec0(
+    embedding float[{EMBEDDING_DIMENSIONS}] distance_metric=cosine,
+    policy_area text,
+    +meta_json text
+)"""
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> str | None:
@@ -380,11 +384,21 @@ def invalidate_on_model_change(db_session=None) -> None:
     """
     logger.warning("Embedding model change detected — invalidating stored embeddings")
     # DROP + recreate, not DELETE: a vec0 table's vector width is fixed at
-    # creation, and a new model may have a different one.
+    # creation, and a new model may have a different one. In one
+    # transaction, so a reader that doesn't take _vec_lock (the kNN
+    # reference read, the dashboard's counts) sees the old table or the new
+    # one, never none.
     conn = get_vec_conn()
     with _vec_lock:
-        conn.execute("DROP TABLE IF EXISTS vec_bills")
-        _ensure_schema(conn)
+        if conn.in_transaction:
+            conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute("DROP TABLE IF EXISTS vec_bills")
+            conn.execute(_BILLS_DDL.format(if_not_exists=""))
+        except BaseException:
+            conn.rollback()
+            raise
         conn.commit()
 
     if db_session is not None:
@@ -947,8 +961,15 @@ def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | No
     try:
         from app.models import ExploreDocument
 
-        if wait and index_is_whole():
-            return None
+        if wait:
+            try:
+                whole = index_is_whole()
+            except Exception:
+                # Unreadable is not whole: this rebuild recreates it.
+                logger.warning("Explore index unreadable — rebuilding it", exc_info=True)
+                whole = False
+            if whole:
+                return None
 
         conn = get_vec_conn()
         # Not ready from here until the last batch is in (_INDEX_MODEL).
@@ -1038,10 +1059,12 @@ def ensure_explore_index(db_session_factory) -> None:
             finally:
                 db.close()
             logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
-            # Not recalibrated here: the ranking fit measures the keyword
-            # index too, which only an Explore run (or a re-embed) rebuilds in
-            # step with this one. The next run fits it, now that this is whole.
-            rebuild_explore_index(db_session_factory)
+            if rebuild_explore_index(db_session_factory) is not None:
+                # The fit in force was measured against the index this
+                # replaced. The keyword index it also measures is kept live
+                # by its triggers; a run mid-ingest meanwhile refits at its
+                # own end.
+                recalibrate_ranking(db_session_factory)
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
 
