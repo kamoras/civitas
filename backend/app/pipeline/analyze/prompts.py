@@ -60,18 +60,15 @@ SUMMARY: <2-3 sentences: what does this document do? What is its purpose and sub
 def _before_a_partial_marker(text: str) -> str | None:
     """`text` whole up to where it stopped — without a section marker it
     ends partway through ("...\nKEY POI"), or all of it when it stopped just
-    after a key point's line ended — or None when the section it was
-    writing is unfinished."""
+    after a line ended — or None when it stopped mid-line."""
     head, newline, last = text.rstrip(" ").rpartition("\n")
     if not newline:
         return None
     if not last:
-        # Stopped right after a newline. A key point is one line, so the
-        # list is whole up to there; the summary and the impact are prose
-        # that can run to another paragraph, so a line break doesn't end
-        # them.
-        _, in_key_points, rest = head.partition(SUMMARY_KEY_POINTS_MARKER)
-        return head if in_key_points and SUMMARY_IMPACT_MARKER not in rest else None
+        # Stopped right after a newline: every line is whole, and the format
+        # asked for (explore_document_summary_prompt) is a line per part —
+        # the summary, each key point, the impact.
+        return head
     for marker in (SUMMARY_KEY_POINTS_MARKER, SUMMARY_IMPACT_MARKER):
         if marker != last and marker.startswith(last):
             return head

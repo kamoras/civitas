@@ -628,7 +628,7 @@ async def get_country_news(response: Response):
     # and a way to get this server rate-limited by the outlets. So the
     # answer is also held here, and concurrent misses share one fetch.
     global _country_news
-    response.headers["Cache-Control"] = "public, max-age=600"
+    response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=600"
     async with _country_news_lock:
         if _country_news is None or time.monotonic() - _country_news[0] >= _COUNTRY_NEWS_TTL_S:
             from app.api.response_helpers import retry_soon_json
@@ -805,7 +805,7 @@ async def get_my_reps(
     """Return senators for a state with their connections to today's issues."""
     # Ties to "today's issues", which only change on the next Action
     # Center refresh — a few minutes of staleness is invisible in practice.
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
     state_upper = state.upper()
 
     senators = (
@@ -925,7 +925,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     """Return Federal Register documents with open public comment periods, sorted by deadline."""
     # Comment-period deadlines move in days, not minutes — an hour of
     # staleness has no real effect on this list.
-    response.headers["Cache-Control"] = "public, max-age=3600"
+    response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=3600"
     today = comment_period_today()
     docs = (
         db.query(ExploreDocument)
@@ -982,7 +982,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
     """Return upcoming election info: dates, senate races, state data."""
     # Election dates and race rosters change on the order of days, not
     # minutes — same reasoning as /open-comments above.
-    response.headers["Cache-Control"] = "public, max-age=3600"
+    response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=3600"
     today = utcnow().date()
     election_day = _next_election_day(today)
     days_until = days_until_next_election(today)
@@ -1124,7 +1124,7 @@ async def list_monitors(response: Response, db: Session = Depends(get_db)):
     """List all active and watching national monitors."""
     # Monitor creation/status changes on the pipeline's hourly cadence, not
     # continuously — matches the other Action Center list endpoints.
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
     monitors = (
         db.query(NationalMonitor)
         .options(selectinload(NationalMonitor.updates))
@@ -1140,7 +1140,7 @@ async def get_monitor(response: Response, slug: str, db: Session = Depends(get_d
     """Get full detail for a national monitor including timeline."""
     # Same cadence as the monitors list above — a single monitor's
     # timeline only grows on the same hourly refresh.
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
     monitor = (
         db.query(NationalMonitor)
         .options(selectinload(NationalMonitor.updates))
@@ -1235,7 +1235,7 @@ async def get_timeline(
 ):
     """Return the year's timeline with hierarchical week/month/year structure."""
     # Same reasoning as the other Action Center aggregate views above.
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
     if year is None:
         year = utcnow().date().year
 

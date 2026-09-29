@@ -34,7 +34,7 @@ async def test_news_is_cached_for_ten_minutes(monkeypatch):
     _count_fetches(monkeypatch)
     response = Response()
     body = await action.get_country_news(response)
-    assert response.headers["Cache-Control"] == "public, max-age=600"
+    assert response.headers["Cache-Control"] == "public, max-age=600, stale-while-revalidate=600"
     assert [c["country"] for c in body["countries"]] == ["Canada"]
 
 

@@ -487,6 +487,10 @@ _NOT_ANALYSIS_PATHS = {
     # Reads finished scores after a run to check two components still
     # measure different things; nothing it computes feeds a score.
     "pipeline/analyze/signal_overlap.py",
+    # The Explore summary prompt and its parser: read only by
+    # services/explore_summary.py, a reader's on-request summary. Nothing
+    # classified or scored reads it.
+    "pipeline/analyze/prompts.py",
     *_COORDINATION_PATHS,
     *_PUBLISHING_PATHS,
 }

@@ -973,8 +973,9 @@ export async function streamExploreDocumentSummary(
     wait(Math.min(summaryRetryDelayMs(retryAfter), Math.max(0, giveUpAt - Date.now())), signal);
   for (;;) {
     const res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
-    // Only a refusal the server marks as a wait (X-Summary-Wait): nginx's
-    // own 503 is not waited out.
+    // Only a refusal marked as a wait (X-Summary-Wait — the backend's, and
+    // nginx's own limits and outages on this route): a 404 or a 500 is not
+    // waited out.
     if (res.headers.get("X-Summary-Wait") === "1" && Date.now() < giveUpAt) {
       // Released now, not at garbage collection: an unread body can hold
       // its connection, and the page has other requests to make meanwhile.
@@ -1228,6 +1229,9 @@ export interface VectorDbStats {
    * 2026-07) — distinct from embeddingModel, which is the
    * classification-side model. Empty until the first reindex completes. */
   indexModelVersion?: string;
+  /** "running" while the search index is rebuilt, "failed" when a rebuild
+   * raised and the index is partial (the next pipeline start rebuilds it). */
+  indexRebuild?: "" | "running" | "failed";
   learningStore?: LearningStoreStats;
   error?: string;
 }

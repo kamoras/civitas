@@ -37,10 +37,10 @@ def cached_json(data, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
 # this moment's, not the resource's; shared rather than no-store, because
 # during an outage every reader's refresh would otherwise reach the upstream
 # again — this bounds that to one request per URL per period, across all
-# visitors. nginx caches it, and serves the expired copy only to requests
-# that arrive while its one background refresh is in flight
-# (proxy_cache_use_stale updating): no stale-while-revalidate is sent, so
-# browsers and any other cache keep it no longer than this.
+# visitors. nginx caches it, and once it expires the next request refreshes
+# it while the others wait on that one (proxy_cache_lock): no
+# stale-while-revalidate is sent, so neither nginx nor a browser nor any
+# other cache serves it past this.
 FAILURE_RETRY_S = 30
 
 

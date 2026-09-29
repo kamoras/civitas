@@ -228,8 +228,12 @@ def _busy_timeout_s() -> float:
 
 
 # vec_meta key: set while ensure_explore_index rebuilds the index from
-# scratch, cleared when the last batch is in.
+# scratch, cleared when the last batch is in. A rebuild that raised leaves
+# _REBUILD_FAILED instead: the partial index is searched again (with the
+# keyword channel, a partial answer beats none until someone restarts the
+# pipeline), and the next start rebuilds it.
 _REBUILDING = "explore_index_rebuilding"
+_REBUILD_FAILED = "failed"
 
 
 def get_vec_conn() -> sqlite3.Connection:
@@ -684,7 +688,7 @@ def search_explore_documents(
     # model's space, and ranking against them would be noise presented as a
     # whole answer. Nor while a rebuild is partway: a few hundred documents
     # are not the index. Not ready, either way.
-    if _get_meta(conn, _REBUILDING):
+    if _get_meta(conn, _REBUILDING) not in (None, "", _REBUILD_FAILED):
         logger.warning("explore index being rebuilt — not ready")
         return None
     if _get_meta(conn, "explore_index_model") != index_identity():
@@ -769,6 +773,10 @@ def collection_stats() -> dict:
         ],
         "indexModelVersion": _get_meta(conn, "explore_index_model") or "",
         "chunksPerDocument": float(_get_meta(conn, "explore_chunks_per_doc") or 0.0),
+        # "running", "failed" (the index is partial), or "" (complete).
+        "indexRebuild": {"": "", None: "", _REBUILD_FAILED: "failed"}.get(
+            _get_meta(conn, _REBUILDING), "running",
+        ),
     }
 
 
@@ -960,7 +968,11 @@ def ensure_explore_index(db_session_factory) -> None:
             _set_meta(conn, _REBUILDING, "")
             logger.info("Explore index rebuild complete: %d documents", total)
         except Exception:
-            logger.exception("Explore index rebuild failed")
+            logger.exception("Explore index rebuild failed — searching the partial index until the next start")
+            try:
+                _set_meta(conn, _REBUILDING, _REBUILD_FAILED)
+            except Exception:
+                logger.exception("Could not record the failed rebuild")
         finally:
             db.close()
 

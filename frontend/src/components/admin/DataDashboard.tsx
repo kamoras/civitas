@@ -144,6 +144,19 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                       <div className="text-sm font-mono text-ink-hi">
                         {d.system.vectorDb.indexModelVersion || "rebuilding…"}
                       </div>
+                      {d.system.vectorDb.indexRebuild && (
+                        <div
+                          className={`text-xs font-mono mt-1 ${
+                            d.system.vectorDb.indexRebuild === "failed"
+                              ? "text-signal-amber"
+                              : "text-ink-lo"
+                          }`}
+                        >
+                          {d.system.vectorDb.indexRebuild === "failed"
+                            ? "rebuild failed: index partial until the pipeline restarts"
+                            : "rebuilding…"}
+                        </div>
+                      )}
                     </div>
                     <div className="border border-white/[0.07] p-3">
                       <div className="text-xs font-mono text-ink-min mb-1">DIMENSIONS</div>

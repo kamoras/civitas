@@ -301,7 +301,7 @@ def _today() -> str:
     own clock, since a visit salt can come from there (_shared_salt)."""
     from app.api import throttle
 
-    return throttle._utc_today()
+    return throttle.utc_today()
 
 
 async def _daily_salt(date: str) -> bytes:

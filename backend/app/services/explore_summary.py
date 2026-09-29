@@ -49,8 +49,9 @@ KEEPALIVE_S = 15.0
 # the prompt's hash too.
 CACHE_KEY_VERSION = 5
 # Marks a refusal that is only a wait: the page asks again after
-# Retry-After. A refusal without it (nginx's own rate limit) is not waited
-# out.
+# Retry-After. nginx marks its own refusals on this route the same way (its
+# rate and connection limits, the pipeline down: @summary_wait); anything
+# unmarked, a 404 or a 500, is a failure the page shows.
 WAIT_OUT = {"X-Summary-Wait": "1"}
 
 _NOTHING = {"summary": "", "keyPoints": [], "impact": ""}

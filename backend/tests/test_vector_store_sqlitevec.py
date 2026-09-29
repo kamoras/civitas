@@ -5,6 +5,8 @@ tiny vectors padded to the real dimension) — no model download, no
 network.
 """
 
+import sqlite3
+
 import numpy as np
 import pytest
 from unittest.mock import MagicMock, patch
@@ -195,6 +197,34 @@ class TestEnsureExploreIndex:
         vector_store._set_meta(
             vector_store.get_vec_conn(), vector_store._REBUILDING, vector_store.index_identity(),
         )
+        with patch.object(vector_store.threading, "Thread") as thread:
+            vector_store.ensure_explore_index(lambda: None)
+        thread.assert_called_once()
+
+    def test_a_rebuild_that_raised_leaves_the_partial_index_searchable(self, vec_env, db_session, monkeypatch):
+        # Not "not ready" until someone restarts the pipeline: the partial
+        # index is searched, the dashboard says so, and the next start
+        # rebuilds it.
+        db_session.add(ExploreDocument(
+            doc_type="House Floor Speech", source="congress.gov",
+            title="A real doc", summary="s", body="b", date="2026-07-01",
+        ))
+        db_session.commit()
+        vector_store.embed_explore_documents([_doc(1, "A real doc")])
+        conn = vector_store.get_vec_conn()
+        vector_store._set_meta(conn, vector_store._REBUILDING, vector_store.index_identity())
+        real_embed = vector_store.embed_explore_documents
+        monkeypatch.setattr(vector_store, "embed_explore_documents",
+                            MagicMock(side_effect=sqlite3.OperationalError("database is locked")))
+        vector_store.ensure_explore_index(lambda: db_session)
+        import threading as _t
+        for t in _t.enumerate():
+            if t.name == "explore-reindex":
+                t.join(timeout=10)
+        monkeypatch.setattr(vector_store, "embed_explore_documents", real_embed)
+
+        assert vector_store.collection_stats()["indexRebuild"] == "failed"
+        assert vector_store.search_explore_documents("A real doc", n_results=1) is not None
         with patch.object(vector_store.threading, "Thread") as thread:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()

@@ -200,7 +200,7 @@ def test_a_summary_read_goes_through_the_miss_hop_and_is_never_served_stale_whil
     assert "updating" not in location[3]
     assert "limit_req zone=" in _match(_locations(internal), "/api/explore/1/cached-summary")[3]
     # Nor does any location that follows the backend's Cache-Control: stale
-    # while refreshing comes only from a response's own, bounded
+    # while refreshing comes only from a response's own
     # stale-while-revalidate (api/cache_headers.py).
     for path in ("/api/senators", "/api/explore", "/api/action/country-news"):
         assert "updating" not in _match(_locations(public), path)[3], path
