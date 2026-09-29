@@ -18,7 +18,7 @@ describe("BallotBasisNotice", () => {
     render(
       <BallotBasisNotice
         basis={basis({ basis: "filers", supersededByPrimary: true, daysSincePrimary: 95 })}
-      />,
+      />
     );
     expect(screen.getByTestId("ballot-superseded")).toBeInTheDocument();
     expect(screen.getByText(/NOT BALLOT POSITIONS/i)).toBeInTheDocument();
@@ -29,7 +29,7 @@ describe("BallotBasisNotice", () => {
     render(
       <BallotBasisNotice
         basis={basis({ basis: "filers", supersededByPrimary: true, daysSincePrimary: null })}
-      />,
+      />
     );
     expect(screen.getByTestId("ballot-superseded")).toBeInTheDocument();
     expect(screen.queryByText(/days ago/)).not.toBeInTheDocument();
@@ -39,7 +39,7 @@ describe("BallotBasisNotice", () => {
     render(
       <BallotBasisNotice
         basis={basis({ basis: "filers", primaryPassed: false, supersededByPrimary: false })}
-      />,
+      />
     );
     expect(screen.queryByTestId("ballot-superseded")).not.toBeInTheDocument();
     expect(screen.getByTestId("ballot-filers")).toBeInTheDocument();

@@ -44,14 +44,21 @@ export async function generateMetadata({
   const path = `/explore/${encodeURIComponent(id)}`;
 
   if (!doc) {
-    return pageMetadata({ title: "Document not found", description: "No record for this document.", path, noindex: true });
+    return pageMetadata({
+      title: "Document not found",
+      description: "No record for this document.",
+      path,
+      noindex: true,
+    });
   }
 
   const who = doc.politicianName || doc.agencyName;
   const byline = [doc.docType, who, doc.date].filter(Boolean).join(" · ");
   return pageMetadata({
     title: doc.title,
-    description: doc.summary ? `${byline}. ${doc.summary}` : `${byline}. Full text and plain-language summary on Civitas.`,
+    description: doc.summary
+      ? `${byline}. ${doc.summary}`
+      : `${byline}. Full text and plain-language summary on Civitas.`,
     path,
     type: "article",
   });

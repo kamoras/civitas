@@ -81,8 +81,8 @@ export default function DataChapter() {
               Senate&apos;s eFD system; the sitting president&apos;s disclosures from the Office of
               Government Ethics. The president&apos;s annual report lists every transaction of its
               year and is the record for that year; the periodic reports since are scans, read by
-              OCR, and their dates support no timeliness figure. One 2026 report, printed at half size,
-              is still mostly unread.
+              OCR, and their dates support no timeliness figure. One 2026 report, printed at half
+              size, is still mostly unread.
             </Fact>
             <Fact label="Lobbying Disclosure Act registry (lda.gov)">
               Registered lobbying spending by organizations that appear among donors, and the bills

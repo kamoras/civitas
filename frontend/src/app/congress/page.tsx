@@ -32,7 +32,10 @@ export default async function CongressPage() {
           <PageMasthead eyebrow="What happened in Congress" title="Congress">
             <p>
               No day of Congress has been recorded yet. The{" "}
-              <Link href="/congress/bills" className="underline decoration-white/30 underline-offset-4 hover:text-phos">
+              <Link
+                href="/congress/bills"
+                className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+              >
                 bills tab
               </Link>{" "}
               shows every bill moving through this Congress.

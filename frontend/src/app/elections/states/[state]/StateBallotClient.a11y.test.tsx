@@ -19,39 +19,87 @@ vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/BackToTop", () => ({ default: () => null }));
 vi.mock("@/components/elections/DistrictMap", () => ({ default: () => null }));
 
-function candidate(id: string, name: string, party: string, extra: Partial<RaceWithCandidates["candidates"][number]> = {}) {
+function candidate(
+  id: string,
+  name: string,
+  party: string,
+  extra: Partial<RaceWithCandidates["candidates"][number]> = {}
+) {
   return {
-    id, name, party, confirmed: true, incumbentChallenge: null, candidateStatus: "C", hasRaisedFunds: true,
-    contributions: 1000, cashOnHand: 500, lastFinancialsSync: "2026-09-20T00:00:00Z", incumbentRecord: null,
+    id,
+    name,
+    party,
+    confirmed: true,
+    incumbentChallenge: null,
+    candidateStatus: "C",
+    hasRaisedFunds: true,
+    contributions: 1000,
+    cashOnHand: 500,
+    lastFinancialsSync: "2026-09-20T00:00:00Z",
+    incumbentRecord: null,
     ...extra,
   };
 }
 
 function race(id: string, office: "S" | "H", district: number | null): RaceWithCandidates {
   return {
-    id, cycleYear: 2026, office, state: "NC", district, isSpecial: false, pvi: 2, pviLevel: "district",
-    candidateSource: "confirmed", counties: office === "H" ? ["Wake County (part)"] : null,
+    id,
+    cycleYear: 2026,
+    office,
+    state: "NC",
+    district,
+    isSpecial: false,
+    pvi: 2,
+    pviLevel: "district",
+    candidateSource: "confirmed",
+    counties: office === "H" ? ["Wake County (part)"] : null,
     candidates: [
-      candidate(`${id}-d`, "A Democrat", "DEM", { incumbentRecord: { id: "M000001", score: 70.5 } }),
+      candidate(`${id}-d`, "A Democrat", "DEM", {
+        incumbentRecord: { id: "M000001", score: 70.5 },
+      }),
       candidate(`${id}-r`, "A Republican", "REP"),
     ],
   };
 }
 
 const ballot: StateBallot = {
-  state: "NC", stateName: "North Carolina", cycleYear: 2026, electionDate: "2026-11-03", electionType: "general",
-  primaryDate: "2026-03-03", statePvi: 2, nextSenateElection: null,
+  state: "NC",
+  stateName: "North Carolina",
+  cycleYear: 2026,
+  electionDate: "2026-11-03",
+  electionType: "general",
+  primaryDate: "2026-03-03",
+  statePvi: 2,
+  nextSenateElection: null,
   senateRaces: [race("2026-SEN-NC", "S", null)],
   houseRaces: [race("2026-HOUSE-NC-1", "H", 1), race("2026-HOUSE-NC-2", "H", 2)],
-  coverage: [{
-    id: 1, sourceType: "news", sourceName: "A Paper", title: "A story", url: "https://example.org/a",
-    summary: "What happened.", author: null, publishedAt: "2026-09-20T00:00:00Z",
-    race: { id: "2026-SEN-NC", office: "S", district: null },
-  }],
-  measures: [], measureCoverage: { status: "confirmed_none", sourceName: "NC SBE", checkedAt: null },
-  statewideRaces: [], statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
-  stateLegRaces: [], judicialRaces: [], judicialCoverage: { status: "not_yet_covered", checkedAt: null, sourceName: null },
-  officialLookup: { url: "https://www.usa.gov/election-office", label: "Find your election office", sourceName: "USA.gov", isStateSpecific: false, verifiedAt: null },
+  coverage: [
+    {
+      id: 1,
+      sourceType: "news",
+      sourceName: "A Paper",
+      title: "A story",
+      url: "https://example.org/a",
+      summary: "What happened.",
+      author: null,
+      publishedAt: "2026-09-20T00:00:00Z",
+      race: { id: "2026-SEN-NC", office: "S", district: null },
+    },
+  ],
+  measures: [],
+  measureCoverage: { status: "confirmed_none", sourceName: "NC SBE", checkedAt: null },
+  statewideRaces: [],
+  statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
+  stateLegRaces: [],
+  judicialRaces: [],
+  judicialCoverage: { status: "not_yet_covered", checkedAt: null, sourceName: null },
+  officialLookup: {
+    url: "https://www.usa.gov/election-office",
+    label: "Find your election office",
+    sourceName: "USA.gov",
+    isStateSpecific: false,
+    verifiedAt: null,
+  },
   omits: ["County and municipal offices"],
 };
 

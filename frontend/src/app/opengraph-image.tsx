@@ -41,124 +41,136 @@ export default async function OgImage() {
   }
 
   return new ImageResponse(
-    (
+    <div
+      style={{
+        background: BASE,
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "Archivo",
+        padding: "60px",
+        position: "relative",
+      }}
+    >
+      {/* Records-band hairlines, not the old CRT scanline/frame combo. */}
       <div
         style={{
-          background: BASE,
-          width: "100%",
-          height: "100%",
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "2px",
+          background: "rgba(187,181,172,0.35)",
+          display: "flex",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: "2px",
+          background: "rgba(187,181,172,0.35)",
+          display: "flex",
+        }}
+      />
+
+      <div
+        style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Archivo",
-          padding: "60px",
-          position: "relative",
+          gap: "28px",
         }}
       >
-        {/* Records-band hairlines, not the old CRT scanline/frame combo. */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: "2px",
-            background: "rgba(187,181,172,0.35)",
-            display: "flex",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: "2px",
-            background: "rgba(187,181,172,0.35)",
-            display: "flex",
-          }}
-        />
-
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "28px",
-          }}
-        >
-          {/* Overprint wordmark: two off-register plates behind the ink
+        {/* Overprint wordmark: two off-register plates behind the ink
               layer — same construction and colours as .overprint on the
               site, offset scaled up from its fixed 3px (sized for a 12px
               navbar mark) to stay proportionate at 96px. */}
-          <div style={{ position: "relative", display: "flex" }}>
-            <div
-              style={{ ...WORDMARK_STYLE, position: "absolute", top: 5, left: -5, color: MAGENTA, display: "flex" }}
-            >
-              {WORDMARK}
-            </div>
-            <div
-              style={{ ...WORDMARK_STYLE, position: "absolute", top: -5, left: 5, color: CYAN, display: "flex" }}
-            >
-              {WORDMARK}
-            </div>
-            <div style={{ ...WORDMARK_STYLE, position: "relative", color: INK_HI, display: "flex" }}>
-              {WORDMARK}
-            </div>
-          </div>
-
+        <div style={{ position: "relative", display: "flex" }}>
           <div
             style={{
-              width: "360px",
-              height: "1px",
-              background: "rgba(205,199,188,0.3)",
-              display: "flex",
-            }}
-          />
-
-          <div
-            style={{
-              fontSize: "22px",
-              color: INK_LO,
-              letterSpacing: "0.2em",
-              textAlign: "center",
+              ...WORDMARK_STYLE,
+              position: "absolute",
+              top: 5,
+              left: -5,
+              color: MAGENTA,
               display: "flex",
             }}
           >
-            {SUBTITLE}
+            {WORDMARK}
           </div>
-
           <div
             style={{
-              fontSize: "18px",
-              color: INK_MIN,
-              letterSpacing: "0.05em",
-              textAlign: "center",
-              maxWidth: "680px",
-              lineHeight: 1.5,
+              ...WORDMARK_STYLE,
+              position: "absolute",
+              top: -5,
+              left: 5,
+              color: CYAN,
               display: "flex",
             }}
           >
-            {DESCRIPTION}
+            {WORDMARK}
           </div>
-
-          <div
-            style={{
-              marginTop: "12px",
-              border: "1px solid rgba(187,181,172,0.3)",
-              padding: "8px 24px",
-              fontSize: "14px",
-              color: INK_MIN,
-              letterSpacing: "0.2em",
-              display: "flex",
-            }}
-          >
-            {DOMAIN}
+          <div style={{ ...WORDMARK_STYLE, position: "relative", color: INK_HI, display: "flex" }}>
+            {WORDMARK}
           </div>
         </div>
+
+        <div
+          style={{
+            width: "360px",
+            height: "1px",
+            background: "rgba(205,199,188,0.3)",
+            display: "flex",
+          }}
+        />
+
+        <div
+          style={{
+            fontSize: "22px",
+            color: INK_LO,
+            letterSpacing: "0.2em",
+            textAlign: "center",
+            display: "flex",
+          }}
+        >
+          {SUBTITLE}
+        </div>
+
+        <div
+          style={{
+            fontSize: "18px",
+            color: INK_MIN,
+            letterSpacing: "0.05em",
+            textAlign: "center",
+            maxWidth: "680px",
+            lineHeight: 1.5,
+            display: "flex",
+          }}
+        >
+          {DESCRIPTION}
+        </div>
+
+        <div
+          style={{
+            marginTop: "12px",
+            border: "1px solid rgba(187,181,172,0.3)",
+            padding: "8px 24px",
+            fontSize: "14px",
+            color: INK_MIN,
+            letterSpacing: "0.2em",
+            display: "flex",
+          }}
+        >
+          {DOMAIN}
+        </div>
       </div>
-    ),
+    </div>,
     {
       ...size,
       // Satori requires at least one *loaded* font — passing an empty array

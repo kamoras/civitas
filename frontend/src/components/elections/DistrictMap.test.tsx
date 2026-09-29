@@ -83,7 +83,7 @@ describe("DistrictMap", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const { container } = render(
-      <DistrictMap state="WY" races={[race(0)]} picked={null} onPick={vi.fn()} />,
+      <DistrictMap state="WY" races={[race(0)]} picked={null} onPick={vi.fn()} />
     );
     expect(container).toBeEmptyDOMElement();
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe("DistrictMap", () => {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: false, status: 404 });
     vi.stubGlobal("fetch", fetchSpy);
     const { container } = render(
-      <DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} />,
+      <DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} />
     );
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();

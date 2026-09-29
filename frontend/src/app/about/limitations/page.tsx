@@ -39,8 +39,8 @@ export default function LimitationsChapter() {
     >
       <Summary>
         <Point>
-          Funding covers six years for a senator but two for a representative, so the two are
-          best read side by side, not ranked.
+          Funding covers six years for a senator but two for a representative, so the two are best
+          read side by side, not ranked.
         </Point>
         <Point>
           &ldquo;What a seat expects&rdquo; comes from how it votes for president: a broad stand-in
@@ -57,15 +57,14 @@ export default function LimitationsChapter() {
           <P>
             Funding covers a member&apos;s most recent completed election: six years of fundraising
             for a senator, two for a representative. The PAC share and top-donor concentration are
-            each scored against the member&apos;s own chamber, but industry concentration is not, and
-            no adjustment makes six years and two years the same span. Within a chamber members are
-            measured over the same length of time, except a member with no completed election yet
-            (appointed, or seated by a special election), who is measured on the campaign still in
-            progress; across chambers the scores are best read side by side, not ranked, which is
+            each scored against the member&apos;s own chamber, but industry concentration is not,
+            and no adjustment makes six years and two years the same span. Within a chamber members
+            are measured over the same length of time, except a member with no completed election
+            yet (appointed, or seated by a special election), who is measured on the campaign still
+            in progress; across chambers the scores are best read side by side, not ranked, which is
             why the compare page names no winner when a senator and a representative are compared.
-            The window itself is deliberate: a strict two-year window would leave most senators
-            with little or no fundraising to measure. FEC filings also lag donations by weeks or
-            months.
+            The window itself is deliberate: a strict two-year window would leave most senators with
+            little or no fundraising to measure. FEC filings also lag donations by weeks or months.
           </P>
         </Limitation>
       </Section>
@@ -160,13 +159,12 @@ export default function LimitationsChapter() {
           <P>
             Ballots are printed per precinct, so there&apos;s no single &ldquo;ballot&rdquo; for a
             whole state. Pages show federal contests, statewide measures and — where a state&apos;s
-            own results or candidate list name them — statewide offices, state legislative seats
-            and judgeships.
-            County and city offices and local measures are shown only for a small, hand-picked list
-            of towns (looked up from each town hall&apos;s address); anywhere else, showing them
-            would mean taking a home address to a lookup service, and we won&apos;t do that. Every
-            page lists what it omits for that state and links to the election office. See{" "}
-            <A href="/about/elections">Elections &amp; ballots</A>.
+            own results or candidate list name them — statewide offices, state legislative seats and
+            judgeships. County and city offices and local measures are shown only for a small,
+            hand-picked list of towns (looked up from each town hall&apos;s address); anywhere else,
+            showing them would mean taking a home address to a lookup service, and we won&apos;t do
+            that. Every page lists what it omits for that state and links to the election office.
+            See <A href="/about/elections">Elections &amp; ballots</A>.
           </P>
         </Limitation>
         <Limitation title="Ballot-measure coverage is still filling in">

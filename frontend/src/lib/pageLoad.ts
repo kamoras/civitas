@@ -11,7 +11,8 @@
  *  navigations inside the app. A client that sends no Sec-Fetch-Dest (not a
  *  browser) is counted as before. */
 export function isPageLoad(headers: Headers): boolean {
-  const purpose = `${headers.get("sec-purpose") ?? ""} ${headers.get("purpose") ?? ""}`.toLowerCase();
+  const purpose =
+    `${headers.get("sec-purpose") ?? ""} ${headers.get("purpose") ?? ""}`.toLowerCase();
   if (purpose.includes("prefetch") || purpose.includes("prerender")) return false;
   const dest = headers.get("sec-fetch-dest");
   return dest === null || dest === "document";
