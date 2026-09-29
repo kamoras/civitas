@@ -154,6 +154,7 @@ export default function MemberScorecard({
               name={member.name}
               seat={seat}
               breaks={member.votingRecord.votedAgainstPartyCount}
+              approval={member.constituentApproval}
               dimension={breakdown?.constituentAlignment}
               score={scores.constituentAlignment}
               weight={weights?.constituentAlignment}

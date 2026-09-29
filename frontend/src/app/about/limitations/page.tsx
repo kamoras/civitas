@@ -84,7 +84,7 @@ export default function LimitationsChapter() {
               would mean building multilevel regression and poststratification over raw survey data
               in-house: a statistics pipeline, and a black box next to every other formula on these
               pages. We chose not to trade auditability for a partial fix. Issue-level opinion data
-              remains the named next step.
+              remains the named next step for the score itself.
             </P>
           </More>
         </Limitation>
@@ -97,7 +97,8 @@ export default function LimitationsChapter() {
             <Cite id="bafumi2010" />. But it is one-dimensional, and members answer to their primary
             voters and supporters as well as to the whole seat
             <Cite id="fenno1978" />
-            <Cite id="clinton2006" />.
+            <Cite id="clinton2006" />. How the member&apos;s own constituents rate them, split by
+            party, is now shown beside the score on each profile (see the next item).
           </P>
         </Limitation>
         <Limitation title="Heavy breaking reads the same whether it builds a coalition or burns one">
@@ -107,8 +108,26 @@ export default function LimitationsChapter() {
             elections from 1990 to 2024, members who broke more than their seat&apos;s norm did
             somewhat better, and some heavy breakers keep winning by appealing to both sides. A
             roll-call record can&apos;t tell them apart from members whose breaks cost them their
-            base; that would take approval data split by party, the same survey data named above.
+            base. That takes approval split by party, so each profile now shows it beside the score:
+            approval of the member among the Democrats, Republicans and independents they represent,
+            from the Cooperative Election Study. It is shown, not scored, until a second survey wave
+            shows it is stable.
           </P>
+          <More label="How sharp the approval figures can be">
+            <P>
+              The 2024 survey asked about 60,000 respondents in October and November 2024, and a
+              profile shows a figure only for a member still in the seat the survey asked about: one
+              who has since moved to another seat or district shows none. Small
+              groups are pulled toward what a typical member of the same party gets from that group,
+              by an amount estimated from how much members actually differ. The survey&apos;s size
+              sets how sharp the House figures can be: a district has about a hundred respondents,
+              so most House figures come mostly from what similar members get. Only Democrats&apos;
+              ratings rest mostly on the district&apos;s own respondents, for about three in five
+              Democratic members and two in five Republican ones, and the profile marks every figure
+              that doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s
+              respondents (a median of 672).
+            </P>
+          </More>
         </Limitation>
         <Limitation title="Some bills are labelled by content">
           <P>
