@@ -344,8 +344,9 @@ export default function DataChapter() {
       <Section id="infrastructure" title="The computer it runs on">
         <P>
           The whole of Civitas — database, models, pipeline and website — runs on one Raspberry Pi
-          5, a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. It draws
-          about 5–12 watts; a cloud AI accelerator draws 250–400
+          5, a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. Its board
+          measured 2–7 watts during the nightly pipeline, and we budget 7 for the whole machine; a
+          cloud AI accelerator draws 250–400
           <Cite id="patterson2021" />. The trade is speed: the nightly pipeline takes hours rather
           than minutes, which is fine for a nightly job. See the{" "}
           <A href="/environmental">environmental page</A> for the full energy accounting.
