@@ -31,9 +31,9 @@ class DonorSchema(CamelModel):
     pac_sponsor: str | None = None
     pac_industry: str | None = None
     pac_analysis: str | None = None
-    # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified)
-    # for this donor's own committee, when known — see
-    # score_calculator._funding_independence_core's PAC-utilization signal.
+    # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified,
+    # ...) for this donor's own committee, when the donor is one. Reported,
+    # not scored (the PAC-utilization signal that read it left in v6.22).
     committee_type: str | None = None
 
 
@@ -627,10 +627,26 @@ class PresidentLeaderboardEntry(CamelModel):
 # ── Supreme Court Justices ──────────────────────────────────────────
 
 class JusticeScoreSchema(CamelModel):
-    consistency: float
-    independence: float
+    # Loyalty to the appointing president, 0-100 (justice_loyalty.score);
+    # None until the Supreme Court Database covers the justice.
+    loyalty: float | None = None
     # Backend-computed overall (justice_service._build_score).
-    overall: float = 0.0
+    overall: float | None = None
+
+
+class JusticeLoyaltySchema(CamelModel):
+    """The loyalty estimate behind the score: points more often for the
+    government while the appointing president is in office (a share), its
+    standard error, the votes under the appointing president and under
+    others with the share of each for the government, and the Supreme Court
+    Database term the record runs through."""
+    estimate: float
+    se: float
+    votes_in: int
+    votes_out: int
+    rate_in: float
+    rate_out: float
+    through_term: int | None = None
 
 
 class JusticeSchema(CamelModel):
@@ -652,9 +668,10 @@ class JusticeSchema(CamelModel):
     authored_dissent: int = 0
     authored_concurrence: int = 0
     close_case_majority_pct: float = 0.0
-    cross_bloc_pct: float = 0.0
     agreement_matrix: dict[str, float] = {}
-    summary: str = ""
+    loyalty: JusticeLoyaltySchema | None = None
+    # Martin-Quinn position per term, [[term, position], ...]: shown, not scored.
+    ideal_points: list[tuple[int, float]] = []
 
 
 class JusticeLeaderboardEntry(CamelModel):
@@ -670,7 +687,7 @@ class JusticeLeaderboardEntry(CamelModel):
     cases_decided: int = 0
     majority_pct: float = 0.0
     dissent_pct: float = 0.0
-    cross_bloc_pct: float = 0.0
+    loyalty: JusticeLoyaltySchema | None = None
 
 
 # ── Action Center ─────────────────────────────────────────────────

@@ -111,6 +111,11 @@ export default function DataChapter() {
             <Fact label="Oyez · supremecourt.gov">
               Cases, justices&apos; votes, and official slip opinions.
             </Fact>
+            <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
+              Every justice&apos;s votes in cases the federal government argued, with Epstein and
+              Posner&apos;s coding through 2014; nomination dates; each justice&apos;s position per
+              term.
+            </Fact>
             <Fact label="State election offices">
               Certified candidate lists and primary results, from each state&apos;s own site; six
               states&apos; official voter guides for ballot measures.
@@ -187,9 +192,6 @@ export default function DataChapter() {
               checked against that record and labelled as developing.
             </Item>
             <Item label="Explore">A summary of a document, only when you ask for one.</Item>
-            <Item label="Justices">
-              A short profile of each justice, written from their voting statistics.
-            </Item>
             <Item label="Bluesky">
               The wording around a post; an issue post&apos;s lead is the verified quote itself.
             </Item>

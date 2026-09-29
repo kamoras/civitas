@@ -7,7 +7,7 @@ import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MemberScorecard from "@/components/scorecard/MemberScorecard";
 import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
-import { JusticeCard } from "@/components/justice/JusticeClient";
+import JusticeScorecard from "@/components/scorecard/JusticeScorecard";
 import { formerOfficeNotice } from "@/lib/officeStatus";
 import { issueDateLabel } from "@/lib/formatting";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
@@ -81,9 +81,6 @@ export default function PoliticianProfileClient({
 }) {
   const { identity, branch, activeIssues, governmentRecord, scorecard } = profile;
   const isMember = branch === "senate" || branch === "house";
-  // Members' and presidents' scorecards set their score columns side by
-  // side, so their pages are wider than a justice's.
-  const wide = isMember || branch === "president";
 
   // Justices carry `isActive`; every other branch carries `isCurrent`.
   const hasLeftOffice =
@@ -94,7 +91,7 @@ export default function PoliticianProfileClient({
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
-        <div className={`${wide ? "max-w-7xl" : "max-w-4xl"} mx-auto`}>
+        <div className="max-w-7xl mx-auto">
           {/* Breadcrumb */}
           <div className="mb-6 font-mono text-xs text-ink-min">
             <Link href="/politicians" className="hover:text-phos transition-colors">
@@ -165,7 +162,12 @@ export default function PoliticianProfileClient({
                 />
               )}
               {branch === "scotus" && (
-                <JusticeCard justice={scorecard as unknown as Justice} titleAs="h1" />
+                <JusticeScorecard
+                  key={(scorecard as unknown as Justice).id}
+                  justice={scorecard as unknown as Justice}
+                  rank={profile.chamberRank}
+                  titleAs="h1"
+                />
               )}
 
               {(branch === "senate" || branch === "house") && identity.state && (

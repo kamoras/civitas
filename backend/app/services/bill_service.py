@@ -329,9 +329,12 @@ def _issues_mentioning(db: Session, bill_id: str) -> list[RelatedIssueSchema]:
     return result
 
 
-def get_bill_detail(db: Session, bill_id: str) -> BillDetailSchema | None:
+def get_bill_detail(db: Session, bill_id: str, congress: int | None = None) -> BillDetailSchema | None:
     """Look up a single bill by its bill_id (e.g. "S.4967", "HR.22") among
-    current senators' and representatives' sponsored bills.
+    current senators' and representatives' sponsored bills: of `congress`
+    when given, else the newest Congress held. A bill number alone names a
+    different bill in each Congress, so without the Congress the row was
+    whichever came first.
 
     Queried directly rather than through _collect_bills' cache — a single
     lookup on the indexed bill_id column (ix_*_bill_id, database.py) is
@@ -340,27 +343,27 @@ def get_bill_detail(db: Session, bill_id: str) -> BillDetailSchema | None:
     """
     bill_id = bill_id.upper()
 
-    row = (
-        db.query(SponsoredBill, Senator)
-        .join(Senator, SponsoredBill.senator_id == Senator.id)
-        .filter(SponsoredBill.bill_id == bill_id)
-        .filter(Senator.is_current == True)  # noqa: E712
-        .first()
-    )
-    chamber = "senate"
-    if row is None:
-        row = (
-            db.query(RepSponsoredBill, Representative)
-            .join(Representative, RepSponsoredBill.representative_id == Representative.id)
-            .filter(RepSponsoredBill.bill_id == bill_id)
-            .filter(Representative.is_current == True)  # noqa: E712
-            .first()
+    candidates = []
+    for chamber, model, member_model, fk in (
+        ("senate", SponsoredBill, Senator, SponsoredBill.senator_id),
+        ("house", RepSponsoredBill, Representative, RepSponsoredBill.representative_id),
+    ):
+        q = (
+            db.query(model, member_model)
+            .join(member_model, fk == member_model.id)
+            .filter(model.bill_id == bill_id)
+            .filter(member_model.is_current == True)  # noqa: E712
         )
-        chamber = "house"
-    if row is None:
+        if congress is not None:
+            q = q.filter(model.congress == congress)
+        found = q.order_by(model.congress.desc()).first()
+        if found is not None:
+            candidates.append((found[0].congress or 0, chamber, found))
+    if not candidates:
         return None
 
-    sp, member = row
+    # The newest Congress wins; between chambers the Senate row, as before.
+    _, chamber, (sp, member) = max(candidates, key=lambda c: (c[0], c[1] == "senate"))
     related = _issues_mentioning(db, bill_id)
 
     return BillDetailSchema(

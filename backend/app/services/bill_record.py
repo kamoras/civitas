@@ -14,6 +14,7 @@ never reads as a bill with no actions or no cosponsors.
 import asyncio
 import html as html_lib
 import re
+import time
 import unicodedata
 from collections.abc import Awaitable, Callable
 
@@ -77,15 +78,22 @@ async def _congress_get(client: httpx.AsyncClient, url: str):
 
 async def fetch_bill_record(
     client: httpx.AsyncClient, db: Session, congress: int, bill_id: str,
-    spend: Callable[[int], Awaitable[None]] | None = None,
+    spend: Callable[[int], Awaitable[None]] | None = None, deadline_s: float | None = None,
 ) -> dict:
     """{bill, summaries, actions, cosponsors, text, unavailable: [...],
     not_found}: not_found when Congress.gov has no such bill.
 
     `spend(n)` is charged, before the requests it pays for go out, with the
     parts not already cached — the bill first, the rest once it exists (the
-    public route's upstream budget; it raises to refuse). A bill Congress.gov has no record of is cached too, so the
-    same wrong id asked again costs nothing upstream."""
+    public route's upstream budget; it raises to refuse). A bill Congress.gov
+    has no record of is cached too, so the same wrong id asked again costs
+    nothing upstream.
+
+    `deadline_s` bounds the whole fetch. Congress.gov's rate limiter is
+    shared with the nightly pipeline, which keeps it busy for hours, and a
+    reader's page waits on this: a part still unfetched when time runs out
+    is named in `unavailable`, not cached, and fetched by a later visit."""
+    started = time.monotonic()
     type_path, number = parse_bill_id(bill_id)
     out: dict = {"unavailable": [], "not_found": False}
     keys = {part: f"bill-record-{part}-{congress}-{type_path}-{number}" for part in _PARTS}
@@ -125,7 +133,15 @@ async def fetch_bill_record(
             if part != "bill" and not rest_charged:
                 rest_charged = True
                 await charge(sum(1 for p in missing if p != "bill"))
-            data = await _congress_get(client, f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}")
+            url = f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}"
+            if deadline_s is None:
+                data = await _congress_get(client, url)
+            else:
+                remaining = deadline_s - (time.monotonic() - started)
+                try:
+                    data = await asyncio.wait_for(_congress_get(client, url), remaining) if remaining > 0 else None
+                except TimeoutError:
+                    data = None
             if data is NOT_FOUND:
                 if part == "bill":
                     out["not_found"] = True

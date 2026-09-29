@@ -8,7 +8,7 @@ all-zero "not yet scored" guard and rounding to 1 decimal place."""
 import pytest
 
 from app.api.politicians import _president_overall, _senator_overall
-from app.models import President, Representative, Senator
+from app.models import Justice, President, Representative, Senator
 from app.pipeline.analyze.score_calculator import compute_overall_score
 
 
@@ -176,6 +176,17 @@ class TestChamberRank:
         assert _chamber_rank("president", db_session.get(President, "b-2"), db_session) == {"rank": 2, "of": 2}
         assert _chamber_rank("president", db_session.get(President, "c-3"), db_session) is None
 
-    def test_no_rank_for_a_justice(self, db_session):
+    def test_justices_rank_by_loyalty_and_the_unmeasured_are_unranked(self, db_session):
         from app.api.politicians import _chamber_rank
-        assert _chamber_rank("scotus", object(), db_session) is None
+        for jid, score in (("a", 90.0), ("b", 40.0), ("new", None)):
+            db_session.add(Justice(id=jid, name=jid, last_name=jid, is_active=True, score_loyalty=score))
+        db_session.add(Justice(id="retired", name="r", last_name="r", is_active=False, score_loyalty=99.0))
+        db_session.commit()
+
+        def rank(jid):
+            return _chamber_rank("scotus", db_session.get(Justice, jid), db_session)
+
+        assert rank("a") == {"rank": 1, "of": 2}
+        assert rank("b") == {"rank": 2, "of": 2}
+        assert rank("new") is None
+        assert rank("retired") is None

@@ -354,6 +354,15 @@ class TestCollectionCache:
 
 
 class TestGetBillDetail:
+    def test_a_bill_number_is_read_in_the_congress_asked_for(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "ENACTED", congress=CURRENT - 1, title="Last Congress's S. 1")
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED", congress=CURRENT, title="This Congress's S. 1")
+
+        assert get_bill_detail(db_session, "S.1").title == "This Congress's S. 1"
+        assert get_bill_detail(db_session, "S.1", CURRENT - 1).title == "Last Congress's S. 1"
+        assert get_bill_detail(db_session, "S.1", CURRENT - 2) is None
+
     def test_finds_senate_bill(self, db_session):
         senator = _make_senator(db_session)
         _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE", title="A bill")

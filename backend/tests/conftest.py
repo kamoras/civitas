@@ -143,12 +143,12 @@ TEST_LES_REFERENCE = {
 # 2026-07 audit medians that were hand-typed as the multipliers 3.2 / 1.35.
 TEST_FUNDING_REFERENCE = {
     "senate": {
-        "n": 100, "pac_ratio_median": 0.157, "pac_dollars_median": 662750.0,
+        "n": 100, "pac_ratio_median": 0.157,
         "concentration_p10": 0.212, "concentration_median": 0.305, "concentration_p90": 0.383,
         "small_donor_p10": 8.0, "small_donor_median": 18.62, "small_donor_p90": 29.2,
     },
     "house": {
-        "n": 435, "pac_ratio_median": 0.371, "pac_dollars_median": 662750.0,
+        "n": 435, "pac_ratio_median": 0.371,
         "concentration_p10": 0.212, "concentration_median": 0.275, "concentration_p90": 0.383,
         "small_donor_p10": 8.0, "small_donor_median": 18.62, "small_donor_p90": 29.2,
     },

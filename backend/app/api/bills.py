@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json, retry_soon_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db, off_loop
 from app.http_client import make_async_client
 from app.pipeline.fetch.congress import expected_current_congress
@@ -45,12 +45,23 @@ def list_bills_in_flight(
 
 
 @router.get("/bills/{bill_id}")
-def get_bill(bill_id: str, db: Session = Depends(get_db)) -> JSONResponse:
-    """Return full detail for a single bill by its bill_id (e.g. "S.4967")."""
-    detail = get_bill_detail(db, bill_id)
+def get_bill(
+    bill_id: str,
+    congress: int | None = Query(None, ge=93, le=200),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Return full detail for a single bill by its bill_id (e.g. "S.4967"):
+    of `congress` when given, else the newest one held."""
+    detail = get_bill_detail(db, bill_id, congress)
     if detail is None:
         raise HTTPException(status_code=404, detail="Bill not found")
     return _cached_json(detail.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+
+
+# How long a reader's bill page waits on Congress.gov before it is served
+# with what arrived (fetch_bill_record's deadline_s). The limiter is shared
+# with the nightly pipeline: without a bound, a page took over a minute.
+_RECORD_DEADLINE_S = 10.0
 
 
 @router.get("/bills/{bill_id}/record")
@@ -74,13 +85,14 @@ async def get_bill_record(
     if congress > current:
         raise HTTPException(status_code=404, detail="That Congress hasn't convened")
     async with make_async_client() as client:
-        raw = await fetch_bill_record(client, db, congress, bill_id, spend=spend_upstream)
+        raw = await fetch_bill_record(
+            client, db, congress, bill_id, spend=spend_upstream, deadline_s=_RECORD_DEADLINE_S,
+        )
     if raw["not_found"]:
         raise HTTPException(status_code=404, detail="Bill not found")
     # Its roll-call queries off the event loop, on a session of their own.
-    record = await off_loop(db, lambda session: shape_record(session, congress, bill_id, raw))
+    shaped = await off_loop(db, lambda session: shape_record(session, congress, bill_id, raw))
     if raw["unavailable"]:
-        # Some part timed out or failed upstream just now; cached, every
-        # reader would get the gap until it expired.
-        return retry_soon_json(record)
-    return _cached_json(record, max_age=CACHE_TTL_DETAIL_S)
+        # Partial: a browser or nginx must not keep it once the rest arrives.
+        return JSONResponse(content=shaped, headers={"Cache-Control": "no-store"})
+    return _cached_json(shaped, max_age=CACHE_TTL_DETAIL_S)
