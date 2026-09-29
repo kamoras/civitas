@@ -1,0 +1,27 @@
+name: Torch CPU pin watch
+
+# Dependabot can't update torch: it is pinned by CPU-only wheel URL + sha256
+# (see backend/requirements.txt and dependabot.yml's `torch` ignore). This
+# stands in for it — a red run means a newer CPU build is published, and the
+# log prints the replacement lines. It is not part of `CI`, so it never gates
+# a PR or a deploy (check-and-deploy.sh reads only the CI workflow).
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, alongside Dependabot's weekly run
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install packaging
+      - run: python backend/scripts/check_torch_cpu_pin.py

@@ -94,6 +94,21 @@ updates:
       # Pi and CI actually install — on the old version, with CI still
       # green. Bumped by hand instead; the steps are in requirements.txt.
       - dependency-name: "torch"
+      # Children capped by a parent's range, where a release past the cap
+      # is already out (checked against PyPI 2026-09-29), so Dependabot
+      # would open a PR pip can't install, every week. Lift each entry when
+      # its parent's newest release raises the cap (`pip show` / the
+      # parent's METADATA Requires-Dist):
+      #   pyee    — playwright 1.63.0 requires `pyee<14,>=13`; 14.0.0 is out.
+      #   mpmath  — sympy requires `mpmath<1.4`; 1.4.1 is out.
+      # Other capped children (atproto's cryptography<51, zstandard<0.26,
+      # dnspython<3, ...) have no release past the cap yet; a Dependabot PR
+      # for one fails at `pip install` in CI, which is the signal to add it
+      # here.
+      - dependency-name: "pyee"
+        versions: [">=14"]
+      - dependency-name: "mpmath"
+        versions: [">=1.4"]
       # pydantic-core is one case where grouping cannot help: pydantic
       # pins it with `==`, so there is exactly one correct pydantic-core for
       # a given pydantic and no independent upgrade ever exists. It moves

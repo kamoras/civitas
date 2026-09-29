@@ -36,8 +36,8 @@ method — a least-squares expectation and a percentage-point scale, peaking
 one scale above the expectation — which this script keeps as a labelled
 local copy (v615_expectation, v615_score) so those numbers still reproduce
 and v6.16 can be compared against it like for like. Run it with the backend's environment plus the research-only
-dependencies (not in requirements.txt):
-    pip install pandas statsmodels rdata pyreadr
+dependencies (requirements-research.txt):
+    pip install -r requirements.txt -r requirements-research.txt
 Run:
     python backend/scripts/research_constituent_alignment.py [--cache DIR]
 """

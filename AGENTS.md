@@ -943,6 +943,21 @@ the pending list).
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
 - Use parameterized queries via SQLAlchemy ORM; never concatenate user input into SQL
+- **Dependencies** (`backend/requirements.txt`) pin exactly the dependency tree
+  of the direct dependencies — every package, `==` or a sha256-hashed wheel
+  URL, nothing extra. `tests/test_requirements_pins.py` enforces both
+  directions: add a new direct dependency to its `DIRECT` set, and when you
+  drop one's last use, remove it there and the test names every pin that went
+  unused with it (42 ChromaDB-era pins sat in the image for months before
+  anyone noticed). Everything installs from wheels (`--only-binary=:all:` in
+  the Dockerfile and CI): a package with no aarch64 wheel fails the build
+  rather than compiling for the build host's CPU (the 2026-07-12 SIGILL).
+  torch is the **CPU-only** build, pinned by wheel URL per architecture —
+  PyPI's Linux torch drags in ~4 GB of NVIDIA CUDA libraries the Pi can't
+  use. Dependabot can't bump it; `scripts/check_torch_cpu_pin.py` (weekly in
+  `torch-cpu-watch.yml`) reports a newer build and prints the replacement
+  lines. Research/calibration scripts' extra packages (pandas, statsmodels,
+  …) live in `requirements-research.txt`, never in the image.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
   time. The `senator_service.py` and `representative_service.py` read paths use

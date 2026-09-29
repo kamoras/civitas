@@ -54,6 +54,9 @@ Per task and model:
   knn_auroc   — the same for the kNN winner's vote share.
   margin      — median top-1 minus runner-up prototype similarity.
 
+--onnx needs onnxruntime (requirements-research.txt):
+    pip install -r requirements.txt -r requirements-research.txt
+
 Run (downloads models on first use; CPU is fine):
     cd backend && python3 scripts/evaluate_embedding_models.py \
         [--fec-cm cm26.txt] [--db /data/civitas.db] [--models NAME ...]

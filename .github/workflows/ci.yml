@@ -84,18 +84,14 @@ jobs:
           # origin/main, which a depth-1 checkout doesn't have.
           fetch-depth: 0
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc g++ libxml2-dev libxslt-dev
-
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - run: pip install -r requirements.txt
+      # Wheels only, as in backend/Dockerfile (see the comment there).
+      - run: "pip install --only-binary=:all: -r requirements.txt"
 
       - name: Lint (ruff)
         # Pinned: ruff 0.16.0 (released 2026-07-23) flags 345 pre-existing
@@ -270,12 +266,6 @@ jobs:
             echo "needed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install system dependencies
-        if: steps.check.outputs.needed == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc g++ libxml2-dev libxslt-dev
-
       - uses: actions/setup-python@v7
         if: steps.check.outputs.needed == 'true'
         with:
@@ -283,7 +273,8 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - run: pip install -r requirements.txt
+      # Wheels only, as in backend/Dockerfile (see the comment there).
+      - run: "pip install --only-binary=:all: -r requirements.txt"
         if: steps.check.outputs.needed == 'true'
 
       - name: Cache sentence-transformer model
