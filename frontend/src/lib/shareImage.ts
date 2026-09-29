@@ -16,7 +16,7 @@
  * `/photo/bioguide/…` route, and any other third-party image is left out
  * (see `captureImageData`). That guard sees images only: modern-screenshot
  * fetches fonts, stylesheets and external `<use href>` targets directly,
- * which is safe while those stay self-hosted (next/font, compiled CSS).
+ * which is safe while those stay self-hosted (app/fonts.ts, compiled CSS).
  */
 
 import { bioguideIdFromPhotoUrl } from "./bioguide";
@@ -114,7 +114,7 @@ function cssVar(name: string, fallback: string): string {
 
 /** A computed style of a Tailwind class, read off a throwaway element in
  *  <body> — the palette and the fonts live in CSS, not in this file. It has
- *  to be <body>: next/font puts its family variables on the body's class,
+ *  to be <body>: the root layout puts the font variables on <body>,
  *  not on :root, so a `var(--font-…)` read from the root comes back empty. */
 function resolveClassStyle(
   className: string | undefined,
