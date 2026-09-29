@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { inOtherDialog } from "@/lib/focusedDialog";
 
 interface ModalProps {
   open: boolean;
@@ -23,6 +24,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
+      if (inOtherDialog(e, dialogRef.current)) return;
       if (e.key === "Escape") {
         onClose();
         return;

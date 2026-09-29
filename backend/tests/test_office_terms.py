@@ -34,9 +34,10 @@ def test_a_seat_of_a_district_body_uses_the_bodys_term_and_nothing_is_guessed():
     assert term_years("statewide", "GA", "public_service_commission-3") == 6
     assert term_years("legislature", "MD", "lower") == 4
     assert term_years("judicial", "NC", "district") == 4
-    # Not listed: no term, rather than a default that is wrong for New
-    # Hampshire's two-year governors.
-    assert term_years("statewide", "NH", "governor") is None
+    # Not listed: no term, rather than a default -- which would have been
+    # wrong for New Hampshire's two-year governors before they were listed.
+    assert term_years("statewide", "NH", "attorney_general") is None
+    assert term_years("statewide", "NH", "governor") == 2
 
 
 def test_the_file_is_where_the_loader_looks():

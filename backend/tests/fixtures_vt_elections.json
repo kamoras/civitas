@@ -62,5 +62,21 @@
     "electionYear": 2026,
     "isHomeLinks": false,
     "town": "READSBORO"
+  },
+  {
+    "electionGuid": "68d61e96-1d28-4210-8c1d-8e90512ae105",
+    "electionName": "2026 GENERAL ELECTION",
+    "electionDate": "2026-11-03T00:00:00",
+    "electionDateWithName": "11/03/2026 -- 2026 GENERAL ELECTION",
+    "isDefault": false,
+    "isStateWideElection": true,
+    "isGeneralElection": true,
+    "isSync": true,
+    "electionTypeCode": "G",
+    "electionCategoryCode": "S",
+    "isOfficial": false,
+    "electionYear": 2026,
+    "isHomeLinks": false,
+    "town": null
   }
 ]

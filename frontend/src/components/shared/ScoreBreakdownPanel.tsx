@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  fetchJusticeScoreBreakdown,
   fetchPresidentScoreBreakdown,
   fetchRepScoreBreakdown,
   fetchSenatorScoreBreakdown,
@@ -11,29 +10,22 @@ import { getScoreColor } from "@/lib/representation";
 import type { ScoreBreakdownComponent } from "@/types/scoreBreakdown";
 import Modal from "./Modal";
 
-export type BreakdownEntityType = "senator" | "representative" | "president" | "justice";
+export type BreakdownEntityType = "senator" | "representative" | "president";
 
 interface ScoreBreakdownPanelProps {
   entityType: BreakdownEntityType;
   entityId: string;
-  /** Key into the fetched breakdown dict, e.g. "fundingIndependence", "agencyAlignment", "consistency". */
+  /** Key into the fetched breakdown dict, e.g. "fundingIndependence", "agencyAlignment". */
   dimensionKey: string;
   label: string;
 }
 
-// Loosely typed on purpose: senator/rep/president dimensions share
-// {score, components, note?} but president also has {score, seedOnly},
-// and justice's breakdown sub-objects are a free-form {detail, ...numbers}
-// bag (analyze_justice_votes' math doesn't decompose into weighted
-// components the way the other three do) — forcing one rigid shape onto
-// all four would fight the data more than it would help render it.
+// Senator, representative and president dimensions share
+// {score, components, note?}.
 interface FetchedDimension {
   score?: number;
   components?: ScoreBreakdownComponent[];
   note?: string;
-  seedOnly?: boolean;
-  detail?: string;
-  [key: string]: unknown;
 }
 
 type LoadState = "idle" | "loading" | "error" | "ready";
@@ -64,14 +56,10 @@ function fetchEntityBreakdown(
         FetchedDimension
       >;
     }
-    if (entityType === "president") {
-      return (await fetchPresidentScoreBreakdown(entityId)) as unknown as Record<
-        string,
-        FetchedDimension
-      >;
-    }
-    const justice = await fetchJusticeScoreBreakdown(entityId);
-    return justice.breakdown as unknown as Record<string, FetchedDimension>;
+    return (await fetchPresidentScoreBreakdown(entityId)) as unknown as Record<
+      string,
+      FetchedDimension
+    >;
   })();
   _breakdownCache.set(key, promise);
   return promise;
@@ -103,14 +91,6 @@ function ComponentRow({ c }: { c: ScoreBreakdownComponent }) {
 }
 
 function DimensionBody({ dimension }: { dimension: FetchedDimension }) {
-  if (dimension.seedOnly) {
-    return (
-      <p className="text-ink-lo italic">
-        Editorial estimate — not computed from a live formula. See the methodology page for
-        sourcing.
-      </p>
-    );
-  }
   if (dimension.components && dimension.components.length > 0) {
     return (
       <div>
@@ -127,11 +107,6 @@ function DimensionBody({ dimension }: { dimension: FetchedDimension }) {
   }
   if (dimension.note) {
     return <p className="text-ink-lo italic">{dimension.note}</p>;
-  }
-  // Justice dimensions: no components array, just a plain-language detail
-  // string plus raw supporting numbers (already shown elsewhere on the page).
-  if (dimension.detail) {
-    return <p className="text-ink leading-relaxed">{dimension.detail}</p>;
   }
   return <p className="text-ink-min italic">No breakdown available.</p>;
 }

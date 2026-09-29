@@ -265,3 +265,182 @@ class TestFetchConfirmedCandidates:
             "republican-state-primary": REP_PAGE_HTML,
         }, {}, held="2026-01-01")  # discovery succeeds, but every file download 404s
         assert await nh.fetch_confirmed_candidates(None, 2026, "NH", {}) is None
+
+
+# ── Statewide: the Governor ───────────────────────────────────────────
+#
+# fixtures_nh_democratic_page_statewide.html holds three REAL anchors off
+# the live 2026 Democratic State Primary page (fetched 2026-09-28): the
+# "Governor Summary" workbook, one of its ten per-county breakdowns
+# ("Governor Belknap", the decoy the summary rule must refuse), and
+# "Executive Council District 1", read one seat per district.
+#
+# The rows are the real 2026 Governor Summary exports, trimmed to two
+# counties. Statewide the real totals are Cinde Warmington 126,626 (the
+# only Democrat on the ballot) and Kelly Ayotte 100,920 to Shaun Fife's 4,418
+# on the Republican side; Ayotte's 2,643 write-ins on the Democratic ballot
+# (Belknap 193 + Carroll 90 here) must stay out of the Democratic count.
+
+STATEWIDE_ANCHORS = (FIXTURES / "fixtures_nh_democratic_page_statewide.html").read_text()
+DEM_PAGE_SW = DEM_PAGE_HTML + STATEWIDE_ANCHORS
+REP_PAGE_SW = DEM_PAGE_SW.replace("democratic", "republican").replace("Democratic", "Republican")
+
+GOV_DEM_ROWS = [
+    [None, "State of New Hampshire - Primary Election"],
+    [None, "Governor - Democratic"],
+    ["Summary By Counties", "Cinde Warmington, d", "Kelly Ayotte, r", "Shaun Fife, r", "Bob Wayne McClory, r", "", "Write-Ins"],
+    ["Belknap", "5326", "193", "2", "0", "", "59"],
+    ["Carroll", "5542", "90", "0", "0", "", "56"],
+    ["TOTALS", "10868", "283", "2", "0", "0", "115"],
+]
+GOV_REP_ROWS = [
+    [None, "State of New Hampshire - Primary Election"],
+    [None, "Governor - Republican"],
+    ["Summary By Counties", "Kelly Ayotte, r", "Shaun Fife, r", "Bob Wayne McClory, r", "Cinde Warmington, d", "", "Write-Ins"],
+    ["Belknap", "6591", "266", "185", "28", "", "29"],
+    ["Carroll", "5560", "235", "217", "19", "", "8"],
+    ["TOTALS", "12151", "501", "402", "47", "0", "37"],
+]
+
+
+# Real anchor and rows off the live 2026 primary pages and their
+# "Executive Council District N" workbooks (fetched 2026-09-28), trimmed
+# to two towns plus the file's own TOTALS row (never summed: see
+# _office_choices).
+EC4_ANCHOR = (
+    '<a class="file file--mime-application-vnd-openxmlformats-officedocument-spreadsheetml-sheet '
+    'file--x-office-spreadsheet" data-entity-type="file" '
+    'data-entity-uuid="08ccb5b8-6bcb-4d3f-bd5a-1f621f8b0859" '
+    'filename="2026-sp-executive-council-4-democratic.xlsx" '
+    'href="/sites/g/files/ehbemt561/files/inline-documents/sonh/2026-sp-executive-council-4-democratic.xlsx">'
+    'Executive Council District 4</a>'
+)
+EC1_DEM_ROWS = [
+    [None, "State of New Hampshire - Primary Election"],
+    [None, "Executive Council - District No. 1 Democratic"],
+    ["SEPTEMBER 08, 2026", "Luz Bay, d", "Joseph D. Kenney, r", "", "Write-Ins "],
+    ["Albany", "76", "", "", ""],
+    ["Alexandria", "134", "", "", ""],
+    ["TOTALS", "26664", "47", "0", "77"],
+]
+EC1_REP_ROWS = [
+    [None, "State of New Hampshire - Primary Election"],
+    [None, "Executive Council - District No. 1 Republican"],
+    ["SEPTEMBER 08, 2026", "Joseph D. Kenney, r", "Luz Bay, d", "", "Write-Ins "],
+    ["Albany", "56", "1", "", "0"],
+    ["Alexandria", "183", "2", "", "2"],
+    ["TOTALS", "20775", "62", "0", "102"],
+]
+EC4_DEM_ROWS = [
+    [None, "State of New Hampshire - Primary Election"],
+    [None, "Executive Council - District No. 4 Democratic"],
+    ["SEPTEMBER 08, 2026", "Jim O'Connell, d", "Terese M. Bastarache, r", "Harriet E. Cady, r", "John Stephen, r", "",
+     "Write-Ins "],
+    ["Allenstown", "334", "", "", "", "", "0"],
+    ["Auburn", "564", "", "", "35", "", "2"],
+    ["TOTALS", "22817", "4", "0", "35", "0", "91"],
+]
+EC4_REP_ROWS = [
+    [None, "State of New Hampshire - Primary Election"],
+    [None, "Executive Council - District No. 4 Republican"],
+    ["SEPTEMBER 08, 2026", "Terese M. Bastarache, r", "Harriet E. Cady, r", "John Stephen, r", "Jim O'Connell, d", "",
+     "Write-Ins "],
+    ["Allenstown", "47", "56", "253", "3", "", "1"],
+    ["Auburn", "76", "81", "536", "", "", "2"],
+    ["TOTALS", "2543", "1877", "14261", "33", "0", "37"],
+]
+
+class TestStatewide:
+    def _patch_sw(self, monkeypatch, dem_page=DEM_PAGE_SW, rep_page=REP_PAGE_SW):
+        _patch(monkeypatch, {
+            "/elections": ROOT_HTML,
+            "state-primary-election-results": INDEX_HTML,
+            "democratic-state-primary": dem_page,
+            "republican-state-primary": rep_page,
+        }, {
+            "us-senator-summary-democratic": _workbook(DEM_ROWS),
+            "us-senator-summary-republican": _workbook(REP_ROWS),
+            "congressional-district-1-democratic": _workbook(DEM_ROWS),
+            "congressional-district-1-republican": _workbook(REP_ROWS),
+            "governor-summary-democratic": _workbook(GOV_DEM_ROWS),
+            "governor-summary-republican": _workbook(GOV_REP_ROWS),
+            "executive-council-1-democratic": _workbook(EC1_DEM_ROWS),
+            "executive-council-1-republican": _workbook(EC1_REP_ROWS),
+        }, held="2026-01-01")
+
+    @pytest.mark.asyncio
+    async def test_discovers_the_governor_summary_and_the_council_districts(self, monkeypatch):
+        self._patch_sw(monkeypatch)
+        offices = await nh._discover_office_links(None, 2026, statewide=True)
+        # Not "Governor Belknap": a per-county breakdown of a statewide race.
+        assert set(offices) == {("S", None), ("H", 1), ("governor", None), ("executive_council", "1")}
+        assert offices[("governor", None)]["d"].endswith("governor-summary-democratic.xlsx")
+        assert offices[("governor", None)]["r"].endswith("governor-summary-republican.xlsx")
+
+    @pytest.mark.asyncio
+    async def test_without_the_opt_in_the_governor_is_not_discovered(self, monkeypatch):
+        self._patch_sw(monkeypatch)
+        offices = await nh._discover_office_links(None, 2026)
+        assert set(offices) == {("S", None), ("H", 1)}
+
+    @pytest.mark.asyncio
+    async def test_resolves_the_real_governor_nominees(self, monkeypatch):
+        self._patch_sw(monkeypatch)
+        records = await nh.fetch_confirmed_candidates(None, 2026, "NH", {"statewide_offices": True})
+        governor = [r for r in records if r["office"] == "governor"]
+        assert sorted(governor, key=lambda r: r["party"]) == [
+            {"office": "governor", "district": None, "party": "D", "last_name": "Cinde Warmington"},
+            {"office": "governor", "district": None, "party": "R", "last_name": "Kelly Ayotte"},
+        ]
+        # The federal records are unchanged by the opt-in.
+        assert {(r["office"], r["party"]) for r in records if r["office"] in ("S", "H")} == {
+            ("S", "D"), ("S", "R"), ("H", "D"), ("H", "R"),
+        }
+
+    @pytest.mark.asyncio
+    async def test_the_executive_council_is_read_one_seat_per_district(self, monkeypatch):
+        """A statewide body seated by district is listed per district, like
+        the legislature (the one rule for every such body). Each party page
+        links one workbook per district -- no "Summary", no per-county
+        breakdown -- and only its own party's columns count: John Stephen's
+        35 Democratic-ballot write-ins stay out, and in the real Republican
+        District 4 file he took 14,261 to Bastarache's 2,543 and Cady's
+        1,877 (the rows below are two of its 33 towns)."""
+        dem_page = DEM_PAGE_SW + EC4_ANCHOR
+        rep_page = dem_page.replace("democratic", "republican").replace("Democratic", "Republican")
+        _patch(monkeypatch, {
+            "/elections": ROOT_HTML,
+            "state-primary-election-results": INDEX_HTML,
+            "democratic-state-primary": dem_page,
+            "republican-state-primary": rep_page,
+        }, {
+            "us-senator-summary-democratic": _workbook(DEM_ROWS),
+            "us-senator-summary-republican": _workbook(REP_ROWS),
+            "congressional-district-1-democratic": _workbook(DEM_ROWS),
+            "congressional-district-1-republican": _workbook(REP_ROWS),
+            "governor-summary-democratic": _workbook(GOV_DEM_ROWS),
+            "governor-summary-republican": _workbook(GOV_REP_ROWS),
+            "executive-council-1-democratic": _workbook(EC1_DEM_ROWS),
+            "executive-council-1-republican": _workbook(EC1_REP_ROWS),
+            "executive-council-4-democratic": _workbook(EC4_DEM_ROWS),
+            "executive-council-4-republican": _workbook(EC4_REP_ROWS),
+        }, held="2026-01-01")
+        records = await nh.fetch_confirmed_candidates(None, 2026, "NH", {"statewide_offices": True})
+        council = sorted(
+            (r["district"], r["party"], r["last_name"]) for r in records if r["office"] == "executive_council"
+        )
+        assert council == [
+            ("1", "D", "Luz Bay"), ("1", "R", "Joseph D. Kenney"),
+            ("4", "D", "Jim O'Connell"), ("4", "R", "John Stephen"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_federal_pages_with_no_governor_summary_fail_rather_than_say_none(self, monkeypatch):
+        """New Hampshire elects a governor every even year. Pages that list
+        federal contests but no Governor Summary would otherwise be stored
+        as a confirmed "no statewide offices"."""
+        self._patch_sw(monkeypatch, dem_page=DEM_PAGE_HTML,
+                       rep_page=REP_PAGE_HTML)
+        assert await nh.fetch_confirmed_candidates(None, 2026, "NH", {"statewide_offices": True}) is None
+        # ...and without the opt-in the same pages are simply federal.
+        assert await nh.fetch_confirmed_candidates(None, 2026, "NH", {})

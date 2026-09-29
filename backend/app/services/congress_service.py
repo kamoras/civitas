@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.models import CongressDay, CongressEvent, RepSponsoredBill, RollCall, SponsoredBill
 from app.pipeline.congress_activity import digest_cursor, eastern_today, last_run
 from app.pipeline.fetch.daily_digest import words_to_int
+from app.pipeline.fetch.congress import congress_of_date
 
 CHAMBERS = ("senate", "house")
 _CHAMBER_NAME = {"senate": "Senate", "house": "House"}
@@ -122,6 +123,9 @@ def _next_step(e: CongressEvent) -> str | None:
 
 def _event(e: CongressEvent) -> dict:
     return {
+        # The Congress the day fell in: a bill number names a different
+        # bill in each, so a link to the bill needs it.
+        "congress": congress_of_date(e.date),
         "kind": e.kind, "name": e.name, "text": e.text, "billId": e.bill_id,
         "billLabel": bill_label(e.bill_id), "isResolution": is_resolution(e.bill_id),
         "nextStep": _next_step(e),
@@ -364,13 +368,13 @@ def _became_law(db: Session, start: date, end: date) -> list[dict]:
     Read from the sponsored-bill rows, so a bill no current member
     sponsored is not listed."""
     s, e = start.isoformat(), end.isoformat()
-    seen: dict[str, dict] = {}
+    seen: dict[tuple[str, int | None], dict] = {}
     for model in (SponsoredBill, RepSponsoredBill):
         for b in db.query(model).filter(
             model.is_law.is_(True), model.latest_action_date >= s, model.latest_action_date <= e,
         ):
-            seen.setdefault(b.bill_id, {
-                "billId": b.bill_id, "billLabel": bill_label(b.bill_id), "name": b.title,
+            seen.setdefault((b.bill_id, b.congress), {
+                "billId": b.bill_id, "billLabel": bill_label(b.bill_id), "name": b.title, "congress": b.congress,
                 "date": b.latest_action_date, "text": b.latest_action,
             })
     return sorted(seen.values(), key=lambda b: b["date"])

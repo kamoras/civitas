@@ -5,11 +5,7 @@ import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
-import type {
-  JusticeScoreBreakdown,
-  PresidentScoreBreakdown,
-  RepresentationScoreBreakdown,
-} from "@/types/scoreBreakdown";
+import type { PresidentScoreBreakdown, RepresentationScoreBreakdown, SignalOverlap } from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -274,11 +270,6 @@ export async function fetchPresidentScoreBreakdown(id: string): Promise<Presiden
   return camelizeKeys(raw) as PresidentScoreBreakdown;
 }
 
-export async function fetchJusticeScoreBreakdown(id: string): Promise<JusticeScoreBreakdown> {
-  const raw = await cachedFetch(`${API_BASE}/justices/${id}/score-breakdown`, TTL.MEDIUM);
-  return camelizeKeys(raw) as JusticeScoreBreakdown;
-}
-
 export interface PaginatedLeaderboard {
   entries: LeaderboardEntry[];
   total: number;
@@ -378,7 +369,7 @@ export async function fetchSenatorStockTrades(
  * by-category breakdown plus one page of holdings, largest first, optionally
  * narrowed to one category. */
 async function fetchHoldings(
-  chamber: Chamber,
+  segment: string,
   memberId: string,
   options?: HoldingsOptions
 ): Promise<Holdings> {
@@ -389,7 +380,7 @@ async function fetchHoldings(
   // Loaded like the stock-trade and vote pages, outside cachedFetch's
   // client cache.
   return requestJson(
-    `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`,
+    `${API_BASE}/${segment}/${memberId}/holdings?${params}`,
     "Failed to load holdings",
   );
 }
@@ -397,11 +388,20 @@ async function fetchHoldings(
 type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };
 
 export async function fetchSenatorHoldings(senatorId: string, options?: HoldingsOptions): Promise<Holdings> {
-  return fetchHoldings(Chamber.Senate, senatorId, options);
+  return fetchHoldings(CHAMBER_PATH[Chamber.Senate], senatorId, options);
 }
 
 export async function fetchRepHoldings(repId: string, options?: HoldingsOptions): Promise<Holdings> {
-  return fetchHoldings(Chamber.House, repId, options);
+  return fetchHoldings(CHAMBER_PATH[Chamber.House], repId, options);
+}
+
+/** The assets on the sitting president's latest annual report (OGE 278e),
+ * in the members' shape. */
+export async function fetchPresidentHoldings(
+  presidentId: string,
+  options?: HoldingsOptions
+): Promise<Holdings> {
+  return fetchHoldings("presidents", presidentId, options);
 }
 
 /** Disclosed buy/sell/exchange transactions from a president's OGE Form
@@ -448,21 +448,6 @@ export async function fetchBillsInFlight(options?: {
   );
 }
 
-async function fetchHighlights(chamber: Chamber, entityId: string): Promise<string[]> {
-  const res = await fetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/highlights`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return Array.isArray(data.highlights) ? data.highlights : [];
-}
-
-export async function fetchSenatorHighlights(senatorId: string): Promise<string[]> {
-  return fetchHighlights(Chamber.Senate, senatorId);
-}
-
-export async function fetchRepHighlights(repId: string): Promise<string[]> {
-  return fetchHighlights(Chamber.House, repId);
-}
-
 export interface IndustryInfo {
   name: string;
   color: string;
@@ -479,6 +464,10 @@ export interface AppConfig {
   platformCategories: Record<string, string>;
   policyAreas: string[];
   billStages: Record<string, BillStageInfo>;
+  /** Each dimension's share of the Representation Score (config_definitions.SCORE_WEIGHTS). */
+  scoreWeights?: Record<string, number>;
+  /** Each dimension's share of the Presidential Score (PRESIDENT_SCORE_WEIGHTS). */
+  presidentScoreWeights?: Record<string, number>;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -1463,6 +1452,12 @@ export async function setPoliticianVacancy(
     throw new Error(body.detail || `Vacancy update failed: ${res.status}`);
   }
   return res.json();
+}
+
+/** The post-run check that related score components still measure
+ * different things. Refreshed by each pipeline run. */
+export async function fetchSignalOverlap(): Promise<SignalOverlap> {
+  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.LONG);
 }
 
 export async function fetchConfig(): Promise<AppConfig> {

@@ -16,7 +16,14 @@ import ContestBox from "@/components/elections/ballot/ContestBox";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
-import { buildBallotContests, contestForHash, countBallotContests, type BallotContest } from "@/lib/ballotContests";
+import {
+  buildBallotContests,
+  contestForHash,
+  countBallotContests,
+  groupStatewideRaces,
+  type BallotContest,
+  contestHash,
+} from "@/lib/ballotContests";
 import {
   candidateName,
   districtAreaLabel,
@@ -29,6 +36,9 @@ import {
   tierCandidates,
 } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
+import { absoluteUrl } from "@/lib/site";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type {
   RaceWithCandidates,
@@ -36,6 +46,7 @@ import type {
   StateLegChamber,
   StateLegDistrict,
   StatewideNominee,
+  StatewideRace,
   TownBallot,
   TownEntry,
 } from "@/types/election";
@@ -55,7 +66,10 @@ function NomineeName({ nominee }: { nominee: StatewideNominee }) {
   const major = majorPartyOf(nominee);
   return (
     <span className="inline-flex items-baseline gap-1">
-      <span className="font-mono text-[10px] text-ink-min">{nominee.party}</span>
+      {/* A party with no code of ours or FEC's is shown as the state
+          printed it: "OTH" alone would tell a reader nothing about which
+          party this line is. */}
+      <span className="font-mono text-[10px] text-ink-min">{nominee.partyLabel || nominee.party}</span>
       <span
         className={
           major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink"
@@ -171,9 +185,10 @@ function StateLegislatureDetail({ ballot }: { ballot: StateBallot }) {
         <StateLegChamberSection key={chamber.chamber} chamber={chamber} />
       ))}
       <p className="mt-1 text-[10px] text-ink-min">
-        Only seats named in the state&apos;s own results feed appear — a seat whose primary was
-        uncontested is often not published at all, so this is not the full chamber. District
-        boundaries from the U.S. Census Bureau; these offices have no federal
+        {ballot.statewideCoverage.ballotList
+          ? "Every candidate on the state's list for the November ballot. "
+          : `${PRIMARY_RESULTS_CAVEAT} This is not the full chamber. `}
+        District boundaries from the U.S. Census Bureau; these offices have no federal
         campaign-finance filings, so no funding figures exist for them.
       </p>
     </div>
@@ -232,11 +247,131 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
         </div>
       ))}
       <p className="mt-1 text-[10px] text-ink-min">
-        Only seats named in the state&apos;s own results feed appear — a seat whose primary
-        was uncontested is often not published at all, so this is not the full bench.
+        {ballot.judicialCoverage.ballotList
+          ? "Every candidate on the state's list for the November ballot. "
+          : `${PRIMARY_RESULTS_CAVEAT} This is not the full bench. `}
         Retention questions are a separate ballot item and are not covered. These offices
         have no federal campaign-finance filings, so no funding figures exist for them.
       </p>
+    </div>
+  );
+}
+
+/** What primary results cannot show, said wherever state offices are
+ * listed from them. A results file itemises only contested nominations:
+ * a nominee who ran unopposed is often absent (Alabama prints no
+ * uncontested contest at all), so an office or seat can be missing, or
+ * listed with one party's nominee while another party's is not, and no
+ * independent or minor-party candidate ever appears. */
+const PRIMARY_RESULTS_CAVEAT =
+  "Names come from primary results, which often omit a nominee who ran unopposed and never include independent or minor-party candidates — so an office may be missing, or missing a party's nominee.";
+
+function StatewideOfficeRow({ race }: { race: StatewideRace }) {
+  return (
+    <div className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3">
+      <span className="font-mono text-xs text-ink-lo sm:self-center">
+        {race.label}
+        {termPhrase(race.termYears) && (
+          <span className="block text-ink-min">{termPhrase(race.termYears)}</span>
+        )}
+      </span>
+      <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+        {race.nominees.map((n) => (
+          <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/** Every seat of one statewide body on this ballot. How the body is
+ * elected is stated, never implied by the layout: where each voter votes
+ * in one district's seat (New Hampshire's Executive Council), the reader
+ * is told so and helped to find theirs — by the towns it covers where the
+ * state publishes them, the official lookup otherwise; where every voter
+ * votes for each seat (Georgia's PSC, whose districts are residency
+ * requirements), the reader is told that instead. */
+function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; lookupHref: string }) {
+  const [filter, setFilter] = useState("");
+  const first = seats[0];
+  const label = first.officeLabel || first.label;
+  const byDistrict = first.electedBy === "district";
+  const hasAreas = seats.some((s) => (s.areas ?? []).length > 0);
+  const shown = seats.filter((s) =>
+    matchesDistrictQuery({ district: s.seat ?? null, areas: s.areas ?? [], candidates: s.nominees }, filter)
+  );
+  const seatWord = /^\d/.test(first.seat ?? "") ? "District" : "";
+  // Offered whenever there are towns to match: the hint below tells the
+  // reader to filter, so the box has to be there whatever the seat count.
+  const canFilter = byDistrict && hasAreas;
+
+  return (
+    <div className="border border-white/[0.09] bg-surface px-3 py-2.5">
+      <h3 className="font-mono text-xs text-ink-lo">
+        {label.toUpperCase()} — {seats.length} {seats.length === 1 ? "SEAT" : "SEATS"}
+        {termPhrase(first.termYears) && (
+          <span className="text-ink-min"> · {termPhrase(first.termYears)!.toUpperCase()}</span>
+        )}
+      </h3>
+      {byDistrict && (
+        <p className="mt-1 text-xs text-ink-lo">
+          Each voter votes in one district&apos;s seat only.{" "}
+          {canFilter ? "Filter by your town to find yours, or " : "Find yours with "}
+          <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+            {canFilter ? "check the official lookup" : "the official lookup"}
+          </a>
+          .
+        </p>
+      )}
+      {first.electedBy === "statewide" && (
+        <p className="mt-1 text-xs text-ink-lo">
+          Every voter in the state votes for each seat; a seat&apos;s number only says which one it is.
+        </p>
+      )}
+      {canFilter && (
+        <div className="mt-2">
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by town, candidate, or district number"
+            aria-label={`Filter ${label} seats by town, candidate, or district number`}
+            className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
+          />
+          <p role="status" aria-live="polite" className="sr-only">
+            {filter.trim() ? `${shown.length} of ${seats.length} ${label} seats match ${filter}` : ""}
+          </p>
+        </div>
+      )}
+      <div className="mt-2 space-y-1">
+        {shown.map((s) => (
+          <div
+            key={s.office}
+            className="grid grid-cols-[minmax(42px,auto)_1fr] items-baseline gap-3 border border-white/[0.06] px-3 py-2"
+          >
+            <span className="font-mono text-xs text-ink-hi">
+              {seatWord ? `${seatWord} ${s.seat}` : s.seat}
+            </span>
+            <span className="min-w-0">
+              {districtAreaLabel(s.areas ?? [], 3, false) && (
+                <span className="block truncate text-[11px] text-ink-min">
+                  {districtAreaLabel(s.areas ?? [], 3, false)}
+                </span>
+              )}
+              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                {s.nominees.map((n) => (
+                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                ))}
+              </span>
+            </span>
+          </div>
+        ))}
+        {shown.length === 0 && (
+          <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
+            No {label} seat matches “{filter}”. Try your town, a candidate&apos;s name, or a district number.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -249,7 +384,7 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
  * FEC filing, so there is no money, no score and nothing to click
  * through to. Showing a name and a party is the whole of what's true.
  */
-function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
+function StatewideExecutiveDetail({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
   const { statewideRaces, statewideCoverage, state } = ballot;
   return (
     <div>
@@ -259,40 +394,41 @@ function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
         </p>
       ) : (
         <div className="space-y-1.5">
-          {statewideRaces.map((race) => (
-            <div
-              key={race.office}
-              className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3"
-            >
-              <span className="font-mono text-xs text-ink-lo sm:self-center">
-                {race.label}
-                {termPhrase(race.termYears) && (
-                  <span className="block text-ink-min">{termPhrase(race.termYears)}</span>
-                )}
-              </span>
-              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-                {race.nominees.map((n) => (
-                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
-                ))}
-              </span>
-            </div>
-          ))}
+          {groupStatewideRaces(statewideRaces).map((group) =>
+            group.seats ? (
+              <StatewideSeatGroup key={group.key} seats={group.seats} lookupHref={lookupHref} />
+            ) : (
+              <StatewideOfficeRow key={group.key} race={group.race!} />
+            )
+          )}
         </div>
       )}
+      {statewideCoverage.basis && statewideRaces.length === 0 && (
+        // Why "none" is known for a state whose feed was never read for
+        // these offices. Shown instead of the attribution line below,
+        // which would claim a reading that never happened.
+        <p className="mt-2 text-xs text-ink-lo">{statewideCoverage.basis}</p>
+      )}
       <p className="mt-3 text-[10px] text-ink-min">
-        {statewideCoverage.sourceName
-          ? `Nominees as published by ${statewideCoverage.sourceName}`
-          : "Nominees as published by the state"}
+        {statewideCoverage.basis && statewideRaces.length === 0
+          ? "From the state's election calendar"
+          : statewideCoverage.sourceName
+            ? `Nominees as published by ${statewideCoverage.sourceName}`
+            : "Nominees as published by the state"}
         {statewideCoverage.checkedAt
           ? ` · last checked ${statewideCoverage.checkedAt.slice(0, 10)}`
           : ""}
         .
-        {/* Only meaningful next to actual nominees: an office whose primary
-            nobody contested is often not itemised in a results feed at all,
-            so this list is what the state published, not necessarily every
-            statewide office on the ballot. */}
+        {/* Only meaningful next to actual nominees. From primary results,
+            a nomination nobody contested is often not itemised at all, so
+            an office can be missing entirely — or be shown with one
+            party's nominee while the other's, unopposed, is absent. */}
         {statewideRaces.length > 0 &&
-          " Only offices named in the state's own results feed appear — one whose primary was uncontested is often not published at all. These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
+          (statewideCoverage.ballotList
+            ? " Every candidate on the state's list for the November ballot."
+            : ` ${PRIMARY_RESULTS_CAVEAT}`)}
+        {statewideRaces.length > 0 &&
+          " These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
       </p>
     </div>
   );
@@ -335,6 +471,9 @@ const OPERATOR_NONE_TEXT = (state: string) =>
   `No statewide ballot measures remain on ${state}'s ballot as far as Civitas can tell. This is our ` +
   `operator's determination, made after checking the state's own announcements when its published ` +
   `list stopped being available — not a list published by the state.`;
+/** The shareable measures box's short form of OPERATOR_NONE_TEXT. */
+const OPERATOR_NONE_SHORT =
+  "None remain as far as Civitas can tell — our determination, not a list from the state.";
 
 function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
   const { measures, measureCoverage, state } = ballot;
@@ -815,6 +954,7 @@ function OpenButton({ label, onClick }: { label: string; onClick: () => void }) 
     <button
       type="button"
       onClick={onClick}
+      {...{ [SHARE_EXCLUDE_ATTR]: "" }}
       className="min-h-[44px] w-full px-4 text-left font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
     >
       {label} →
@@ -831,8 +971,16 @@ function ContestOverview({
   ballot: StateBallot;
   onOpen: (key: string, houseRaceId?: string | null) => void;
 }) {
-  const box = (children: ReactNode) => (
-    <ContestBox title={contest.title} subtitle={contest.subtitle} instruction={contest.instruction}>
+  // Shared as an image unless the box is only controls (the House district
+  // picker), linking to the fragment that opens this contest.
+  const box = (children: ReactNode, share: { houseRaceId?: string | null } | false = {}) => (
+    <ContestBox
+      title={contest.title}
+      subtitle={contest.subtitle}
+      instruction={contest.instruction}
+      shareId={share ? `contest-${contest.key}` : undefined}
+      shareAnchor={share ? contestHash(contest, share.houseRaceId ?? null).slice(1) : undefined}
+    >
       {children}
     </ContestBox>
   );
@@ -858,6 +1006,7 @@ function ContestOverview({
             <BallotRaceRows race={ballot.houseRaces[0]} />
             <OpenButton label="RESEARCH THIS RACE" onClick={() => onOpen("house", ballot.houseRaces[0].id)} />
           </>,
+          { houseRaceId: ballot.houseRaces[0].id },
         );
       }
       return box(
@@ -884,6 +1033,7 @@ function ContestOverview({
             DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
           </button>
         </div>,
+        false,
       );
     }
     case "statewide":
@@ -895,21 +1045,53 @@ function ContestOverview({
         ) : (
           <>
             <ul>
-              {ballot.statewideRaces.map((r) => (
-                <li key={r.office} className="border-b border-white/[0.09] px-4 py-2">
-                  <span className="block text-[13px] font-bold text-ink-hi">
-                    {r.label}
-                    {termPhrase(r.termYears) && (
-                      <span className="font-normal text-ink-lo"> · {termPhrase(r.termYears)}</span>
+              {groupStatewideRaces(ballot.statewideRaces).map((g) =>
+                g.race ? (
+                  <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
+                    <span className="block text-[13px] font-bold text-ink-hi">
+                      {g.race.label}
+                      {termPhrase(g.race.termYears) && (
+                        <span className="font-normal text-ink-lo"> · {termPhrase(g.race.termYears)}</span>
+                      )}
+                    </span>
+                    <span className="flex flex-wrap gap-x-3 text-sm">
+                      {g.race.nominees.map((n) => (
+                        <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                      ))}
+                    </span>
+                  </li>
+                ) : (
+                  // A body's seats under one heading, saying how it is
+                  // elected: listed flat, New Hampshire's five council
+                  // districts read as five offices every voter marks.
+                  <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
+                    <span className="block text-[13px] font-bold text-ink-hi">
+                      {g.seats![0].officeLabel || g.seats![0].label}
+                      <span className="font-normal text-ink-lo">
+                        {" "}
+                        · {g.seats!.length} {g.seats!.length === 1 ? "seat" : "seats"}
+                        {termPhrase(g.seats![0].termYears) && ` · ${termPhrase(g.seats![0].termYears)}`}
+                      </span>
+                    </span>
+                    {g.seats![0].electedBy === "district" && (
+                      <span className="block text-[12px] text-ink-lo">You vote in your district&apos;s seat only</span>
                     )}
-                  </span>
-                  <span className="flex flex-wrap gap-x-3 text-sm">
-                    {r.nominees.map((n) => (
-                      <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                    {g.seats![0].electedBy === "statewide" && (
+                      <span className="block text-[12px] text-ink-lo">Every voter votes for each seat</span>
+                    )}
+                    {g.seats!.map((seat) => (
+                      <span key={seat.office} className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                        <span className="font-mono text-[11px] text-ink-lo">
+                          {/^\d/.test(seat.seat ?? "") ? `District ${seat.seat}` : seat.seat}
+                        </span>
+                        {seat.nominees.map((n) => (
+                          <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                        ))}
+                      </span>
                     ))}
-                  </span>
-                </li>
-              ))}
+                  </li>
+                ),
+              )}
             </ul>
             <OpenButton label="SOURCE AND NOTES" onClick={() => onOpen(contest.key)} />
           </>
@@ -965,11 +1147,34 @@ function ContestOverview({
       return box(
         ballot.measures.length > 0 ? (
           <>
+            {/* This box is shared as an image on its own, so it carries the
+                drawer's two caveats in short: a list the latest read did not
+                confirm is not presented as current, and a measure no longer
+                on the ballot is not listed as if it were. */}
+            {(ballot.measureCoverage.unreadReason ||
+              (ballot.measureCoverage.status !== "covered" &&
+                ballot.measureCoverage.status !== "confirmed_none")) && (
+              <p className="border-b border-white/[0.09] px-4 py-2 text-[12px] text-signal-amber">
+                From our last successful read — may be out of date.
+              </p>
+            )}
+            {/* An operator's accepted absence marks every row removed; say
+                whose determination that is, or the image reads as the state
+                having struck them. */}
+            {ballot.measureCoverage.status === "confirmed_none" &&
+              ballot.measureCoverage.basis === "operator" && (
+                <p className="border-b border-white/[0.09] px-4 py-2 text-[12px] text-signal-amber">
+                  {OPERATOR_NONE_SHORT}
+                </p>
+              )}
             <ul>
               {ballot.measures.map((m) => (
                 <li key={m.id} className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-hi">
                   <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
                   {m.title}
+                  {(m.status === "removed" || m.status === "withdrawn") && (
+                    <span className="ml-2 font-mono text-[10px] uppercase text-signal-red">{m.status}</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -979,7 +1184,9 @@ function ContestOverview({
           <>
             <p className="px-4 pt-3 text-[13px] text-ink-lo">
               {ballot.measureCoverage.status === "confirmed_none"
-                ? "No statewide measures are on record for this ballot."
+                ? ballot.measureCoverage.basis === "operator"
+                  ? OPERATOR_NONE_SHORT
+                  : "No statewide measures are on record for this ballot."
                 : "Civitas does not have this state's measures yet — that does not mean there are none."}
             </p>
             <OpenButton label="DETAILS" onClick={() => onOpen(contest.key)} />
@@ -1063,8 +1270,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const openContest = useCallback(
     (key: string, houseRaceId: string | null = null) => {
       setChosen({ key, houseRaceId });
-      const race = contests.find((c) => c.key === key)?.race;
-      const hash = houseRaceId ? `#race-${houseRaceId}` : race ? `#race-${race.id}` : `#ballot-${key}`;
+      const contest = contests.find((c) => c.key === key);
+      const hash = contest ? contestHash(contest, houseRaceId) : `#ballot-${key}`;
       window.history.replaceState(null, "", hash);
     },
     [contests],
@@ -1102,7 +1309,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           />
         );
       case "statewide":
-        return <StatewideExecutiveDetail ballot={ballot} />;
+        return <StatewideExecutiveDetail ballot={ballot} lookupHref={lookupHref} />;
       case "stateleg":
         return <StateLegislatureDetail ballot={ballot} />;
       case "judicial":
@@ -1120,7 +1327,16 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
   const columns: BallotContest["column"][] = ["federal", "state", "local"];
 
+  // What a shared image of any contest says it is from. "Statewide", like
+  // the page itself: a precinct's ballot has more on it (ballot.omits).
+  const shareSubject = {
+    title: `${stateName} statewide ballot`,
+    subtitle: `${ballot.cycleYear} general election · ${ballot.electionDate}`,
+    url: absoluteUrl(`/elections/states/${ballot.state}`),
+  };
+
   return (
+    <ShareSubjectProvider subject={shareSubject}>
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
@@ -1280,6 +1496,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       {openContestEntry && (
         <ContestDrawer
           contest={openContestEntry}
+          shareAnchor={contestHash(openContestEntry, open?.houseRaceId ?? null).slice(1)}
           index={openIndex}
           total={contests.length}
           prev={openIndex > 0 ? contests[openIndex - 1] : null}
@@ -1294,5 +1511,6 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       <BackToTop />
       <Footer />
     </div>
+    </ShareSubjectProvider>
   );
 }

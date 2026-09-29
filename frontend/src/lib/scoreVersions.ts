@@ -24,6 +24,77 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.23",
+    date: "2026-10-01",
+    title: "Legislative Effectiveness: members who won a special election are compared with the time they have served",
+    tldr: "A member sworn in partway through the Congress is now compared with what the typical member achieves in the same share of it, not in the whole Congress so far. It matters only for the 11 House members who arrived late this Congress; everyone else keeps their score.",
+    changes: [
+      "Why: bill credit builds up over the time a member has had to sponsor and advance bills, but late arrivals were held to the bar of colleagues with up to 20 more months. One member sworn in on September 1, 2026, dropped from a neutral 50 to 38 on the bill measure by introducing his first bill.",
+      "Now: each member's sworn-in date comes from the House Clerk's member list, and the bar is scaled by the share of the Congress so far that they have served. The breakdown states the date and the share. Senators are not affected: no source the pipeline reads gives a senator's sworn-in date, and no senator in this Congress was seated late.",
+      "Effect on September 2026 data: the 11 late arrivals rise by 0 to 18 points on Legislative Effectiveness (for example, from 23 to 39 for a member seated in April 2026).",
+      "Also: a bill whose last recorded action was the chamber rejecting it is no longer counted as having passed, in the rare case its full action history can't be fetched.",
+    ],
+  },
+  {
+    version: "v6.22",
+    date: "2026-09-30",
+    title: "Funding Independence compares PAC money with campaigns of the same size",
+    tldr: "A member's PAC share is now judged against the share campaigns of the same size typically take in their chamber, not against one chamber-wide typical share. A bigger campaign no longer looks independent just for being bigger. Most members move a few points up; senators with large campaigns and above-typical PAC money move down.",
+    changes: [
+      "Why: PAC checks are capped by law and individual money is not, so a larger campaign dilutes the same PAC dollars to a smaller share. In September 2026 a senator's PAC dollars barely grew with campaign size at all, and Funding Independence tracked campaign size (a correlation of 0.58 in the Senate). The About page listed this as a known limitation.",
+      "Now: each update fits, per chamber, the PAC share campaigns of each size typically take, and the member is scored against the share at their size: the typical share scores 50, no PAC money 100, twice the typical share 0. Campaign sizes outside the range most members fall in are compared with the edge of that range. The correlation with campaign size falls to 0.05 (Senate) and -0.06 (House).",
+      "Removed: the adjustment for how close each contributing PAC came to its legal limit. It measured how hard each PAC gave, not how much the campaign relied on PACs, and it compared totals covering a primary and a general election with a single election's limit. It also held every member's PAC score down, so the typical member scored about 33 (House) to 35 (Senate) on it rather than 50; that is why most scores rise.",
+      "Effect on September 2026 data: Senate average 46.5 to 51.4, House 50.4 to 55.0. The Senate gap between the parties narrows from 13.2 to 8.2 points. 37 senators and 35 representatives move by more than 10 points, from +27 (small-state senators with typical PAC money for their campaign size) to -15 (large campaigns taking more PAC money than campaigns their size do).",
+    ],
+  },
+  {
+    version: "v6.21",
+    date: "2026-09-29",
+    title: "Funding: party, candidate and leadership committees are political money, not an industry",
+    tldr: "Money from a party committee, a candidate's campaign, a joint-fundraising committee or a leadership PAC no longer counts toward any industry. The FEC's own registration of each committee decides it, not the committee's name. Funding Independence moves by under two points for anyone; donor-vote connections built on such money are gone.",
+    changes: [
+      "Why: industries were assigned to committees by their names, and some names read like an industry. The NRSC (the Senate Republicans' campaign committee) was filed under GUNS for 19 senators, $919,000 in all, and headed Lindsey Graham's gun-industry donor-vote connection. Leadership PACs with names like Pineapple PAC, Giddy Up PAC and Velvet Hammer PAC were filed under lobbyists, finance and labor unions. Across the September 2026 Senate, 57 of 101 senators had some of this money counted as an industry's.",
+      "Now: every contributing committee is looked up in the FEC's committee master file. Committee types H, S and P (candidate campaigns) and X, Y and Z (party committees), and designations A, P and J (authorized by a candidate, principal campaign committee, joint fundraiser) and D (leadership PAC), are political money. That is the FEC's classification, read from the filing; no name is interpreted.",
+      "Effect on the September 2026 Senate, recomputed from the live breakdowns: Funding Independence falls by up to 1.7 points (Bill Hagerty, Mike Lee, Chuck Grassley) where political money had made industry funding look more spread out, and moves by under 0.2 points for everyone else.",
+      "Unscored, same release: donor-vote connections now show the organization's registered lobbying again (the registry moved to lda.gov, and every lookup since had failed and read as $0), look a PAC's sponsor up under the company's own name, and link any bill the member voted on that a lobbying filing under the donor's name names, showing the client each filing was for (a name can be shared by a separate company).",
+    ],
+  },
+  {
+    version: "v6.20",
+    date: "2026-09-29",
+    title: "Breaks with the party: the whole Congress, toward the other party, each measure once",
+    tldr: "How often a member breaks with their party is now counted over every roll call of the current Congress, not the latest 120. A vote against the party counts only when it goes toward the other party; a vote from the party's own flank is listed but not counted, because how far toward the flank a member sits is already scored. A nomination or bill voted on several times, such as cloture and then confirmation, counts once.",
+    changes: [
+      "A break counts when, on that roll call, the party's members who broke sit on average nearer the other party (DW-NOMINATE) than the party does.",
+      "Tim Burchett (R-TN-2) had 6 breaks in 76 sampled votes (7.9%). Over the whole Congress, counting only breaks toward Democrats and each measure once, it is 2 of 298 (0.7%), the House Republican median; 14 more votes came from the party's right flank.",
+      "Tested against Senate general elections and House primaries (research note, sections 11 and 12): at least as predictive as counting every break, and counting each measure once changes nothing measurable.",
+      "In the 119th Senate 37% of roll calls repeat a measure already voted on, nearly all of them cloture on nominations.",
+    ],
+  },
+  {
+    version: "Justice v2",
+    date: "2026-09-29",
+    title: "Justices scored on independence from the president who appointed them",
+    tldr: "Supreme Court justices are now scored on one question: do they side with the federal government more often while the president who appointed them is in office than under other presidents? The two old measures, based on agreeing with the other party's appointees, turned out to rank justices by how close they sit to the Court's center. Each score is shown with its margin of error.",
+    changes: [
+      "The measure is Epstein and Posner's (2016): each justice's votes in cases the federal government argued, since 1937, comparing the share for the government under the appointing president with the share under others, with whether the government brought the case held fixed.",
+      "Each justice's estimate is pulled toward the average of all 42 justices measured by how uncertain it is, and shown with its standard error. The score is 100 at no favoritism either way and 0 at twice the spread between justices.",
+      "Consistency and Independence were removed. On today's Court every Republican appointee sits right of every Democratic appointee, so both ranked justices by distance from the Court's median (Spearman -0.82 and -0.75 against 2024 Martin-Quinn positions). The new measure's correlation with that distance is 0.28.",
+      "Martin-Quinn positions and the Oyez voting record are shown, not scored. The short profile written by the site's language model was removed. The study is in docs/research/justice-scores.md.",
+    ],
+  },
+  {
+    version: "v6.19",
+    date: "2026-09-28",
+    title: "Housekeeping votes no longer count as breaks with the party",
+    tldr: "Votes on running the chamber, such as quorum calls, adjourning, motions to table or to recommit, and the House's previous question, no longer count for or against a member's party loyalty. They split on party lines as a matter of course, so they say little about the member. Rule votes, cloture and nominations still count.",
+    changes: [
+      "In the 119th Congress these were 31% of the House's party-line roll calls (mostly motions to recommit and previous-question votes) and 3% of the Senate's.",
+      "A motion to recommit is the minority party's messaging vote and the previous question is the majority's hold on the floor; both split on party lines nearly every time.",
+      "Rule votes stay: voting down the party's rule keeps a bill off the floor. Cloture stays: it is often the real decision on a bill. Nominations stay: confirming judges and officials is a core Senate power.",
+    ],
+  },
+  {
     version: "v6.18",
     date: "2026-09-28",
     title: "A vote counts against the party only when the parties actually split on it",

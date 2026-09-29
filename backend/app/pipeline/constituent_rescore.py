@@ -24,6 +24,8 @@ import json
 import logging
 from collections import defaultdict
 
+from app.pipeline.analyze.party_line_record import load_record
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,6 +53,7 @@ def _member_dict(row, votes: list[dict], chamber: str) -> dict:
             "keyVotes": votes,
             "recentVotes": [],
             "effectiveParty": row.caucus_party or row.party,
+            "partyLineRecord": load_record(row.party_line_record),
         },
     }
 
@@ -119,6 +122,12 @@ def rescore_stale_constituent_alignment(session_factory) -> list[str]:
             # writing it first would strand the scores on a failure.
             CONSTITUENT_REFERENCE.write(chamber, ref)
             done.append(chamber)
+            # The overlap check reads these breakdowns; re-measure it so
+            # /about/scores doesn't show the pre-rescore reading until the
+            # next nightly run. Never raises.
+            from app.pipeline.analyze.signal_overlap import record_signal_overlap
+
+            record_signal_overlap(db, chamber)
             logger.info(
                 "Constituent Alignment rescore (%s): %d members moved to the current reference",
                 chamber, len(rows),

@@ -17,7 +17,7 @@ differ.
 ```mermaid
 flowchart LR
     subgraph FI["Funding Independence — 33%"]
-        FI1["PAC dependency — 20/53<br/>share vs chamber median<br/>× closeness to legal cap"]
+        FI1["PAC dependency — 20/53<br/>share vs campaigns of the same size<br/>(chamber fit, each run)"]
         FI2["Small-donor share — 10/53<br/>&lt;$200 unitemized, state-relative"]
         FI3["Top-donor concentration — 10/53<br/>top 10 of external pool<br/>vs chamber median"]
         FI5["Industry concentration — 13/53<br/>inverse HHI"]
@@ -115,12 +115,16 @@ historian rating for a top-10 placement.
 
 ```mermaid
 flowchart LR
-    JC["Consistency — 0.35/0.80"] --> JOVR["<b>Justice score</b>"]
-    JI["Independence — 0.45/0.80"] --> JOVR
+    SCDB["Supreme Court Database<br/>votes in federal-government cases"] --> FIT["per-justice fit:<br/>for the government ~ appointer in office<br/>+ government petitioner (HC1)"]
+    FJC["FJC nominations<br/>+ presidents' terms"] --> FIT
+    FIT --> SHR["shrunk across justices<br/>(DerSimonian-Laird)"]
+    SHR --> JOVR["<b>Justice score</b><br/>100 × (1 − |loyalty| / 2 sd)"]
 ```
 
-Judicial Restraint and Bipartisan Agreement were removed in v6.13; see
-`docs/research/justice-scores.md`.
+One measure since justice v2: independence from the appointing president
+(Epstein & Posner 2016). Consistency and Independence from the appointing
+party's bloc, and before them Judicial Restraint and Bipartisan Agreement,
+were removed; see `docs/research/justice-scores.md`.
 
 Single source of truth in `JUSTICE_SCORE_WEIGHTS` — shared by the scorer, the
 directory's overall calculation, and the public weights endpoint. These were
@@ -136,4 +140,5 @@ previously three independent copies that could silently drift.
 | President formulas | `analyze/president_scorer.py` |
 | Justice formulas | `services/justice_service.py` |
 | Public weights endpoint | `GET /api/config` |
+| A member's breakdown and the scorecard's figures | `explain_scores` → `GET /api/{senators|representatives}/{id}/score-breakdown` (components + `facts`); rendered by `frontend/src/components/scorecard/` |
 | Human-readable version history | `frontend/src/lib/scoreVersions.ts` → `/changelog` |

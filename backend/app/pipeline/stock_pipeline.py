@@ -37,6 +37,7 @@ from app.models import (
     StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
+from app.pipeline.fetch.president_fd import fetch_annual_transactions
 from app.pipeline.fetch.president_ptr import (
     fetch_and_parse_ptr as fetch_president_ptr,
     fetch_ptr_filing_index as fetch_president_ptr_index,
@@ -59,6 +60,7 @@ from app.pipeline.fetch.senate_ptr import (
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_tracked_run, run_in_progress, skip_reason_text
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
+from app.services.president_service import current_president
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -216,6 +218,7 @@ def _trade(model, *, row: TradeRow, **owner):
         filing_id=row.filing_id,
         parse_confidence=row.parse_confidence,
         parser_version=PTR_PARSER_VERSION,
+        **({"report_kind": row.report_kind} if model is PresidentTrade else {}),
     )
 
 
@@ -339,7 +342,7 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
         _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url, _filed: fetch_house_ptr(
             client, db, {"doc_id": fid, "pdf_url": url},
         )),
-        _StoredSource("President", PresidentTrade, "president_id", lambda fid, url, _filed: fetch_president_ptr(
+        _StoredSource("President", PresidentTrade, "president_id", lambda fid, url, _filed: _read_president_filing(
             db, {"doc_id": fid, "pdf_url": url},
         )),
     ]
@@ -411,8 +414,65 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     return reread
 
 
+def _annual_covered_through(db: Session, president_id: str) -> str | None:
+    """The last day of the latest year the president's stored annual report
+    covers (YYYY-12-31), or None when none is stored."""
+    latest = (
+        db.query(func.max(PresidentTrade.transaction_date))
+        .filter(PresidentTrade.president_id == president_id, PresidentTrade.report_kind == "annual")
+        .scalar()
+    )
+    return f"{latest[:4]}-12-31" if latest else None
+
+
+async def _read_president_filing(db: Session, filing: dict) -> list[TradeRow]:
+    """A 278-T's rows, read inside its window (the term's start to the
+    filing's date, from OGE's index when the caller holds only its URL, as
+    a re-read does) and without the transactions of a year an annual report
+    covers: that report is their record (president_fd)."""
+    president = current_president(db)
+    if president is None:
+        return []
+    if not filing.get("filing_date"):
+        dates = {f["doc_id"]: f["filing_date"] for f in await fetch_president_ptr_index(db, president.name)}
+        filing = {**filing, "filing_date": dates.get(filing["doc_id"])}
+    rows = await fetch_president_ptr(db, {**filing, "not_before": president.term_start})
+    covered = _annual_covered_through(db, president.id)
+    return [r for r in rows if not covered or r.transaction_date > covered]
+
+
+async def _ingest_president_annual(db: Session, client: httpx.AsyncClient, president: President, filings: list[dict]) -> int:
+    """Store the newest annual report's transactions when not stored yet,
+    replacing that year's rows: an amended report's earlier reading, and
+    the periodic filings' OCR'd rows, which the report's text supersedes."""
+    annual = sorted((f for f in filings if f["kind"] == "annual"), key=lambda f: f["filing_date"] or "")
+    if not annual:
+        return 0
+    newest = annual[-1]
+    stored = db.query(PresidentTrade.id).filter(PresidentTrade.filing_id == newest["doc_id"]).first()
+    if stored is not None:
+        return 0
+    result = await fetch_annual_transactions(db, newest)
+    if result is None:
+        return 0
+    year, rows = result
+    await _classify_rows_industry(db, client, rows)
+    db.query(PresidentTrade).filter(
+        PresidentTrade.president_id == president.id,
+        PresidentTrade.transaction_date <= f"{year}-12-31",
+        (PresidentTrade.report_kind == "periodic") | (PresidentTrade.transaction_date >= f"{year}-01-01"),
+    ).delete(synchronize_session=False)
+    for row in rows:
+        db.add(_trade(PresidentTrade, president_id=president.id, row=row))
+    db.commit()
+    logger.info("Presidential annual report for %d: %d transactions stored", year, len(rows))
+    return len(rows)
+
+
 async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
-    """Ingest the sitting president's OGE 278-T periodic transaction reports.
+    """Ingest the sitting president's transactions: the newest annual
+    report's Part 7 for the year it covers (president_fd), then the OGE
+    278-T periodic reports for the months since.
 
     Current president only, and deliberately so: 278-T filings exist only
     from the STOCK Act's 2012 effective date onward, and a former
@@ -425,28 +485,18 @@ async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
     indexes these filings under the office, and president_ptr.py already
     requires the row to name this president before returning it.
     """
-    # Ordered, not just .first(): during a transition the roster can briefly
-    # carry two is_current rows, and an unordered pick would attribute the
-    # filings to whichever one the query happened to return — different
-    # answers on different runs. Highest number is the later presidency.
-    president = (
-        db.query(President)
-        .filter(President.is_current == True)  # noqa: E712
-        .order_by(President.number.desc())
-        .first()
-    )
+    president = current_president(db)
     if president is None:
         logger.info("No current president row — skipping presidential PTR ingestion")
         return 0
 
-    existing_filing_ids = {row[0] for row in db.query(PresidentTrade.filing_id).all()}
     filings = await fetch_president_ptr_index(db, president.name)
-
-    inserted = 0
+    inserted = await _ingest_president_annual(db, client, president, filings)
+    existing_filing_ids = {row[0] for row in db.query(PresidentTrade.filing_id).all()}
     for filing in filings:
-        if filing["doc_id"] in existing_filing_ids:
+        if filing["kind"] != "periodic" or filing["doc_id"] in existing_filing_ids:
             continue
-        rows = await fetch_president_ptr(db, filing)
+        rows = await _read_president_filing(db, filing)
         if not rows:
             continue
         await _classify_rows_industry(db, client, rows)
@@ -548,9 +598,10 @@ async def run_stock_trades_pipeline() -> dict:
         elapsed = round(time.time() - start_time, 1)
         logger.info(
             "Stock trades pipeline: %d House rows, %d Senate rows, %d presidential rows; "
-            "%d House / %d Senate holdings",
+            "%d House / %d Senate / %d presidential holdings",
             house_count, senate_count, president_count,
             holdings_counts["house_holdings"], holdings_counts["senate_holdings"],
+            holdings_counts["president_holdings"],
         )
 
         # FAILED only when every trade phase failed — one source being down
@@ -575,6 +626,7 @@ async def run_stock_trades_pipeline() -> dict:
             "president_trades": president_count,
             "house_holdings": holdings_counts["house_holdings"],
             "senate_holdings": holdings_counts["senate_holdings"],
+            "president_holdings": holdings_counts["president_holdings"],
             "elapsed_seconds": elapsed,
         }
     finally:

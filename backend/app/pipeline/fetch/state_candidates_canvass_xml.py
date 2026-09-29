@@ -35,6 +35,7 @@ from urllib.request import urlopen
 from xml.etree import ElementTree as ET
 
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     normalize_party,
     parse_office,
     pick_nominees,
@@ -193,7 +194,7 @@ async def fetch_confirmed_candidates(
         logger.info("%s %d canvass not yet settled — withholding", state, year)
         return []
 
-    runoff_threshold_pct = source.get("runoff_threshold_pct")
+    runoff_threshold_pct = runoff_threshold(source)
     results = []
     for contest in root.findall(".//contests/contest"):
         parsed = parse_office(contest.get("contestLongName") or "")

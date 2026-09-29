@@ -17,6 +17,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
 )
+from app.services._scorecard_common import score_breakdown
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
@@ -316,6 +317,9 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
                 bills_influenced=json.loads(lm.bills_influenced) if lm.bills_influenced else [],
                 senator_vote_aligned=lm.senator_vote_aligned,
                 description=lm.description,
+                lobbied_bills=json.loads(lm.lobbied_bills) if lm.lobbied_bills else [],
+                lobbying_clients=json.loads(lm.lobbying_clients) if lm.lobbying_clients else [],
+                lobbying_checked=lm.lobbying_checked,
             )
             for lm in lobbying_matches
         ],
@@ -367,8 +371,6 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
     only exposes vote *counts* (totalVotes, votedWithPartyCount, ...), not
     the per-vote votedWithParty fields the scoring formulas actually read.
     """
-    from app.pipeline.analyze.score_calculator import explain_scores
-    from app.services._scorecard_common import build_score_breakdown_entity
 
     senator = (
         db.query(Senator)
@@ -379,8 +381,7 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
     if senator is None:
         return None
 
-    entity = build_score_breakdown_entity(senator, lobbying_donation_attr="donation_to_senator")
-    return explain_scores(entity)
+    return score_breakdown(db, senator, lobbying_donation_attr="donation_to_senator")
 
 
 def get_states_with_counts(db: Session) -> list[StateCountSchema]:
@@ -597,7 +598,10 @@ def get_senator_stock_trades(
 
     query = db.query(StockTrade).filter(StockTrade.senator_id == senator_id)
     total = query.count()
-    late_count = query.filter(StockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
+    # Only trades whose timeliness is known (StockTradeSchema).
+    late_count = query.filter(
+        StockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS, StockTrade.parse_confidence == "text",
+    ).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (

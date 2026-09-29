@@ -26,6 +26,34 @@ Three hops, nothing cycle-specific written down:
 
 Verified live on the real 2026-05-19 primary (election 117): Bob Harvie
 taking the PA-01 Democratic primary with 65.14%.
+
+STATE OFFICES, with `statewide_offices`. The same office list names
+Pennsylvania's own contests beside the federal ones — for 2026 "GOV"
+Governor, "LTG" Lieutenant Governor, "STS" Senator in the General
+Assembly, "STH" Representative in the General Assembly, plus the two
+party state committees ("DSC"/"RSC"). Unlike the federal pass these are
+NOT picked by code: every non-federal office is read and its label goes
+through the shared parse_statewide_office / parse_state_leg_office gates,
+which refuse the committees ("Committee" is decisive in both). That is
+deliberate: a code list written from one cycle would silently miss the
+row offices Pennsylvania elects in the other (Attorney General, Treasurer
+and Auditor General, next in 2028), and under the flag a missed contest
+reads as "none on this ballot". The label is the office name plus the
+district exactly as the API writes it — "Governor Statewide",
+"Senator in the General Assembly 2nd Senatorial District",
+"Representative in the General Assembly 4th Legislative District".
+
+Verified against the real 2026 primary (read 2026-09-28): Josh Shapiro
+(D, unopposed, 1,116,960) and Stacy Garrity (R, unopposed, 641,534) for
+Governor; Austin Davis (D, 1,072,694) and Jason Richey (R, 428,740 over
+John Ventre's 225,238) for Lieutenant Governor; 25 even-numbered Senate
+districts, and the House's districts.
+
+What the API does not carry: WRITE-IN nominations. Pennsylvania lets a
+write-in candidate take a party's nomination where nobody was printed,
+and no write-in row appears in this feed, so such a nominee is missing
+here rather than misnamed — the same limitation the federal pass has
+always had.
 """
 
 import json
@@ -35,7 +63,9 @@ import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    federal_record, normalize_party, parse_office, pick_nominees,
+    runoff_threshold,
+    clean_display_name, federal_record, normalize_party, parse_office,
+    parse_state_leg_office, parse_statewide_office, pick_nominees,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -95,21 +125,46 @@ async def _primary_election_id(client: httpx.AsyncClient, year: int) -> str | No
     return None
 
 
-async def _federal_office_ids(
-    client: httpx.AsyncClient, election_id: str,
-) -> list[tuple[int, str]]:
+async def _office_ids(
+    client: httpx.AsyncClient, election_id: str, state_offices: bool = False,
+) -> list[tuple[int, str]] | None:
+    """(OfficeID, OfficeName) for the federal offices — and, with
+    `state_offices`, every other office too, left for the label gates to
+    sort out (see the module docstring). None when the list itself could
+    not be read: with the state flag set, an empty list would otherwise
+    be recorded as "no statewide contests"."""
     payload = await _get(
         client,
         f"{API_BASE}/GetOfficeNames?countyName=&methodName=GetOfficeNames"
         f"&electionid={election_id}&electiontype={PRIMARY_TYPE}&isactive=0",
         "PA offices",
     )
-    table = (payload or {}).get("Table") if isinstance(payload, dict) else None
+    table = payload.get("Table") if isinstance(payload, dict) else None
+    if not isinstance(table, list):
+        return None
     return [
         (row.get("OfficeID"), row.get("OfficeName") or "")
-        for row in table or []
-        if row.get("OfficeCode") in FEDERAL_OFFICE_CODES and row.get("OfficeID") is not None
+        for row in table
+        if row.get("OfficeID") is not None
+        and (
+            row.get("OfficeCode") in FEDERAL_OFFICE_CODES
+            or (state_offices and _may_be_state_office(row.get("OfficeName") or ""))
+        )
     ]
+
+
+def _may_be_state_office(office_name: str) -> bool:
+    """Whether an office is worth fetching at all — asked of the same two
+    gates every contest label goes through, with a placeholder district
+    since the office list carries none. The party state committees fail
+    both on "Committee", so they are never requested: one of them failing
+    to load would otherwise fail the whole state, federal races included.
+    This only saves a request; the full label is still checked per
+    contest."""
+    return (
+        parse_statewide_office(office_name) is not None
+        or parse_state_leg_office(f"{office_name} District 1") is not None
+    )
 
 
 def _contests(payload: dict, office_name: str) -> list[tuple[str, dict]]:
@@ -143,14 +198,19 @@ async def fetch_confirmed_candidates(
     expected to be null; it is still read from config rather than assumed,
     exactly as the other adapters do.
     """
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     election_id = await _primary_election_id(client, year)
     if not election_id:
         logger.warning("No %d primary indexed yet for PA — skipping", year)
         return None
 
+    state_offices = bool(source.get("statewide_offices"))
+    offices = await _office_ids(client, election_id, state_offices)
+    if offices is None:
+        return None
+
     records: list[dict] = []
-    for office_id, office_name in await _federal_office_ids(client, election_id):
+    for office_id, office_name in offices:
         payload = await _get(
             client,
             f"{API_BASE}/GetOfficeData?officeId={office_id}&methodName=GetOfficeDetails"
@@ -161,9 +221,22 @@ async def fetch_confirmed_candidates(
             return None
         for label, by_party in _contests(payload, office_name):
             parsed = parse_office(label)
-            if parsed is None:
+            seat = None
+            if parsed is not None:
+                office, district = parsed
+            elif not state_offices:
                 continue
-            office, district = parsed
+            else:
+                # A state office: the whole printed name is kept, since no
+                # FEC row exists to match a surname against.
+                statewide = parse_statewide_office(label)
+                if statewide is not None:
+                    office, district = statewide
+                else:
+                    leg = parse_state_leg_office(label)
+                    if leg is None:
+                        continue
+                    office, district, seat = leg
             for party_name, rows in by_party.items():
                 party = normalize_party(party_name)
                 if party is None:
@@ -175,7 +248,16 @@ async def fetch_confirmed_candidates(
                 ]
                 won = pick_nominees(choices, threshold)
                 for name, _pct in won:
-                    record = federal_record(office, district, party, name)
+                    if parsed is not None:
+                        record = federal_record(office, district, party, name)
+                    else:
+                        display = clean_display_name(name)
+                        record = {
+                            "office": office, "district": district,
+                            "party": party, "last_name": display,
+                        } if display else None
+                        if record and seat is not None:
+                            record["seat"] = seat
                     if record:
                         records.append(record)
     return records

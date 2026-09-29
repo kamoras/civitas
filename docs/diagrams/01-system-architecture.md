@@ -11,7 +11,7 @@ flowchart TB
         FEC["FEC API<br/>contributions · committees<br/>0.25 RPS"]
         GOVINFO["GovInfo<br/>bill text · Congressional Record<br/>1.0 RPS"]
         SENGOV["Senate.gov · House Clerk<br/>roll-call vote XML<br/>no API"]
-        OYEZ["Oyez / supremecourt.gov<br/>SCOTUS votes · opinions"]
+        OYEZ["Oyez / supremecourt.gov · SCDB · FJC · Martin-Quinn<br/>SCOTUS votes · opinions · appointments"]
         ECON["BLS · BEA / FRED · MeasuringWorth<br/>employment · GDP"]
         FEDREG["Federal Register<br/>orders · rulemaking"]
         UCSB["UCSB American Presidency Project<br/>roster · approval · margins"]
@@ -53,7 +53,7 @@ flowchart TB
 
     PIPE -->|writes| SQLITE
     PIPE -->|upserts embeddings| VECDB
-    PIPE -.->|Action Center · Bluesky · justice profiles<br/>member pipelines: none| LLAMA
+    PIPE -.->|Action Center · Bluesky<br/>member and justice pipelines: none| LLAMA
     PIPE -.->|~50,000 ops/run| EMBED
     HOURLY -->|posts| BSKY
 
@@ -72,7 +72,7 @@ flowchart TB
 **Solid edges are data flow; dotted edges are inference calls.** The ratio is
 the point: roughly 50,000 embedding operations per nightly run, and no LLM
 call at all from the member pipelines; the model writes only Action Center
-and Bluesky text and justice profiles. Civitas is a semantic classification and retrieval system that uses a
+and Bluesky text. Civitas is a semantic classification and retrieval system that uses a
 language model only at the final synthesis step, not an LLM application.
 
 **The two models live in different places.** The embedding model runs
@@ -89,7 +89,7 @@ all. See [08 — Deployment](08-deployment.md).
 
 **If llama.cpp is unavailable**, LLM calls fail with a timeout and each
 caller degrades on its own: the Action Center publishes nothing from a cluster
-it can't read, and a justice profile falls back to a template. Scores are
+it can't read. Scores are
 unaffected — they are deterministic and take no LLM input.
 
 ## Source map

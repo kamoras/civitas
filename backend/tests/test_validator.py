@@ -254,6 +254,23 @@ class TestValidateSenator:
         result = validate_senator(senator)
         assert result["lobbyingMatches"][0]["industry"] == "OTHER"
 
+    def test_lobbying_match_keeps_lda_fields_and_consensus_flag(self):
+        # The Senate path saves what the validator returns; these were
+        # dropped, so no senator ever showed a filing-named bill.
+        bill = {"billId": "H.R. 1492", "vote": "Yea", "filingUrl": "https://lda.gov/f/1/print/"}
+        senator = _make_senator(lobbyingMatches=[{
+            "lobbyistOrg": "Pfizer", "industry": "PHARMA", "lobbyingSpend": 1,
+            "donationToSenator": 1, "billsInfluenced": [], "description": "",
+            "isConsensusVote": True, "lobbyingChecked": False,
+            "lobbiedBills": [bill, {"no": "id"}, "junk"],
+            "lobbyingClients": [{"client": "PFIZER INC.", "amount": 5}, {"amount": 1}],
+        }])
+        m = validate_senator(senator)["lobbyingMatches"][0]
+        assert m["lobbiedBills"] == [bill]
+        assert m["lobbyingClients"] == [{"client": "PFIZER INC.", "amount": 5}]
+        assert m["lobbyingChecked"] is False
+        assert m["isConsensusVote"] is True
+
     def test_bioguide_id_preserved(self):
         senator = _make_senator(bioguideId="B001230")
         result = validate_senator(senator)
@@ -301,11 +318,9 @@ class TestValidateSenator:
 
 class TestCommitteeTypePreserved:
     def test_committee_type_survives_validation(self):
-        """committeeType feeds the PAC-utilization signal in
-        _funding_independence_core and is persisted to Donor.committee_type.
-        The validator's donor rebuild used to drop it, silently NULLing the
-        column for every senator and desyncing the score-breakdown endpoint
-        from the stored score."""
+        """committeeType is persisted to Donor.committee_type. The
+        validator's donor rebuild used to drop it, silently NULLing the
+        column for every senator while the House path kept it."""
         senator = _make_senator(funding={
             "totalRaised": 1_000_000,
             "totalFromPACs": 200_000,

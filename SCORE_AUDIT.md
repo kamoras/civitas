@@ -190,6 +190,11 @@ EOF
 
 High correlation between two dimensions means they're measuring the same thing (a design flaw):
 
+(Within a dimension, the two component pairs built from related data are
+checked by the pipeline itself after every chamber run —
+`analyze/signal_overlap.py`, `GET /api/signal-overlap` — and alert at
+|r| >= 0.60. This step is for pairs of whole dimensions.)
+
 ```bash
 docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 import sqlite3, statistics, math
@@ -466,7 +471,7 @@ After running the audit, use this framework to decide what to change:
 |---|---|---|
 | stdev < 8 on any dimension | Formula too narrow, or defaults dominate | Recalibrate multipliers; check default values |
 | mean > 65 on any dimension | Missing data treated as positive | Change "no data" default from positive to neutral (50) |
-| FI > 85 for high-fundraising senators | PAC committee types unresolved, so the dollar fallback applied | Check donors.committee_type coverage; verify fetch_committee_type. (Outside spending is deliberately not scored since v6.13 — see docs/research/funding-independence.md) |
+| FI > 85 for high-fundraising senators | No size fit for the chamber, so PAC share was scored against the median alone (large campaigns dilute PAC money) | Check funding_reference.json / /data/funding_reference.json has the pac_size_* keys (compute_funding_reference needs 30 PAC-funded members inside the size range). (Outside spending is deliberately not scored since v6.13 — see docs/research/funding-independence.md) |
 | Derived consistency check ✗ | Vote/finance matching broken, or algorithm regression | The failure's rationale names the raw metric that decoupled; check key_votes/donor tables and the corresponding fetch |
 | >20% senators in data desert | API fetch failure | Check API cache, rate limits, name matching |
 | High score variance (>15 pts) on specific senator | Inconsistent vote/FEC matching | Add name normalization or use bioguide_id as primary key |

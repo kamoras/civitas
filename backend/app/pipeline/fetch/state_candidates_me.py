@@ -93,6 +93,22 @@ Verified live 2026-09-09 against the real, certified 2026 primary:
 Matthew Dunlap (CD2 D, real RCV winner — trailed Joseph Baldacci in
 first-choice votes, won on the third and final elimination round) and
 Chellie Pingree (CD1 D, real incumbent, plain plurality, no RCV needed).
+
+With `statewide_offices`, the GOVERNOR is read the same two ways — the
+only executive office Maine elects by popular vote (the Legislature
+chooses its Attorney General, Secretary of State and Treasurer). Both
+2026 governor primaries were ranked-choice, so each winner comes from
+its RCV Summary Report, never from first choices: Hannah M. Pingree (D)
+trailed Nirav D. Shah 50,552 to 58,606 in round 1 and won round 4, and
+Robert B. Charles (R) won in round 7. A statewide nominee is shown under
+the whole printed name, put in reading order ("Pingree, Hannah M." ->
+"Hannah M. Pingree"). A governor tabulation that fails its cross-check
+fails the whole fetch, exactly as a federal one does: returning the
+federal records alone would record Maine as checked with no governor's
+race on its ballot. Legislative seats are not read: each party's
+"State Senate" / "Representative to the Legislature" file stacks every
+district in one sheet under repeated header rows, and a few districts
+were tabulated separately by RCV.
 """
 
 import io
@@ -106,9 +122,11 @@ import pdfplumber
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     DiscoveryFailed,
+    clean_display_name,
     federal_record,
     normalize_party,
     parse_office,
+    parse_statewide_office,
     resolve_confirmed_nominees,
     surname,
 )
@@ -184,20 +202,31 @@ async def _get_bytes(client: httpx.AsyncClient, url: str, label: str) -> bytes:
     return content
 
 
-def _discover_entries(html: str, year: int) -> list[tuple[str, tuple[str, int | None], str, str]]:
+def _discover_entries(
+    html: str, year: int, statewide: bool = False,
+) -> list[tuple[str, tuple[str, int | str | None], str, str]]:
     """[(kind, (office, district), party, url), ...] for every real
     federal entry the page currently lists for `year` — kind is "xlsx"
     for a plain vote-count export or "rcv" for a ranked-choice summary
     PDF. Empty is a real, healthy answer (nothing posted yet this cycle,
-    or the page is still showing an older year)."""
+    or the page is still showing an older year).
+
+    With `statewide`, a statewide executive heading is kept too, read by
+    parse_statewide_office ("Governor - Democratic"). Every other heading
+    on the real 2026 page is refused by it: the RCV legislative ones
+    ("Senate District 4 - Republican") and the county offices ("County
+    Treasurer", "Register of Deeds", "Sheriff", "District Attorney",
+    "Judge of Probate")."""
     reader = _ResultsPageReader()
     reader.feed(html)
 
-    entries: list[tuple[str, tuple[str, int | None], str, str]] = []
+    entries: list[tuple[str, tuple[str, int | str | None], str, str]] = []
     for (h2, h3), links in reader.sections.items():
         if str(year) not in h2:
             continue
         office_district = parse_office(h3)
+        if office_district is None and statewide:
+            office_district = parse_statewide_office(h3)
         if office_district is None:
             continue
         if "Non-Ranked Choice Offices" in h2:
@@ -262,6 +291,17 @@ def _municipality_choices(rows: list[dict]) -> list[tuple[str, int]]:
     return list(totals.items())
 
 
+def _first_last(name: str) -> str:
+    """Maine's "LAST, FIRST MIDDLE[, SUFFIX]" ("Pingree, Hannah M.", "King,
+    Angus, III") in reading order ("Hannah M. Pingree", "Angus King III"),
+    otherwise verbatim — the whole printed name a statewide nominee is
+    shown under, where a federal one only needs the surname."""
+    parts = [p.strip() for p in (name or "").split(",")]
+    if len(parts) < 2:
+        return clean_display_name(name)
+    return clean_display_name(" ".join([parts[1], parts[0], *parts[2:]]))
+
+
 def _pdf_text(content: bytes) -> str:
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         return "\n".join(page.extract_text() or "" for page in pdf.pages)
@@ -314,24 +354,28 @@ def _parse_rcv_summary(text: str) -> str | None:
 
 
 async def fetch_confirmed_candidates(
-    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — source unused, this strategy is ME-only by construction
+    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is ME-only by construction
 ) -> list[dict] | None:
+    statewide = bool(source.get("statewide_offices"))
     try:
         html = await _get_text(client, _LANDING_URL, f"ME results page {year}")
-        entries = _discover_entries(html, year)
+        entries = _discover_entries(html, year, statewide=statewide)
         if not entries:
             return []
 
         by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
+        statewide_by_seat: dict[tuple[str, str | None, str], list[tuple[str, int]]] = {}
         results: list[dict] = []
         for kind, (office, district), party, url in entries:
             label = f"ME {office}{district or 0} {party} {kind} {year}"
+            is_federal = office in ("S", "H")
             content = await _get_bytes(client, url, label)
             if kind == "xlsx":
                 rows = _xlsx_rows(content)
                 if rows is None:
                     raise DiscoveryFailed(f"{label}: download was not a readable xlsx workbook")
-                by_seat.setdefault((office, district, party), []).extend(_municipality_choices(rows))
+                bucket = by_seat if is_federal else statewide_by_seat
+                bucket.setdefault((office, district, party), []).extend(_municipality_choices(rows))
             else:
                 try:
                     text = _pdf_text(content)
@@ -340,7 +384,14 @@ async def fetch_confirmed_candidates(
                 winner = _parse_rcv_summary(text)
                 if winner is None:
                     raise DiscoveryFailed(f"{label}: RCV summary did not yield a cross-checked winner")
-                record = federal_record(office, district, party, winner, last_first=True)
+                if is_federal:
+                    record = federal_record(office, district, party, winner, last_first=True)
+                else:
+                    # A statewide nominee has no FEC row to match, so the
+                    # whole name is kept, as the tabulation printed it.
+                    name = _first_last(winner)
+                    record = {"office": office, "district": district, "party": party,
+                              "last_name": name} if name else None
                 if record:
                     results.append(record)
     except DiscoveryFailed as exc:
@@ -353,4 +404,7 @@ async def fetch_confirmed_candidates(
             name_transform=lambda n: surname(n, last_first=True),
         ),
     )
+    # A two-candidate (or one-candidate) statewide primary is posted as a
+    # plain count, like the federal ones: same tie-safe pick, whole name.
+    results.extend(resolve_confirmed_nominees(statewide_by_seat, None, name_transform=_first_last))
     return results

@@ -42,10 +42,11 @@ ideological positioning, not donor-concentration statistics by rank
 ratio or top-N-donor-concentration table). The specific calibration
 targets below are this platform's own live empirical audits, not
 numbers reproduced from either paper — see _calc_funding_independence's
-own "Academic rationale" note for the fuller account, including why the
-PAC multiplier is chamber-specific (0.5 / that chamber's median PAC
-share, measured every run — compute_funding_reference) rather than one
-shared value. Top-donor
+own "Academic rationale" note for the fuller account. The PAC share is
+scored per chamber against the share campaigns of the same size typically
+take there (v6.22, _pac_size_fit, measured every run —
+compute_funding_reference), with the chamber median as the fallback
+before a chamber has a fit. Top-donor
 concentration is scored against the chamber's measured median, saturating
 at one p10-p90 spread (v6.13; the fixed 15%/40% anchors it replaced were
 pooled across chambers). The 2026-07-23 audit measured that median at
@@ -169,6 +170,7 @@ comments state the current rule only.
 import logging
 import math
 import statistics
+from datetime import date
 
 from app.atomic_write import update_json_file
 from app.config_definitions import (
@@ -183,6 +185,7 @@ from app.pipeline.analyze.population_reference import (
     FUNDING_REFERENCE,
     LES_REFERENCE,
 )
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +195,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.18"
+ALGORITHM_VERSION = "v6.23"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -585,6 +588,7 @@ def calculate_scores(senator: dict) -> dict:
             les_reference=senator.get("lesReference"),
             chamber="house" if senator.get("district") is not None else "senate",
             bills_known=not senator.get("sponsoredBillsUnavailable"),
+            sworn_date=senator.get("swornDate"),
         ),
     }
 
@@ -636,6 +640,7 @@ def explain_scores(senator: dict) -> dict:
             les_reference=senator.get("lesReference"),
             chamber="house" if senator.get("district") is not None else "senate",
             bills_known=not senator.get("sponsoredBillsUnavailable"),
+            sworn_date=senator.get("swornDate"),
         ),
     }
 
@@ -852,18 +857,19 @@ def _calc_funding_independence(
     chamber references each is scored against are measured every run
     (compute_funding_reference — AGENTS.md §3a):
 
-      1. PAC dependency (20/53): PAC share of contributions, scored so the
-         chamber's median member lands at 50 (House members rely on PAC
-         money far more than senators — a structural difference, not a
-         choice), then scaled by how close the contributing PACs ran to
-         their legal per-election caps ($5,000 multicandidate / $3,500
-         other, FEC 2025-26). Share alone has a scale bias: a $100M
-         campaign dilutes millions of PAC dollars to a small share
-         (2026-07 audit: FI vs log(total raised) r=+0.68), so the cap
-         utilization of each PAC with a known committee type measures
-         the depth of the commitment directly. Without committee-type
-         data, the absolute PAC dollars are scaled against twice the
-         chamber median instead.
+      1. PAC dependency (20/53): PAC share of contributions against the
+         share campaigns of the same size typically take in the chamber
+         (v6.22, _pac_size_fit): at that share it scores 50, with none 100,
+         at twice it 0. Per chamber because House members rely on PAC money
+         far more than senators, a structural difference, not a choice. Per
+         size because PAC checks are capped by law and individual money is
+         not, so a larger campaign dilutes the same PAC dollars to a smaller
+         share: scored against one chamber median, FI tracked campaign size
+         (r=+0.58 Senate, +0.15 House, 2026-09-28), and the PAC-cap
+         utilization factor meant to correct that (before v6.22) measured how
+         close each contributing PAC came to a one-election cap, over
+         totals spanning a primary and a general, rather than how much the
+         campaign depended on PACs. With the size fit, r=+0.05 / -0.06.
       2. Small-donor share (10/53): unitemized (<$200) contributions,
          against what the state's size predicts for senators
          (small_donor_baseline.json) and against the House median for
@@ -959,6 +965,68 @@ def _top_donor_concentration(funding: dict) -> tuple[float | None, int, float]:
     return None, len(external), pool
 
 
+def _pac_size_fit(sized: list[tuple[float, float]]) -> dict | None:
+    """The PAC share a campaign of a given size typically takes, from one
+    chamber's (contributions, PAC dollars) pairs: log(PAC share) fitted
+    linearly on log(contributions) by least squares, the intercept then
+    moved by the median residual so a member at the fit is the typical
+    member of that size (scored 50), as the chamber median was before.
+
+    Fitted over members inside the chamber's 5th-95th percentile of
+    campaign size, and read back only inside that range (_expected_pac_
+    ratio clamps to it), so a campaign far smaller or larger than any the
+    fit saw — a first-term member with a partial record, a nine-figure
+    Senate race — is compared with the edge of the observed range, not an
+    extrapolation. Members with no PAC money have no log share and are left
+    out of the fit (they score 100 on the component either way).
+
+    Measured 2026-09-28 from the live breakdowns: slope -1.03 Senate
+    (n=91; PAC dollars barely grow with campaign size, so the share mostly
+    measures size), -0.48 House (n=390). See docs/methodology/member-score/
+    v6.22.md. None below _MIN_FUNDING_REFERENCE_MEMBERS usable members."""
+    logs = sorted(math.log(base) for base, _ in sized if base > 0)
+    if len(logs) < _MIN_FUNDING_REFERENCE_MEMBERS:
+        return None
+    ventiles = statistics.quantiles(logs, n=20)
+    lo, hi = ventiles[0], ventiles[-1]
+    points = [
+        (math.log(base), math.log(pac / base))
+        for base, pac in sized
+        if base > 0 and pac > 0 and lo <= math.log(base) <= hi
+    ]
+    if len(points) < _MIN_FUNDING_REFERENCE_MEMBERS:
+        return None
+    xs = [x for x, _ in points]
+    mx = statistics.mean(xs)
+    my = statistics.mean(y for _, y in points)
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if sxx == 0:
+        return None
+    slope = sum((x - mx) * (y - my) for x, y in points) / sxx
+    intercept = my - slope * mx
+    intercept += statistics.median(y - (intercept + slope * x) for x, y in points)
+    return {
+        "pac_size_n": len(points),
+        "pac_size_slope": round(slope, 6),
+        "pac_size_intercept": round(intercept, 6),
+        "pac_size_log_lo": round(lo, 6),
+        "pac_size_log_hi": round(hi, 6),
+    }
+
+
+def _expected_pac_ratio(base: float, ref: dict) -> float | None:
+    """The PAC share typical of a campaign this size in the chamber
+    (_pac_size_fit), or None without a fit."""
+    keys = ("pac_size_slope", "pac_size_intercept", "pac_size_log_lo", "pac_size_log_hi")
+    if base <= 0 or any(ref.get(k) is None for k in keys):
+        return None
+    x = min(max(math.log(base), ref["pac_size_log_lo"]), ref["pac_size_log_hi"])
+    # A share is at most 1. The fit is a line in log space, re-measured every
+    # run, and a steep enough one would put the smallest campaigns above 100%,
+    # where a member funded wholly by PACs would score above the typical 50.
+    return min(1.0, math.exp(ref["pac_size_intercept"] + ref["pac_size_slope"] * x))
+
+
 def compute_funding_reference(fundings: list[dict]) -> dict | None:
     """One chamber's Funding Independence reference from this run's
     members' funding dicts:
@@ -966,22 +1034,22 @@ def compute_funding_reference(fundings: list[dict]) -> dict | None:
     - pac_ratio_median: median PAC share of contributions (the raw ratio,
       before the outside-spending adjustment — what scripts/audit_pac_ratio.py
       measured when the multipliers were hand-typed);
-    - pac_dollars_median: median PAC dollars, the fallback volume scale for
-      members whose PACs have no known committee type;
+    - pac_size_*: the PAC share campaigns of each size typically take
+      (_pac_size_fit), which the PAC-dependency component is scored against;
     - concentration_p10 / _median / _p90: top-10 donor concentration among
       members with a measurable pool.
 
     None when too few members have funding to measure the PAC share; the
     concentration stats are omitted (keep the last persisted ones) when too
     few members have a measurable pool."""
-    ratios, dollars, concentrations, small = [], [], [], []
+    ratios, sized, concentrations, small = [], [], [], []
     for f in fundings:
         f = f or {}
         base = funding_share_base(f)
         if base > 0:
             pac = f.get("totalFromPACs") or 0
             ratios.append(min(pac / base, 1.0))
-            dollars.append(pac)
+            sized.append((base, pac))
             small.append(f.get("smallDonorPercentage") or 0)
         c, _, _ = _top_donor_concentration(f)
         if c is not None:
@@ -992,7 +1060,7 @@ def compute_funding_reference(fundings: list[dict]) -> dict | None:
         "n": len(ratios),
         "pac_ratio_median": round(statistics.median(ratios), 6),
         "pac_ratio_mean": round(statistics.mean(ratios), 6),
-        "pac_dollars_median": round(statistics.median(dollars), 2),
+        **(_pac_size_fit(sized) or {}),
         "small_donor_p10": round(statistics.quantiles(small, n=10)[0], 4),
         "small_donor_median": round(statistics.median(small), 4),
         "small_donor_p90": round(statistics.quantiles(small, n=10)[8], 4),
@@ -1024,91 +1092,43 @@ def _funding_independence_core(
     pac_total = funding.get("totalFromPACs", 0)
     pac_ratio = pac_total / total_raised
 
-    # Chamber-relative: the chamber's MEDIAN PAC share scores 50
-    # (multiplier = 0.5 / median). House candidates rely on PAC money far
-    # more than Senate candidates — a real structural difference (2026-07
-    # audit: House median 37.1%, Senate 15.7% of receipts), so each chamber
-    # is measured against its own. The median used to be hand-typed as the
-    # multipliers 1.35 / 3.2 (AGENTS.md §3a); it is now measured every run
-    # from the members being scored (compute_funding_reference), which also
-    # keeps it on the same denominator as the ratio itself.
+    # Scored against the share campaigns of the member's size typically take
+    # in their chamber (v6.22, _pac_size_fit, measured every run): the member
+    # at that share scores 50, none scores 100, twice it scores 0. PAC
+    # checks are capped by law and individual money is not, so a larger
+    # campaign dilutes the same PAC dollars to a smaller share. Scored
+    # against one chamber median, share tracked size (FI vs log campaign
+    # size r=+0.58 Senate on 2026-09-28 data), and the PAC-cap utilization
+    # factor meant to correct it measured how hard each contributing PAC
+    # gave, not how much the campaign depended on PACs, against a
+    # one-election cap applied to totals that span a primary and a general.
+    # Before a chamber has a fit, its median share is the reference, as
+    # before v6.22.
     chamber = _chamber_of(district)
     ref = {
         **(FUNDING_REFERENCE.load().get(chamber) or {}),
         **((reference or {}).get(chamber) or {}),
     }
-    pac_median = ref.get("pac_ratio_median")
-    if pac_median:
-        ratio_score = max(0.0, (1.0 - pac_ratio * (0.5 / pac_median))) * 100
+    expected = _expected_pac_ratio(total_raised, ref)
+    if expected:
+        ratio_score = max(0.0, (1.0 - pac_ratio * (0.5 / expected))) * 100
+        lo, hi = (math.exp(ref["pac_size_log_lo"]), math.exp(ref["pac_size_log_hi"]))
+        if lo <= total_raised <= hi:
+            reference_detail = f"campaigns this size in the chamber typically take {expected:.0%}"
+        else:
+            # Outside the fitted range the edge stands in; say which size.
+            edge = lo if total_raised < lo else hi
+            reference_detail = (
+                f"the chamber's {'smallest' if edge == lo else 'largest'} typical campaigns"
+                f" (${edge:,.0f}) take {expected:.0%}"
+            )
+    elif ref.get("pac_ratio_median"):
+        ratio_score = max(0.0, (1.0 - pac_ratio * (0.5 / ref["pac_ratio_median"]))) * 100
+        reference_detail = f"chamber median {ref['pac_ratio_median']:.0%}"
     else:
         ratio_score = 50.0
-
-    # Scale the share-based score by how close contributing PACs are to
-    # their legal per-election maximum — see the docstring above for why
-    # this replaced a cruder absolute-dollar penalty. Caps are FEC
-    # 2025-2026 cycle limits (fec.gov/help-candidates-and-committees/
-    # candidate-taking-receipts/contribution-limits/): $5,000/election for
-    # a Qualified (multicandidate) PAC, $3,500/election for a Nonqualified
-    # one (the latter tracks the individual limit and is inflation-
-    # adjusted each cycle — recalibrate at the next cycle boundary).
-    MULTICANDIDATE_PAC_CAP = 5_000
-    NONMULTICANDIDATE_PAC_CAP = 3_500
-
-    # "Q"/"N" are the only two FEC committee_type codes that are actually
-    # PACs subject to these per-election caps. A contributing "COM" entity
-    # can just as easily be a party committee, a joint fundraising
-    # committee, or a hybrid/Carey committee (codes like "Y", "V", "W") —
-    # real committee types observed live against production data for
-    # this exact use case — none of which are bound by the PAC limits, and
-    # some of which legitimately transfer far more than $5,000 as a
-    # pass-through of many underlying individual contributions. Anything
-    # outside "Q"/"N" is excluded from the utilization pool entirely
-    # rather than forced into the nonqualified bucket, where a large JFC
-    # transfer would misleadingly register as a maxed-out PAC.
-    pac_donors = [
-        d for d in funding.get("topDonors", [])
-        if d.get("committeeType") in ("Q", "N")
-    ]
-    if pac_donors:
-        total_cap = 0.0
-        total_utilized = 0.0
-        for d in pac_donors:
-            cap = MULTICANDIDATE_PAC_CAP if d["committeeType"] == "Q" else NONMULTICANDIDATE_PAC_CAP
-            total_cap += cap
-            total_utilized += min(d.get("total", 0), cap)
-        pac_utilization = total_utilized / total_cap if total_cap > 0 else 0.0
-        # 1.0 at zero utilization (PACs giving token amounts, no penalty)
-        # down to 0.5 at full utilization (PACs uniformly maxing out) —
-        # same [0.5, 1.0] output range as the dollar-based factor this
-        # replaced, so the component's overall scale doesn't jump for the
-        # population when this ships.
-        volume_factor = 1.0 - 0.5 * pac_utilization
-        volume_detail_suffix = (
-            f"{len(pac_donors)} PAC(s) with known committee type averaging "
-            f"{pac_utilization:.0%} of their per-election cap"
-        )
-    else:
-        # No contributing donor resolves to an actual PAC ("Q"/"N") —
-        # every committee-type lookup failed, none were FEC entity_type
-        # "COM" rows, or all resolved to a non-PAC committee type (party
-        # committee, JFC, hybrid/Carey committee) — degrade to the
-        # original dollar-based penalty rather than silently skipping the
-        # correction. The volume scale is twice the chamber's median PAC
-        # dollars (measured each run — compute_funding_reference), so the
-        # median member lands at x0.75 and anything at or above twice it
-        # floors at x0.5. It used to be a hand-typed $1,325,000 (2 x a
-        # 2026-07 median of $662,750, itself refit after an earlier $2.0M
-        # value had drifted 3x as the election cycle moved) — exactly the
-        # drift a measured value doesn't suffer.
-        pac_dollars_median = ref.get("pac_dollars_median")
-        if pac_dollars_median:
-            fallback_cap = 2 * pac_dollars_median
-            volume_factor = 0.5 + 0.5 * max(0.0, 1.0 - pac_total / fallback_cap)
-        else:
-            volume_factor = 0.75
-        volume_detail_suffix = f"no PAC committee-type data — fallback scaling for ${pac_total:,.0f} in absolute PAC dollars"
-
-    pac_score = ratio_score * volume_factor
+        reference_detail = "no chamber reference yet, neutral 50"
+    pac_score = ratio_score
 
     # Component 2: small-donor share (25% weight), state-relative for
     # senators — see _small_donor_capacity_score.
@@ -1158,15 +1178,28 @@ def _funding_independence_core(
     )
     return {
         "score": score,
+        # The numbers the scorecard's sentence states, as numbers: the page
+        # writes "11% of $1.21M in contributions came from PACs" from these,
+        # never re-deriving a share itself.
+        "facts": {
+            "contributions": round(total_raised),
+            "pacShare": round(pac_ratio, 4),
+            "smallDonorShare": round(small_pct / 100, 4),
+            "smallDonorExpectedShare": (
+                round(small_expected_pct / 100, 4) if small_expected_pct is not None else None
+            ),
+            # The House compares with the chamber median; a senator with what
+            # a state of that size is expected to raise in small gifts.
+            "smallDonorComparison": "house-median" if district is not None else "state-size",
+        },
         "components": [
             {
                 "label": "PAC dependency",
                 "weight": round(20 / 53, 4),
                 "score": round(pac_score, 1),
                 "detail": (
-                    f"{pac_ratio:.0%} of ${total_raised:,.0f} in contributions came from PACs"
-                    f" → raw {ratio_score:.1f}, scaled ×{volume_factor:.2f} "
-                    f"({volume_detail_suffix})"
+                    f"{pac_ratio:.0%} of ${total_raised:,.0f} in contributions came from PACs;"
+                    f" {reference_detail}"
                 ),
             },
             {
@@ -1426,8 +1459,20 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     research note validated (party-unity votes, unweighted). It used to be
     weighted by partyAlignmentWeight, the bill's CONTENT lean, with 0.0
     read as 1.0; a content-bipartisan bill that split on party lines then
-    counted a hundred times more than one with a 0.01 lean."""
+    counted a hundred times more than one with a 0.01 lean.
+
+    Since v6.20 the rate is the member's party-line record over the whole
+    Congress when the pipeline has measured it (partyLineRecord,
+    party_line_record.py): breaks toward the other party only, each measure
+    once. The stored votes are read only when it hasn't."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
+
+    record = voting_record.get("partyLineRecord")
+    if isinstance(record, dict) and isinstance(record.get("votes"), int):
+        n = record["votes"]
+        if n < CONSTITUENT_MIN_VOTES:
+            return None, n
+        return len(record.get("breaks") or []) / n, n
 
     votes = dedupe_votes([
         v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
@@ -2016,7 +2061,25 @@ def _constituent_alignment_core(
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
         })
-    return {"score": score, "components": components, "vote_part_status": vote_part_status}
+    record = voting_record.get("partyLineRecord")
+    return {
+        "score": score,
+        "components": components,
+        "vote_part_status": vote_part_status,
+        # The scorecard's sentence and scale, as numbers: how many
+        # party-labeled votes, how many were breaks, and the rate same-party
+        # members of seats like this one break at (None where not measured).
+        "facts": {
+            "party": eval_party,
+            "partyVotes": n_party,
+            "breaks": round(break_rate * n_party) if break_rate is not None else None,
+            "breakRate": round(break_rate, 4) if break_rate is not None else None,
+            "expectedBreakRate": round(expected, 4) if expected is not None else None,
+            # Votes against the party from its flank (party_line_record):
+            # shown beside the breaks, not counted. None without a record.
+            "flankBreaks": len(record.get("flankBreaks") or []) if record else None,
+        },
+    }
 
 
 def _calc_funding_diversity(funding: dict) -> int:
@@ -2142,7 +2205,7 @@ def _funding_diversity_core(funding: dict) -> dict:
     value alongside the final score. Single implementation, same reuse
     contract as _funding_independence_core above."""
     industry_breakdown = funding.get("industryBreakdown", [])
-    small_donor_pct = funding.get("smallDonorPercentage", 0)
+    small_donor_pct = funding.get("smallDonorPercentage", 0) or 0
     total_raised = funding_share_base(funding)
 
     if not industry_breakdown or not total_raised:
@@ -2412,7 +2475,10 @@ def _les_bill_stage(bill: dict) -> int:
     if bill.get("isLaw"):
         return _LES_MAX_STAGE
     action = (bill.get("latestAction") or "").lower()
-    if "passed" in action or "agreed to" in action:
+    # "Motion to proceed ... not agreed to" and "failed of passage" record
+    # a chamber declining the bill, which the bare phrases would credit as
+    # passing it.
+    if ("passed" in action or "agreed to" in action) and "not agreed to" not in action and "failed" not in action:
         return _LES_STAGE_ORDER["PASSED_CHAMBER"]
     if "ordered to be reported" in action:
         return _LES_STAGE_ORDER["IN_COMMITTEE"]
@@ -2497,6 +2563,26 @@ def _les_normalized_credit(
 #      regenerated by scripts/calibrate_les_credit_scale.py.
 # (File handling: population_reference.LES_REFERENCE.)
 _LES_SATURATION_STDEVS = 1.5
+
+
+def congress_exposure(sworn_date: str | None, congress: int | None, as_of: str | None = None) -> float:
+    """The share of `congress` so far, up to `as_of` (ISO date; today when
+    absent), that a member sworn in on `sworn_date` has served: 1.0 for a
+    member seated when it convened (January 3 of its first year, 20th
+    Amendment §2), and whenever either date is unknown or unparseable."""
+    if not sworn_date or not congress:
+        return 1.0
+    try:
+        sworn = date.fromisoformat(sworn_date[:10])
+        now = date.fromisoformat(as_of[:10]) if as_of else utcnow().date()
+    except (TypeError, ValueError):
+        return 1.0
+    start = date(1789 + (congress - 1) * 2, 1, 3)
+    now = min(now, date(start.year + 2, 1, 3))
+    elapsed = (now - start).days
+    if elapsed <= 0 or sworn <= start:
+        return 1.0
+    return min(max((now - sworn).days / elapsed, 0.0), 1.0)
 
 
 def _les_member_inputs(
@@ -2625,6 +2711,9 @@ def compute_les_reference(
     ref = {
         "congress": congress,
         "majority": majority,
+        # The date the credits were counted up to, which a mid-Congress
+        # arrival's share of the Congress is taken against (congress_exposure).
+        "measured_on": utcnow().date().isoformat(),
         "n": len(credits),
         "median_credit": round(statistics.median(credits), 4),
         "mean_credit": round(statistics.mean(credits), 4),
@@ -2674,6 +2763,7 @@ def _les_component_score(
     reference: dict | None = None,
     chamber: str | None = None,
     bills_known: bool = True,
+    sworn_date: str | None = None,
 ) -> tuple[float, str]:
     """The V&W-based component: stage-normalized credit per congress
     served (_les_normalized_credit), scored against the median member of
@@ -2683,6 +2773,11 @@ def _les_component_score(
     YEARS or when the chamber is unknown, and otherwise as a credit of 0 —
     so inaction never beats an attempt. `bills_known=False` (the fetch
     failed) is neutral: an empty list there is not a record.
+
+    `sworn_date` (ISO date) is when a member who arrived mid-Congress took
+    the seat: the bar is prorated by the share of the Congress so far they
+    have served (congress_exposure, v6.23), since credit accumulates over
+    the time a member has had to sponsor and advance bills.
 
     `reference` is {"senate": {...}, "house": {...}} (compute_les_reference
     per chamber); None reads load_les_reference(). See the LES population
@@ -2769,6 +2864,15 @@ def _les_component_score(
         # scores ~50 despite the right-skewed credit distribution.
         expected_per_congress = population_median * status_ratio
 
+    # A member sworn in mid-Congress (a special election) has had only part
+    # of it to sponsor and advance bills, while the bar is measured on
+    # members who have served all of it so far: compare them with that
+    # share of it (v6.23). 1.0 for everyone who took the seat when the
+    # Congress convened, or whose date is unknown.
+    exposure = congress_exposure(sworn_date, ref.get("congress"), ref.get("measured_on"))
+    full_bar = expected_per_congress
+    expected_per_congress *= exposure
+
     diff = raw_per_congress - expected_per_congress
     normalized_diff = max(-1.0, min(diff / saturation, 1.0)) if saturation else 0.0
     # No shrinkage toward 50 by bill count (v6.14). Credit is a total over
@@ -2799,6 +2903,8 @@ def _les_component_score(
     enacted = sum(1 for b in substantive_bills if _les_bill_stage(b) >= _LES_MAX_STAGE)
 
     bar = f"median {status}-party sponsor" if status_median is not None else "for this sponsor's status"
+    if exposure < 1.0:
+        bar += f"; {full_bar:.2f} prorated to the {exposure:.0%} of this Congress served since {sworn_date}"
     if inputs is None:
         return score, (
             f"0 substantive bills over {years_in_office:.1f} years in office — "
@@ -2825,6 +2931,7 @@ def _calc_legislative_effectiveness(
     les_reference: dict | None = None,
     chamber: str | None = None,
     bills_known: bool = True,
+    sworn_date: str | None = None,
 ) -> int:
     """
     Legislative Effectiveness Score (0-100, higher = better).
@@ -2880,8 +2987,19 @@ def _calc_legislative_effectiveness(
     """
     return _legislative_effectiveness_core(
         sponsored_bills, leadership_score, party, years_in_office,
-        attracted_bipartisanship, les_reference, chamber, bills_known,
+        attracted_bipartisanship, les_reference, chamber, bills_known, sworn_date,
     )["score"]
+
+
+def _bills_by_stage(sponsored_bills: list[dict] | None) -> list[int]:
+    """How many of a member's sponsored bills got furthest to each of the
+    five V&W stages (introduced, action in committee, action beyond
+    committee, passed a chamber, became law), by the same stage mapping
+    the score uses (_les_bill_stage)."""
+    counts = [0] * _LES_MAX_STAGE
+    for bill in sponsored_bills or []:
+        counts[_les_bill_stage(bill) - 1] += 1
+    return counts
 
 
 def _legislative_effectiveness_core(
@@ -2893,13 +3011,14 @@ def _legislative_effectiveness_core(
     les_reference: dict | None = None,
     chamber: str | None = None,
     bills_known: bool = True,
+    sworn_date: str | None = None,
 ) -> dict:
     """Same math as _calc_legislative_effectiveness, returning every
     intermediate value alongside the final score. Single implementation,
     same reuse contract as _funding_independence_core above."""
     les_score, les_detail = _les_component_score(
         sponsored_bills or [], party, years_in_office, les_reference,
-        chamber=chamber, bills_known=bills_known,
+        chamber=chamber, bills_known=bills_known, sworn_date=sworn_date,
     )
 
     # Component: leadership score from cosponsorship PageRank
@@ -2984,4 +3103,4 @@ def _legislative_effectiveness_core(
                 "(median attractor = 50)"
             ),
         })
-    return {"score": score, "components": components}
+    return {"score": score, "components": components, "facts": {"billsByStage": _bills_by_stage(sponsored_bills)}}
