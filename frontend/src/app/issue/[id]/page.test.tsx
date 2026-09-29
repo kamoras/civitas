@@ -10,7 +10,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
 vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/BackToTop", () => ({ default: () => null }));
-vi.mock("./IssueActions", () => ({ default: () => null }));
 
 import IssuePage from "./page";
 
@@ -69,10 +68,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** The shared facts block: the element carrying its anchor and share id,
+ *  around the Coverage section. */
 function factsSection() {
   return screen
-    .getByRole("heading", { name: /from the count|media coverage/i })
-    .closest("section")!;
+    .getByRole("heading", { name: /from the count|in the coverage/i })
+    .closest<HTMLElement>("[data-share-section]")!;
 }
 
 describe("an issue's facts section", () => {

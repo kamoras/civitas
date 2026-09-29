@@ -20,7 +20,6 @@ import type { StateInfo, RepStateInfo } from "@/lib/api";
 import type { Senator } from "@/types/senator";
 import { getScoreColor, asciiScoreBar } from "@/lib/representation";
 import { displayScore, formatCurrency } from "@/lib/formatting";
-import { useUserState } from "@/hooks/useUserState";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 
@@ -375,21 +374,6 @@ function ComparePageInner() {
   const [hydrating, setHydrating] = useState(() =>
     Boolean(searchParams.get("leftId") || searchParams.get("rightId"))
   );
-  const [savedState] = useUserState();
-  const [savedStateName, setSavedStateName] = useState<string | null>(null);
-  const [quickLoading, setQuickLoading] = useState(false);
-
-  // Resolve the saved state code (from useUserState, SSR-safe) to a display name.
-  useEffect(() => {
-    if (!savedState) return;
-    fetchStates()
-      .then((states) => {
-        const match = states.find((s) => s.code === savedState);
-        if (match) setSavedStateName(match.name);
-      })
-      .catch(() => {});
-  }, [savedState]);
-
   // Hydrate from URL params on mount (only when sides are not already set)
   useEffect(() => {
     const leftId = searchParams.get("leftId");
@@ -463,25 +447,6 @@ function ComparePageInner() {
     [leftSenator, leftChamber, updateUrl]
   );
 
-  // Quick-populate from saved state
-  const handleQuickCompare = useCallback(() => {
-    if (!savedState) return;
-    setQuickLoading(true);
-    fetchSenatorsByState(savedState)
-      .then((senators) => {
-        if (senators.length >= 2) {
-          setLeftSenator(senators[0]);
-          setLeftChamber("senate");
-          setRightSenator(senators[1]);
-          setRightChamber("senate");
-          updateUrl(senators[0], senators[1], "senate", "senate");
-        }
-        // If fewer than 2 senators, do nothing — selectors stay empty
-      })
-      .catch(() => {})
-      .finally(() => setQuickLoading(false));
-  }, [savedState, updateUrl]);
-
   if (hydrating) {
     return (
       <>
@@ -552,18 +517,6 @@ function ComparePageInner() {
                   ? "SELECT TWO LEGISLATORS ABOVE TO COMPARE"
                   : "SELECT A SECOND LEGISLATOR TO COMPARE"}
               </div>
-              {!leftSenator && !rightSenator && savedState && (
-                <button
-                  onClick={handleQuickCompare}
-                  disabled={quickLoading}
-                  className="mt-2 px-4 py-2 border border-signal-cyan/40 text-signal-cyan font-mono text-xs tracking-widest hover:bg-signal-cyan/10 hover:border-signal-cyan/40 transition-colors
-                             disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {quickLoading
-                    ? "LOADING..."
-                    : `COMPARE MY SENATORS FROM ${savedStateName ?? savedState}`}
-                </button>
-              )}
             </div>
           )}
         </div>

@@ -39,6 +39,11 @@ export function factsAreTheCount(issue: IssueKind): boolean {
 /** The heading over an issue's facts. News-derived issues quote their
  * outlets; an election-results issue quotes the count. */
 export function factsHeading(issue: IssueKind): string {
+  return factsAreTheCount(issue) ? "From the count" : "In the coverage";
+}
+
+/** The facts section's share label (its image's caption). */
+export function factsShareLabel(issue: IssueKind): string {
   return factsAreTheCount(issue) ? "From the count" : "Media coverage";
 }
 

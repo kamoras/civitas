@@ -334,7 +334,8 @@ export default function DataChapter() {
         </List>
         <P>
           None of it is shared or sold. Requests this server makes go only to the public sources
-          listed above, and none carries anything about a visitor.
+          listed above, and none carries anything about a visitor. Nothing is kept in your browser
+          either: the site stores no preferences, history or record of what you did there.
         </P>
       </Section>
 

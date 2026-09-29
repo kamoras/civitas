@@ -32,3 +32,26 @@ export function focusTabWhenSelected(tabId: string): void {
   };
   requestAnimationFrame(check);
 }
+
+/**
+ * A retry button's click handler that keeps keyboard focus on the page.
+ *
+ * A retry swaps the error (and the focused button in it) for a loading line
+ * and then the result, so the button unmounts and focus falls to <body>,
+ * stranding a keyboard or screen-reader user at the top of the document.
+ * Moving focus first to the enclosing tab panel (which is focusable, see the
+ * tabs rule above) keeps it inside the region whose content is reloading.
+ */
+export function retryKeepingFocus(
+  retry: () => void,
+  /** A nearer home for focus than the panel, when the retry reloads only
+   *  part of it (a monitor row's updates: back to that row's toggle). */
+  target?: (button: Element) => HTMLElement | null | undefined
+) {
+  return (event: { currentTarget: Element }) => {
+    const button = event.currentTarget;
+    const home = target?.(button) ?? button.closest<HTMLElement>('[role="tabpanel"]');
+    home?.focus({ preventScroll: true });
+    retry();
+  };
+}

@@ -128,3 +128,47 @@ def next_senate_election_year(state: str, after_year: int) -> int | None:
             year += 6
         candidates.append(year)
     return min(candidates)
+
+
+ELECTION_SEASON_WINDOW_DAYS = 60
+
+
+def _eastern_today() -> date:
+    # The election's calendar day is the Eastern one (election_phase):
+    # from 7 PM ET on election day the UTC date is already tomorrow.
+    from app.election_phase import election_today
+
+    return election_today()
+
+
+def days_until_next_election(today: date | None = None) -> int:
+    """Days remaining until the next federal Election Day (0 = today).
+
+    next_election_day is strictly AFTER its argument, so on election day
+    itself it answers two years out — this used to return ~730 that day,
+    and "0 = today" never happened."""
+    today = today or _eastern_today()
+    if previous_election_day(today) == today:
+        return 0
+    return (next_election_day(today) - today).days
+
+
+def is_election_season(today: date | None = None, db=None, election=None) -> bool:
+    """True within ELECTION_SEASON_WINDOW_DAYS of the next federal election,
+    and on through the results window after it (election_phase) — the
+    window the midterm-elections pipeline (election_pipeline.py) uses to
+    switch its coverage-ingestion phase from nightly to a tighter cadence
+    (see scheduler.py). The count after election day is when coverage moves
+    fastest; ending the season the night polls closed stopped coverage
+    exactly then. Moved here from api/action.py (2026-09), where it had
+    outlived the Action Center elections tab it was written beside.
+
+    Pass the caller's `db` (or the `election` already resolved from it)
+    where there is one: without either, active_election opens a session of
+    its own for the results window's lookup."""
+    from app.election_phase import active_election
+
+    today = today or _eastern_today()
+    if (election or active_election(db, today)).shows_results:
+        return True
+    return days_until_next_election(today) <= ELECTION_SEASON_WINDOW_DAYS

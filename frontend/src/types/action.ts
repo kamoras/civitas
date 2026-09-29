@@ -65,8 +65,6 @@ export interface ActionIssue {
   relatedExploreDocs: RelatedExploreDoc[];
   relatedSenators: RelatedSenator[];
   relatedMonitorSlugs?: string[];
-  concernedCount: number;
-  notPriorityCount: number;
   fullStory?: string | null;
   /** Only ever true from the issues-list fetch — the single-issue lookup
    *  has no peer issues to judge traction against. */
@@ -95,60 +93,6 @@ export interface ActionIssue {
   imageAlt?: string;
   /** Photographer/wire-service credit shown alongside the image. */
   imageCredit?: string;
-}
-
-export interface MyRepSenator {
-  id: string;
-  name: string;
-  state: string;
-  party: "D" | "R" | "I";
-  initials: string;
-  scores: {
-    fundingIndependence: number;
-    promisePersistence: number;
-    constituentAlignment: number;
-    fundingDiversity: number;
-    legislativeEffectiveness: number;
-    overall: number;
-  };
-  leadershipScore: number | null;
-  ideologyScore: number | null;
-  yearsInOffice: number;
-  contactFormUrl?: string | null;
-  officePhone?: string | null;
-  websiteUrl?: string | null;
-  connectedIssues: { id: number; rank: number; title: string; policyAreas: string[] }[];
-}
-
-export interface MyRepRep {
-  id: string;
-  name: string;
-  state: string;
-  party: "D" | "R" | "I";
-  district: number;
-  initials: string;
-  scores: {
-    fundingIndependence: number;
-    promisePersistence: number;
-    constituentAlignment: number;
-    fundingDiversity: number;
-    legislativeEffectiveness: number;
-    overall: number;
-  };
-  leadershipScore: number | null;
-  ideologyScore: number | null;
-  yearsInOffice: number;
-  contactFormUrl?: string | null;
-  officePhone?: string | null;
-  websiteUrl?: string | null;
-  connectedIssues: { id: number; rank: number; title: string; policyAreas: string[] }[];
-}
-
-export interface MyRepsResponse {
-  state: string;
-  senators: MyRepSenator[];
-  representatives: MyRepRep[];
-  issueDate: string | null;
 }
 
 export interface ActionIssuesResponse {

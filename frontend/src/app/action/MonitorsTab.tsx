@@ -1,274 +1,286 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchMonitors, fetchMonitorDetail } from "@/lib/api";
-import { safeHref } from "@/lib/formatting";
-import type { MonitorUpdate, NationalMonitor, NationalMonitorDetail } from "@/lib/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { retryKeepingFocus } from "@/lib/tabFocus";
+import { formatUtcDate, safeHref } from "@/lib/formatting";
+import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
+import type { MonitorUpdate, NationalMonitor } from "@/lib/api";
 
-const RECENT_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
-
-function formatUpdateTime(update: MonitorUpdate): { timeLabel: string; isRecent: boolean } {
-  if (!update.createdAt) {
-    return { timeLabel: update.date, isRecent: false };
+/** "Sep 29 at 9:14 AM" from the update's own timestamp, else its date. */
+function updateTime(update: MonitorUpdate): string {
+  const created = update.createdAt ? new Date(update.createdAt) : null;
+  if (!created || Number.isNaN(created.getTime())) {
+    return formatUtcDate(update.date, { month: "short", day: "numeric", year: "numeric" });
   }
-  const created = new Date(update.createdAt);
-  if (isNaN(created.getTime())) {
-    return { timeLabel: update.date, isRecent: false };
-  }
-  const now = Date.now();
-  const ageMs = now - created.getTime();
-  const isRecent = ageMs >= 0 && ageMs < RECENT_THRESHOLD_MS;
-
-  const timeStr = created.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-  const dateStr = created.toLocaleDateString(undefined, {
+  return `${created.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
-  });
-
-  const isToday = new Date().toDateString() === created.toDateString();
-  const yesterday = new Date(now - 86_400_000);
-  const isYesterday = yesterday.toDateString() === created.toDateString();
-
-  let timeLabel: string;
-  if (isToday) {
-    timeLabel = `Today at ${timeStr}`;
-  } else if (isYesterday) {
-    timeLabel = `Yesterday at ${timeStr}`;
-  } else {
-    timeLabel = `${dateStr} at ${timeStr}`;
-  }
-
-  return { timeLabel, isRecent };
+  })} at ${created.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
 
-export default function MonitorsTab() {
-  const [monitors, setMonitors] = useState<NationalMonitor[]>([]);
-  const [selected, setSelected] = useState<NationalMonitorDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const detailRef = useRef<HTMLDivElement>(null);
+const shortDate = (d: string) => formatUtcDate(d, { month: "short", day: "numeric" });
 
-  useEffect(() => {
-    fetchMonitors()
-      .then((d) => setMonitors(d.monitors))
-      .catch(() => setFetchError(true))
-      .finally(() => setLoading(false));
-  }, []);
+/** A monitor's dated updates, each with its source. Fetched when first opened. */
+function MonitorUpdates({ slug }: { slug: string }) {
+  const request = useAsyncData(`action-monitor:${slug}`, () => fetchMonitorDetail(slug));
 
-  const openMonitor = useCallback((slug: string) => {
-    setDetailLoading(true);
-    fetchMonitorDetail(slug)
-      .then((d) => {
-        setSelected(d);
-        setTimeout(() => {
-          detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 100);
-      })
-      .catch(() => {})
-      .finally(() => setDetailLoading(false));
-  }, []);
-
-  if (loading) {
+  if (request.loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="text-signal-amber animate-pulse font-mono text-sm">
-          {">"} SCANNING NATIONAL CONCERNS...
-        </div>
-      </div>
+      <p role="status" className="py-3 font-mono text-xs tracking-[0.12em] text-ink-min">
+        Reading updates…
+      </p>
+    );
+  }
+  if (request.error !== null || !request.data) {
+    return (
+      <p role="alert" className="py-3 font-mono text-xs text-signal-red">
+        Could not load this monitor&apos;s updates.{" "}
+        <button
+          onClick={retryKeepingFocus(request.retry, (b) =>
+            b.closest("li")?.querySelector<HTMLElement>("button[aria-expanded]")
+          )}
+          className={TEXT_LINK}
+        >
+          Try again
+        </button>
+      </p>
     );
   }
 
-  if (fetchError) {
-    return (
-      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
-        <div className="font-mono text-sm text-signal-red">CONNECTION ERROR</div>
-        <p className="text-ink-lo text-base">Could not load monitors.</p>
+  const updates = request.data.updates ?? [];
+  if (updates.length === 0) {
+    return <p className="py-3 font-display text-sm text-ink-lo">No updates recorded yet.</p>;
+  }
+
+  return (
+    <ol className="mt-2 border-l border-white/15 pl-4">
+      {updates.map((u) => (
+        <li key={u.id} className="py-2.5">
+          <span className="font-mono text-xs tracking-[0.08em] text-ink-min">{updateTime(u)}</span>
+          <p className="mt-1 font-display text-[15px] leading-relaxed text-ink">{u.summary}</p>
+          <a
+            href={safeHref(u.sourceUrl) || "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-block font-mono text-xs text-ink-lo underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
+          >
+            {u.sourceName || u.articleTitle || "Source"} <span aria-hidden="true">↗</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function MonitorRow({
+  monitor,
+  initiallyOpen,
+}: {
+  monitor: NationalMonitor;
+  initiallyOpen: boolean;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const ref = useRef<HTMLLIElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const active = monitor.status === "active";
+  const statusLabel = active ? "Active" : monitor.status === "watching" ? "Watching" : "Closed";
+  const areas = monitor.policyAreas ?? [];
+
+  // Arrived from a "Tracked in …" link: bring this row into view, and move
+  // focus to it, since the link that was followed is gone from the page.
+  useEffect(() => {
+    if (!initiallyOpen) return;
+    const t = setTimeout(() => {
+      buttonRef.current?.focus({ preventScroll: true });
+      ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    return () => clearTimeout(t);
+  }, [initiallyOpen]);
+
+  return (
+    <li
+      ref={ref}
+      id={`monitor-${monitor.slug}`}
+      className="scroll-mt-[calc(var(--header-clearance)+3rem)] border-b border-white/[0.07]"
+    >
+      <h3>
         <button
-          onClick={() => {
-            setFetchError(false);
-            setLoading(true);
-            fetchMonitors()
-              .then((d) => setMonitors(d.monitors))
-              .catch(() => setFetchError(true))
-              .finally(() => setLoading(false));
-          }}
-          className="text-signal-cyan font-mono text-sm border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
+          ref={buttonRef}
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls={`monitor-detail-${monitor.slug}`}
+          className="flex w-full items-start gap-4 py-4 text-left"
         >
-          [RETRY]
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs tracking-[0.08em] text-ink-min">
+              <span className={`uppercase tracking-[0.1em] ${active ? "text-phos-mid" : ""}`}>
+                {statusLabel}
+              </span>
+              <span>Updated {shortDate(monitor.lastArticleDate || monitor.updatedAt)}</span>
+              <span>
+                {monitor.updateCount} update{monitor.updateCount !== 1 ? "s" : ""}
+              </span>
+              {/* A long-running monitor accumulates one policy area per
+                  smaller monitor merged into it over time (see backend's
+                  _merge_monitors) — past a handful they read as noise. */}
+              {areas.length > 0 && (
+                <span className="text-ink-lo">
+                  {areas.slice(0, 3).join(" · ")}
+                  {areas.length > 3 && ` +${areas.length - 3}`}
+                </span>
+              )}
+            </span>
+            <span className="mt-1.5 block font-display text-lg font-semibold leading-snug text-ink-hi">
+              {monitor.title}
+            </span>
+            {!open && monitor.description && (
+              <span className="mt-1 line-clamp-2 block font-display text-[15px] leading-relaxed text-ink-lo">
+                {monitor.description}
+              </span>
+            )}
+          </span>
+          <span
+            className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
+            aria-hidden="true"
+          >
+            {open ? "−" : "+"}
+          </span>
+        </button>
+      </h3>
+
+      {open && (
+        <div id={`monitor-detail-${monitor.slug}`} className="pb-5">
+          {monitor.description && (
+            <p className="max-w-3xl font-display text-[15px] leading-relaxed text-ink">
+              {monitor.description}
+            </p>
+          )}
+          <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">
+            Tracking since {shortDate(monitor.createdAt)}
+          </p>
+          <MonitorUpdates slug={monitor.slug} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * A monitor someone was sent to that the live list doesn't carry. The list is
+ * active and watching monitors only; one a month without coverage closes it
+ * (or deletes it, when it never gathered enough), while archive entries and
+ * older issues still name it. The detail endpoint still serves a closed one.
+ */
+function OffListMonitor({ slug }: { slug: string }) {
+  const request = useAsyncData(`action-monitor:${slug}`, () => fetchMonitorDetail(slug));
+  const noteRef = useRef<HTMLParagraphElement>(null);
+  const missing = request.error !== null;
+
+  // The link that brought the reader here is gone from the page; give focus
+  // somewhere that says what happened rather than dropping it on <body>.
+  useEffect(() => {
+    if (missing) noteRef.current?.focus();
+  }, [missing]);
+
+  if (request.loading) return null;
+  if (missing || !request.data) {
+    const gone = request.error?.includes("404");
+    return (
+      <p
+        ref={noteRef}
+        tabIndex={-1}
+        role="status"
+        className="mb-6 border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo"
+      >
+        {gone ? (
+          "That concern is no longer tracked, and its record has been removed."
+        ) : (
+          <>
+            Could not load that concern right now.{" "}
+            <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
+              Try again
+            </button>
+          </>
+        )}
+      </p>
+    );
+  }
+  return (
+    <section aria-labelledby="off-list-heading" className="mb-10">
+      <h2 id="off-list-heading" className={SECTION_HEADING}>
+        No longer tracked
+      </h2>
+      <ul>
+        <MonitorRow monitor={request.data} initiallyOpen />
+      </ul>
+    </section>
+  );
+}
+
+export default function MonitorsTab({ initialSlug }: { initialSlug?: string | null }) {
+  const request = useAsyncData("action-monitors", fetchMonitors);
+
+  if (request.loading) {
+    return (
+      <p
+        role="status"
+        aria-live="polite"
+        className="py-10 font-mono text-sm tracking-[0.12em] text-ink-min"
+      >
+        Reading the national monitors…
+      </p>
+    );
+  }
+
+  if (request.error !== null) {
+    return (
+      <div
+        role="alert"
+        className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
+      >
+        <span>Could not load the national monitors.</span>
+        <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
+          Try again
         </button>
       </div>
     );
   }
 
-  if (monitors.length === 0) {
-    return (
-      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4">
-        <div className="font-mono text-sm text-signal-amber">NO ACTIVE MONITORS</div>
-        <p className="text-ink-lo text-base">
-          National monitors are automatically created when an issue persists across multiple days in
-          the news cycle. Check back as the system identifies ongoing concerns.
-        </p>
-      </div>
-    );
-  }
+  const monitors = request.data?.monitors ?? [];
+  const offList = initialSlug && !monitors.some((m) => m.slug === initialSlug) ? initialSlug : null;
 
   return (
-    <div className="space-y-6">
-      <div className="text-center text-xs text-ink-min font-mono mb-2">
-        ONGOING NATIONAL CONCERNS — AUTO-DETECTED FROM RECURRING NEWS PATTERNS
-      </div>
+    <div>
+      <p className="mb-6 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
+        Concerns that keep coming back across days of coverage, detected automatically. Each one
+        gathers the dated updates that fed it, with a source for every entry.
+      </p>
 
-      <div className="grid grid-cols-1 gap-3">
-        {monitors.map((m) => (
-          <button
-            key={m.slug}
-            onClick={() => openMonitor(m.slug)}
-            className={`panel p-4 text-left transition-colors hover:border-signal-amber/40 ${
-              selected?.slug === m.slug ? "border-signal-amber/40" : ""
-            }`}
-            aria-label={`View monitor: ${m.title}`}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span
-                className={`w-2 h-2  ${m.status === "active" ? "bg-phos" : "bg-signal-amber/10"}`}
-                aria-label={m.status === "active" ? "Active" : "Watching"}
-              />
-              <span className="font-mono text-xs text-signal-amber uppercase">{m.category}</span>
-            </div>
-            <h2 className="font-mono text-sm text-ink-hi mb-1 leading-relaxed">{m.title}</h2>
-            {selected?.slug !== m.slug && m.description && (
-              <p className="mb-2 line-clamp-1 font-sans text-xs leading-snug text-ink-min">
-                {m.description}
-              </p>
-            )}
-            <div className="flex items-center gap-3 text-xs text-ink-min">
-              <span>
-                {m.updateCount} update{m.updateCount !== 1 ? "s" : ""}
-              </span>
-              {m.lastArticleDate && <span>latest: {m.lastArticleDate}</span>}
-              <span>tracking since {m.createdAt}</span>
-            </div>
-          </button>
-        ))}
-      </div>
+      {offList && <OffListMonitor slug={offList} />}
 
-      {detailLoading && (
-        <div className="flex items-center justify-center py-8">
-          <div className="text-signal-amber animate-pulse font-mono text-sm">
-            {">"} LOADING TIMELINE...
-          </div>
-        </div>
-      )}
-
-      {selected && !detailLoading && (
-        <div
-          ref={detailRef}
-          className="panel border-t-2 border-t-signal-amber/50 p-5 sm:p-6 scroll-mt-4"
-          role="region"
-          aria-label={`Monitor: ${selected.title}`}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="font-display font-semibold text-base sm:text-lg text-signal-amber">
-                {selected.title}
-              </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <span
-                  className={`text-xs font-mono px-2 py-0.5 border ${
-                    selected.status === "active"
-                      ? "border-phos/30 text-phos-mid"
-                      : "border-signal-amber/40 text-signal-amber"
-                  }`}
-                >
-                  {selected.status.toUpperCase()}
-                </span>
-                {selected.policyAreas.slice(0, 4).map((area) => (
-                  <span
-                    key={area}
-                    className="text-xs font-mono px-2 py-0.5 border border-signal-amber/40 text-signal-amber"
-                  >
-                    {area}
-                  </span>
-                ))}
-                {/* A long-running monitor accumulates one policy area per
-                    smaller monitor merged into it over time (see backend's
-                    _merge_monitors) — a real multi-month story can end up
-                    tagged with most of the taxonomy, which reads as noise
-                    rather than signal past a handful of badges. */}
-                {selected.policyAreas.length > 4 && (
-                  <span className="text-xs font-mono px-2 py-0.5 text-ink-min">
-                    +{selected.policyAreas.length - 4} more
-                  </span>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={() => setSelected(null)}
-              className="text-ink-min hover:text-phos font-mono text-xs"
-              aria-label="Close monitor detail"
-            >
-              [CLOSE]
-            </button>
-          </div>
-
-          <p className="text-ink text-base mb-6 leading-relaxed">{selected.description}</p>
-
-          <h4 className="font-mono text-sm text-signal-amber mb-4">
-            {">"} TIMELINE ({selected.updates.length} updates)
-          </h4>
-
-          <div className="relative pl-4 border-l border-signal-amber/40 space-y-4" role="list">
-            {selected.updates.map((update) => {
-              const { timeLabel, isRecent } = formatUpdateTime(update);
-              return (
-                <div key={update.id} className="relative" role="listitem">
-                  <div
-                    className={`absolute -left-[21px] top-1 w-2.5 h-2.5  border ${
-                      isRecent
-                        ? "bg-signal-red border-signal-red animate-pulse"
-                        : "bg-signal-amber/10 border-signal-amber/40"
-                    }`}
-                    aria-hidden="true"
-                  />
-                  <div className="flex items-center gap-2 mb-1">
-                    <time
-                      dateTime={update.createdAt || undefined}
-                      className="text-xs text-ink-min font-mono"
-                    >
-                      {timeLabel}
-                    </time>
-                    {isRecent && (
-                      <span className="text-xs font-mono px-1.5 py-0.5 bg-signal-red/10 border border-signal-red/40 text-signal-red animate-pulse">
-                        BREAKING
-                      </span>
-                    )}
-                    {update.sourceName && (
-                      <span className="text-xs text-ink-min font-mono">
-                        via {update.sourceName}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-base text-ink leading-relaxed mb-1">{update.summary}</p>
-                  <a
-                    href={safeHref(update.sourceUrl) || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-ink-lo hover:text-phos transition-colors"
-                  >
-                    {update.articleTitle || "Source"} <span aria-hidden="true">↗</span>
-                  </a>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <section aria-labelledby="monitors-heading">
+        <h2 id="monitors-heading" className={SECTION_HEADING}>
+          <span>Tracking</span>
+          <span aria-hidden="true">
+            {monitors.length} concern{monitors.length !== 1 ? "s" : ""}
+          </span>
+        </h2>
+        {monitors.length === 0 ? (
+          <p className="py-4 font-display text-base text-ink-lo">
+            Nothing is being tracked right now. A monitor opens when an issue persists across
+            several days of coverage.
+          </p>
+        ) : (
+          <ul>
+            {monitors.map((m) => (
+              <MonitorRow key={m.slug} monitor={m} initiallyOpen={m.slug === initialSlug} />
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

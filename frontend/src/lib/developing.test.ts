@@ -26,12 +26,12 @@ describe("developing issue wording", () => {
     expect(factsHeading({ sourceType: "election_results", status: "developing" })).toBe(
       "From the count"
     );
-    expect(factsHeading({ sourceType: null, status: "confirmed" })).toBe("Media coverage");
+    expect(factsHeading({ sourceType: null, status: "confirmed" })).toBe("In the coverage");
   });
 
   it("heads a confirmed count issue's facts as media coverage: promotion swaps them for the outlets'", () => {
     const promoted = { sourceType: "election_results", status: "confirmed" };
-    expect(factsHeading(promoted)).toBe("Media coverage");
+    expect(factsHeading(promoted)).toBe("In the coverage");
     expect(factsSectionId(promoted)).toBe("media-coverage");
   });
 

@@ -22,7 +22,16 @@ def test_every_link_is_a_page_the_site_has():
     events = _upcoming_civic_events(2029, date(2029, 1, 1))  # inauguration, Congress, Court, no election
     links = {e["link"].split("?")[0] for e in events}
     assert "/scorecard" not in links
-    assert links <= {"/politicians", "/leaderboard", "/action"}
+    assert links <= {"/politicians", "/leaderboard", "/elections"}
+
+
+def test_election_day_links_to_the_elections_page():
+    """The Action Center's elections tab is gone (2026-09); Election Day
+    points at /elections, which carries the countdown and every state's
+    ballot."""
+    events = _upcoming_civic_events(2026, date(2026, 1, 1))
+    election = next(e for e in events if e["category"] == "election")
+    assert election["link"] == "/elections"
 
 
 def test_election_day_is_on_the_calendar_on_election_day():

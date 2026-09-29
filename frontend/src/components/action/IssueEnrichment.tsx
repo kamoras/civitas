@@ -1,30 +1,38 @@
-"use client";
-
-import { developingSource } from "@/lib/developing";
-
 /**
- * The enrichment an Action Center issue carries beyond its own prose: the
- * monitors tracking it, the representatives involved, the legislation and
- * federal documents it points at, and where the reporting came from.
+ * The parts an Action Center issue is built from, shared by the Action
+ * Center's cards and the standalone /issue/{id} page.
  *
- * Shared deliberately. These blocks render in two places — the Action Center's
- * top-issue card and the standalone /issue/{id} full-story page — and the full
- * story page is a *cold entry point* (Bluesky posts link straight to it), so a
- * visitor who lands there must get the same links a visitor who started at the
- * Action Center gets. Keeping one copy is what stops the two from drifting
- * apart again.
+ * Shared deliberately. The full-story page is a *cold entry point* (Bluesky
+ * posts link straight to it), so a visitor who lands there must get the same
+ * links a visitor who started at the Action Center gets, and the Action
+ * Center's top issue and its expanded secondary issues render one body, not a
+ * full-size copy and a hand-compacted one that drift apart.
  *
- * The compact accordion variant inside the Action Center's secondary issues
- * renders the same data at a much tighter density and stays inline there on
- * purpose; only the full-size presentation lives here.
+ * Set in the records style (see PageMasthead, RecordIndex): small mono caps
+ * over a hairline for a section, hairline rows for items, the display face for
+ * anything a person reads, underlined sentence-case links. No tinted boxes and
+ * no per-block accent colour; colour is left for what is true about the data
+ * (a party, a developing draft, a new fact).
+ *
+ * No hooks and no browser APIs, so the server-rendered issue page can render
+ * these directly.
  */
 
 import Link from "next/link";
-import { safeHref } from "@/lib/formatting";
-import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
-import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
+import { formatUtcDate, isNewFact, issueDateLabel, issueRef, safeHref } from "@/lib/formatting";
+import { developingSource, factsHeading } from "@/lib/developing";
+import { PARTY_COLORS } from "@/lib/partyStyles";
+import { monitorHref } from "@/lib/routes";
 import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+
+/** Hairline section header: the one used by RecordIndex and /elections. */
+export const SECTION_HEADING =
+  "flex items-baseline justify-between gap-3 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min";
+
+/** An underlined sentence-case link, the records pages' only link treatment. */
+export const TEXT_LINK =
+  "font-display text-sm text-ink-hi underline decoration-ink-min/60 underline-offset-4 transition-colors hover:decoration-ink-hi";
 
 /** An issue's rights-cleared source photo, in the two sizes it renders at.
  *
@@ -43,11 +51,7 @@ import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
  *  The source caption is also still shown as a VISIBLE figcaption
  *  alongside the credit on the full size, for sighted readers — that's
  *  a deliberate, accepted duplication with the alt text now, not an
- *  oversight.
- *
- *  Design: font-mono/tracked-uppercase/text-ink-min matches every other
- *  small label on this page (SOURCES:, MEDIA COVERAGE) — this is that same
- *  register, not a one-off caption style. */
+ *  oversight. */
 export function IssueImage({
   issue,
   size = "full",
@@ -74,7 +78,7 @@ export function IssueImage({
 
   return (
     // Left out of shared images, as above.
-    <figure className="mb-6" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+    <figure className="mb-5" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
       {/* eslint-disable-next-line @next/next/no-img-element -- external, varied source-article hosts; not worth per-host next/image remotePatterns */}
       <img
         src={issue.imageUrl}
@@ -82,53 +86,59 @@ export function IssueImage({
         className="max-h-96 w-full border border-white/[0.07] object-cover"
       />
       {(issue.imageAlt || issue.imageCredit) && (
-        <figcaption className="mt-1.5 font-mono text-[10px] tracking-wide text-ink-min">
+        <figcaption className="mt-1.5 font-mono text-xs tracking-wide text-ink-min">
           {issue.imageAlt}
           {issue.imageAlt && issue.imageCredit && " — "}
-          {issue.imageCredit && `PHOTO: ${issue.imageCredit}`}
+          {issue.imageCredit && `Photo: ${issue.imageCredit}`}
         </figcaption>
       )}
     </figure>
   );
 }
 
-export function PolicyBadge({ area }: { area: string }) {
+/**
+ * The docket line above an issue's title: date, reference, and the two
+ * computed flags. "Developing" is amber (lower confidence: a primary-source
+ * draft not yet corroborated by press coverage — backend early_signal.py);
+ * "Trending" is cyan, and only ever set when the backend's traction bar
+ * (app/trending.py) was cleared. Words, not boxed badges.
+ */
+export function IssueMeta({
+  issue,
+  lead,
+  withRef = true,
+  as: Tag = "p",
+}: {
+  issue: ActionIssue;
+  /** A label ahead of the date, e.g. "Top issue". */
+  lead?: string;
+  withRef?: boolean;
+  /** "span" inside phrasing content, such as a disclosure button. */
+  as?: "p" | "span";
+}) {
   return (
-    <span className="text-xs px-2 py-0.5 border font-mono tracking-wide border-signal-amber/40 text-signal-amber bg-signal-amber/10">
-      {area}
-    </span>
+    <Tag className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs tracking-[0.08em] text-ink-min">
+      {lead && (
+        <span className="border border-white/15 px-2 py-0.5 uppercase tracking-[0.14em] text-ink-hi">
+          {lead}
+        </span>
+      )}
+      <span>{issueDateLabel(issue)}</span>
+      {withRef && (
+        <>
+          <span aria-hidden="true">·</span>
+          <span>{issueRef(issue.publicId)}</span>
+        </>
+      )}
+      {issue.status === "developing" && <span className="text-signal-amber">Developing</span>}
+      {issue.isTrending && <span className="text-signal-cyan">Trending</span>}
+    </Tag>
   );
 }
 
-/** Phosphor, matching "TOP ISSUE": this is a computed figure (today's view
- *  count clearing app/trending.py's traction bar), not chrome — the rule
- *  established during the rebrand is phosphor lands on data, never
- *  decoration, and a badge that's silently wrong more often than right
- *  would be worse than no badge, so this only ever renders when the
- *  backend has already done that judgment. */
-export function TrendingBadge() {
-  return (
-    <span className="border border-phos/40 px-2 py-0.5 font-mono text-xs tracking-[0.14em] text-phos-mid">
-      ▲ TRENDING
-    </span>
-  );
-}
-
-/** Amber, matching MonitorStatus's non-"active" badge — this flags lower
- *  confidence (a primary-source-only draft, not yet corroborated by press
- *  coverage), the opposite of phosphor's "computed positive figure"
- *  meaning elsewhere on this page. See backend early_signal.py. */
-export function DevelopingBadge() {
-  return (
-    <span className="border border-signal-amber/40 px-2 py-0.5 font-mono text-xs tracking-[0.14em] text-signal-amber">
-      DEVELOPING
-    </span>
-  );
-}
-
-/** One-line disclosure paired with DevelopingBadge — explains what
- *  "developing" means, and names what the story was drafted from, rather
- *  than leaving readers to guess. */
+/** One-line disclosure paired with the "Developing" flag — explains what it
+ *  means, and names what the story was drafted from, rather than leaving
+ *  readers to guess. */
 export function DevelopingDisclosure({
   sourceType,
   countOfficial = false,
@@ -139,150 +149,66 @@ export function DevelopingDisclosure({
 }) {
   const source = developingSource(sourceType, { countOfficial });
   return (
-    <p className="mb-4 font-mono text-xs text-ink-min">
+    <p className="mb-4 font-mono text-xs leading-relaxed text-ink-min">
       Based on {source}; broader news coverage has not yet confirmed this story.
     </p>
   );
 }
 
 /** Marks a fact added since this issue's last genuine content change (see
- *  backend/app/fact_diff.py). Phosphor, matching TrendingBadge/"TOP ISSUE" —
- *  this is a computed fact about the data, not decoration. `[NEW]` rather
- *  than a bare dot: the site already uses bracketed tags for exactly this
- *  register (the navbar's [BSKY]). */
+ *  backend/app/fact_diff.py). Phosphor: a computed fact about the data. */
 export function NewFactTag() {
-  return <span className="ml-2 align-middle font-mono text-[10px] text-phos-mid">[NEW]</span>;
+  return <span className="ml-2 font-mono text-xs text-phos-mid">new</span>;
 }
 
-export function SourceBadge({ name, url }: { name: string; url?: string }) {
-  if (url) {
-    return (
-      <a
-        href={safeHref(url) || "#"}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 transition-colors"
-      >
-        {name} <span aria-hidden="true">↗</span>
-      </a>
-    );
-  }
-  return (
-    <span className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-lo">{name}</span>
-  );
-}
-
-const MONITOR_CHIP_CLASS =
-  "text-xs font-mono tracking-wide px-2 py-0.5 border border-signal-amber/40 text-signal-amber hover:text-signal-amber hover:border-signal-amber/40 transition-colors bg-signal-amber/10";
-
-function monitorLabel(slug: string) {
-  return `${slug.replace(/-/g, " ").slice(0, 40)}${slug.length > 40 ? "…" : ""}`;
+function humanizeSlug(slug: string): string {
+  const words = slug.replace(/-/g, " ");
+  const clipped = words.length > 48 ? `${words.slice(0, 48)}…` : words;
+  return clipped.charAt(0).toUpperCase() + clipped.slice(1);
 }
 
 /**
- * `onSelect` is for callers that already live on /action and can just switch
- * tabs. Without it — the full-story page — each chip links to the monitors tab
- * instead, so the enrichment stays reachable rather than becoming inert text.
+ * Policy areas and the national monitors tracking this issue, on one line.
+ * Each monitor opens in place on the Action Center's monitors tab.
  */
-export function MonitorChips({
-  slugs,
-  onSelect,
-  className = "mb-4",
-}: {
-  slugs?: string[];
-  onSelect?: () => void;
-  className?: string;
-}) {
-  if (!slugs || slugs.length === 0) return null;
-  return (
-    <div className={`flex items-center gap-2 flex-wrap ${className}`}>
-      <span className="font-mono text-xs tracking-widest text-signal-amber">TRACKING</span>
-      {slugs.map((slug) =>
-        onSelect ? (
-          <button key={slug} onClick={onSelect} className={MONITOR_CHIP_CLASS}>
-            {monitorLabel(slug)}
-          </button>
-        ) : (
-          <Link key={slug} href={ACTION_CENTER_MONITORS_HREF} className={MONITOR_CHIP_CLASS}>
-            {monitorLabel(slug)}
-          </Link>
-        )
-      )}
-    </div>
-  );
-}
-
-export function RepresentativeContacts({
+export function IssueTags({
   issue,
-  userState,
+  className = "mb-6",
+  onMonitor,
 }: {
   issue: ActionIssue;
-  userState: string | null;
+  className?: string;
+  /**
+   * On /action itself, open the monitor in place. A <Link> to the same route
+   * would be a soft navigation the page never re-reads (it latches ?monitor=
+   * at mount), so the tab would switch and nothing would open.
+   */
+  onMonitor?: (slug: string) => void;
 }) {
-  const senators = issue.relatedSenators ?? [];
-
-  if (senators.length === 0 && !userState) return null;
-
+  const areas = issue.policyAreas ?? [];
+  const slugs = issue.relatedMonitorSlugs ?? [];
+  if (areas.length === 0 && slugs.length === 0) return null;
   return (
-    <div className="mb-6">
-      <h3 className="font-mono text-xs tracking-widest text-ink-lo mb-3 uppercase">
-        {senators.length > 0 ? "Contact Representatives" : "Contact Your Representatives"}
-      </h3>
-
-      {senators.length > 0 ? (
-        <div className="space-y-2">
-          {senators.map((s) => {
-            const url = s.contactFormUrl || s.websiteUrl || null;
-            return (
-              <div
-                key={s.id}
-                className={`flex items-center gap-3 px-3 py-2.5 border ${PARTY_BORDER[s.party]} bg-white/[0.03]`}
-              >
-                <span className={`font-mono text-xs shrink-0 ${PARTY_COLORS[s.party]}`}>
-                  {s.party}-{s.state}
-                </span>
-                <span className="text-sm text-ink flex-1 min-w-0 truncate">{s.name}</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <a
-                    href={url || "https://www.senate.gov/senators/senators-contact.htm"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={
-                      url
-                        ? "text-xs font-mono tracking-widest text-signal-cyan border border-signal-cyan/40 hover:border-signal-cyan/40 hover:bg-signal-cyan/10 px-2 py-1 transition-colors"
-                        : "text-xs font-mono tracking-widest text-ink-lo border border-white/15 hover:border-signal-cyan/40 px-2 py-1 transition-colors"
-                    }
-                  >
-                    CONTACT ↗
-                  </a>
-                  <Link
-                    href={`/politicians/${s.id}`}
-                    className="text-xs font-mono tracking-wide text-ink-lo hover:text-phos transition-colors"
-                  >
-                    SCORE: {Math.round(s.overallScore)}
-                  </Link>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : userState ? (
-        <a
-          href={`/politicians?branch=senate&state=${userState}`}
-          className="inline-flex items-center gap-2 text-xs font-mono tracking-widest text-signal-cyan border border-signal-cyan/40 hover:border-signal-cyan/40 hover:bg-signal-cyan/10 px-3 py-1.5 transition-colors"
-        >
-          VIEW {userState} SENATORS &amp; CONTACT INFO →
-        </a>
-      ) : (
-        <a
-          href="https://www.senate.gov/senators/senators-contact.htm"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-xs font-mono tracking-widest text-signal-cyan border border-signal-cyan/40 hover:border-signal-cyan/40 hover:bg-signal-cyan/10 px-3 py-1.5 transition-colors"
-        >
-          FIND YOUR SENATORS ↗
-        </a>
-      )}
+    <div
+      className={`flex flex-wrap items-baseline gap-x-4 gap-y-1.5 font-mono text-xs tracking-[0.08em] text-ink-lo ${className}`}
+    >
+      {areas.map((area) => (
+        <span key={area}>{area}</span>
+      ))}
+      {slugs.map((slug) => (
+        <span key={slug}>
+          Tracked in{" "}
+          {onMonitor ? (
+            <button onClick={() => onMonitor(slug)} className={TEXT_LINK}>
+              {humanizeSlug(slug)} →
+            </button>
+          ) : (
+            <Link href={monitorHref(slug)} className={TEXT_LINK}>
+              {humanizeSlug(slug)} →
+            </Link>
+          )}
+        </span>
+      ))}
     </div>
   );
 }
@@ -312,196 +238,270 @@ export function trackActionText(action: ActionItem, internal: boolean): string {
 }
 
 export function trackableActions(issue: ActionIssue): ActionItem[] {
-  return issue.actions.filter((a) => a.type === "track_legislation" && a.url);
+  return (issue.actions ?? []).filter((a) => a.type === "track_legislation" && a.url);
 }
 
 /** A seat-flip issue's link to the live count (backend
  * live_results/signals.py). Same-site paths only: the backend writes
  * these, and anything else is not one of them. */
 export function followResultsActions(issue: ActionIssue): ActionItem[] {
-  return issue.actions.filter(
+  return (issue.actions ?? []).filter(
     (a) =>
       a.type === "follow_results" && typeof a.url === "string" && a.url.startsWith("/elections/")
   );
 }
 
-export function FollowResults({ issue }: { issue: ActionIssue }) {
-  const actions = followResultsActions(issue);
-  if (actions.length === 0) return null;
-  return (
-    <div className="mb-6 space-y-2">
-      {actions.map((action) => (
-        <Link
-          key={action.url}
-          href={action.url!}
-          className="flex items-center gap-3 border border-signal-amber/40 bg-signal-amber/10 p-3 transition-all hover:border-signal-amber/70 group"
-        >
-          <span className="flex-1 text-sm text-ink group-hover:text-phos">{action.text}</span>
-          <span className="shrink-0 font-mono text-xs tracking-wide text-signal-amber">
-            LIVE COUNT →
-          </span>
-        </Link>
-      ))}
-    </div>
-  );
-}
-
-export function TrackLegislation({ issue }: { issue: ActionIssue }) {
-  const actions = trackableActions(issue);
-  if (actions.length === 0) return null;
-
-  return (
-    <div className="mb-6">
-      <h3 className="font-mono text-xs tracking-widest text-ink-lo mb-3 uppercase">
-        Track Legislation
-      </h3>
-      <div className="space-y-2">
-        {actions.map((action, i) => {
-          const { href, internal } = trackActionLink(issue, action);
-          const linkClass =
-            "flex items-center gap-3 p-3 border border-white/15 bg-signal-cyan/10 hover:border-signal-cyan/40 hover:bg-signal-cyan/10 transition-all group";
-          const inner = (
-            <>
-              <span className="text-sm text-ink group-hover:text-phos flex-1">
-                {trackActionText(action, internal)}
-              </span>
-              <span className="text-xs font-mono tracking-wide text-ink-lo shrink-0">
-                {internal ? "VIEW BILL →" : "CONGRESS.GOV ↗"}
-              </span>
-            </>
-          );
-          return internal ? (
-            <Link key={i} href={href} className={linkClass}>
-              {inner}
-            </Link>
-          ) : (
-            <a key={i} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
-              {inner}
-            </a>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-export function OfficialLegislation({ issue }: { issue: ActionIssue }) {
-  if (!issue.relatedBills || issue.relatedBills.length === 0) return null;
-
-  return (
-    <div className="mb-6">
-      <h3 className="font-mono text-xs tracking-widest text-ink-lo mb-3 uppercase">
-        Official Legislation
-      </h3>
-      <div className="space-y-2">
-        {issue.relatedBills.map((bill) => {
-          const { href, internal } = billLink(bill);
-          const linkClass =
-            "flex items-center gap-3 p-3 border border-signal-amber/40 bg-signal-amber/10 hover:border-signal-amber/40 hover:bg-signal-amber/10 transition-all group";
-          const inner = (
-            <>
-              <span className="text-xs font-mono tracking-wide text-ink-lo border border-signal-amber/40 px-1.5 py-0.5 shrink-0">
-                {bill.id}
-              </span>
-              <span className="text-sm text-ink group-hover:text-phos truncate">{bill.name}</span>
-              <span className="text-xs font-mono tracking-wide text-ink-lo shrink-0 ml-auto">
-                {internal ? "VIEW BILL →" : "CONGRESS.GOV ↗"}
-              </span>
-            </>
-          );
-          return internal ? (
-            <Link key={bill.id} href={href} className={linkClass}>
-              {inner}
-            </Link>
-          ) : (
-            <a
-              key={bill.id}
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={linkClass}
-            >
-              {inner}
-            </a>
-          );
-        })}
-      </div>
-    </div>
-  );
+interface ActionRow {
+  key: string;
+  verb: string;
+  what: React.ReactNode;
+  detail?: React.ReactNode;
+  href: string;
+  internal: boolean;
+  label: string;
 }
 
 /**
- * `today` is passed in rather than read from the clock here so a server-rendered
- * page and its hydration agree on whether a comment period is still open.
+ * Every row a reader can act on, in one list: contact the members the coverage
+ * names, follow the legislation, read or comment on the federal documents.
+ *
+ * Bills and track-legislation actions describe the same legislation (an action
+ * is generated from a related bill), so a track action whose URL is already a
+ * related bill's is not listed twice.
+ *
+ * With no member named in the coverage there is no one specific to contact, so
+ * the row points at the directory, where a reader picks their own state. The
+ * reader is never asked, and nothing remembers, where they live (AGENTS.md §8).
+ *
+ * `today` is passed in rather than read from the clock so a server-rendered page
+ * and its hydration agree on whether a comment period is still open.
  */
-export function RelatedDocuments({
+function actionRows(issue: ActionIssue, today: string): ActionRow[] {
+  const rows: ActionRow[] = [];
+
+  // A seat-flip issue's first row: the count itself, on its state's page.
+  followResultsActions(issue).forEach((action, i) => {
+    rows.push({
+      key: `results-${i}`,
+      verb: "Follow",
+      what: action.text,
+      detail: "The state's own count, as it comes in",
+      href: action.url!,
+      internal: true,
+      label: "Live count →",
+    });
+  });
+
+  const members = issue.relatedSenators ?? [];
+  for (const m of members) {
+    const url = safeHref(m.contactFormUrl || m.websiteUrl || null);
+    const title = m.chamber === "house" ? "Rep." : "Sen.";
+    rows.push({
+      key: `member-${m.id}`,
+      verb: "Contact",
+      what: (
+        <>
+          {title} {m.name}{" "}
+          <span className={`font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
+            {m.party}-{m.state}
+          </span>{" "}
+          <Link
+            href={`/politicians/${m.id}`}
+            className="font-mono text-xs text-phos-mid hover:underline"
+            aria-label={`${m.name}'s scorecard, overall score ${Math.round(m.overallScore)}`}
+          >
+            · {Math.round(m.overallScore)}
+          </Link>
+        </>
+      ),
+      detail: m.matchReason ? `Named in the coverage · ${m.matchReason}` : "Named in the coverage",
+      href: url ?? `/politicians/${m.id}`,
+      internal: !url,
+      label: url ? "Contact ↗" : "Scorecard →",
+    });
+  }
+  if (members.length === 0) {
+    rows.push({
+      key: "directory",
+      verb: "Contact",
+      what: "Find your senators and representative",
+      detail: "No member was named in the coverage",
+      href: "/politicians",
+      internal: true,
+      label: "Directory →",
+    });
+  }
+
+  const bills = issue.relatedBills ?? [];
+  const billUrls = new Set(bills.map((b) => b.url));
+  for (const bill of bills) {
+    const { href, internal } = billLink(bill);
+    rows.push({
+      key: `bill-${bill.id}`,
+      verb: "Follow",
+      what: (
+        <>
+          <span className="font-mono text-xs text-ink-lo">{bill.id}</span> · {bill.name}
+        </>
+      ),
+      href,
+      internal,
+      label: internal ? "Bill page →" : "Congress.gov ↗",
+    });
+  }
+  trackableActions(issue)
+    .filter((a) => !billUrls.has(a.url ?? ""))
+    .forEach((action, i) => {
+      const { href, internal } = trackActionLink(issue, action);
+      rows.push({
+        key: `track-${i}`,
+        verb: "Follow",
+        what: trackActionText(action, internal),
+        href,
+        internal,
+        label: internal ? "Bill page →" : "Congress.gov ↗",
+      });
+    });
+
+  for (const doc of issue.relatedExploreDocs ?? []) {
+    const commentOpen = !!(doc.commentUrl && doc.commentsCloseOn && doc.commentsCloseOn >= today);
+    const kind = doc.docType.replace(/_/g, " ");
+    rows.push({
+      key: `doc-${doc.id}`,
+      verb: commentOpen ? "Comment" : "Read",
+      what: doc.title,
+      detail: commentOpen
+        ? `${kind} · comments close ${formatUtcDate(doc.commentsCloseOn!, { month: "short", day: "numeric" })}`
+        : `${kind} · ${doc.date}`,
+      href: commentOpen ? `/explore/${doc.id}#comment` : `/explore/${doc.id}`,
+      internal: true,
+      label: commentOpen ? "Comment →" : "Document →",
+    });
+  }
+
+  return rows;
+}
+
+export function WhatYouCanDo({
   issue,
   today,
-  className = "mb-4",
+  className = "mt-8",
+  headingLevel = "h3",
 }: {
   issue: ActionIssue;
   today: string;
   className?: string;
+  headingLevel?: "h2" | "h3" | "h4";
 }) {
-  if (!issue.relatedExploreDocs || issue.relatedExploreDocs.length === 0) return null;
-
+  const rows = actionRows(issue, today);
+  const Heading = headingLevel;
   return (
-    <div className={className}>
-      <h3 className="font-mono text-xs tracking-widest text-ink-min mb-3 uppercase">
-        Related Documents
-      </h3>
-      <div className="space-y-2">
-        {issue.relatedExploreDocs.map((doc) => {
-          const commentOpen = !!(
-            doc.commentUrl &&
-            doc.commentsCloseOn &&
-            doc.commentsCloseOn >= today
-          );
+    <section className={className}>
+      <Heading className={SECTION_HEADING}>What you can do</Heading>
+      <ul>
+        {rows.map((row) => {
+          const cls = `${TEXT_LINK} whitespace-nowrap`;
           return (
-            <div key={doc.id} className="space-y-1">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-xs px-1 py-0.5 border border-white/[0.07] text-ink-min font-mono tracking-wide shrink-0">
-                  {doc.docType.replace(/_/g, " ")}
-                </span>
-                <Link
-                  href={`/explore/${doc.id}`}
-                  className="text-signal-cyan hover:text-phos transition-colors truncate"
-                >
-                  {doc.title}
+            <li
+              key={row.key}
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 border-b border-white/[0.07] py-3 sm:grid-cols-[5.5rem_minmax(0,1fr)_auto]"
+            >
+              <span className="col-span-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-min sm:col-span-1">
+                {row.verb}
+              </span>
+              <span className="min-w-0 font-display text-[15px] leading-snug text-ink-hi">
+                {row.what}
+                {row.detail && (
+                  <span className="mt-0.5 block text-[13px] text-ink-lo">{row.detail}</span>
+                )}
+              </span>
+              {row.internal ? (
+                <Link href={row.href} className={cls}>
+                  {row.label}
                 </Link>
-                <span className="text-ink-min text-xs shrink-0">{doc.date}</span>
-              </div>
-              {commentOpen && (
-                <Link
-                  href={`/explore/${doc.id}#comment`}
-                  className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wide text-signal-cyan hover:text-phos border border-white/15 hover:border-signal-cyan/40
-                             px-2 py-0.5 transition-colors"
-                >
-                  → SUBMIT COMMENT
-                </Link>
+              ) : (
+                <a href={row.href} target="_blank" rel="noopener noreferrer" className={cls}>
+                  {row.label}
+                </a>
               )}
-            </div>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ul>
+    </section>
   );
 }
 
-export function SourceList({
+/** Lines quoted verbatim from the reporting, each with its outlet. */
+export function Coverage({
   issue,
-  className = "flex items-center gap-2 flex-wrap pt-4 border-t border-white/[0.07]",
+  className = "mt-8",
+  headingLevel = "h3",
+  heading,
 }: {
   issue: ActionIssue;
   className?: string;
+  headingLevel?: "h2" | "h3" | "h4";
+  /** Replaces the plain heading, e.g. to add a share button beside it. */
+  heading?: React.ReactNode;
 }) {
-  if (!issue.sourceNames || issue.sourceNames.length === 0) return null;
+  const facts = issue.facts ?? [];
+  if (facts.length === 0) return null;
+  const Heading = headingLevel;
   return (
-    <div className={className}>
-      <span className="text-xs text-ink-min">SOURCES:</span>
-      {issue.sourceNames.map((name, i) => (
-        <SourceBadge key={name} name={name} url={issue.sourceUrls?.[i]} />
-      ))}
-    </div>
+    <section className={className}>
+      {heading ?? <Heading className={SECTION_HEADING}>{factsHeading(issue)}</Heading>}
+      <ol className="mt-1">
+        {facts.map((fact, i) => (
+          <li key={i} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 py-2">
+            <span className="pt-0.5 font-mono text-xs text-ink-min" aria-hidden="true">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <p className="font-display text-[15px] leading-relaxed text-ink">
+              {fact}
+              {issue.factSources?.[i] && (
+                <span className="ml-2 whitespace-nowrap font-mono text-xs text-ink-min">
+                  {issue.factSources[i]}
+                </span>
+              )}
+              {isNewFact(issue.newFacts, fact) && <NewFactTag />}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** "Sources · AP · NPR", each outlet linked to the article it came from. */
+export function SourceList({ issue, className = "" }: { issue: ActionIssue; className?: string }) {
+  const names = issue.sourceNames ?? [];
+  if (names.length === 0) return null;
+  return (
+    <p
+      className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-xs tracking-[0.08em] text-ink-min ${className}`}
+    >
+      <span>Sources</span>
+      {names.map((name, i) => {
+        const href = safeHref(issue.sourceUrls?.[i]);
+        return (
+          <span key={name} className="flex items-baseline gap-2">
+            <span aria-hidden="true">·</span>
+            {href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-ink-lo underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
+              >
+                {name}
+              </a>
+            ) : (
+              <span className="text-ink-lo">{name}</span>
+            )}
+          </span>
+        );
+      })}
+    </p>
   );
 }

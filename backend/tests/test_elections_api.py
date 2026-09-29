@@ -245,6 +245,21 @@ class TestPviMap:
         data = _body(elections.pvi_map(db_session))
         assert data["cycleYear"] == current_election_cycle(db_session)
 
+    def test_includes_next_election_day(self, db_session):
+        """The /elections masthead's countdown. A date, not a day count:
+        the response is cached, and a count would go stale with it."""
+        data = _body(elections.pvi_map(db_session))
+        assert data["electionDay"] == "2026-11-03"
+
+    def test_election_day_stays_on_the_election_just_held(self, db_session, monkeypatch):
+        """While its results are on show the page is about the election just
+        held (election_phase), not already the next one two years out."""
+        from datetime import date
+
+        monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 11, 6))
+        data = _body(elections.pvi_map(db_session))
+        assert data["electionDay"] == "2026-11-03"
+
 
 class TestUnopposedNomineesAreNotTreatedAsLosers:
     """A state that cancels an uncontested primary publishes no row for a

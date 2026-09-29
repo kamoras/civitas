@@ -23,3 +23,23 @@ export const ACTION_CENTER_HREF = "/action?tab=issues";
 
 /** The Action Center's national-monitors tab. Same reasoning as above. */
 export const ACTION_CENTER_MONITORS_HREF = "/action?tab=monitors";
+
+/**
+ * One national monitor, opened in place on the Action Center's monitors tab.
+ * The tab is named for the same reason as above; `monitor` is read once, when
+ * the tab mounts, to expand and scroll to that row.
+ */
+export function monitorHref(slug: string): string {
+  return `${ACTION_CENTER_MONITORS_HREF}&monitor=${encodeURIComponent(slug)}`;
+}
+
+/** The Today tab's address: the day being shown (when it isn't the live
+ *  view) and the issue expanded on it, so a reload or a shared link opens
+ *  the same thing. Writing one without the other opened a different day. */
+export function issuesUrl(date: string | null, issue: string | null): string {
+  const params = new URLSearchParams();
+  if (date) params.set("date", date);
+  if (issue) params.set("issue", issue);
+  const q = params.toString();
+  return q ? `/action?${q}` : "/action";
+}

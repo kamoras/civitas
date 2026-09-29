@@ -1,7 +1,7 @@
 """Midterm-elections API — candidate rosters, race detail, and PVI
-(2026-07). Plain camelCase dicts, same convention as api/action.py's
-existing /action/elections endpoint (that endpoint is unchanged; this is
-a separate, fuller namespace for the new candidate-research feature)."""
+(2026-07). Plain camelCase dicts, the convention api/action.py uses. The
+Action Center's older /action/elections teaser was removed in 2026-09;
+this namespace is the only elections API."""
 
 import json
 import logging
@@ -1471,6 +1471,13 @@ def pvi_map(db: Session = Depends(get_db)):
             # coloring, instead of a second fetch of every race just to
             # read one field off the first result.
             "cycleYear": current_election_cycle(db),
+            # The election the site is about, for the countdown in the
+            # page's masthead (it used to live on the Action Center's
+            # elections tab, removed 2026-09): the one just held while its
+            # results are on show (election_phase), not already the next.
+            # A date, not a day count: the response is cached, and the page
+            # counts the days against its own clock.
+            "electionDay": active_election(db).election_day.isoformat(),
         },
         max_age=CACHE_TTL_LIST_S,
     )

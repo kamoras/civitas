@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { fetchRecord } from "@/lib/ssrPayload";
+import { stateBallotHref } from "@/lib/elections";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -26,5 +27,5 @@ export default async function RaceDetailRedirect({
 
   if (!state) notFound();
 
-  redirect(`/elections/states/${state}#race-${raceId}`);
+  redirect(`${stateBallotHref(state)}#race-${raceId}`);
 }

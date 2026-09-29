@@ -421,13 +421,17 @@ class PaginatedBillsSchema(CamelModel):
 
 class RelatedIssueSchema(CamelModel):
     id: int
-    # `date` is the trending-day the /action?date= link needs, not when this
+    # `date` is the trending-day the issue was listed under (the fallback
+    # /action?date= link when public_id is missing), not when this
     # happened — see ActionIssueSchema.first_surfaced's docstring. The label
     # shown next to this title has to use first_surfaced, not date, or this
     # list carries the exact same "today" drift the rest of the site fixed.
     date: str
     first_surfaced: str
     title: str
+    # The issue's own page, /issue/{public_id}: the bill page links there
+    # rather than to the whole day on /action.
+    public_id: str | None = None
 
 
 class BillDetailSchema(BillInFlightSchema):
@@ -808,8 +812,6 @@ class ActionIssueSchema(CamelModel):
     related_explore_docs: list[RelatedExploreDoc] = []
     related_senators: list[RelatedSenator] = []
     related_monitor_slugs: list[str] = []
-    concerned_count: int = 0
-    not_priority_count: int = 0
     full_story: str | None = None
     # Computed only by the list endpoint (app/trending.py needs the whole
     # day's view-count spread to judge any one issue) — always False from

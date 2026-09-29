@@ -38,6 +38,7 @@ import {
   majorPartyOf,
   matchesDistrictQuery,
   pviColor,
+  stateBallotHref,
   termPhrase,
   tierCandidates,
 } from "@/lib/elections";
@@ -1675,7 +1676,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const shareSubject = {
     title: `${stateName} statewide ballot`,
     subtitle: `${ballot.cycleYear} general election · ${ballot.electionDate}`,
-    url: absoluteUrl(`/elections/states/${ballot.state}`),
+    url: absoluteUrl(stateBallotHref(ballot.state)),
   };
 
   return (

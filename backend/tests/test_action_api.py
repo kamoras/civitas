@@ -8,7 +8,7 @@ import pytest
 
 from app.api.action import _latest_current_issues
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ActionIssueStatus, Senator
+from app.models import ActionIssue, ActionIssueStatus
 
 
 def _make_issue(date: str, rank: int, title: str, is_current: bool) -> ActionIssue:
@@ -313,47 +313,13 @@ class TestRelatedBillInternalLinks:
         assert resp["relatedBills"][0]["internalUrl"] == f"/congress/bills/S.55?congress={current}"
 
 
-class TestElectionsAndTimelineRoutesUseCanonicalClock:
-    """get_open_comments/get_election_info/get_timeline all compute
+class TestTimelineRoutesUseCanonicalClock:
+    """get_open_comments/get_timeline both compute
     "today" via app.time_utils.utcnow — must not silently regress to a
     local-timezone-dependent date.today()/datetime.now() call, which
     could compute a different calendar day/year right at a UTC boundary
     depending on the container's local timezone (2026-07-23 timezone-
     consistency pass)."""
-
-    async def test_get_election_info_runs_against_an_empty_db(self, db_session):
-        from fastapi import Response
-
-        from app.api.action import get_election_info
-
-        result = await get_election_info(Response(), db=db_session)
-        assert "nextElection" in result
-        election = result["nextElection"]
-        # Counting down in a campaign; zero or less while the election
-        # just held has its results on show (election_phase).
-        if election["phase"] == "campaign":
-            assert election["daysUntil"] >= 0
-        else:
-            assert election["daysUntil"] <= 0
-        assert result["senateSeatsUp"] > 0
-
-    async def test_get_election_info_in_election_week(self, db_session):
-        """Inside the results window the phase lookup must use the
-        request's session — its own reached a database with no tables."""
-        from datetime import date
-        from unittest.mock import patch
-
-        from fastapi import Response
-
-        from app.api.action import get_election_info
-
-        with patch("app.api.action.election_today", return_value=date(2026, 11, 5)), \
-                patch("app.election_phase.election_today", return_value=date(2026, 11, 5)), \
-                patch("app.database.SessionLocal", side_effect=AssertionError("opened its own session")):
-            result = await get_election_info(Response(), db=db_session)
-        assert result["nextElection"]["phase"] == "results"
-        assert result["nextElection"]["daysUntil"] == -2
-        assert result["nextElection"]["isElectionSeason"] is True
 
     def test_get_open_comments_runs_against_an_empty_db(self, db_session):
         from fastapi import Response
@@ -388,66 +354,6 @@ class TestElectionsAndTimelineRoutesUseCanonicalClock:
                 patch("app.api.action.election_today", return_value=date(2026, 11, 3)):
             result = await get_timeline(Response(), year=2026, db=db_session)
         assert any(e["date"] == "2026-11-03" for e in result["upcomingEvents"])
-
-
-class TestElectionInfoSpecialSenateRaces:
-    """get_election_info merges data-derived special Senate races (Race
-    rows with is_special, synced from FEC by the election pipeline) into
-    the calendar-derived class rotation (2026-07 review F16) — so the
-    Action Center teaser and /api/elections can't disagree about which
-    states have a Senate race."""
-
-    def _fl_entry(self, result):
-        return next(s for s in result["states"] if s["state"] == "FL")
-
-    async def test_special_race_adds_state_and_seat_count(self, db_session):
-        from datetime import datetime
-        from unittest.mock import patch
-
-        from fastapi import Response
-
-        from app.api.action import get_election_info
-        from app.models import Race
-
-        # FL's Class 3 seat is NOT in the 2026 (Class II) rotation — only
-        # the pipeline-synced special race can put it on the map.
-        db_session.add(Race(
-            id="2026-SEN-FL-SPECIAL", cycle_year=2026, office="S",
-            state="FL", is_special=True,
-        ))
-        db_session.commit()
-
-        # get_election_info reads the Eastern election date (election_today),
-        # not utcnow: pin that, or the test runs on the real clock.
-        from datetime import date
-
-        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)), \
-                patch("app.api.action.election_today", return_value=date(2026, 7, 24)), \
-                patch("app.election_phase.election_today", return_value=date(2026, 7, 24)):
-            result = await get_election_info(Response(), db=db_session)
-
-        assert self._fl_entry(result)["hasSenateRace"] is True
-        assert result["senateSeatsUp"] == 34  # 33 Class II + FL special
-
-    async def test_without_special_race_fl_has_no_senate_race(self, db_session):
-        from datetime import datetime
-        from unittest.mock import patch
-
-        from fastapi import Response
-
-        from app.api.action import get_election_info
-
-        # get_election_info reads the Eastern election date (election_today),
-        # not utcnow: pin that, or the test runs on the real clock.
-        from datetime import date
-
-        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)), \
-                patch("app.api.action.election_today", return_value=date(2026, 7, 24)), \
-                patch("app.election_phase.election_today", return_value=date(2026, 7, 24)):
-            result = await get_election_info(Response(), db=db_session)
-
-        assert self._fl_entry(result)["hasSenateRace"] is False
-        assert result["senateSeatsUp"] == 33  # the Class II rotation alone
 
 
 class TestSingleIssueEnrichment:
@@ -975,7 +881,9 @@ class TestEmptyDayPager:
         db_session.commit()
         resp = await get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
         assert resp["issues"] == []
-        assert resp["availableDates"] == ["2026-10-03", "2026-10-02", "2026-10-01"]
+        # Its neighbours, not the empty day itself: the timeline offers
+        # every listed day as one to open.
+        assert resp["availableDates"] == ["2026-10-03", "2026-10-01"]
 
     async def test_a_malformed_date_is_not_offered_as_a_day(self, db_session):
         from fastapi import Response
@@ -984,43 +892,7 @@ class TestEmptyDayPager:
 
         for bad in ("not-a-day", "2026-1-2", "2026-02-30", "2026-09-26\n"):
             resp = await get_action_issues(Response(), date=bad, db=db_session, db_visits=db_session)
-            assert resp == {"date": bad, "issues": [], "availableDates": []}, bad
-
-
-class TestMyRepsIssueDay:
-    async def test_evening_eastern_still_finds_todays_issues(self, db_session):
-        """My Reps used utcnow()'s date: from 8 PM Eastern (the next UTC
-        day) until the next refresh it found no issues at all. It reads the
-        Action Center's landing set, which the page intersects it with."""
-        from unittest.mock import patch
-        from datetime import datetime
-
-        from fastapi import Response
-
-        from app.api.action import get_my_reps
-
-        db_session.add(Senator(id="s1", name="Sen. Alpha", state="CA", party="D", is_current=True))
-        db_session.add(ActionIssue(date="2026-10-14", rank=1, title="Water bill", is_current=True,
-                                   related_senators='[{"id": "s1"}]'))
-        db_session.commit()
-        with patch("app.api.action.utcnow", return_value=datetime(2026, 10, 15, 1, 30)):
-            resp = await get_my_reps(Response(), state="CA", db=db_session)
-        assert resp["issueDate"] == "2026-10-14"
-        assert [i["title"] for i in resp["senators"][0]["connectedIssues"]] == ["Water bill"]
-
-    async def test_after_midnight_on_election_night_it_is_the_landing_day(self, db_session):
-        from fastapi import Response
-
-        from app.api.action import get_my_reps
-
-        db_session.add(Senator(id="s1", name="Sen. Alpha", state="CA", party="D", is_current=True))
-        db_session.add(ActionIssue(date="2026-11-03", rank=1, title="Polls close", is_current=True,
-                                   related_senators='[{"id": "s1"}]'))
-        db_session.add(ActionIssue(date="2026-11-04", rank=999, title="Republican leads", is_current=True,
-                                   source_type="election_results", status=ActionIssueStatus.DEVELOPING))
-        db_session.commit()
-        resp = await get_my_reps(Response(), state="CA", db=db_session)
-        assert resp["issueDate"] == "2026-11-03"
+            assert resp == {"date": bad, "issues": [], "availableDates": [], "generatedAt": None}, bad
 
 
 class TestRecentFeedAndSeatFlips:
@@ -1103,3 +975,73 @@ def test_timeline_refuses_a_year_it_cannot_build_dates_for(db_session):
     client = TestClient(app)
     assert client.get("/api/action/timeline?year=0").status_code == 422
     assert client.get("/api/action/timeline?year=2026").status_code == 200
+
+
+class TestIssuesListPagerFields:
+    """The day pager and the "Updated" line read these off the list
+    endpoint (2026-09 Action Center redesign)."""
+
+    async def test_an_empty_day_still_lists_the_days_to_page_back_to(self, db_session):
+        # A reader who opens a day whose issues were cleaned up needs the
+        # pager's way back, not a dead end.
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        db_session.add(ActionIssue(date="2026-09-28", rank=1, title="Kept", summary="s"))
+        db_session.commit()
+
+        resp = await get_action_issues(
+            Response(), date="2026-06-01", db=db_session, db_visits=db_session,
+        )
+
+        assert resp["issues"] == []
+        assert resp["availableDates"] == ["2026-09-28"]
+
+    async def test_generated_at_is_the_latest_run_that_wrote_issues(self, db_session):
+        # An aborted run (feeds down) still writes a metrics row; "Updated"
+        # must not read as fresh over issues it didn't touch.
+        import json
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+        from app.models import ApiCache
+
+        def run(key, at, **counts):
+            return ApiCache(tier="action-metrics", cache_key=key,
+                            data_json=json.dumps({"counts": counts}), cached_at=at)
+
+        db_session.add(ActionIssue(date="2026-09-29", rank=1, title="Live", summary="s", is_current=True))
+        db_session.add_all([
+            run("a", datetime(2026, 9, 29, 12, 15), issues_new_topic=2),
+            run("b", datetime(2026, 9, 29, 13, 15), issues_matched_existing=3),
+            run("c", datetime(2026, 9, 29, 14, 15), articles_fetched=0),  # aborted
+            ApiCache(tier="other", cache_key="d", data_json="{}", cached_at=datetime(2026, 9, 29, 15, 0)),
+        ])
+        db_session.commit()
+
+        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        past = await get_action_issues(Response(), date="2026-09-29", db=db_session, db_visits=db_session)
+
+        assert live["generatedAt"] == "2026-09-29T13:15:00Z"
+        assert past["generatedAt"] is None
+
+    async def test_no_recent_run_wrote_issues_omits_generated_at(self, db_session):
+        import json
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+        from app.models import ApiCache
+
+        db_session.add(ActionIssue(date="2026-09-29", rank=1, title="Live", summary="s", is_current=True))
+        db_session.add(ApiCache(tier="action-metrics", cache_key="x",
+                                data_json=json.dumps({"counts": {"articles_fetched": 0}}),
+                                cached_at=datetime(2026, 9, 29, 14, 15)))
+        db_session.commit()
+
+        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        assert live["generatedAt"] is None

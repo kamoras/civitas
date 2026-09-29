@@ -10,7 +10,8 @@ import Link from "next/link";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
-import { formatPvi, pviColor } from "@/lib/elections";
+import { formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
+import { formatUtcDate } from "@/lib/formatting";
 import { formatEasternTime, pollsStillOpen, showsResults } from "@/lib/results";
 import { useNow } from "@/hooks/useNow";
 import { fetchPviMap } from "@/lib/api";
@@ -55,9 +56,43 @@ const STATES = Array.from(new Set(Object.values(FIPS_TO_STATE)))
   .filter((s) => s !== "DC")
   .sort();
 
+/** Whole days from `asOf`'s calendar date to `isoDate`, both in local time. */
+function daysUntil(isoDate: string, asOf: number): number | null {
+  const target = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date(asOf);
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+/** The masthead's figure: how far off the next federal Election Day is. */
+function ElectionCountdown({ electionDay, asOf }: { electionDay: string; asOf: number }) {
+  const days = daysUntil(electionDay, asOf);
+  if (days === null || days < 0) return null;
+  return (
+    <div className="text-right">
+      <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+        Election Day ·{" "}
+        {formatUtcDate(electionDay, { month: "short", day: "numeric", year: "numeric" })}
+      </p>
+      <p className="mt-1 font-display text-3xl font-extrabold leading-none tabular-nums text-ink-hi">
+        {days === 0 ? "Today" : days}
+        {days > 0 && (
+          <span className="ml-2 font-mono text-xs font-normal uppercase tracking-[0.12em] text-ink-lo">
+            day{days !== 1 ? "s" : ""} away
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
 export default function ElectionsPage() {
   const router = useRouter();
   const [pvi, setPvi] = useState<PviMap | null>(null);
+  // The clock is read when the data lands, not on every render, so the
+  // countdown is a function of what was fetched.
+  const [asOf, setAsOf] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   // From election day until the results window closes the page leads with
   // the live count (backend election_phase). One request says which; it
@@ -99,7 +134,10 @@ export default function ElectionsPage() {
     let cancelled = false;
     fetchPviMap()
       .then((p) => {
-        if (!cancelled) setPvi(p);
+        if (!cancelled) {
+          setPvi(p);
+          setAsOf(Date.now());
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Failed to load election data");
@@ -109,7 +147,7 @@ export default function ElectionsPage() {
     };
   }, []);
 
-  const goToBallot = (state: string) => router.push(`/elections/states/${state}`);
+  const goToBallot = (state: string) => router.push(stateBallotHref(state));
 
   /* `states` is indexed unguarded in three places below, and a payload without
      it takes the whole page down with "Cannot read properties of undefined" —
@@ -188,6 +226,11 @@ export default function ElectionsPage() {
             <PageMasthead
               eyebrow="Elections · partisan lean by state"
               title={pvi?.cycleYear ? `${pvi.cycleYear} midterm ballot` : "Midterm ballot"}
+              aside={
+                pvi?.electionDay && asOf !== null ? (
+                  <ElectionCountdown electionDay={pvi.electionDay} asOf={asOf} />
+                ) : undefined
+              }
             >
               Pick a state for its candidates, their filings, statewide ballot measures, and the
               coverage we have ingested. Shading is partisan lean, not a forecast.
@@ -293,7 +336,7 @@ export default function ElectionsPage() {
                   {STATES.map((state) => (
                     <li key={state}>
                       <Link
-                        href={`/elections/states/${state}`}
+                        href={stateBallotHref(state)}
                         className="flex items-baseline justify-between bg-surface-base px-3 py-2.5 transition-colors hover:bg-surface-raised"
                       >
                         <span className="font-mono text-sm text-ink-hi">{state}</span>
