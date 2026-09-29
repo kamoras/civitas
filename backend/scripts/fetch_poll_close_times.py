@@ -67,7 +67,7 @@ _ZONE_WORDS = {"eastern": ET, "central": CT, "mountain": MT, "pacific": PT}
 
 # Ballotpedia answers a bare non-browser User-Agent with an empty 202;
 # the "compatible;" form still names Civitas and a contact address.
-UA = {"User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0; poll-closing times; +contact@civitas-research.org)"}
+UA = {"User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0; poll-closing times; +mack.ryanm@gmail.com)"}
 SOURCE_URL = "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_({year})"
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "poll_close_times.json"
 
