@@ -24,7 +24,7 @@ def client(db_session):
 
 def _post(db, kind="issue", when="2026-09-28T12:00:00", state=None, **kw):
     post = BroadcastPost(
-        kind=kind, state=state, published_at=datetime.fromisoformat(when),
+        kind=kind, subject=kw.pop("subject", f"{kind}:x"), state=state, published_at=datetime.fromisoformat(when),
         title=kw.pop("title", f"{kind} title"), text=kw.pop("text", f"{kind} text."),
         url=kw.pop("url", f"https://civitas-research.org/{kind}"), **kw,
     )

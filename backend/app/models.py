@@ -1823,6 +1823,11 @@ class BroadcastPost(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # broadcast.KINDS.
     kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    # What the post is about, as "<kind>:<id>" ("race:2026-SEN-GA",
+    # "congress-day:2026-09-24", "issue:<public id>", "member:<id>"): the
+    # key the posting modules' dedupe, budgets and cooldowns read, so they
+    # hold across a data reset, which keeps this table (RESET_KEEPS).
+    subject: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)

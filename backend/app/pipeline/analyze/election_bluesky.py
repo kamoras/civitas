@@ -244,14 +244,20 @@ def _publish(db: Session, text: str, race: Race) -> None:
     # straight to the merged page.
     url = f"{broadcast.SITE_URL}/elections/states/{race.state}#race-{race.id}"
     broadcast.publish(
-        db, kind="race", title=f"Update on {_office_label(race)}", text=text,
+        db, kind="race", subject=f"race:{race.id}", title=f"Update on {_office_label(race)}", text=text,
         url=url, state=race.state,
     )
 
 
+# Both counts read the published posts (broadcast_posts, kept through a data
+# reset) as well as the coverage items' own marks (wiped by one, and the only
+# record of posts from before the feed existed). A reset re-ingests coverage
+# with fresh fetch times, so counting the items alone would let the same
+# race be posted again, and the day's budget be spent twice.
+
 def _posts_in_last_day(db: Session) -> int:
     since = utcnow() - timedelta(hours=24)
-    return (
+    items = (
         db.query(RaceCoverageItem)
         .filter(
             RaceCoverageItem.bsky_posted.is_(True),
@@ -259,6 +265,8 @@ def _posts_in_last_day(db: Session) -> int:
         )
         .count()
     )
+    # max, not sum: a post since the feed existed is in both.
+    return max(items, len(broadcast.subjects_published_since(db, "race", since)))
 
 
 def _races_posted_recently(db: Session) -> set[str]:
@@ -271,7 +279,10 @@ def _races_posted_recently(db: Session) -> set[str]:
         )
         .all()
     )
-    return {r[0] for r in rows}
+    published = {
+        subject.removeprefix("race:") for subject in broadcast.subjects_published_since(db, "race", since)
+    }
+    return {r[0] for r in rows} | published
 
 
 def _drain_stale_unconsidered(db: Session) -> int:

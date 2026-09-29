@@ -90,7 +90,8 @@ def test_published_without_a_bluesky_account(db_session, posting):
     db_session.commit()
     assert cb.post_daily_congress(db_session, date(2026, 9, 25)) == date(2026, 9, 24)
     post = db_session.query(BroadcastPost).one()
-    assert (post.kind, post.title, post.bsky_status) == ("congress_day", "Congress, Thursday, September 24", "off")
+    assert (post.kind, post.subject, post.title, post.bsky_status) == (
+        "congress_day", "congress-day:2026-09-24", "Congress, Thursday, September 24", "off")
     assert post.text.startswith("Congress, Thursday, September 24. ")
 
 

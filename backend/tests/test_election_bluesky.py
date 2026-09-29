@@ -66,7 +66,7 @@ class TestPostRaceCoverageUpdates:
 
         post = db_session.query(BroadcastPost).one()
         assert (post.kind, post.state, post.text, post.bsky_status) == ("race", "GA", "Ossoff holds a narrow lead.", "off")
-        assert post.title == "Update on the GA Senate race"
+        assert (post.title, post.subject) == ("Update on the GA Senate race", "race:2026-SEN-GA")
         assert item.bsky_posted is True
         assert bluesky_outbox == []
 
@@ -461,3 +461,27 @@ def test_no_item_is_started_past_the_deadline(db_session, monkeypatch):
     assert posted == 0
     mock_publish.assert_not_called()
     assert item.bsky_posted_at is None
+
+
+def test_a_data_reset_does_not_reset_the_budget_or_the_cooldown(db_session, monkeypatch):
+    """A reset wipes the coverage items (and their posted marks) but keeps
+    what was published, so re-ingested coverage of a race posted an hour
+    ago is still inside its cooldown, and the day's posts still count."""
+    from app import broadcast
+
+    _stub_relevance(monkeypatch)
+    race = _race(db_session)
+    _candidate(db_session)
+    db_session.commit()
+    broadcast.publish(db_session, kind="race", subject=f"race:{race.id}", title="t", text="x", url="u", state="GA")
+    for i in range(election_bluesky.MAX_POSTS_PER_DAY - 1):
+        broadcast.publish(db_session, kind="race", subject=f"race:other-{i}", title="t", text="x", url="u")
+
+    assert election_bluesky._races_posted_recently(db_session) >= {race.id}
+    assert election_bluesky._posts_in_last_day(db_session) == election_bluesky.MAX_POSTS_PER_DAY
+
+    _item(db_session)  # re-ingested after the reset: no posted mark
+    db_session.commit()
+    with patch.object(election_bluesky, "_generate_post_text", return_value="A sentence.") as gen:
+        assert election_bluesky.post_race_coverage_updates(db_session) == 0
+    gen.assert_not_called()

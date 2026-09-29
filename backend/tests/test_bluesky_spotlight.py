@@ -142,7 +142,8 @@ class TestPublishSpotlight:
         assert post.url == "https://civitas-research.org/politicians/chuck-grassley"
         assert bluesky_configured == [("Some spotlight text.", post.url)]
         # Filed under the member's state, for that state's feed.
-        assert (post.kind, post.state, post.title) == ("spotlight", "IA", "Member spotlight: Chuck Grassley (R-IA)")
+        assert (post.kind, post.subject, post.state, post.title) == (
+            "spotlight", "member:senate:chuck-grassley", "IA", "Member spotlight: Chuck Grassley (R-IA)")
 
     def test_published_once_a_day_without_a_bluesky_account(self, db_session, bluesky_outbox):
         db_session.add(_senator("Chuck Grassley"))

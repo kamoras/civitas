@@ -1013,6 +1013,11 @@ RESET_KEEPS = frozenset({
     # Which members the Bluesky account has already spotlighted — posts
     # that were really made. Wiped, the rotation would repeat them.
     "bsky_senator_spotlights",
+    # Everything Civitas published: the feeds' entries, and the record the
+    # posting modules check before publishing again (broadcast.py). Wiped,
+    # every feed would empty, and the Congress days and races posted in
+    # the last few days would be posted a second time.
+    "broadcast_posts",
     # LLM generations captured as fine-tuning data, accumulated over months.
     "llm_generation_samples",
     # Run history. ops_alerts.check_pipeline_staleness reads a pipeline with

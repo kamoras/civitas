@@ -10,7 +10,7 @@ from app.time_utils import utcnow
 
 
 def _publish(db, **kw):
-    args = dict(kind="issue", title="A title", text="A post.", url="https://civitas-research.org/issue/x")
+    args = dict(kind="issue", subject="issue:x", title="A title", text="A post.", url="https://civitas-research.org/issue/x")
     args.update(kw)
     return broadcast.publish(db, **args)
 
@@ -101,7 +101,7 @@ def test_a_post_from_an_earlier_eastern_day_is_not_retried(db_session, bluesky_c
 
 
 def test_nothing_is_retried_without_an_account(db_session, bluesky_outbox, monkeypatch):
-    db_session.add(BroadcastPost(kind="issue", title="t", text="x", url="u", published_at=utcnow(),
+    db_session.add(BroadcastPost(kind="issue", subject="issue:x", title="t", text="x", url="u", published_at=utcnow(),
                                  bsky_status="failed", bsky_attempts=1))
     db_session.commit()
     assert broadcast.deliver_pending(db_session) == 0
@@ -115,3 +115,30 @@ def test_every_feed_names_only_real_kinds():
     # Every kind is reachable from a topic feed other than "all".
     topical = {k for f in broadcast.FEEDS.values() if f.slug != "all" for k in f.kinds}
     assert topical == set(broadcast.KINDS)
+
+
+def test_a_retry_never_sends_a_post_another_sender_has_claimed(db_session, bluesky_configured):
+    """The hourly retry and a publish on another thread can both hold the
+    row; only the one whose conditional update flips it to "sending" sends
+    it. Here the row was claimed elsewhere after this session loaded it."""
+    bluesky_configured.ok = False
+    post = _publish(db_session)
+    bluesky_configured.ok = True
+    db_session.query(BroadcastPost).filter(BroadcastPost.id == post.id).update(
+        {"bsky_status": "sending"}, synchronize_session=False)
+    db_session.commit()
+    post.bsky_status = "failed"  # this session's stale view of the row
+
+    assert broadcast._deliver_to_bluesky(db_session, post) is False
+    assert bluesky_configured == []
+
+
+def test_was_published_and_subjects_since(db_session):
+    _publish(db_session, kind="race", subject="race:2026-SEN-GA")
+    _publish(db_session, kind="race", subject="race:2026-SEN-GA")
+    assert broadcast.was_published(db_session, "race:2026-SEN-GA")
+    assert not broadcast.was_published(db_session, "race:2026-SEN-NC")
+    since = utcnow() - timedelta(hours=1)
+    assert broadcast.subjects_published_since(db_session, "race", since) == ["race:2026-SEN-GA"] * 2
+    assert broadcast.subjects_published_since(db_session, "issue", since) == []
+    assert broadcast.subjects_published_since(db_session, "race", utcnow() + timedelta(hours=1)) == []

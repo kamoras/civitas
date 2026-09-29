@@ -94,6 +94,7 @@ def publish(
     db: Session,
     *,
     kind: str,
+    subject: str,
     title: str,
     text: str,
     url: str,
@@ -111,6 +112,7 @@ def publish(
     # upstream: no post carries a hashtag, on any channel.
     post = BroadcastPost(
         kind=kind,
+        subject=subject,
         title=strip_hashtags(title),
         text=strip_hashtags(text),
         url=url,
@@ -126,9 +128,24 @@ def publish(
 
 
 def _deliver_to_bluesky(db: Session, post: BroadcastPost) -> bool:
-    post.bsky_status = "sending"
-    post.bsky_attempts = (post.bsky_attempts or 0) + 1
+    # Claimed with one conditional UPDATE, not a read then a write: the
+    # hourly retry (deliver_pending) runs on the Action Center's thread while
+    # the Congress sync and the election refresh publish on theirs, and a
+    # retry that read this row as "pending" between publish()'s two commits
+    # would otherwise send it a second time. Whoever flips it to "sending"
+    # sends it; everyone else leaves it alone.
+    claimed = (
+        db.query(BroadcastPost)
+        .filter(BroadcastPost.id == post.id, BroadcastPost.bsky_status.in_(("pending", "failed")))
+        .update(
+            {"bsky_status": "sending", "bsky_attempts": BroadcastPost.bsky_attempts + 1},
+            synchronize_session=False,
+        )
+    )
     db.commit()
+    if claimed != 1:
+        return False
+    db.refresh(post)
     ok = publish_post(
         post.text, post.url,
         success_msg=f"Posted to Bluesky ({post.kind}): {post.title[:80]}",
@@ -164,3 +181,19 @@ def deliver_pending(db: Session) -> int:
         if _deliver_to_bluesky(db, post):
             sent += 1
     return sent
+
+
+def was_published(db: Session, subject: str) -> bool:
+    """Whether anything about `subject` was ever published."""
+    return db.query(BroadcastPost.id).filter(BroadcastPost.subject == subject).first() is not None
+
+
+def subjects_published_since(db: Session, kind: str, since: datetime) -> list[str]:
+    """The subject of every `kind` post published since `since` (naive UTC),
+    one per post, so its length is a count of posts."""
+    return [
+        row[0]
+        for row in db.query(BroadcastPost.subject)
+        .filter(BroadcastPost.kind == kind, BroadcastPost.published_at >= since)
+        .all()
+    ]

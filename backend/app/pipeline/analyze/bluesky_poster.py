@@ -148,9 +148,10 @@ def _compose_new_post(issue, today: str) -> str | None:
 def _publish(db: Session, text: str, issue) -> None:
     """Publish the post: to the feed, then Bluesky if configured. Once it
     is in the feed it is published, whatever Bluesky does with it."""
+    public_id = to_public_id(issue.id)
     broadcast.publish(
-        db, kind="issue", title=issue.title, text=text,
-        url=f"{broadcast.SITE_URL}/issue/{to_public_id(issue.id)}",
+        db, kind="issue", subject=f"issue:{public_id}", title=issue.title, text=text,
+        url=f"{broadcast.SITE_URL}/issue/{public_id}",
     )
 
 

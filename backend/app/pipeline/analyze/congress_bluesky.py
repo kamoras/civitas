@@ -14,7 +14,8 @@ site does not repeat one under its own name. The link is the day's page.
 Only the last few days are eligible, so the Digest back-fill, which fills
 in months of past days, can never set off a burst of old posts, and a day
 is posted at most once: the published post itself is the marker (its
-kind and url), stored in the same commit that publishes it.
+subject), stored in the same commit that publishes it, and kept through a
+data reset.
 
 The weekly post is the week report's sentence (congress_service.week_report)
 and the bills that became law that week, by number. It replaced a weekly
@@ -27,7 +28,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app import broadcast
-from app.models import BroadcastPost, CongressDay
+from app.models import CongressDay
 from app.pipeline.cache import api_cache_get
 from app.services.congress_service import bill_label, day_report, week_bounds, week_report
 
@@ -87,8 +88,8 @@ def _eligible_days(db: Session, today: date) -> list[date]:
     return sorted(out, reverse=True)
 
 
-def _already_published(db: Session, kind: str, url: str, legacy_tier: str, key: str) -> bool:
-    if db.query(BroadcastPost.id).filter(BroadcastPost.kind == kind, BroadcastPost.url == url).first():
+def _already_published(db: Session, subject: str, legacy_tier: str, key: str) -> bool:
+    if broadcast.was_published(db, subject):
         return True
     return api_cache_get(db, legacy_tier, key, max_age_hours=24 * 30) is not None
 
@@ -98,10 +99,11 @@ def post_daily_congress(db: Session, today: date) -> date | None:
     for day in _eligible_days(db, today):
         key = day.isoformat()
         url = f"{broadcast.SITE_URL}/congress/{key}"
-        if _already_published(db, "congress_day", url, _CACHE_TIER, key):
+        subject = f"congress-day:{key}"
+        if _already_published(db, subject, _CACHE_TIER, key):
             continue
         report = day_report(db, day)
-        broadcast.publish(db, kind="congress_day", title=f"Congress, {_day_label(day)}",
+        broadcast.publish(db, kind="congress_day", subject=subject, title=f"Congress, {_day_label(day)}",
                           text=compose_post(report), url=url)
         return day
     return None
@@ -138,9 +140,10 @@ def post_weekly_congress(db: Session, today: date) -> date | None:
     start, end = week_bounds(today - timedelta(days=7))
     key = start.isoformat()
     url = f"{broadcast.SITE_URL}/congress/week/{key}"
-    if not _week_is_final(db, start, end) or _already_published(db, "congress_week", url, _WEEK_CACHE_TIER, key):
+    subject = f"congress-week:{key}"
+    if not _week_is_final(db, start, end) or _already_published(db, subject, _WEEK_CACHE_TIER, key):
         return None
     report = week_report(db, start)
-    broadcast.publish(db, kind="congress_week", title=f"Congress, week of {_week_label(start, end)}",
+    broadcast.publish(db, kind="congress_week", subject=subject, title=f"Congress, week of {_week_label(start, end)}",
                       text=compose_week_post(report), url=url)
     return start

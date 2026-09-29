@@ -59,6 +59,8 @@ class TestResetAllDataTables:
         db_session.add(models.ActionIssue(date="2026-09-01", rank=1, title="An issue", related_explore_ids="[12, 40]"))
         db_session.add(models.ApiCache(tier="action-refresh-lock", cache_key="lock", data_json="{}"))
         db_session.add(models.ApiCache(tier="fec", cache_key="k", data_json="{}"))
+        db_session.add(models.BroadcastPost(kind="congress_day", subject="congress-day:2026-09-24",
+                                            title="t", text="x", url="u"))
         db_session.commit()
         monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
         with patch("app.pipeline.vector_store.reset_vector_db"):
@@ -67,6 +69,9 @@ class TestResetAllDataTables:
         assert RESET_KEEPS <= tables  # a renamed table must not drop out of the keep list unnoticed
         assert set(summary) >= tables - RESET_KEEPS
         assert db_session.query(models.PipelineRun).count() == 1  # run history is kept
+        # What was published stays published: the feeds keep their entries,
+        # and the posting modules still know not to post it again.
+        assert db_session.query(models.BroadcastPost).count() == 1
         # A kept issue no longer links to Explore rowids the rebuild reuses.
         db_session.expire_all()
         assert db_session.query(models.ActionIssue).one().related_explore_ids == "[]"

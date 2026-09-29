@@ -24,6 +24,7 @@ def upgrade() -> None:
         "broadcast_posts",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("kind", sa.String(length=20), nullable=False),
+        sa.Column("subject", sa.String(length=80), nullable=False),
         sa.Column("title", sa.Text(), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("url", sa.Text(), nullable=False),
@@ -39,6 +40,7 @@ def upgrade() -> None:
     with op.batch_alter_table("broadcast_posts", schema=None) as batch_op:
         batch_op.create_index(batch_op.f("ix_broadcast_posts_kind"), ["kind"], unique=False)
         batch_op.create_index(batch_op.f("ix_broadcast_posts_published_at"), ["published_at"], unique=False)
+        batch_op.create_index(batch_op.f("ix_broadcast_posts_subject"), ["subject"], unique=False)
         batch_op.create_index(batch_op.f("ix_broadcast_posts_state"), ["state"], unique=False)
 
 

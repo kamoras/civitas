@@ -114,7 +114,7 @@ def compose_spotlight(entity: "Senator | Representative", rank: int, total: int,
 def _publish_spotlight(db: Session, text: str, entity: "Senator | Representative", chamber: str) -> None:
     """Publish the spotlight: to the feed, then Bluesky if configured."""
     broadcast.publish(
-        db, kind="spotlight", title=f"Member spotlight: {_identity(entity, chamber)}", text=text,
+        db, kind="spotlight", subject=f"member:{chamber}:{entity.id}", title=f"Member spotlight: {_identity(entity, chamber)}", text=text,
         url=f"{broadcast.SITE_URL}/politicians/{entity.id}", state=entity.state,
     )
 
