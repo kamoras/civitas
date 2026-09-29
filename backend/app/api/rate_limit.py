@@ -108,9 +108,28 @@ WriteRateLimit = Annotated[None, Depends(write_rate_limit)]
 
 def charge_write(ip: str) -> throttle.Decision:
     """Count one mutation for `ip` against the same limit as WriteRateLimit,
-    for a route that charges only the requests that do the work (the
-    Explore summary: a refusal to wait out a generation costs nothing)."""
+    for a route that decides later whether the request did the work (the
+    Explore summary): refund_write gives it back when it didn't."""
     return limit_client(ip, _write_limiter.bucket, limit=_write_limiter.limit, period=_write_limiter.period)
+
+
+def refund_write(ip: str) -> None:
+    bucket = _write_limiter.bucket
+    throttle.refund(bucket, throttle.client_key(ip, bucket), period=_write_limiter.period)
+
+
+# Every Explore summary request, generating or not: a page waiting out
+# another reader's generation asks every 10-60s, well inside this, and a
+# client looping on the endpoint is held to one a second without touching
+# the write budget its votes and comments share.
+_summary_limiter = _PerClientLimit("explore-summary-requests", 60, 60.0, "summary requests")
+
+
+async def summary_rate_limit(request: Request) -> None:
+    await _summary_limiter.check(request)
+
+
+SummaryRateLimit = Annotated[None, Depends(summary_rate_limit)]
 
 
 # ── Public routes that fetch from the shared api.data.gov key ─────

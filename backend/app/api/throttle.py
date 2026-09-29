@@ -559,6 +559,26 @@ def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 
     return Decision(allowed, remaining, reset_at)
 
 
+def refund(bucket: str, key: str | None, *, period: float, cost: int = 1) -> None:
+    """Give back `cost` units hit() counted for `key` — a request that turned
+    out to do none of the work the limit is for. Taken from the current
+    window, or the previous one when the charge was made before it began."""
+    if key is None:
+        return
+    window = int(time.time() // period)
+    try:
+        with _Txn() as conn:
+            for w in (window, window - 1):
+                if conn.execute(
+                    "UPDATE windows SET count = MAX(count - ?, 0) WHERE bucket = ? AND key = ? AND window = ? "
+                    "AND count > 0",
+                    (cost, bucket, str(key), w),
+                ).rowcount:
+                    return
+    except sqlite3.Error:
+        logger.warning("Throttle %r refund failed", bucket, exc_info=True)
+
+
 # The store's calls run on threads of their own: each is microseconds, but
 # on the default executor they would queue behind whatever holds it —
 # searches, PDF parses, model encodes, seconds each — and every limited

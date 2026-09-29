@@ -416,7 +416,7 @@ describe("streamExploreDocumentSummary", () => {
     ).rejects.toThrow("404");
   });
 
-  it("doesn't wait out the write limit's own 429, or nginx's 503", async () => {
+  it("doesn't wait out a refusal the server doesn't mark as a wait", async () => {
     for (const status of [429, 503]) {
       const fetchMock = vi
         .fn()

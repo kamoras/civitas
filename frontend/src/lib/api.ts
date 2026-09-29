@@ -935,8 +935,8 @@ export async function streamExploreDocumentSummary(
   const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
   const ask = () => fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
   let res = await ask();
-  // Only a refusal the server marks as a wait (X-Summary-Wait): the write
-  // limit's 429 and nginx's own 503 are not waited out.
+  // Only a refusal the server marks as a wait (X-Summary-Wait): nginx's own
+  // 503, or a limit on how often a client may ask at all, is not waited out.
   while (res.headers.get("X-Summary-Wait") === "1" && Date.now() < giveUpAt) {
     await wait(
       Math.min(summaryRetryDelayMs(res.headers.get("Retry-After")), Math.max(0, giveUpAt - Date.now())),

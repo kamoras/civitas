@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 
+import httpx
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -11,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
-from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, client_ip, retry_after, spend_upstream
+from app.api.rate_limit import (
+    SummaryRateLimit, UpstreamRouteLimit, WriteRateLimit, client_ip, retry_after, spend_upstream,
+)
 from app.api.response_helpers import RETRY_SOON_CACHE_CONTROL, retry_soon_json
 from app.database import get_db, off_loop
 from app.models import ExploreDocument
@@ -348,8 +351,9 @@ _BUSY_RETRY_AFTER_S = 30
 _HELD_RETRY_AFTER_S = 10
 _SLOW_RETRY_AFTER_S = 60
 # Marks a refusal that is only a wait (another generation, the cap, a
-# recent timeout, the store): the page asks again after Retry-After. A
-# refusal without it — the write limit, nginx's own — is not waited out.
+# recent timeout, the store, the write budget): the page asks again after
+# Retry-After. A refusal without it — nginx's own, SummaryRateLimit's — is
+# not waited out.
 _WAIT_OUT = {"X-Summary-Wait": "1"}
 # How often a stream waiting on the LLM sends an SSE comment: nginx drops a
 # proxied response that sends nothing for proxy_read_timeout (120s), which
@@ -387,16 +391,18 @@ def _sse(data: dict) -> str:
 async def get_explore_document_summary(
     doc_id: int,
     request: Request,
+    _rl: SummaryRateLimit,
     db: Session = Depends(get_db),
 ):
     """Stream an AI summary of a government document as it generates.
 
     One generation per document at a time and a few in all (_Generation's
     claims). The per-IP write limit, which stops a caller fanning out
-    across many doc_ids (2026-07 audit), is charged only when a generation
-    starts: a refusal to wait out (held, busy, slow) does no work, and a
-    page waiting on another reader's generation must not spend the
-    reader's budget for votes and comments doing so.
+    across many doc_ids (2026-07 audit), is charged up front and given back
+    when no generation starts: a refusal to wait out (held, busy, slow)
+    does no work, and a page waiting on another reader's generation must
+    not spend the reader's budget for votes and comments doing so. Every
+    request, generating or not, counts against SummaryRateLimit.
 
     Streams Server-Sent Events, each `data:` line a JSON object:
     {"delta": "<text chunk>"} while generating, then a final
@@ -451,10 +457,12 @@ async def get_explore_document_summary(
     outcome = await asyncio.shield(generation.outcome)
 
     if isinstance(outcome, throttle.Decision):  # the write limit refused it
+        # A wait too: a refused charge isn't counted, so asking again once
+        # the budget resets costs nothing more.
         raise HTTPException(
             status_code=429,
             detail="Rate limit exceeded — too many requests per minute per IP.",
-            headers={"Retry-After": retry_after(outcome.reset_at)},
+            headers={"Retry-After": retry_after(outcome.reset_at), **_WAIT_OUT},
         )
     if outcome == "unavailable":
         raise HTTPException(
@@ -581,8 +589,17 @@ class _Generation:
         self._held.clear()
 
     async def run(self) -> None:
-        from app.api import throttle
+        from app.api import rate_limit, throttle
 
+        # The write limit first, so a client over it takes no claim that
+        # would hold other readers off; given back below when no generation
+        # starts (a refusal to wait out does none of the work it limits).
+        decision = await throttle.run(rate_limit.charge_write, self.client)
+        if not decision.allowed:
+            self._settle(decision)
+            self.events.put_nowait(None)
+            return
+        started = False
         try:
             try:
                 key = self.key
@@ -611,18 +628,17 @@ class _Generation:
             if made is not None:
                 self._settle(made)
                 return
-            # Charged only now that a generation will start (see the endpoint).
-            from app.api.rate_limit import charge_write
-
-            decision = await throttle.run(charge_write, self.client)
-            if not decision.allowed:
-                self._settle(decision)
-                return
+            started = True
             self._settle("go")
             await self._generate()
         finally:
             self._settle("unavailable")  # a no-op once settled
             await self._give_back()  # a no-op once given back
+            if not started:
+                try:
+                    await throttle.run(rate_limit.refund_write, self.client)
+                except Exception:
+                    logger.warning("Explore summary's write charge not refunded", exc_info=True)
             self.events.put_nowait(None)
 
     async def _generate(self) -> None:
@@ -651,10 +667,12 @@ class _Generation:
             # At the token limit: as far as it will ever get (the same
             # prompt stops at the same place).
             at_limit = True
-        except Exception:
-            # Out of time only if this deadline expired: a TimeoutError from
-            # inside the stream (a socket's) is a failure like any other.
-            if deadline.expired():
+        except Exception as error:
+            # Out of time: this deadline expired, or the LLM stopped answering
+            # within its client's read timeout (it is busy: the pipeline's
+            # work, another generation). Anything else — the LLM unreachable,
+            # a bad response — is a failure, which may be retried at once.
+            if deadline.expired() or isinstance(error, httpx.TimeoutException):
                 logger.warning("Explore doc summary for doc_id=%s ran out of time", self.doc_id)
                 timed_out = True
             else:
