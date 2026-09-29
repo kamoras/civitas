@@ -33,6 +33,10 @@ import time
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from app.pipeline.fetch.http_utils import CONTACT_EMAIL  # noqa: E402
+
 STATE_NAMES = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
     "CA": "California", "CO": "Colorado", "CT": "Connecticut",
@@ -63,7 +67,7 @@ SEATS = {
     "WY": 1,
 }
 
-UA = {"User-Agent": "CivitasCivicPlatform/1.0 (district PVI ingestion; contact: mack.ryanm@gmail.com)"}
+UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (district PVI ingestion; contact: {CONTACT_EMAIL})"}
 API = "https://en.wikipedia.org/w/api.php"
 
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "district_pvi.json"

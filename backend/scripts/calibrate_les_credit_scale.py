@@ -28,9 +28,10 @@ from app.pipeline.analyze.score_calculator import (
     compute_les_reference,
     derive_chamber_majority,
 )
+from app.pipeline.fetch.http_utils import CONTACT_EMAIL
 
 API_BASE = "https://civitas-research.org/api"
-UA = {"User-Agent": "CivitasCivicPlatform/1.0 (LES calibration; contact: mack.ryanm@gmail.com)"}
+UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (LES calibration; contact: {CONTACT_EMAIL})"}
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "les_reference.json"
 
 

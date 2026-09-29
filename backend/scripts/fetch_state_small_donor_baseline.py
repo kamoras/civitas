@@ -32,10 +32,15 @@ import json
 import math
 import pathlib
 import statistics
+import sys
 import urllib.request
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from app.pipeline.fetch.http_utils import CONTACT_EMAIL  # noqa: E402
+
 API_BASE = "https://civitas-research.org/api"
-UA = {"User-Agent": "CivitasCivicPlatform/1.0 (funding-baseline calibration; contact: mack.ryanm@gmail.com)"}
+UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (funding-baseline calibration; contact: {CONTACT_EMAIL})"}
 
 STATE_POPULATION_PATH = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_population.json"
 OUTPUT_PATH = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "small_donor_baseline.json"

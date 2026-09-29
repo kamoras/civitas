@@ -358,14 +358,30 @@ def test_every_user_agent_names_the_real_contact_address():
     from app.pipeline.fetch import sec_tickers, state_candidates_tx
     from app.pipeline.fetch.http_utils import BROWSER_HEADERS, CIVIC_CONTACT, CONTACT_EMAIL
 
+    assert "@" in CONTACT_EMAIL
     assert CONTACT_EMAIL in CIVIC_CONTACT
     assert BROWSER_HEADERS["User-Agent"].endswith(f"(+{CONTACT_EMAIL})")
     assert sec_tickers._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
     assert state_candidates_tx._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
-    backend = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[2]
+    searched = [
+        *repo.glob("backend/app/**/*.py"),
+        *repo.glob("backend/app/data/*.json"),
+        *repo.glob("backend/scripts/*.py"),
+        *repo.glob("*.md"),
+        *repo.glob("frontend/src/**/*.ts*"),
+    ]
+    assert searched
     stale = [
-        str(p.relative_to(backend))
-        for p in [*backend.glob("app/**/*.py"), *backend.glob("scripts/*.py")]
-        if "contact@civitas-research.org" in p.read_text()
+        str(p.relative_to(repo))
+        for p in searched
+        if "contact@civitas-research.org" in p.read_text(errors="ignore")
     ]
     assert not stale
+    # The scripts name the same address through the constant, not a copy.
+    copies = [
+        str(p.relative_to(repo))
+        for p in repo.glob("backend/scripts/*.py")
+        if CONTACT_EMAIL in p.read_text()
+    ]
+    assert not copies

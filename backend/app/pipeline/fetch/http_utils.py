@@ -83,8 +83,8 @@ redact_url = redact_sensitive_params
 # wants to refuse Civitas can still refuse Civitas.
 # The maintainer's real address: SEC's fair-access policy asks every
 # automated client to name a working contact email, and a site that wants
-# to report a problem needs one that is read. Every User-Agent in the
-# pipeline takes it from here.
+# to report a problem needs one that is read. Every User-Agent that names
+# a contact takes it from here, backend/scripts/ included.
 CONTACT_EMAIL = "mack.ryanm@gmail.com"
 CIVIC_CONTACT = f"Civitas/1.0 (+{CONTACT_EMAIL})"
 BROWSER_HEADERS = {

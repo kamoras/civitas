@@ -67,6 +67,10 @@ import pathlib
 import sys
 import urllib.request
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from app.pipeline.fetch.http_utils import CONTACT_EMAIL  # noqa: E402
+
 # MEDSL 1976-2020 president state-level returns (version 20210113), pinned
 # to an immutable commit so a regeneration years from now fetches the exact
 # same file. Byte-identical to the Harvard Dataverse original
@@ -112,7 +116,7 @@ CROSS_SOURCE_TOLERANCE_PP = 0.3
 # column or sign flip moves most of the map by tens of points.
 CONTINUITY_TOLERANCE = 5
 
-UA = {"User-Agent": "CivitasCivicPlatform/1.0 (state PVI ingestion; contact: mack.ryanm@gmail.com)"}
+UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state PVI ingestion; contact: {CONTACT_EMAIL})"}
 
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_pvi.json"
 
