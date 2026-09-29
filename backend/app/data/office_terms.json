@@ -2,6 +2,8 @@
   "_about": "Term length, in years, of each state office the ballot page shows. Listed explicitly per state and office, never defaulted: a state or office missing here shows no term at all, because terms differ (New Hampshire and Vermont elect governors for two years, Georgia's Public Service Commission serves six) and a guessed term is a wrong fact on a ballot page. Keys match the API's: statewide office codes (a district-seated body like 'public_service_commission-3' uses its bare code), legislative chambers 'upper'/'lower', and judicial courts. A term here is the office's regular term; a seat filled for the rest of an unexpired term runs shorter, which is why the page words it as the office's term ('4-year terms'), not the winner's. Checked 2026-09-26 against each state's constitution and Ballotpedia's office pages; the less common ones are cited in _sources.",
   "_sources": {
     "state legislatures": "Two-year state senates: AZ, CT, GA, ID, ME, MA, NH, NY, NC, RI, SD, VT; four-year state houses: AL, LA, MD, MS, ND. AR, DE, FL and MN senates run a 2-4-4 cycle (one two-year term each decade after redistricting); 2026 elects four-year terms in all four (MN: four-year terms in years ending in 2 and 6).",
+    "NE public_service_commission": "Six-year staggered terms, elected by district (Neb. Rev. Stat. 75-101; Ballotpedia, Nebraska Public Service Commission).",
+    "ND school_superintendent": "Four-year term, elected on the no-party ballot (N.D. Const. art. V sec. 2; N.D.C.C. 15.1-02-01).",
     "GA public_service_commission": "Six-year staggered terms (Ballotpedia, Georgia Public Service Commission; 2026 elects District 3 to a full term after its 2025 special).",
     "ND public_service_commission": "Six-year staggered terms since the 1926 constitutional amendment (ND PSC history).",
     "ND tax_commissioner": "Four-year term, elected at midterms (Ballotpedia, North Dakota Tax Commissioner).",
@@ -10,10 +12,38 @@
     "UT state_board_of_education": "Fifteen members, four-year staggered terms (Ballotpedia, Utah State Board of Education).",
     "NC judicial": "Court of Appeals and Superior Court eight years, District Court four (N.C. Const. art. IV).",
     "FL judicial": "Circuit judges six years (The Florida Bar, judicial elections FAQ).",
-    "WA judicial": "Supreme Court justices six years (Wash. Const. art. IV §3)."
+    "WA judicial": "Supreme Court justices six years (Wash. Const. art. IV §3).",
+    "SD public_utilities_commission": "Three commissioners elected statewide to six-year staggered terms (Ballotpedia, South Dakota Public Utilities Commission).",
+    "AL public_service_commission": "Two associate commissioners (Place 1, Place 2) and a president, each elected statewide to a four-year term (Ballotpedia, Alabama Public Service Commission).",
+    "AL state_board_of_education": "Eight members elected by district to four-year staggered terms (Ballotpedia, Alabama State Board of Education).",
+    "SD school_public_lands_commissioner": "Four-year term (Ballotpedia, South Dakota Commissioner of School and Public Lands).",
+    "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade.",
+    "KS state_board_of_education": "Ten members, one per district, four-year staggered terms (Ballotpedia, Kansas State Board of Education); the 2026 primary's own results carry exactly the odd-numbered seats 1, 3, 5, 7 and 9.",
+    "KS upper": "Four-year terms, elected in presidential years (Kansas Legislature; Wikipedia, Kansas Senate). The only Senate contests on the 2026 primary are Districts 24 and 25, seats being filled for the rest of an unexpired term, which runs shorter than the office's term the page shows.",
+    "TX railroad_commissioner": "Three commissioners elected statewide to six-year staggered terms (Tex. Const. art. XVI §30(b); Ballotpedia, Texas Railroad Commission).",
+    "TX land_office_commissioner": "Four-year term (Tex. Const. art. IV §23).",
+    "TX state_board_of_education": "Fifteen members elected by district to four-year staggered terms, with a 2-4-4 cycle only in the election after redistricting (Tex. Educ. Code §7.103); 2026 elects four-year terms.",
+    "TX legislature": "Senate four years with a 2-4-4 cycle after redistricting (Tex. Const. art. III §3); the 16 districts up in 2026 are the ones that drew four-year terms in 2022, so 2026 elects four-year terms. House two years.",
+    "SC statewide": "Governor (jointly with the Lieutenant Governor since 2018), Secretary of State, Treasurer, Attorney General, Comptroller General, Superintendent of Education and Commissioner of Agriculture all four years (S.C. Const. art. IV §3, art. VI §7). The Adjutant General has been appointed since 2019 and is not on the ballot.",
+    "VT statewide": "All six executive officers are elected biennially, to two-year terms (Vt. Const. ch. II sec. 43).",
+    "NH governor": "Two-year term (N.H. Const. pt. II art. 42).",
+    "NM public_lands_commissioner": "Four-year term (N.M. Const. art. V §1, Commissioner of Public Lands).",
+    "NM governor": "Elected jointly with the lieutenant governor as one ticket (N.M. Const. art. V §1), so the ticket is stored under governor and there is no separate lt_governor contest.",
+    "joint governor tickets": "CO, CT, HI, IA, MA, PA and WI also elect the governor and lieutenant governor jointly on one vote (each state's joint_governor_ticket in state_candidate_sources.json cites its constitution), so the lieutenant governor is joined to the governor's ticket and has no term of its own here.",
+    "NH executive_council": "Five councillors, one per district, elected biennially (N.H. Const. Pt. II Art. 60).",
+    "NM public_education_commission": "Ten commissioners, one per district, staggered four-year terms (N.M. Const. art. XII sec. 6).",
+    "NE state_board_of_education": "Eight members, one per district, four-year terms (Neb. Const. art. VII sec. 3); the 2026 list's own Term column reads 4.",
+    "NE university_regent": "University of Nebraska Board of Regents: eight elected by district to six-year terms (Neb. Const. art. VII sec. 10); the 2026 list's Term column reads 6, and 4 for District 4's unexpired seat.",
+    "MA governors_council": "Eight councillors, one per council district, elected every two years (Mass. Const. amend. art. 16; Ballotpedia, Massachusetts Governor's Council).",
+    "WI legislature": "Senators serve four-year staggered terms, odd-numbered districts elected in midterm years; Assembly two (Wis. Const. art. IV, sec. 4-5)."
   },
   "statewide": {
     "AK": {"governor": 4},
+    "AL": {
+      "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
+      "treasurer": 4, "auditor": 4, "agriculture_commissioner": 4,
+      "public_service_commission": 4, "state_board_of_education": 4
+    },
     "AR": {"governor": 4, "state_lands_commissioner": 4},
     "CA": {
       "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
@@ -24,8 +54,12 @@
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4,
       "state_board_of_education": 6, "university_regent": 6
     },
-    "DE": {"attorney_general": 4, "treasurer": 4},
-    "FL": {"governor": 4, "agriculture_commissioner": 4, "chief_financial_officer": 4},
+    "CT": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4,
+      "treasurer": 4, "comptroller": 4
+    },
+    "DE": {"attorney_general": 4, "treasurer": 4, "auditor": 4},
+    "FL": {"governor": 4, "agriculture_commissioner": 4, "chief_financial_officer": 4, "attorney_general": 4},
     "GA": {
       "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
       "insurance_commissioner": 4, "agriculture_commissioner": 4, "labor_commissioner": 4,
@@ -41,16 +75,63 @@
     },
     "MD": {"governor": 4, "attorney_general": 4, "comptroller": 4},
     "MN": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4},
-    "NE": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4, "auditor": 4},
+    "NE": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4, "auditor": 4,
+           "public_service_commission": 6, "state_board_of_education": 4, "university_regent": 6},
     "ND": {
       "attorney_general": 4, "secretary_of_state": 4, "agriculture_commissioner": 4,
-      "public_service_commission": 6, "tax_commissioner": 4
+      "public_service_commission": 6, "tax_commissioner": 4, "school_superintendent": 4
     },
     "RI": {"governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4},
-    "UT": {"state_board_of_education": 4}
+    "UT": {"state_board_of_education": 4},
+    "HI": {"governor": 4},
+    "IL": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "comptroller": 4,
+      "treasurer": 4
+    },
+    "SD": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4,
+      "treasurer": 4, "school_public_lands_commissioner": 4, "public_utilities_commission": 6
+    },
+    "KS": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4,
+      "insurance_commissioner": 4, "state_board_of_education": 4
+    },
+    "MO": {"auditor": 4},
+    "SC": {
+      "governor": 4, "secretary_of_state": 4, "treasurer": 4, "attorney_general": 4,
+      "comptroller": 4, "school_superintendent": 4, "agriculture_commissioner": 4
+    },
+    "TX": {
+      "governor": 4, "lt_governor": 4, "attorney_general": 4, "comptroller": 4,
+      "land_office_commissioner": 4, "agriculture_commissioner": 4,
+      "railroad_commissioner": 6, "state_board_of_education": 4
+    },
+    "PA": {"governor": 4},
+    "OR": {"governor": 4, "labor_commissioner": 4},
+    "ME": {"governor": 4},
+    "VT": {
+      "governor": 2, "lt_governor": 2, "treasurer": 2, "secretary_of_state": 2,
+      "auditor": 2, "attorney_general": 2
+    },
+    "NH": {"governor": 2, "executive_council": 2},
+    "WY": {
+      "governor": 4, "secretary_of_state": 4, "auditor": 4, "treasurer": 4,
+      "school_superintendent": 4
+    },
+    "NM": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4,
+      "treasurer": 4, "public_lands_commissioner": 4, "public_education_commission": 4
+    },
+    "TN": {"governor": 4},
+    "MA": {
+      "governor": 4, "attorney_general": 4, "secretary_of_commonwealth": 4,
+      "treasurer": 4, "auditor": 4, "governors_council": 2
+    },
+    "WI": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4}
   },
   "legislature": {
     "AK": {"upper": 4, "lower": 2},
+    "ME": {"upper": 2, "lower": 2},
     "AR": {"upper": 4, "lower": 2},
     "CA": {"upper": 4, "lower": 2},
     "CO": {"upper": 4, "lower": 2},
@@ -66,7 +147,19 @@
     "RI": {"upper": 2, "lower": 2},
     "UT": {"upper": 4, "lower": 2},
     "WA": {"upper": 4, "lower": 2},
-    "WV": {"upper": 4, "lower": 2}
+    "WV": {"upper": 4, "lower": 2},
+    "HI": {"lower": 2},
+    "IL": {"lower": 2},
+    "SD": {"upper": 2, "lower": 2},
+    "KS": {"upper": 4, "lower": 2},
+    "MO": {"upper": 4, "lower": 2},
+    "SC": {"lower": 2},
+    "TX": {"upper": 4, "lower": 2},
+    "PA": {"upper": 4, "lower": 2},
+    "WY": {"upper": 4, "lower": 2},
+    "NM": {"upper": 4, "lower": 2},
+    "TN": {"upper": 4, "lower": 2},
+    "WI": {"upper": 4, "lower": 2}
   },
   "judicial": {
     "FL": {"circuit": 6},

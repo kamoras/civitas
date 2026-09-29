@@ -1,0 +1,762 @@
+{
+ "d": [
+  {
+   "pid": 0,
+   "pn": null,
+   "pc": null,
+   "pco": null,
+   "o": [
+    {
+     "oid": 5,
+     "on": "GOVERNOR",
+     "vf": 1,
+     "otc": "S",
+     "cid1": 210405,
+     "cn1": "JUNE GOODBAND",
+     "cid2": 225760,
+     "cn2": "AMANDA JANOO",
+     "cid3": 213273,
+     "cn3": "BRIAN JUDD",
+     "cs": [
+      {
+       "tid": 16,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ADDISON",
+       "repd": "ADDISON-3",
+       "send": "ADDISON_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 210405,
+         "cn": "JUNE GOODBAND",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "PEACE AND JUSTICE",
+         "pco": "33cc33"
+        },
+        {
+         "cid": 225760,
+         "cn": "AMANDA JANOO",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEM/PROG",
+         "pco": "fac08f"
+        },
+        {
+         "cid": 213273,
+         "cn": "BRIAN JUDD",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "INDEPENDENT",
+         "pco": "ccc1d9"
+        },
+        {
+         "cid": 210802,
+         "cn": "DEAN ROY",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "FREEDOM AND UNITY",
+         "pco": null
+        },
+        {
+         "cid": 225759,
+         "cn": "PHIL SCOTT",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      },
+      {
+       "tid": 18,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ALBURGH",
+       "repd": "GRAND ISLE CHITTENDEN",
+       "send": "FRANKLIN_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 210405,
+         "cn": "JUNE GOODBAND",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "PEACE AND JUSTICE",
+         "pco": "33cc33"
+        },
+        {
+         "cid": 225760,
+         "cn": "AMANDA JANOO",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEM/PROG",
+         "pco": "fac08f"
+        },
+        {
+         "cid": 213273,
+         "cn": "BRIAN JUDD",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "INDEPENDENT",
+         "pco": "ccc1d9"
+        },
+        {
+         "cid": 210802,
+         "cn": "DEAN ROY",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "FREEDOM AND UNITY",
+         "pco": null
+        },
+        {
+         "cid": 225759,
+         "cn": "PHIL SCOTT",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "oid": 6,
+     "on": "LIEUTENANT GOVERNOR",
+     "vf": 1,
+     "otc": "S",
+     "cid1": 225762,
+     "cn1": "MOLLY GRAY",
+     "cid2": 225761,
+     "cn2": "JOHN S. RODGERS",
+     "cid3": 0,
+     "cn3": null,
+     "cs": [
+      {
+       "tid": 16,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ADDISON",
+       "repd": "ADDISON-3",
+       "send": "ADDISON_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225762,
+         "cn": "MOLLY GRAY",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        },
+        {
+         "cid": 225761,
+         "cn": "JOHN S. RODGERS",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      },
+      {
+       "tid": 18,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ALBURGH",
+       "repd": "GRAND ISLE CHITTENDEN",
+       "send": "FRANKLIN_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225762,
+         "cn": "MOLLY GRAY",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        },
+        {
+         "cid": 225761,
+         "cn": "JOHN S. RODGERS",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "oid": 7,
+     "on": "STATE TREASURER",
+     "vf": 1,
+     "otc": "S",
+     "cid1": 225765,
+     "cn1": "ZACHARY HAMPL",
+     "cid2": 226148,
+     "cn2": "LYNN LAFLEUR",
+     "cid3": 225763,
+     "cn3": "MIKE PIECIAK",
+     "cs": [
+      {
+       "tid": 16,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ADDISON",
+       "repd": "ADDISON-3",
+       "send": "ADDISON_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225765,
+         "cn": "ZACHARY HAMPL",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "PROGRESSIVE",
+         "pco": "c00000"
+        },
+        {
+         "cid": 226148,
+         "cn": "LYNN LAFLEUR",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        },
+        {
+         "cid": 225763,
+         "cn": "MIKE PIECIAK",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      },
+      {
+       "tid": 18,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ALBURGH",
+       "repd": "GRAND ISLE CHITTENDEN",
+       "send": "FRANKLIN_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225765,
+         "cn": "ZACHARY HAMPL",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "PROGRESSIVE",
+         "pco": "c00000"
+        },
+        {
+         "cid": 226148,
+         "cn": "LYNN LAFLEUR",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        },
+        {
+         "cid": 225763,
+         "cn": "MIKE PIECIAK",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "oid": 8,
+     "on": "SECRETARY OF STATE",
+     "vf": 1,
+     "otc": "S",
+     "cid1": 225768,
+     "cn1": "SARAH COPELAND HANZAS",
+     "cid2": 225767,
+     "cn2": "H. BROOKE PAIGE",
+     "cid3": 225766,
+     "cn3": "RACHEL SHAW",
+     "cs": [
+      {
+       "tid": 16,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ADDISON",
+       "repd": "ADDISON-3",
+       "send": "ADDISON_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225768,
+         "cn": "SARAH COPELAND HANZAS",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        },
+        {
+         "cid": 225767,
+         "cn": "H. BROOKE PAIGE",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        },
+        {
+         "cid": 225766,
+         "cn": "RACHEL SHAW",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "PROGRESSIVE",
+         "pco": "c00000"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      },
+      {
+       "tid": 18,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ALBURGH",
+       "repd": "GRAND ISLE CHITTENDEN",
+       "send": "FRANKLIN_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225768,
+         "cn": "SARAH COPELAND HANZAS",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        },
+        {
+         "cid": 225767,
+         "cn": "H. BROOKE PAIGE",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        },
+        {
+         "cid": 225766,
+         "cn": "RACHEL SHAW",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "PROGRESSIVE",
+         "pco": "c00000"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "oid": 9,
+     "on": "AUDITOR OF ACCOUNTS",
+     "vf": 1,
+     "otc": "S",
+     "cid1": 225769,
+     "cn1": "TIM ASHE",
+     "cid2": 226125,
+     "cn2": "IVAR KRONICK",
+     "cid3": 0,
+     "cn3": null,
+     "cs": [
+      {
+       "tid": 16,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ADDISON",
+       "repd": "ADDISON-3",
+       "send": "ADDISON_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225769,
+         "cn": "TIM ASHE",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        },
+        {
+         "cid": 226125,
+         "cn": "IVAR KRONICK",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      },
+      {
+       "tid": 18,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ALBURGH",
+       "repd": "GRAND ISLE CHITTENDEN",
+       "send": "FRANKLIN_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225769,
+         "cn": "TIM ASHE",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        },
+        {
+         "cid": 226125,
+         "cn": "IVAR KRONICK",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "oid": 10,
+     "on": "ATTORNEY GENERAL",
+     "vf": 1,
+     "otc": "S",
+     "cid1": 225772,
+     "cn1": "CHARITY R. CLARK",
+     "cid2": 226123,
+     "cn2": "EDWIN HOWELL KEMON",
+     "cid3": 0,
+     "cn3": null,
+     "cs": [
+      {
+       "tid": 16,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ADDISON",
+       "repd": "ADDISON-3",
+       "send": "ADDISON_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225772,
+         "cn": "CHARITY R. CLARK",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        },
+        {
+         "cid": 226123,
+         "cn": "EDWIN HOWELL KEMON",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      },
+      {
+       "tid": 18,
+       "ctyid": 0,
+       "oid": 0,
+       "sc": 0,
+       "sv": 0,
+       "bv": 0,
+       "vf": 1,
+       "tn": "ALBURGH",
+       "repd": "GRAND ISLE CHITTENDEN",
+       "send": "FRANKLIN_",
+       "ctyn": null,
+       "distReported": "0/1",
+       "townsReported": null,
+       "distCode": "",
+       "io": false,
+       "rc": [
+        {
+         "cid": 225772,
+         "cn": "CHARITY R. CLARK",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "DEMOCRATIC",
+         "pco": "007ABC"
+        },
+        {
+         "cid": 226123,
+         "cn": "EDWIN HOWELL KEMON",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": "REPUBLICAN",
+         "pco": "ff2c2c"
+        }
+       ],
+       "wc": [
+        {
+         "cid": 0,
+         "cn": "OTHER WRITE-IN",
+         "vc": 0,
+         "isWriteIn": false,
+         "isWinner": false,
+         "pn": null,
+         "pco": null
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

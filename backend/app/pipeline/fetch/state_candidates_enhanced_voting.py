@@ -110,6 +110,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     clean_display_name,
     normalize_party,
     STATEWIDE_OFFICE_LABELS,
@@ -288,7 +289,7 @@ async def fetch_confirmed_candidates(
         for name, party, votes in _candidates(ballot_item):
             bucket.setdefault((office, district, party, seat), []).append((name, votes))
 
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     # The two kinds of contest are resolved by the same shared tie-safe
     # machinery but reduced to DIFFERENT name forms, because they are
     # asked different questions afterwards. A federal nominee is matched

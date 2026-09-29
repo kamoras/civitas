@@ -47,7 +47,7 @@ from urllib.robotparser import RobotFileParser
 import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office
+from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, runoff_threshold
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -876,7 +876,7 @@ async def discover_source(
                       "format": {**shape, **fmt}}
             by_seat: dict = {}
             tabular._collect(rows, source["format"], by_seat,
-                             rules.get("runoff_threshold_pct"),
+                             runoff_threshold(rules),
                              int(rules.get("advance_count") or 1))
             records = [r for v in by_seat.values() for r in v]
             if _federal_contests(rows, source["format"]) and (
@@ -894,7 +894,7 @@ async def discover_source(
             continue
         fmt = {**shape, **fmt}
         by_seat: dict = {}
-        tabular._collect(rows, fmt, by_seat, rules.get("runoff_threshold_pct"),
+        tabular._collect(rows, fmt, by_seat, runoff_threshold(rules),
                          int(rules.get("advance_count") or 1))
         records = [r for v in by_seat.values() for r in v]
         if not _federal_contests(rows, fmt) or (records and not _looks_federal(records)):

@@ -20,5 +20,9 @@
   "federal": {
     "isEnable": true,
     "path": "elections\\a18f77e0-89f8-4a01-8d97-61a7c75ba200-f-20260908223641.json"
+  },
+  "stateWide": {
+    "isEnable": true,
+    "path": "elections\\a18f77e0-89f8-4a01-8d97-61a7c75ba200-s-20260928071722.json"
   }
 }

@@ -199,6 +199,71 @@ class TestNormalizeParty:
         assert common.normalize_party("No Party Preference") is None
         assert common.normalize_party("") is None
 
+    def test_progressive_is_read_only_from_a_ballot_list(self):
+        """Vermont's 2026 Progressive PRIMARY was scattered write-ins and
+        must stay unread; its general report's PROGRESSIVE lines are real
+        ballot lines, and FEC codes the party PRO."""
+        assert common.normalize_party("PROGRESSIVE") is None
+        assert common.normalize_party("PROGRESSIVE", ballot_list=True) == "P"
+        assert common.normalize_party("PROG", ballot_list=True) == "P"
+        assert common.PARTY_CODE_MAP["P"] == "PRO"
+        # A fusion line keeps the party it names first.
+        assert common.normalize_party("Democratic/Progressive", ballot_list=True) == "D"
+
+
+class TestBallotListParty:
+    """The party column of a certified GENERAL list, where a party the
+    shared codes cannot name is still a party."""
+
+    def test_a_recognised_party_is_its_code_with_no_label(self):
+        assert common.ballot_list_party("Republican") == ("R", None)
+        assert common.ballot_list_party("INDEPENDENT") == ("I", None)
+        assert common.ballot_list_party("PROGRESSIVE") == ("P", None)
+
+    def test_an_unknown_party_keeps_its_printed_label(self):
+        # Real 2026 labels: Vermont's general report, South Carolina's VREMS.
+        assert common.ballot_list_party("FREEDOM AND UNITY") == ("O", "FREEDOM AND UNITY")
+        assert common.ballot_list_party("  Workers ") == ("O", "Workers")
+
+    def test_a_column_printing_no_party_yields_none(self):
+        assert common.ballot_list_party("") is None
+        assert common.ballot_list_party(" - ") is None
+        # A lone code letter (Texas's "W" is a write-in) names no party.
+        assert common.ballot_list_party("W") is None
+
+    def test_a_non_partisan_entry_is_non_partisan_not_independent(self):
+        """North Dakota's Superintendent of Public Instruction candidates
+        are printed "Nonpartisan" (its 2026 list): a state row keeps that
+        word under NONPARTISAN. The federal reading is unchanged."""
+        assert common.ballot_list_party("Nonpartisan") == ("N", "Nonpartisan")
+        assert common.ballot_list_party("NON-PARTISAN") == ("N", "NON-PARTISAN")
+        assert common.normalize_party("Nonpartisan", ballot_list=True) == "I"
+        assert common.NONPARTISAN not in common.PARTY_CODE_MAP
+        assert common.state_nominee_party("N") == "N"
+
+    def test_a_party_named_independent_is_a_party(self):
+        """Florida's IND is the Independent Party of Florida (the
+        Division's own party list), Delaware's is FEC's IDE."""
+        assert common.ballot_list_party("Independent Party of Florida") == (
+            "O", "Independent Party of Florida")
+        # The federal matcher's reading is unchanged from before this
+        # distinction existed: "I", never None (which drops the row).
+        assert common.normalize_party("Independent Party of Delaware", ballot_list=True) == "I"
+        assert common.ballot_list_party("Independent Party of Delaware") == (
+            "O", "Independent Party of Delaware")
+        assert common.ballot_list_party("Ind Pty of DE") != ("I", None)
+        # The word alone is still no party.
+        assert common.ballot_list_party("Independent") == ("I", None)
+        assert common.ballot_list_party("independent nomination") == ("I", None)
+
+    def test_other_party_never_takes_part_in_federal_matching(self):
+        """"O" names no party, so it is not an FEC party code of ours --
+        a federal candidate is never matched or contradicted through it."""
+        assert common.OTHER_PARTY not in common.PARTY_CODE_MAP
+        assert common.state_nominee_party("O") == "OTH"
+        assert common.state_nominee_party("D") == "DEM"
+        assert common.state_nominee_party("") == ""
+
 
 class TestSurname:
     def test_takes_trailing_token_and_drops_suffixes(self):
@@ -345,6 +410,16 @@ class TestParseStateLegOffice:
         assert common.parse_state_leg_office(
             "REP Representative in General Assembly District 13") == ("lower", "13", None)
 
+    def test_pennsylvanias_article_and_ordinal_districts(self):
+        """Real 2026 PA primary labels (office name + the API's district)."""
+        assert common.parse_state_leg_office(
+            "Senator in the General Assembly 2nd Senatorial District") == ("upper", "2", None)
+        assert common.parse_state_leg_office(
+            "Representative in the General Assembly 203rd Legislative District",
+        ) == ("lower", "203", None)
+        assert common.parse_state_leg_office(
+            "Member of Republican State Committee 12th Senatorial District") is None
+
     def test_leading_zeros_are_the_same_seat(self):
         assert common.parse_state_leg_office(
             "DEM Senator in General Assembly District 05") == ("upper", "5", None)
@@ -442,6 +517,9 @@ class TestStatewideOfficePhrases:
             "Commissioner of Agriculture - Dem") == ("agriculture_commissioner", None)
         assert common.parse_statewide_office(
             "Commissioner of Labor - Rep") == ("labor_commissioner", None)
+        # Oregon's own label, off its 2026 primary Abstract of Votes.
+        assert common.parse_statewide_office(
+            "Commissioner of the Bureau of Labor and Industries") == ("labor_commissioner", None)
 
     def test_either_word_order_works(self):
         assert common.parse_statewide_office(
@@ -717,6 +795,11 @@ class TestNebraskaAuditor:
     def test_a_county_auditor_is_still_refused(self):
         assert common.parse_statewide_office("County Auditor") is None
         assert common.parse_statewide_office("County Auditor/Treasurer") is None
+
+    def test_pennsylvanias_auditor_general(self):
+        """Pennsylvania's title for the office, as its returns API labels
+        a statewide contest (office name + "Statewide")."""
+        assert common.parse_statewide_office("Auditor General Statewide") == ("auditor", None)
 
 
 class TestClarityStateOffices:
@@ -1069,3 +1152,230 @@ class TestDecidedBeforeGeneral:
     def test_it_does_not_touch_a_state_without_the_value(self):
         assert [n for n, _ in common.pick_nominees(self.NO_MAJORITY, None, 2)] == [
             "David Stevens", "Jaime Michelle Hawk"]
+
+
+class TestStatewideOfficeBallotQuestions:
+    """A ballot question that names an office is not that office's
+    contest. Real shapes: South Dakota and Missouri print amendments
+    whose titles mention the governor's powers."""
+
+    def test_an_amendment_about_the_governor_is_not_the_governors_race(self):
+        for label in (
+            "Constitutional Amendment 1 - Governor appointments",
+            "Proposition A: Attorney General term limits",
+            "Referendum on the Secretary of State's duties",
+            "Initiated Measure 28 - State Treasurer",
+            "Question 2 - Lieutenant Governor succession",
+        ):
+            assert common.parse_statewide_office(label) is None, label
+
+    def test_the_offices_themselves_still_parse(self):
+        assert common.parse_statewide_office("Governor and Lieutenant Governor") == ("governor", None)
+        assert common.parse_statewide_office("Lieutenant Governor") == ("lt_governor", None)
+
+
+class TestSouthDakotaOffices:
+    """Real contest labels off South Dakota's 2026 VIP primary feed."""
+
+    def test_school_and_public_lands(self):
+        assert common.parse_statewide_office("Commissioner of School and Public Lands") == (
+            "school_public_lands_commissioner", None)
+
+    def test_public_utilities_commission(self):
+        assert common.parse_statewide_office("Public Utilities Commissioner") == (
+            "public_utilities_commission", None)
+
+    def test_every_new_office_has_a_label(self):
+        for code in ("school_public_lands_commissioner", "public_utilities_commission"):
+            assert code in common.STATEWIDE_OFFICE_LABELS
+
+
+class TestIllinoisOffices:
+    """Real contest names off Illinois's 2026 by-office CSV exports, which
+    print them in capitals."""
+
+    def test_uppercase_labels(self):
+        for label, code in (
+            ("GOVERNOR AND LIEUTENANT GOVERNOR", "governor"),
+            ("ATTORNEY GENERAL", "attorney_general"),
+            ("SECRETARY OF STATE", "secretary_of_state"),
+            ("COMPTROLLER", "comptroller"),
+            ("TREASURER", "treasurer"),
+        ):
+            assert common.parse_statewide_office(label) == (code, None), label
+
+
+class TestMassachusettsOffices:
+    """Labels state_candidates_ma builds from the Office and District cells
+    of Massachusetts's 2026 PD43+ primary archive."""
+
+    def test_its_executive_offices(self):
+        for label, code in (
+            ("Statewide Governor", "governor"),
+            ("Statewide Lieutenant Governor", "lt_governor"),
+            ("Statewide Attorney General", "attorney_general"),
+            ("Statewide Secretary of the Commonwealth", "secretary_of_commonwealth"),
+            ("Statewide Treasurer", "treasurer"),
+            # Printed bare; "Statewide" is the archive's own District cell.
+            ("Statewide Auditor", "auditor"),
+        ):
+            assert common.parse_statewide_office(label) == (code, None), label
+
+    def test_a_bare_auditor_is_still_refused(self):
+        assert common.parse_statewide_office("Auditor") is None
+
+    def test_the_governors_council_is_not_the_governor(self):
+        assert common.parse_statewide_office("Governor's Council 3rd District") == ("governors_council", "3")
+        assert common.parse_statewide_office("Governor’s Council 8th District") == ("governors_council", "8")
+
+    def test_its_county_offices_are_refused(self):
+        for label in (
+            "County Treasurer Bristol County District",
+            "District Attorney Berkshire District",
+            "Register of Probate Suffolk County District",
+            "Sheriff Franklin County District",
+            "Council of Governments Executive Committee Franklin District",
+        ):
+            assert common.parse_statewide_office(label) is None, label
+
+    def test_every_new_office_has_a_label(self):
+        for code in ("secretary_of_commonwealth", "governors_council"):
+            assert code in common.STATEWIDE_OFFICE_LABELS
+
+
+class TestWisconsinLegislature:
+    """Labels off Wisconsin's certified 2026 partisan-primary canvass."""
+
+    def test_both_chambers(self):
+        assert common.parse_state_leg_office("STATE SENATOR DISTRICT 7") == ("upper", "7", None)
+        assert common.parse_state_leg_office("REPRESENTATIVE TO THE ASSEMBLY DISTRICT 20") == ("lower", "20", None)
+
+    def test_the_congressional_seat_is_not_the_assembly(self):
+        assert common.parse_state_leg_office("REPRESENTATIVE IN CONGRESS DISTRICT 1") is None
+
+
+class TestAlabamaAndConnecticutStatewideLabels:
+    """Real labels off Alabama's 2026 primary precinct workbooks and
+    Connecticut's 2026 certificates of party endorsement."""
+
+    def test_alabamas_psc_seats_are_places_not_districts(self):
+        assert common.parse_statewide_office(
+            "PUBLIC SERVICE COMMISSION, PLACE 1 (DEM)") == ("public_service_commission", "Place 1")
+        assert common.parse_statewide_office(
+            "PUBLIC SERVICE COMMISSION, PLACE 2 (REP)") == ("public_service_commission", "Place 2")
+
+    def test_alabamas_other_statewide_labels(self):
+        assert common.parse_statewide_office(
+            "COMMISSIONER OF AGRICULTURE AND INDUSTRIES (REP)") == ("agriculture_commissioner", None)
+        assert common.parse_statewide_office(
+            "STATE BOARD OF EDUCATION MEMBER DISTRICT 6 (REP)") == ("state_board_of_education", "6")
+        assert common.parse_statewide_office("STATE AUDITOR (REP)") == ("auditor", None)
+
+    def test_alabamas_county_boards_committees_and_amendments_are_refused(self):
+        for label in (
+            "MEMBER, BALDWIN COUNTY BOARD OF EDUCATION, DIST 5",
+            "STATE DEMOCRATIC EXECUTIVE COMMITTEE (MALE), DISTRICT 10 (DEM)",
+            "PROPOSED STATEWIDE AMENDMENT 1",
+            "SUPERINTENDENT, BIBB COUNTY BOARD OF EDUCATION",
+        ):
+            assert common.parse_statewide_office(label) is None, label
+
+    def test_connecticuts_secretary_of_the_state(self):
+        assert common.parse_statewide_office("Secretary of the State") == ("secretary_of_state", None)
+
+
+class TestStatewidePhrasesRefuseLocalBodies:
+    """Every _STATEWIDE_PHRASES entry skips the general locality gate, so
+    each must still refuse a local body that shares its words. The rows
+    are adversarial local labels, one or more per phrase; the real labels
+    each state prints still parse."""
+
+    @pytest.mark.parametrize("label", [
+        "Sanitary District Public Utilities Commission",
+        "Hibbing Public Utilities Commissioner",
+        "Fripp Island Public Service Commission",
+        "Water District Board of Equalization",
+        "Hospital District Chief Financial Officer",
+        "School District Chief Financial Officer",
+        "Fulton Tax Commissioner",
+        "Soil and Water Conservation District Commissioner of Agriculture",
+        "Fire District Labor Commissioner",
+        "Unified School District Superintendent of Public Instruction",
+        "Port Authority Railroad Commissioner",
+        "Belt Railroad Commission",
+        "Metropolitan Water District Governor's Council",
+        "Library District State Board of Education",
+        "Village Insurance Commissioner",
+        "County Commissioner of Public Lands",
+        "Harbor Commissioner of the General Land Office",
+        "Township Secretary of the Commonwealth",
+        "Irrigation District Commissioner of School and Public Lands",
+        "Regent of the University, Park District",
+        "Improvement District Comm. of State Lands",
+    ])
+    def test_a_local_body_is_refused(self, label):
+        assert common.parse_statewide_office(label) is None
+
+    @pytest.mark.parametrize("label,expected", [
+        ("Public Utilities Commissioner", ("public_utilities_commission", None)),
+        ("Tax Commissioner Republican", ("tax_commissioner", None)),
+        ("RAILROAD COMMISSIONER", ("railroad_commissioner", None)),
+        ("Governor's Council 3rd District", ("governors_council", "3")),
+        ("PSC - District 3", ("public_service_commission", "3")),
+        ("PUBLIC SERVICE COMMISSION, PLACE 1", ("public_service_commission", "Place 1")),
+        ("REP State Board of Education District 3", ("state_board_of_education", "3")),
+        ("MEMBER, STATE BOARD OF EDUCATION, DISTRICT 5", ("state_board_of_education", "5")),
+        ("Member, State Board of Equalization, District 2", ("board_of_equalization", "2")),
+        ("Regent of the University of Colorado - Congressional District 3", ("university_regent", "3")),
+        ("Statewide Secretary of the Commonwealth", ("secretary_of_commonwealth", None)),
+        ("Commissioner of the Bureau of Labor and Industries", ("labor_commissioner", None)),
+        ("Commissioner of School and Public Lands", ("school_public_lands_commissioner", None)),
+        ("Comm. of State Lands", ("state_lands_commissioner", None)),
+    ])
+    def test_the_state_labels_still_parse(self, label, expected):
+        assert common.parse_statewide_office(label) == expected
+
+
+class TestThresholdBoundary:
+    """A leader exactly AT the threshold. A majority is more than half
+    (GA O.C.G.A. 21-2-501, TX Elec. Code 172.003, ...); North Carolina's
+    substantial plurality is "any excess of" thirty percent (G.S.
+    163-111); Iowa's is "thirty-five percent or more" (Iowa Code 43.52),
+    the one inclusive rule. Read from each state's real source entry."""
+
+    _SOURCES = __import__("json").loads(
+        (__import__("pathlib").Path(__file__).resolve().parents[1]
+         / "app" / "data" / "state_candidate_sources.json").read_text()
+    )["states"]
+
+    def _pick(self, source, leader, rest):
+        return common.pick_nominee([("Leader", leader), *rest], common.runoff_threshold(source))
+
+    def test_exactly_half_is_no_majority_in_georgia(self):
+        assert self._pick(self._SOURCES["GA"], 500, [("B", 300), ("C", 200)]) is None
+        assert self._pick(self._SOURCES["GA"], 501, [("B", 300), ("C", 199)])[0] == "Leader"
+
+    def test_exactly_half_is_no_majority_in_texas(self):
+        # Texas's own entry reads its certified list (no threshold); its
+        # primary rule is the 50% majority of Tex. Elec. Code 172.003.
+        assert self._pick({"runoff_threshold_pct": 50}, 50, [("B", 30), ("C", 20)]) is None
+
+    def test_exactly_thirty_percent_is_not_a_substantial_plurality_in_north_carolina(self):
+        assert self._pick(self._SOURCES["NC"], 300, [("B", 290), ("C", 210), ("D", 200)]) is None
+
+    def test_exactly_thirty_five_percent_nominates_in_iowa(self):
+        assert self._SOURCES["IA"]["runoff_threshold_inclusive"] is True
+        won = self._pick(self._SOURCES["IA"], 350, [("B", 330), ("C", 320)])
+        assert won and won[0] == "Leader"
+
+    def test_only_iowa_is_inclusive(self):
+        assert [s for s, e in self._SOURCES.items() if e.get("runoff_threshold_inclusive")] == ["IA"]
+
+    def test_owed_a_runoff_agrees_with_withheld_at_the_boundary(self):
+        # Georgia's 50/50/0 Lieutenant Governor is withheld AND owed a runoff.
+        from app.pipeline.fetch import state_candidates_tabular as tb
+
+        votes = [("Leader", 500), ("B", 300), ("C", 200)]
+        threshold = common.runoff_threshold(self._SOURCES["GA"])
+        assert common.pick_nominees(votes, threshold) == []
+        assert tb._owed_a_runoff(votes, None, 1) is True
