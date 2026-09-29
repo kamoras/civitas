@@ -178,10 +178,10 @@ export default function ElectionsChapter() {
             Arkansas and Connecticut leave unseen — districts whose primary was uncontested —
             Google&apos;s election index fills in once it publishes the general election, and only
             for those races. Michigan, Ohio and Oklahoma are read from lists the states publish
-            themselves (Oklahoma&apos;s results API requires a login, so its State Election Board&apos;s
-            published list of November ballots is read instead). Nevada and New York answer every
-            request with a bot challenge, so Google&apos;s election index is their only source until
-            that changes.
+            themselves (Oklahoma&apos;s results API requires a login, so its State Election
+            Board&apos;s published list of November ballots is read instead). Nevada and New York
+            answer every request with a bot challenge, so Google&apos;s election index is their only
+            source until that changes.
           </P>
           <P>
             Where a state&apos;s results are reached through a link on its own site, each linked
