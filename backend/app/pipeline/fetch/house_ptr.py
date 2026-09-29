@@ -174,13 +174,19 @@ async def fetch_and_parse_ptr(
     if pdf_bytes is None:
         return []
 
+    # A scan's dates must fall on or before its filing date; a row whose
+    # date alone isn't legible is kept undated (ptr_common.ocr_extract_rows),
+    # with the filing date as its disclosure date.
+    filed = filing.get("filing_date") or None
     try:
-        rows, confidence = parse_pdf_bytes(pdf_bytes)
+        rows, confidence = parse_pdf_bytes(pdf_bytes, not_after=filed, keep_undated=True)
     except Exception as e:
         logger.error("Failed to parse PTR PDF %s: %s", filing["pdf_url"], e)
         return []
 
     for row in rows:
+        if not row.disclosure_date and filed:
+            row.disclosure_date = filed
         row.parse_confidence = confidence
         row.source_url = filing["pdf_url"]
         row.filing_id = filing["doc_id"]
