@@ -395,8 +395,13 @@ function DayPager({
   // By comparison, not by index: a day outside the list (an old ?date= link,
   // a day whose issues were cleaned up) still has real neighbours on it.
   const prev = currentDate ? availableDates.find((d) => d < currentDate) : undefined;
-  const next = currentDate ? [...availableDates].reverse().find((d) => d > currentDate) : undefined;
-  const nextIsLive = next !== undefined && next === availableDates[0];
+  // The live view has no "next": it is the newest thing there is. (Its date
+  // can trail availableDates[0] while nothing is marked current; see
+  // _latest_current_issues.) "Back to the latest" returns to it.
+  const next =
+    selectedDate && currentDate
+      ? [...availableDates].reverse().find((d) => d > currentDate)
+      : undefined;
 
   const short = (d: string) => formatUtcDate(d, { month: "short", day: "numeric" });
 
@@ -431,10 +436,10 @@ function DayPager({
             : "—"}
         </span>
         <button
-          onClick={() => onSelect(next && !nextIsLive ? next : null)}
-          disabled={!next && !selectedDate}
+          onClick={() => next && onSelect(next)}
+          disabled={!next}
           className={link}
-          aria-label={next ? `Next day, ${short(next)}` : "Newest day"}
+          aria-label={next ? `Next day, ${short(next)}` : "No later day"}
         >
           {next ? short(next) : "Later"} →
         </button>
@@ -500,51 +505,60 @@ function ActionPageInner() {
   const paramTab = searchParams.get("tab");
   const activeTab: Tab = isValidTab(paramTab) ? paramTab : "issues";
 
-  // ?date=, ?issue= and ?monitor= are read once, from the URL the page was
-  // opened with, and deliberately not re-read afterwards. The page writes
-  // ?date= and ?issue= back as the user pages through days and expands cards,
-  // and Next feeds a history.replaceState straight back through
-  // useSearchParams — so re-reading them would make the page treat the
-  // user's own click as a fresh arrival: SecondaryIssue would smooth-scroll
-  // the card out from under them, and the day pager would reload the day it
-  // just loaded.
+  // ?issue= and ?monitor= describe how the page was opened: an item to
+  // expand and scroll to on arrival. They are read once, from the URL the page
+  // was opened with, and not re-read: the page writes ?issue= back as cards
+  // are expanded, and Next feeds a history.replaceState straight back through
+  // useSearchParams, so re-reading it would treat the user's own click as a
+  // fresh arrival and smooth-scroll the card out from under them.
   const [deepLink] = useState(() => ({
-    date: searchParams.get("date"),
     issue: searchParams.get("issue"),
     monitor: searchParams.get("monitor"),
   }));
 
+  // Arrivals are one-shot. Any ordinary tab switch or day change clears them,
+  // or every return to a tab would re-open the item, scroll to it and pull
+  // focus off the tab bar, killing arrow-key navigation.
+  const [issueLink, setIssueLink] = useState<string | null>(deepLink.issue);
+  const [monitorSlug, setMonitorSlug] = useState<string | null>(deepLink.monitor);
+
+  // The day, by contrast, is view state, and the address bar is its source on
+  // Today, like the tab: Back and Forward land on the day the URL names. Away
+  // from Today, `todayDate` keeps the day Today was last showing, so switching
+  // back returns to it (and says so in the URL).
+  //
   // The selected day IS the request. Keying the fetch on it means the pager
-  // can't get out of step with what is on screen: there is no separate
-  // "which day did we last ask for" to drift from `selectedDate`. It lives
-  // here, not in the tab, because the pager sits in the masthead.
-  const [selectedDate, setSelectedDate] = useState<string | null>(deepLink.date);
+  // can't get out of step with what is on screen.
+  const urlDate = searchParams.get("date");
+  const [todayDate, setTodayDate] = useState<string | null>(urlDate);
+  const selectedDate = activeTab === "issues" ? urlDate : todayDate;
   const request = useAsyncData(`action-issues:${selectedDate ?? "latest"}`, () =>
     fetchActionIssues(selectedDate || undefined)
   );
 
   const selectDate = useCallback(
     (d: string | null) => {
-      setSelectedDate(d);
+      setTodayDate(d);
+      setIssueLink(null);
       replaceUrl(issuesUrl(d, null));
     },
     [replaceUrl]
   );
 
-  // The monitor to open on arrival at the Ongoing tab. One-shot: cleared by
-  // any ordinary tab switch, or every return to Ongoing would re-open the row
-  // and pull focus off the tab bar, killing arrow-key navigation.
-  const [monitorSlug, setMonitorSlug] = useState<string | null>(deepLink.monitor);
-
   const setActiveTab = useCallback(
     (tab: Tab) => {
-      setMonitorSlug(null);
-      // Today keeps the day it was showing, so the address says which.
-      pushUrl(tab === "issues" ? issuesUrl(selectedDate, null) : `/action?tab=${tab}`);
+      // Re-selecting the showing tab is not a navigation: no history entry,
+      // and nothing it shows is reset.
+      if (tab !== activeTab) {
+        if (activeTab === "issues") setTodayDate(urlDate);
+        setMonitorSlug(null);
+        setIssueLink(null);
+        pushUrl(tab === "issues" ? issuesUrl(todayDate, null) : `/action?tab=${tab}`);
+      }
       // The panel stays tabbable (tabIndex=0), so Tab still reaches content.
       focusTabWhenSelected(`tab-${tab}`);
     },
-    [pushUrl, selectedDate]
+    [pushUrl, activeTab, urlDate, todayDate]
   );
 
   // Opening a monitor or a day from inside the page. Both are links out in the
@@ -554,13 +568,15 @@ function ActionPageInner() {
   const openMonitor = useCallback(
     (slug: string) => {
       setMonitorSlug(slug);
+      setIssueLink(null);
       pushUrl(`/action?tab=monitors&monitor=${encodeURIComponent(slug)}`);
     },
     [pushUrl]
   );
   const openDay = useCallback(
     (d: string) => {
-      setSelectedDate(d);
+      setTodayDate(d);
+      setIssueLink(null);
       pushUrl(issuesUrl(d, null));
       window.scrollTo({ top: 0 });
       focusTabWhenSelected("tab-issues");
@@ -655,7 +671,7 @@ function ActionPageInner() {
               <IssuesTab
                 request={request}
                 selectedDate={selectedDate}
-                initialIssueId={deepLink.issue}
+                initialIssueId={issueLink}
                 onIssueChange={handleIssueChange}
                 onMonitor={openMonitor}
               />
@@ -667,7 +683,7 @@ function ActionPageInner() {
               <TimelineTab
                 onOpenDay={openDay}
                 onOpenMonitor={openMonitor}
-                openableDates={request.data?.availableDates ?? []}
+                openableDates={request.data ? (request.data.availableDates ?? []) : null}
               />
             )}
           </div>

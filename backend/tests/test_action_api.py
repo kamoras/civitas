@@ -788,7 +788,38 @@ class TestIssuesListPagerFields:
         assert resp["issues"] == []
         assert resp["availableDates"] == ["2026-09-28"]
 
-    async def test_generated_at_is_the_latest_refresh_and_only_for_the_live_view(self, db_session):
+    async def test_generated_at_is_the_latest_run_that_wrote_issues(self, db_session):
+        # An aborted run (feeds down) still writes a metrics row; "Updated"
+        # must not read as fresh over issues it didn't touch.
+        import json
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+        from app.models import ApiCache
+
+        def run(key, at, **counts):
+            return ApiCache(tier="action-metrics", cache_key=key,
+                            data_json=json.dumps({"counts": counts}), cached_at=at)
+
+        db_session.add(ActionIssue(date="2026-09-29", rank=1, title="Live", summary="s", is_current=True))
+        db_session.add_all([
+            run("a", datetime(2026, 9, 29, 12, 15), issues_new_topic=2),
+            run("b", datetime(2026, 9, 29, 13, 15), issues_matched_existing=3),
+            run("c", datetime(2026, 9, 29, 14, 15), articles_fetched=0),  # aborted
+            ApiCache(tier="other", cache_key="d", data_json="{}", cached_at=datetime(2026, 9, 29, 15, 0)),
+        ])
+        db_session.commit()
+
+        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        past = await get_action_issues(Response(), date="2026-09-29", db=db_session, db_visits=db_session)
+
+        assert live["generatedAt"] == "2026-09-29T13:15:00Z"
+        assert past["generatedAt"] is None
+
+    async def test_no_recent_run_wrote_issues_omits_generated_at(self, db_session):
+        import json
         from datetime import datetime
 
         from fastapi import Response
@@ -797,15 +828,10 @@ class TestIssuesListPagerFields:
         from app.models import ApiCache
 
         db_session.add(ActionIssue(date="2026-09-29", rank=1, title="Live", summary="s", is_current=True))
-        db_session.add_all([
-            ApiCache(tier="action-metrics", cache_key="a", data_json="{}", cached_at=datetime(2026, 9, 29, 13, 0)),
-            ApiCache(tier="action-metrics", cache_key="b", data_json="{}", cached_at=datetime(2026, 9, 29, 14, 15)),
-            ApiCache(tier="other", cache_key="c", data_json="{}", cached_at=datetime(2026, 9, 29, 15, 0)),
-        ])
+        db_session.add(ApiCache(tier="action-metrics", cache_key="x",
+                                data_json=json.dumps({"counts": {"articles_fetched": 0}}),
+                                cached_at=datetime(2026, 9, 29, 14, 15)))
         db_session.commit()
 
         live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
-        past = await get_action_issues(Response(), date="2026-09-29", db=db_session, db_visits=db_session)
-
-        assert live["generatedAt"] == "2026-09-29T14:15:00Z"
-        assert past["generatedAt"] is None
+        assert live["generatedAt"] is None

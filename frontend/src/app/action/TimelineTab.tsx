@@ -24,8 +24,11 @@ interface Handlers {
   /** Days the Action Center still has issues for (its pager's list). Older
    *  unposted issues are deleted after 14 days
    *  (action_center._cleanup_old_unposted_issues), so an older day would
-   *  open onto nothing; the entry here is its record. */
-  openableDates: string[];
+   *  open onto nothing; the entry here is its record. Null while that list
+   *  is unknown (loading, or its request failed): every day stays openable
+   *  rather than the rows changing shape once it lands, and Today says so
+   *  if a day turns out to be empty. */
+  openableDates: string[] | null;
 }
 
 const dayLabel = (d: string) => formatUtcDate(d, { month: "short", day: "2-digit" }).toUpperCase();
@@ -44,7 +47,7 @@ function DayRow({
   openableDates,
 }: { entry: TimelineEntry } & Handlers) {
   const source = safeHref(entry.sourceUrl);
-  const openable = openableDates.includes(entry.date);
+  const openable = openableDates === null || openableDates.includes(entry.date);
   return (
     <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-white/[0.07] py-2.5">
       <span className="font-mono text-xs tracking-[0.08em] tabular-nums text-ink-min">

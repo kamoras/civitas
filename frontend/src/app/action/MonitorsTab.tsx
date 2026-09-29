@@ -189,9 +189,16 @@ function OffListMonitor({ slug }: { slug: string }) {
         role="status"
         className="mb-6 border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo"
       >
-        {gone
-          ? "That concern is no longer tracked, and its record has been removed."
-          : "Could not load that concern right now."}
+        {gone ? (
+          "That concern is no longer tracked, and its record has been removed."
+        ) : (
+          <>
+            Could not load that concern right now.{" "}
+            <button onClick={request.retry} className={TEXT_LINK}>
+              Try again
+            </button>
+          </>
+        )}
       </p>
     );
   }

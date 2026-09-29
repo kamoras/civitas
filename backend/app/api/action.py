@@ -338,6 +338,31 @@ def _trending_ids_for(issues: list[ActionIssue], db_visits: Session) -> set[str]
     return compute_trending_issue_ids(view_counts)
 
 
+# Runs to look back through for one that wrote issues: two days of hourly
+# refreshes. Past that the line is omitted rather than naming a stale time.
+_REFRESH_LOOKBACK_RUNS = 48
+
+
+def _last_refresh_with_issues(db: Session) -> str | None:
+    """ISO time (UTC, "Z") of the newest Action Center run that published or
+    re-matched at least one issue, or None if none did recently."""
+    rows = (
+        db.query(ApiCache.cached_at, ApiCache.data_json)
+        .filter(ApiCache.tier == "action-metrics")
+        .order_by(ApiCache.cached_at.desc())
+        .limit(_REFRESH_LOOKBACK_RUNS)
+        .all()
+    )
+    for cached_at, data_json in rows:
+        try:
+            counts = json.loads(data_json).get("counts", {})
+        except (ValueError, TypeError, AttributeError):
+            continue
+        if counts.get("issues_new_topic", 0) + counts.get("issues_matched_existing", 0) > 0:
+            return cached_at.isoformat() + "Z"
+    return None
+
+
 @router.get("/issues")
 async def get_action_issues(
     response: Response,
@@ -359,20 +384,12 @@ async def get_action_issues(
         .limit(14)
         .all()
     ]
-    # When the live view was last refreshed: the newest run's metrics row
-    # (action_metrics.py writes one per hourly run, abort paths included).
+    # When the live view was last refreshed: the newest run that wrote
+    # issues. Every run leaves an action-metrics row (action_metrics.py),
+    # aborted ones included, so the newest row alone would read "updated
+    # just now" over issues hours old exactly when the feeds are down.
     # Only for the live view; a past day's page is not "updated".
-    generated_at = None
-    if date is None:
-        latest_run = (
-            db.query(ApiCache.cached_at)
-            .filter(ApiCache.tier == "action-metrics")
-            .order_by(ApiCache.cached_at.desc())
-            .limit(1)
-            .scalar()
-        )
-        if latest_run is not None:
-            generated_at = latest_run.isoformat() + "Z"
+    generated_at = _last_refresh_with_issues(db) if date is None else None
 
     if not issues:
         return {
