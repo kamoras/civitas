@@ -92,18 +92,18 @@ column: presidents.gdp_growth_adjusted` on the migrated copy.
 
 ### Pending contract
 
-`0018` dropped the columns no image had mapped since v6.13 (outside
+`0019` dropped the columns no image had mapped since v6.13 (outside
 spending, the opposing-party unity figure, GDP-adjusted growth) and released
 the ones below: unmapped, made nullable so this image's inserts can leave
 them out, kept in the database because the image before still selects them.
 `tests/test_alembic_migrations.py`'s `UNMAPPED_PENDING_DROP` lists them, and
 checks each is still present and nullable.
 
-Write the drops as the next free revision once an image from `0018` or later
+Write the drops as the next free revision once an image from `0019` or later
 is the running one, and remove each from `UNMAPPED_PENDING_DROP`:
 
 | Change | Why it waits |
 |---|---|
-| Drop `justices.score_consistency`, `score_independence`, `score_bipartisan_agreement`, `score_judicial_restraint` | Unscored since justice v2 / v6.13; images before `0018` still map them. |
-| Drop `candidates.last_coverage_search` | The Bluesky candidate search it paced was removed; images before `0018` still map it. |
+| Drop `justices.score_consistency`, `score_independence`, `score_bipartisan_agreement`, `score_judicial_restraint` | Unscored since justice v2 / v6.13; images before `0019` still map them. |
+| Drop `candidates.last_coverage_search` | The Bluesky candidate search it paced was removed; images before `0019` still map it. |
 | Rename `score_independent_voting` → `score_constituent_alignment` on `senators` and `representatives` | Every image so far maps `score_constituent_alignment` onto the old column name, so an in-place rename breaks the running one. It needs two releases: add the new column and write both, then drop the old one. |
