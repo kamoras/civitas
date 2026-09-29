@@ -1166,7 +1166,9 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
 @router.get("/timeline")
 async def get_timeline(
     response: Response,
-    year: int | None = Query(None, description="Year (defaults to current)"),
+    # Bounded: the handler builds calendar dates from it, and date() refuses
+    # a year outside 1-9999 with a 500 rather than a 422.
+    year: int | None = Query(None, ge=1900, le=2100, description="Year (defaults to current)"),
     db: Session = Depends(get_db),
 ):
     """Return the year's timeline with hierarchical week/month/year structure."""
