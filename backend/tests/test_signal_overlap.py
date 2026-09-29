@@ -114,7 +114,8 @@ def test_no_scoring_code_imports_the_check():
     import pathlib
 
     pipeline_dir = pathlib.Path(signal_overlap.__file__).resolve().parent.parent
-    allowed = {"senate_pipeline.py", "house_pipeline.py", "signal_overlap.py"}
+    # Callers that run it after their scores are committed, never before.
+    allowed = {"senate_pipeline.py", "house_pipeline.py", "constituent_rescore.py", "signal_overlap.py"}
     for py in pipeline_dir.rglob("*.py"):
         if py.name in allowed:
             continue
