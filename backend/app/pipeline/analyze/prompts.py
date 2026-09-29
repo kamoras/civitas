@@ -58,11 +58,14 @@ SUMMARY: <2-3 sentences: what does this document do? What is its purpose and sub
 
 
 def _before_a_partial_marker(text: str) -> str | None:
-    """`text` without a section marker it ends partway through ("...\nKEY
-    POI"), or None when it doesn't end in one."""
+    """`text` whole up to where it stopped — without a section marker it
+    ends partway through ("...\nKEY POI"), or all of it when it stopped just
+    after a line ended — or None when it stopped mid-line."""
     head, newline, last = text.rstrip(" ").rpartition("\n")
-    if not newline or not last:
+    if not newline:
         return None
+    if not last:  # stopped right after a newline: every line is whole
+        return head
     for marker in (SUMMARY_KEY_POINTS_MARKER, SUMMARY_IMPACT_MARKER):
         if marker != last and marker.startswith(last):
             return head

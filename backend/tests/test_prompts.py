@@ -89,3 +89,10 @@ class TestCutOff:
         }
         text = "SUMMARY: Whole.\nKEY POINTS:\n- One\n- Two\nIMPA"
         assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One", "Two"]
+
+    def test_cut_just_after_a_line_ended_keeps_that_line(self):
+        assert parse_explore_document_summary("SUMMARY: The bill does X.\n", cut_off=True)["summary"] == (
+            "The bill does X."
+        )
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\n- b\n"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a", "b"]

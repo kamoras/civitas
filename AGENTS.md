@@ -1017,7 +1017,10 @@ the pending list).
     Every row expires. The hourly upstream-lookup
     budget (`rate_limit.spend_upstream`) is one shared count the same way.
     Caches of data every client sees alike (`bill_service`'s collection
-    cache) are fine per process.
+    cache) are fine per process. So is state in the pipeline process, which
+    is always exactly one process (it refuses to start as several):
+    `services/explore_summary.py` keeps its one-generation-per-client rule
+    there, keyed by `throttle.client_key`, whole by construction.
   - A module cache of a file the pipeline rewrites must notice the rewrite
     from the API process: keep a `file_cache.files_stamp` of it and reload
     when it moves. Clearing the cache from the writer only clears the

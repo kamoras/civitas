@@ -219,14 +219,16 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
     if (stream := joined()) is not None:
         return stream
     now = time.monotonic()
-    if _llm_busy_until > now:
-        raise _busy(_llm_busy_until - now)
     held = _holds.get(key)
     if held is not None:
         why, until = held
         if why == "slow":
             raise Refusal(503, "This summary took too long a moment ago; please try again shortly.", until - now)
         return once({"done": True, **_NOTHING})  # unusable: the answer, not a wait
+    # After the text's own holds: an unusable text's answer doesn't wait on
+    # the LLM.
+    if _llm_busy_until > now:
+        raise _busy(_llm_busy_until - now)
     if client is None:
         raise Refusal(503, "Summaries are unavailable right now; please try again shortly.",
                       throttle.UNAVAILABLE_RETRY_AFTER_S)
