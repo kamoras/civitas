@@ -163,10 +163,12 @@ class TestSupplementaryPipelineRunTracking:
         alert.assert_called_once()
         assert why in alert.call_args.args[1]
 
-    def test_a_measured_run_sends_no_alert(self, db_session):
-        with patch("app.pipeline.supplementary_pipeline.send_ops_alert") as alert:
+    def test_a_measured_run_sends_no_alert_and_resolves_an_open_one(self, db_session):
+        with patch("app.pipeline.supplementary_pipeline.send_ops_alert") as alert, \
+             patch("app.pipeline.supplementary_pipeline.resolve_ops_alert") as resolve:
             _run(db_session, justice_result={"justices": 9, "loyalty_unmeasured": None})
         alert.assert_not_called()
+        resolve.assert_called_once_with("justice-loyalty-unmeasured")
 
     def test_committee_leadership_skipped_outside_weekly_cadence_when_not_missing(self, db_session):
         with patch("app.pipeline.supplementary_pipeline.utcnow",

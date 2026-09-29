@@ -1002,7 +1002,7 @@ class TestAlertsAndCadence:
     def test_a_new_failure_later_in_the_day_is_not_silenced(self, monkeypatch):
         keys = []
         monkeypatch.setattr("app.ops_alerts.send_ops_alert",
-                            lambda subject, body, dedupe_key=None: keys.append(dedupe_key))
+                            lambda subject, body, dedupe_key=None, condition=None: keys.append(dedupe_key))
         sc.report_file_problems("s", "l", ["WV: raised X"], "k")
         sc.report_file_problems("s", "l", ["WV: raised X again"], "k")
         sc.report_file_problems("s", "l", ["WV: raised X", "TX: raised Y"], "k")
