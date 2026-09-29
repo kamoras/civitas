@@ -1259,6 +1259,15 @@ export interface AdminDashboard {
     lastRun?: PipelineRunInfo;
   };
   llm: Record<string, unknown>;
+  /** ops_alerts.recent_alerts: the newest ten, newest first. */
+  opsAlerts?: OpsAlert[];
+}
+
+/** One operator alert (backend ops_alerts.send_ops_alert). */
+export interface OpsAlert {
+  subject: string;
+  body: string;
+  at: string;
 }
 
 export async function fetchAdminDashboard(token: string): Promise<AdminDashboard> {

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
 import {
   AboutPage,
@@ -58,7 +59,12 @@ export default function PresidentsAndJusticesChapter() {
           historical or expert-survey data. The ranked list compares past presidents; the sitting
           president is shown on their own, since comparison with predecessors is the only meaningful
           ranking for that office. The leaderboard shows the sitting president&apos;s scores above
-          the ranked list, linking to the full scorecard.
+          the ranked list, linking to the full scorecard. Any two presidents, the sitting one
+          included, can be set side by side on the{" "}
+          <Link href="/compare/presidents" className="underline underline-offset-2 hover:text-phos">
+            president comparison
+          </Link>
+          , which shows both scores and the same figures without ranking either.
         </P>
         <P>
           A president&apos;s page shows each score beside the figures it is scored on and the
