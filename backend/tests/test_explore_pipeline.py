@@ -522,7 +522,7 @@ async def test_a_skipped_embed_step_owes_the_backfilled_documents_to_the_next_ru
 
     embed = MagicMock(return_value=1)
     await run(index_is_whole=MagicMock(return_value=True), top_up_explore_index=embed)
-    assert [d["id"] for d in embed.call_args.args[0]] == [doc_id]
+    assert [d["id"] for d in embed.call_args.args[0]()] == [doc_id]
     assert api_cache_get(db_session, "explore", "reembed_owed", max_age_hours=24) is None
 
 
@@ -589,3 +589,29 @@ async def test_a_rebuild_that_completes_pays_what_was_owed_and_resolves_the_aler
         assert await explore_pipeline._embed_step(db_session, set()) == 0
     owe.assert_called_once_with(db_session, set())
     resolve.assert_called_once_with("explore-index-rebuild")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error,raised", [("database is locked", False), ("disk I/O error", True)])
+async def test_a_top_up_that_raises_owes_the_backfill(db_session, error, raised):
+    # Its reading of what is embedded too: unreadable must not read as
+    # empty and re-encode the whole corpus.
+    import sqlite3
+
+    from app.pipeline import explore_pipeline
+
+    owe = MagicMock()
+    with patch.object(explore_pipeline, "_owed_reembeds", return_value=set()), \
+         patch.object(explore_pipeline, "_owe_reembeds", owe), \
+         patch.object(explore_pipeline, "index_is_whole", return_value=True), \
+         patch.object(explore_pipeline, "get_embedded_explore_ids", side_effect=sqlite3.OperationalError(error)), \
+         patch.object(explore_pipeline, "embed_explore_documents", create=True) as embed, \
+         patch("app.pipeline.vector_store.embed_explore_documents") as real_embed:
+        if raised:
+            with pytest.raises(sqlite3.OperationalError):
+                await explore_pipeline._embed_step(db_session, {7})
+        else:
+            assert await explore_pipeline._embed_step(db_session, {7}) == 0
+    owe.assert_called_once_with(db_session, {7})
+    embed.assert_not_called()
+    real_embed.assert_not_called()

@@ -403,7 +403,7 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
         try:
             # Waiting out one already running (a start's): embedding beside
             # it would insert every missing document's chunks twice.
-            rebuilt = await asyncio.to_thread(rebuild_explore_index, SessionLocal, wait=True)
+            rebuilt = await asyncio.to_thread(rebuild_explore_index, SessionLocal, wait=True, if_incomplete=True)
         except Exception as exc:
             if is_busy_error(exc):
                 logger.warning("Explore pipeline: vector index busy — rebuild left to the next run (%s)", exc)
@@ -430,8 +430,18 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
                 await asyncio.to_thread(_purge_orphaned_vectors, db)
                 whole = True
     if whole is True:
-        embedded = await _top_up(db, refreshed_ids)
-        outcome = "topped up"
+        try:
+            embedded = await _top_up(db, refreshed_ids)
+            outcome = "topped up"
+        except Exception as exc:
+            # Owed either way; a lock skips the step, anything else fails
+            # the run as it always has.
+            if refreshed_ids:
+                await asyncio.to_thread(_owe_reembeds, db, refreshed_ids)
+            if not is_busy_error(exc):
+                raise
+            logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", exc)
+            return 0
 
     if outcome == "skipped" or outcome == "failed":
         if refreshed_ids:
@@ -447,17 +457,21 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
 
 
 def _to_embed(db: Session, refreshed_ids: set[int]) -> list[dict]:
-    all_docs = db.query(ExploreDocument).all()
-    try:
-        already = get_embedded_explore_ids()
-    except Exception:
-        already = set()
-    return [explore_embed_dict(d) for d in all_docs if d.id not in already or d.id in refreshed_ids]
+    """The documents the index lacks, and the ones whose body changed. An
+    unreadable index raises (a lock is a skip): read as empty, it would
+    re-encode the whole corpus. Ids first, then only those documents'
+    rows: bodies are long, and most are embedded already."""
+    already = get_embedded_explore_ids()
+    wanted = [i for (i,) in db.query(ExploreDocument.id) if i not in already or i in refreshed_ids]
+    docs = []
+    for start in range(0, len(wanted), 500):
+        batch = wanted[start:start + 500]
+        docs += db.query(ExploreDocument).filter(ExploreDocument.id.in_(batch)).order_by(ExploreDocument.id).all()
+    return [explore_embed_dict(d) for d in docs]
 
 
 async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
     logger.info("Explore pipeline: embedding documents into vector store...")
-    doc_dicts = await asyncio.to_thread(_to_embed, db, refreshed_ids)
     # Off the event loop: encoding is pure CPU inside sentence-transformers
     # and ran for 23 MINUTES in one call against the real corpus (1,557
     # documents / 11,022 chunks, measured on the Pi 2026-09-20). Awaiting it
@@ -473,7 +487,7 @@ async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
     # donor_classifier_ai.py and api/explore.py already give their own
     # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
     # start's rebuild waits for it rather than embed beside it.
-    return await asyncio.to_thread(top_up_explore_index, doc_dicts)
+    return await asyncio.to_thread(top_up_explore_index, lambda: _to_embed(db, refreshed_ids))
 
 
 # api_cache: ids whose re-embed a skipped embed step still owes. Rewritten by

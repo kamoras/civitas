@@ -242,6 +242,9 @@ _INDEX_MODEL = "explore_index_model"
 # process): two overlapping would each clear what the other built, and
 # whichever finished first would record a partial index as complete.
 _rebuild_lock = threading.Lock()
+# Set while a rebuild (not a top-up, which holds the lock too) runs: what
+# is_rebuilding and the dashboard report.
+_rebuilding = threading.Event()
 
 # Documents a rebuild reads and embeds at a time.
 _REBUILD_BATCH = 500
@@ -697,8 +700,12 @@ def embed_explore_documents(docs: list[dict]) -> int:
             conn.commit()
 
     if _get_meta(conn, _INDEX_MODEL) is None:
-        # Never built: this call built it (the first Explore run embeds every
-        # document at once). Otherwise only a complete rebuild records it.
+        # A store never built at all (no identity, blank or other): only a
+        # direct caller's embed reaches here — tests, a one-off script —
+        # since every pipeline path builds through rebuild_explore_index,
+        # which blanks the identity first. Recorded so such a caller can
+        # search what it embedded; a partial or other-model index always
+        # carries an identity, and is never recorded here.
         _set_meta(conn, _INDEX_MODEL, index_identity())
     # Mean chunks per document, measured rather than assumed: the search
     # path needs it to know how many chunk slots to request for a given
@@ -848,7 +855,7 @@ def collection_stats() -> dict:
         # or not, or another model built it: search is off until a rebuild
         # completes), or "" (ready, or never built: nothing to search yet).
         "indexRebuild": (
-            "running" if _rebuild_lock.locked()
+            "running" if _rebuilding.is_set()
             else "incomplete" if recorded == "" or (explore and recorded != index_identity())
             else ""
         ),
@@ -977,11 +984,12 @@ def explore_embed_dict(d) -> dict:
     }
 
 
-def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | None:
+def rebuild_explore_index(db_session_factory, *, wait: bool = False, if_incomplete: bool = False) -> int | None:
     """Rebuild the explore index from scratch, in the calling thread: the
-    documents embedded, or None when a rebuild is already running here — or,
-    with `wait`, None once that one has finished and left the index whole
-    (an Explore run then tops it up, rather than embedding beside it).
+    documents embedded, or None when it didn't. Without `wait`, None when a
+    rebuild or top-up is already running here; with it, waiting that out.
+    With `if_incomplete`, None when the index is (by then) a complete build
+    — an Explore run then tops it up, rather than embedding beside it.
 
     DROP + recreate, not DELETE FROM: INDEX_SCHEMA_VERSION signals a COLUMN
     LAYOUT change (e.g. adding doc_id when chunking landed), and a vec0
@@ -997,7 +1005,7 @@ def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | No
     try:
         from app.models import ExploreDocument
 
-        if wait:
+        if if_incomplete:
             try:
                 whole = index_is_whole()
             except Exception as error:
@@ -1008,6 +1016,7 @@ def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | No
             if whole:
                 return None
 
+        _rebuilding.set()
         conn = get_vec_conn()
         # Not ready from here until the last batch is in (_INDEX_MODEL):
         # blanked with the swap, so a swap that fails leaves a whole index
@@ -1039,6 +1048,7 @@ def rebuild_explore_index(db_session_factory, *, wait: bool = False) -> int | No
         logger.info("Explore index rebuild complete: %d documents", total)
         return total
     finally:
+        _rebuilding.clear()
         _rebuild_lock.release()
 
 
@@ -1060,12 +1070,14 @@ _BUSY_CHECKS = 10
 _BUSY_CHECK_EVERY_S = 30.0
 
 
-def top_up_explore_index(docs: list[dict]) -> int:
-    """embed_explore_documents for an Explore run's incremental step, under
-    the rebuild lock: a start's rebuild waits for it (and then looks again)
-    rather than embed the same documents beside it."""
+def top_up_explore_index(docs_to_embed) -> int:
+    """An Explore run's incremental step, under the rebuild lock: a start's
+    rebuild waits for it (and then looks again) rather than embed the same
+    documents beside it. `docs_to_embed()` is asked under the lock, so what
+    it finds missing is what the index lacks then, not before a rebuild
+    this waited out."""
     with _rebuild_lock:
-        return embed_explore_documents(docs)
+        return embed_explore_documents(docs_to_embed())
 
 
 def wait_for_rebuild() -> None:
@@ -1102,16 +1114,15 @@ def _refit_after_a_start_rebuild(db_session_factory) -> None:
 
 
 def is_rebuilding() -> bool:
-    """Whether the explore index is being rebuilt, or topped up, in this
-    process (the pipeline's): check-and-deploy.sh waits it out like a run."""
-    return _rebuild_lock.locked()
+    """Whether the explore index is being rebuilt in this process (the
+    pipeline's): check-and-deploy.sh waits it out like a run."""
+    return _rebuilding.is_set()
 
 
 def index_is_whole() -> bool:
-    """Whether the explore index is a complete build by this model."""
-    conn = get_vec_conn()
-    count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    return _get_meta(conn, _INDEX_MODEL) == index_identity() and count > 0
+    """Whether the explore index is a complete build by this model — an
+    empty corpus's, empty, included: only a completed build records it."""
+    return _get_meta(get_vec_conn(), _INDEX_MODEL) == index_identity()
 
 
 def ensure_explore_index(db_session_factory) -> None:
@@ -1163,11 +1174,14 @@ def ensure_explore_index(db_session_factory) -> None:
             logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
             # Waiting out an Explore run's top-up (or its rebuild) rather
             # than embedding beside it; None when that left it whole.
-            if rebuild_explore_index(db_session_factory, wait=True) is None:
+            if rebuild_explore_index(db_session_factory, wait=True, if_incomplete=True) is None:
                 return
         except Exception:
             logger.exception("Explore index rebuild failed — not ready until one completes")
             return
+        from app.ops_alerts import resolve_ops_alert
+
+        resolve_ops_alert("explore-index-rebuild")  # whole again
         try:
             _refit_after_a_start_rebuild(db_session_factory)
         except Exception:

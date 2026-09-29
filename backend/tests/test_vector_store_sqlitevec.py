@@ -290,7 +290,7 @@ class TestEnsureExploreIndex:
         vector_store.embed_explore_documents([_doc(1, "Anything")])
         embed = MagicMock()
         monkeypatch.setattr(vector_store, "embed_explore_documents", embed)
-        assert vector_store.rebuild_explore_index(lambda: None, wait=True) is None
+        assert vector_store.rebuild_explore_index(lambda: None, wait=True, if_incomplete=True) is None
         embed.assert_not_called()
 
     def test_a_run_rebuilds_an_index_it_cannot_read(self, vec_env, db_session, monkeypatch):
@@ -304,7 +304,7 @@ class TestEnsureExploreIndex:
             raise sqlite3.OperationalError("database disk image is malformed")
 
         monkeypatch.setattr(vector_store, "index_is_whole", unreadable)
-        assert vector_store.rebuild_explore_index(lambda: db_session, wait=True) == 1
+        assert vector_store.rebuild_explore_index(lambda: db_session, wait=True, if_incomplete=True) == 1
 
     def test_an_index_a_rebuild_left_empty_reads_incomplete(self, vec_env):
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
@@ -396,21 +396,26 @@ class TestEnsureExploreIndex:
     def test_a_runs_top_up_holds_the_rebuild_lock(self, vec_env, monkeypatch):
         # A start's rebuild waits for it rather than embed the same
         # documents beside it.
+        # And it asks what is missing under the lock, not before a rebuild
+        # it waited out. Not reported as a rebuild, though: it isn't one.
         seen = []
-        monkeypatch.setattr(vector_store, "embed_explore_documents",
-                            lambda docs: seen.append(vector_store.is_rebuilding()) or 0)
-        vector_store.top_up_explore_index([_doc(1, "x")])
-        assert seen == [True] and not vector_store.is_rebuilding()
+        monkeypatch.setattr(vector_store, "embed_explore_documents", lambda docs: seen.append(docs) or 0)
+        vector_store.top_up_explore_index(lambda: [vector_store._rebuild_lock.locked(), vector_store.is_rebuilding()])
+        assert seen == [[True, False]] and not vector_store._rebuild_lock.locked()
 
     def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
         # Two overlapping would each clear what the other built.
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
         with vector_store._rebuild_lock:
-            with patch.object(vector_store, "start_writer") as thread:
-                vector_store.ensure_explore_index(lambda: None)
-            thread.assert_not_called()
-            assert vector_store.rebuild_explore_index(lambda: None) is None
-            assert vector_store.collection_stats()["indexRebuild"] == "running"
+            vector_store._rebuilding.set()
+            try:
+                with patch.object(vector_store, "start_writer") as thread:
+                    vector_store.ensure_explore_index(lambda: None)
+                thread.assert_not_called()
+                assert vector_store.rebuild_explore_index(lambda: None) is None
+                assert vector_store.collection_stats()["indexRebuild"] == "running"
+            finally:
+                vector_store._rebuilding.clear()
 
     def test_a_rebuild_that_raised_is_not_ready_until_one_completes(self, vec_env, db_session, monkeypatch):
         db_session.add(ExploreDocument(
@@ -597,7 +602,7 @@ async def test_the_admin_re_embed_runs_in_the_background_and_refuses_when_it_can
     from app.pipeline import lease
 
     done = _t.Event()
-    monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda _factory: (done.set(), 0)[1])
+    monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda _factory, **_k: (done.set(), 0)[1])
     monkeypatch.setattr(vector_store, "_write_model_version", lambda: None)
     monkeypatch.setattr("app.pipeline.lexical_index.rebuild_index", lambda db: 0)
     monkeypatch.setattr("app.pipeline.analyze.document_authority.update_document_authority", lambda db: {})
@@ -605,9 +610,12 @@ async def test_the_admin_re_embed_runs_in_the_background_and_refuses_when_it_can
     assert await admin_reembed_explore(db=db_session) == {"started": True}
     assert done.wait(5)
 
-    with vector_store._rebuild_lock:
+    vector_store._rebuilding.set()
+    try:
         with pytest.raises(HTTPException) as refused:
             await admin_reembed_explore(db=db_session)
+    finally:
+        vector_store._rebuilding.clear()
     assert refused.value.status_code == 409
 
     # Held by an Explore run: refused with the reason, not started to skip.

@@ -138,8 +138,11 @@ async def test_status_reports_an_explore_index_rebuild_so_deploys_wait_it_out(db
     from app.pipeline import vector_store
 
     assert (await admin_pipeline_status(db=db_session))["exploreIndexIsRebuilding"] is False
-    with vector_store._rebuild_lock:
+    vector_store._rebuilding.set()
+    try:
         assert (await admin_pipeline_status(db=db_session))["exploreIndexIsRebuilding"] is True
+    finally:
+        vector_store._rebuilding.clear()
 
 
 @pytest.mark.asyncio

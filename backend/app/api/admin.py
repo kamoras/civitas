@@ -1398,9 +1398,10 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     from app.pipeline import lease
     from app.pipeline.analyze.document_authority import update_document_authority
     from app.pipeline.lexical_index import rebuild_index
-    from app.pipeline.vector_store import _rebuild_lock, rebuild_explore_index, recalibrate_ranking
+    from app.ops_alerts import resolve_ops_alert
+    from app.pipeline.vector_store import is_rebuilding, rebuild_explore_index, recalibrate_ranking
 
-    if _rebuild_lock.locked():
+    if is_rebuilding():
         raise HTTPException(status_code=409, detail="Explore re-embed not started: the index is already being rebuilt")
 
     def why_not(session: Session) -> str | None:
@@ -1422,10 +1423,9 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
             if not held:
                 return  # logged as a skip by lease.job
             try:
-                count = rebuild_explore_index(SessionLocal)
-                if count is None:
-                    logger.warning("Explore re-embed skipped: the index is already being rebuilt")
-                    return
+                # Waiting out a top-up (or a rebuild begun since the check).
+                count = rebuild_explore_index(SessionLocal, wait=True)
+                resolve_ops_alert("explore-index-rebuild")  # whole again
                 # Not _write_model_version: that records the classification
                 # model's vectors as current, which this doesn't touch.
                 db = SessionLocal()
