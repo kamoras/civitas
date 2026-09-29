@@ -380,6 +380,7 @@ export default function LineChart({
           </summary>
           <div className="mt-1 max-h-64 overflow-auto">
             <table className="w-full text-xs font-mono">
+              <caption className="sr-only">{title}</caption>
               <thead>
                 <tr className="border-b border-white/[0.07] text-ink-lo">
                   <th scope="col" className="py-1 pr-3 text-left font-normal">

@@ -642,7 +642,9 @@ def _reset_caches() -> None:
 #
 # Every House score is stored with the Congress whose lines it was computed
 # on (Representative.district_lines_congress, written by
-# upsert_representative from lines_congress()), and the API's "show the
+# upsert_representative from lines_congress(), or by the startup
+# Constituent Alignment rescore from current_lines() in the same commit as
+# the scores it rewrites), and the API's "show the
 # math" breakdown recomputes Constituent Alignment on THOSE lines
 # (lines_of). Without it the breakdown read whatever the file's top-level
 # table was: from the moment a House run switched the lines until it had

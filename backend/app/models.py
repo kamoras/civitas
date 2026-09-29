@@ -360,7 +360,8 @@ class Representative(Base):
     # when the Clerk lists no date.
     sworn_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # The Congress whose district lines the stored scores were computed on
-    # (fetch/district_pvi.lines_congress, recorded by upsert_representative).
+    # (fetch/district_pvi.lines_congress, recorded by upsert_representative,
+    # or by the startup Constituent Alignment rescore from current_lines()).
     # The API's breakdown recomputes Constituent Alignment on these same
     # district lines (district_pvi.lines_of) — while a House run is part-way
     # through switching Congresses, after one that failed, and for a member
