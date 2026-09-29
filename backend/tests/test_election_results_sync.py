@@ -629,8 +629,17 @@ def _on_election_day():
         yield
 
 
-def _reset(db):
-    """A data reset: the count and its events go, the issues stay."""
+ELECTION_NIGHT = datetime(2026, 11, 4, 2, 0)  # 9pm Eastern, naive UTC
+
+
+def _reset(db, members=False):
+    """A data reset: the count and its events go, the issues stay (made on
+    election night — the tests run on another date). With members=True the
+    members a seat's holder is read from go too."""
+    for issue in _issues(db):
+        issue.created_at = ELECTION_NIGHT
+    if members:
+        db.query(Representative).delete()
     db.query(ElectionResultEvent).delete()
     db.query(RaceResult).delete()
     db.flush()
@@ -694,3 +703,45 @@ def test_the_race_link_never_matches_a_longer_id(db_session, _on_election_day):
     by_race = signals._issues_by_race(db_session)
     assert set(by_race) == {"2026-HOUSE-GA-12"}
     assert "2026-HOUSE-GA-1" not in by_race
+
+
+def test_a_reset_that_took_the_holder_leaves_the_issue_alone(db_session, _on_election_day):
+    """With no holder the count can't say whether the seat still changes
+    party; retiring then said "no longer shows a change of party" while the
+    challenger led."""
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [issue] = _issues(db_session)
+    _reset(db_session, members=True)
+    _apply(db_session, race, _contest(400, 650, 70))
+    assert issue.is_current and "no longer" not in issue.title
+    db_session.add(Representative(id="S000001", name="Dana Smith", state="GA", district=2, party="D"))
+    db_session.flush()
+    _apply(db_session, race, _contest(400, 700, 75))  # the holder is back: still the same story
+    assert _issues(db_session) == [issue] and issue.is_current
+
+
+def test_a_zero_read_does_not_retire_a_flip(db_session, _on_election_day):
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [issue] = _issues(db_session)
+    _reset(db_session)
+    _apply(db_session, race, _contest(0, 0, 0))
+    assert issue.is_current
+
+
+def test_a_runoff_does_not_take_the_generals_promoted_story(db_session, _on_election_day):
+    """A promoted story's date moves with each news match; its created_at
+    doesn't."""
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [issue] = _issues(db_session)
+    issue.status = ActionIssueStatus.CONFIRMED
+    issue.date = "2026-12-05"
+    _reset(db_session)
+    result = RaceResult(race_id=race.id, election_date="2026-12-01", source_name="x", tallies="[]",
+                        held_by_party="D", votes_counted=10)
+    db_session.add(result)
+    db_session.flush()
+    signals.update_developing_issues(db_session, [er.Applied(result, created=True)])
+    assert result.developing_issue_id is None

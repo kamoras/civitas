@@ -22,7 +22,7 @@ a new issue, drafted fresh; the old one keeps its record of the reversal.
 
 import json
 import re
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -30,7 +30,7 @@ from app.models import ActionIssue, ActionIssueStatus, RaceResult
 from app.pipeline.analyze.early_signal import CONFIRMATION_WINDOW_HOURS
 from app.live_results.sync import event_detail, is_flip
 from app.pipeline.fetch.district_pvi import STATE_NAMES
-from app.time_utils import utcnow
+from app.time_utils import COMMENT_DEADLINE_TZ, utcnow
 
 SOURCE_TYPE = "election_results"
 # Who held a seat going in is Civitas's record of the sitting member, not a
@@ -147,7 +147,7 @@ def _reverted_content(result: RaceResult) -> dict:
         facts.append(f"{d['reportingUnits']:,} of {d['totalUnits']:,} {d['unitLabel']} reporting ({share}%)")
     race = result.race
     return {
-        "title": f"{label[:1].upper()}{label[1:]} count no longer shows a change of party"[:500],
+        "title": f"{label[:1].upper()}{label[1:]}{_REVERTED_TITLE_END}"[:500],
         "summary": summary,
         "facts": facts,
         "actions": [{
@@ -221,8 +221,19 @@ def _issues_by_race(db: Session) -> dict[str, ActionIssue]:
     return by_race
 
 
-def _says_reverted(issue: ActionIssue, result: RaceResult) -> bool:
-    return issue.title == _reverted_content(result)["title"]
+# The fixed end of _reverted_content's title (the start is the race's
+# label, whose wording can change between deploys).
+_REVERTED_TITLE_END = " count no longer shows a change of party"
+
+
+def _says_reverted(issue: ActionIssue) -> bool:
+    return (issue.title or "").endswith(_REVERTED_TITLE_END)
+
+
+def _election_began(election_date: str) -> datetime:
+    """Midnight Eastern on election day, as naive UTC like created_at."""
+    start = datetime.combine(date.fromisoformat(election_date), time.min, tzinfo=COMMENT_DEADLINE_TZ)
+    return start.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def update_developing_issues(db: Session, applied: list) -> int:
@@ -249,15 +260,22 @@ def update_developing_issues(db: Session, applied: list) -> int:
             # action_issues: the rebuilt row picks its race's issue back up
             # — promoted, retired or current — instead of opening a second
             # one beside it. Only this election's: a runoff re-using the id
-            # starts its own.
+            # starts its own. Judged by created_at — the Action Center moves
+            # a promoted story's date to each later news match.
             if by_race is None:
                 by_race = _issues_by_race(db)
             found = by_race.get(result.race_id)
-            if found is not None and found.date >= result.election_date:
+            if found is not None and found.created_at >= _election_began(result.election_date):
                 issue, relinked = found, True
                 result.developing_issue_id = found.id
         if issue is not None and issue.status != ActionIssueStatus.DEVELOPING:
             continue  # promoted: news coverage owns its content now
+        if issue is not None and (result.held_by_party is None or not (result.votes_counted or 0)):
+            # Nothing to judge a flip or its reversal by: a data reset wipes
+            # the members a holder is read from (sync re-reads it), and a
+            # feed can list zeros for a moment. Retiring the issue then said
+            # "no longer shows a change of party" while the challenger led.
+            continue
         if is_flip(result):
             if issue is None:
                 _create(db, result)
@@ -268,7 +286,7 @@ def update_developing_issues(db: Session, applied: list) -> int:
                 # afresh; it is a new story only if the issue last said the
                 # count had gone back — not if the Action Center retired it
                 # while the flip held.
-                if outcome.new_flip and (not relinked or _says_reverted(issue, result)):
+                if outcome.new_flip and (not relinked or _says_reverted(issue)):
                     # A flip after a reversal is a new story, drafted fresh:
                     # the Action Center's refresh retires an unmatched
                     # developing row a day after it was CREATED, so reviving
