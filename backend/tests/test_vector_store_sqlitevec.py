@@ -72,15 +72,18 @@ class TestEmbedAndSearch:
         monkeypatch.setattr(vector_store, "index_identity", lambda: "another-model|v9")
         assert vector_store.search_explore_documents("Pentagon") is None
 
-    def test_an_index_mid_rebuild_is_not_searched(self, vec_env):
-        # Each rebuild batch records the identity, so without the mark a
-        # search would take the first few hundred documents for the index.
+    def test_an_index_a_rebuild_has_not_finished_is_not_searched(self, vec_env):
+        # A rebuild blanks the recorded identity and records it after its
+        # last batch: a few hundred documents in, search mustn't take them
+        # for the index.
         vector_store.embed_explore_documents([_doc(1, "Pentagon appropriations act")])
         conn = vector_store.get_vec_conn()
-        vector_store._set_meta(conn, vector_store._REBUILDING, vector_store.index_identity())
+        vector_store._set_meta(conn, vector_store._INDEX_MODEL, "")
         assert vector_store.search_explore_documents("Pentagon") is None
-        vector_store._set_meta(conn, vector_store._REBUILDING, "")
-        assert vector_store.search_explore_documents("Pentagon") is not None
+        # Nor does another incremental embed make it look whole.
+        vector_store.embed_explore_documents([_doc(2, "Another act")])
+        assert vector_store.search_explore_documents("Pentagon") is None
+        assert vector_store.collection_stats()["indexRebuild"] == "incomplete"
 
     def test_empty_index_returns_none_not_empty_list(self, vec_env):
         assert vector_store.search_explore_documents("anything") is None
@@ -194,67 +197,57 @@ class TestEnsureExploreIndex:
 
     def test_a_rebuild_that_died_partway_is_restarted(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "Anything")])
-        vector_store._set_meta(
-            vector_store.get_vec_conn(), vector_store._REBUILDING, vector_store.index_identity(),
-        )
+        vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
         with patch.object(vector_store.threading, "Thread") as thread:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()
 
-    def test_a_rebuild_that_raised_is_not_ready_until_the_index_is_completed(
-        self, vec_env, db_session, monkeypatch,
-    ):
-        # A partial index is not the index: keyword-only (and saying so),
-        # the dashboard shows the failure, the next start rebuilds it — and
-        # the Explore run's embed step, which embeds every missing document,
-        # completes it.
+    def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
+        # Two overlapping would each clear what the other built.
+        vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
+        with vector_store._rebuild_lock:
+            with patch.object(vector_store.threading, "Thread") as thread:
+                vector_store.ensure_explore_index(lambda: None)
+            thread.assert_not_called()
+            assert vector_store.rebuild_explore_index(lambda: None) is None
+            assert vector_store.collection_stats()["indexRebuild"] == "running"
+
+    def test_a_rebuild_that_raised_is_not_ready_until_one_completes(self, vec_env, db_session, monkeypatch):
         db_session.add(ExploreDocument(
             doc_type="House Floor Speech", source="congress.gov",
             title="A real doc", summary="s", body="b", date="2026-07-01",
         ))
         db_session.commit()
         vector_store.embed_explore_documents([_doc(1, "A real doc")])
-        conn = vector_store.get_vec_conn()
-        vector_store._set_meta(conn, vector_store._REBUILDING, vector_store.index_identity())
         real_embed = vector_store.embed_explore_documents
-        monkeypatch.setattr(vector_store, "embed_explore_documents",
-                            MagicMock(side_effect=sqlite3.OperationalError("database is locked")))
-        vector_store.ensure_explore_index(lambda: db_session)
-        import threading as _t
-        for t in _t.enumerate():
-            if t.name == "explore-reindex":
-                t.join(timeout=10)
+        calls = []
+
+        def fails_after_a_batch(docs):
+            calls.append(1)
+            real_embed(docs)
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(vector_store, "embed_explore_documents", fails_after_a_batch)
+        with pytest.raises(sqlite3.OperationalError):
+            vector_store.rebuild_explore_index(lambda: db_session)
         monkeypatch.setattr(vector_store, "embed_explore_documents", real_embed)
 
-        assert vector_store.collection_stats()["indexRebuild"] == "failed"
+        # A batch is in, but the build isn't complete: not the index.
+        assert calls and vector_store.collection_stats()["indexRebuild"] == "incomplete"
         assert vector_store.search_explore_documents("A real doc", n_results=1) is None
-        with patch.object(vector_store.threading, "Thread") as thread:
-            vector_store.ensure_explore_index(lambda: None)
-        thread.assert_called_once()
-
-        vector_store.clear_failed_rebuild()
+        assert vector_store.rebuild_explore_index(lambda: db_session) == 1
         assert vector_store.collection_stats()["indexRebuild"] == ""
         assert vector_store.search_explore_documents("A real doc", n_results=1) is not None
 
-    def test_every_rebuild_from_scratch_is_marked_while_it_runs(self, vec_env):
-        # An admin re-embed as much as a start's rebuild: each batch is
-        # committed as it goes.
-        vector_store.embed_explore_documents([_doc(1, "Anything")])
-        with vector_store.rebuilding_explore_index():
-            assert vector_store.collection_stats()["indexRebuild"] == "running"
-            assert vector_store.search_explore_documents("Anything") is None
-        assert vector_store.collection_stats()["indexRebuild"] == ""
-        with pytest.raises(RuntimeError), vector_store.rebuilding_explore_index():
-            raise RuntimeError("encode failed")
-        assert vector_store.collection_stats()["indexRebuild"] == "failed"
-        assert vector_store.search_explore_documents("Anything") is None
-
-    def test_clearing_a_failed_rebuild_leaves_a_running_one_marked(self, vec_env):
-        vector_store.embed_explore_documents([_doc(1, "Anything")])
+    def test_an_index_left_by_another_model_is_not_made_whole_by_incremental_embeds(self, vec_env):
+        # A rebuild that failed before its DROP leaves the old model's
+        # vectors: new documents embedded beside them don't make it ready.
+        vector_store.embed_explore_documents([_doc(1, "Old")])
         conn = vector_store.get_vec_conn()
-        vector_store._set_meta(conn, vector_store._REBUILDING, vector_store.index_identity())
-        vector_store.clear_failed_rebuild()
-        assert vector_store.collection_stats()["indexRebuild"] == "running"
+        vector_store._set_meta(conn, vector_store._INDEX_MODEL, "old-model|v1")
+        vector_store.embed_explore_documents([_doc(2, "New")])
+        assert vector_store._get_meta(conn, vector_store._INDEX_MODEL) == "old-model|v1"
+        assert vector_store.search_explore_documents("New") is None
 
     def test_rebuild_spawned_when_empty_and_docs_exist(self, vec_env, db_session):
         db_session.add(ExploreDocument(
@@ -297,7 +290,7 @@ class TestEnsureExploreIndex:
                 +snippet text
             )"""
         )
-        vector_store._set_meta(conn, "explore_index_model", "minilm-l6-v2+1-old-schema")
+        vector_store._set_meta(conn, vector_store._INDEX_MODEL, "minilm-l6-v2+1-old-schema")
         conn.commit()
 
         db_session.add(ExploreDocument(
@@ -359,3 +352,36 @@ def test_a_connection_that_failed_to_open_is_closed_not_leaked(vec_env, monkeypa
     # was closed.
     assert len(opened) >= 2 and all(t.closed for t in opened)
     assert vector_store._vec_conn is None
+
+
+async def test_the_admin_re_embed_runs_in_the_background_and_refuses_while_one_runs(monkeypatch):
+    # Over twenty minutes on the Pi: tied to its request, nginx's timeout
+    # dropped it partway and let its lease go under writes still running.
+    import threading as _t
+
+    from fastapi import HTTPException
+
+    from app.api.admin import admin_reembed_explore
+    from app.pipeline import lease
+
+    done = _t.Event()
+    monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda _factory: (done.set(), 0)[1])
+    monkeypatch.setattr(vector_store, "_write_model_version", lambda: None)
+    monkeypatch.setattr("app.pipeline.lexical_index.rebuild_index", lambda db: 0)
+    monkeypatch.setattr("app.pipeline.analyze.document_authority.update_document_authority", lambda db: {})
+
+    class _Held:
+        def __enter__(self):
+            return True
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(lease, "job", lambda *a, **k: _Held())
+    assert await admin_reembed_explore() == {"started": True}
+    assert done.wait(5)
+
+    with vector_store._rebuild_lock:
+        with pytest.raises(HTTPException) as refused:
+            await admin_reembed_explore()
+    assert refused.value.status_code == 409

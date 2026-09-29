@@ -76,17 +76,25 @@ def _before_a_partial_marker(text: str) -> str | None:
         # sentence. A key point without one may be the first half of two
         # lines, and is dropped with the part it was writing.
         head = stopped.rstrip()
-        line = head.rsplit("\n", 1)[-1].strip()
-        if line == SUMMARY_KEY_POINTS_MARKER or line.endswith(_SENTENCE_ENDS):
-            return head
-        return None
+        return head if _finished(head) else None
     head, newline, last = stopped.rpartition("\n")
     if not newline:
         return None
     for marker in (SUMMARY_KEY_POINTS_MARKER, SUMMARY_IMPACT_MARKER):
         if marker != last and marker.startswith(last):
-            return head
+            # Two capitals of a marker are a marker. One alone could as well
+            # begin the next line of a wrapped sentence ("...would\nI"), so
+            # it counts only after a line that was finished anyway.
+            if len(last) >= 2 or _finished(head):
+                return head
     return None
+
+
+def _finished(head: str) -> bool:
+    """Whether `head`'s last line can't go on in the same part: the KEY
+    POINTS: marker line, or a line that ends a sentence."""
+    line = head.rsplit("\n", 1)[-1].strip()
+    return line == SUMMARY_KEY_POINTS_MARKER or line.endswith(_SENTENCE_ENDS)
 
 
 def parse_explore_document_summary(text: str, *, cut_off: bool = False) -> dict:

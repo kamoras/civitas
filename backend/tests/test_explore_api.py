@@ -482,9 +482,16 @@ class TestCachedSummaryRead:
         # may well be stored: both ends answer a wait instead.
         from app.api.explore import get_cached_explore_summary
 
+        from unittest.mock import MagicMock
+
+        from sqlalchemy.exc import OperationalError
+
         doc = _make_doc(db_session)
-        locked = sqlite3.OperationalError("database is locked")
-        with patch("app.pipeline.analyze.ollama_client._cache_get_with_own_session", side_effect=locked), \
+        # Through the real read (analysis_cache_get), which used to take any
+        # error for a miss: only the session is the locked database.
+        locked_db = MagicMock()
+        locked_db.query.side_effect = OperationalError("SELECT", {}, sqlite3.OperationalError("database is locked"))
+        with patch("app.pipeline.analyze.ollama_client.SessionLocal", return_value=locked_db), \
                 patch("app.pipeline.analyze.ollama_client.stream_llm", side_effect=AssertionError("generated")):
             with pytest.raises(HTTPException) as read:
                 await get_cached_explore_summary(doc.id, db=db_session)

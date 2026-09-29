@@ -147,13 +147,13 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                       {d.system.vectorDb.indexRebuild && (
                         <div
                           className={`text-xs font-mono mt-1 ${
-                            d.system.vectorDb.indexRebuild === "failed"
+                            d.system.vectorDb.indexRebuild === "incomplete"
                               ? "text-signal-amber"
                               : "text-ink-lo"
                           }`}
                         >
-                          {d.system.vectorDb.indexRebuild === "failed"
-                            ? "rebuild failed: semantic search off until the next Explore run completes the index"
+                          {d.system.vectorDb.indexRebuild === "incomplete"
+                            ? "incomplete: semantic search off until a rebuild completes"
                             : "rebuilding…"}
                         </div>
                       )}

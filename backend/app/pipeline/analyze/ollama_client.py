@@ -150,10 +150,10 @@ def extract_json(text: str) -> Any | None:
     return None
 
 
-def _cache_get_with_own_session(version: str, input_hash: str) -> Any | None:
+def _cache_get_with_own_session(version: str, input_hash: str, *, raise_errors: bool = False) -> Any | None:
     db = SessionLocal()
     try:
-        return analysis_cache_get(db, version, input_hash)
+        return analysis_cache_get(db, version, input_hash, raise_db_errors=raise_errors)
     finally:
         db.close()
 
@@ -330,7 +330,7 @@ def get_cached_llm_result(
     use_model = model or settings.OLLAMA_MODEL
     input_hash = _make_input_hash(prompt_version, cache_key, use_model)
     try:
-        return _cache_get_with_own_session(prompt_version, input_hash)
+        return _cache_get_with_own_session(prompt_version, input_hash, raise_errors=raise_errors)
     except Exception:
         if raise_errors:
             raise

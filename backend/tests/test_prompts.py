@@ -125,3 +125,11 @@ class TestCutOff:
         assert parse_explore_document_summary(text, cut_off=True)["summary"] == ""
         text = "SUMMARY: s.\nKEY POINTS:\n- a\nIMPACT: Drivers will pay\n"
         assert parse_explore_document_summary(text, cut_off=True)["impact"] == ""
+
+    def test_one_letter_after_a_wrapped_line_is_not_taken_for_a_marker(self):
+        text = "SUMMARY: The rule would\nI"
+        assert parse_explore_document_summary(text, cut_off=True)["summary"] == ""
+        # After a finished line, or with two letters of it, it is one.
+        assert parse_explore_document_summary("SUMMARY: Done.\nK", cut_off=True)["summary"] == "Done."
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\n- b\nIM"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a", "b"]

@@ -1229,10 +1229,11 @@ export interface VectorDbStats {
    * 2026-07) — distinct from embeddingModel, which is the
    * classification-side model. Empty until the first reindex completes. */
   indexModelVersion?: string;
-  /** "running" while the search index is rebuilt, "failed" when a rebuild
-   * raised and the index is partial — semantic search stays off until the
-   * next Explore run embeds the rest (or the next pipeline start rebuilds it). */
-  indexRebuild?: "" | "running" | "failed";
+  /** "running" while the search index is rebuilt, "incomplete" when it
+   * holds vectors that aren't a complete build by the current model (a
+   * rebuild failed or was cut off) — semantic search stays off until a
+   * rebuild completes (the next Explore run or pipeline start retries it). */
+  indexRebuild?: "" | "running" | "incomplete";
   learningStore?: LearningStoreStats;
   error?: string;
 }

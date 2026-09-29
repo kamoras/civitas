@@ -35,6 +35,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -172,9 +173,14 @@ async def api_cache_set_async(db: Session, tier: str, key: str, data, **kwargs) 
 
 
 def analysis_cache_get(
-    db: Session, version: str, input_hash: str
+    db: Session, version: str, input_hash: str, *, raise_db_errors: bool = False,
 ) -> dict | None:
-    """Get cached analysis result (no TTL - invalidated by version change)."""
+    """Get cached analysis result (no TTL - invalidated by version change).
+
+    `raise_db_errors`: a database that can't be read (locked past its
+    timeout) raises instead of reading as a miss — for a caller that would
+    otherwise redo work that may well be stored. Corrupt JSON is a miss
+    either way: redoing it is what replaces it."""
     try:
         entry = (
             db.query(AnalysisCache)
@@ -187,6 +193,11 @@ def analysis_cache_get(
         if not entry:
             return None
         return json.loads(entry.result_json)
+    except SQLAlchemyError:
+        if raise_db_errors:
+            raise
+        logger.debug("analysis_cache_get failed for %s/%s", version, input_hash, exc_info=True)
+        return None
     except Exception:
         # Treat any failure (corrupt cached JSON, DB error) as a miss so the
         # caller recomputes rather than crashing — but log it, since a silent

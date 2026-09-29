@@ -49,8 +49,9 @@ from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
 from app.pipeline.vector_store import (
     delete_explore_vectors,
-    clear_failed_rebuild,
     embed_explore_documents,
+    ensure_explore_index,
+    explore_embed_dict,
     get_embedded_explore_ids,
 )
 
@@ -631,21 +632,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
             d for d in all_docs
             if d.id not in _already_embedded or d.id in refreshed_ids
         ]
-        doc_dicts = [
-            {
-                "id": d.id,
-                "title": d.title,
-                "summary": d.summary,
-                "body": d.body,
-                "doc_type": d.doc_type,
-                "source": d.source,
-                "date": d.date,
-                "politician_name": d.politician_name,
-                "politician_id": d.politician_id,
-                "chamber": d.chamber,
-            }
-            for d in all_docs
-        ]
+        doc_dicts = [explore_embed_dict(d) for d in all_docs]
         # Off the event loop: encoding is pure CPU inside sentence-
         # transformers and ran for 23 MINUTES in one call against the real
         # corpus (1,557 documents / 11,022 chunks, measured on the Pi
@@ -662,12 +649,14 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # donor_classifier_ai.py and api/explore.py already give their own
         # CPU-bound calls.
         embedded = await asyncio.to_thread(embed_explore_documents, doc_dicts)
-        # Every document missing from the index is in it now, so one a
-        # failed rebuild left partial is whole.
+        # An index that isn't a complete build by this model (a rebuild that
+        # failed or was cut off, a model change) is rebuilt now, in the
+        # background, rather than waiting for the next start: search is off
+        # until it is.
         try:
-            await asyncio.to_thread(clear_failed_rebuild)
+            await asyncio.to_thread(ensure_explore_index, SessionLocal)
         except Exception:
-            logger.exception("Explore pipeline: could not clear a failed index rebuild's mark")
+            logger.exception("Explore pipeline: could not check the explore index")
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
-from app.database import get_db, get_visits_db, off_loop
+from app.database import get_db, get_visits_db
 from app.http_client import make_async_client
 from app.models import (
     ActionIssue,
@@ -1371,8 +1371,8 @@ async def admin_trigger_pipeline(
     }
 
 
-@router.post("/pipeline/reembed-explore", dependencies=[Depends(require_admin)])
-async def admin_reembed_explore(db: Session = Depends(get_db)):
+@router.post("/pipeline/reembed-explore", dependencies=[Depends(require_admin)], status_code=202)
+async def admin_reembed_explore():
     """Rebuild every search structure over the explore corpus.
 
     Use this after changing the embedding model, or any time search results
@@ -1381,62 +1381,49 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     derived from `explore_documents`, so all three are rebuilt together —
     rebuilding only the embeddings is how the vector index and the keyword
     index end up disagreeing about what exists.
+
+    Started in the background and answered at once: re-embedding the corpus
+    takes over twenty minutes on the Pi, far past any request's timeout, and
+    work tied to a request that is dropped partway would leave its lease
+    let go under writes still running. Its progress is in the logs, and the
+    admin data dashboard shows the index rebuilding.
     """
-    from app.models import ExploreDocument
-    from app.background import writing
+    from app.background import start_writer
+    from app.database import SessionLocal
+    from app.pipeline import lease
     from app.pipeline.analyze.document_authority import update_document_authority
     from app.pipeline.lexical_index import rebuild_index
-    from app.pipeline.vector_store import (
-        _write_model_version,
-        clear_explore,
-        embed_explore_documents,
-        rebuilding_explore_index,
-    )
+    from app.pipeline.vector_store import _rebuild_lock, _write_model_version, rebuild_explore_index
 
-    from app.pipeline import lease
+    if _rebuild_lock.locked():
+        raise HTTPException(status_code=409, detail="Explore re-embed not started: the index is already being rebuilt")
 
-    # Registered for the admin data reset: the awaits below free the loop
-    # while threads write the explore tables. And a lease, so a reset or an
-    # explore ingest in another process sees it too.
-    with writing("Explore re-embed"):
-        async with lease.job_async(lease.EXPLORE) as held:
+    def _reembed() -> None:
+        # A lease, so a reset or an explore ingest in another process sees
+        # it too; start_writer registers it for this process's data reset.
+        with lease.job(lease.EXPLORE, who="Explore re-embed") as held:
             if not held:
-                raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {held.why}")
-            # Search reports the index not ready from the clear until the
-            # last batch is in (and after a failure partway, until the next
-            # Explore run or start completes it).
-            with rebuilding_explore_index():
+                return  # logged as a skip by lease.job
+            try:
+                count = rebuild_explore_index(SessionLocal)
+                if count is None:
+                    logger.warning("Explore re-embed skipped: the index is already being rebuilt")
+                    return
+                _write_model_version()
+                db = SessionLocal()
                 try:
-                    clear_explore()
-                except Exception:
-                    logger.warning("Explore re-embed: clearing the old vectors failed", exc_info=True)
+                    indexed = rebuild_index(db)
+                    authority = update_document_authority(db)
+                finally:
+                    db.close()
+                logger.info("Explore re-embed complete: %d embedded, %d keyword-indexed, authority %s",
+                            count, indexed, authority)
+            except Exception:
+                logger.exception("Explore re-embed failed — search's vector index is not ready until a rebuild "
+                                 "completes (the next Explore run or start retries it)")
 
-                all_docs = db.query(ExploreDocument).all()
-                doc_dicts = [
-                    {
-                        "id": d.id,
-                        "title": d.title,
-                        "summary": d.summary,
-                        "body": d.body,
-                        "doc_type": d.doc_type,
-                        "source": d.source,
-                        "date": d.date,
-                        "politician_name": d.politician_name,
-                        "politician_id": d.politician_id,
-                        "chamber": d.chamber,
-                    }
-                    for d in all_docs
-                ]
-
-                def _run():
-                    count = embed_explore_documents(doc_dicts)
-                    _write_model_version()
-                    return count
-
-                count = await asyncio.to_thread(_run)
-            indexed = await off_loop(db, rebuild_index)
-            authority = await off_loop(db, update_document_authority)
-    return {"embedded": count, "keywordIndexed": indexed, "authority": authority}
+    start_writer(_reembed, name="explore-reembed")
+    return {"started": True}
 
 
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])

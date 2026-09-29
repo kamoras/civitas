@@ -215,7 +215,11 @@ def test_only_the_action_center_lists_are_served_stale_while_updating():
     for path in ("/api/action/issues", "/api/action/issues/recent"):
         location = _match(_locations(public), path)
         assert "updating" in location[3] and location[2] == _MISSES_HOP, path
+        # In a cache whose short `inactive` bounds how old a stale copy is.
+        assert "proxy_cache action_lists_cache;" in location[3], path
         assert "limit_req" not in location[3], path
         assert "limit_req zone=" in _match(_locations(internal), path)[3], path
     for path in ("/api/action/issues/i123", "/api/action/issues/recent/x", "/api/action/monitors"):
         assert "updating" not in _match(_locations(public), path)[3], path
+    zone = re.search(r"keys_zone=action_lists_cache:\S+.*?inactive=(\d+)m", CONF.read_text(), re.S)
+    assert zone is not None and int(zone.group(1)) <= 5

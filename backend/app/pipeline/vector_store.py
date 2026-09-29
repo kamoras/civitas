@@ -42,8 +42,6 @@ import sqlite3
 import struct
 import threading
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
 
 from sentence_transformers import SentenceTransformer
 from app.atomic_write import write_text_atomic
@@ -229,14 +227,18 @@ def _busy_timeout_s() -> float:
     return _API_BUSY_TIMEOUT_S if settings.PROCESS_ROLE == "api" else SQLITE_BUSY_TIMEOUT_S
 
 
-# vec_meta key: set while ensure_explore_index rebuilds the index from
-# scratch, cleared when the last batch is in. A rebuild that raised leaves
-# _REBUILD_FAILED: the index holds only the batches it finished, so search
-# still reports it not ready (keyword-only, and says so) until the next
-# nightly Explore run embeds every document it is missing
-# (clear_failed_rebuild), or the next start rebuilds it.
-_REBUILDING = "explore_index_rebuilding"
-_REBUILD_FAILED = "failed"
+# vec_meta key: the identity (index_identity) of the last complete build of
+# the explore index. Search takes the index as ready only while it matches.
+# A rebuild blanks it first and records it after its last batch, so an index
+# a rebuild left partway (a failure, a restart) is not ready until one
+# completes; incremental embeds record it only on an index never built, so
+# they can't make a partial or other-model index look whole.
+_INDEX_MODEL = "explore_index_model"
+
+# One rebuild at a time in this process (the pipeline's, which is always one
+# process): two overlapping would each clear what the other built, and
+# whichever finished first would record a partial index as complete.
+_rebuild_lock = threading.Lock()
 
 
 def get_vec_conn() -> sqlite3.Connection:
@@ -630,7 +632,10 @@ def embed_explore_documents(docs: list[dict]) -> int:
                 )
             conn.commit()
 
-    _set_meta(conn, "explore_index_model", index_identity())
+    if _get_meta(conn, _INDEX_MODEL) is None:
+        # Never built: this call built it (the first Explore run embeds every
+        # document at once). Otherwise only a complete rebuild records it.
+        _set_meta(conn, _INDEX_MODEL, index_identity())
     # Mean chunks per document, measured rather than assumed: the search
     # path needs it to know how many chunk slots to request for a given
     # number of documents. Stored here because it is a property of the
@@ -689,13 +694,10 @@ def search_explore_documents(
     # Built by another model (a deploy changed it, and the pipeline process —
     # which rebuilds the index — hasn't yet): its vectors don't live in this
     # model's space, and ranking against them would be noise presented as a
-    # whole answer. Nor while a rebuild is partway: a few hundred documents
-    # are not the index. Not ready, either way.
-    if _get_meta(conn, _REBUILDING):
-        logger.warning("explore index being rebuilt, or partial after a failed rebuild — not ready")
-        return None
-    if _get_meta(conn, "explore_index_model") != index_identity():
-        logger.warning("explore index built by another model — not ready until it is rebuilt")
+    # whole answer. Nor while a rebuild is partway, or after one failed: a
+    # few hundred documents are not the index. Not ready, either way.
+    if _get_meta(conn, _INDEX_MODEL) != index_identity():
+        logger.warning("explore index not a complete build by this model — not ready until it is rebuilt")
         return None
 
     model = get_similarity_model()
@@ -774,11 +776,15 @@ def collection_stats() -> dict:
             {"name": "explore_documents", "count": explore, "metadata": {}},
             {"name": "bills", "count": bills, "metadata": {}},
         ],
-        "indexModelVersion": _get_meta(conn, "explore_index_model") or "",
+        "indexModelVersion": _get_meta(conn, _INDEX_MODEL) or "",
         "chunksPerDocument": float(_get_meta(conn, "explore_chunks_per_doc") or 0.0),
-        # "running", "failed" (the index is partial), or "" (complete).
-        "indexRebuild": {"": "", None: "", _REBUILD_FAILED: "failed"}.get(
-            _get_meta(conn, _REBUILDING), "running",
+        # "running" (in this process, the pipeline's), "incomplete" (holding
+        # vectors that aren't a complete build by this model: search is off
+        # until a rebuild completes), or "" (ready).
+        "indexRebuild": (
+            "running" if _rebuild_lock.locked()
+            else "incomplete" if explore and _get_meta(conn, _INDEX_MODEL) != index_identity()
+            else ""
         ),
     }
 
@@ -897,114 +903,92 @@ def reset_vector_db() -> None:
     logger.info("Reset vector DB")
 
 
-@contextmanager
-def rebuilding_explore_index() -> Iterator[None]:
-    """Mark the explore index as being rebuilt for the enclosed work (every
-    rebuild of it from scratch: ensure_explore_index's, an admin re-embed):
-    search reports it not ready meanwhile, since each batch is committed as
-    it goes and a few hundred documents are not the index. Cleared when the
-    work finishes; left _REBUILD_FAILED when it raises."""
-    conn = get_vec_conn()
-    _set_meta(conn, _REBUILDING, index_identity())
+def explore_embed_dict(d) -> dict:
+    """An ExploreDocument as embed_explore_documents takes it — the one
+    spelling of it, for every path that embeds (a rebuild, the Explore
+    run's incremental step)."""
+    return {
+        "id": d.id, "title": d.title, "summary": d.summary or "",
+        "body": d.body or "",
+        "doc_type": d.doc_type, "source": d.source or "",
+        "date": d.date or "",
+        "politician_name": d.politician_name or "",
+        "politician_id": d.politician_id or "",
+        "chamber": d.chamber or "",
+    }
+
+
+def rebuild_explore_index(db_session_factory) -> int | None:
+    """Rebuild the explore index from scratch, in the calling thread: the
+    documents embedded, or None when a rebuild is already running here.
+
+    DROP + recreate, not DELETE FROM: INDEX_SCHEMA_VERSION signals a COLUMN
+    LAYOUT change (e.g. adding doc_id when chunking landed), and a vec0
+    virtual table's columns are fixed at creation — they can't be ALTERed.
+    DELETE FROM only clears rows against whatever schema is already on disk,
+    silently keeping a stale pre-migration table forever and failing every
+    embed_explore_documents() call against it. Recreating picks up whatever
+    _ensure_schema currently defines, so this is correct for a pure
+    model-version bump or a plain re-embed too (identical schema either way).
+    """
+    if not _rebuild_lock.acquire(blocking=False):
+        return None
     try:
-        yield
-    except BaseException:
+        from app.models import ExploreDocument
+
+        conn = get_vec_conn()
+        # Not ready from here until the last batch is in (_INDEX_MODEL).
+        _set_meta(conn, _INDEX_MODEL, "")
+        with _vec_lock:
+            conn.execute("DROP TABLE IF EXISTS vec_explore")
+            _ensure_schema(conn)
+            conn.commit()
+
+        db = db_session_factory()
         try:
-            _set_meta(conn, _REBUILDING, _REBUILD_FAILED)
-        except Exception:
-            logger.exception("Could not record the failed explore index rebuild")
-        raise
-    _set_meta(conn, _REBUILDING, "")
-
-
-def clear_failed_rebuild() -> None:
-    """After every document missing from the index has been embedded (the
-    Explore run's embed step): a rebuild that failed partway is complete
-    now. One statement, so a rebuild that started meanwhile keeps its
-    mark."""
-    conn = get_vec_conn()
-    cleared = conn.execute(
-        "UPDATE vec_meta SET value = '' WHERE key = ? AND value = ?", (_REBUILDING, _REBUILD_FAILED),
-    ).rowcount
-    conn.commit()
-    if cleared:
-        logger.info("Explore index completed after a failed rebuild")
+            total = 0
+            BATCH = 500
+            offset = 0
+            while True:
+                docs = (
+                    db.query(ExploreDocument)
+                    .order_by(ExploreDocument.id)
+                    .offset(offset).limit(BATCH).all()
+                )
+                if not docs:
+                    break
+                total += embed_explore_documents([explore_embed_dict(d) for d in docs])
+                offset += BATCH
+        finally:
+            db.close()
+        _set_meta(conn, _INDEX_MODEL, index_identity())
+        logger.info("Explore index rebuild complete: %d documents", total)
+        return total
+    finally:
+        _rebuild_lock.release()
 
 
 def ensure_explore_index(db_session_factory) -> None:
-    """Rebuild the explore index in the background when it is missing or
-    was built by a different model — the migration/upgrade path.
+    """Rebuild the explore index in the background unless it is a complete
+    build by this model — the migration/upgrade path, and the recovery from
+    a rebuild that failed or was cut off.
 
-    Called from app startup (main.py lifespan). Runs in a daemon thread
-    because re-embedding thousands of documents takes minutes on the Pi;
-    search correctly reports "not ready" (None) until it finishes.
+    Called from app startup (main.py lifespan) and after the Explore run's
+    embed step. Runs in a daemon thread because re-embedding thousands of
+    documents takes minutes on the Pi; search correctly reports "not ready"
+    (None) until it finishes.
     """
     conn = get_vec_conn()
-    stored = _get_meta(conn, "explore_index_model")
+    stored = _get_meta(conn, _INDEX_MODEL)
     count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    # A rebuild that died partway (a restart, an error) left its mark: not
-    # complete, whatever identity its batches recorded.
-    if stored == index_identity() and count > 0 and not _get_meta(conn, _REBUILDING):
+    if (stored == index_identity() and count > 0) or _rebuild_lock.locked():
         return
+    logger.warning("Explore index not a complete build by %s (recorded: %r) — rebuilding", index_identity(), stored)
 
     def _reindex() -> None:
-        db = db_session_factory()
         try:
-            from app.models import ExploreDocument
-
-            # Marked until the last batch is in: each batch records the
-            # identity, so without this search would take a few hundred
-            # documents for the whole index a minute into the rebuild.
-            with rebuilding_explore_index():
-                if stored is not None and stored != index_identity():
-                    logger.warning(
-                        "Explore index identity changed (%s -> %s) — rebuilding",
-                        stored, index_identity(),
-                    )
-                    # DROP + recreate, not DELETE FROM: INDEX_SCHEMA_VERSION
-                    # signals a COLUMN LAYOUT change (e.g. adding doc_id when
-                    # chunking landed), and a vec0 virtual table's columns are
-                    # fixed at creation — they can't be ALTERed. DELETE FROM
-                    # only clears rows against whatever schema is already on
-                    # disk, silently keeping a stale pre-migration table
-                    # forever and failing every embed_explore_documents() call
-                    # against it. Recreating picks up whatever _ensure_schema
-                    # currently defines, so this is correct for a pure model-
-                    # version bump too (identical schema either way) — a
-                    # strict superset of the old behavior, not a special case.
-                    with _vec_lock:
-                        conn.execute("DROP TABLE IF EXISTS vec_explore")
-                        _ensure_schema(conn)
-                        conn.commit()
-
-                total = 0
-                BATCH = 500
-                offset = 0
-                while True:
-                    docs = (
-                        db.query(ExploreDocument)
-                        .order_by(ExploreDocument.id)
-                        .offset(offset).limit(BATCH).all()
-                    )
-                    if not docs:
-                        break
-                    total += embed_explore_documents([
-                        {
-                            "id": d.id, "title": d.title, "summary": d.summary or "",
-                            "body": getattr(d, "body", "") or "",
-                            "doc_type": d.doc_type, "source": getattr(d, "source", "") or "",
-                            "date": d.date or "",
-                            "politician_name": getattr(d, "politician_name", "") or "",
-                            "politician_id": getattr(d, "politician_id", "") or "",
-                            "chamber": getattr(d, "chamber", "") or "",
-                        }
-                        for d in docs
-                    ])
-                    offset += BATCH
-            logger.info("Explore index rebuild complete: %d documents", total)
+            rebuild_explore_index(db_session_factory)
         except Exception:
-            logger.exception("Explore index rebuild failed — not ready until the next Explore run completes it")
-        finally:
-            db.close()
+            logger.exception("Explore index rebuild failed — not ready until one completes")
 
     start_writer(_reindex, name="explore-reindex")
