@@ -6,9 +6,11 @@
  *
  *  Vercel's documented next/og pattern: the Google Fonts CSS2 API returns
  *  a direct woff/ttf src for a given text+weight, fetched only for the
- *  glyphs actually used rather than the whole family. next/font/google
- *  (used everywhere else on the site) isn't reachable from Satori's
- *  render path — it needs raw font bytes handed to it directly.
+ *  glyphs actually used rather than the whole family. The site's own
+ *  font files (app/fonts/, loaded through next/font/local) don't serve
+ *  here: they are woff2, which Satori can't read, and a subset per
+ *  script rather than per text. This fetch runs per request, never at
+ *  build time, and the callers fall back to Satori's face if it fails.
  *
  *  `text` has to cover every character rendered anywhere in the image,
  *  not just a headline: Satori falls back to whatever font IS registered
