@@ -213,7 +213,7 @@ not for scoring.
 Fetches and scores Supreme Court justices, weekly on Sunday UTC (or whenever the table is empty — the uncached Oyez per-case crawl takes hours):
 - Pulls each justice's votes in the Court's decided cases. Oyez sometimes lists one justice twice in a decision (Ketanji Brown Jackson in two 2025-term cases, with Barrett and Gorsuch missing): identical rows count once, conflicting ones leave that vote out, and a missing justice's vote is never filled in. The duplicate had broken the one-vote-per-case key, so every Sunday refresh rolled back and the scorecards went stale with no alert. Now any pipeline step that fails and is carried past (`ProgressTracker.fail`) sends an ops alert, deduplicated per pipeline, step and day.
 - The voting record from Oyez (`justice_analyzer.py`): majority, dissent and unanimous shares, opinions written, agreement with each sitting justice. Shown, not scored.
-- The score is independence from the appointing president (`justice_loyalty.py`, Epstein & Posner 2016): whether a justice sides with the federal government more often while that president is in office than under others, fit per justice with the government's side of the case held fixed, shrunk across every justice since 1937 (DerSimonian-Laird). Votes through 2014 are Epstein & Posner's, bundled; later terms come from the newest Supreme Court Database release, with each appointing president taken from the Federal Judicial Center's nomination dates (`fetch/justice_records.py`). 100 is no favoritism either way, 0 is two between-justice sds; each estimate is stored with its standard error. A source that can't be read leaves the stored scores standing.
+- The score is independence from the appointing president (`justice_loyalty.py`, Epstein & Posner 2016): whether a justice sides with the federal government more often while that president is in office than under others, fit per justice with the government's side of the case held fixed, shrunk across every justice since 1937 (DerSimonian-Laird). Votes through 2014 are Epstein & Posner's, bundled; later terms come from the newest Supreme Court Database release, with each appointing president taken from the Federal Judicial Center's nomination dates (`fetch/justice_records.py`). 100 is no favoritism either way, 0 is two between-justice sds; each estimate is stored with its standard error. A source that can't be read leaves the stored scores standing, and the run's justice step says "loyalty not measured" and which source couldn't be read, in its progress detail and in an ops alert, rather than only a count. The backend image is Debian trixie because the Database's host refuses httpx's TLS handshake under bookworm's OpenSSL 3.0 (a 403 that left every justice unscored on 2026-09-29; see `backend/Dockerfile`).
 - Martin-Quinn positions per term, shown beside the score, not scored. No LLM step.
 
 ### Phase 6 — PRESIDENTS
@@ -1217,6 +1217,18 @@ curl -X POST http://localhost:8000/api/admin/pipeline/trigger \
 ```
 
 ## Deployment
+
+### Operator alerts
+
+Pipeline problems (a failed step in a run that carries on, a skipped phase of
+the nightly chain, an overrun, stale data) go through
+`app/ops_alerts.py:send_ops_alert`. Each alert is logged at ERROR, listed in the
+admin Overview's **Ops alerts** panel (the ten newest), and pushed to
+[ntfy](https://ntfy.sh) when `ALERT_NTFY_URL` is set, which is the only channel
+that reaches a phone. Container logs rotate at 30 MB, about a day, so the panel
+or ntfy is where an overnight alert is still found the next afternoon. Each
+alert carries a dedupe key (per day, per run or per cycle), so a recurring
+problem notifies once for that span.
 
 ### Docker Swarm Architecture
 

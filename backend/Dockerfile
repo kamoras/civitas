@@ -5,7 +5,14 @@
 # whatever Docker Hub currently serves on the very next commit, with no
 # review. Bump this deliberately (like the PVI/population data refresh)
 # when a newer patch is actually wanted, not automatically.
-FROM python:3.13.14-slim-bookworm
+#
+# Debian trixie, not bookworm: scdb.la.psu.edu (the justice score's source,
+# behind Pantheon's CDN) answers 403 to httpx's TLS handshake under
+# bookworm's OpenSSL 3.0 and 200 under trixie's 3.5, same IP and headers
+# (found 2026-09-29, when every justice went unscored). curl and urllib pass
+# on both, so the block is keyed to that one handshake, not to automated
+# clients.
+FROM python:3.13.15-slim-trixie
 
 WORKDIR /app
 
