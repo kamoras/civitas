@@ -394,6 +394,92 @@ class TestFetchConfirmedCandidatesArkansas:
 
 
 @pytest.mark.asyncio
+class TestUnsettledRunoff:
+    """The primary has settled, its runoff has not. Read alone, the
+    primary lacks every office the runoff decides; under the state-office
+    opt-in the caller would take that for the whole ballot."""
+
+    def _patched(self, monkeypatch):
+        elections = json.loads(json.dumps(AR_ELECTIONS))
+        for e in elections:
+            if e["electionID"] == AR_RUNOFF_ID:
+                e["electionDate"] = "2026-12-31T00:00:00"
+
+        async def fake(client, rl, method, url, **kw):
+            if "GetElectionList" in url:
+                return _resp(elections)
+            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestSearchList" in url:
+                return _resp(AR_PRIMARY_SEARCH)
+            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestResults" in url:
+                return _resp(AR_PRIMARY_RESULTS)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+
+    async def test_with_state_offices_only_the_federal_rows_are_published(self, monkeypatch):
+        # The settled primary's federal nominees stand (None used to throw
+        # them away and report Arkansas as a failed fetch); its state rows
+        # are left out and the read is marked state-office incomplete.
+        self._patched(monkeypatch)
+        source = {**AR_SOURCE, "statewide_offices": True}
+        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", source)
+        assert len(result) == 5 and all(r["office"] in ("S", "H") for r in result)
+        assert result.state_offices_incomplete is True
+
+    async def test_federal_only_still_reads_the_settled_primary(self, monkeypatch):
+        # Federal rows are applied non-authoritatively, so the settled
+        # primary's winners are still worth confirming.
+        self._patched(monkeypatch)
+        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
+        assert len(result) == 5
+
+
+@pytest.mark.asyncio
+class TestRunoffOwedButNotListed:
+    """The primary has settled and the runoff election is not in the list
+    yet. A state contest whose leader fell short of the majority is owed
+    that runoff; reading the primary alone would publish the office with
+    no nominee for that party, as if complete."""
+
+    LTG = "aaaaaaaa-0000-0000-0000-00000000000l"
+
+    def _patched(self, monkeypatch, votes):
+        elections = [e for e in AR_ELECTIONS if e["electionID"] != AR_RUNOFF_ID]
+        search = json.loads(json.dumps(AR_PRIMARY_SEARCH))
+        search["response"]["contests"][self.LTG] = {
+            "contestName": "REP Lieutenant Governor", "contestTypeCode": "Statewide",
+            "choices": {"a": {"name": "Leader Name"}, "b": {"name": "Second Name"}, "c": {"name": "Third Name"}},
+        }
+        results = json.loads(json.dumps(AR_PRIMARY_RESULTS))
+        results["response"]["contests"][self.LTG] = {"choices": [
+            {"choiceID": k, "totalVotes": v} for k, v in zip("abc", votes)
+        ]}
+
+        async def fake(client, rl, method, url, **kw):
+            if "GetElectionList" in url:
+                return _resp(elections)
+            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestSearchList" in url:
+                return _resp(search)
+            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestResults" in url:
+                return _resp(results)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+
+    async def test_a_short_state_contest_marks_the_state_offices_incomplete(self, monkeypatch):
+        self._patched(monkeypatch, (45, 35, 20))
+        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", {**AR_SOURCE, "statewide_offices": True})
+        assert result.state_offices_incomplete is True
+        assert len(result) == 5 and all(r["office"] in ("S", "H") for r in result)
+
+    async def test_a_majority_everywhere_is_the_whole_read(self, monkeypatch):
+        self._patched(monkeypatch, (60, 30, 10))
+        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", {**AR_SOURCE, "statewide_offices": True})
+        assert not getattr(result, "state_offices_incomplete", False)
+        assert ("lt_governor", "R", "Leader Name") in {(r["office"], r["party"], r["last_name"]) for r in result}
+
+
+@pytest.mark.asyncio
 class TestFetchConfirmedCandidatesNorthDakota:
     def _patched(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):

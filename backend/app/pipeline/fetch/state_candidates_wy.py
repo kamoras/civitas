@@ -80,6 +80,7 @@ from datetime import datetime
 
 import httpx
 
+from app.pipeline.fetch.state_candidates_common import runoff_threshold
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
 from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, parse_office, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
@@ -301,7 +302,7 @@ async def fetch_confirmed_candidates(
     for office, district, party, name, votes in totals:
         by_group.setdefault((office, district, party), []).append((name, votes))
 
-    runoff_threshold_pct = source.get("runoff_threshold_pct")
+    runoff_threshold_pct = runoff_threshold(source)
     results = []
     for (office, district, party), choices in by_group.items():
         won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)

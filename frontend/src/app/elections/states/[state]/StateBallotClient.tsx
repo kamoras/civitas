@@ -21,7 +21,14 @@ import { electionIsNear, useLiveResults } from "@/hooks/useLiveResults";
 import { useHashAt } from "@/hooks/useHashAt";
 import { useNow } from "@/hooks/useNow";
 import { feedFailed, pollsClosed, pollsStillOpen, showsResults } from "@/lib/results";
-import { buildBallotContests, contestForHash, countBallotContests, type BallotContest, contestHash } from "@/lib/ballotContests";
+import {
+  buildBallotContests,
+  contestForHash,
+  countBallotContests,
+  groupStatewideRaces,
+  type BallotContest,
+  contestHash,
+} from "@/lib/ballotContests";
 import {
   candidateName,
   districtAreaLabel,
@@ -46,6 +53,7 @@ import type {
   StateLegChamber,
   StateLegDistrict,
   StatewideNominee,
+  StatewideRace,
   TownBallot,
   TownEntry,
 } from "@/types/election";
@@ -65,7 +73,10 @@ function NomineeName({ nominee }: { nominee: StatewideNominee }) {
   const major = majorPartyOf(nominee);
   return (
     <span className="inline-flex items-baseline gap-1">
-      <span className="font-mono text-[10px] text-ink-min">{nominee.party}</span>
+      {/* A party with no code of ours or FEC's is shown as the state
+          printed it: "OTH" alone would tell a reader nothing about which
+          party this line is. */}
+      <span className="font-mono text-[10px] text-ink-min">{nominee.partyLabel || nominee.party}</span>
       <span
         className={
           major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink"
@@ -181,9 +192,10 @@ function StateLegislatureDetail({ ballot }: { ballot: StateBallot }) {
         <StateLegChamberSection key={chamber.chamber} chamber={chamber} />
       ))}
       <p className="mt-1 text-[10px] text-ink-min">
-        Only seats named in the state&apos;s own results feed appear — a seat whose primary was
-        uncontested is often not published at all, so this is not the full chamber. District
-        boundaries from the U.S. Census Bureau; these offices have no federal
+        {ballot.statewideCoverage.ballotList
+          ? "Every candidate on the state's list for the November ballot. "
+          : `${PRIMARY_RESULTS_CAVEAT} This is not the full chamber. `}
+        District boundaries from the U.S. Census Bureau; these offices have no federal
         campaign-finance filings, so no funding figures exist for them.
       </p>
     </div>
@@ -242,11 +254,131 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
         </div>
       ))}
       <p className="mt-1 text-[10px] text-ink-min">
-        Only seats named in the state&apos;s own results feed appear — a seat whose primary
-        was uncontested is often not published at all, so this is not the full bench.
+        {ballot.judicialCoverage.ballotList
+          ? "Every candidate on the state's list for the November ballot. "
+          : `${PRIMARY_RESULTS_CAVEAT} This is not the full bench. `}
         Retention questions are a separate ballot item and are not covered. These offices
         have no federal campaign-finance filings, so no funding figures exist for them.
       </p>
+    </div>
+  );
+}
+
+/** What primary results cannot show, said wherever state offices are
+ * listed from them. A results file itemises only contested nominations:
+ * a nominee who ran unopposed is often absent (Alabama prints no
+ * uncontested contest at all), so an office or seat can be missing, or
+ * listed with one party's nominee while another party's is not, and no
+ * independent or minor-party candidate ever appears. */
+const PRIMARY_RESULTS_CAVEAT =
+  "Names come from primary results, which often omit a nominee who ran unopposed and never include independent or minor-party candidates — so an office may be missing, or missing a party's nominee.";
+
+function StatewideOfficeRow({ race }: { race: StatewideRace }) {
+  return (
+    <div className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3">
+      <span className="font-mono text-xs text-ink-lo sm:self-center">
+        {race.label}
+        {termPhrase(race.termYears) && (
+          <span className="block text-ink-min">{termPhrase(race.termYears)}</span>
+        )}
+      </span>
+      <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+        {race.nominees.map((n) => (
+          <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/** Every seat of one statewide body on this ballot. How the body is
+ * elected is stated, never implied by the layout: where each voter votes
+ * in one district's seat (New Hampshire's Executive Council), the reader
+ * is told so and helped to find theirs — by the towns it covers where the
+ * state publishes them, the official lookup otherwise; where every voter
+ * votes for each seat (Georgia's PSC, whose districts are residency
+ * requirements), the reader is told that instead. */
+function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; lookupHref: string }) {
+  const [filter, setFilter] = useState("");
+  const first = seats[0];
+  const label = first.officeLabel || first.label;
+  const byDistrict = first.electedBy === "district";
+  const hasAreas = seats.some((s) => (s.areas ?? []).length > 0);
+  const shown = seats.filter((s) =>
+    matchesDistrictQuery({ district: s.seat ?? null, areas: s.areas ?? [], candidates: s.nominees }, filter)
+  );
+  const seatWord = /^\d/.test(first.seat ?? "") ? "District" : "";
+  // Offered whenever there are towns to match: the hint below tells the
+  // reader to filter, so the box has to be there whatever the seat count.
+  const canFilter = byDistrict && hasAreas;
+
+  return (
+    <div className="border border-white/[0.09] bg-surface px-3 py-2.5">
+      <h3 className="font-mono text-xs text-ink-lo">
+        {label.toUpperCase()} — {seats.length} {seats.length === 1 ? "SEAT" : "SEATS"}
+        {termPhrase(first.termYears) && (
+          <span className="text-ink-min"> · {termPhrase(first.termYears)!.toUpperCase()}</span>
+        )}
+      </h3>
+      {byDistrict && (
+        <p className="mt-1 text-xs text-ink-lo">
+          Each voter votes in one district&apos;s seat only.{" "}
+          {canFilter ? "Filter by your town to find yours, or " : "Find yours with "}
+          <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+            {canFilter ? "check the official lookup" : "the official lookup"}
+          </a>
+          .
+        </p>
+      )}
+      {first.electedBy === "statewide" && (
+        <p className="mt-1 text-xs text-ink-lo">
+          Every voter in the state votes for each seat; a seat&apos;s number only says which one it is.
+        </p>
+      )}
+      {canFilter && (
+        <div className="mt-2">
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by town, candidate, or district number"
+            aria-label={`Filter ${label} seats by town, candidate, or district number`}
+            className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
+          />
+          <p role="status" aria-live="polite" className="sr-only">
+            {filter.trim() ? `${shown.length} of ${seats.length} ${label} seats match ${filter}` : ""}
+          </p>
+        </div>
+      )}
+      <div className="mt-2 space-y-1">
+        {shown.map((s) => (
+          <div
+            key={s.office}
+            className="grid grid-cols-[minmax(42px,auto)_1fr] items-baseline gap-3 border border-white/[0.06] px-3 py-2"
+          >
+            <span className="font-mono text-xs text-ink-hi">
+              {seatWord ? `${seatWord} ${s.seat}` : s.seat}
+            </span>
+            <span className="min-w-0">
+              {districtAreaLabel(s.areas ?? [], 3, false) && (
+                <span className="block truncate text-[11px] text-ink-min">
+                  {districtAreaLabel(s.areas ?? [], 3, false)}
+                </span>
+              )}
+              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                {s.nominees.map((n) => (
+                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                ))}
+              </span>
+            </span>
+          </div>
+        ))}
+        {shown.length === 0 && (
+          <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
+            No {label} seat matches “{filter}”. Try your town, a candidate&apos;s name, or a district number.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -259,7 +391,7 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
  * FEC filing, so there is no money, no score and nothing to click
  * through to. Showing a name and a party is the whole of what's true.
  */
-function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
+function StatewideExecutiveDetail({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
   const { statewideRaces, statewideCoverage, state } = ballot;
   return (
     <div>
@@ -269,40 +401,41 @@ function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
         </p>
       ) : (
         <div className="space-y-1.5">
-          {statewideRaces.map((race) => (
-            <div
-              key={race.office}
-              className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3"
-            >
-              <span className="font-mono text-xs text-ink-lo sm:self-center">
-                {race.label}
-                {termPhrase(race.termYears) && (
-                  <span className="block text-ink-min">{termPhrase(race.termYears)}</span>
-                )}
-              </span>
-              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-                {race.nominees.map((n) => (
-                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
-                ))}
-              </span>
-            </div>
-          ))}
+          {groupStatewideRaces(statewideRaces).map((group) =>
+            group.seats ? (
+              <StatewideSeatGroup key={group.key} seats={group.seats} lookupHref={lookupHref} />
+            ) : (
+              <StatewideOfficeRow key={group.key} race={group.race!} />
+            )
+          )}
         </div>
       )}
+      {statewideCoverage.basis && statewideRaces.length === 0 && (
+        // Why "none" is known for a state whose feed was never read for
+        // these offices. Shown instead of the attribution line below,
+        // which would claim a reading that never happened.
+        <p className="mt-2 text-xs text-ink-lo">{statewideCoverage.basis}</p>
+      )}
       <p className="mt-3 text-[10px] text-ink-min">
-        {statewideCoverage.sourceName
-          ? `Nominees as published by ${statewideCoverage.sourceName}`
-          : "Nominees as published by the state"}
+        {statewideCoverage.basis && statewideRaces.length === 0
+          ? "From the state's election calendar"
+          : statewideCoverage.sourceName
+            ? `Nominees as published by ${statewideCoverage.sourceName}`
+            : "Nominees as published by the state"}
         {statewideCoverage.checkedAt
           ? ` · last checked ${statewideCoverage.checkedAt.slice(0, 10)}`
           : ""}
         .
-        {/* Only meaningful next to actual nominees: an office whose primary
-            nobody contested is often not itemised in a results feed at all,
-            so this list is what the state published, not necessarily every
-            statewide office on the ballot. */}
+        {/* Only meaningful next to actual nominees. From primary results,
+            a nomination nobody contested is often not itemised at all, so
+            an office can be missing entirely — or be shown with one
+            party's nominee while the other's, unopposed, is absent. */}
         {statewideRaces.length > 0 &&
-          " Only offices named in the state's own results feed appear — one whose primary was uncontested is often not published at all. These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
+          (statewideCoverage.ballotList
+            ? " Every candidate on the state's list for the November ballot."
+            : ` ${PRIMARY_RESULTS_CAVEAT}`)}
+        {statewideRaces.length > 0 &&
+          " These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
       </p>
     </div>
   );
@@ -919,21 +1052,53 @@ function ContestOverview({
         ) : (
           <>
             <ul>
-              {ballot.statewideRaces.map((r) => (
-                <li key={r.office} className="border-b border-white/[0.09] px-4 py-2">
-                  <span className="block text-[13px] font-bold text-ink-hi">
-                    {r.label}
-                    {termPhrase(r.termYears) && (
-                      <span className="font-normal text-ink-lo"> · {termPhrase(r.termYears)}</span>
+              {groupStatewideRaces(ballot.statewideRaces).map((g) =>
+                g.race ? (
+                  <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
+                    <span className="block text-[13px] font-bold text-ink-hi">
+                      {g.race.label}
+                      {termPhrase(g.race.termYears) && (
+                        <span className="font-normal text-ink-lo"> · {termPhrase(g.race.termYears)}</span>
+                      )}
+                    </span>
+                    <span className="flex flex-wrap gap-x-3 text-sm">
+                      {g.race.nominees.map((n) => (
+                        <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                      ))}
+                    </span>
+                  </li>
+                ) : (
+                  // A body's seats under one heading, saying how it is
+                  // elected: listed flat, New Hampshire's five council
+                  // districts read as five offices every voter marks.
+                  <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
+                    <span className="block text-[13px] font-bold text-ink-hi">
+                      {g.seats![0].officeLabel || g.seats![0].label}
+                      <span className="font-normal text-ink-lo">
+                        {" "}
+                        · {g.seats!.length} {g.seats!.length === 1 ? "seat" : "seats"}
+                        {termPhrase(g.seats![0].termYears) && ` · ${termPhrase(g.seats![0].termYears)}`}
+                      </span>
+                    </span>
+                    {g.seats![0].electedBy === "district" && (
+                      <span className="block text-[12px] text-ink-lo">You vote in your district&apos;s seat only</span>
                     )}
-                  </span>
-                  <span className="flex flex-wrap gap-x-3 text-sm">
-                    {r.nominees.map((n) => (
-                      <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                    {g.seats![0].electedBy === "statewide" && (
+                      <span className="block text-[12px] text-ink-lo">Every voter votes for each seat</span>
+                    )}
+                    {g.seats!.map((seat) => (
+                      <span key={seat.office} className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                        <span className="font-mono text-[11px] text-ink-lo">
+                          {/^\d/.test(seat.seat ?? "") ? `District ${seat.seat}` : seat.seat}
+                        </span>
+                        {seat.nominees.map((n) => (
+                          <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                        ))}
+                      </span>
                     ))}
-                  </span>
-                </li>
-              ))}
+                  </li>
+                ),
+              )}
             </ul>
             <OpenButton label="SOURCE AND NOTES" onClick={() => onOpen(contest.key)} />
           </>
@@ -1202,7 +1367,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           />
         );
       case "statewide":
-        return <StatewideExecutiveDetail ballot={ballot} />;
+        return <StatewideExecutiveDetail ballot={ballot} lookupHref={lookupHref} />;
       case "stateleg":
         return <StateLegislatureDetail ballot={ballot} />;
       case "judicial":

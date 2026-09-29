@@ -82,6 +82,8 @@ from app.pipeline.fetch.state_source_crawler import (
 from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
+    LABELLED_PARTIES,
+    NOMINATION_RULE_KEYS,
     PARTY_CODE_MAP,
     fec_party,
     ballot_basis_key,
@@ -94,6 +96,7 @@ from app.pipeline.fetch.state_candidates_common import (
     STATE_LEG_CHAMBER_LABELS,
     STATEWIDE_MARKER_TIER,
     STATEWIDE_MARKER_TTL_HOURS,
+    join_governor_tickets,
     STATEWIDE_OFFICE_LABELS,
     statewide_marker_key,
 )
@@ -170,6 +173,28 @@ STRATEGIES = {
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
 }
+
+# The strategies whose rows are a state's list of who is on the November
+# ballot -- every qualified candidate, independents included -- rather
+# than primary results, which name only each party's contested winners.
+# Decides whether the page may call a state-office section the whole
+# ballot (the markers' ballotList). A property of the DOCUMENT read, never
+# of general_ballot_complete: that flag describes a state's federal
+# ballot, and North Carolina sets it for its federal FILING list while its
+# state offices come from primary results. A strategy that can read either
+# kind says which per run (SourceRecords.ballot_list -- Vermont's reads
+# the general report once final, primary winners before). Not listed:
+# nj_certification (party nominees only) and every results reader.
+BALLOT_LIST_STRATEGIES = frozenset({
+    "certified_table",    # the certified general lists (AK CO DE HI IA MD ME ND NE NM TN WY)
+    "grouped_list_pdf",   # Illinois's website candidate list
+    "dos_canlist",        # Florida's general candidate list
+    "certified_pdf",      # Missouri's certification of candidates
+    "vrems",              # South Carolina's candidate tracking, general election
+    "sd_vip",             # South Dakota's general candidate list
+    "tx_civix",           # Texas's general-election candidate portal
+    "voterportal",        # Louisiana's staged November ballot
+})
 
 
 
@@ -977,7 +1002,7 @@ async def _crawl_state(
             )
     rules = {
         k: v for k, v in (hand or {}).items()
-        if k in ("runoff_threshold_pct", "advance_count")
+        if k in NOMINATION_RULE_KEYS
     }
     earlier = outcome
     outcome = await _crawl_results_source(db, client, cycle, state, rules, record, now)
@@ -1266,8 +1291,19 @@ def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
     )
 
 
+def _printed_party(record: dict) -> str | None:
+    """The party label a state-office row keeps: the list's own printing,
+    and only under OTHER_PARTY or NONPARTISAN -- a recognised party is its code, and a
+    label beside it would be a second vocabulary for the same fact."""
+    if record.get("party") not in LABELLED_PARTIES:
+        return None
+    label = " ".join(str(record.get("party_label") or "").split())
+    return label[:80] or None
+
+
 def _sync_statewide_nominees(
     db: Session, cycle: int, state: str, source: dict, records: list[dict],
+    *, ballot_list: bool = False,
 ) -> int:
     """Persist this state's statewide-executive nominees and record that
     we looked. Returns how many were stored.
@@ -1296,6 +1332,11 @@ def _sync_statewide_nominees(
         office, party = record["office"], record["party"]
         district = record["district"]
         name = record["last_name"]
+        if is_not_a_person(name or "") or _NOT_ON_THE_BALLOT_RE.search(name or ""):
+            # A results file's bucket won the contest ("Write-in" took
+            # Illinois's 2026 Republican primary for Treasurer, where no
+            # Republican filed): the seat has no nominee to name.
+            continue
         # See the identical guard in _sync_state_leg_nominees: with
         # autoflush=False a duplicate key in one run queues two rows and
         # fails the unique constraint at commit.
@@ -1324,6 +1365,7 @@ def _sync_statewide_nominees(
         # reduced it with clean_display_name rather than surname (see
         # state_candidates_enhanced_voting), so it holds the whole
         # printed name, which is what gets rendered.
+        row.party_label = _printed_party(record)
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
         keep.add((office, district, party, name))
@@ -1346,6 +1388,22 @@ def _sync_statewide_nominees(
             "checkedAt": utcnow().isoformat() + "Z",
             "count": len(keep),
             "sourceName": str(source.get("source_name") or ""),
+            # Set only for a state whose adapter reads no executive
+            # contests at all, because the state elects none this cycle
+            # (Virginia and New Jersey choose governors in odd years).
+            # Its "none" rests on the state's constitutional calendar,
+            # not on a feed we parsed, and the page has to say which —
+            # "as published by the Department of Elections" would claim
+            # a reading that never happened.
+            "basis": str(source.get("statewide_offices_basis") or "") or None,
+            # Whether these names come from the state's list of who is on
+            # the November ballot (every qualified candidate) or from
+            # primary results. Primary results name only the nominees a
+            # results file itemised: a nominee who ran unopposed is often
+            # absent (Alabama prints no uncontested contest at all), and
+            # no independent or minor-party candidate ever appears. The
+            # page must say an office's names may be incomplete then.
+            "ballotList": ballot_list,
         },
         normal_ttl_hours=STATEWIDE_MARKER_TTL_HOURS,
     )
@@ -1378,6 +1436,11 @@ def _sync_state_leg_nominees(
         chamber, district, party = record["office"], record["district"], record["party"]
         seat = record.get("seat")
         name = record["last_name"]
+        if is_not_a_person(name or "") or _NOT_ON_THE_BALLOT_RE.search(name or ""):
+            # A results file's bucket won the contest ("Write-in" took
+            # Illinois's 2026 Republican primary for Treasurer, where no
+            # Republican filed): the seat has no nominee to name.
+            continue
         # A key already handled in THIS run. The query below cannot see a
         # row added moments ago because SessionLocal sets autoflush=False,
         # so a feed that lists one nominee twice would queue two identical
@@ -1406,6 +1469,7 @@ def _sync_state_leg_nominees(
                 district=district, seat=seat, party=party, display_name=name,
             )
             db.add(row)
+        row.party_label = _printed_party(record)
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
         keep.add((chamber, district, seat, party, name))
@@ -1425,6 +1489,7 @@ def _sync_state_leg_nominees(
 
 def _sync_judicial_nominees(
     db: Session, cycle: int, state: str, source: dict, records: list[dict],
+    *, ballot_list: bool = False,
 ) -> int:
     """Persist this state's judicial nominees. Returns how many were stored.
 
@@ -1451,6 +1516,11 @@ def _sync_judicial_nominees(
         court, party = record["office"], record["party"]
         district, seat = record["district"], record.get("seat")
         name = record["last_name"]
+        if is_not_a_person(name or "") or _NOT_ON_THE_BALLOT_RE.search(name or ""):
+            # A results file's bucket won the contest ("Write-in" took
+            # Illinois's 2026 Republican primary for Treasurer, where no
+            # Republican filed): the seat has no nominee to name.
+            continue
         # Same autoflush=False guard as both siblings above.
         if (court, district, seat, party, name) in keep:
             continue
@@ -1473,6 +1543,7 @@ def _sync_judicial_nominees(
                 seat=seat, party=party, display_name=name,
             )
             db.add(row)
+        row.party_label = _printed_party(record)
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
         keep.add((court, district, seat, party, name))
@@ -1499,11 +1570,67 @@ def _sync_judicial_nominees(
             "checkedAt": utcnow().isoformat() + "Z",
             "count": len(keep),
             "sourceName": str(source.get("source_name") or ""),
+            # See the statewide marker's field of the same name.
+            "ballotList": ballot_list,
         },
         normal_ttl_hours=JUDICIAL_MARKER_TTL_HOURS,
     )
     db.commit()
     return len(keep)
+
+
+def _is_ballot_list(source: dict, records: list[dict]) -> bool:
+    """Whether the state-office rows `records` (read from `source`) are
+    the state's list of who is on the November ballot rather than primary
+    results: the adapter's own answer for this run when it gave one, else
+    its strategy's (BALLOT_LIST_STRATEGIES)."""
+    said = getattr(records, "ballot_list", None)
+    if said is not None:
+        return bool(said)
+    return source.get("strategy") in BALLOT_LIST_STRATEGIES
+
+
+def _state_office_source(
+    db: Session, cycle: int, state: str,
+    source: dict, records: list[dict], main_answered: bool,
+    general: dict | None, general_records: list[dict] | None,
+) -> tuple[dict, list[dict], bool]:
+    """(source, records, answered) for this state's statewide and
+    legislative offices this run.
+
+    Without a general_list that opts in with its own statewide_offices,
+    that is the main source, as it always was.
+
+    With one, the certified list is the source once it answers with
+    state-office rows: it is the ballot itself. Until then -- it has not
+    been published (None), or it answered with federal rows only -- the
+    main source's primary results stand in, exactly as they did before
+    the list was configured, when the main source answered and itself
+    opts in (_sync_statewide_nominees gates on the source's own flag).
+    Otherwise every one of these states would drop from the nominees it
+    had to "not yet covered" (or keep a stale marker) for the weeks
+    between its primary and its list's certification.
+
+    Once the list HAS answered with state rows for this cycle (the stored
+    marker names it as the source), it stays authoritative: a later run
+    where it is down says nothing, rather than swapping the certified
+    ballot back to primary winners and deleting its independents.
+    """
+    if not (general and general.get("statewide_offices")):
+        return source, records, main_answered
+    if any(r["office"] not in ("S", "H") for r in general_records or []):
+        return general, general_records or [], True
+    marker = api_cache_get(
+        db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
+        max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
+    ) or {}
+    # The lock is the marker's sourceName, so renaming the list's
+    # source_name in the sources file mid-cycle unlocks it until the list
+    # next answers: primary results would stand in again for those nights.
+    list_name = str(general.get("source_name") or "")
+    if list_name and marker.get("sourceName") == list_name:
+        return general, [], False
+    return source, records, main_answered
 
 
 async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
@@ -1605,6 +1732,29 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         if records is None and general_records is None:
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
+        # Whether the main source said anything this run. When it failed
+        # and only the certified federal list answered, the main source has
+        # nothing to say about the state offices: syncing an empty list
+        # would record the state as checked and holding none, and the page
+        # would call that a confirmed absence.
+        main_answered = records is not None
+        # An answer holding NO contest at all is a feed with nothing in it
+        # yet -- a primary not settled, a results page not posted -- not a
+        # read of a ballot: every state has a House seat on every even-year
+        # ballot, so a real read always yields something. Syncing it would
+        # record the state as checked and holding no statewide offices,
+        # which is what every opted-in state said between the start of a
+        # cycle and its primary settling (New Hampshire's 21-day settle
+        # window ran to 2026-09-29). A state whose "none" rests on its
+        # constitutional calendar rather than the feed
+        # (statewide_offices_basis) is still recorded.
+        if main_answered and not records and not source.get("statewide_offices_basis"):
+            main_answered = False
+        # The adapter's federal rows are settled but its state-office read
+        # is not (a party's primary or a runoff still settling -- see
+        # SourceRecords): the federal rows are applied as usual, and the
+        # main source says nothing about the state offices this run.
+        main_state_answered = main_answered and not getattr(records, "state_offices_incomplete", False)
         records = records or []
 
         # Neither a statewide executive office (Governor, AG, ...) nor a
@@ -1613,8 +1763,23 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # own feed is the record, stored as-is. Split first rather than
         # branching inside the federal loop, which otherwise counts every
         # one of them as `unmatched` against a Race id that cannot exist.
-        statewide = [r for r in records if r["office"] in STATEWIDE_OFFICE_LABELS]
-        state_leg = [r for r in records if r["office"] in STATE_LEG_CHAMBER_LABELS]
+        #
+        # A certified November list that opts in with its OWN
+        # statewide_offices is the source for these instead: it is the
+        # ballot itself, independents included, where primary results can
+        # only name each party's winner (and New Mexico's results portal
+        # no longer serves its primary at all). See _state_office_source
+        # for when the main source's primary results stand in for it.
+        main_records = records
+        state_source, state_records, state_answered = _state_office_source(
+            db, cycle, state, source, records, main_state_answered, general, general_records,
+        )
+        statewide = [r for r in state_records if r["office"] in STATEWIDE_OFFICE_LABELS]
+        if configured.get("joint_governor_ticket"):
+            # One vote for governor and lieutenant governor together: the
+            # ballot has one contest, the ticket (join_governor_tickets).
+            statewide = join_governor_tickets(statewide)
+        state_leg = [r for r in state_records if r["office"] in STATE_LEG_CHAMBER_LABELS]
         judicial = [r for r in records if r["office"] in JUDICIAL_COURT_LABELS]
         records = [
             r for r in records
@@ -1622,9 +1787,17 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             and r["office"] not in STATE_LEG_CHAMBER_LABELS
             and r["office"] not in JUDICIAL_COURT_LABELS
         ]
-        statewide_count = _sync_statewide_nominees(db, cycle, state, source, statewide)
-        state_leg_count = _sync_state_leg_nominees(db, cycle, state, source, state_leg)
-        judicial_count = _sync_judicial_nominees(db, cycle, state, source, judicial)
+        statewide_count = state_leg_count = judicial_count = 0
+        if state_answered:
+            statewide_count = _sync_statewide_nominees(
+                db, cycle, state, state_source, statewide,
+                ballot_list=_is_ballot_list(state_source, state_records),
+            )
+            state_leg_count = _sync_state_leg_nominees(db, cycle, state, state_source, state_leg)
+        if main_state_answered:
+            judicial_count = _sync_judicial_nominees(
+                db, cycle, state, source, judicial, ballot_list=_is_ballot_list(source, main_records),
+            )
 
         # A state with its own general FILING list gets its November ballot
         # from that list (sync_ballot_filings), which is what may speak for
@@ -1636,8 +1809,8 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             # race it covers. Races it does not cover — a national source
             # that only knows the districts it has a verified address for —
             # keep what primary results say, non-authoritatively, exactly
-            # as if the list did not exist for them. Primary results above
-            # still supplied the state offices, which the list may not cover.
+            # as if the list did not exist for them. (The state offices
+            # were settled above, by _state_office_source.)
             general_federal = [r for r in general_records if r["office"] in ("S", "H")]
             covered = {_race_id_for(db, cycle, state, r["office"], r["district"]) for r in general_federal}
             races_here = {

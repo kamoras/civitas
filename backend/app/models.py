@@ -353,6 +353,12 @@ class Representative(Base):
     district: Mapped[int] = mapped_column(Integer, default=0)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
     years_in_office: Mapped[int] = mapped_column(Integer, default=0)
+    # ISO date the member was sworn in to the current Congress, from the
+    # House Clerk's member list (fetch/house_clerk.py). Legislative
+    # Effectiveness prorates its bar for a member seated mid-Congress (a
+    # special election) by the share of the Congress served (v6.23). Null
+    # when the Clerk lists no date.
+    sworn_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
     initials: Mapped[str] = mapped_column(String(4), default="")
 
     # See Senator.leadership_title/committees for the rationale and source.
@@ -579,11 +585,12 @@ class RepStockTrade(Base):
 
 
 class FinancialDisclosure(Base):
-    """A member's most recent annual financial disclosure report — the one
-    whose asset list (House Schedule A / Senate Part 3) backs the holdings
-    breakdown on their scorecard. Informational only, not scored.
+    """A member's or the sitting president's most recent annual financial
+    disclosure report — the one whose asset list (House Schedule A / Senate
+    Part 3 / the 278e's Parts 2, 5 and 6) backs the holdings breakdown on
+    their scorecard. Informational only, not scored.
 
-    Exactly one of senator_id / representative_id is set. Only the latest
+    Exactly one of senator_id / representative_id / president_id is set. Only the latest
     report per member is kept: a report describes holdings at one year end,
     so an older one is superseded rather than accumulated.
 
@@ -596,6 +603,7 @@ class FinancialDisclosure(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     senator_id: Mapped[str | None] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=True, index=True)
     representative_id: Mapped[str | None] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=True, index=True)
+    president_id: Mapped[str | None] = mapped_column(String, ForeignKey("presidents.id", ondelete="CASCADE"), nullable=True, index=True)
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     # What the report is, as the scorecard names it: "2025 annual report",
     # "2025 annual report (amended)", "new-filer report as of 2026-03-24".
@@ -638,6 +646,7 @@ class FinancialDisclosure(Base):
 
     senator: Mapped["Senator"] = relationship(back_populates="financial_disclosures")
     representative: Mapped["Representative"] = relationship(back_populates="financial_disclosures")
+    president: Mapped["President"] = relationship(back_populates="financial_disclosures")
     holdings: Mapped[list["FinancialHolding"]] = relationship(back_populates="disclosure", cascade="all, delete-orphan")
 
 
@@ -744,6 +753,9 @@ class President(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
     trades: Mapped[list["PresidentTrade"]] = relationship(
+        back_populates="president", cascade="all, delete-orphan"
+    )
+    financial_disclosures: Mapped[list["FinancialDisclosure"]] = relationship(
         back_populates="president", cascade="all, delete-orphan"
     )
 
@@ -2068,6 +2080,12 @@ class StatewideNominee(Base):
     # the second overwriting the first.
     district: Mapped[str | None] = mapped_column(String(8), nullable=True)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
+    # The party exactly as the state printed it, set only when `party` is
+    # state_candidates_common.OTHER_PARTY: a certified November list that
+    # names a party the shared codes cannot (Vermont's "FREEDOM AND
+    # UNITY", South Carolina's "Workers"). The page shows this label
+    # rather than a code. Null for every recognised party.
+    party_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # The name the state itself printed, annotations stripped (Rhode
     # Island marks its party-endorsed candidates with a bare asterisk).
     # There is deliberately no separate surname column: a surname exists
@@ -2136,6 +2154,8 @@ class StateLegNominee(Base):
     # Minnesota's "10A" really is a district of its own.
     seat: Mapped[str | None] = mapped_column(String(4), nullable=True)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
+    # As on StatewideNominee: the printed party, for OTHER_PARTY rows only.
+    party_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -2197,6 +2217,8 @@ class JudicialNominee(Base):
     # judgeship is a single office, never a multi-member body.
     seat: Mapped[str | None] = mapped_column(String(8), nullable=True)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
+    # As on StatewideNominee: the printed party, for OTHER_PARTY rows only.
+    party_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

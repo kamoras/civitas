@@ -126,6 +126,7 @@ from lxml import html as lxml_html
 
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     clean_display_name,
     is_not_a_person,
     normalize_party,
@@ -346,7 +347,7 @@ async def fetch_confirmed_candidates(
             for name, party, votes in candidates:
                 bucket.setdefault((*key[:2], party, *key[2:]), []).append((name, votes))
 
-    runoff_threshold_pct = source.get("runoff_threshold_pct")
+    runoff_threshold_pct = runoff_threshold(source)
     # Two reductions, same tie-safe machinery: a surname for the federal
     # records that get matched against FEC rows, the whole printed name
     # for a state office that has no FEC row to match or render from.

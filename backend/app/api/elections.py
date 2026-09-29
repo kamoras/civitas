@@ -65,7 +65,7 @@ from app.pipeline.fetch.state_candidates_common import (
     JUDICIAL_MARKER_TIER,
     JUDICIAL_MARKER_TTL_HOURS,
     judicial_marker_key,
-    PARTY_CODE_MAP,
+    state_nominee_party,
     fec_party,
     STATE_LEG_CHAMBER_LABELS,
     district_label,
@@ -148,6 +148,54 @@ def _state_leg_towns() -> dict[str, list[str]]:
             logger.exception("state_leg_district_crosswalk.json unavailable")
             _state_leg_towns_cache = {}
     return _state_leg_towns_cache
+
+
+_STATEWIDE_SEATS_PATH = pathlib.Path(__file__).resolve().parent.parent / "data" / "statewide_seats.json"
+_STATEWIDE_TOWNS_PATH = pathlib.Path(__file__).resolve().parent.parent / "data" / "statewide_district_towns.json"
+_statewide_seats_cache: dict[str, dict] | None = None
+_statewide_towns_cache: dict[str, list[str]] | None = None
+
+
+def _statewide_seats() -> dict[str, dict]:
+    """{state: {office: {"electedBy": ..., "districts": ...}}} for the
+    statewide bodies the page lists seat by seat -- whether each voter
+    votes in one district's seat or in every seat. A cited constitutional
+    fact per state (data/statewide_seats.json), never read off a label.
+    Empty dict if the file is missing: the page then says neither."""
+    global _statewide_seats_cache
+    if _statewide_seats_cache is None:
+        try:
+            _statewide_seats_cache = json.loads(_STATEWIDE_SEATS_PATH.read_text())["states"]
+        except Exception:
+            logger.exception("statewide_seats.json unavailable")
+            _statewide_seats_cache = {}
+    return _statewide_seats_cache
+
+
+def _statewide_district_towns() -> dict[str, list[str]]:
+    """"{ST}-{office}-{n}" -> the towns a district-elected statewide seat
+    covers, from the state's own results for that contest
+    (scripts/fetch_statewide_district_towns.py). Empty dict if missing."""
+    global _statewide_towns_cache
+    if _statewide_towns_cache is None:
+        try:
+            _statewide_towns_cache = json.loads(_STATEWIDE_TOWNS_PATH.read_text())["districts"]
+        except Exception:
+            logger.exception("statewide_district_towns.json unavailable")
+            _statewide_towns_cache = {}
+    return _statewide_towns_cache
+
+
+def _seat_places(state: str, code: str, district: str | None, spec: dict) -> list[str]:
+    """The places a district-elected seat covers, where they are known:
+    the county crosswalk for a body whose districts are the congressional
+    ones (Colorado's), the body's own town list otherwise. Empty when the
+    state publishes none -- never a guess."""
+    if not district or not district.isdigit() or spec.get("electedBy") != "district":
+        return []
+    if spec.get("districts") == "congressional":
+        return list(_district_counties().get(f"{state}-{int(district)}") or [])
+    return list(_statewide_district_towns().get(f"{state}-{code}-{int(district)}") or [])
 
 
 router = APIRouter(prefix="/elections")
@@ -797,23 +845,51 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
             # through the exact same majorPartyOf() every federal
             # candidate already goes through — a second party vocabulary
             # on one page is how the two drift apart.
-            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "party": state_nominee_party(row.party),
+            # The party as the state printed it, for a party the shared
+            # codes cannot name (party "OTH"); null otherwise. The page
+            # shows it in place of the code.
+            "partyLabel": row.party_label,
             "name": row.display_name or row.last_name,
         })
 
     # STATEWIDE_OFFICE_LABELS is insertion-ordered by seniority of the
     # office, which is the order a state prints them on the real ballot.
-    # A statewide body seated by district (Georgia's Public Service
-    # Commission) contributes one entry per seat, labelled with it —
-    # otherwise District 3 and District 5 render as one indistinguishable
-    # "Public Service Commission" row.
+    # A statewide body with seats contributes one entry per seat, labelled
+    # with it -- otherwise District 3 and District 5 render as one
+    # indistinguishable row -- and says how it is elected (electedBy):
+    # Georgia's PSC seats are voted on by every voter, New Hampshire's
+    # Executive Council seats each by one district's.
     races = [
         {
             "office": code if district is None else f"{code}-{district}",
-            "label": label if district is None else f"{label}, District {district}",
+            # A seat that names its own kind ("Place 1", Alabama's PSC)
+            # is printed as-is; a bare number is a district.
+            "label": (
+                label if district is None
+                else f"{label}, District {district}" if district[:1].isdigit()
+                else f"{label}, {district}"
+            ),
             "nominees": sorted(by_office[(code, district)], key=lambda n: n["party"]),
             # Null when data/office_terms.json does not list this office.
             "termYears": term_years("statewide", state, code),
+            # For a seat: "district" when each voter votes in one district's
+            # seat only (the page helps them find theirs), "statewide" when
+            # every voter votes for each seat (Georgia's PSC). Null for an
+            # office with no seat, or one data/statewide_seats.json does not
+            # cite -- never read off the label.
+            "electedBy": (
+                (_statewide_seats().get(state) or {}).get(code, {}).get("electedBy")
+                if district is not None else None
+            ),
+            # The seat as the page shows it ("3", "Place 1"), and the places
+            # a district seat covers, for the same filter the legislature
+            # uses. Empty when the state publishes no list.
+            "seat": district,
+            # The office itself, for grouping its seats under one heading.
+            "officeCode": code,
+            "officeLabel": label,
+            "areas": _seat_places(state, code, district, (_statewide_seats().get(state) or {}).get(code, {})),
         }
         for code, label in STATEWIDE_OFFICE_LABELS.items()
         for district in sorted(
@@ -833,6 +909,17 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
         "status": status,
         "sourceName": (marker or {}).get("sourceName") or None,
         "checkedAt": (marker or {}).get("checkedAt") or None,
+        # Why "none" is known when the feed was never read for these
+        # offices — see _sync_statewide_nominees. Null for every state
+        # whose own results were parsed.
+        "basis": (marker or {}).get("basis") or None,
+        # True when the names are the state's list of who is on the
+        # November ballot; false when they are primary results, whose
+        # names under an office may be incomplete (an unopposed nominee
+        # is often not itemised; independents never are). A marker
+        # written before this field existed reads as false: the cautious
+        # reading.
+        "ballotList": bool((marker or {}).get("ballotList")),
     }
 
 
@@ -862,7 +949,8 @@ def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None)
     seats: dict[tuple[str, str, str | None], list[dict]] = {}
     for row in rows:
         seats.setdefault((row.chamber, row.district, row.seat), []).append({
-            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "party": state_nominee_party(row.party),
+            "partyLabel": row.party_label,
             "name": row.display_name,
         })
 
@@ -936,11 +1024,14 @@ def _judicial_section(
     """
     if marker is None:
         return [], {"status": JudicialCoverageStatus.NOT_YET_COVERED,
-                    "checkedAt": None, "sourceName": None}
+                    "checkedAt": None, "sourceName": None, "ballotList": False}
 
     coverage = {
         "checkedAt": marker.get("checkedAt"),
         "sourceName": marker.get("sourceName") or None,
+        # As on the statewide section: primary results may omit a seat's
+        # unopposed nominee, the state's ballot list does not.
+        "ballotList": bool(marker.get("ballotList")),
     }
     rows = (
         db.query(JudicialNominee)
@@ -955,7 +1046,8 @@ def _judicial_section(
     seats: dict[tuple[str, str | None, str | None], list[dict]] = {}
     for row in rows:
         seats.setdefault((row.court, row.district, row.seat), []).append({
-            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "party": state_nominee_party(row.party),
+            "partyLabel": row.party_label,
             "name": row.display_name,
         })
 
@@ -1141,7 +1233,14 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # actually close, or it stops describing the page and starts
             # being boilerplate a reader learns to skip.
             "Governor and other statewide executive contests",
-        ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else []) + ([
+        ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else [
+            # What a covered state's executive section still leaves out,
+            # named by its source entry: a state office on the ballot its
+            # adapter does not read (Louisiana's and Montana's
+            # district-elected Public Service Commissions). Before coverage
+            # the line above already says it.
+            str(o) for o in ((source_for_state(state) or {}).get("statewide_omits") or [])
+        ]) + ([
             "State legislative districts",
         ] if not state_leg_races else []) + (
             # Same rule as the two above: the line shrinks the moment this

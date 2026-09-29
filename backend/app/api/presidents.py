@@ -17,6 +17,7 @@ from app.api.response_helpers import (
     cached_json as _cached_json,
     score_history_json,
 )
+from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_president_holdings
 from app.services.president_service import (
     get_all_presidents,
     get_current_president,
@@ -120,6 +121,23 @@ def get_trades(
     amounts are the ranges the form reports, with no derived profit — see
     president_service.get_president_trades."""
     result = get_president_trades(db, president_id, page, per_page)
+    if result is None:
+        raise HTTPException(status_code=404, detail="President not found")
+    return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/{president_id}/holdings")
+def get_holdings(
+    president_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=100),
+    category: str | None = Query(None, pattern=HOLDING_CATEGORY_PATTERN),
+    db: Session = Depends(get_db),
+):
+    """The assets on the president's latest annual report (OGE 278e): a
+    by-category breakdown plus a page of holdings, largest first
+    (optionally one category's). Same shape as the members' holdings."""
+    result = get_president_holdings(db, president_id, page, per_page, category)
     if result is None:
         raise HTTPException(status_code=404, detail="President not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)

@@ -13,6 +13,59 @@ vi.mock("@/lib/api", () => ({
   fetchSenatorStockTrades: vi.fn(),
   fetchRepStockTrades: vi.fn(),
   fetchPresidentHistory: vi.fn().mockResolvedValue({ snapshots: [] }),
+  fetchPresidentHoldings: vi.fn().mockResolvedValue({
+    available: true,
+    reportLabel: "2025 annual report",
+    asOfDate: "2025-12-31",
+    filedDate: "2026-07-01",
+    sourceUrl: "https://extapps2.oge.gov/report.pdf",
+    parsed: true,
+    unreadableReason: null,
+    laterFilingLabel: null,
+    laterFilingUrl: null,
+    holdingsCount: 1,
+    unvaluedCount: 0,
+    totalLow: 50000000,
+    totalHigh: 50000000,
+    totalOpenEnded: true,
+    categories: [
+      {
+        category: "REAL_ESTATE",
+        label: "Real estate",
+        color: "#008300",
+        count: 1,
+        unvaluedCount: 0,
+        zeroValueCount: 0,
+        valueLow: 50000000,
+        valueHigh: 50000000,
+        openEnded: true,
+        weight: 50000000,
+        share: 1,
+      },
+    ],
+    categoryFilter: null,
+    holdings: [
+      {
+        assetName: "40 Wall Street LLC",
+        account: null,
+        ticker: null,
+        assetType: "Commercial real estate",
+        category: "REAL_ESTATE",
+        categoryLabel: "Real estate",
+        owner: "self",
+        valueText: "Over $50,000,000",
+        valueLow: 50000000,
+        valueHigh: 50000000,
+        valueOpenEnded: true,
+      },
+    ],
+    total: 1,
+    page: 1,
+    perPage: 5,
+    totalPages: 1,
+  }),
+  fetchSenatorHoldings: vi.fn(),
+  fetchRepHoldings: vi.fn(),
   fetchSenatorHistory: vi.fn(),
   fetchRepresentativeHistory: vi.fn(),
 }));
@@ -113,6 +166,9 @@ describe("PresidentScorecard", () => {
       "/politicians/trump-45"
     );
     expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
+    // The sitting president's annual-report holdings, in the members' panel.
+    expect(await screen.findByRole("heading", { name: "Holdings" })).toBeInTheDocument();
+    expect(screen.getByText("40 Wall Street LLC")).toBeInTheDocument();
     expect(screen.getByText("285 signed")).toBeInTheDocument();
   });
 
@@ -144,9 +200,10 @@ describe("PresidentScorecard", () => {
       </main>
     );
     await screen.findByText("21,285 disclosed this term");
-    // The share buttons are part of what axe checks here: the summary and
-    // the four score columns.
-    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(5);
+    await screen.findByText("40 Wall Street LLC");
+    // The share buttons are part of what axe checks here: the summary, the
+    // four score columns and the holdings.
+    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(6);
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });

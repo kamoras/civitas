@@ -24,6 +24,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.23",
+    date: "2026-10-01",
+    title: "Legislative Effectiveness: members who won a special election are compared with the time they have served",
+    tldr: "A member sworn in partway through the Congress is now compared with what the typical member achieves in the same share of it, not in the whole Congress so far. It matters only for the 11 House members who arrived late this Congress; everyone else keeps their score.",
+    changes: [
+      "Why: bill credit builds up over the time a member has had to sponsor and advance bills, but late arrivals were held to the bar of colleagues with up to 20 more months. One member sworn in on September 1, 2026, dropped from a neutral 50 to 38 on the bill measure by introducing his first bill.",
+      "Now: each member's sworn-in date comes from the House Clerk's member list, and the bar is scaled by the share of the Congress so far that they have served. The breakdown states the date and the share. Senators are not affected: no source the pipeline reads gives a senator's sworn-in date, and no senator in this Congress was seated late.",
+      "Effect on September 2026 data: the 11 late arrivals rise by 0 to 18 points on Legislative Effectiveness (for example, from 23 to 39 for a member seated in April 2026).",
+      "Also: a bill whose last recorded action was the chamber rejecting it is no longer counted as having passed, in the rare case its full action history can't be fetched.",
+    ],
+  },
+  {
     version: "v6.22",
     date: "2026-09-30",
     title: "Funding Independence compares PAC money with campaigns of the same size",

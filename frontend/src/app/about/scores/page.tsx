@@ -15,6 +15,7 @@ import {
   A,
 } from "@/components/about/AboutPage";
 import ScoreWeightBar from "@/components/about/ScoreWeightBar";
+import SignalOverlapReading from "@/components/about/SignalOverlapReading";
 
 export const metadata = pageMetadata({
   title: "How Senators and Representatives Are Scored",
@@ -242,6 +243,11 @@ export default function ScoresChapter() {
             neutral; toward the seat&apos;s center scores above, by the same amount either way. When
             that data isn&apos;t available, the score is all break-rate.
           </P>
+          <P>
+            Both parts come from roll calls (a crossing rate and a position), so every pipeline run
+            checks that they still measure different things by how closely they move together across
+            each chamber. <SignalOverlapReading pair="constituent" />
+          </P>
         </Sub>
         <Sub title="What 0 and 100 mean">
           <P>
@@ -359,6 +365,15 @@ export default function ScoresChapter() {
         </List>
         <P>
           When cosponsorship data is missing, the split falls back to 70% bills and 30% leadership.
+        </P>
+        <P>
+          Leadership and bipartisan attraction are both measured from the cosponsorship network (how
+          central a member is, and how many cosponsors cross party lines to join them), so their
+          combined weight is capped at 40%, and every pipeline run checks that they still carry
+          separate information by how closely they move together across each chamber. Two earlier
+          pairs that shipped as distinct signals turned out to move together at |r| of 0.72 and 0.76
+          and were restructured (see the <A href="/changelog">scoring changelog</A>).{" "}
+          <SignalOverlapReading pair="effectiveness" />
         </P>
         <Sub title="How bills are counted">
           <Steps>
@@ -545,8 +560,8 @@ export default function ScoresChapter() {
       <Section id="trades-and-holdings" title="Stock trades and holdings">
         <P>
           Profiles also show members&apos; STOCK Act trade disclosures and the assets from their
-          latest annual financial disclosure (the sitting president&apos;s trade filings too). These
-          are shown, not scored.
+          latest annual financial disclosure, and the sitting president&apos;s trade filings and
+          annual report the same way. These are shown, not scored.
         </P>
         <P>
           These forms report each amount as a range, with no purchase price or share count, so no
@@ -554,8 +569,11 @@ export default function ScoresChapter() {
           ceiling, such as &ldquo;Over $50,000,000&rdquo;, is shown as &ldquo;$50,000,000+&rdquo;.
           The holdings chart sizes each asset by its range&apos;s midpoint (an open-ended range by
           its minimum) and says so. Asset categories come only from the type the filer declared on
-          the form, never guessed from an asset&apos;s name. A report that can&apos;t be read, such
-          as a scanned paper filing, is linked rather than machine-read.
+          the form, never guessed from an asset&apos;s name. The president&apos;s form has no type
+          column: a business is categorized by the underlying assets it states, a fund by the
+          form&apos;s fund marker, and every other security reads &ldquo;type not stated&rdquo;. A
+          report that can&apos;t be read, such as a scanned paper filing, is linked rather than
+          machine-read.
         </P>
       </Section>
     </AboutPage>

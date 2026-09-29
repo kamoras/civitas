@@ -27,3 +27,16 @@ class TestDefaultCurrentCongress:
 
     def test_returns_120_for_2027(self):
         assert congress_for_year(2027) == 120
+
+    def test_the_new_congress_starts_when_it_convenes(self):
+        # January 3 of an odd year (20th Amendment), not January 1: a day
+        # early, every scored window would point at a Congress with no bills.
+        assert _default_current_congress(datetime.date(2027, 1, 2)) == 119
+        assert _default_current_congress(datetime.date(2027, 1, 3)) == 120
+        assert _default_current_congress(datetime.date(2026, 1, 1)) == 119
+
+    def test_the_staleness_check_agrees_on_the_convening_day(self):
+        from app.pipeline.fetch.congress import expected_current_congress
+        for day in (datetime.date(2027, 1, 2), datetime.date(2027, 1, 3), datetime.date(2026, 6, 1)):
+            now = datetime.datetime(day.year, day.month, day.day, 12)
+            assert expected_current_congress(now) == _default_current_congress(day)
