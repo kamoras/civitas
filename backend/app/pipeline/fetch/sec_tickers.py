@@ -14,7 +14,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.http_utils import CONTACT_EMAIL, DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 # SEC requests a descriptive User-Agent with contact info on all automated
 # requests (https://www.sec.gov/os/webmaster-faq#developers) — a generic UA
 # risks a block.
-_HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-research.org"}
+_HEADERS = {"User-Agent": f"Civitas civic-transparency-platform {CONTACT_EMAIL}"}
 
 _ticker_map_cache: dict[str, str] | None = None
 _ticker_map_cache_at: float = 0.0
