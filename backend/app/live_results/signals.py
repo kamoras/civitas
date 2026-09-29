@@ -254,7 +254,6 @@ def update_developing_issues(db: Session, applied: list) -> int:
         if result is None:
             continue
         issue = db.get(ActionIssue, result.developing_issue_id) if result.developing_issue_id else None
-        relinked = False
         if issue is None and result.developing_issue_id is None and outcome.created:
             # A data reset wipes race_results (and this link) but keeps
             # action_issues: the rebuilt row picks its race's issue back up
@@ -266,7 +265,7 @@ def update_developing_issues(db: Session, applied: list) -> int:
                 by_race = _issues_by_race(db)
             found = by_race.get(result.race_id)
             if found is not None and found.created_at >= _election_began(result.election_date):
-                issue, relinked = found, True
+                issue = found
                 result.developing_issue_id = found.id
         if issue is not None and issue.status != ActionIssueStatus.DEVELOPING:
             continue  # promoted: news coverage owns its content now
@@ -282,11 +281,14 @@ def update_developing_issues(db: Session, applied: list) -> int:
                 changed += 1
                 continue
             if not issue.is_current:
-                # The rebuilt count's first read always raises its flip
-                # afresh; it is a new story only if the issue last said the
-                # count had gone back — not if the Action Center retired it
-                # while the flip held.
-                if outcome.new_flip and (not relinked or _says_reverted(issue)):
+                # A new flip is a new story only if the issue last said the
+                # count had gone back. In a normal night that is always so —
+                # a flip is raised again only after a reversal, which writes
+                # the reverted content, current or not — but after a reset
+                # the rebuilt count raises its flip afresh, a poll or two
+                # later if the holder had to be read again, and an issue the
+                # Action Center retired while the flip held is not news.
+                if outcome.new_flip and _says_reverted(issue):
                     # A flip after a reversal is a new story, drafted fresh:
                     # the Action Center's refresh retires an unmatched
                     # developing row a day after it was CREATED, so reviving

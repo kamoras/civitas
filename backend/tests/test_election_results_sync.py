@@ -745,3 +745,19 @@ def test_a_runoff_does_not_take_the_generals_promoted_story(db_session, _on_elec
     db_session.flush()
     signals.update_developing_issues(db_session, [er.Applied(result, created=True)])
     assert result.developing_issue_id is None
+
+
+def test_a_reset_that_took_the_holder_does_not_revive_a_retired_flip(db_session, _on_election_day):
+    """The holder comes back a poll after the rebuild, and the sync raises
+    the flip afresh then — the relink was a poll earlier."""
+    race = _setup(db_session)
+    _apply(db_session, race, _contest(400, 600, 60))
+    [issue] = _issues(db_session)
+    issue.is_current = False  # the Action Center's one-day rule, the flip still holding
+    _reset(db_session, members=True)
+    _apply(db_session, race, _contest(400, 650, 70))
+    db_session.add(Representative(id="S000001", name="Dana Smith", state="GA", district=2, party="D"))
+    db_session.flush()
+    kinds, _ = _apply(db_session, race, _contest(400, 700, 75))
+    assert "flip" in kinds
+    assert _issues(db_session) == [issue] and not issue.is_current
