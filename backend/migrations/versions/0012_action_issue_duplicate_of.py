@@ -5,16 +5,16 @@ migrated schema. Filled by the hourly Action Center refresh
 (action_center.mark_recent_duplicates); until its first run after this
 release the homepage feed shows the rows unmarked.
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0012
+Revises: 0011
 Create Date: 2026-09-28
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0013"
-down_revision = "0012"
+revision = "0012"
+down_revision = "0011"
 branch_labels = None
 depends_on = None
 

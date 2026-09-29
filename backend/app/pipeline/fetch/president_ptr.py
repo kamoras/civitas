@@ -233,7 +233,8 @@ def _oge_api_params(surname: str) -> dict:
 
 
 def _parse_index(rows: list[dict], president_name: str) -> list[dict]:
-    """Extract this president's PTR filings from the OGE API's rows.
+    """Extract this president's filings from the OGE API's rows: periodic
+    transaction reports (kind "periodic") and annual reports ("annual").
 
     Each row's `type` field is an HTML fragment — an anchor to the PDF for a
     postable filing, or an anchor to a "Request this Document" form for one
@@ -262,9 +263,14 @@ def _parse_index(rows: list[dict], president_name: str) -> list[dict]:
             continue
 
         haystack = f"{type_html} {pdf_url}".lower()
+        # An annual report is checked first: a row identifying as one is
+        # never read as transactions of a periodic report, even if it also
+        # carries a periodic marker.
         if any(marker in haystack for marker in _ANNUAL_FORM_MARKERS):
-            continue
-        if not any(marker in haystack for marker in _PTR_FORM_MARKERS):
+            kind = "annual"
+        elif any(marker in haystack for marker in _PTR_FORM_MARKERS):
+            kind = "periodic"
+        else:
             continue
         if not _names_this_president([row.get("name") or "", row.get("title") or ""], president_name):
             continue
@@ -277,20 +283,23 @@ def _parse_index(rows: list[dict], president_name: str) -> list[dict]:
             "doc_id": filing_id,
             "filing_date": (row.get("docDate") or "")[:10] or None,
             "pdf_url": pdf_url,
+            "kind": kind,
         })
 
     return filings
 
 
 async def fetch_ptr_filing_index(db: Session, president_name: str) -> list[dict]:
-    """Fetch and parse OGE's index of the sitting president's 278-T filings.
+    """Fetch and parse OGE's index of the sitting president's filings.
 
-    Returns one dict per filing: {doc_id, filing_date, pdf_url}. Returns an
+    Returns one dict per filing: {doc_id, filing_date, pdf_url, kind}, kind
+    "periodic" (a 278-T) or "annual" (a 278e). Returns an
     empty list (never None) on failure — a caller must treat "couldn't fetch
     this run" as "leave existing rows alone," not as "the president disclosed
     no trades."
     """
-    cache_key = f"ptr-index-{president_name.lower().replace(' ', '-')}"
+    # v2: entries carry `kind`, and annual reports are listed too.
+    cache_key = f"ptr-index-v2-{president_name.lower().replace(' ', '-')}"
     cached = api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_INDEX_MAX_AGE_HOURS)
     if cached is not None:
         return cached
@@ -349,7 +358,9 @@ async def fetch_and_parse_ptr(db: Session, filing: dict) -> list[TradeRow]:
 
     Returns rows tagged with parse_confidence ("text" or "ocr"), or an empty
     list if the PDF can't be fetched or holds no parseable transaction table
-    — never a fabricated row.
+    — never a fabricated row. `filing` may carry `not_before` (the start of
+    the term) and its `filing_date`: the window an OCR'd transaction date
+    must fall in, since a filing reports no transaction after it was filed.
     """
     cache_key = f"ptr-parsed-v{PTR_PARSER_VERSION}-{filing['doc_id']}"
     cached = api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_FILING_MAX_AGE_HOURS)
@@ -369,7 +380,9 @@ async def fetch_and_parse_ptr(db: Session, filing: dict) -> list[TradeRow]:
         return []
 
     try:
-        rows, confidence = parse_pdf_bytes(resp.content)
+        rows, confidence = parse_pdf_bytes(
+            resp.content, not_before=filing.get("not_before"), not_after=filing.get("filing_date"),
+        )
     except Exception as e:
         logger.error("Failed to parse presidential 278-T PDF %s: %s", pdf_url, e)
         return []

@@ -164,8 +164,9 @@ class StockTradeSchema(CamelModel):
     transaction_type: Literal["purchase", "sale_full", "sale_partial", "exchange"]
     transaction_date: str
     disclosure_date: str
-    days_to_disclose: int
-    late: bool = False
+    # None where the row can't support a timeliness figure (below).
+    days_to_disclose: int | None
+    late: bool | None = False
     amount_low: float
     amount_high: float
     # True when the filing used the open-ended top bracket ("Over
@@ -179,12 +180,22 @@ class StockTradeSchema(CamelModel):
     industry: str = "UNCLASSIFIED"
     source_url: str
     parse_confidence: Literal["text", "ocr"] = "text"
+    # "annual": a presidential annual report's transaction (PresidentTrade).
+    report_kind: Literal["periodic", "annual"] = "periodic"
 
     @model_validator(mode="after")
     def _compute_derived_flags(self) -> "StockTradeSchema":
         # Derived, not stored — see StockTrade model comment on
-        # days_to_disclose for why this isn't a separate DB column.
-        self.late = self.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS
+        # days_to_disclose for why this isn't a separate DB column. None
+        # when the row can't support it: an annual report states no date
+        # the transaction was first reported, and a date read by OCR from a
+        # scan may be misread by a digit (ptr_common.window_date), enough
+        # to mark an on-time trade late.
+        if self.report_kind == "annual" or self.parse_confidence == "ocr":
+            self.days_to_disclose = None
+            self.late = None
+        else:
+            self.late = self.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS
         self.amount_open_ended = is_open_ended(self.amount_low, self.amount_high)
         return self
 
