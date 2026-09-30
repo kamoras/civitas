@@ -176,6 +176,22 @@ class TestStreaming:
             assert await _events(doc, db_session) == [{**_NONE, "retryAfter": explore_summary.BUSY_RETRY_AFTER_S}]
         assert written == {}
 
+    async def test_an_llm_unreachable_past_a_restarts_length_is_a_failure(self, db_session, monkeypatch):
+        # A crash loop or a wrong URL: reported, not a ten-minute wait.
+        doc = _make_doc(db_session)
+
+        async def _unreachable(*_args, **_kwargs):
+            raise httpx.ConnectError("refused")
+            yield  # pragma: no cover
+
+        patches, _ = _llm(_unreachable)
+        with patches[0], patches[1], patches[2]:
+            assert "retryAfter" in (await _events(doc, db_session))[-1]
+            monkeypatch.setattr(explore_summary, "_unreachable_since",
+                                explore_summary.time.monotonic() - explore_summary.UNREACHABLE_WAIT_S - 1)
+            explore_summary._llm_busy_until = 0.0
+            assert await _events(doc, db_session) == [_NONE]
+
     async def test_a_stream_waiting_on_the_llm_keeps_the_connection_alive(self, db_session, monkeypatch):
         # nginx drops a response silent for its read timeout.
         doc = _make_doc(db_session)

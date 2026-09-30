@@ -43,6 +43,9 @@ GENERATION_LIMIT_S = 240.0
 UNUSABLE_FOR_S = 30 * 60.0
 SLOW_FOR_S = 2 * 60.0
 BUSY_RETRY_AFTER_S = 30
+# How long an unreachable LLM is a wait (a restart, a redeploy) before it
+# is a failure (a crash loop, a wrong URL): the page stops waiting then.
+UNREACHABLE_WAIT_S = 5 * 60.0
 # How often a stream waiting on the LLM sends an SSE comment: nginx drops a
 # proxied response that sends nothing for its read timeout, which a busy
 # LLM's prompt processing can exceed before the first token.
@@ -184,6 +187,8 @@ _holds: dict[str, tuple[str, float]] = {}
 # before then makes it unusable.
 _strikes: dict[str, float] = {}
 _llm_busy_until = 0.0
+# Monotonic time the LLM was first found unreachable, until it next answers.
+_unreachable_since: float | None = None
 # Text key -> (monotonic time it's forgotten, its final event): a run just
 # over, kept briefly — a reader whose cache read raced its cache write (and
 # missed it) gets this rather than generating the same text again.
@@ -282,11 +287,27 @@ async def once(event: dict) -> AsyncIterator[str]:
     yield sse(event)
 
 
+def _unreachable_is_a_wait() -> bool:
+    """Whether an LLM that couldn't be reached is still a wait: for
+    UNREACHABLE_WAIT_S from the first such failure, a restart's length;
+    after that a failure the page reports, not waits out for ten minutes."""
+    global _unreachable_since
+    now = time.monotonic()
+    if _unreachable_since is None:
+        _unreachable_since = now
+    return now - _unreachable_since < UNREACHABLE_WAIT_S
+
+
+def _reached() -> None:
+    global _unreachable_since
+    _unreachable_since = None
+
+
 async def _generate(run: _Run) -> None:
     from app.pipeline.analyze import ollama_client
 
     text = ""
-    finished = at_limit = timed_out = llm_busy = False
+    finished = at_limit = timed_out = llm_busy = unreachable = False
     deadline = asyncio.timeout(GENERATION_LIMIT_S)
     try:
         async with deadline:
@@ -314,14 +335,22 @@ async def _generate(run: _Run) -> None:
             logger.warning("Explore doc summary for doc_id=%s: the LLM is busy", run.doc_id)
             llm_busy = True
         elif isinstance(error, (httpx.ConnectError, httpx.ConnectTimeout)) and not text:
-            logger.warning("Explore doc summary for doc_id=%s: the LLM is unreachable (%s)", run.doc_id, error)
-            llm_busy = True
+            unreachable = True
+            llm_busy = _unreachable_is_a_wait()
+            if llm_busy:
+                logger.warning("Explore doc summary for doc_id=%s: the LLM is unreachable (%s)", run.doc_id, error)
+            else:
+                logger.error("Explore doc summary for doc_id=%s: the LLM has been unreachable for over %ds — "
+                             "check LLAMA_SERVER_URL / LLM_BACKEND and the llama-server service (%s)",
+                             run.doc_id, int(UNREACHABLE_WAIT_S), error)
         elif deadline.expired() or isinstance(error, httpx.ReadTimeout):
             logger.warning("Explore doc summary for doc_id=%s ran out of time", run.doc_id)
             timed_out = True
         else:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", run.doc_id)
 
+    if not unreachable:
+        _reached()  # it was reached this time: the unreachable run is over
     try:
         await _finish(run, text, finished=finished, at_limit=at_limit, timed_out=timed_out, llm_busy=llm_busy)
     except Exception:
@@ -402,3 +431,4 @@ def reset() -> None:
     _strikes.clear()
     _finished.clear()
     _llm_busy_until = 0.0
+    _reached()

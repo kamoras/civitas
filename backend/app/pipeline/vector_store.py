@@ -954,15 +954,21 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
     return len(doc_ids)
 
 
-def _record_chunks_per_doc(conn: sqlite3.Connection) -> None:
+def _record_chunks_per_doc(conn: sqlite3.Connection, *, finished_rebuild: bool = False) -> None:
     """Mean chunks per document, measured rather than assumed: the search
     path needs it to know how many chunk slots to request for a given
     number of documents. Stored because it is a property of the index and
     recomputing it per query is a COUNT DISTINCT over the whole table.
     Counted and written in one write transaction: a delete committing
     between a count and its write would leave a ratio of a table that no
-    longer exists (the two scans hold the lock ~tens of ms)."""
+    longer exists (the two scans hold the lock ~tens of ms).
+
+    Only over a complete index: a rebuild's partial table records its own
+    at its end (`finished_rebuild`, just before its identity), so one that
+    fails leaves no ratio of half a table behind."""
     with _writing(conn):
+        if not finished_rebuild and _get_meta(conn, _INDEX_MODEL) != index_identity():
+            return
         total_chunks = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
         total_docs = conn.execute(
             "SELECT COUNT(*) FROM (SELECT DISTINCT doc_id FROM vec_explore)"
@@ -1198,12 +1204,11 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
     conn = get_vec_conn()
     # One transaction, the ratio's recount included: a failure part-way
     # leaves nothing half-deleted, and none is reported for a delete that
-    # landed. Recounted only over a complete index — a rebuild's partial
-    # table records its own at its end.
+    # landed.
     with _writing(conn):
         removed = _delete_chunks(conn, ids)
         _delete_ids(conn, "vec_explore_text", ids)
-        if removed and _get_meta(conn, _INDEX_MODEL) == index_identity():
+        if removed:
             _record_chunks_per_doc(conn)  # chunks went: the ratio moved
     return removed
 
@@ -1376,7 +1381,7 @@ def _rebuild(db_session_factory, wait: bool, if_incomplete: bool, unless_rebuilt
         }, meta={_INDEX_MODEL: ""})
         try:
             total = _embed_all(db_session_factory)
-            _record_chunks_per_doc(conn)  # once, over the finished index
+            _record_chunks_per_doc(conn, finished_rebuild=True)  # once, over the finished index
             _set_meta(conn, _INDEX_MODEL, index_identity())
         except Exception as error:
             raise RebuildFailed(f"explore index rebuild failed after its swap: {error}") from error

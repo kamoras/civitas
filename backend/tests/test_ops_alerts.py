@@ -435,6 +435,17 @@ class TestOpenAndResolved:
         # The newest three, plus the open one the cap would have dropped.
         assert subjects == ["Open", "event 4", "event 3", "event 2"]
 
+    def test_pruning_keeps_a_superseded_alerts_key_while_its_condition_is_open(self, db_session):
+        # Freed, the key would let the swing back to it send it again.
+        from app import ops_alerts
+
+        with patch.object(ops_alerts, "_HISTORY_KEEP", 2):
+            assert self._send(db_session, "States A failing", dedupe_key="a", condition="states")
+            assert self._send(db_session, "States B failing", dedupe_key="b", condition="states")
+            for i in range(4):
+                self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
+            assert not self._send(db_session, "States A failing", dedupe_key="a", condition="states")
+
     def test_the_overrun_watchdog_resolves_once_the_run_is_over(self, db_session):
         self._send(db_session, "House pipeline overrun", condition="overrun-house")
         _check(db_session)  # no House run is running any more

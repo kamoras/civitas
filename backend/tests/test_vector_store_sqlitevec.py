@@ -257,7 +257,7 @@ class TestOneWritePerDocument:
         monkeypatch.setattr(vector_store, "_REBUILD_BATCH", 1)
         measured = []
         real = vector_store._record_chunks_per_doc
-        monkeypatch.setattr(vector_store, "_record_chunks_per_doc", lambda c: (measured.append(1), real(c)))
+        monkeypatch.setattr(vector_store, "_record_chunks_per_doc", lambda c, **kw: (measured.append(1), real(c, **kw)))
         assert vector_store.rebuild_explore_index(lambda: db_session) == 3
         assert measured == [1]
 

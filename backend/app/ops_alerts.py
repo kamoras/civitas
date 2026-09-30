@@ -261,18 +261,24 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
             # alert for it says so.
             _supersede_open(db, condition, now, keep=key)
         # Prune old history so the table stays bounded — never an open
-        # alert, which would silently drop a live problem off the panel.
+        # alert, which would silently drop a live problem off the panel,
+        # nor one superseded under a condition still open: its dedupe key
+        # is what keeps it from being sent again (_supersede_open).
         db.flush()  # the session doesn't autoflush; count this one in the prune
-        cutoff_rows = (
+        history = (
             db.query(ApiCache)
             .filter(ApiCache.tier == _HISTORY_TIER)
             .order_by(ApiCache.cached_at.desc())
-            .offset(_HISTORY_KEEP)
             .all()
         )
-        for row in cutoff_rows:
-            if not _is_open(json.loads(row.data_json)):
-                db.delete(row)
+        decoded = [(row, json.loads(row.data_json)) for row in history]
+        still_open = {data.get("condition") for _, data in decoded if data.get("condition") and _is_open(data)}
+        for row, data in decoded[_HISTORY_KEEP:]:
+            if _is_open(data):
+                continue
+            if row.cache_key.startswith("dedupe-") and data.get("condition") in still_open:
+                continue
+            db.delete(row)
         db.commit()
     except Exception:
         logger.exception("Failed to record ops alert")
