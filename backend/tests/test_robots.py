@@ -193,6 +193,9 @@ class TestRecordsAfterReview:
     def test_keys_are_read_by_prefix_in_googles_spellings(self, line):
         assert _allows(f"User-agent: *\n{line}\n", "/x") is False
 
+    def test_a_prefixed_key_with_whitespace_keeps_a_colon_in_its_value(self):
+        assert _allows("User-agent: *\nDisallowed /a:b\n", "/a:b/c") is False
+
     def test_a_pluralised_user_agent_key_starts_a_group(self):
         assert _allows("User-agents: *\nDisallow: /x\n", "/x") is False
 

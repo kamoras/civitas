@@ -70,8 +70,10 @@ def edition_url(edition: int) -> str:
     return f"https://www.c-span.org/presidentsurvey{edition}/?page=overall"
 
 # C-SPAN's WAF blocks requests with no browser-like User-Agent (confirmed
-# 2026-07: a plain httpx/default-UA request 403s, the same UA string this
-# codebase already uses for congress.gov's own bot-resistant pages works).
+# 2026-07: a plain httpx/default-UA request 403s, "Mozilla/5.0 (compatible;
+# Civitas/1.0)" worked). BOT_USER_AGENT is that string with the contact
+# added; C-SPAN refused both from the network it was re-checked on
+# (2026-09-30), so the contact's effect there is unverified.
 _HEADERS = {"User-Agent": BOT_USER_AGENT}
 
 _RATE_LIMITER = RateLimiter(rps=1.0)

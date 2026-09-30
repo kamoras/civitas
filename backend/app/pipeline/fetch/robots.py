@@ -21,7 +21,9 @@ byte-order mark is dropped, and only the first MAX_BYTES are read (§2.5
 asks for at least 500 KiB). Like Google's parser, a record may use
 whitespace instead of the colon, and a key is read by its prefix in the
 spellings Google's parser accepts ("useragent", "user agent", "disalow",
-"diasllow"; "Disallowed" and "User-agents" too): a crawler that wants to be
+"diasllow"; "Disallowed" and "User-agents" too) — a little more loosely,
+since "-", "_" and spaces are ignored anywhere in a key ("User_agent",
+"Dis-allow"), which only ever reads more rules: a crawler that wants to be
 told no reads a rule its author clearly meant. Bytes that aren't UTF-8 are
 kept as the bytes they are, and percent-encoded as such.
 
@@ -160,11 +162,12 @@ def normalize(value: str) -> str:
     return "".join(out)
 
 
-# The record keys matched first, in the spellings Google's parser accepts,
-# with a colon or whitespace after them — so "Sitemap https://…" and
-# "Disallow /a:b" split after the key, not at a colon inside the value.
+# The record keys matched first, in the spellings Google's parser accepts
+# and anything they prefix ("Disallowed"), with a colon or whitespace after
+# them — so "Sitemap https://…" and "Disallowed /a:b" split after the key,
+# not at a colon inside the value.
 _KNOWN_RECORD = re.compile(
-    r"^(user[\s_-]*agent|allow|dis+al+[oa]w|diasl+ow|site[\s_-]*maps?)\s*(?::|\s)\s*(.*)$",
+    r"^(user[\s_-]*agent\w*|allow\w*|dis+al+[oa]w\w*|diasl+ow\w*|site[\s_-]*map\w*)\s*(?::|\s)\s*(.*)$",
     re.IGNORECASE,
 )
 # Record keys as Google's parser reads them — by prefix, so "Disallowed"

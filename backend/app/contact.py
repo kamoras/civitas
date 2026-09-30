@@ -20,3 +20,9 @@ CONTACT_EMAIL = "mack.ryanm@gmail.com"
 # BROWSER_HEADERS' full browser shape — the "compatible; bot; +contact"
 # form crawlers use, so a site's logs show who it is and how to reach us.
 BOT_USER_AGENT = f"Mozilla/5.0 (compatible; Civitas/1.0; +{CONTACT_EMAIL})"
+
+# Civitas fetching its own pages (the Bluesky link-card reader): the site's
+# middleware (frontend/src/middleware.ts) skips a User-Agent starting
+# "Civitas-Bot/", so the app reading itself is not counted as a visit — or
+# as a view of the issue a post links to, which feeds "trending".
+SELF_FETCH_USER_AGENT = f"Civitas-Bot/1.0 (+{CONTACT_EMAIL})"

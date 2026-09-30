@@ -11,6 +11,7 @@ change caller-visible behavior.
 """
 
 import asyncio
+import re
 import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -432,38 +433,117 @@ def test_contact_address_is_real_and_held_once():
         assert path.resolve() in allowed or CONTACT_EMAIL.lower() not in text, path
 
 
-# The User-Agent written out as a literal on purpose, explained where it is
-# defined: New Hampshire's filter refuses the "(+contact)" comment.
-# (scripts/fetch_site_fonts.py sends next/font's browser string by name, so
-# Google Fonts serves the same files; the sweep doesn't read it as a literal.)
+# User-Agents sent without the contact on purpose, each explained where it
+# is written: (file, a fragment of the line). New Hampshire's filter refuses
+# the "(+contact)" comment; the bioguide photo host refuses anything but a
+# browser; fetch_site_fonts.py sends next/font's own browser string, so
+# Google Fonts serves the files next/font would.
 _BROWSER_ONLY_USER_AGENTS = {
-    "app/pipeline/fetch/state_candidates_nh.py",
+    ("backend/app/pipeline/fetch/state_candidates_nh.py", "Chrome/151"),
+    ("frontend/src/lib/remoteImage.ts", "Chrome/128"),
+    ("backend/scripts/fetch_site_fonts.py", "Chrome/104"),
 }
+# Where a User-Agent is set: a header key ("User-Agent": / ["User-Agent"] =
+# / ("User-Agent", ...) or a user_agent= / USER_AGENT = / UA = name.
+_UA_SITE = re.compile(
+    r"""(["']user-agent["']\s*(?:\]\s*=|[:,])|\b(?:user_?agent|ua)\b\s*[:=](?!=))""", re.IGNORECASE,
+)
+# A string literal naming Civitas as a client: "Civitas/1.0", "Civitas-OG/1".
+_CIVITAS_TOKEN = re.compile(r"""(?:^|[=:(,{\[]\s*)(?:[rbfu]{1,2})?["'`][^"'`\n]*\bcivitas[\w-]*/\d""", re.IGNORECASE)
+# What counts as naming the contact in a value (or a constant built from it).
+_NAMES_CONTACT = re.compile(
+    r"CONTACT_EMAIL|BOT_USER_AGENT|SELF_FETCH_USER_AGENT|CIVIC_CONTACT|BROWSER_HEADERS|\+\$\{SITE_URL\}"
+)
+
+
+def _user_agent_offenders(repo, files):
+    """Every User-Agent value written as a literal, and every literal
+    naming Civitas as a client, whose text (with the next two non-blank
+    lines, for a value split over lines) doesn't name the contact."""
+    from app.contact import CONTACT_EMAIL
+
+    offenders = []
+    for path in files:
+        rel = path.relative_to(repo).as_posix()
+        if path.suffix not in (".py", ".ts", ".tsx", ".mjs", ".js") or not (
+            rel.startswith(("backend/app/", "backend/scripts/", "frontend/src/"))
+        ) or ".test." in path.name or "/tests/" in rel:
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        in_docstring = False
+        for i, line in enumerate(lines):
+            if path.suffix == ".py":
+                # Prose in a docstring may quote a User-Agent; it sends none.
+                quotes = line.count('"""') + line.count("'''")
+                was_in, in_docstring = in_docstring, in_docstring ^ (quotes % 2 == 1)
+                if was_in or quotes:
+                    continue
+            code = line.split("#", 1)[0] if path.suffix == ".py" else line
+            if code.lstrip().startswith(("//", "*", "/*")):
+                continue
+            window = " ".join([code] + [x for x in lines[i + 1:i + 4] if x.strip()][:2])
+            site = _UA_SITE.search(code)
+            literal_value = site and re.match(r"""\s*\(?\s*(?:[rbfu]{1,2})?["'`]""", window[site.end():])
+            if not (literal_value or _CIVITAS_TOKEN.search(code)):
+                continue
+            if _NAMES_CONTACT.search(window) or CONTACT_EMAIL in window:
+                continue
+            if any(rel == f and frag in window for f, frag in _BROWSER_ONLY_USER_AGENTS):
+                continue
+            offenders.append(f"{rel}:{i + 1}: {line.strip()}")
+    return offenders
 
 
 def test_every_user_agent_names_the_contact():
-    """A User-Agent written as a string literal is one that bypasses the
-    contact: every request that names Civitas says how to reach us, through
-    CIVIC_CONTACT, BROWSER_HEADERS or BOT_USER_AGENT."""
-    import re
+    """A User-Agent written as a string literal, or a literal naming Civitas
+    as a client, bypasses the contact: every request says how to reach us,
+    through CIVIC_CONTACT, BROWSER_HEADERS, BOT_USER_AGENT or
+    SELF_FETCH_USER_AGENT (the site's URL in the frontend, which can't
+    import the address) — the few browser-only strings aside."""
     from pathlib import Path
 
-    from app.contact import BOT_USER_AGENT, CONTACT_EMAIL
+    from app.contact import BOT_USER_AGENT, CONTACT_EMAIL, SELF_FETCH_USER_AGENT
 
     assert BOT_USER_AGENT.endswith(f"+{CONTACT_EMAIL})")
-    backend = Path(__file__).resolve().parents[1]
-    literal = re.compile(r"""["']user-agent["']\s*:\s*(?:\(\s*)?f?["']""", re.IGNORECASE)
-    offenders = []
-    for path in _checked_in(backend):
-        if path.suffix != ".py" or "tests" in path.relative_to(backend).parts:
-            continue
-        rel = path.relative_to(backend).as_posix()
-        if rel in _BROWSER_ONLY_USER_AGENTS:
-            continue
-        lines = path.read_text(encoding="utf-8").splitlines()
-        for i, line in enumerate(lines):
-            # A value split over lines ends within the next one or two.
-            value = " ".join(lines[i:i + 3])
-            if literal.search(line) and CONTACT_EMAIL not in value and "CONTACT_EMAIL" not in value:
-                offenders.append(f"{rel}: {line.strip()}")
-    assert offenders == []
+    assert SELF_FETCH_USER_AGENT.endswith(f"(+{CONTACT_EMAIL})")
+    repo = Path(__file__).resolve().parents[2]
+    files = _checked_in(repo / "backend")
+    assert _user_agent_offenders(repo, files) == []
+    # Each exemption still points at a line that exists.
+    for rel, frag in _BROWSER_ONLY_USER_AGENTS:
+        if (repo / rel).exists():
+            assert frag in (repo / rel).read_text(encoding="utf-8"), rel
+
+
+@pytest.mark.parametrize("source", [
+    'headers = {"User-Agent": "Civitas/1.0"}',
+    'headers["User-Agent"] = "Mozilla/5.0"',
+    'h = [("User-Agent", "x")]',
+    'client = httpx.Client(headers={\n    "User-Agent": (\n        "Civitas/1.0 (research)"\n    ),\n})',
+    'UA = "Civitas/1.0 (bill title calibration)"',
+    'USER_AGENT = rf"Civitas/1.0"',
+    'fetch(u, { headers: { "User-Agent": `civitas-og` } })',
+])
+def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
+    path = tmp_path / "backend" / "app" / "x.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(source + "\n")
+    assert _user_agent_offenders(tmp_path, [path]) != []
+
+
+def test_the_link_card_reader_is_the_user_agent_the_site_skips():
+    """The site's middleware doesn't count a request whose User-Agent starts
+    with its self-fetch marker as a visit (or an issue view, which feeds
+    trending); the link-card reader must still send it."""
+    from pathlib import Path
+
+    from app.contact import SELF_FETCH_USER_AGENT
+
+    middleware = Path(__file__).resolve().parents[2] / "frontend" / "src" / "middleware.ts"
+    if not middleware.exists():  # the backend image carries no frontend
+        pytest.skip("no frontend checkout")
+    marker = re.search(r'userAgent\.startsWith\("([^"]+)"\)', middleware.read_text(encoding="utf-8"))
+    assert marker and SELF_FETCH_USER_AGENT.startswith(marker.group(1))
