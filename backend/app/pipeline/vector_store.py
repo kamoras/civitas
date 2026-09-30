@@ -821,6 +821,19 @@ def chunk_text(text: str, max_tokens: int, count_tokens) -> list[str]:
     return windows
 
 
+def _delete_chunks(conn: sqlite3.Connection, doc_ids: list[int]) -> int:
+    """Delete these documents' chunks, inside the caller's transaction:
+    one statement per 500 ids, since vec0 can't index doc_id outside a KNN
+    query — each statement scans every chunk, so one per document would
+    scan the table once per document. Returns the chunks deleted."""
+    removed = 0
+    for i in range(0, len(doc_ids), 500):
+        part = doc_ids[i:i + 500]
+        cur = conn.execute(f"DELETE FROM vec_explore WHERE doc_id IN ({','.join('?' * len(part))})", part)
+        removed += cur.rowcount or 0
+    return removed
+
+
 def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = True, fresh: bool = False) -> int:
     """Embed explore documents for semantic search.
 
@@ -873,9 +886,9 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
             for doc in textless
         ]
         with _writing(conn):
+            if not fresh:
+                _delete_chunks(conn, [doc_id for doc_id, _, _ in textless_hashes])
             for doc_id, digest, meta in textless_hashes:
-                if not fresh:
-                    conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
                 _record_text_hash(conn, doc_id, digest, meta)
     if not units:
         if textless and not fresh and record_chunks_per_doc:
@@ -903,8 +916,7 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
         digests = {d: (doc.get("_text_hash") or explore_text_hash(doc), explore_meta_hash(doc)) for d, _, doc in batch}
         with _writing(conn):
             if not fresh:
-                for doc_id in dict.fromkeys(d for d, _, _ in batch):
-                    conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
+                _delete_chunks(conn, list(dict.fromkeys(d for d, _, _ in batch)))
             for (doc_id, text, doc), emb in zip(batch, embs):
                 conn.execute(
                     _CHUNK_INSERT,
@@ -942,16 +954,17 @@ def _record_chunks_per_doc(conn: sqlite3.Connection) -> None:
     path needs it to know how many chunk slots to request for a given
     number of documents. Stored because it is a property of the index and
     recomputing it per query is a COUNT DISTINCT over the whole table.
-    Counted and written in one transaction on the write connection, under
-    its lock: no other thread's uncommitted writes are counted."""
-    with _writing(conn):
-        total_chunks = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-        total_docs = conn.execute(
+    Counted in a read snapshot (committed rows only, and no write lock held
+    through two full scans); only the one row is written under it."""
+    with _snapshot() as snap:
+        total_chunks = snap.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+        total_docs = snap.execute(
             "SELECT COUNT(*) FROM (SELECT DISTINCT doc_id FROM vec_explore)"
         ).fetchone()[0]
-        if total_docs:
-            _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
-        else:  # an empty index: no ratio, rather than the last corpus's
+    if total_docs:
+        _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
+    else:  # an empty index: no ratio, rather than the last corpus's
+        with _writing(conn):
             conn.execute("DELETE FROM vec_meta WHERE key = 'explore_chunks_per_doc'")
 
 
@@ -1178,20 +1191,14 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
     if not ids:
         return 0
     conn = get_vec_conn()
-    removed = 0
-    # Chunked: SQLite caps host parameters per statement, and this is
-    # called with whole-corpus-sized id sets during a cleanup sweep. One
-    # transaction: a failure part-way leaves nothing half-deleted.
+    # SQLite caps host parameters per statement, and this is called with
+    # whole-corpus-sized id sets during a cleanup sweep. One transaction: a
+    # failure part-way leaves nothing half-deleted.
     with _writing(conn):
+        removed = _delete_chunks(conn, ids)
         for i in range(0, len(ids), 500):
-            chunk = ids[i:i + 500]
-            placeholders = ",".join("?" * len(chunk))
-            cur = conn.execute(
-                f"DELETE FROM vec_explore WHERE doc_id IN ({placeholders})",
-                chunk,
-            )
-            removed += cur.rowcount or 0
-            conn.execute(f"DELETE FROM vec_explore_text WHERE doc_id IN ({placeholders})", chunk)
+            part = ids[i:i + 500]
+            conn.execute(f"DELETE FROM vec_explore_text WHERE doc_id IN ({','.join('?' * len(part))})", part)
     return removed
 
 

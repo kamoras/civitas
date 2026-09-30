@@ -481,8 +481,8 @@ class TestTextHashes:
 
     def test_an_embed_takes_the_write_lock_only_to_write(self, vec_env):
         # The identity is recorded already: no write transaction just to
-        # read it — the batch's, and the ratio's (with its nested meta
-        # write), nothing else.
+        # read it — the batch's, and the ratio's one-row write (its counts
+        # are read in a snapshot), nothing else.
         vector_store.embed_explore_documents([_doc(1, "A title")])
         real = vector_store._writing
         opened = []
@@ -493,7 +493,29 @@ class TestTextHashes:
 
         with patch.object(vector_store, "_writing", counting):
             vector_store.embed_explore_documents([_doc(2, "B title")])
-        assert len(opened) == 3
+        assert len(opened) == 2
+
+    def test_a_batch_deletes_its_documents_old_chunks_in_one_statement(self, vec_env):
+        # vec0 scans every chunk per doc_id statement: one per batch, not
+        # one per document.
+        vector_store.embed_explore_documents([_doc(i, f"Old {i}") for i in range(1, 6)])
+        conn = vector_store.get_vec_conn()
+        deletes = []
+
+        class _Conn:
+            def __getattr__(self, name):
+                return getattr(conn, name)
+
+            def execute(self, sql, *a):
+                if sql.startswith("DELETE FROM vec_explore WHERE"):
+                    deletes.append(sql)
+                return conn.execute(sql, *a)
+
+        with patch.object(vector_store, "get_vec_conn", return_value=_Conn()):
+            vector_store.embed_explore_documents([_doc(i, f"New {i}") for i in range(1, 6)])
+        assert len(deletes) == 1
+        titles = dict(conn.execute("SELECT doc_id, title FROM vec_explore").fetchall())
+        assert titles == {i: f"New {i}" for i in range(1, 6)}
 
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
