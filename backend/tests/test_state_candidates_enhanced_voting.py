@@ -325,13 +325,9 @@ class TestFreshnessGate:
         """The date comes from the election INDEX entry, which is what
         dates the cycle — not from the results payload, which a vendor
         could re-stamp on every amendment."""
-        index = json.loads(json.dumps(INDEX))
-        for entry in index["elections"]:
-            if entry["publicElectionId"] == "RI2026StatewidePrimary":
-                entry["electionDate"] = "2026-12-31"
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        _patched(monkeypatch, index=index, results=results)
+        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
         assert await _fetch(year=2026) == []
 
 

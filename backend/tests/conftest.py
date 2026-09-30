@@ -626,3 +626,35 @@ def pytest_sessionfinish(session, exitstatus):
         if hits:
             print(f"\nThe test run tried to {what} the data volume outside a test: " + "; ".join(sorted(set(hits))))
             session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+@pytest.fixture()
+def freeze_utcnow(monkeypatch):
+    """Pin the backend's clock: ``freeze_utcnow(datetime(...))``.
+
+    Replaces ``app.time_utils.utcnow`` and every loaded module's own
+    ``from app.time_utils import utcnow`` binding (the app's and the test
+    module's alike), so a module imported later picks up the frozen one too. For tests whose fixtures describe one
+    election cycle or one congress (a 2026 Senate race, a snapshot a week
+    old): on the real clock they break the day the calendar moves past it —
+    election night, or January 3 of an odd year — as three freshness-gate
+    tests did on 2026-09-30 (#779)."""
+    import sys
+
+    from app import time_utils
+
+    real = time_utils.utcnow
+
+    def freeze(when):
+        def frozen():
+            return when
+
+        # A module's own __dict__, never getattr: a lazy package's module
+        # __getattr__ (transformers) imports optional backends on any
+        # attribute it doesn't have.
+        for module in list(sys.modules.values()):
+            if (getattr(module, "__dict__", None) or {}).get("utcnow") is real:
+                monkeypatch.setattr(module, "utcnow", frozen)
+        return when
+
+    return freeze
