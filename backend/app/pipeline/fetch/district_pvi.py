@@ -751,6 +751,33 @@ class SeatLines(dict):
     def copy(self) -> dict:
         return dict(self.items())
 
+    # The remaining dict operations that would read the storage directly —
+    # comparison, reversed(), copy.copy/deepcopy, `lines | other`, repr.
+    def __eq__(self, other) -> bool:
+        return dict(self.items()) == other
+
+    def __ne__(self, other) -> bool:
+        return not self == other
+
+    __hash__ = None  # a dict: unhashable, like its base
+
+    def __reversed__(self):
+        return reversed(list(self.keys()))
+
+    def __copy__(self) -> dict:
+        return self.copy()
+
+    def __deepcopy__(self, memo) -> dict:
+        import copy
+
+        return copy.deepcopy(self.copy(), memo)
+
+    def __or__(self, other):
+        return self.copy() | other if isinstance(other, dict) else NotImplemented
+
+    def __repr__(self) -> str:
+        return f"SeatLines({self.copy()!r}, congress={self.congress!r})"
+
     def own_table(self) -> dict[str, int]:
         """This read's own (top-level) table, whatever block is open."""
         return dict(dict.items(self))

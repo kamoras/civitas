@@ -358,12 +358,16 @@ The correct pattern, established by `_district_pvi()` /
    Jan 3 of an odd year, the 20th Amendment's hand-over — not midnight,
    which gave a process started that morning the new windows on the old
    lines), and `app.config.scoring_congress` advances it to the Congress
-   in office at the start of every pipeline job (every scheduled job via
-   `scheduler._start_job`, every trigger via `run_pipeline_in_thread`) and
-   holds it for that job, in a ContextVar every read of the setting in the
-   job's context answers — so a process running across Jan 3 moves at its
-   next job with no restart, and a job running across noon stays on one
-   Congress. An environment pin is the one thing that stops the switch: it
+   in office at the start of every background job and holds it for that
+   job — `app.background.start_writer` (every scheduled job, every trigger,
+   the startup rescore) and `writing()` take the hold themselves, so no
+   writer can start without one. The hold is a ContextVar that every read
+   of the setting in the job's context answers (including work handed to
+   `asyncio.to_thread`; a plain `threading.Thread` started inside a job
+   does not inherit it and reads the process-wide value) — so a process
+   running across Jan 3 moves at its next job with no restart, and a job
+   running across noon stays on one Congress. The read-only API process
+   runs no jobs; it advances the value on its liveness loop. An environment pin is the one thing that stops the switch: it
    freezes the district lines as well as the windows, and
    `check_current_congress_staleness` alerts once it falls behind. It exists only for re-running an archived
    database; **the production `.env` must not set `CURRENT_CONGRESS`**

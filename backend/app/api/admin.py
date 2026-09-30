@@ -1351,12 +1351,14 @@ async def admin_pipeline_timings(
 
 
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
-async def admin_trigger_pipeline(
+def admin_trigger_pipeline(
     senator: str | None = Query(default=None),
     fetch_only: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
-    """Trigger a pipeline run from the admin panel."""
+    """Trigger a pipeline run from the admin panel. A plain def: its
+    run-in-progress check is a blocking database read, so FastAPI runs it
+    on the threadpool rather than the event loop."""
     from app.api.pipeline import _is_pipeline_running
     from app.pipeline.senate_pipeline import run_senate_pipeline
 
@@ -1511,7 +1513,7 @@ _reembed_slot = threading.Lock()
 
 
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])
-async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
+def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     """Trigger a House representative pipeline run.
 
     409 when a House run is already going (or holds the district-lines
@@ -1523,7 +1525,8 @@ async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     lock are (fetch/district_pvi.run_house_on_sitting_lines,
     run_house_pipeline), and a trigger that slips past both checks is
     refused by them — but they turn the common double click into an answer
-    instead of a silent skip.
+    instead of a silent skip. A plain def, since both checks are blocking
+    database reads: FastAPI runs it on the threadpool, off the event loop.
     """
     from app.models import HousePipelineRun
     from app.pipeline import lease

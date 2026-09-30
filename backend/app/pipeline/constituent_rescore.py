@@ -59,7 +59,7 @@ def _member_dict(row, votes: list[dict], chamber: str) -> dict:
 
 
 def rescore_stale_constituent_alignment(
-    session_factory, *, house_lines: int | None, house: bool = True,
+    session_factory, *, house_lines: int | None, chambers: tuple[str, ...] = ("senate", "house"),
 ) -> list[str]:
     """Rescore each chamber whose persisted Constituent Alignment reference
     predates the current statistic. Returns the chambers rescored. Never
@@ -76,9 +76,9 @@ def rescore_stale_constituent_alignment(
     mid-rollout) would have its members stamped with this rescore's
     lines.
 
-    `house=False` leaves the House alone (its caller couldn't hold the
-    district lines — main.rescore_constituent_alignment_on_current_lines);
-    the next House run measures and rescores it."""
+    `chambers` limits it to those (main.rescore_constituent_alignment_on_
+    current_lines runs the Senate alone, then the House under the district
+    lines' lease)."""
     from app.models import HousePipelineRun, PipelineRun, Representative, Senator
     from app.pipeline.analyze.ground_truth import _vote_query_for
     from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
@@ -92,11 +92,7 @@ def rescore_stale_constituent_alignment(
 
     done: list[str] = []
     for chamber in _stale_chambers():
-        if chamber == "house" and not house:
-            logger.info(
-                "Constituent Alignment rescore (house) skipped — a House run or District PVI "
-                "refresh holds the district lines",
-            )
+        if chamber not in chambers:
             continue
         model, run = (Senator, PipelineRun) if chamber == "senate" else (Representative, HousePipelineRun)
         db = session_factory()

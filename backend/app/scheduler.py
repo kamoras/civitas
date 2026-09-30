@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.config import scoring_congress, settings
+from app.config import settings
 from app.database import SessionLocal
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
@@ -54,16 +54,13 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
     lease.tracked_job) while it runs, so a reset in another process sees it,
     and it sees the reset — taken inside the job, past its own checks, so a
     tick that bails holds nothing another entry point would skip over."""
-    def held_target() -> None:
-        # One Congress for the whole job — the nightly chain's Senate,
-        # Supplementary and House runs included: its scored windows and
-        # House members' district lines move together, at the first job to
-        # start after noon ET on Jan 3 (app.config.scoring_congress).
-        with scoring_congress():
-            target()
-
+    # start_writer runs the job inside app.config.scoring_congress: one
+    # Congress for the whole job — the nightly chain's Senate, Supplementary
+    # and House runs included — so its scored windows and House members'
+    # district lines move together, at the first job to start after noon ET
+    # on Jan 3.
     try:
-        start_writer(held_target, name=name)
+        start_writer(target, name=name)
     except WritesHeld as held:
         logger.warning("%s", held)
         if alert:
@@ -179,7 +176,7 @@ def _nightly_pipeline() -> None:
             # first, under a lease it holds until its scoring is done
             # (fetch/district_pvi.run_house_on_sitting_lines). The sitting
             # Congress is the one this whole job holds
-            # (app.config.scoring_congress, via _start_job) — the same
+            # (app.config.scoring_congress, via start_writer) — the same
             # value every scored window reads — so the first job to start
             # after noon ET on Jan 3 of an odd year (with the default 03:00
             # UTC schedule, the chain that starts that evening) switches

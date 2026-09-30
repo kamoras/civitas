@@ -121,26 +121,33 @@ def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]
     overlap check the rescore re-measures from it — recompute on the same
     ones. Never raises (the rescore's own contract).
 
-    The House part holds the DISTRICT_LINES lease (who=RESCORE_WHO) across
-    the read and the commit: a House run (or a refresh) takes it before it
-    switches the lines, and a triggered House run has no HousePipelineRun
-    row yet while it does — the rescore's run_in_progress check can't see
-    it, and would commit the old lines' scores over the run's fresh ones.
-    A House run that finds the rescore holding it waits (WAITED_FOR). When
-    the lease is held elsewhere, only the Senate is rescored; the House
-    run holding it scores the House itself."""
+    The Senate goes first and reads no lines. The House part, only when
+    the House is stale, holds the DISTRICT_LINES lease (who=RESCORE_WHO)
+    across the read and the commit: a House run (or a refresh) takes it
+    before it switches the lines, and a triggered House run has no
+    HousePipelineRun row yet while it does — the rescore's run_in_progress
+    check can't see it, and would commit the old lines' scores over the
+    run's fresh ones. A House run that finds the rescore holding it waits
+    (district_pvi.WAITED_FOR). When the lease is held elsewhere the House
+    is left to the run holding it, which scores the House itself."""
     from app.pipeline import lease
-    from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
+    from app.pipeline.constituent_rescore import _stale_chambers, rescore_stale_constituent_alignment
     from app.pipeline.fetch.district_pvi import RESCORE_WHO, current_lines
 
+    done = rescore_stale_constituent_alignment(session_factory, house_lines=None, chambers=("senate",))
     try:
+        if "house" not in _stale_chambers():
+            return done
         with lease.job(lease.DISTRICT_LINES, who=RESCORE_WHO) as granted:
-            if granted:
-                with current_lines() as lines:
-                    return rescore_stale_constituent_alignment(session_factory, house_lines=lines)
+            if not granted:
+                return done
+            with current_lines() as lines:
+                return done + rescore_stale_constituent_alignment(
+                    session_factory, house_lines=lines, chambers=("house",),
+                )
     except Exception:
-        logging.getLogger("app.main").exception("Startup rescore: taking the district lines failed")
-    return rescore_stale_constituent_alignment(session_factory, house_lines=None, house=False)
+        logging.getLogger("app.main").exception("Startup rescore (house): taking the district lines failed")
+        return done
 
 
 async def _watch_pipeline_service() -> None:
@@ -205,13 +212,10 @@ def _start_pipeline_side_startup_jobs() -> None:
                         "Startup rescore skipped: %s", lease.refusal(db, lease.STARTUP_RESCORE),
                     )
                     return
-                # One Congress for both, like any pipeline job
-                # (app.config.scoring_congress).
-                from app.config import scoring_congress
-
-                with scoring_congress():
-                    rescore_stale_legislative_effectiveness(_rescore_session)
-                    rescore_constituent_alignment_on_current_lines(_rescore_session)
+                # One Congress for both: start_writer runs this inside
+                # app.config.scoring_congress.
+                rescore_stale_legislative_effectiveness(_rescore_session)
+                rescore_constituent_alignment_on_current_lines(_rescore_session)
         except Exception:
             # Each rescore logs its own failures; this is the lease's.
             logging.getLogger("app.main").exception("Startup rescore failed")

@@ -62,9 +62,11 @@ def test_expected_current_congress_tracks_the_clock():
 
 
 class TestCongressStalenessGuard:
-    def test_alerts_when_config_is_behind_the_calendar(self):
-        # Config still says 119 while the clock is in the 120th Congress.
-        with patch("app.config.settings.CURRENT_CONGRESS", 119), patch(
+    def test_alerts_when_a_pin_is_behind_the_calendar(self):
+        # An environment pin still says 119 while the clock is in the 120th.
+        from app.config import Settings
+
+        with patch("app.config.settings", Settings(CURRENT_CONGRESS=119)), patch(
             "app.pipeline.fetch.congress.expected_current_congress",
             return_value=120,
         ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
@@ -72,8 +74,29 @@ class TestCongressStalenessGuard:
 
             check_current_congress_staleness()
             assert mock_alert.called
-            # The alert names the Congress to bump to.
-            assert "120" in mock_alert.call_args.args[1]
+            # The alert names the Congress in session and the pin.
+            text = mock_alert.call_args.args[1]
+            assert "120th" in text and "pinned in the environment" in text and "to 119," in text
+
+    def test_unpinned_never_alerts_even_across_the_hand_over(self):
+        """Unpinned, the check advances the value first; it can read behind
+        only if noon passes between its two reads — not staleness, and no
+        "pinned" alert."""
+        from app.config import Settings
+
+        s = Settings()
+        assert not s.current_congress_pinned
+        with patch("app.config.settings", s), patch(
+            "app.pipeline.fetch.congress.expected_current_congress",
+            return_value=s.CURRENT_CONGRESS + 1,
+        ), patch("app.ops_alerts.send_ops_alert") as mock_alert, patch(
+            "app.ops_alerts.resolve_ops_alert",
+        ) as resolved:
+            from app.ops_alerts import check_current_congress_staleness
+
+            check_current_congress_staleness()
+        mock_alert.assert_not_called()
+        resolved.assert_called_once_with("stale-congress")
 
     def test_silent_when_config_matches(self):
         with patch("app.config.settings.CURRENT_CONGRESS", 120), patch(
@@ -113,7 +136,7 @@ class TestCongressStalenessMessage:
 
     def _alert_text(self, settings_obj):
         expected = settings_obj.CURRENT_CONGRESS + 1
-        with patch("app.ops_alerts.settings", settings_obj), patch(
+        with patch("app.config.settings", settings_obj), patch(
             "app.pipeline.fetch.congress.expected_current_congress", return_value=expected,
         ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
             from app.ops_alerts import check_current_congress_staleness

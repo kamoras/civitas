@@ -67,13 +67,15 @@ def pipeline_status(db: Session = Depends(get_db)) -> PipelineStatusSchema:
 
 
 @router.post("/pipeline/trigger")
-async def trigger_pipeline(
+def trigger_pipeline(
     authorization: str | None = Header(default=None),
     senator: str | None = Query(default=None, description="Filter to a single senator by name"),
     fetch_only: bool = Query(default=False, description="Stop after fetch phase (no LLM analysis)"),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
+    """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN.
+    A plain def: the run-in-progress check is a blocking database read, so
+    FastAPI runs it on the threadpool rather than the event loop."""
     check_pipeline_token(authorization)
 
     if _is_pipeline_running(db):

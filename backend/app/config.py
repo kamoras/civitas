@@ -1,5 +1,4 @@
 import datetime
-import functools
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -31,10 +30,12 @@ def _default_current_congress(now: datetime.datetime | None = None) -> int:
     return congress_in_session(now)
 
 
-# The Congress one pipeline run holds (scoring_congress): while set, every
-# read of settings.CURRENT_CONGRESS in that run's context (its tasks, and
-# threads started through asyncio.to_thread) answers it, whatever another
-# run in the same process advances meanwhile.
+# The Congress one background job holds (scoring_congress, taken by
+# app.background.start_writer and writing()): while set, every read of
+# settings.CURRENT_CONGRESS in that job's context (its tasks, and threads
+# started through asyncio.to_thread — not a plain threading.Thread, which
+# reads the process-wide value) answers it, whatever another job in the
+# same process advances meanwhile.
 _RUN_CONGRESS: ContextVar[int | None] = ContextVar("scoring_congress", default=None)
 
 
@@ -42,19 +43,23 @@ def advance_current_congress() -> int:
     """Bring settings.CURRENT_CONGRESS up to the Congress in office (noon ET
     on Jan 3 of an odd year), unless an operator pinned it in the
     environment. Never moves it back. Returns the value in effect in this
-    context. Called by the pipeline process at the start of each run (via
-    scoring_congress) and by the API process periodically — never in the
-    middle of a run's computation, which holds its own Congress."""
+    context. Called at the start of every background job (via
+    scoring_congress, which app.background.start_writer and writing()
+    take) and by the API process periodically; a job's own hold is
+    unaffected by it."""
     if not settings.current_congress_pinned:
         now = congress_in_session()
-        if now > settings.CURRENT_CONGRESS:
+        # The process-wide value, not this context's hold (which the
+        # attribute read would answer).
+        if now > settings.__dict__["CURRENT_CONGRESS"]:
             settings.CURRENT_CONGRESS = now
     return settings.CURRENT_CONGRESS
 
 
 @contextmanager
 def scoring_congress() -> Iterator[int]:
-    """Hold ONE Congress for a pipeline run: the scored windows (roll-call
+    """Hold ONE Congress for a background job (app.background.start_writer
+    and writing() take it for every job): the scored windows (roll-call
     sessions, bills, Voteview ideal points — every read of
     settings.CURRENT_CONGRESS) and House members' district lines
     (fetch/district_pvi reads the same value) come from it for the whole
@@ -72,18 +77,6 @@ def scoring_congress() -> Iterator[int]:
         yield congress
     finally:
         _RUN_CONGRESS.reset(token)
-
-
-def holds_scoring_congress(fn):
-    """Decorator for a pipeline run's async entry point: runs it inside
-    scoring_congress()."""
-
-    @functools.wraps(fn)
-    async def wrapper(*args, **kwargs):
-        with scoring_congress():
-            return await fn(*args, **kwargs)
-
-    return wrapper
 
 
 # Settings removed from the code that a deployed .env may still set. The

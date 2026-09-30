@@ -16,7 +16,6 @@ import logging
 from collections.abc import Awaitable
 from typing import Callable
 from app.background import start_writer
-from app.config import scoring_congress
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +37,11 @@ def run_pipeline_in_thread(
     def _run() -> None:
         loop = asyncio.new_event_loop()
         try:
-            # One Congress for the whole run (app.config.scoring_congress):
-            # the task below copies this context, so every read of
-            # settings.CURRENT_CONGRESS in it answers the held Congress.
-            with scoring_congress():
-                loop.run_until_complete(coro_factory())
+            # start_writer holds one Congress for this thread
+            # (app.config.scoring_congress); the task below copies this
+            # context, so every read of settings.CURRENT_CONGRESS in the run
+            # answers it.
+            loop.run_until_complete(coro_factory())
         except BaseException:
             logger.exception(error_label)
         finally:

@@ -111,6 +111,17 @@ class TestScoringCongress:
                 with scoring_congress() as inner:
                     assert inner == s.CURRENT_CONGRESS == 119
 
+    def test_advancing_inside_a_hold_reads_the_process_value(self, monkeypatch):
+        """Another job advancing while this one holds an older Congress:
+        compared against the process-wide value, never this hold, so it
+        can't move the process back."""
+        s = self._started_on(monkeypatch, datetime(2026, 12, 20))
+        with scoring_congress():
+            s.CURRENT_CONGRESS = 121  # process-wide, set by another job
+            with patch("app.time_utils.utcnow", return_value=datetime(2027, 1, 4)):
+                assert advance_current_congress() == 119  # this context's hold
+        assert s.CURRENT_CONGRESS == 121
+
     def test_never_moves_back(self, monkeypatch):
         s = self._started_on(monkeypatch, datetime(2027, 2, 1))
         with patch("app.time_utils.utcnow", return_value=datetime(2026, 6, 1)):

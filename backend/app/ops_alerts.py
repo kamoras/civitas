@@ -336,9 +336,14 @@ def check_current_congress_staleness() -> None:
     from app.ordinals import ordinal
     from app.pipeline.fetch.congress import expected_current_congress
 
+    from app.config import settings as current
+
     configured = advance_current_congress()
     expected = expected_current_congress()
-    if expected <= configured:
+    # Unpinned, advance_current_congress just brought it up to the clock;
+    # it can only read as behind across the instant of the hand-over
+    # between the two reads, and the next call advances it.
+    if expected <= configured or not current.current_congress_pinned:
         resolve_ops_alert("stale-congress")
         return
     send_ops_alert(
