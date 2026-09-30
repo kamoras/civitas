@@ -19,6 +19,7 @@ for Hern's open seat.
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -144,10 +145,12 @@ def test_the_entry_is_the_ballot_and_google_only_supplements_it():
 
 
 @pytest.mark.asyncio
-async def test_a_list_still_not_published_once_ballots_are_mailed_is_a_failure(monkeypatch):
+async def test_a_list_still_not_published_once_ballots_are_mailed_is_a_failure(monkeypatch, freeze_utcnow):
     """45 days out (UOCAVA) every state has mailed its ballot. A page that
     still names another election then is a moved or broken page, and must
     report fetch_failed rather than "not yet" for the rest of the cycle."""
+    # Inside 2026's ballot window, which closes on election day.
+    freeze_utcnow(datetime(2026, 10, 1))
     august = PAGE.replace(b"NOVEMBER / 2026 LIST OF ELECTIONS", b"AUGUST / 2026 LIST OF ELECTIONS")
     monkeypatch.setattr(common, "ballot_final", lambda held, today=None: True)
     async with httpx.AsyncClient(transport=httpx.MockTransport(

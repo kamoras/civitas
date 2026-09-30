@@ -12,6 +12,13 @@ import type { StateBallot } from "@/types/election";
 
 export const runtime = "nodejs";
 
+// ImageResponse sends "public, max-age=0, must-revalidate" in production, and
+// nginx honours that over its own proxy_cache_valid, so without this every
+// link-preview fetch re-rendered the card and counted against the miss limit
+// (civitas.conf's /api/og block). Five minutes matches the backend fetches'
+// revalidate below: a day card that says "no record yet" catches up soon.
+const OG_HEADERS = { "Cache-Control": "public, max-age=300" };
+
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
 // Raw hex, not the Tailwind tokens used elsewhere on the site — Satori
@@ -207,6 +214,7 @@ async function issueImage(
     {
       width: 1200,
       height: 630,
+      headers: OG_HEADERS,
       ...(archivoBold
         ? {
             fonts: [
@@ -344,6 +352,7 @@ async function politicianImage(
     {
       width: 1200,
       height: 630,
+      headers: OG_HEADERS,
       ...(archivoBold
         ? {
             fonts: [
@@ -409,6 +418,7 @@ async function genericCard({
     {
       width: 1200,
       height: 630,
+      headers: OG_HEADERS,
       ...(archivoBold
         ? {
             fonts: [
@@ -513,6 +523,7 @@ async function tileCard({
     {
       width: 1200,
       height: 630,
+      headers: OG_HEADERS,
       ...(archivoBold
         ? {
             fonts: [
@@ -574,8 +585,6 @@ async function electionImage(ballot: StateBallot | null, code: string) {
   });
 }
 
-// Every real link on the site points at an issue's public id (backend
-// issue_ids.py: "i" + 8 lowercase hex chars, e.g. "i9e3779b1") via
 const CHAMBER_NAME: Record<Chamber, string> = { senate: "SENATE", house: "HOUSE" };
 
 // What a chamber's tile says when its day has no counts to show: the day
@@ -636,7 +645,7 @@ async function congressWeekImage(date: string) {
   if (!report) {
     return genericCard({
       section,
-      title: "Congress this week",
+      title: `Congress, week of ${longDate(date).replace(/^\w+, /, "")}`,
       description: "What the Senate and the House did, from the official record.",
       footerLabel,
     });
@@ -659,6 +668,8 @@ export function parseCongressDate(raw: string | null): string | null {
   return raw && ISO_DATE.test(raw) ? raw : null;
 }
 
+// Every real link on the site points at an issue's public id (backend
+// issue_ids.py: "i" + 8 lowercase hex chars, e.g. "i9e3779b1") via
 // issue.publicId — page.tsx's generateMetadata builds this OG URL from
 // that same route param. A digits-only check here rejected every real
 // request and silently fell through to the generic fallback card for
