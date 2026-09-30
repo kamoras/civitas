@@ -24,6 +24,9 @@ class TestParsePage:
         assert m["number"] == "1"
         assert m["title"] == "Constitutional Amendment 1"
         assert m["origin"] == "Kansas Legislature"
+        # The drafter of the quoted text is named; the label is not a ballot title.
+        assert m["title_authority"] == "Kansas Legislature"
+        assert m.get("official_title") is None
         assert m["official_summary"] == (
             "This amendment would clarify that only a person who is a citizen of the "
             "United States is eligible to vote in this state."
@@ -52,11 +55,6 @@ class TestParsePage:
         broken = FIXTURE["general_2026"].replace("The following constitutional amendment will be voted on", "Voters will decide")
         assert broken != FIXTURE["general_2026"]
         assert ks.parse_page(broken, 2026) is None
-
-    def test_the_drafter_of_the_quoted_text_is_named(self):
-        [m] = ks.parse_page(FIXTURE["general_2026"], 2026)
-        assert m["title_authority"] == "Kansas Legislature"
-        assert m.get("official_title") is None
 
     def test_missing_against_line_refuses_the_page(self):
         broken = FIXTURE["general_2026"].replace("A vote against this proposition", "A vote on this")

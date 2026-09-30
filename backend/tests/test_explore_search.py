@@ -121,34 +121,8 @@ class TestFusion:
 
 
 class TestFreshnessPrior:
-    def test_a_much_newer_document_outranks_a_slightly_more_relevant_one(
-        self, indexed_db, stub_semantic
-    ):
-        # Sixty candidates. Both retrieval channels rank them in insertion
-        # order, so the first document inserted is the most relevant — and
-        # it is also the oldest in the pool, while the third is the newest.
-        # Recency is supposed to be able to close a two-rank relevance gap
-        # against a ~57-rank recency gap, and (per the next test) not a
-        # one-rank one.
-        def _date(i: int) -> str:
-            if i == 0:
-                return "2020-01-01"     # oldest in the pool
-            if i == 2:
-                return "2026-12-31"     # newest in the pool
-            j = i - 1 if i < 2 else i - 2
-            return f"2023-{1 + j // 28:02d}-{1 + j % 28:02d}"
-
-        docs = [
-            _add(indexed_db, title="wildfire notice", agency_name=f"Agency {i}",
-                 body=f"document numbered {i + 10} about wildfire operations",
-                 date=_date(i))
-            for i in range(60)
-        ]
-        stub_semantic([d.id for d in docs])
-
-        outcome = hybrid_search(indexed_db, "wildfire", limit=60)
-        ids = [r["id"] for r in outcome["results"]]
-        assert ids.index(docs[2].id) < ids.index(docs[0].id)
+    # That a much newer document outranks a slightly more relevant one is
+    # TestPriorScaling.test_recency_reaches_a_close_relevance_gap_either_way.
 
     def test_freshness_cannot_flip_an_adjacent_relevance_pair(
         self, indexed_db, stub_semantic
@@ -226,17 +200,12 @@ class TestAuthorityPrior:
         ids = [r["id"] for r in hybrid_search(indexed_db, "wildfire", limit=60)["results"]]
         assert ids.index(docs[2].id) < ids.index(docs[0].id)
 
-    def test_raw_pagerank_is_not_exposed_to_the_client(self, indexed_db, stub_semantic):
+    def test_citation_count_is_exposed_but_raw_pagerank_is_not(self, indexed_db, stub_semantic):
         doc = _add(indexed_db, title="wildfire rule", cited_by_count=4, authority=0.01)
         stub_semantic([doc.id])
         result = hybrid_search(indexed_db, "wildfire", limit=10)["results"][0]
+        assert result["citedByCount"] == 4
         assert "authority" not in result and "_authority" not in result
-
-    def test_citation_count_is_exposed_to_the_client(self, indexed_db, stub_semantic):
-        doc = _add(indexed_db, title="wildfire rule", cited_by_count=4, authority=0.01)
-        stub_semantic([doc.id])
-        outcome = hybrid_search(indexed_db, "wildfire", limit=10)
-        assert outcome["results"][0]["citedByCount"] == 4
 
 
 class TestDeduplication:
@@ -307,27 +276,8 @@ class TestDiversity:
 
 
 class TestFiltersAndSort:
-    def test_commentable_filters_to_open_comment_periods(self, indexed_db, stub_semantic):
-        open_doc = _add(indexed_db, title="wildfire proposed rule",
-                        comment_url="https://regulations.gov/x",
-                        comments_close_on="2099-01-01")
-        _add(indexed_db, title="wildfire final rule")
-        stub_semantic([])
-        outcome = hybrid_search(indexed_db, "wildfire", limit=10, commentable=True)
-        assert [r["id"] for r in outcome["results"]] == [open_doc.id]
-
-    def test_sort_by_date_orders_the_pool_not_the_page(self, indexed_db, stub_semantic):
-        # The bug this replaces: the old implementation sorted the twenty
-        # results it had already picked by relevance, so "newest" meant
-        # "newest of the twenty most similar".
-        newest = _add(indexed_db, title="wildfire notice newest", date="2026-07-01",
-                      body="the newest document about wildfire in the corpus")
-        for i in range(30):
-            _add(indexed_db, title=f"wildfire notice {i}", date="2020-01-01",
-                 body=f"an older wildfire document number {i}")
-        stub_semantic([])
-        outcome = hybrid_search(indexed_db, "wildfire", limit=5, sort="date")
-        assert outcome["results"][0]["id"] == newest.id
+    # `commentable`, `sort="date"` and `limit` are exercised end to end
+    # through GET /explore in test_explore_search_api.py's TestFiltersAndSort.
 
     def test_chamber_filter_reaches_the_keyword_channel(self, indexed_db, stub_semantic):
         keep = _add(indexed_db, title="wildfire remarks", chamber="Senate",
@@ -336,15 +286,6 @@ class TestFiltersAndSort:
         stub_semantic([])
         outcome = hybrid_search(indexed_db, "wildfire", limit=10, chamber="Senate")
         assert [r["id"] for r in outcome["results"]] == [keep.id]
-
-    def test_limit_is_respected(self, indexed_db, stub_semantic):
-        for i in range(10):
-            _add(indexed_db, title=f"wildfire notice {i}", agency_name=f"Agency {i}",
-                 body=f"document {i} about wildfire")
-        stub_semantic([])
-        outcome = hybrid_search(indexed_db, "wildfire", limit=3)
-        assert outcome["count"] == 3
-        assert len(outcome["results"]) == 3
 
     def test_no_matches_returns_an_empty_ready_result(self, indexed_db, stub_semantic):
         _add(indexed_db, title="grazing permits")
@@ -438,14 +379,20 @@ class TestPriorScaling:
         ids = [r["id"] for r in hybrid_search(db, "wildfire", limit=60)["results"]]
         return ids.index(docs[newest_at].id) < ids.index(docs[0].id)
 
-    @pytest.mark.parametrize("semantic_up", [True, False])
+    @pytest.mark.parametrize("newest_at, semantic_up", [
+        # Two ranks back against a ~57-rank recency gap: recency closes it
+        # (and, per TestFreshnessPrior, not a one-rank gap).
+        pytest.param(2, True, id="two_ranks_back"),
+        pytest.param(3, True, id="three_ranks_back-semantic_up"),
+        pytest.param(3, False, id="three_ranks_back-semantic_down"),
+    ])
     def test_recency_reaches_a_close_relevance_gap_either_way(
-        self, indexed_db, stub_semantic, semantic_up
+        self, indexed_db, stub_semantic, newest_at, semantic_up
     ):
-        # Three ranks back and far newer: recency wins, and must win
+        # A few ranks back and far newer: recency wins, and must win
         # whether or not the semantic index happens to be available.
         assert self._newest_beats_most_relevant(
-            indexed_db, stub_semantic, 3, semantic_up) is True
+            indexed_db, stub_semantic, newest_at, semantic_up) is True
 
     @pytest.mark.parametrize("semantic_up", [True, False])
     def test_recency_cannot_reach_a_wide_relevance_gap_either_way(

@@ -179,123 +179,68 @@ def test_no_confirmed_data_falls_back_to_every_fec_filer(db_session):
     assert len(data["senateRaces"][0]["candidates"]) == 2
 
 
-def test_two_fec_ids_for_the_same_person_collapse_to_one(db_session):
-    """The real bug this fix addresses, verified live across 22 real 2026
-    races: Ohio's real House District 4 lists "WILSON, TAMARA" twice under
-    two different FEC candidate ids (one DEM, one IND) with byte-identical
-    contributions and cash on hand -- a refile that got a new id, not two
-    people. Real values, from the live production pull."""
-    _race(db_session, "2026-HOUSE-OH-4", "OH", office="H", district=4)
-    _candidate(
-        db_session, "H6OH04173", "2026-HOUSE-OH-4", "WILSON, TAMARA",
-        party="DEM", contributions=22049.51, cash_on_hand=520819.93,
-    )
-    _candidate(
-        db_session, "H2OH04164", "2026-HOUSE-OH-4", "WILSON, TAMARA",
-        party="IND", contributions=22049.51, cash_on_hand=520819.93,
-    )
+def _filer(cand_id, name, party, contributions, cash_on_hand):
+    return cand_id, name, dict(party=party, contributions=contributions, cash_on_hand=cash_on_hand)
+
+
+@pytest.mark.parametrize("race_id, state, office, district, filers, expected", [
+    # The real bug this fix addresses, verified live across 22 real 2026
+    # races: Ohio's real House District 4 lists "WILSON, TAMARA" twice under
+    # two different FEC candidate ids (one DEM, one IND) with byte-identical
+    # contributions and cash on hand -- a refile that got a new id, not two
+    # people. Real values, from the live production pull.
+    pytest.param("2026-HOUSE-OH-4", "OH", "H", 4, [
+        _filer("H6OH04173", "WILSON, TAMARA", "DEM", 22049.51, 520819.93),
+        _filer("H2OH04164", "WILSON, TAMARA", "IND", 22049.51, 520819.93),
+    ], 1, id="two_fec_ids_for_the_same_person_collapse"),
+    # Real Maine Senate data: one letter apart -- a name-typo correction on
+    # refiling -- under two ids, both reporting -$3,500 cash on hand: a real
+    # case where the shared fingerprint is NEGATIVE, and where the surname
+    # match must survive a near-miss first name.
+    pytest.param("2026-SEN-ME", "ME", "S", None, [
+        _filer("S6ME00316", "CALABRESE, CARMEM VINCENT MR.", "REP", 17759.71, -3500.0),
+        _filer("S6ME00324", "CALABRESE, CARMEN VINCENT MR.", "REP", 17759.71, -3500.0),
+    ], 1, id="typo_corrected_name_still_collapses"),
+    # Real Missouri data: the suffix attached to the surname in one, trailing
+    # the first name in the other -- FEC doesn't put JR/SR in a consistent
+    # place, so the surname normalization has to strip it from either side.
+    pytest.param("2026-HOUSE-MO-3", "MO", "H", 3, [
+        _filer("H8MO09146", "ONDER JR, ROBERT FRANK", "REP", 878006.03, 471458.89),
+        _filer("H4MO03221", "ONDER, ROBERT FOR JR.", "REP", 878006.03, 471458.89),
+    ], 1, id="generational_suffix_on_either_side_still_matches"),
+    # Real Ohio Senate data, live-verified 2026-09-04: the plainest real
+    # case, no name-variant handling needed, just two ids for one filer.
+    pytest.param("2026-SEN-OH-SPECIAL", "OH", "S", None, [
+        _filer("S6OH00353", "VOLPE, CHRISTOPHER", "DEM", 4317.18, 168.3),
+        _filer("S6OH00346", "VOLPE, CHRISTOPHER", "DEM", 4317.18, 168.3),
+    ], 1, id="exact_name_duplicate_collapses"),
+    # The real negative case that rules out a financials-only rule: real
+    # California District 4 data, two people with nothing in common both
+    # reporting exactly $7,000 raised and $0 cash on hand. Coincidental
+    # round numbers; the completely different surnames must block the merge.
+    pytest.param("2026-HOUSE-CA-4", "CA", "H", 4, [
+        _filer("H6CA04206", "BROWN, SHARON", "REP", 7000.0, 0.0),
+        _filer("H6CA08223", "GHUSAR, MANDY", "DEM", 7000.0, 0.0),
+    ], 2, id="identical_financials_alone_do_not_merge_two_people"),
+    # A shared (None, None) or (0, 0) fingerprint is common among minor
+    # filers and proves nothing about being the same person -- never dedup
+    # evidence, even when the two also happen to share a surname.
+    pytest.param("2026-SEN-GA", "GA", "S", None, [
+        _filer("A", "SMITH, JOHN", "DEM", None, None),
+        _filer("B", "SMITH, JANE", "DEM", 0.0, 0.0),
+    ], 2, id="never_synced_or_zero_dollar_never_merged_on_that_alone"),
+])
+def test_duplicate_fec_filings_collapse_only_on_real_evidence(
+    db_session, race_id, state, office, district, filers, expected,
+):
+    _race(db_session, race_id, state, office=office, district=district)
+    for cand_id, name, fields in filers:
+        _candidate(db_session, cand_id, race_id, name, **fields)
     db_session.commit()
 
-    data = _body(elections.state_ballot("OH", db_session))
-    candidates = data["houseRaces"][0]["candidates"]
-    assert len(candidates) == 1
-
-
-def test_a_refiled_candidate_with_a_typo_corrected_name_still_collapses(db_session):
-    """Real Maine Senate data: "CALABRESE, CARMEM VINCENT MR." and
-    "CALABRESE, CARMEN VINCENT MR." (one letter apart -- a name-typo
-    correction on refiling) under two ids, both reporting -$3,500 cash on
-    hand -- a real case where the shared fingerprint is NEGATIVE, and
-    where the surname match must survive a near-miss first name."""
-    _race(db_session, "2026-SEN-ME", "ME", office="S")
-    _candidate(
-        db_session, "S6ME00316", "2026-SEN-ME", "CALABRESE, CARMEM VINCENT MR.",
-        party="REP", contributions=17759.71, cash_on_hand=-3500.0,
-    )
-    _candidate(
-        db_session, "S6ME00324", "2026-SEN-ME", "CALABRESE, CARMEN VINCENT MR.",
-        party="REP", contributions=17759.71, cash_on_hand=-3500.0,
-    )
-    db_session.commit()
-
-    data = _body(elections.state_ballot("ME", db_session))
-    assert len(data["senateRaces"][0]["candidates"]) == 1
-
-
-def test_a_generational_suffix_on_either_side_of_the_name_still_matches(db_session):
-    """Real Missouri data: "ONDER JR, ROBERT FRANK" (suffix attached to
-    the surname) and "ONDER, ROBERT FOR JR." (suffix trailing the first
-    name instead) -- FEC doesn't put JR/SR in a consistent place, so the
-    surname normalization has to strip it from either side."""
-    _race(db_session, "2026-HOUSE-MO-3", "MO", office="H", district=3)
-    _candidate(
-        db_session, "H8MO09146", "2026-HOUSE-MO-3", "ONDER JR, ROBERT FRANK",
-        party="REP", contributions=878006.03, cash_on_hand=471458.89,
-    )
-    _candidate(
-        db_session, "H4MO03221", "2026-HOUSE-MO-3", "ONDER, ROBERT FOR JR.",
-        party="REP", contributions=878006.03, cash_on_hand=471458.89,
-    )
-    db_session.commit()
-
-    data = _body(elections.state_ballot("MO", db_session))
-    assert len(data["houseRaces"][0]["candidates"]) == 1
-
-
-def test_exact_name_duplicate_in_the_same_race_collapses(db_session):
-    """Real Ohio Senate data, live-verified 2026-09-04: "VOLPE,
-    CHRISTOPHER" appears twice with identical (contributions,
-    cash_on_hand) -- the plainest real case, no name-variant handling
-    needed, just two ids for the one real filer."""
-    _race(db_session, "2026-SEN-OH-SPECIAL", "OH", office="S", cycle_year=2026)
-    _candidate(
-        db_session, "S6OH00353", "2026-SEN-OH-SPECIAL", "VOLPE, CHRISTOPHER",
-        party="DEM", contributions=4317.18, cash_on_hand=168.3,
-    )
-    _candidate(
-        db_session, "S6OH00346", "2026-SEN-OH-SPECIAL", "VOLPE, CHRISTOPHER",
-        party="DEM", contributions=4317.18, cash_on_hand=168.3,
-    )
-    db_session.commit()
-
-    data = _body(elections.state_ballot("OH", db_session))
-    volpes = [c for c in data["senateRaces"][0]["candidates"] if c["name"] == "VOLPE, CHRISTOPHER"]
-    assert len(volpes) == 1
-
-
-def test_identical_financials_alone_do_not_merge_two_different_people(db_session):
-    """The real negative case that rules out a financials-only rule: real
-    California District 4 data shows "BROWN, SHARON" and "GHUSAR, MANDY"
-    -- two people with nothing in common -- both reporting exactly $7,000
-    raised and $0 cash on hand. Coincidental round numbers, not the same
-    candidate; the completely different surnames must block the merge."""
-    _race(db_session, "2026-HOUSE-CA-4", "CA", office="H", district=4)
-    _candidate(
-        db_session, "H6CA04206", "2026-HOUSE-CA-4", "BROWN, SHARON",
-        party="REP", contributions=7000.0, cash_on_hand=0.0,
-    )
-    _candidate(
-        db_session, "H6CA08223", "2026-HOUSE-CA-4", "GHUSAR, MANDY",
-        party="DEM", contributions=7000.0, cash_on_hand=0.0,
-    )
-    db_session.commit()
-
-    data = _body(elections.state_ballot("CA", db_session))
-    assert len(data["houseRaces"][0]["candidates"]) == 2
-
-
-def test_never_synced_or_zero_dollar_candidates_are_never_merged_on_that_alone(db_session):
-    """A shared (None, None) or (0, 0) fingerprint is common among minor
-    filers and proves nothing about being the same person -- must never
-    be treated as dedup evidence even when two such candidates also
-    happen to share a surname."""
-    _race(db_session, "2026-SEN-GA", "GA")
-    _candidate(db_session, "A", "2026-SEN-GA", "SMITH, JOHN", contributions=None, cash_on_hand=None)
-    _candidate(db_session, "B", "2026-SEN-GA", "SMITH, JANE", contributions=0.0, cash_on_hand=0.0)
-    db_session.commit()
-
-    data = _body(elections.state_ballot("GA", db_session))
-    assert len(data["senateRaces"][0]["candidates"]) == 2
+    data = _body(elections.state_ballot(state, db_session))
+    (race,) = data["senateRaces"] + data["houseRaces"]
+    assert len(race["candidates"]) == expected
 
 
 def test_dedup_keeps_the_confirmed_general_candidate_over_id_order(db_session):
@@ -647,33 +592,22 @@ class TestStateCoverage:
         """A single article can name candidates from two different races
         in the same state (e.g. covers both the Senate and a House
         race), producing two DB rows with the same url under different
-        race_ids — the reader must not see the same headline twice."""
+        race_ids — the reader must not see the same headline twice.
+
+        The two rows share the same published_at/fetched_at (same article,
+        same ingest pass), so which race's badge wins must not depend on
+        undefined SQL tie-break order — the `.id` tiebreaker makes it
+        repeatable across calls rather than however the DB happens to
+        return tied rows."""
         _race(db_session, "2026-SEN-GA", "GA", office="S")
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
         _coverage(db_session, "2026-SEN-GA", "https://apnews.com/both-races")
         _coverage(db_session, "2026-HOUSE-GA-6", "https://apnews.com/both-races")
         db_session.commit()
 
-        data = _body(elections.state_ballot("GA", db_session))
-        assert len(data["coverage"]) == 1
-
-    def test_deduplicated_story_picks_a_race_deterministically(self, db_session):
-        """The two rows for a deduplicated story share the same
-        published_at/fetched_at (same article, same ingest pass), so
-        which race's badge wins must not depend on undefined SQL tie-
-        break order — the `.id` tiebreaker makes it repeatable across
-        calls rather than however the DB happens to return tied rows."""
-        _race(db_session, "2026-SEN-GA", "GA", office="S")
-        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
-        _coverage(db_session, "2026-SEN-GA", "https://apnews.com/both-races")
-        _coverage(db_session, "2026-HOUSE-GA-6", "https://apnews.com/both-races")
-        db_session.commit()
-
-        winners = {
-            _body(elections.state_ballot("GA", db_session))["coverage"][0]["race"]["id"]
-            for _ in range(5)
-        }
-        assert len(winners) == 1
+        responses = [_body(elections.state_ballot("GA", db_session)) for _ in range(5)]
+        assert all(len(data["coverage"]) == 1 for data in responses)
+        assert len({data["coverage"][0]["race"]["id"] for data in responses}) == 1
 
     def test_excludes_coverage_from_a_different_state(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA", office="S")
@@ -812,6 +746,8 @@ class TestJudicialOmitShrinks:
         data = _body(elections.state_ballot("GA", db_session))
         assert "Judicial contests and retention questions" in data["omits"]
         assert data["judicialRaces"] == []
+        # Unchecked, not checked-and-empty (see TestJudicialConfirmedNone).
+        assert data["judicialCoverage"]["status"] == "not_yet_covered"
 
     def test_covered_state_still_declares_retention_questions(self, db_session):
         """The line SHRINKS rather than disappearing: retention questions
@@ -872,10 +808,5 @@ class TestJudicialConfirmedNone:
         # accounted for — the answer is simply that none are on the ballot.
         assert "Judicial retention questions" in data["omits"]
         assert "Judicial contests and retention questions" not in data["omits"]
-
-    def test_an_unchecked_state_still_declares_the_full_omission(self, db_session):
-        _race(db_session, "2026-SEN-GA", "GA")
-        db_session.commit()
-        data = _body(elections.state_ballot("GA", db_session))
-        assert data["judicialCoverage"]["status"] == "not_yet_covered"
-        assert "Judicial contests and retention questions" in data["omits"]
+        # The unchecked counterpart (GA, full omission kept) is
+        # TestJudicialOmitShrinks.test_uncovered_state_names_contests_and_retention_together.

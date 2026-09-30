@@ -11,22 +11,20 @@ by synthetic fixtures matching the real infobox field format.
 
 import json
 
+import pytest
+
 from app.pipeline.analyze import score_calculator
 from app.pipeline.fetch import district_pvi as dp
 
 
-class TestParsePvi:
-    def test_parses_r_lean(self):
-        assert dp.parse_pvi("{{Infobox\n| cpvi = R+12\n}}") == 12
-
-    def test_parses_d_lean(self):
-        assert dp.parse_pvi("{{Infobox\n| cook_pvi = D+7\n}}") == -7
-
-    def test_parses_even(self):
-        assert dp.parse_pvi("{{Infobox\n| cpvi = EVEN\n}}") == 0
-
-    def test_missing_field_returns_none(self):
-        assert dp.parse_pvi("{{Infobox\n| party = Democratic\n}}") is None
+@pytest.mark.parametrize("wikitext, expected", [
+    pytest.param("{{Infobox\n| cpvi = R+12\n}}", 12, id="r_lean"),
+    pytest.param("{{Infobox\n| cook_pvi = D+7\n}}", -7, id="d_lean"),
+    pytest.param("{{Infobox\n| cpvi = EVEN\n}}", 0, id="even"),
+    pytest.param("{{Infobox\n| party = Democratic\n}}", None, id="missing_field_returns_none"),
+])
+def test_parse_pvi(wikitext, expected):
+    assert dp.parse_pvi(wikitext) == expected
 
 
 # A made-up House: nothing in the module assumes an apportionment, so the

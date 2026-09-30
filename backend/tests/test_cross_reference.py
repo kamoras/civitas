@@ -197,7 +197,11 @@ class TestDetectLobbyingMatches:
         industry_breakdown = [{"industry": "PHARMA", "name": "PHARMA", "total": 5000, "percentage": 100}]
         assert detect_lobbying_matches(donors, [], industry_breakdown) == []
 
-    def test_max_eight_matches(self):
+    def test_no_substantial_industry_share_matches_nothing(self):
+        """Ten industries at 10% each: none clears the 25% share gate, so
+        nothing is flagged however related the votes are. (This used to be
+        named for the 8-match cap and assert `<= 8`, which this input can
+        never reach — at most four industries can each hold 25%.)"""
         industries = [
             "PHARMA", "FINANCE", "TECH", "ENERGY", "DEFENSE",
             "GUNS", "LABOR_UNIONS", "REAL_ESTATE", "TELECOM", "AGRIBUSINESS",
@@ -210,26 +214,7 @@ class TestDetectLobbyingMatches:
             {"name": f"{ind} Corp", "industry": ind, "type": "PAC", "total": 1000}
             for ind in industries
         ]
-        # Broad vote set so most industries find at least one policy-area match.
-        votes = (
-            self._healthcare_votes()
-            + [
-                {"billId": "HR.100", "vote": "Yea", "billName": "Energy Independence Act",
-                 "policyArea": "ENERGY", "description": "Domestic energy production"},
-                {"billId": "HR.101", "vote": "Yea", "billName": "Defense Authorization Act",
-                 "policyArea": "DEFENSE", "description": "Military spending authorization"},
-                {"billId": "HR.102", "vote": "Yea", "billName": "Financial Reform Act",
-                 "policyArea": "FINANCIAL", "description": "Bank regulation reform"},
-                {"billId": "HR.103", "vote": "Yea", "billName": "Tech Privacy Act",
-                 "policyArea": "TECH", "description": "Data privacy regulation"},
-                {"billId": "HR.104", "vote": "Yea", "billName": "Labor Rights Act",
-                 "policyArea": "LABOR", "description": "Worker protections"},
-                {"billId": "HR.105", "vote": "Yea", "billName": "Gun Safety Act",
-                 "policyArea": "GUNS", "description": "Firearm background checks"},
-            ]
-        )
-        matches = detect_lobbying_matches(donors, votes, industry_breakdown)
-        assert len(matches) <= 8
+        assert detect_lobbying_matches(donors, self._healthcare_votes(), industry_breakdown) == []
 
     def test_lobbyists_industry_never_matches(self):
         """LOBBYISTS is a service profession, not a policy domain — a

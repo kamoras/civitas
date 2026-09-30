@@ -28,31 +28,24 @@ def _contest(needle: str) -> dict:
 
 
 class TestParseOffice:
-    def test_senate(self):
-        assert cl._parse_office("United States Senator - Democratic Party") == ("S", None)
-
-    def test_house_with_district(self):
-        assert cl._parse_office(
-            "Representative to the 120th United States Congress - District 7 - Democratic Party"
-        ) == ("H", 7)
-
-    def test_house_at_large_has_no_district(self):
-        """AK/DE/MT/ND/SD/VT/WY print no district number; FEC models those
-        as district 0, which _race_id_for already falls back to."""
-        assert cl._parse_office(
-            "Representative to the 120th United States Congress - Republican Party"
-        ) == ("H", None)
-
-    def test_ordinal_advances_between_congresses(self):
-        """The "120th" is not load-bearing — the same label in the next
-        cycle must still parse, or the adapter silently dies every 2 years."""
-        assert cl._parse_office(
-            "Representative to the 121st United States Congress - District 2 - Democratic Party"
-        ) == ("H", 2)
-
-    def test_non_federal_contest_is_not_guessed_into_a_federal_one(self):
-        assert cl._parse_office("Governor - Democratic Party") is None
-        assert cl._parse_office("State Senate District 4 - Republican Party") is None
+    @pytest.mark.parametrize("label, expected", [
+        pytest.param("United States Senator - Democratic Party", ("S", None), id="senate"),
+        pytest.param("Representative to the 120th United States Congress - District 7 - Democratic Party",
+                     ("H", 7), id="house_with_district"),
+        # AK/DE/MT/ND/SD/VT/WY print no district number; FEC models those
+        # as district 0, which _race_id_for already falls back to.
+        pytest.param("Representative to the 120th United States Congress - Republican Party",
+                     ("H", None), id="house_at_large_has_no_district"),
+        # The "120th" is not load-bearing — the same label in the next
+        # cycle must still parse, or the adapter silently dies every 2 years.
+        pytest.param("Representative to the 121st United States Congress - District 2 - Democratic Party",
+                     ("H", 2), id="ordinal_advances_between_congresses"),
+        # A non-federal contest is not guessed into a federal one.
+        pytest.param("Governor - Democratic Party", None, id="governor_is_not_federal"),
+        pytest.param("State Senate District 4 - Republican Party", None, id="state_senate_is_not_federal"),
+    ])
+    def test_parse_office(self, label, expected):
+        assert cl._parse_office(label) == expected
 
 
 class TestParseParty:
@@ -66,12 +59,11 @@ class TestParseParty:
 
 
 class TestSurname:
-    def test_takes_the_trailing_token(self):
-        assert surname("Melat Kiros") == "Kiros"
-        assert surname("Dwayne L. Romero") == "Romero"
+    """The trailing token and a "Jr." are covered with surname() itself in
+    test_state_candidates_common.py; these are the cases only this file
+    checks."""
 
     def test_drops_a_generational_suffix(self):
-        assert surname("Robert Cruz Jr.") == "Cruz"
         assert surname("Harold Ford III") == "Ford"
 
     def test_blank_name_yields_none(self):
@@ -109,25 +101,14 @@ class TestNominee:
 
 
 class TestIsPrimary:
-    def test_matches_the_cycles_regular_primary(self):
-        assert cl._is_primary(
-            {"ElectionName": "2026 Primary", "Date": "6/30/2026 12:00:00 AM"}, 2026,
-        ) is True
-
-    def test_rejects_another_years_primary(self):
-        assert cl._is_primary(
-            {"ElectionName": "2024 Primary", "Date": "6/25/2024 12:00:00 AM"}, 2026,
-        ) is False
-
-    def test_rejects_the_separate_presidential_primary(self):
-        assert cl._is_primary(
-            {"ElectionName": "2026 Presidential Primary", "Date": "3/3/2026 12:00:00 AM"}, 2026,
-        ) is False
-
-    def test_rejects_a_general_election(self):
-        assert cl._is_primary(
-            {"ElectionName": "2026 General", "Date": "11/3/2026 12:00:00 AM"}, 2026,
-        ) is False
+    @pytest.mark.parametrize("name, date, expected", [
+        pytest.param("2026 Primary", "6/30/2026", True, id="the_cycles_regular_primary"),
+        pytest.param("2024 Primary", "6/25/2024", False, id="another_years_primary"),
+        pytest.param("2026 Presidential Primary", "3/3/2026", False, id="the_separate_presidential_primary"),
+        pytest.param("2026 General", "11/3/2026", False, id="a_general_election"),
+    ])
+    def test_is_primary(self, name, date, expected):
+        assert cl._is_primary({"ElectionName": name, "Date": f"{date} 12:00:00 AM"}, 2026) is expected
 
 
 class TestFetchConfirmedCandidates:
@@ -234,16 +215,25 @@ class TestDiscoverElectionId:
     real results are live — verified 2026-09-03 — so it discovers its EID
     off the link its own elections page keeps current instead."""
 
+    @pytest.mark.parametrize("eids, expected", [
+        pytest.param(["126209"], "126209", id="landing_page_mode_extracts_the_eid"),
+        # West Virginia's current page dropped its primary link before the
+        # general; the results archive still has it, beside every election
+        # back to 2016. Each id's own settings say which is this cycle's.
+        pytest.param(["119000", "126209", "126300"], "126209",
+                     id="an_archive_of_links_is_scoped_by_each_elections_own_date"),
+        pytest.param(["119000"], None, id="a_lone_stale_link_is_not_trusted"),
+        pytest.param(["126209", "126209"], "126209", id="same_link_repeated_is_not_treated_as_ambiguous"),
+    ])
     @pytest.mark.asyncio
-    async def test_landing_page_mode_extracts_the_eid(self, monkeypatch):
+    async def test_the_linked_election_for_this_cycle(self, monkeypatch, eids, expected):
         async def fake_get(client, url, label):
             if url == "https://sos.wv.gov/elections":
-                return _Resp(text=_links("126209"))
+                return _Resp(text=_links(*eids))
             return _clarity(url)
 
         monkeypatch.setattr(cl, "_get", fake_get)
-        eid = await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY)
-        assert eid == "126209"
+        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) == expected
 
     @pytest.mark.asyncio
     async def test_missing_page_url_or_link_regex_returns_none_not_a_crash(self, monkeypatch):
@@ -258,37 +248,6 @@ class TestDiscoverElectionId:
         assert await cl._discover_election_id(None, "WV", 2026, incomplete) is None
 
     @pytest.mark.asyncio
-    async def test_no_matching_link_returns_none(self, monkeypatch):
-        async def fake_get(client, url, label):
-            return _Resp(text="<html>nothing here</html>")
-
-        monkeypatch.setattr(cl, "_get", fake_get)
-        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
-
-    @pytest.mark.asyncio
-    async def test_an_archive_of_links_is_scoped_by_each_elections_own_date(self, monkeypatch):
-        """West Virginia's current page dropped its primary link before the
-        general; the results archive still has it, beside every election
-        back to 2016. Each id's own settings say which is this cycle's."""
-        async def fake_get(client, url, label):
-            if url == "https://sos.wv.gov/elections":
-                return _Resp(text=_links("119000", "126209", "126300"))
-            return _clarity(url)
-
-        monkeypatch.setattr(cl, "_get", fake_get)
-        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) == "126209"
-
-    @pytest.mark.asyncio
-    async def test_a_lone_stale_link_is_not_trusted(self, monkeypatch):
-        async def fake_get(client, url, label):
-            if url == "https://sos.wv.gov/elections":
-                return _Resp(text=_links("119000"))
-            return _clarity(url)
-
-        monkeypatch.setattr(cl, "_get", fake_get)
-        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
-
-    @pytest.mark.asyncio
     async def test_two_primaries_for_the_cycle_refuses_rather_than_guessing(self, monkeypatch):
         async def fake_get(client, url, label):
             if url == "https://sos.wv.gov/elections":
@@ -299,16 +258,6 @@ class TestDiscoverElectionId:
 
         monkeypatch.setattr(cl, "_get", fake_get)
         assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
-
-    @pytest.mark.asyncio
-    async def test_same_link_repeated_is_not_treated_as_ambiguous(self, monkeypatch):
-        async def fake_get(client, url, label):
-            if url == "https://sos.wv.gov/elections":
-                return _Resp(text=_links("126209", "126209"))
-            return _clarity(url)
-
-        monkeypatch.setattr(cl, "_get", fake_get)
-        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) == "126209"
 
     @pytest.mark.asyncio
     async def test_a_challenge_gated_empty_page_is_retried_once(self, monkeypatch):
@@ -339,8 +288,9 @@ class TestDiscoverElectionId:
             return _Resp(text="<html>truly nothing here</html>")
 
         monkeypatch.setattr(cl, "_get", fake_get)
+        # No matching link: nothing — after one retry, not an infinite loop.
         assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
-        assert len(calls) == 2  # one retry, not an infinite loop
+        assert len(calls) == 2
 
     @pytest.mark.asyncio
     async def test_page_fetch_failure_returns_none(self, monkeypatch):

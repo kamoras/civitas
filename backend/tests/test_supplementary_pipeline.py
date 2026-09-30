@@ -54,30 +54,19 @@ def _run(db_session, explore_result=None, justice_result=None, president_result=
                new_callable=AsyncMock) as mock_committee_leadership, \
          patch("app.pipeline.fetch.district_pvi.refresh_district_pvi",
                new_callable=AsyncMock) as mock_district_pvi:
-        if isinstance(explore_result, Exception):
-            mock_explore.side_effect = explore_result
-        else:
-            mock_explore.return_value = explore_result if explore_result is not None else {"total": 0}
-        if isinstance(justice_result, Exception):
-            mock_justice.side_effect = justice_result
-        else:
-            mock_justice.return_value = justice_result if justice_result is not None else {"justices": 0}
-        if isinstance(president_result, Exception):
-            mock_president.side_effect = president_result
-        else:
-            mock_president.return_value = president_result if president_result is not None else {"updated": 0}
-        if isinstance(committee_leadership_result, Exception):
-            mock_committee_leadership.side_effect = committee_leadership_result
-        else:
-            mock_committee_leadership.return_value = (
-                committee_leadership_result if committee_leadership_result is not None else True
-            )
-        if isinstance(district_pvi_result, Exception):
-            mock_district_pvi.side_effect = district_pvi_result
-        else:
-            mock_district_pvi.return_value = (
-                district_pvi_result if district_pvi_result is not None else True
-            )
+        # An exception or a callable becomes the mock's side effect;
+        # anything else its return value (None -> that phase's default).
+        for mock, result, default in (
+            (mock_explore, explore_result, {"total": 0}),
+            (mock_justice, justice_result, {"justices": 0}),
+            (mock_president, president_result, {"updated": 0}),
+            (mock_committee_leadership, committee_leadership_result, True),
+            (mock_district_pvi, district_pvi_result, True),
+        ):
+            if isinstance(result, Exception) or callable(result):
+                mock.side_effect = result
+            else:
+                mock.return_value = result if result is not None else default
 
         import asyncio
         return asyncio.run(supplementary_pipeline.run_supplementary_pipeline())
@@ -119,8 +108,14 @@ class TestSupplementaryPipelineRunTracking:
         assert run.elapsed_seconds is not None
 
     def test_in_memory_flag_is_set_during_and_cleared_after(self, db_session):
-        assert supplementary_pipeline.is_supplementary_pipeline_running() is False
-        _run(db_session)
+        seen_during = []
+
+        def explore(*_args, **_kwargs):
+            seen_during.append(supplementary_pipeline.is_supplementary_pipeline_running())
+            return {"total": 0}
+
+        _run(db_session, explore_result=explore)
+        assert seen_during == [True]
         # Cleared by the finally block once the (synchronous, in this
         # test) run completes.
         assert supplementary_pipeline.is_supplementary_pipeline_running() is False
@@ -327,10 +322,12 @@ def test_a_step_whose_lease_is_held_elsewhere_is_skipped(db_session):
     async def explore_held(tier, **_kw):
         yield lease.Granted("it is running elsewhere" if tier == lease.EXPLORE else None)
 
-    with patch("app.pipeline.lease.job_async", explore_held), \
-         patch("app.pipeline.explore_pipeline.run_explore_pipeline", new_callable=AsyncMock) as explore:
-        _run(db_session)
-    explore.assert_not_called()
+    # Recorded through _run's own explore mock: a mock patched outside
+    # _run would be shadowed by it and could never see a call.
+    explore_calls = []
+    with patch("app.pipeline.lease.job_async", explore_held):
+        _run(db_session, explore_result=lambda *a, **k: explore_calls.append(a) or {"total": 0})
+    assert explore_calls == []
     run = db_session.query(SupplementaryPipelineRun).one()
     steps = {step["key"]: step["status"] for step in json.loads(run.progress_detail)}
     assert steps["explore_documents"] == "skipped" and steps["president_scorecards"] == "done"

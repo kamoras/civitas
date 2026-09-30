@@ -18,6 +18,8 @@ import math
 from datetime import date, datetime
 from unittest.mock import patch
 
+import pytest
+
 from app.pipeline.analyze.population_reference import ChamberReference
 from app.pipeline.analyze.score_calculator import (
     _funding_independence_core,
@@ -115,17 +117,14 @@ class TestACompletedElectionMustBeTheOneThatSeatedThem:
 
 
 class TestMostRecentCompletedElection:
-    def test_in_progress_campaign_is_not_the_current_mandate(self):
-        with _at(2026, 9, 24):
-            assert select_recent_elections(ROWS)[0]["candidate_election_year"] == 2024
-
-    def test_election_day_itself_is_still_in_progress(self):
-        with _at(2026, 11, 3):
-            assert select_recent_elections(ROWS)[0]["candidate_election_year"] == 2024
-
-    def test_counts_once_the_election_has_been_held(self):
-        with _at(2026, 11, 4):
-            assert select_recent_elections(ROWS)[0]["candidate_election_year"] == 2026
+    @pytest.mark.parametrize("today, expected", [
+        pytest.param((2026, 9, 24), 2024, id="in_progress_campaign_is_not_the_current_mandate"),
+        pytest.param((2026, 11, 3), 2024, id="election_day_itself_is_still_in_progress"),
+        pytest.param((2026, 11, 4), 2026, id="counts_once_the_election_has_been_held"),
+    ])
+    def test_the_election_counts_only_once_it_has_been_held(self, today, expected):
+        with _at(*today):
+            assert select_recent_elections(ROWS)[0]["candidate_election_year"] == expected
 
     def test_appointee_with_no_completed_race_uses_the_in_progress_one(self):
         with _at(2026, 9, 24):

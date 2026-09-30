@@ -23,54 +23,18 @@ same candidate's correctly-suffixed column in the real Democratic
 file's own cross-tabulation.
 """
 
-import io
-import zipfile
 from pathlib import Path
 
 import pytest
 
 from app.pipeline.fetch import state_candidates_nh as nh
+from tests.test_state_candidates_tabular import _workbook
 
 FIXTURES = Path(__file__).parent
 ROOT_HTML = (FIXTURES / "fixtures_nh_elections_root.html").read_text()
 INDEX_HTML = (FIXTURES / "fixtures_nh_results_index.html").read_text()
 DEM_PAGE_HTML = (FIXTURES / "fixtures_nh_democratic_page.html").read_text()
 REP_PAGE_HTML = DEM_PAGE_HTML.replace("democratic", "republican").replace("Democratic", "Republican")
-
-
-def _col_letter(i: int) -> str:
-    letters = ""
-    i += 1
-    while i:
-        i, rem = divmod(i - 1, 26)
-        letters = chr(ord("A") + rem) + letters
-    return letters
-
-
-def _workbook(rows: list[list[str | None]]) -> bytes:
-    """Minimal real .xlsx: real column references (r="A1"), a `None`
-    entry omitting that cell from the row's XML entirely — same shape
-    as state_candidates_me.py's own test helper."""
-    table = []
-    for row in rows:
-        for cell in row:
-            if cell is not None and cell not in table:
-                table.append(cell)
-    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
-    shared = f"<sst {ns}>" + "".join(f"<si><t>{v}</t></si>" for v in table) + "</sst>"
-    body = "".join(
-        "<row>" + "".join(
-            f'<c r="{_col_letter(i)}{rownum}" t="s"><v>{table.index(cell)}</v></c>'
-            for i, cell in enumerate(row) if cell is not None
-        ) + "</row>"
-        for rownum, row in enumerate(rows, start=1)
-    )
-    sheet = f"<worksheet {ns}><sheetData>{body}</sheetData></worksheet>"
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("xl/sharedStrings.xml", shared)
-        zf.writestr("xl/worksheets/sheet1.xml", sheet)
-    return buf.getvalue()
 
 
 # Real rows, real 2026 U.S. Senate Democratic export, trimmed to two
@@ -112,6 +76,9 @@ class TestOfficeChoices:
     def test_democratic_file_keeps_only_its_own_party_and_excludes_the_cross_listed_republican(self):
         rows = nh._xlsx_rows(_workbook(DEM_ROWS), skip=2)
         choices = dict(nh._office_choices(rows, "d"))
+        # Exactly the two county rows, summed: if TOTALS (92/10052/...)
+        # were summed in as a third "county", Pappas would be 2x his real
+        # total; and the Write-Ins column is no candidate.
         assert choices == {"Chris Pappas": 4954 + 5098, "David Jarvis": 50 + 42}
         assert "John E. Sununu" not in choices  # the other party's real cross-tab, not a genuine total
         assert "Richard A. McMenamon II" not in choices
@@ -126,14 +93,20 @@ class TestOfficeChoices:
         assert choices["Richard A. McMenamon"] == 0 + 1
         assert "Chris Pappas" not in choices  # the other party's real cross-tab
 
-    def test_totals_row_and_write_ins_column_are_excluded(self):
-        rows = nh._xlsx_rows(_workbook(DEM_ROWS), skip=2)
-        choices = dict(nh._office_choices(rows, "d"))
-        # If TOTALS (92/10052/...) were summed in as a third "county",
-        # Pappas would be 2x his real total instead of matching it.
-        assert choices["Chris Pappas"] == 10052
-        assert "Write-Ins" not in choices
-        assert "" not in choices
+# The real three-hop discovery chain, both parties' pages.
+PAGES = {
+    "/elections": ROOT_HTML,
+    "state-primary-election-results": INDEX_HTML,
+    "democratic-state-primary": DEM_PAGE_HTML,
+    "republican-state-primary": REP_PAGE_HTML,
+}
+# Every federal workbook those pages link (House files reuse the Senate rows).
+FEDERAL_FILES = {
+    "us-senator-summary-democratic": _workbook(DEM_ROWS),
+    "us-senator-summary-republican": _workbook(REP_ROWS),
+    "congressional-district-1-democratic": _workbook(DEM_ROWS),
+    "congressional-district-1-republican": _workbook(REP_ROWS),
+}
 
 
 def _patch(monkeypatch, texts: dict[str, str], files: dict[str, bytes], held=None):
@@ -157,12 +130,7 @@ def _patch(monkeypatch, texts: dict[str, str], files: dict[str, bytes], held=Non
 class TestDiscoverOfficeLinks:
     @pytest.mark.asyncio
     async def test_finds_the_real_senate_summary_and_house_district_for_both_parties(self, monkeypatch):
-        _patch(monkeypatch, {
-            "/elections": ROOT_HTML,
-            "state-primary-election-results": INDEX_HTML,
-            "democratic-state-primary": DEM_PAGE_HTML,
-            "republican-state-primary": REP_PAGE_HTML,
-        }, {})
+        _patch(monkeypatch, PAGES, {})
         offices = await nh._discover_office_links(None, 2026)
         assert set(offices.keys()) == {("S", None), ("H", 1)}
         assert "summary-democratic" in offices[("S", None)]["d"]
@@ -184,12 +152,7 @@ class TestDiscoverOfficeLinks:
             "Representative in Congress District No. 1</a><br>\n",
             1,
         )
-        _patch(monkeypatch, {
-            "/elections": ROOT_HTML,
-            "state-primary-election-results": INDEX_HTML,
-            "democratic-state-primary": dem_with_duplicate_house_link,
-            "republican-state-primary": REP_PAGE_HTML,
-        }, {})
+        _patch(monkeypatch, {**PAGES, "democratic-state-primary": dem_with_duplicate_house_link}, {})
         offices = await nh._discover_office_links(None, 2026)
         assert "d" not in offices.get(("H", 1), {})
         assert "r" in offices.get(("H", 1), {})  # the OTHER party's own real link is unaffected
@@ -207,17 +170,7 @@ class TestDiscoverOfficeLinks:
 
 class TestFetchConfirmedCandidates:
     def _full_patch(self, monkeypatch, held=None):
-        _patch(monkeypatch, {
-            "/elections": ROOT_HTML,
-            "state-primary-election-results": INDEX_HTML,
-            "democratic-state-primary": DEM_PAGE_HTML,
-            "republican-state-primary": REP_PAGE_HTML,
-        }, {
-            "us-senator-summary-democratic": _workbook(DEM_ROWS),
-            "us-senator-summary-republican": _workbook(REP_ROWS),
-            "congressional-district-1-democratic": _workbook(DEM_ROWS),
-            "congressional-district-1-republican": _workbook(REP_ROWS),
-        }, held=held)
+        _patch(monkeypatch, PAGES, FEDERAL_FILES, held=held)
 
     @pytest.mark.asyncio
     async def test_confirms_the_real_nominees_once_settled(self, monkeypatch):
@@ -258,12 +211,7 @@ class TestFetchConfirmedCandidates:
 
     @pytest.mark.asyncio
     async def test_a_file_download_failure_fails_the_whole_fetch(self, monkeypatch):
-        _patch(monkeypatch, {
-            "/elections": ROOT_HTML,
-            "state-primary-election-results": INDEX_HTML,
-            "democratic-state-primary": DEM_PAGE_HTML,
-            "republican-state-primary": REP_PAGE_HTML,
-        }, {}, held="2026-01-01")  # discovery succeeds, but every file download 404s
+        _patch(monkeypatch, PAGES, {}, held="2026-01-01")  # discovery succeeds, but every file download 404s
         assert await nh.fetch_confirmed_candidates(None, 2026, "NH", {}) is None
 
 
@@ -349,24 +297,19 @@ EC4_REP_ROWS = [
     ["Auburn", "76", "81", "536", "", "", "2"],
     ["TOTALS", "2543", "1877", "14261", "33", "0", "37"],
 ]
+STATEWIDE_FILES = {
+    "governor-summary-democratic": _workbook(GOV_DEM_ROWS),
+    "governor-summary-republican": _workbook(GOV_REP_ROWS),
+    "executive-council-1-democratic": _workbook(EC1_DEM_ROWS),
+    "executive-council-1-republican": _workbook(EC1_REP_ROWS),
+}
+
 
 class TestStatewide:
-    def _patch_sw(self, monkeypatch, dem_page=DEM_PAGE_SW, rep_page=REP_PAGE_SW):
+    def _patch_sw(self, monkeypatch, dem_page=DEM_PAGE_SW, rep_page=REP_PAGE_SW, **extra_files):
         _patch(monkeypatch, {
-            "/elections": ROOT_HTML,
-            "state-primary-election-results": INDEX_HTML,
-            "democratic-state-primary": dem_page,
-            "republican-state-primary": rep_page,
-        }, {
-            "us-senator-summary-democratic": _workbook(DEM_ROWS),
-            "us-senator-summary-republican": _workbook(REP_ROWS),
-            "congressional-district-1-democratic": _workbook(DEM_ROWS),
-            "congressional-district-1-republican": _workbook(REP_ROWS),
-            "governor-summary-democratic": _workbook(GOV_DEM_ROWS),
-            "governor-summary-republican": _workbook(GOV_REP_ROWS),
-            "executive-council-1-democratic": _workbook(EC1_DEM_ROWS),
-            "executive-council-1-republican": _workbook(EC1_REP_ROWS),
-        }, held="2026-01-01")
+            **PAGES, "democratic-state-primary": dem_page, "republican-state-primary": rep_page,
+        }, {**FEDERAL_FILES, **STATEWIDE_FILES, **extra_files}, held="2026-01-01")
 
     @pytest.mark.asyncio
     async def test_discovers_the_governor_summary_and_the_council_districts(self, monkeypatch):
@@ -408,23 +351,10 @@ class TestStatewide:
         1,877 (the rows below are two of its 33 towns)."""
         dem_page = DEM_PAGE_SW + EC4_ANCHOR
         rep_page = dem_page.replace("democratic", "republican").replace("Democratic", "Republican")
-        _patch(monkeypatch, {
-            "/elections": ROOT_HTML,
-            "state-primary-election-results": INDEX_HTML,
-            "democratic-state-primary": dem_page,
-            "republican-state-primary": rep_page,
-        }, {
-            "us-senator-summary-democratic": _workbook(DEM_ROWS),
-            "us-senator-summary-republican": _workbook(REP_ROWS),
-            "congressional-district-1-democratic": _workbook(DEM_ROWS),
-            "congressional-district-1-republican": _workbook(REP_ROWS),
-            "governor-summary-democratic": _workbook(GOV_DEM_ROWS),
-            "governor-summary-republican": _workbook(GOV_REP_ROWS),
-            "executive-council-1-democratic": _workbook(EC1_DEM_ROWS),
-            "executive-council-1-republican": _workbook(EC1_REP_ROWS),
+        self._patch_sw(monkeypatch, dem_page, rep_page, **{
             "executive-council-4-democratic": _workbook(EC4_DEM_ROWS),
             "executive-council-4-republican": _workbook(EC4_REP_ROWS),
-        }, held="2026-01-01")
+        })
         records = await nh.fetch_confirmed_candidates(None, 2026, "NH", {"statewide_offices": True})
         council = sorted(
             (r["district"], r["party"], r["last_name"]) for r in records if r["office"] == "executive_council"

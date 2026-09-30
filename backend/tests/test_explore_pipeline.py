@@ -9,6 +9,7 @@ audit: 1,758 exact-duplicate rows, 31% of the table).
 """
 
 import asyncio
+from contextlib import ExitStack
 from types import SimpleNamespace
 import os
 import subprocess
@@ -40,10 +41,33 @@ def _no_real_vector_store(monkeypatch):
     monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: set())
     monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", lambda: {})
 
+
+def _stubbed_run(db_session, **stubs) -> ExitStack:
+    """The outside world of the REAL run_explore_pipeline stubbed empty:
+    its session, every fetcher, the lexical index, authority, calibration
+    and the cache. `stubs` replaces or adds explore_pipeline attributes —
+    the vector-index steps each test is about."""
+    defaults = {
+        "SessionLocal": MagicMock(return_value=db_session),
+        "fetch_floor_remarks": AsyncMock(return_value={}),
+        "fetch_house_floor_remarks": AsyncMock(return_value=[]),
+        "fetch_recent_presidential_actions": AsyncMock(return_value=[]),
+        "fetch_scotus_cases": AsyncMock(return_value=[]),
+        "fetch_fr_rulemaking": AsyncMock(return_value=[]),
+        "rebuild_index": MagicMock(return_value=0),
+        "update_document_authority": MagicMock(return_value={"documents": 0, "cited": 0}),
+        "calibrate_and_store": MagicMock(return_value={}),
+        "api_cache_set": MagicMock(),
+    }
+    stack = ExitStack()
+    for name, stub in {**defaults, **stubs}.items():
+        stack.enter_context(patch.object(explore_pipeline, name, stub))
+    return stack
+
+
 class TestStableHash:
-    def test_same_input_same_output(self):
-        text = "Mr. Speaker, I rise today to commend the bipartisan effort..."
-        assert _stable_hash(text) == _stable_hash(text)
+    # Same input, same output — across processes, not just within one — is
+    # test_immune_to_pythonhashseed below.
 
     def test_different_input_different_output(self):
         a = _stable_hash("Remarks about infrastructure funding.")
@@ -125,36 +149,27 @@ class TestRulemakingBackfillChangeDetection:
             self.fetch = fetch
             return asyncio.run(_backfill_rulemaking_bodies(db_session))
 
-    def test_an_unchanged_body_is_not_reported_as_refreshed(self, db_session):
-        complete = "Document Headings — a complete but short notice."
-        doc = _regulatory_doc(complete)
-        assert self._run(db_session, doc, complete) == []
-        assert doc.body == complete
-
     def test_a_genuinely_longer_body_is_reported(self, db_session):
         doc = _regulatory_doc("stub")
         assert self._run(db_session, doc, "the real, much longer rule text") == [1]
         assert doc.body == "the real, much longer rule text"
 
-    def test_a_failed_fetch_never_blanks_a_stored_body(self, db_session):
-        doc = _regulatory_doc("already stored text")
-        assert self._run(db_session, doc, "") == []
-        assert doc.body == "already stored text"
-
     def test_a_complete_short_document_is_fetched_once_ever(self, db_session):
         """The non-convergence, which change-detection alone did not fix.
 
-        Suppressing the re-embed (above) stopped the wasted encoding but
-        not the wasted download: the selection matches on body shape, so
-        a document whose real full text is genuinely under 2,000 chars
-        kept matching after every successful fetch. 476 documents were
+        Change detection — an unchanged body is not reported as refreshed,
+        so it is not re-embedded — stopped the wasted encoding but not the
+        wasted download: the selection matches on body shape, so a
+        document whose real full text is genuinely under 2,000 chars kept
+        matching after every successful fetch. 476 documents were
         re-downloaded nightly, forever. `body_fetched_at` records the one
         fact the body's shape cannot.
         """
         complete = "Document Headings — a complete but short notice."
         doc = _regulatory_doc(complete)
 
-        assert self._run(db_session, doc, complete) == []
+        assert self._run(db_session, doc, complete) == []  # unchanged: not refreshed
+        assert doc.body == complete
         assert self.fetch.await_count == 1
         assert doc.body_fetched_at is not None
 
@@ -166,11 +181,12 @@ class TestRulemakingBackfillChangeDetection:
 
         A fetch that returns nothing leaves body_fetched_at NULL, so a
         transient Federal Register failure is retried rather than
-        permanently marked done.
+        permanently marked done — and never blanks the body already stored.
         """
         doc = _regulatory_doc("stub")
 
         assert self._run(db_session, doc, "") == []
+        assert doc.body == "stub"
         assert doc.body_fetched_at is None
 
         assert self._rerun(db_session, "the real, much longer rule text") == [doc.id]
@@ -217,26 +233,13 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
             return 0
 
         loop = asyncio.get_running_loop()
-        empty = AsyncMock(return_value={})
 
-        with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
-             patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
-             patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks",
-                   new_callable=AsyncMock, return_value=[]), \
-             patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
-                   new_callable=AsyncMock, return_value=[]), \
-             patch("app.pipeline.explore_pipeline.fetch_scotus_cases",
-                   new_callable=AsyncMock, return_value=[]), \
-             patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking",
-                   new_callable=AsyncMock, return_value=[]), \
-             patch("app.pipeline.explore_pipeline.top_up_explore_index", blocking_embed), \
-             patch("app.pipeline.explore_pipeline._top_up_plan", return_value=([], [])), \
-             patch("app.pipeline.explore_pipeline.index_is_whole", return_value=True), \
-             patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
-             patch("app.pipeline.explore_pipeline.update_document_authority",
-                   return_value={"documents": 0, "cited": 0}), \
-             patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
-             patch("app.pipeline.explore_pipeline.api_cache_set"):
+        with _stubbed_run(
+            db_session,
+            top_up_explore_index=blocking_embed,
+            _top_up_plan=MagicMock(return_value=([], [])),
+            index_is_whole=MagicMock(return_value=True),
+        ):
             beat = asyncio.create_task(heartbeat())
             run = asyncio.create_task(run_explore_pipeline(days_back=1))
             await embed_started.wait()
@@ -257,24 +260,14 @@ async def test_an_incomplete_index_is_rebuilt_whole_in_the_run_not_topped_up(db_
     # Topped up, it would still not be a complete build — and a background
     # rebuild started after would throw the top-up away and leave the
     # calibration below measuring an empty semantic channel.
-    empty = AsyncMock(return_value={})
     rebuild = MagicMock(return_value=3)
     embed = MagicMock(return_value=0)
-    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
-         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
-         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
-               new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.index_is_whole", return_value=False), \
-         patch("app.pipeline.explore_pipeline.rebuild_explore_index", rebuild), \
-         patch("app.pipeline.explore_pipeline.top_up_explore_index", embed), \
-         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
-         patch("app.pipeline.explore_pipeline.update_document_authority",
-               return_value={"documents": 0, "cited": 0}), \
-         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
-         patch("app.pipeline.explore_pipeline.api_cache_set"):
+    with _stubbed_run(
+        db_session,
+        index_is_whole=MagicMock(return_value=False),
+        rebuild_explore_index=rebuild,
+        top_up_explore_index=embed,
+    ):
         await run_explore_pipeline(days_back=1)
     rebuild.assert_called_once()
     embed.assert_not_called()
@@ -443,26 +436,15 @@ async def test_a_run_that_waited_out_a_rebuild_purges_again_and_resolves_the_ale
     # The start's rebuild reads by id without this run's lease: a document
     # the run deleted may have been embedded after the first purge. And the
     # index it leaves whole ends a failed rebuild's alert.
-    empty = AsyncMock(return_value={})
     purge = MagicMock(return_value=0)
     resolve = MagicMock()
-    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
-         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
-         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
-               new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.index_is_whole", side_effect=[False, True]), \
-         patch("app.pipeline.explore_pipeline.rebuild_explore_index", return_value=None), \
-         patch("app.pipeline.explore_pipeline.top_up_explore_index", return_value=0), \
-         patch("app.pipeline.explore_pipeline._purge_orphaned_vectors", purge), \
-         patch("app.ops_alerts.resolve_ops_alert", resolve), \
-         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
-         patch("app.pipeline.explore_pipeline.update_document_authority",
-               return_value={"documents": 0, "cited": 0}), \
-         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
-         patch("app.pipeline.explore_pipeline.api_cache_set"):
+    with _stubbed_run(
+        db_session,
+        index_is_whole=MagicMock(side_effect=[False, True]),
+        rebuild_explore_index=MagicMock(return_value=None),
+        top_up_explore_index=MagicMock(return_value=0),
+        _purge_orphaned_vectors=purge,
+    ), patch("app.ops_alerts.resolve_ops_alert", resolve):
         await run_explore_pipeline(days_back=1)
     assert purge.call_count == 2
     resolve.assert_called_once_with("explore-index-rebuild")
@@ -475,26 +457,14 @@ async def test_a_run_facing_a_locked_index_neither_rebuilds_nor_tops_it_up(db_se
     # never answered resolve a failed rebuild's alert.
     import sqlite3
 
-    empty = AsyncMock(return_value={})
     rebuild, embed, resolve = MagicMock(), MagicMock(return_value=0), MagicMock()
-    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
-         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
-         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
-               new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
-         patch("app.pipeline.explore_pipeline.index_is_whole",
-               side_effect=sqlite3.OperationalError("database is locked")), \
-         patch("app.pipeline.explore_pipeline.rebuild_explore_index", rebuild), \
-         patch("app.pipeline.explore_pipeline.top_up_explore_index", embed), \
-         patch("app.pipeline.explore_pipeline._purge_orphaned_vectors", return_value=0), \
-         patch("app.ops_alerts.resolve_ops_alert", resolve), \
-         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
-         patch("app.pipeline.explore_pipeline.update_document_authority",
-               return_value={"documents": 0, "cited": 0}), \
-         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
-         patch("app.pipeline.explore_pipeline.api_cache_set"):
+    with _stubbed_run(
+        db_session,
+        index_is_whole=MagicMock(side_effect=sqlite3.OperationalError("database is locked")),
+        rebuild_explore_index=rebuild,
+        top_up_explore_index=embed,
+        _purge_orphaned_vectors=MagicMock(return_value=0),
+    ), patch("app.ops_alerts.resolve_ops_alert", resolve):
         await run_explore_pipeline(days_back=1)
     rebuild.assert_not_called()
     embed.assert_not_called()

@@ -34,30 +34,23 @@ def _make_request(peer_ip: str, forwarded_for: str | None = None) -> MagicMock:
 
 
 class TestClientIp:
-    def test_untrusted_peer_ignores_forwarded_header(self):
+    @pytest.mark.parametrize("peer, forwarded_for, expected", [
         # A direct internet client can set any X-Forwarded-For it wants —
         # if it isn't relayed through our own proxy, it must not be trusted.
-        req = _make_request("8.8.8.8", forwarded_for="1.2.3.4")
-        assert client_ip(req) == "8.8.8.8"
-
-    def test_trusted_loopback_proxy_uses_forwarded_header(self):
-        req = _make_request("127.0.0.1", forwarded_for="8.8.8.8")
-        assert client_ip(req) == "8.8.8.8"
-
-    def test_trusted_overlay_proxy_uses_forwarded_header(self):
+        pytest.param("8.8.8.8", "1.2.3.4", "8.8.8.8", id="untrusted_peer_ignores_forwarded_header"),
+        pytest.param("127.0.0.1", "8.8.8.8", "8.8.8.8", id="trusted_loopback_proxy_uses_forwarded_header"),
         # The production case: nginx reaches the backend over the Docker
         # overlay network, so the peer is a private 10.0.x.x address. Its
         # X-Forwarded-For last hop must be trusted or per-IP limiting
         # collapses to one global bucket.
-        req = _make_request("10.0.1.7", forwarded_for="8.8.8.8")
-        assert client_ip(req) == "8.8.8.8"
-
-    def test_trusted_proxy_uses_last_hop_not_first(self):
+        pytest.param("10.0.1.7", "8.8.8.8", "8.8.8.8", id="trusted_overlay_proxy_uses_forwarded_header"),
         # A malicious client can prepend its own fake entry before the
         # request reaches our proxy; our proxy appends the real IP after
         # it. The last entry is the one our trust boundary actually saw.
-        req = _make_request("10.0.1.7", forwarded_for="1.2.3.4, 8.8.8.8")
-        assert client_ip(req) == "8.8.8.8"
+        pytest.param("10.0.1.7", "1.2.3.4, 8.8.8.8", "8.8.8.8", id="trusted_proxy_uses_last_hop_not_first"),
+    ])
+    def test_client_ip(self, peer, forwarded_for, expected):
+        assert client_ip(_make_request(peer, forwarded_for=forwarded_for)) == expected
 
     def test_no_client_falls_back_to_unknown(self):
         req = MagicMock()
@@ -68,15 +61,10 @@ class TestClientIp:
 
 @pytest.mark.usefixtures("throttle_store")
 class TestWriteRateLimit:
-    async def test_allows_under_limit(self):
-        req = _make_request("8.8.4.1")
-        for _ in range(20):
-            await write_rate_limit(req)  # should not raise
-
     async def test_blocks_over_limit(self):
         req = _make_request("8.8.4.2")
         for _ in range(20):
-            await write_rate_limit(req)
+            await write_rate_limit(req)  # under the limit: none of these raise
         with pytest.raises(HTTPException) as exc:
             await write_rate_limit(req)
         assert exc.value.status_code == 429

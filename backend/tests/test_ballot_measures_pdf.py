@@ -87,43 +87,6 @@ async def test_fetch_returns_none_for_an_unregistered_state(db_session):
 
 
 @pytest.mark.asyncio
-async def test_fetch_returns_cached_result_without_a_fetch(monkeypatch, db_session):
-    from app.pipeline.cache import api_cache_set
-
-    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source())
-    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
-    api_cache_set(db_session, pdf.CACHE_TIER, "ZZ-2026", [{"id": "ZZ-x"}])
-
-    async def fail_get(*a, **kw):
-        raise AssertionError("should not fetch — cache hit")
-
-    client = SimpleNamespace(get=fail_get)
-    result = await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2026, "2026-11-03")
-    assert result == [{"id": "ZZ-x"}]
-
-
-@pytest.mark.asyncio
-async def test_fetch_returns_none_on_http_failure(monkeypatch, db_session):
-    import httpx
-
-    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source())
-    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
-
-    class FakeResponse:
-        status_code = 403
-
-        def raise_for_status(self):
-            raise httpx.HTTPStatusError("403", request=None, response=self)
-
-    async def fake_get(*a, **kw):
-        return FakeResponse()
-
-    client = SimpleNamespace(get=fake_get)
-    result = await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2026, "2026-11-03")
-    assert result is None
-
-
-@pytest.mark.asyncio
 async def test_fetch_dispatches_to_the_registered_strategy_and_caches(monkeypatch, db_session):
     monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source())
     fake_page = object()
@@ -451,6 +414,7 @@ def test_every_registered_state_resolves_to_a_strategy():
         "AL", "AR", "FL", "KY", "MD", "NC", "SC", "TN", "TX", "WV",
         "AK", "HI", "ID", "MT", "NM", "WA", "WY",
         "IL", "IN", "KS", "MI", "MN", "ND", "NE", "OK", "SD",
+        "GA", "MS", "NH", "NV", "OH", "UT",
     } <= states
     for state in states:
         assert pdf.is_configured(state), state

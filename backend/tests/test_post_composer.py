@@ -71,11 +71,9 @@ class TestEmptinessIsImpossible:
         assert compose(actor, "tracks the TX-4 House race", "This coverage tracks the TX-4 House race") is None
 
     def test_no_extraction_means_no_post(self):
+        # Whatever the source (a real story, or a listing with nobody doing
+        # anything), empty spans are refused before the source is read.
         assert compose("", "", REAL_NEWS) is None
-
-    def test_a_listing_with_nobody_doing_anything_yields_nothing(self):
-        src = "The (movie) Reservoir Dogs 4K (iTunes)(CA) C$4.99 (Crime) (iMDB) 8.3"
-        assert compose("", "", src) is None
 
 
 class TestWellFormedness:
@@ -91,6 +89,9 @@ class TestWellFormedness:
         src = ("From left, New Jersey Sen. Cory Booker takes a selfie with Maryland "
                "Sens. Chris Van Hollen and Angela Alsobrooks.")
         assert compose("New Jersey Sen. Cory Booker", "takes a selfie with", src) is None
+        # The whole predicate composes. "Sens." must not read as the end of
+        # the sentence — an earlier version truncated there and rejected
+        # this valid composition.
         assert compose(
             "New Jersey Sen. Cory Booker",
             "takes a selfie with Maryland Sens. Chris Van Hollen and Angela Alsobrooks",
@@ -141,17 +142,6 @@ class TestBothSpansMustBeAssertedTogether:
     def test_the_assertion_the_source_does_make_still_composes(self):
         assert compose(
             "Hunter Biden", "confirmed he would sit next to Donald Trump Jr.", self.BIDEN
-        ) is not None
-
-    def test_an_abbreviation_period_inside_the_predicate_is_not_a_boundary(self):
-        """"Sens." must not read as the end of the sentence — an earlier
-        version truncated there and rejected a valid composition."""
-        src = ("From left, New Jersey Sen. Cory Booker takes a selfie with Maryland "
-               "Sens. Chris Van Hollen and Angela Alsobrooks.")
-        assert compose(
-            "New Jersey Sen. Cory Booker",
-            "takes a selfie with Maryland Sens. Chris Van Hollen and Angela Alsobrooks",
-            src,
         ) is not None
 
 

@@ -3,17 +3,13 @@ import { render, screen } from "@testing-library/react";
 import TerminalTitlebar from "./TerminalTitlebar";
 
 describe("TerminalTitlebar", () => {
-  it("renders the given title", () => {
-    render(<TerminalTitlebar title="Analysis" />);
-    expect(screen.getByText("Analysis")).toBeInTheDocument();
-  });
-
-  it("renders children alongside the title", () => {
+  it("renders the given title, with children alongside it", () => {
     render(
       <TerminalTitlebar title="Search">
         <span data-testid="extra">extra content</span>
       </TerminalTitlebar>
     );
+    expect(screen.getByText("Search")).toBeInTheDocument();
     expect(screen.getByTestId("extra")).toBeInTheDocument();
   });
 

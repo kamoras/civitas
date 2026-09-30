@@ -26,7 +26,6 @@ from app.pipeline.fetch import (
     ballot_measures_nh as nh,
     ballot_measures_nv as nv,
     ballot_measures_oh as oh,
-    ballot_measures_pdf as pdf,
     ballot_measures_ut as ut,
 )
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished
@@ -40,14 +39,6 @@ def _json(name):
 
 def _unpack(page, keys=("text", "x0", "x1", "top")):
     return {"width": page["width"], "words": [dict(zip(keys, w)) for w in page["words"]]}
-
-
-def test_every_new_state_is_registered_and_resolves():
-    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
-
-    sources.invalidate_cache()
-    for state in ("GA", "MS", "NH", "NV", "OH", "UT"):
-        assert pdf.is_configured(state), state
 
 
 # ── New Hampshire ────────────────────────────────────────────────────
@@ -293,17 +284,6 @@ class TestGeorgia:
         pages[6] = {**pages[6], "words": words}
         assert ga.parse_booklet(pages, 2026) is None
 
-    def test_discovery_link_matching(self):
-        # SYNTHETIC page: sos.ga.gov could not be seen from this
-        # environment; the hrefs are the real 2026 and 2024 files.
-        page = (
-            "<html><body><a href='/sites/default/files/2026-09/2026%20Constitutional%20Summaries%20booklet%20FINAL.pdf'>"
-            "2026 booklet</a><a href='/sites/default/files/2024-09/Statewide_Const_Amendments_and_Ballot_Questions_"
-            "Booklet.pdf'>2024</a></body></html>"
-        )
-        url, ok = ga.find_booklet_url(page, 2026)
-        assert ok and url.endswith("2026-09/2026%20Constitutional%20Summaries%20booklet%20FINAL.pdf")
-
 
 # ── Ohio ─────────────────────────────────────────────────────────────
 
@@ -433,10 +413,6 @@ class TestGeorgiaReferendumsFailClosed:
         # dev environment); the booklet href is the real 2026 file.
         return f"<html><body>Constitution <a href='{self.booklet}'>2026 booklet</a>{extra}</body></html>"
 
-    def test_only_the_booklet_is_accepted(self):
-        url, ok = ga.find_booklet_url(self._page(), 2026)
-        assert ok and url.endswith("booklet%20FINAL.pdf")
-
     def test_a_same_year_referendum_document_refuses(self):
         extra = "<a href='/sites/default/files/2026-09/2026_Statewide_Referendum_Questions.pdf'>2026 Referendum</a>"
         assert ga.find_booklet_url(self._page(extra), 2026) == (None, False)
@@ -444,14 +420,35 @@ class TestGeorgiaReferendumsFailClosed:
         assert ga.find_booklet_url(self._page(extra), 2026) == (None, False)
 
     def test_another_years_referendum_document_does_not(self):
+        # The real 2024 booklet's href beside 2026's: the booklet is found.
         extra = "<a href='/files/2024-09/Statewide_Const_Amendments_and_Ballot_Questions_Booklet.pdf'>2024</a>"
-        assert ga.find_booklet_url(self._page(extra), 2026)[1] is True
+        url, ok = ga.find_booklet_url(self._page(extra), 2026)
+        assert ok and url.endswith("2026-09/2026%20Constitutional%20Summaries%20booklet%20FINAL.pdf")
 
-    def test_registry_description_states_the_fail_closed_rule(self):
+    def test_registry_description_states_the_fail_closed_rule_and_what_the_reader_cannot_see(self):
         from app.pipeline.fetch import ballot_measure_pdf_sources as sources
 
         sources.invalidate_cache()
-        assert "referendum" in sources.source_for_state("GA")["description"].lower()
+        desc = sources.source_for_state("GA")["description"]
+        assert "referendum" in desc.lower()
+        assert "county sample ballots" in desc and "Augusta-Richmond" in desc and "by hand" in desc
+
+
+_MS_DOCS = "https://www.sos.ms.gov/content/documents/Elections/2026/"
+
+
+def _stub_ms(monkeypatch, page, docs):
+    """The elections page is `page`; each URL in `docs` serves those
+    pages, any other document fails to fetch."""
+    async def get_text(client, u, label, **kw):
+        return page
+
+    async def get_bytes(client, u, label, **kw):
+        return u if u in docs else None
+
+    monkeypatch.setattr(ms, "get_text", get_text)
+    monkeypatch.setattr(ms, "get_bytes", get_bytes)
+    monkeypatch.setattr(ms, "pdf_pages", lambda raw: docs[raw])
 
 
 class TestMississippiPicksTheGeneralBallot:
@@ -465,17 +462,7 @@ class TestMississippiPicksTheGeneralBallot:
         return f"<html><head><title>Elections &amp; Voting | MS SOS</title></head><body>{links}</body></html>"
 
     def _stub(self, monkeypatch, page):
-        docs = {self.general: self.fx["sample_ballot_pages"], self.primary: self.primary_pages}
-
-        async def get_text(client, u, label, **kw):
-            return page
-
-        async def get_bytes(client, u, label, **kw):
-            return u if u in docs else None
-
-        monkeypatch.setattr(ms, "get_text", get_text)
-        monkeypatch.setattr(ms, "get_bytes", get_bytes)
-        monkeypatch.setattr(ms, "pdf_pages", lambda raw: docs[raw])
+        _stub_ms(monkeypatch, page, {self.general: self.fx["sample_ballot_pages"], self.primary: self.primary_pages})
 
     @pytest.mark.asyncio
     async def test_primary_only_link_is_not_yet_published(self, monkeypatch):
@@ -574,44 +561,65 @@ class TestNewHampshireMultiPage:
         assert nh.parse_questions(stray, 2026) is None
 
 
-class TestOhioYesNoSentenceEnd:
-    def test_abbreviation_does_not_cut_the_sentence(self):
-        body = (
+def _title_abbreviation_case(name):
+    yes = f"A “YES” vote means the plan proposed by {name} takes effect."
+    body = f"{yes}\nA “NO” vote means it does not.\nSHALL THE AMENDMENT BE APPROVED?"
+    return pytest.param(body, (yes, "A “NO” vote means it does not."), id=f"title_abbreviation_{name.split('.')[0]}")
+
+
+class TestOhioYesNoSentences:
+    @pytest.mark.parametrize("body, expected", [
+        pytest.param(
             "Proposed by Initiative Petition\n"
             "A “YES” vote means approval of the amendment under R.C. 3519.01 as proposed.\n"
-            "A “NO” vote means disapproval of the amendment.\nSHALL THE AMENDMENT BE APPROVED?"
-        )
-        yes, no = oh.yes_no_sentences(body)
-        assert yes == "A “YES” vote means approval of the amendment under R.C. 3519.01 as proposed."
-        assert no == "A “NO” vote means disapproval of the amendment."
+            "A “NO” vote means disapproval of the amendment.\nSHALL THE AMENDMENT BE APPROVED?",
+            ("A “YES” vote means approval of the amendment under R.C. 3519.01 as proposed.",
+             "A “NO” vote means disapproval of the amendment."),
+            id="abbreviation_does_not_cut_the_sentence",
+        ),
+        pytest.param(
+            "A “YES” vote means approval of the amendment. A “NO” vote means disapproval of the amendment.",
+            ("A “YES” vote means approval of the amendment.", "A “NO” vote means disapproval of the amendment."),
+            id="real_2026_sentences_unchanged",
+        ),
+        # Review round 2 (PR #715).
+        pytest.param(
+            "A “YES” vote means the tax applies to Plan B. A “NO” vote means it does not.",
+            ("A “YES” vote means the tax applies to Plan B.", "A “NO” vote means it does not."),
+            id="single_capital_before_the_no_sentence_ends_yes",
+        ),
+        pytest.param(
+            "A “YES” vote means approval of the amendment to Article V.\n"
+            "A “NO” vote means disapproval of the amendment to Article V.\n"
+            "SHALL THE AMENDMENT BE APPROVED?",
+            ("A “YES” vote means approval of the amendment to Article V.",
+             "A “NO” vote means disapproval of the amendment to Article V."),
+            id="sentences_ending_in_a_roman_numeral_read_whole",
+        ),
+        # Review round 3 (PR #715): a title abbreviation does not cut the sentence.
+        *[_title_abbreviation_case(name) for name in ("Gov. DeWine", "St. Clairsville", "Dr. Smith")],
+    ])
+    def test_each_sentence_is_read_whole(self, body, expected):
+        assert oh.yes_no_sentences(body) == expected
 
-    def test_real_2026_sentences_unchanged(self):
-        body = "A “YES” vote means approval of\nthe amendment.\nA “NO” vote means disapproval of\nthe amendment."
-        assert oh.yes_no_sentences(body.replace("\n", " ")) == (
-            "A “YES” vote means approval of the amendment.", "A “NO” vote means disapproval of the amendment.",
-        )
+    # Review round 3 (PR #715).
+    @pytest.mark.parametrize("body", [
+        pytest.param(
+            "A “YES” vote means approval of the amendment. If approved, it takes effect at once.\n"
+            "A “NO” vote means disapproval of the amendment.\nSHALL THE AMENDMENT BE APPROVED?",
+            id="two_sentences_in_one_segment",
+        ),
+        pytest.param(
+            "A “YES” vote means approval of the\nA “NO” vote means disapproval.\nSHALL THE AMENDMENT BE APPROVED?",
+            id="segment_not_ending_in_a_period",
+        ),
+    ])
+    def test_an_ambiguous_segment_refuses(self, body):
+        with pytest.raises(oh.AmbiguousSentence):
+            oh.yes_no_sentences(body)
 
 
 # ── Review round 2 (PR #715) ─────────────────────────────────────────
-
-class TestOhioYesNoBounds:
-    def test_a_single_capital_before_the_no_sentence_ends_yes(self):
-        body = "A “YES” vote means the tax applies to Plan B. A “NO” vote means it does not."
-        assert oh.yes_no_sentences(body) == (
-            "A “YES” vote means the tax applies to Plan B.", "A “NO” vote means it does not.",
-        )
-
-    def test_sentences_ending_in_a_roman_numeral_read_whole(self):
-        body = (
-            "A “YES” vote means approval of the amendment to Article V.\n"
-            "A “NO” vote means disapproval of the amendment to Article V.\n"
-            "SHALL THE AMENDMENT BE APPROVED?"
-        )
-        assert oh.yes_no_sentences(body) == (
-            "A “YES” vote means approval of the amendment to Article V.",
-            "A “NO” vote means disapproval of the amendment to Article V.",
-        )
-
 
 class TestNevadaUnrecognisedBooklet:
     fx = _json("fixtures_nv_ballot_questions_2026.json")
@@ -647,85 +655,30 @@ class TestNevadaUnrecognisedBooklet:
 
 class TestMississippiReissuedBallot:
     fx = _json("fixtures_ms_sample_ballot_2026.json")
-    general = "https://www.sos.ms.gov/content/documents/Elections/2026/Sample Ballot 9-9-26.pdf"
-    corrected = "https://www.sos.ms.gov/content/documents/Elections/2026/Sample Ballot 9-15-26 corrected.pdf"
-    stale = "https://www.sos.ms.gov/content/documents/Elections/2026/Sample Ballot Primary.pdf"
+    general = _MS_DOCS + "Sample Ballot 9-9-26.pdf"
+    corrected = _MS_DOCS + "Sample Ballot 9-15-26 corrected.pdf"
+    older = _MS_DOCS + "Sample Ballot 3-1-26.pdf"
+    stale = _MS_DOCS + "Sample Ballot Primary.pdf"
 
-    def _stub(self, monkeypatch, hrefs, docs):
-        links = "".join(f'<a href="{h.split("sos.ms.gov")[1]}">Sample Ballot</a>' for h in hrefs)
-        page = f"<html><head><title>Elections &amp; Voting | MS SOS</title></head><body>{links}</body></html>"
-
-        async def get_text(client, u, label, **kw):
-            return page
-
-        async def get_bytes(client, u, label, **kw):
-            return u if u in docs else None
-
-        monkeypatch.setattr(ms, "get_text", get_text)
-        monkeypatch.setattr(ms, "get_bytes", get_bytes)
-        monkeypatch.setattr(ms, "pdf_pages", lambda raw: docs[raw])
-
-    @pytest.mark.asyncio
-    async def test_two_general_ballots_with_the_same_answer_read(self, monkeypatch):
-        pages = self.fx["sample_ballot_pages"]
-        self._stub(monkeypatch, [self.general, self.corrected], {self.general: pages, self.corrected: pages})
-        assert await ms.fetch_measures(None, 2026) == []
-
-    @pytest.mark.asyncio
-    async def test_a_dead_older_link_does_not_fail_a_found_general(self, monkeypatch):
-        older = "https://www.sos.ms.gov/content/documents/Elections/2026/Sample Ballot 3-1-26.pdf"
-        self._stub(monkeypatch, [older, self.general], {self.general: self.fx["sample_ballot_pages"]})
-        assert await ms.fetch_measures(None, 2026) == []
-
-    @pytest.mark.asyncio
-    async def test_a_dead_newer_ballot_is_a_failure_not_the_older_ones_none(self, monkeypatch):
+    @pytest.mark.parametrize("hrefs, served, expected", [
+        pytest.param([general, corrected], [general, corrected], [], id="two_general_ballots_with_the_same_answer_read"),
+        pytest.param([older, general], [general], [], id="a_dead_older_link_does_not_fail_a_found_general"),
         # A corrected ballot (which could add a measure) that fails to
         # fetch must not let the older ballot's "none" stand that night.
-        self._stub(monkeypatch, [self.general, self.corrected], {self.general: self.fx["sample_ballot_pages"]})
-        assert await ms.fetch_measures(None, 2026) is None
-
-    @pytest.mark.asyncio
-    async def test_a_dead_undated_link_is_a_failure(self, monkeypatch):
+        pytest.param([general, corrected], [general], None, id="a_dead_newer_ballot_is_a_failure_not_the_older_ones_none"),
         # Nothing proves it older than the ballot that was read.
-        self._stub(monkeypatch, [self.stale, self.general], {self.general: self.fx["sample_ballot_pages"]})
-        assert await ms.fetch_measures(None, 2026) is None
-
+        pytest.param([stale, general], [general], None, id="a_dead_undated_link_is_a_failure"),
+        pytest.param([stale], [], None, id="a_dead_link_and_no_general_is_a_failure_not_a_wait"),
+    ])
     @pytest.mark.asyncio
-    async def test_a_dead_link_and_no_general_is_a_failure_not_a_wait(self, monkeypatch):
-        self._stub(monkeypatch, [self.stale], {})
-        assert await ms.fetch_measures(None, 2026) is None
-
-
-def test_ga_registry_description_names_what_the_reader_cannot_see():
-    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
-
-    sources.invalidate_cache()
-    desc = sources.source_for_state("GA")["description"]
-    assert "county sample ballots" in desc and "Augusta-Richmond" in desc and "by hand" in desc
+    async def test_every_general_ballot_linked_must_be_read(self, monkeypatch, hrefs, served, expected):
+        links = "".join(f'<a href="{h.split("sos.ms.gov")[1]}">Sample Ballot</a>' for h in hrefs)
+        page = f"<html><head><title>Elections &amp; Voting | MS SOS</title></head><body>{links}</body></html>"
+        _stub_ms(monkeypatch, page, {u: self.fx["sample_ballot_pages"] for u in served})
+        assert await ms.fetch_measures(None, 2026) == expected
 
 
 # ── Review round 3 (PR #715) ─────────────────────────────────────────
-
-class TestOhioTitleAbbreviations:
-    @pytest.mark.parametrize("name", ["Gov. DeWine", "St. Clairsville", "Dr. Smith"])
-    def test_a_title_abbreviation_does_not_cut_the_sentence(self, name):
-        yes = f"A “YES” vote means the plan proposed by {name} takes effect."
-        body = f"{yes}\nA “NO” vote means it does not.\nSHALL THE AMENDMENT BE APPROVED?"
-        assert oh.yes_no_sentences(body) == (yes, "A “NO” vote means it does not.")
-
-    def test_two_sentences_in_one_segment_refuse(self):
-        body = (
-            "A “YES” vote means approval of the amendment. If approved, it takes effect at once.\n"
-            "A “NO” vote means disapproval of the amendment.\nSHALL THE AMENDMENT BE APPROVED?"
-        )
-        with pytest.raises(oh.AmbiguousSentence):
-            oh.yes_no_sentences(body)
-
-    def test_a_segment_not_ending_in_a_period_refuses(self):
-        body = "A “YES” vote means approval of the\nA “NO” vote means disapproval.\nSHALL THE AMENDMENT BE APPROVED?"
-        with pytest.raises(oh.AmbiguousSentence):
-            oh.yes_no_sentences(body)
-
 
 def test_nv_registry_description_names_the_other_documents_risk():
     from app.pipeline.fetch import ballot_measure_pdf_sources as sources

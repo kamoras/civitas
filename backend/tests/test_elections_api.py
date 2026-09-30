@@ -45,6 +45,7 @@ class TestListRaces:
         assert race["candidateCount"] == 2
         assert race["topCandidates"][0]["id"] == "S1"  # higher cash_on_hand first
         assert isinstance(race["pvi"], int)  # GA has a real PVI entry
+        assert race["pviLevel"] == "state"  # a Senate race's PVI is the statewide figure
 
     def test_stale_incumbent_flag_is_dropped_in_top_candidates_too(self, db_session):
         """Same correction as the ballot page and the candidate-detail
@@ -72,13 +73,6 @@ class TestListRaces:
         # The provenance flag tells the frontend which map the number came
         # from — a district figure, not the statewide fallback.
         assert data[0]["pviLevel"] == "district"
-
-    def test_senate_race_pvi_is_flagged_as_state_level(self, db_session):
-        _race(db_session, "2026-SEN-GA", "GA")
-        db_session.commit()
-
-        data = _body(elections.list_races(db_session))
-        assert data[0]["pviLevel"] == "state"
 
     def test_only_current_cycle_races_returned(self, db_session):
         """Contract of /races: the CURRENT cycle only — load-bearing the
@@ -386,61 +380,38 @@ class TestCoverageFeedShowsOnlyVettedSources:
         data = _body(elections.state_ballot("CT", db_session))
         assert [c["title"] for c in data["coverage"]] == ["Real reporting"]
 
-
-    def test_a_relevant_ADVOCACY_social_item_is_not_shown(self, db_session):
-        """"Elect Jonathan Nez to Congress!" scores 0.632 — campaign
-        material is maximally on-topic for a campaign, so relevance alone
-        would admit exactly what a non-partisan platform must not carry."""
-        _race(db_session, "2026-HOUSE-AZ-2", "AZ", office="H", district=2)
-        self._item(db_session, "2026-HOUSE-AZ-2", "bluesky",
-                   "Elect Jonathan Nez to Congress!", "b2",
-                   relevance=0.632, has_advocacy=True)
+    @pytest.mark.parametrize("race_id, state, office, district, title, item_kw", [
+        # "Elect Jonathan Nez to Congress!" scores 0.632 — campaign material
+        # is maximally on-topic for a campaign, so relevance alone would
+        # admit exactly what a non-partisan platform must not carry.
+        pytest.param("2026-HOUSE-AZ-2", "AZ", "H", 2, "Elect Jonathan Nez to Congress!",
+                     dict(relevance=0.632, has_advocacy=True), id="relevant_advocacy"),
+        pytest.param("2026-HOUSE-NJ-7", "NJ", "H", 7, "Reservoir Dogs 4K (iTunes) C$4.99",
+                     dict(relevance=0.111, has_advocacy=False), id="irrelevant"),
+        # Fail closed: NULL relevance means never scored, and the next
+        # ingest fills it in.
+        pytest.param("2026-SEN-CT", "CT", "S", None, "Unscored post", {}, id="unscored"),
+        # A DNS-verified domain handle is not enough: @crowbar.wtf is a
+        # domain, and it published "Dave Hughes still a whiny cunt" onto
+        # Minnesota's page. Relevance and no-advocacy both passed it — it IS
+        # about the race and it never says "vote for".
+        pytest.param("2026-HOUSE-MN-7", "MN", "H", 7, "Dave Hughes still a whiny cunt.",
+                     dict(relevance=0.62, has_advocacy=False, source_name="@crowbar.wtf"),
+                     id="clean_looking_domain_handle"),
+        # Measured over 1,200 real items: of 377 that cleared relevance and
+        # the no-advocacy bar, the 316 on *.bsky.social were "Jon Husted Is
+        # For Sale", "Awww poor Cindy :-(", a Celtic football post — and the
+        # opponent's own campaign account attacking him.
+        pytest.param("2026-SEN-OH", "OH", "S", None, "Jon Husted doesn't give a damn about working people",
+                     dict(relevance=0.55, has_advocacy=False, source_name="@sherrodbrownoh.bsky.social"),
+                     id="default_bsky_handle"),
+    ])
+    def test_no_social_item_is_shown_however_it_scores(
+        self, db_session, race_id, state, office, district, title, item_kw,
+    ):
+        _race(db_session, race_id, state, office=office, district=district)
+        self._item(db_session, race_id, "bluesky", title, "b", **item_kw)
         db_session.commit()
-        data = _body(elections.state_ballot("AZ", db_session))
-        assert data["coverage"] == []
-
-    def test_an_irrelevant_social_item_is_not_shown(self, db_session):
-        _race(db_session, "2026-HOUSE-NJ-7", "NJ", office="H", district=7)
-        self._item(db_session, "2026-HOUSE-NJ-7", "bluesky",
-                   "Reservoir Dogs 4K (iTunes) C$4.99", "b3",
-                   relevance=0.111, has_advocacy=False)
-        db_session.commit()
-        data = _body(elections.state_ballot("NJ", db_session))
-        assert data["coverage"] == []
-
-    def test_an_unscored_social_item_is_not_shown(self, db_session):
-        """Fail closed: NULL relevance means never scored, and the next
-        ingest fills it in."""
-        _race(db_session, "2026-SEN-CT", "CT")
-        self._item(db_session, "2026-SEN-CT", "bluesky", "Unscored post", "b4")
-        db_session.commit()
-        data = _body(elections.state_ballot("CT", db_session))
-        assert data["coverage"] == []
-
-    def test_no_social_item_is_shown_however_clean_it_looks(self, db_session):
-        """A DNS-verified domain handle is not enough: @crowbar.wtf is a
-        domain, and it published "Dave Hughes still a whiny cunt" onto
-        Minnesota's page. Relevance and no-advocacy both passed it —
-        it IS about the race and it never says "vote for"."""
-        _race(db_session, "2026-HOUSE-MN-7", "MN", office="H", district=7)
-        self._item(db_session, "2026-HOUSE-MN-7", "bluesky",
-                   "Dave Hughes still a whiny cunt.", "b7",
-                   relevance=0.62, has_advocacy=False, source_name="@crowbar.wtf")
-        db_session.commit()
-        data = _body(elections.state_ballot("MN", db_session))
-        assert data["coverage"] == []
-
-    def test_a_default_bsky_handle_is_not_a_publisher(self, db_session):
-        """Measured over 1,200 real items: of 377 that cleared relevance
-        and the no-advocacy bar, the 316 on *.bsky.social were "Jon
-        Husted Is For Sale", "Awww poor Cindy :-(", a Celtic football
-        post — and the opponent's own campaign account attacking him."""
-        _race(db_session, "2026-SEN-OH", "OH")
-        self._item(db_session, "2026-SEN-OH", "bluesky",
-                   "Jon Husted doesn't give a damn about working people", "b5",
-                   relevance=0.55, has_advocacy=False,
-                   source_name="@sherrodbrownoh.bsky.social")
-        db_session.commit()
-        data = _body(elections.state_ballot("OH", db_session))
+        data = _body(elections.state_ballot(state, db_session))
         assert data["coverage"] == []
 

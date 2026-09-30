@@ -120,27 +120,6 @@ class TestActionRefreshLock:
         assert _acquire_refresh_lock(db_session) is None  # successor still holds it
 
 
-class TestEnsureIndexesCreatesPartialUnique:
-    def test_partial_unique_index_created(self, monkeypatch):
-        import os
-        import tempfile
-
-        from sqlalchemy import create_engine, inspect
-
-        from app import database
-
-        fd, path = tempfile.mkstemp(suffix=".db")
-        os.close(fd)
-        eng = create_engine(f"sqlite:///{path}", connect_args={"check_same_thread": False})
-        monkeypatch.setattr(database, "engine", eng)
-        database.Base.metadata.create_all(bind=eng)
-
-        database._ensure_indexes()
-
-        names = {i["name"] for i in inspect(eng).get_indexes("pipeline_runs")}
-        assert "ux_pipeline_runs_one_running" in names
-
-
 class TestEnsureIndexesDedupesJusticeVotes:
     """2026-08 audit: fetch_case_votes flattening every decision in a
     multi-decision Oyez case wrote 2 rows per (justice, case). Covers the

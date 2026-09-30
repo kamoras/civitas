@@ -12,7 +12,7 @@ from app.main import app
 from app.models import RollCall
 from app.pipeline import congress_activity as ca
 from app.services import congress_service as cs
-from tests.test_congress_activity import FIX, _digest_responses, _fake_get
+from tests.test_congress_activity import _digest_responses, _fake_get
 
 
 @pytest.fixture
@@ -128,9 +128,6 @@ class TestRoutes:
         days = cs.bill_days(week_of_sept_21, "S.4668")
         assert [d["date"] for d in days] == ["2026-09-24"]
         assert {e["kind"] for e in days[0]["entries"]} == {"vote"}
-
-    def test_fixtures_exist(self):
-        assert (FIX / "daily_digest").is_dir()
 
 
 class TestDateBounds:

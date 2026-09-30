@@ -74,8 +74,10 @@ class TestChunkText:
 
     def test_paragraph_structure_is_respected(self):
         text = "First para sentence one. First para sentence two.\n\nSecond para here."
-        windows = chunk_text(text, 6, _count_words)
-        assert all(_count_words(w) <= 6 for w in windows)
+        # The paragraph break is a sentence boundary, not run into "two. Second".
+        assert chunk_text(text, 6, _count_words) == [
+            "First para sentence one.", "First para sentence two.", "Second para here.",
+        ]
 
     def test_is_deterministic(self):
         text = " ".join(f"Sentence {i} of the document." for i in range(50))

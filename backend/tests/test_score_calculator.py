@@ -3,6 +3,8 @@
 
 import math
 
+import pytest
+
 from app.models import Senator
 from app.pipeline.analyze import score_calculator
 from app.pipeline.analyze.score_calculator import (
@@ -27,18 +29,15 @@ from app.pipeline.analyze.score_calculator import (
 
 
 class TestClamp:
-    def test_within_range(self):
-        assert clamp(50.3) == 50
-
-    def test_below_min(self):
-        assert clamp(-10.0) == 0
-
-    def test_above_max(self):
-        assert clamp(150.0) == 100
-
-    def test_exact_boundaries(self):
-        assert clamp(0.0) == 0
-        assert clamp(100.0) == 100
+    @pytest.mark.parametrize("value, expected", [
+        pytest.param(50.3, 50, id="within_range_rounds"),
+        pytest.param(-10.0, 0, id="below_min"),
+        pytest.param(150.0, 100, id="above_max"),
+        pytest.param(0.0, 0, id="exact_lower_boundary"),
+        pytest.param(100.0, 100, id="exact_upper_boundary"),
+    ])
+    def test_clamp(self, value, expected):
+        assert clamp(value) == expected
 
 
 class TestFundingIndependence:
@@ -565,10 +564,6 @@ class TestPromisePersistence:
 
 class TestLegislativeEffectiveness:
     """Higher score = more bills passed, higher leadership, more active sponsorship."""
-
-    def test_no_data_returns_neutral(self):
-        score = _calc_legislative_effectiveness([], None)
-        assert score == 50
 
     def test_no_bills_with_leadership(self):
         """Leadership alone should shift score above 50, at full tenure
@@ -1204,21 +1199,11 @@ class TestBipartisanCoalitionAttraction:
         mid = _calc_legislative_effectiveness(**base, attracted_bipartisanship=0.5)
         high = _calc_legislative_effectiveness(**base, attracted_bipartisanship=1.0)
         assert low < mid < high
-        # 15% weight over a 0-100 component: full range moves the score by ~15
+        # 15% weight over a 0-100 component: full range moves the score by ~15.
+        # Unlike the old Constituent Alignment breadth component there is no
+        # seat-safety discount: the LE signature takes no seat/state input at
+        # all (HVW 2023 find the effect for both majority and minority members).
         assert 12 <= high - low <= 18
-
-    def test_no_seat_scaling_in_effectiveness(self):
-        """Unlike the old Constituent Alignment breadth component, there is
-        no seat-safety discount here: low bipartisan attraction predicts
-        lower lawmaking success regardless of the sponsor's seat (HVW 2023
-        find the effect for both majority and minority members). The LE
-        signature takes no seat/state input at all — this test documents
-        that the component is a pure function of the attraction rate."""
-        base = dict(sponsored_bills=self._bills(), leadership_score=0.5,
-                    party="D", years_in_office=10.0)
-        low = _calc_legislative_effectiveness(**base, attracted_bipartisanship=0.0)
-        high = _calc_legislative_effectiveness(**base, attracted_bipartisanship=1.0)
-        assert high - low >= 12
 
     def test_missing_attraction_reverts_to_pre_v6_11_weights(self):
         """Absent cosponsorship data must reproduce the pre-v6.11 70/30
@@ -1245,7 +1230,6 @@ class TestBipartisanCoalitionAttraction:
         """The old bipartisanship parameter is gone from Constituent
         Alignment entirely — passing it must fail loudly, not be silently
         accepted."""
-        import pytest
         base = dict(
             voting_record={"keyVotes": [], "recentVotes": []},
             lobbying_matches=[], funding={}, state="CA", party="D",

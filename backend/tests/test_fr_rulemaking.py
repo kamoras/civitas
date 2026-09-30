@@ -14,27 +14,19 @@ from app.pipeline.fetch.fr_rulemaking import (
 
 
 class TestPrimaryAgency:
-    def test_single_agency(self):
-        agencies = [{"name": "EPA", "parent_id": None}]
-        assert _primary_agency(agencies) == "EPA"
-
-    def test_parent_and_child(self):
-        agencies = [
+    @pytest.mark.parametrize("agencies, expected", [
+        pytest.param([{"name": "EPA", "parent_id": None}], "EPA", id="single_agency"),
+        pytest.param([
             {"name": "Transportation Department", "parent_id": None},
             {"name": "FAA", "parent_id": 492},
-        ]
-        assert _primary_agency(agencies) == "Transportation Department"
-
-    def test_only_child_agency(self):
-        agencies = [{"name": "FAA", "parent_id": 492}]
-        assert _primary_agency(agencies) == "FAA"
-
-    def test_empty_list(self):
-        assert _primary_agency([]) == ""
-
-    def test_raw_name_fallback(self):
-        agencies = [{"raw_name": "DEPARTMENT OF ENERGY", "parent_id": None}]
-        assert _primary_agency(agencies) == "DEPARTMENT OF ENERGY"
+        ], "Transportation Department", id="parent_and_child"),
+        pytest.param([{"name": "FAA", "parent_id": 492}], "FAA", id="only_child_agency"),
+        pytest.param([], "", id="empty_list"),
+        pytest.param([{"raw_name": "DEPARTMENT OF ENERGY", "parent_id": None}], "DEPARTMENT OF ENERGY",
+                     id="raw_name_fallback"),
+    ])
+    def test_primary_agency(self, agencies, expected):
+        assert _primary_agency(agencies) == expected
 
 
 SAMPLE_RULE = {

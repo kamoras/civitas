@@ -245,6 +245,9 @@ def test_state_ballot_drops_the_governor_omission_once_that_state_is_covered(db_
     assert not any("Governor" in item for item in after["omits"])
     # ... and the omissions that are still true are still there.
     assert any("Primary" in item for item in after["omits"])
+    # Executive contests are published but no legislative seats are: the
+    # seats must still be named missing. One flag opts a state in to both,
+    # but coverage is claimed per section, from what is actually there.
     assert any("State legislative" in item for item in after["omits"])
     assert after["statewideRaces"][0]["nominees"][0]["name"] == "Real Person"
     # The office's term, from data/office_terms.json.
@@ -296,24 +299,6 @@ def test_state_ballot_drops_the_legislature_omission_once_seats_are_covered(db_s
     # The omissions that are still true stay.
     assert any("County and municipal" in item for item in after["omits"])
     assert any("Judicial" in item for item in after["omits"])
-
-
-def test_state_ballot_keeps_the_legislature_omission_when_only_executives_are_covered(db_session):
-    """A state whose executive contests are published but whose seats
-    are not must still say the seats are missing. One flag opts a state
-    in to both, but coverage is claimed per section, from what is
-    actually there."""
-    from app.pipeline.fetch.state_candidates import _sync_statewide_nominees
-
-    cycle = _body(elections.state_ballot("GA", db=db_session))["cycleYear"]
-    _sync_statewide_nominees(
-        db_session, cycle, "GA",
-        {"strategy": "tabular", "source_name": "GA SoS", "statewide_offices": True},
-        [{"office": "governor", "district": None, "party": "D", "last_name": "A Governor"}],
-    )
-    data = _body(elections.state_ballot("GA", db=db_session))
-    assert not any("Governor" in item for item in data["omits"])
-    assert any("State legislative" in item for item in data["omits"])
 
 
 def test_a_covered_state_names_what_its_executive_section_leaves_out(db_session, monkeypatch):
@@ -995,6 +980,9 @@ async def test_coverage_another_source_left_is_not_this_sources_success(monkeypa
     _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     assert failed == 0
     assert _coverage(db_session).status == MeasureCoverage.NOT_YET_COVERED
+    # With none of the previous source's rows on file, its name goes too
+    # (contrast test_the_previous_sources_coverage_keeps_its_name_until_this_one_answers).
+    assert _coverage(db_session).source_name == "Example Elections Office"
 
 
 @pytest.mark.asyncio
@@ -1387,19 +1375,6 @@ def test_the_purge_resets_coverage_the_retired_source_recorded(db_session):
     assert ga.source_name is None and ga.last_success_at is None
     fl = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "FL").one()
     assert fl.status == MeasureCoverage.COVERED and fl.last_success_at is not None
-
-
-@pytest.mark.asyncio
-async def test_the_previous_sources_name_is_kept_only_while_its_rows_are_on_file(monkeypatch, db_session):
-    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
-
-    election_pipeline._set_coverage(
-        db_session, "CA", "2026-11-03", MeasureCoverage.CONFIRMED_NONE, source_name="Earlier Source",
-    )
-    db_session.commit()
-    _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
-    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
-    assert _coverage(db_session).source_name == "Example Elections Office"
 
 
 @pytest.mark.asyncio

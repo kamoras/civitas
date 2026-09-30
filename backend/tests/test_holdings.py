@@ -28,6 +28,21 @@ def _house_filing(doc_id, year=2025, filing_date="2026-05-01", last="Doe", first
     }
 
 
+def _house_member(db_session, i):
+    """Add current House member R{i} (TX-{i+1}); returns the _house_filing
+    keywords that name them."""
+    db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                  party="R", is_current=True))
+    return {"last": f"Name{i}", "first": "Person", "district": f"TX{i + 1:02d}"}
+
+
+def _house_members(db_session, n):
+    """n House members, each with one 2025 filing D{i} in the index."""
+    index = {2025: [_house_filing(f"D{i}", **_house_member(db_session, i)) for i in range(n)]}
+    db_session.commit()
+    return index
+
+
 @pytest.fixture(autouse=True)
 def _fresh_breakdown_cache():
     """Each test's in-memory database restarts ids at 1; never let one
@@ -546,27 +561,13 @@ class TestReportLabels:
 
 
 class TestSourceFailures:
-    async def test_a_source_that_serves_nothing_fails_the_phase(self, db_session):
-        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = {2025: []}
-        for i in range(n + 1):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-        db_session.commit()
-        with pytest.raises(RuntimeError):
-            await _ingest_house(db_session, index, {})
+    # A source that serves nothing fails the phase: TestOutagesStayVisible.
 
     async def test_some_bad_filings_do_not_fail_the_phase_and_everyone_is_processed(self, db_session):
         """No early abort: bad filings bunched at the front (members with
         nothing stored go first) must not starve the members after them."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 2
-        index = {2025: []}
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-        db_session.commit()
+        index = _house_members(db_session, n)
         # Only the last member's report loads.
         await _ingest_house(db_session, index, {f"D{n - 1}": AnnualReport("Member", [_row()])})
         assert [d.filing_id for d in db_session.query(FinancialDisclosure).all()] == [f"D{n - 1}"]
@@ -593,14 +594,6 @@ class TestSourceFailures:
 
 
 class TestSenateRankingByStatedYear:
-    def test_a_dated_report_outranks_a_later_paper_filing(self):
-        electronic = _senate_filing("e", title="Annual Report for CY 2024", filed="2025-05-11")
-        paper = _senate_filing("p", title="Annual Report", filed="2025-12-01", paper=True)
-        rank = lambda f: holdings_pipeline._rank(  # noqa: E731
-            holdings_pipeline._senate_as_of(f), False, f["filed_date"], 0, f["report_url"], False,
-        )
-        assert rank(electronic) > rank(paper)
-
     async def test_an_annual_report_outranks_an_amended_new_filer_report_of_its_year(self, db_session, senator):
         new_filer = _senate_filing("nf", title="New Filer Report for 01/20/2025", filed="2025-02-01")
         amended = _senate_filing("nfa", title="New Filer Report for 01/20/2025 (Amendment 1)", filed="2025-06-10")
@@ -611,8 +604,8 @@ class TestSenateRankingByStatedYear:
         assert (stored.filing_id, stored.as_of_date) == ("cy2025", "2025-12-31")
 
     async def test_a_later_paper_filing_is_named_beside_the_dated_report(self, db_session, senator):
-        """A paper filing states no year, so it doesn't displace the dated
-        report — it is named beside it as filed later."""
+        """A paper filing states no year, so it ranks below the dated report
+        and doesn't displace it — it is named beside it as filed later."""
         e2024 = _senate_filing("e2024", title="Annual Report for CY 2024", filed="2025-05-11")
         paper = _senate_filing("p", title="Annual Report", filed="2026-05-14", office="Senator", paper=True)
         await _ingest_senate(db_session, [e2024, paper], {"e2024": [_row()]})
@@ -682,10 +675,7 @@ async def test_trade_and_holdings_ingests_share_one_index_download(db_session):
 
 
 class TestPaperAmendments:
-    def test_a_paper_amendment_has_no_year_and_claims_none(self):
-        amendment = _senate_filing("a", title="Annual Report (Amendment)", filed="2026-02-19", paper=True)
-        assert _year(holdings_pipeline._senate_as_of(amendment)) is None
-        assert holdings_pipeline._senate_fields(amendment)["report_label"] == "annual report amendment filed 2026-02-19"
+    # A paper amendment's year (none) and label: test_report_year, TestReportLabels.
 
     async def test_a_later_paper_amendment_never_replaces_a_dated_report(self, db_session, senator):
         """Ricketts-shaped (live, 2026-09): an electronic CY2024 report, then
@@ -768,12 +758,9 @@ class TestFallThroughAndMatching:
         index = {2025: []}
         reports = {}
         for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            bad = {**_house_filing(f"BAD{i}", filing_date="2026-08-01", last=f"Name{i}", first="Person",
-                                   district=f"TX{i + 1:02d}"), "filing_type": "A"}
-            good = _house_filing(f"GOOD{i}", filing_date="2026-05-01", last=f"Name{i}", first="Person",
-                                 district=f"TX{i + 1:02d}")
+            common = _house_member(db_session, i)
+            bad = {**_house_filing(f"BAD{i}", filing_date="2026-08-01", **common), "filing_type": "A"}
+            good = _house_filing(f"GOOD{i}", filing_date="2026-05-01", **common)
             index[2025] += [bad, good]
             reports[f"GOOD{i}"] = AnnualReport("Member", [_row()])
         db_session.commit()
@@ -849,13 +836,11 @@ class TestLapsesAndOutages:
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 2
         index = {2025: []}
         for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
+            common = _house_member(db_session, i)
             db_session.add(FinancialDisclosure(
                 representative_id=f"R{i}", filing_id=f"CUR{i}", as_of_date="2025-12-31", filed_date="2026-05-01",
                 source_url="x", parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
             ))
-            common = {"last": f"Name{i}", "first": "Person", "district": f"TX{i + 1:02d}"}
             index[2025] += [
                 {**_house_filing(f"CAND{i}", filing_date="2026-08-01", **common), "filing_type": "A"},
                 _house_filing(f"CUR{i}", filing_date="2026-05-01", **common),
@@ -901,13 +886,7 @@ class TestOutagesStayVisible:
     async def test_an_outage_fails_the_phase_every_night_it_lasts(self, db_session):
         """Nothing may learn to stop counting failures while the source is
         still down — every night of the outage fails the phase (and alerts)."""
-        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = {2025: []}
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-        db_session.commit()
+        index = _house_members(db_session, holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE)
         for _night in range(5):
             with pytest.raises(RuntimeError):
                 await _ingest_house(db_session, index, {})
@@ -917,13 +896,7 @@ class TestOutagesStayVisible:
         plus one member whose report is already stored — a quiet night on
         which only the dead links are left to fetch."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = {2025: []}
-        for i in range(n + 1):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-        db_session.commit()
-        return index, {f"D{n}": AnnualReport("Member", [_row()])}
+        return _house_members(db_session, n + 1), {f"D{n}": AnnualReport("Member", [_row()])}
 
     async def test_dead_links_on_a_quiet_night_are_not_an_outage(self, db_session):
         index, reports = self._dead_links_beside_a_stored_report(db_session)
@@ -967,14 +940,11 @@ class TestOutagesStayVisible:
         index = {2025: []}
         reports = {}
         for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
+            common = _house_member(db_session, i)
             # Each member: a newer filing that fails live, an older one served from cache.
             index[2025] += [
-                _house_filing(f"NEW{i}", filing_date="2026-08-01", last=f"Name{i}", first="Person",
-                              district=f"TX{i + 1:02d}"),
-                _house_filing(f"OLD{i}", filing_date="2026-05-01", last=f"Name{i}", first="Person",
-                              district=f"TX{i + 1:02d}"),
+                _house_filing(f"NEW{i}", filing_date="2026-08-01", **common),
+                _house_filing(f"OLD{i}", filing_date="2026-05-01", **common),
             ]
             reports[f"OLD{i}"] = AnnualReport("Member", [_row()], live=False)
         db_session.commit()
@@ -1017,14 +987,8 @@ class TestParserFailuresAreNotExcused:
         """A parser regression: every PDF downloads, every read crashes. The
         source is fine — which is exactly why a probe mustn't excuse it."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = {2025: []}
-        reports = {}
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-            reports[f"D{i}"] = AnnualReport(None, None, "unrecognized", final=False)
-        db_session.commit()
+        index = _house_members(db_session, n)
+        reports = {f"D{i}": AnnualReport(None, None, "unrecognized", final=False) for i in range(n)}
         probe = AsyncMock(return_value=True)
         with patch.object(holdings_pipeline, "house_report_still_loads", probe):
             with pytest.raises(RuntimeError, match="parser regression"):
@@ -1070,25 +1034,13 @@ class TestParserFailuresAreNotExcused:
         "unrecognized" report for everything — that is not the source and
         parser working."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = {2025: []}
-        reports = {}
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-            reports[f"D{i}"] = AnnualReport("Member", None, "unrecognized")
-        db_session.commit()
+        index = _house_members(db_session, n)
+        reports = {f"D{i}": AnnualReport("Member", None, "unrecognized") for i in range(n)}
         with pytest.raises(RuntimeError, match="parser regression"):
             await _ingest_house(db_session, index, reports)
 
     async def test_one_unreadable_answer_does_not_hide_an_outage(self, db_session):
-        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 3
-        index = {2025: []}
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-        db_session.commit()
+        index = _house_members(db_session, holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 3)
         # Every fetch fails but one, which answers with something unreadable.
         with pytest.raises(RuntimeError, match="no report fetched"):
             await _ingest_house(db_session, index, {"D0": AnnualReport(None, None, "unrecognized", final=False)})
@@ -1125,18 +1077,9 @@ class TestSenateProbe:
 
 
 class TestParserRegressionSignal:
-    def _members(self, db_session, n):
-        index = {2025: []}
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-        db_session.commit()
-        return index
-
     async def test_a_scanned_report_does_not_hide_a_regression(self, db_session):
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 1
-        index = self._members(db_session, n)
+        index = _house_members(db_session, n)
         reports = {f"D{i}": AnnualReport("Member", None, "unrecognized") for i in range(n - 1)}
         reports[f"D{n - 1}"] = AnnualReport(None, None, "scanned")
         with pytest.raises(RuntimeError, match="parser regression"):
@@ -1146,13 +1089,13 @@ class TestParserRegressionSignal:
         """A genuine report can list nothing; zero-row regressions are the
         parser tests' to catch."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = self._members(db_session, n)
+        index = _house_members(db_session, n)
         await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", []) for i in range(n)})
 
     async def test_a_re_read_with_fewer_rows_is_not_an_alarm(self, db_session):
         """A parser fix that drops spurious rows looks exactly like this."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = self._members(db_session, n)
+        index = _house_members(db_session, n)
         await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row(), _row()]) for i in range(n)})
         with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
             await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
@@ -1162,7 +1105,7 @@ class TestParserRegressionSignal:
         """"Scanned" is the parser's own verdict (no words on page one): a
         text-extraction regression calls every report scanned."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = self._members(db_session, n)
+        index = _house_members(db_session, n)
         await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
         with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
             with pytest.raises(RuntimeError, match="parser regression"):
@@ -1174,9 +1117,7 @@ class TestParserRegressionSignal:
         index = {2025: []}
         reports = {}
         for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            common = {"last": f"Name{i}", "first": "Person", "district": f"TX{i + 1:02d}"}
+            common = _house_member(db_session, i)
             index[2025] += [{**_house_filing(f"C{i}", filing_date="2026-08-01", **common), "filing_type": "A"},
                             _house_filing(f"M{i}", filing_date="2026-05-01", **common)]
             reports[f"C{i}"] = AnnualReport("Congressional Candidate", [])
@@ -1186,7 +1127,7 @@ class TestParserRegressionSignal:
 
     async def test_a_kept_regression_keeps_failing_the_phase(self, db_session):
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = self._members(db_session, n)
+        index = _house_members(db_session, n)
         await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
         # Cached reads (no request) of the broken parser's output, night after night.
         broken = {f"D{i}": AnnualReport("Member", None, "unrecognized", live=False) for i in range(n)}
@@ -1200,15 +1141,8 @@ class TestParserRegressionSignal:
 class TestProbesSeveralStoredReports:
     async def test_one_withdrawn_stored_report_is_not_an_outage(self, db_session):
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = {2025: []}
-        good = {}
-        for i in range(n + 3):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-            if i >= n:
-                good[f"D{i}"] = AnnualReport("Member", [_row()])
-        db_session.commit()
+        index = _house_members(db_session, n + 3)
+        good = {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n, n + 3)}
         await _ingest_house(db_session, index, good)
         probe = AsyncMock(side_effect=[False, True])  # the newest stored one is gone; the next loads
         with patch.object(holdings_pipeline, "house_report_still_loads", probe):
@@ -1222,18 +1156,10 @@ class TestProbesSeveralStoredReports:
 
 
 class TestHangingSource:
-    def _members(self, db_session, n):
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-        db_session.commit()
-        return {2025: [_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}")
-                       for i in range(n)]}
-
     async def test_a_budget_spent_on_failing_requests_asks_the_source(self, db_session):
         """A host that hangs costs minutes per request, so the budget runs
         out after a couple of members — far short of the attempt threshold."""
-        index = self._members(db_session, 3)
+        index = _house_members(db_session, 3)
         clock = _Clock()
 
         def hangs(_filing):
@@ -1245,7 +1171,7 @@ class TestHangingSource:
 
     async def test_a_budget_spent_elsewhere_is_not_an_outage(self, db_session):
         """A long index download or search, then one quick failure."""
-        index = self._members(db_session, 3)
+        index = _house_members(db_session, 3)
         clock = _Clock()
 
         budget = holdings_pipeline.FETCH_BUDGET.total_seconds()
@@ -1306,13 +1232,7 @@ class TestFilerAttribution:
         """A former member running again reads as a candidate on a filing
         with a member's honorific; that is not the parser failing."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = {2025: []}
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append({**_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"),
-                                "prefix": "Hon."})
-        db_session.commit()
+        index = {2025: [{**f, "prefix": "Hon."} for f in _house_members(db_session, n)[2025]]}
         reports = {f"D{i}": AnnualReport("Congressional Candidate", [_row()]) for i in range(n)}
         await _ingest_house(db_session, index, reports)  # must not raise
         assert db_session.query(FinancialDisclosure).count() == 0
@@ -1382,18 +1302,13 @@ class TestLapseAndDeadlineEdges:
         """Three members with new filings on a hanging host, then members
         whose stored reports are current: the loop never reaches another
         deadline check, but the budget did run out."""
-        n = 6
-        index = {2025: []}
-        for i in range(n):
-            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
-                                          party="R", is_current=True))
-            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
-            if i >= 3:
-                db_session.add(FinancialDisclosure(
-                    representative_id=f"R{i}", filing_id=f"D{i}", as_of_date="2025-12-31",
-                    filed_date="2026-05-01", source_url="x",
-                    parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
-                ))
+        index = _house_members(db_session, 6)
+        for i in range(3, 6):
+            db_session.add(FinancialDisclosure(
+                representative_id=f"R{i}", filing_id=f"D{i}", as_of_date="2025-12-31",
+                filed_date="2026-05-01", source_url="x",
+                parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
+            ))
         db_session.commit()
         clock = _Clock()
 
@@ -1705,18 +1620,14 @@ class TestIndexAndMatchEdges:
         count, _ = await _ingest_house(db_session, index, {"K": AnnualReport("Member", [_row()])})
         assert count == 1
 
-    async def test_an_undated_filing_the_same_day_is_named(self, db_session, senator):
-        e2025 = _senate_filing("e2025", filed="2026-05-15")
-        paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2026-05-15", office="Senator", paper=True)
-        await _ingest_senate(db_session, [e2025, paper], {"e2025": [_row()]})
-        assert db_session.query(FinancialDisclosure).one().later_filing_url == paper["report_url"]
-
 
 class TestSameDayNotesKeep:
     async def test_a_same_day_note_survives_a_search_that_misses_it_and_a_re_read(self, db_session, senator):
         e2025 = _senate_filing("e2025", filed="2026-05-15")
         paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2026-05-15", office="Senator", paper=True)
         await _ingest_senate(db_session, [e2025, paper], {"e2025": [_row()]})
+        # An undated filing made the same day as the shown report is named.
+        assert db_session.query(FinancialDisclosure).one().later_filing_url == paper["report_url"]
         await _ingest_senate(db_session, [e2025], {"e2025": [_row()]})
         with patch.object(holdings_pipeline, "SENATE_PARSER_VERSION", 2):
             await _ingest_senate(db_session, [e2025], {"e2025": [_row(), _row()]})

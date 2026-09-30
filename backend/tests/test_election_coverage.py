@@ -644,22 +644,20 @@ class TestFullNameMustAppearTogether:
     def test_incidental_words_are_not_a_full_name(self, text):
         assert not self._basis("BILL", "HILL", text)
 
-    @pytest.mark.parametrize("text", [
-        "Bill Hill announced his campaign for Alaska's at-large seat.",
-        "Hill, Bill filed with the FEC this week.",
+    @pytest.mark.parametrize("first,surname,text", [
+        pytest.param("BILL", "HILL", "Bill Hill announced his campaign for Alaska's at-large seat.",
+                     id="the_real_candidate"),
+        pytest.param("BILL", "HILL", "Hill, Bill filed with the FEC this week.", id="the_real_candidate_surname_first"),
+        # The trap this module already documents: building "Mcconnell" to
+        # compare case-sensitively rejects every real "McConnell".
+        pytest.param("MITCH", "MCCONNELL", "Mitch McConnell's absence looms large over the picnic.",
+                     id="intercaps_surname"),
+        pytest.param("BETO", "O'ROURKE", "Beto O'Rourke campaigned in El Paso.", id="apostrophe_surname"),
+        pytest.param("ROBERT", "KENNEDY", "Robert F. Kennedy Jr. spoke on Tuesday.",
+                     id="a_middle_name_or_initial_does_not_break_the_match"),
     ])
-    def test_the_real_candidate_still_matches(self, text):
-        assert self._basis("BILL", "HILL", text)
-
-    def test_intercaps_surnames_survive(self):
-        """The trap this module already documents: building "Mcconnell"
-        to compare case-sensitively rejects every real "McConnell"."""
-        assert self._basis("MITCH", "MCCONNELL",
-                           "Mitch McConnell's absence looms large over the picnic.")
-        assert self._basis("BETO", "O'ROURKE", "Beto O'Rourke campaigned in El Paso.")
-
-    def test_a_middle_name_or_initial_does_not_break_the_match(self):
-        assert self._basis("ROBERT", "KENNEDY", "Robert F. Kennedy Jr. spoke on Tuesday.")
+    def test_a_real_full_name_still_matches(self, first, surname, text):
+        assert self._basis(first, surname, text)
 
     @pytest.mark.parametrize("first,surname,text", [
         ("DANIEL", "CAMERON", "Senate confirms Cameron Hamilton to lead FEMA."),

@@ -94,7 +94,7 @@ class TestEnrich:
         assert matches[0]["lobbyingSpend"] == 0
         assert matches[0]["lobbyingChecked"] is True
         assert matches[0]["description"].startswith("base description")
-        assert "none reported" in matches[0]["description"]
+        assert matches[0]["description"].endswith('registry search for "SMALL ORG": none reported.')
 
     @pytest.mark.asyncio
     async def test_failed_lookup_is_unknown_not_zero(self, db_session):
@@ -279,45 +279,35 @@ class TestLobbiedBills:
         assert m["lobbiedBills"] == []
 
     @pytest.mark.asyncio
-    async def test_same_number_different_bill_is_not(self, db_session):
+    @pytest.mark.parametrize("mention", [
         # The number matches a bill the member voted on, but the filer's
         # words name a different bill: filings cite earlier congresses'.
-        m = await self._run(db_session, [_mention("S.1040", "Medication Affordability and Patent Integrity Act")])
-        assert m["lobbiedBills"] == []
-
-    @pytest.mark.asyncio
-    async def test_a_sibling_bills_title_is_not_this_bill(self, db_session):
+        pytest.param(_mention("S.1040", "Medication Affordability and Patent Integrity Act"),
+                     id="same_number_different_bill_is_not"),
         # Found in calibration: a filing about the Defense appropriations
         # act, citing the Education one's number, scored 0.72 against it.
-        m = await self._run(db_session, [_mention("S.2587", "Department of Defense Appropriations Act, 2026")])
-        assert m["lobbiedBills"] == []
-
-    @pytest.mark.asyncio
-    async def test_the_previous_congresss_bill_with_this_number_wins(self, db_session):
+        pytest.param(_mention("S.2587", "Department of Defense Appropriations Act, 2026"),
+                     id="a_sibling_bills_title_is_not_this_bill"),
         # Found in calibration: "... Defund National Endowment for the
         # Humanities Act of 2025 H.R. 82 - Social Security Fairness Act".
         # The filer's own words for H.R. 82 name the 118th's bill.
-        m = await self._run(db_session, [_mention(
-            "HR.82", " - Social Security Fairness Act",
-            before="Defund National Endowment for the Humanities Act of 2025 ",
-        )])
+        pytest.param(_mention("HR.82", " - Social Security Fairness Act",
+                              before="Defund National Endowment for the Humanities Act of 2025 "),
+                     id="the_previous_congresss_bill_with_this_number_wins"),
+        pytest.param(_mention("S.1040", "Affordable Prescriptions for Patients Act", year=2024),
+                     id="a_filing_from_another_congress_is_ignored"),
+        # H.R. 8774 is in the member's record only as "Not Voting".
+        pytest.param(_mention("HR.8774", "Farm Workforce Modernization Act"),
+                     id="bill_the_member_did_not_vote_on_is_ignored"),
+    ])
+    async def test_a_mention_that_is_not_the_voted_bill_is_not_linked(self, db_session, mention):
+        m = await self._run(db_session, [mention])
         assert m["lobbiedBills"] == []
 
     @pytest.mark.asyncio
     async def test_nothing_is_claimed_without_the_congress_to_compare(self, db_session):
         with patch.object(lda, "_title_pool", new=AsyncMock(return_value=None)):
             m = await self._run(db_session, [_mention("S.1040", "Affordable Prescriptions for Patients Act")])
-        assert m["lobbiedBills"] == []
-
-    @pytest.mark.asyncio
-    async def test_a_filing_from_another_congress_is_ignored(self, db_session):
-        m = await self._run(db_session, [_mention("S.1040", "Affordable Prescriptions for Patients Act", year=2024)])
-        assert m["lobbiedBills"] == []
-
-    @pytest.mark.asyncio
-    async def test_bill_the_member_did_not_vote_on_is_ignored(self, db_session):
-        # H.R. 8774 is in the member's record only as "Not Voting".
-        m = await self._run(db_session, [_mention("HR.8774", "Farm Workforce Modernization Act")])
         assert m["lobbiedBills"] == []
 
 
@@ -678,14 +668,6 @@ def test_a_bills_client_rows_stay_together():
         {"billId": "HR.1", "filingYear": 2025, "client": "B"},
     ]
     assert [(b["billId"], b["client"]) for b in lda._cap_bills(rows)] == [("HR.1", "A"), ("HR.1", "B"), ("HR.2", "A")]
-
-
-@pytest.mark.asyncio
-async def test_a_checked_zero_is_said(db_session):
-    matches = [{"lobbyistOrg": "Small Org", "description": "d."}]
-    with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(0.0))):
-        await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
-    assert matches[0]["description"].endswith('registry search for "SMALL ORG": none reported.')
 
 
 @pytest.mark.asyncio

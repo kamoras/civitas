@@ -96,6 +96,10 @@ ND_SOURCE = {
 @pytest.mark.asyncio
 class TestDiscoverElectionsArkansas:
     async def test_matches_primary_and_runoff_by_name_and_year(self, monkeypatch):
+        # The real 2026 fixture also carries a "2026 Primary Special
+        # Election" -- same year, contains neither "preferential primary"
+        # nor "primary runoff" -- so the exact-id asserts below also prove
+        # the match is on name, not year.
         async def fake(client, rl, method, url, **kw):
             assert "GetElectionList" in url
             return _resp(AR_ELECTIONS)
@@ -108,20 +112,6 @@ class TestDiscoverElectionsArkansas:
         assert runoff["id"] == AR_RUNOFF_ID
         assert primary["date"].startswith("2026-03-03")
         assert runoff["date"].startswith("2026-03-31")
-
-    async def test_a_same_year_election_that_is_neither_is_not_matched(self, monkeypatch):
-        # The real 2026 fixture also carries a "2026 Primary Special
-        # Election" -- same year, contains neither "preferential primary"
-        # nor "primary runoff" -- proving the match is on name, not year.
-        async def fake(client, rl, method, url, **kw):
-            return _resp(AR_ELECTIONS)
-
-        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-        primary, runoff = await tenr._discover_elections(
-            None, "AR", AR_BASE_URL, AR_CID, re.compile("preferential primary", re.I), re.compile("primary runoff", re.I), 2026,
-        )
-        assert primary["id"] != "4b025e66-db9f-4e01-a7b8-3d06d87bccda"
-        assert runoff["id"] != "4b025e66-db9f-4e01-a7b8-3d06d87bccda"
 
     async def test_no_match_for_a_year_not_in_the_list(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):
@@ -157,14 +147,14 @@ class TestDiscoverElectionsArkansas:
 
 @pytest.mark.asyncio
 class TestFetchConfirmedCandidatesArkansas:
-    def _patched(self, monkeypatch):
+    def _patched(self, monkeypatch, search=AR_PRIMARY_SEARCH, results=AR_PRIMARY_RESULTS):
         async def fake(client, rl, method, url, **kw):
             if "GetElectionList" in url:
                 return _resp(AR_ELECTIONS)
             if f"electionID={AR_PRIMARY_ID}" in url and "GetContestSearchList" in url:
-                return _resp(AR_PRIMARY_SEARCH)
+                return _resp(search)
             if f"electionID={AR_PRIMARY_ID}" in url and "GetContestResults" in url:
-                return _resp(AR_PRIMARY_RESULTS)
+                return _resp(results)
             if f"electionID={AR_RUNOFF_ID}" in url and "GetContestSearchList" in url:
                 return _resp(AR_RUNOFF_SEARCH)
             raise AssertionError(f"unexpected URL: {url}")
@@ -172,6 +162,11 @@ class TestFetchConfirmedCandidatesArkansas:
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
 
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
+        # The exact count also proves two things about the real fixtures:
+        # the primary search list's real Governor and County Sheriff
+        # contests are excluded, and the real 2026 runoff stage (zero
+        # federal contests) is a safe no-op that leaves the primary's
+        # answers untouched.
         self._patched(monkeypatch)
         result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
         assert {"office": "S", "district": None, "party": "R", "last_name": "Cotton", "display_name": "Tom Cotton"} in result
@@ -180,13 +175,6 @@ class TestFetchConfirmedCandidatesArkansas:
         assert {"office": "H", "district": 2, "party": "D", "last_name": "Jones", "display_name": "Chris Jones"} in result
         assert {"office": "H", "district": 4, "party": "D", "last_name": "Russell", "display_name": 'James "Rus" Russell, III'} in result
         assert len(result) == 5
-
-    async def test_non_federal_contests_in_the_search_list_are_excluded(self, monkeypatch):
-        # The real primary search fixture also carries a real Governor
-        # race and a real County Sheriff race.
-        self._patched(monkeypatch)
-        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
-        assert all(r["office"] in ("H", "S") for r in result)
 
     async def test_missing_config_returns_none(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):
@@ -239,13 +227,6 @@ class TestFetchConfirmedCandidatesArkansas:
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE) is None
 
-    async def test_a_runoff_stage_with_no_federal_contests_is_a_safe_no_op(self, monkeypatch):
-        # The real 2026 runoff fixture has zero federal contests -- the
-        # primary's answers must survive untouched.
-        self._patched(monkeypatch)
-        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
-        assert len(result) == 5
-
     async def test_a_stage_not_yet_settled_confirms_nothing(self, monkeypatch):
         # The vendor publishes no certification flag at all -- an election
         # dated far in the future (relative to "now") must be treated as
@@ -289,19 +270,7 @@ class TestFetchConfirmedCandidatesArkansas:
             {"choiceID": "aaa", "totalVotes": 55},
             {"choiceID": "unknown-choice-id", "totalVotes": 50},
         ]
-
-        async def fake(client, rl, method, url, **kw):
-            if "GetElectionList" in url:
-                return _resp(AR_ELECTIONS)
-            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestSearchList" in url:
-                return _resp(search)
-            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestResults" in url:
-                return _resp(results)
-            if f"electionID={AR_RUNOFF_ID}" in url and "GetContestSearchList" in url:
-                return _resp(AR_RUNOFF_SEARCH)
-            raise AssertionError(f"unexpected URL: {url}")
-
-        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+        self._patched(monkeypatch, search, results)
         result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
         # 55 / (55 + 50) = 52.4% if the unknown choice is dropped from the
         # total it would read 100% -- either way the real number (52.4)
@@ -324,19 +293,7 @@ class TestFetchConfirmedCandidatesArkansas:
             {"choiceID": "unknown-leader", "totalVotes": 90},
             {"choiceID": "bbb", "totalVotes": 10},
         ]
-
-        async def fake(client, rl, method, url, **kw):
-            if "GetElectionList" in url:
-                return _resp(AR_ELECTIONS)
-            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestSearchList" in url:
-                return _resp(search)
-            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestResults" in url:
-                return _resp(results)
-            if f"electionID={AR_RUNOFF_ID}" in url and "GetContestSearchList" in url:
-                return _resp(AR_RUNOFF_SEARCH)
-            raise AssertionError(f"unexpected URL: {url}")
-
-        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+        self._patched(monkeypatch, search, results)
         result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
         assert [r for r in result if r["district"] == 4] == []
 
@@ -494,20 +451,15 @@ class TestFetchConfirmedCandidatesNorthDakota:
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
 
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
+        # The real search fixture also carries a real, non-federal
+        # Secretary of State contest sharing the SAME "SW" contestTypeCode
+        # as the federal ones -- there is no type value to filter on, so
+        # the exact count proves parse_office() alone excludes it.
         self._patched(monkeypatch)
         result = await tenr.fetch_confirmed_candidates(None, 2026, "ND", ND_SOURCE)
         assert {"office": "H", "district": None, "party": "R", "last_name": "Fedorchak", "display_name": "Julie Fedorchak"} in result
         assert {"office": "H", "district": None, "party": "D", "last_name": "Hammer", "display_name": "Trygve Hammer"} in result
         assert len(result) == 2
-
-    async def test_no_contest_type_filter_falls_back_to_parse_office(self, monkeypatch):
-        # The real search fixture also carries a real, non-federal
-        # Secretary of State contest sharing the SAME "SW" contestTypeCode
-        # as the federal ones -- there is no type value to filter on, so
-        # this must be excluded by parse_office() alone.
-        self._patched(monkeypatch)
-        result = await tenr.fetch_confirmed_candidates(None, 2026, "ND", ND_SOURCE)
-        assert all(r["office"] == "H" for r in result)
 
     async def test_results_scope_narrows_the_results_request_without_losing_data(self, monkeypatch):
         # Real regression case: omitting results_scope entirely sends a

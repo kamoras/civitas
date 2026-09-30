@@ -152,6 +152,7 @@ class TestFloorLogs:
 
     def test_senate_floor_log(self):
         s = fl.parse_senate_floor((FIX / "floor_logs" / "09_24_2026_Senate_Floor.xml").read_bytes())
+        assert s["in_session"] is True  # a meeting day (cf. the day-off file below)
         assert (s["convened_at"], s["adjourned_at"]) == ("10 a.m.", "4:05 p.m.")
         iran = next(e for e in s["events"] if e["bill_id"] == "HCONRES.89")
         assert "Failed of passage in Senate by Yea-Nay Vote. 49 - 50" in iran["text"]
@@ -474,11 +475,6 @@ def test_a_senate_file_for_a_day_off_is_not_a_session(db_session, monkeypatch):
     asyncio.run(ca.sync_floor_logs(None, db_session, date(2026, 9, 26)))
     row = db_session.query(CongressDay).filter_by(chamber="senate").one()
     assert row.in_session is False
-
-
-def test_a_meeting_day_is_a_session():
-    s = fl.parse_senate_floor((FIX / "floor_logs" / "09_24_2026_Senate_Floor.xml").read_bytes())
-    assert s["in_session"] is True
 
 
 def test_a_pending_day_of_the_last_week_is_read_again(db_session):

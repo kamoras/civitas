@@ -80,22 +80,31 @@ def _vote_iv(breaks, total=200, state="NY", party="D"):
     return constituent_metrics(breaks / total, total, state, party)["seat_relative_vote"]
 
 
-def _healthy_population(db, n=40, votes_per_member=200):
+def _healthy_population(db, n=40, votes_per_member=200, fi_of=None, iv_of=None):
     """A population whose scores rank-track their raw data by construction:
     FI falls as PAC share rises and rises with small-donor share; IV is the
     vote score the stored votes give (0-19.5% breaks against a ~6.7%
-    expectation: rising to the peak, then falling)."""
+    expectation: rising to the peak, then falling). Member i breaks i times;
+    fi_of/iv_of(i) replace a score to simulate a regression."""
     for i in range(n):
         s = _add_senator(
             db, f"s{i}",
-            fi=95 - 1.5 * i,
-            iv=_vote_iv(i, votes_per_member),
+            fi=fi_of(i) if fi_of else 95 - 1.5 * i,
+            iv=iv_of(i) if iv_of else _vote_iv(i, votes_per_member),
             total_raised=1_000_000,
             total_from_pacs=1_000_000 * i / 50,
             small_donor_pct=40 - 0.8 * i,
         )
         _add_votes(db, s.id, breaks=i, total=votes_per_member)
     db.commit()
+
+
+def _saturated_reference():
+    """A constituent reference whose saturation is shrunk to a sliver, so
+    nearly every member reads as past it."""
+    return {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
+                "statistic": CONSTITUENT_REFERENCE_STATISTIC}
+            for c in ("senate", "house")}
 
 
 class TestDerivedConsistency:
@@ -108,17 +117,7 @@ class TestDerivedConsistency:
 
     def test_inverted_fi_flagged(self, db_session):
         # Algorithm-regression simulation: FI now RISES with PAC share.
-        for i in range(40):
-            s = _add_senator(
-                db_session, f"s{i}",
-                fi=20 + 1.5 * i,
-                iv=_vote_iv(i),
-                total_raised=1_000_000,
-                total_from_pacs=1_000_000 * i / 50,
-                small_donor_pct=40 - 0.8 * i,
-            )
-            _add_votes(db_session, s.id, breaks=i, total=200)
-        db_session.commit()
+        _healthy_population(db_session, fi_of=lambda i: 20 + 1.5 * i)
 
         failures = check_ground_truth(db_session)["failures"]
         assert any(
@@ -132,17 +131,7 @@ class TestDerivedConsistency:
         # members must not land at the bottom of IV. Scores follow the votes
         # for everyone except the six members nearest the expectation
         # (11-16 breaks of 200, around the ~6.7% norm).
-        for i in range(40):
-            s = _add_senator(
-                db_session, f"s{i}",
-                iv=5 if 11 <= i <= 16 else _vote_iv(i),
-                fi=95 - 1.5 * i,
-                total_raised=1_000_000,
-                total_from_pacs=1_000_000 * i / 50,
-                small_donor_pct=40 - 0.8 * i,
-            )
-            _add_votes(db_session, s.id, breaks=i, total=200)
-        db_session.commit()
+        _healthy_population(db_session, iv_of=lambda i: 5 if 11 <= i <= 16 else _vote_iv(i))
 
         failures = check_ground_truth(db_session)["failures"]
         assert any(
@@ -274,11 +263,8 @@ class TestDerivedConsistency:
         # the one it is given.
         self._peaked_population(db_session, iv_of=_vote_iv)
         assert check_ground_truth(db_session)["failures"] == []
-        run_ref = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
-                       "statistic": CONSTITUENT_REFERENCE_STATISTIC}
-                   for c in ("senate", "house")}
         failures = check_ground_truth(
-            db_session, constituent_reference=run_ref, reference_measured=True,
+            db_session, constituent_reference=_saturated_reference(), reference_measured=True,
         )["failures"]
         assert any("reference and the votes disagree" in f["rationale"] for f in failures)
 
@@ -289,10 +275,7 @@ class TestDerivedConsistency:
         from app.pipeline.analyze import population_reference
 
         self._peaked_population(db_session, iv_of=_vote_iv)
-        broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
-                       "statistic": CONSTITUENT_REFERENCE_STATISTIC}
-                  for c in ("senate", "house")}
-        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: broken)
+        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", _saturated_reference)
         failures = check_ground_truth(db_session, reference_measured=True)["failures"]
         probe = [f for f in failures if "reference and the votes disagree" in f["rationale"]]
         assert len(probe) == 1 and probe[0]["dimension"] == "IV"
@@ -308,10 +291,7 @@ class TestDerivedConsistency:
         from app.pipeline.analyze import population_reference
 
         self._peaked_population(db_session, iv_of=_vote_iv)
-        broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
-                       "statistic": CONSTITUENT_REFERENCE_STATISTIC}
-                  for c in ("senate", "house")}
-        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: broken)
+        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", _saturated_reference)
         failures = check_ground_truth(db_session)["failures"]
         assert not any("reference and the votes disagree" in f["rationale"] for f in failures)
 
@@ -477,10 +457,12 @@ class TestTieExtendedExtreme:
         assert "(16 of 100" in least_failures[0]["senator"]
 
 
-def _add_snapshot_history(db, dates, values_fn, version=ALGORITHM_VERSION):
-    """Write senator score_1 (FI) snapshot history for the given dates."""
+def _add_snapshot_history(db, dates, version=ALGORITHM_VERSION):
+    """Write senator score_1 (FI) snapshot history for the given dates, with
+    a wide spread (stdev ~21) on every date."""
     for d, date in enumerate(dates):
-        for j, v in enumerate(values_fn(d)):
+        for j in range(12):
+            v = (20 + 6 * j) * (1 + 0.01 * d)
             db.add(ScoreSnapshot(
                 entity_type="senator",
                 entity_id=f"s{j}",
@@ -489,6 +471,14 @@ def _add_snapshot_history(db, dates, values_fn, version=ALGORITHM_VERSION):
                 score_1=v,
                 algorithm_version=version,
             ))
+
+
+def _narrow_fi_senate(db):
+    """15 senators whose FI sits in a narrow (stdev ~1) but non-degenerate
+    band; the other dimensions spread widely."""
+    for i in range(15):
+        _add_senator(db, f"s{i}", fi=48 + (i % 5) * 0.7,
+                     iv=20 + 4 * i, fd=20 + 4 * i, le=20 + 4 * i)
 
 
 class TestCheckScoreDistribution:
@@ -524,9 +514,7 @@ class TestCheckScoreDistribution:
         # history to compare against — narrowness alone is not evidence of
         # regression (the old fixed floors false-alarmed for two+ weeks on
         # exactly this, per the 2026-07 audit that lowered them).
-        for i in range(15):
-            _add_senator(db_session, f"s{i}", fi=48 + (i % 5) * 0.7,
-                         iv=20 + 4 * i, fd=20 + 4 * i, le=20 + 4 * i)
+        _narrow_fi_senate(db_session)
         db_session.commit()
 
         assert check_score_distribution(db_session) == []
@@ -535,14 +523,9 @@ class TestCheckScoreDistribution:
         # Live FI compressed to stdev ~1 while this algorithm version's own
         # snapshot history sits near stdev ~21 — an extreme low outlier by
         # modified z-score, flagged with a floor derived from that history.
-        for i in range(15):
-            _add_senator(db_session, f"s{i}", fi=48 + (i % 5) * 0.7,
-                         iv=20 + 4 * i, fd=20 + 4 * i, le=20 + 4 * i)
+        _narrow_fi_senate(db_session)
         dates = [f"2026-07-0{d}" for d in range(1, 7)]
-        _add_snapshot_history(
-            db_session, dates,
-            lambda d: [(20 + 6 * j) * (1 + 0.01 * d) for j in range(12)],
-        )
+        _add_snapshot_history(db_session, dates)
         db_session.commit()
 
         failures = check_score_distribution(db_session)
@@ -556,15 +539,9 @@ class TestCheckScoreDistribution:
     def test_history_from_other_algorithm_versions_ignored(self, db_session):
         # A deliberate algorithm change legitimately reshapes distributions;
         # only same-version history is evidence of a regression.
-        for i in range(15):
-            _add_senator(db_session, f"s{i}", fi=48 + (i % 5) * 0.7,
-                         iv=20 + 4 * i, fd=20 + 4 * i, le=20 + 4 * i)
+        _narrow_fi_senate(db_session)
         dates = [f"2026-07-0{d}" for d in range(1, 7)]
-        _add_snapshot_history(
-            db_session, dates,
-            lambda d: [(20 + 6 * j) * (1 + 0.01 * d) for j in range(12)],
-            version="v0-test",
-        )
+        _add_snapshot_history(db_session, dates, version="v0-test")
         db_session.commit()
 
         assert check_score_distribution(db_session) == []
@@ -578,14 +555,9 @@ class TestCheckScoreDistribution:
         from app import time_utils
 
         monkeypatch.setattr(time_utils, "utcnow", lambda: datetime(2027, 1, 20, 12, 0))
-        for i in range(15):
-            _add_senator(db_session, f"s{i}", fi=48 + (i % 5) * 0.7,
-                         iv=20 + 4 * i, fd=20 + 4 * i, le=20 + 4 * i)
+        _narrow_fi_senate(db_session)
         dates = [f"2026-12-0{d}" for d in range(1, 7)]
-        _add_snapshot_history(
-            db_session, dates,
-            lambda d: [(20 + 6 * j) * (1 + 0.01 * d) for j in range(12)],
-        )
+        _add_snapshot_history(db_session, dates)
         db_session.commit()
 
         assert check_score_distribution(db_session) == []

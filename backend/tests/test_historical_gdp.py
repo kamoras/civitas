@@ -46,6 +46,7 @@ class TestComputeTermGdpGrowth:
         # term_end_year=15 isn't in the series; should fall back to 13.
         growth = compute_term_gdp_growth(gdp, 11, 15)
         assert growth is not None
+        assert growth == compute_term_gdp_growth(gdp, 11, 13)
 
     def test_short_term_without_enough_years_returns_none(self):
         gdp = {2020: 100.0, 2021: 105.0}

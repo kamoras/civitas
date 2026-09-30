@@ -4,23 +4,24 @@ Validates sanitization, defaults, clamping, and edge case handling
 for assembled senator records before they're persisted.
 """
 
+import pytest
 
 from app.pipeline.assemble.validator import validate_senator, clamp
 
 
 class TestClamp:
-    def test_within_range(self):
-        assert clamp(50.3) == 50
+    """validator.clamp is its own function, not score_calculator.clamp
+    (test_score_calculator.py covers that one)."""
 
-    def test_below_min(self):
-        assert clamp(-10.0) == 0
-
-    def test_above_max(self):
-        assert clamp(150.0) == 100
-
-    def test_custom_range(self):
-        assert clamp(200.0, 0, 1000) == 200
-        assert clamp(-5.0, 0, 1000) == 0
+    @pytest.mark.parametrize("args, expected", [
+        pytest.param((50.3,), 50, id="within_range"),
+        pytest.param((-10.0,), 0, id="below_min"),
+        pytest.param((150.0,), 100, id="above_max"),
+        pytest.param((200.0, 0, 1000), 200, id="custom_range_within"),
+        pytest.param((-5.0, 0, 1000), 0, id="custom_range_below"),
+    ])
+    def test_clamp(self, args, expected):
+        assert clamp(*args) == expected
 
 
 def _make_senator(**overrides):
@@ -79,13 +80,9 @@ class TestValidateSenator:
             senator = _make_senator(party=party)
             assert validate_senator(senator)["party"] == party
 
-    def test_negative_years_zeroed(self):
-        senator = _make_senator(yearsInOffice=-5)
-        result = validate_senator(senator)
-        assert result["yearsInOffice"] == 0
-
-    def test_missing_years_zeroed(self):
-        senator = _make_senator(yearsInOffice=None)
+    @pytest.mark.parametrize("years", [pytest.param(-5, id="negative"), pytest.param(None, id="missing")])
+    def test_bad_years_zeroed(self, years):
+        senator = _make_senator(yearsInOffice=years)
         result = validate_senator(senator)
         assert result["yearsInOffice"] == 0
 
@@ -105,19 +102,15 @@ class TestValidateSenator:
         assert scores["fundingDiversity"] == 100
         assert scores["legislativeEffectiveness"] == 100
 
-    def test_missing_scores_default_to_neutral(self):
+    @pytest.mark.parametrize("scores", [pytest.param({}, id="missing"), pytest.param(None, id="none")])
+    def test_missing_scores_default_to_neutral(self, scores):
         # An un-scored member is "unknown", not "fully captured": absent
         # score dimensions default to the neutral 50, never 0. Matches the
         # scoring standard (score_calculator: "Missing data yields a neutral
         # 50, never a perfect 100 or 0").
-        senator = _make_senator(representationScore={})
+        senator = _make_senator(representationScore=scores)
         result = validate_senator(senator)
-        for v in result["representationScore"].values():
-            assert v == 50
-
-    def test_none_scores_default_to_neutral(self):
-        senator = _make_senator(representationScore=None)
-        result = validate_senator(senator)
+        assert result["representationScore"]
         for v in result["representationScore"].values():
             assert v == 50
 

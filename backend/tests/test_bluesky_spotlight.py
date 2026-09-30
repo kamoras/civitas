@@ -42,24 +42,10 @@ class TestPickPolitician:
         entity, rank, total, chamber = _pick_politician(db_session)
         assert (entity, rank, total, chamber) == (None, 0, 0, "")
 
-    def test_combined_pool_can_pick_a_representative(self, db_session):
-        db_session.add(_senator("chuck-grassley"))
-        rep = _representative("nancy-pelosi")
-        db_session.add(rep)
-        db_session.flush()
-
-        with patch(
-            "app.pipeline.analyze.bluesky_spotlight.random.choice",
-            side_effect=lambda pool: next(p for p in pool if p[1] == "house"),
-        ):
-            entity, rank, total, chamber = _pick_politician(db_session)
-
-        assert chamber == "house"
-        assert entity.id == "nancy-pelosi"
-
     def test_rank_is_computed_within_the_picked_entitys_own_chamber(self, db_session):
-        # Two senators (the rep's raw score would rank #1 among all three
-        # combined) — the rep's reported rank must still be "#1 of 1", not
+        # The combined pool can pick a representative. Two senators (the
+        # rep's raw score would rank #1 among all three combined) — the
+        # rep's reported rank must still be "#1 of 1", not
         # "#1 of 3", since House and Senate are ranked separately on the
         # site's own leaderboard.
         db_session.add(_senator("senator-a", score=90.0))

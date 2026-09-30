@@ -31,6 +31,7 @@ from pathlib import Path
 
 from app.pipeline.fetch import state_candidates_wy as wy
 from app.pipeline.fetch.state_candidates_common import surname
+from tests.test_state_candidates_tabular import _col_letter
 
 FIXTURES = Path(__file__).parent
 
@@ -109,15 +110,6 @@ _TOTALS = {
     "* Withdrawn\nCandidate": "2162",
     "Elena\nDel Real": "2660", "Lisa\nKinney": "9344",
 }
-
-
-def _col_letter(col_idx: int) -> str:
-    letters = ""
-    n = col_idx + 1
-    while n > 0:
-        n, rem = divmod(n - 1, 26)
-        letters = chr(65 + rem) + letters
-    return letters
 
 
 def _build_fixture_zip() -> bytes:
@@ -254,6 +246,11 @@ class TestPageElection:
 
 class TestFederalTotals:
     def test_finds_all_real_federal_candidates(self):
+        # Exact set, so it also proves the placeholders are excluded:
+        # Wyoming's own House R field carries a "* Withdrawn Candidate"
+        # column with 2,162 real votes still counted under it -- not a
+        # real candidate, must not surface as a surname of "Candidate" --
+        # and every group's Write-Ins/Overvotes/Undervotes columns.
         rows = wy._find_summary_sheet_rows(ZIP_BYTES)
         totals = wy._federal_totals(rows)
         names = {surname(t[3]) for t in totals}
@@ -263,20 +260,6 @@ class TestFederalTotals:
             "Friess", "Gray", "Rasner",  # House R
             "Real", "Kinney",  # House D
         }
-
-    def test_the_withdrawn_candidate_placeholder_is_excluded(self):
-        # Real shape: Wyoming's own House R field carries a
-        # "* Withdrawn Candidate" column with 2,162 real votes still
-        # counted under it -- not a real candidate, must not surface as
-        # a surname of "Candidate".
-        rows = wy._find_summary_sheet_rows(ZIP_BYTES)
-        names = {surname(t[3]) for t in wy._federal_totals(rows)}
-        assert "Candidate" not in names
-
-    def test_write_ins_overvotes_undervotes_are_excluded(self):
-        rows = wy._find_summary_sheet_rows(ZIP_BYTES)
-        names = {surname(t[3]) for t in wy._federal_totals(rows)}
-        assert not names & {"Write-Ins", "Overvotes", "Undervotes"}
 
     def test_office_and_party_are_forward_filled_correctly(self):
         # The real regression this guards against (hit while building

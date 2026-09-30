@@ -30,53 +30,16 @@ the Senate file's own grand-total row get silently double-counted as if
 it were a real town (see _municipality_choices' own docstring).
 """
 
-import io
-import zipfile
 from pathlib import Path
 
 import pytest
 
 from app.pipeline.fetch import state_candidates_me as me
+from tests.test_state_candidates_tabular import _workbook
 
 FIXTURES = Path(__file__).parent
 LANDING_HTML = (FIXTURES / "fixtures_me_results_page.html").read_text()
 RCV_PDF = (FIXTURES / "fixtures_me_cd2_dem_rcv_summary.pdf").read_bytes()
-
-
-def _col_letter(i: int) -> str:
-    letters = ""
-    i += 1
-    while i:
-        i, rem = divmod(i - 1, 26)
-        letters = chr(ord("A") + rem) + letters
-    return letters
-
-
-def _workbook(rows: list[list[str | None]]) -> bytes:
-    """Minimal real .xlsx, same shape state_candidates_tabular's own test
-    suite builds: real column references (r="A1"), a `None` cell omitted
-    from the row's XML entirely (the real shape Maine's own UOCAVA row
-    has for its blank county cell)."""
-    table = []
-    for row in rows:
-        for cell in row:
-            if cell is not None and cell not in table:
-                table.append(cell)
-    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
-    shared = f"<sst {ns}>" + "".join(f"<si><t>{v}</t></si>" for v in table) + "</sst>"
-    body = "".join(
-        "<row>" + "".join(
-            f'<c r="{_col_letter(i)}{rownum}" t="s"><v>{table.index(cell)}</v></c>'
-            for i, cell in enumerate(row) if cell is not None
-        ) + "</row>"
-        for rownum, row in enumerate(rows, start=1)
-    )
-    sheet = f"<worksheet {ns}><sheetData>{body}</sheetData></worksheet>"
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("xl/sharedStrings.xml", shared)
-        zf.writestr("xl/worksheets/sheet1.xml", sheet)
-    return buf.getvalue()
 
 
 # Real rows from the actual downloaded 2026 U.S. Senate Democratic FINAL
@@ -112,6 +75,14 @@ _CD1_DEM_ROWS = [
 
 class TestResultsPageReader:
     def test_finds_every_real_federal_entry(self):
+        """Exactly these six, which is also what proves the refusals the
+        fixture was built for: the real "Governor - Democratic" RCV
+        heading has its own real RCV Summary Report link but is not
+        federal; the real "State Senate" plurality heading is not either;
+        and the <h4>Cast Vote Records</h4> boundary ends CD2 Democratic's
+        own link collection -- otherwise its real CVR export links would
+        be misread as more results sources for that office (CD2 D is one
+        "rcv" entry, nothing more)."""
         entries = me._discover_entries(LANDING_HTML, 2026)
         assert sorted(entries) == sorted([
             ("rcv", ("H", 2), "D", "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/CG2%20Democratic%20RCV%20Summary%20Report.pdf"),
@@ -122,36 +93,12 @@ class TestResultsPageReader:
             ("xlsx", ("H", 2), "R", "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/Rep%20to%20Congress%20Dis%202%20REP%20-%20FINAL.xlsx"),
         ])
 
-    def test_a_non_federal_rcv_office_is_excluded_even_with_its_own_summary_link(self):
-        """Real page shape: Governor's own Democratic primary also went
-        to RCV tabulation and has a real RCV Summary Report link, but
-        Governor isn't a federal office."""
-        entries = me._discover_entries(LANDING_HTML, 2026)
-        urls = [url for _, _, _, url in entries]
-        assert not any("Gov" in url for url in urls)
-
-    def test_a_non_federal_non_rcv_office_is_excluded(self):
-        entries = me._discover_entries(LANDING_HTML, 2026)
-        urls = [url for _, _, _, url in entries]
-        assert not any("State%20Senate" in url for url in urls)
-
     def test_a_stale_years_page_yields_nothing(self):
         """The page's own h2 text carries the cycle's year -- asking
         about a year this same live content never claims to be must not
         silently confirm 2026's results as if they were some other
         year's."""
         assert me._discover_entries(LANDING_HTML, 2028) == []
-
-    def test_cast_vote_record_links_never_leak_in(self):
-        """The <h4>Cast Vote Records</h4> boundary must end a Ranked
-        Choice office's own link collection -- if it didn't, the CVR
-        export links (also real, also present in the fixture) would be
-        misread as more results sources for that office."""
-        entries = me._discover_entries(LANDING_HTML, 2026)
-        cd2_dem = [e for e in entries if e[1] == ("H", 2) and e[2] == "D"]
-        assert len(cd2_dem) == 1
-        assert cd2_dem[0][0] == "rcv"
-
 
 class TestMunicipalityChoices:
     def test_sums_real_towns_and_uocava_but_not_the_grand_total(self):
@@ -169,7 +116,9 @@ class TestMunicipalityChoices:
         rows = me._xlsx_rows(_workbook(_SENATE_DEM_ROWS))
         choices = dict(me._municipality_choices(rows))
         # Auburn + Durham + STATE UOCAVA only -- the STATE TOTAL row's own
-        # 156084/41644/17560/1114 must NOT be added on top.
+        # 156084/41644/17560/1114 must NOT be added on top. Row 2's
+        # home-town annotations (blank Municipality cell, "BRUNSWICK"
+        # etc.) are skipped too.
         assert choices["PLATNER, GRAHAM C"] == 1894 + 564 + 596
         assert choices["MILLS, JANET T"] == 564 + 107 + 146
         assert choices["COSTELLO, DAVID A"] == 280 + 64 + 63
@@ -184,16 +133,6 @@ class TestMunicipalityChoices:
         assert choices["PINGREE, CHELLIE"] == 131 + 811  # Baldwin + Bridgton only
         # Neither the county subtotal (32055) nor the state grand total
         # (128257) may appear anywhere in this sum.
-
-    def test_blank_municipality_header_annotation_row_is_excluded(self):
-        """Row 2 in both real fixtures carries each candidate's home
-        town / write-in-declared annotation with a blank Municipality
-        cell -- summing it in would add a candidate's HOME TOWN NAME
-        string into the numeric total (silently ignored here since it's
-        not a digit, but the row must still be skipped on principle)."""
-        rows = me._xlsx_rows(_workbook(_SENATE_DEM_ROWS))
-        choices = dict(me._municipality_choices(rows))
-        assert choices["COSTELLO, DAVID A"] != "BRUNSWICK"
 
     def test_a_differently_cased_bookkeeping_column_is_still_excluded(self):
         """Real files in this exact family have already proven twice
@@ -233,18 +172,21 @@ class TestParseRcvSummary:
         assert me._parse_rcv_summary("Rounds Round 1\nSmith, Pat 100\n") is None
 
 
-def _patched(monkeypatch, html=LANDING_HTML, pdf=RCV_PDF, xlsx_by_url=None):
-    xlsx_by_url = xlsx_by_url or {}
+def _patched(monkeypatch, html=LANDING_HTML, files=None):
+    """The landing page, and each download by the first `files` needle its
+    URL contains; any other PDF is the real CD2 RCV summary, any other
+    xlsx a zero-vote placeholder."""
+    files = files or {}
 
     async def fake_text(client, rl, url, label, **kw):
         return html
 
     async def fake_bytes(client, rl, url, label, **kw):
-        if url.endswith(".pdf"):
-            return pdf
-        for needle, payload in xlsx_by_url.items():
+        for needle, payload in files.items():
             if needle in url:
                 return payload
+        if url.endswith(".pdf"):
+            return RCV_PDF
         return _workbook([["Municipality", "NOBODY"], ["Anytown", "0"]])
 
     monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
@@ -254,7 +196,7 @@ def _patched(monkeypatch, html=LANDING_HTML, pdf=RCV_PDF, xlsx_by_url=None):
 class TestFetchConfirmedCandidates:
     @pytest.mark.asyncio
     async def test_confirms_the_real_rcv_and_plurality_nominees_together(self, monkeypatch):
-        _patched(monkeypatch, xlsx_by_url={
+        _patched(monkeypatch, files={
             "US%20Senate%20DEM": _workbook(_SENATE_DEM_ROWS),
             "US%20Senate%20REP": _workbook([["Municipality", "COLLINS, SUSAN M"], ["Auburn", "900"]]),
             "Rep%20to%20Congress%20Dist%201%20FINAL": _workbook(_CD1_DEM_ROWS),
@@ -278,8 +220,7 @@ class TestFetchConfirmedCandidates:
         """A downloaded-but-untrustworthy RCV summary is a genuine
         problem with this cycle's data, not a healthy "nothing yet" --
         must return None (fetch failed), never a partial/empty list."""
-        bad_pdf = RCV_PDF  # will be paired with a page text override below
-        _patched(monkeypatch, pdf=bad_pdf)
+        _patched(monkeypatch)
         monkeypatch.setattr(
             me, "_pdf_text",
             lambda content: "Winner(s) Nobody, Real\nRounds Round 1\nSomeone, Else 5\n",
@@ -304,7 +245,7 @@ class TestFetchConfirmedCandidates:
 
     @pytest.mark.asyncio
     async def test_an_unparseable_xlsx_download_fails_the_whole_fetch(self, monkeypatch):
-        _patched(monkeypatch, xlsx_by_url={"US%20Senate%20DEM": b"not a real xlsx"})
+        _patched(monkeypatch, files={"US%20Senate%20DEM": b"not a real xlsx"})
         assert await me.fetch_confirmed_candidates(None, 2026, "ME", {}) is None
 
 
@@ -354,28 +295,10 @@ class TestGovernorRcvWinners:
         assert me._first_last("Plain Name") == "Plain Name"
 
 
-def _patched_by_url(monkeypatch, html=LANDING_HTML, files=None):
-    files = files or {}
-
-    async def fake_text(client, rl, url, label, **kw):
-        return html
-
-    async def fake_bytes(client, rl, url, label, **kw):
-        for needle, payload in files.items():
-            if needle in url:
-                return payload
-        if url.endswith(".pdf"):
-            return RCV_PDF
-        return _workbook([["Municipality", "NOBODY"], ["Anytown", "0"]])
-
-    monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
-    monkeypatch.setattr(me, "fetch_bytes_with_retry", fake_bytes)
-
-
 class TestFetchWithStatewideOffices:
     @pytest.mark.asyncio
     async def test_the_real_governor_nominees(self, monkeypatch):
-        _patched_by_url(monkeypatch, files={
+        _patched(monkeypatch, files={
             "GOV%20Democratic": GOV_DEM_PDF, "GOV%20Republican": GOV_REP_PDF,
         })
         records = await me.fetch_confirmed_candidates(None, 2026, "ME", {"statewide_offices": True})
@@ -393,7 +316,7 @@ class TestFetchWithStatewideOffices:
 
     @pytest.mark.asyncio
     async def test_without_the_opt_in_no_governor_is_read(self, monkeypatch):
-        _patched_by_url(monkeypatch, files={
+        _patched(monkeypatch, files={
             "GOV%20Democratic": GOV_DEM_PDF, "GOV%20Republican": GOV_REP_PDF,
         })
         records = await me.fetch_confirmed_candidates(None, 2026, "ME", {})
@@ -409,7 +332,7 @@ class TestFetchWithStatewideOffices:
             '<h3><strong>Governor</strong></h3><ul><li><a href="/x/Governor%20GRN%20-%20FINAL.xlsx">'
             "Green Independent</a></li></ul>"
         )
-        _patched_by_url(monkeypatch, html=html, files={"Governor%20GRN": _workbook([
+        _patched(monkeypatch, html=html, files={"Governor%20GRN": _workbook([
             ["DIS", "CTY", "Municipality", "SMITH, PAT A", "JONES, LEE", "BLANK", "TBC"],
             [None, None, None, "PORTLAND", "BANGOR", None, None],
             ["1", "CUM", "Portland", "300", "120", "5", "425"],
@@ -423,7 +346,7 @@ class TestFetchWithStatewideOffices:
     async def test_an_unreadable_governor_tabulation_fails_the_whole_fetch(self, monkeypatch):
         # Returning the federal records alone would sync Maine as
         # "checked, no governor's race".
-        _patched_by_url(monkeypatch, files={
+        _patched(monkeypatch, files={
             "GOV%20Democratic": b"not a pdf", "GOV%20Republican": GOV_REP_PDF,
         })
         assert await me.fetch_confirmed_candidates(None, 2026, "ME", {"statewide_offices": True}) is None

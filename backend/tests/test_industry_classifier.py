@@ -57,12 +57,36 @@ class TestEmbeddingClassification:
     def test_unknown_entity_returns_other(self):
         assert classify_industry("Xylophone Kumquat Zephyr") == "OTHER"
 
-    def test_empty_input(self):
-        assert classify_industry("") == "OTHER"
-        assert classify_industry(None) == "OTHER"
 
-    def test_very_short_input(self):
-        assert classify_industry("A") == "OTHER"
+class TestNoModelNeeded:
+    """Paths that never reach the embedding model, so they run in the fast job."""
+
+    @pytest.mark.parametrize("org_name", [
+        pytest.param("", id="empty"),
+        pytest.param(None, id="none"),
+        pytest.param("A", id="very_short"),
+    ])
+    def test_empty_or_very_short_input_is_other(self, org_name):
+        assert classify_industry(org_name) == "OTHER"
+
+    @pytest.mark.parametrize("old, new", [
+        pytest.param(("OTHER", 0.5, "llm"), ("FINANCE", 0.9, "embedding"), id="higher_confidence_overwrites"),
+        # No confidence guard: the current run's classification always wins.
+        pytest.param(("FINANCE", 0.9, "embedding"), ("TECH", 0.5, "llm"), id="lower_confidence_overwrites_too"),
+    ])
+    def test_latest_classification_always_overwrites(self, db_session, old, new):
+        from app.pipeline.transform.industry_classifier import _store_classification
+
+        value, confidence, source = old
+        db_session.add(LearnedClassification(
+            entity_name="TEST CORP", entity_type="industry", value=value, confidence=confidence, source=source,
+        ))
+        db_session.flush()
+
+        _store_classification(db_session, "TEST CORP", "industry", *new)
+
+        stored = db_session.query(LearnedClassification).filter(LearnedClassification.entity_name == "TEST CORP").one()
+        assert (stored.value, stored.confidence, stored.source) == new
 
 
 @pytest.mark.slow
@@ -83,18 +107,10 @@ class TestLearningStore:
         assert result == "MANUFACTURING"
         assert source == "learned"
 
-    def test_learning_store_miss_falls_to_embedding(self, db_session):
+    def test_learning_store_miss_falls_to_embedding_and_is_stored(self, db_session):
         result, source = classify_with_learning("Goldman Sachs", db_session)
         assert result == "FINANCE"
         assert source == "embedding"
-
-    def test_learning_store_miss_unknown_returns_other(self, db_session):
-        result, source = classify_with_learning("Xylophone Kumquat Zephyr", db_session)
-        assert result == "OTHER"
-        assert source == "unknown"
-
-    def test_embedding_result_stored_in_learning_store(self, db_session):
-        classify_with_learning("Goldman Sachs", db_session)
 
         stored = (
             db_session.query(LearnedClassification)
@@ -108,46 +124,10 @@ class TestLearningStore:
         assert stored.value == "FINANCE"
         assert stored.source == "embedding"
 
-    def test_higher_confidence_overwrites(self, db_session):
-        db_session.add(LearnedClassification(
-            entity_name="TEST CORP",
-            entity_type="industry",
-            value="OTHER",
-            confidence=0.5,
-            source="llm",
-        ))
-        db_session.flush()
-
-        from app.pipeline.transform.industry_classifier import _store_classification
-        _store_classification(db_session, "TEST CORP", "industry", "FINANCE", 0.9, "embedding")
-
-        stored = (
-            db_session.query(LearnedClassification)
-            .filter(LearnedClassification.entity_name == "TEST CORP")
-            .first()
-        )
-        assert stored.value == "FINANCE"
-        assert stored.confidence == 0.9
-
-    def test_latest_classification_always_overwrites(self, db_session):
-        db_session.add(LearnedClassification(
-            entity_name="TEST CORP",
-            entity_type="industry",
-            value="FINANCE",
-            confidence=0.9,
-            source="embedding",
-        ))
-        db_session.flush()
-
-        from app.pipeline.transform.industry_classifier import _store_classification
-        _store_classification(db_session, "TEST CORP", "industry", "TECH", 0.5, "llm")
-
-        stored = (
-            db_session.query(LearnedClassification)
-            .filter(LearnedClassification.entity_name == "TEST CORP")
-            .first()
-        )
-        assert stored.value == "TECH"
+    def test_learning_store_miss_unknown_returns_other(self, db_session):
+        result, source = classify_with_learning("Xylophone Kumquat Zephyr", db_session)
+        assert result == "OTHER"
+        assert source == "unknown"
 
 
 @pytest.mark.slow

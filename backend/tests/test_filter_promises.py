@@ -7,6 +7,7 @@ data quality issues from LLM output that was persisted to the database.
 import json
 from types import SimpleNamespace
 
+import pytest
 
 from app.services.senator_service import _filter_promises
 
@@ -42,55 +43,33 @@ class TestFilterPromises:
         assert result[0].alignment == "kept"
         assert result[0].promise_text == "Lower drug costs"
 
-    def test_filler_analysis_stripped(self):
-        promises = [
-            _make_promise(
-                analysis="Senator has received funding from healthcare PACs.",
-                related_votes=["H.R. 3"],
-            ),
-        ]
-        result = _filter_promises(promises)
+    @pytest.mark.parametrize("analysis", [
+        pytest.param("Senator has received funding from healthcare PACs.", id="filler_funding"),
+        pytest.param("This is, a political PAC that supports healthcare.", id="filler_political_pac"),
+        pytest.param(None, id="none_analysis"),
+    ])
+    def test_analysis_reduced_to_empty(self, analysis):
+        result = _filter_promises([_make_promise(analysis=analysis, related_votes=["H.R. 3"])])
+        assert len(result) == 1
         assert result[0].analysis == ""
 
-    def test_filler_political_pac_stripped(self):
-        promises = [
-            _make_promise(
-                analysis="This is, a political PAC that supports healthcare.",
-                related_votes=["H.R. 3"],
-            ),
-        ]
-        result = _filter_promises(promises)
-        assert result[0].analysis == ""
-
-    def test_broken_label_corrected_when_analysis_says_kept(self):
-        promises = [
-            _make_promise(
-                alignment="broken",
-                analysis="Senator voted Yea on HR.1, which aligns with this promise.",
-            ),
-        ]
-        result = _filter_promises(promises)
-        assert result[0].alignment == "kept"
-
-    def test_kept_label_corrected_when_analysis_says_broken(self):
-        promises = [
-            _make_promise(
-                alignment="kept",
-                analysis="Senator voted against the bill, contradicting this pledge.",
-            ),
-        ]
-        result = _filter_promises(promises)
-        assert result[0].alignment == "broken"
-
-    def test_contradictory_signals_downgraded(self):
-        promises = [
-            _make_promise(
-                alignment="kept",
-                analysis="Senator supports the bill but voted against the final version.",
-            ),
-        ]
-        result = _filter_promises(promises)
-        assert result[0].alignment == "unclear"
+    @pytest.mark.parametrize("alignment, analysis, related_votes, expected", [
+        pytest.param("broken", "Senator voted Yea on HR.1, which aligns with this promise.", None, "kept",
+                     id="broken_corrected_when_analysis_says_kept"),
+        pytest.param("kept", "Senator voted against the bill, contradicting this pledge.", None, "broken",
+                     id="kept_corrected_when_analysis_says_broken"),
+        pytest.param("kept", "Senator supports the bill but voted against the final version.", None, "unclear",
+                     id="contradictory_signals_downgraded"),
+        # A 'kept' promise whose analysis doesn't cite a bill becomes 'unclear'.
+        pytest.param("kept", "Senator supports healthcare expansion.", [], "unclear",
+                     id="kept_without_bill_ref_downgraded"),
+        pytest.param(None, "Senator voted Yea on H.R. 3 to lower drug costs.", None, "unclear",
+                     id="none_alignment_reads_as_unclear"),
+    ])
+    def test_alignment_label_corrected(self, alignment, analysis, related_votes, expected):
+        promise = _make_promise(alignment=alignment, analysis=analysis, related_votes=related_votes)
+        result = _filter_promises([promise])
+        assert result[0].alignment == expected
 
     def test_duplicate_bill_sets_downgraded(self):
         promises = [
@@ -109,6 +88,7 @@ class TestFilterPromises:
             assert p.related_votes == []
 
     def test_unique_bill_sets_preserved(self):
+        # Also the JSON related_votes column read back as a list.
         promises = [
             _make_promise(text="Lower healthcare costs for families", related_votes=["HR.1"]),
             _make_promise(text="Strengthen national defense spending", related_votes=["HR.2"]),
@@ -130,17 +110,6 @@ class TestFilterPromises:
     def test_empty_input(self):
         assert _filter_promises([]) == []
 
-    def test_none_analysis_handled(self):
-        p = _make_promise(analysis=None)
-        result = _filter_promises([p])
-        assert len(result) == 1
-        assert result[0].analysis == ""
-
-    def test_none_alignment_handled(self):
-        p = _make_promise(alignment=None)
-        result = _filter_promises([p])
-        assert len(result) == 1
-
     def test_error_page_promise_filtered(self):
         """Promises scraped from 404 pages should be removed entirely."""
         promises = [
@@ -151,23 +120,6 @@ class TestFilterPromises:
         ]
         result = _filter_promises(promises)
         assert len(result) == 0
-
-    def test_kept_without_bill_ref_downgraded(self):
-        """A 'kept' promise whose analysis doesn't cite a bill should become 'unclear'."""
-        promises = [
-            _make_promise(
-                alignment="kept",
-                analysis="Senator supports healthcare expansion.",
-                related_votes=[],
-            ),
-        ]
-        result = _filter_promises(promises)
-        assert result[0].alignment == "unclear"
-
-    def test_related_votes_deserialized(self):
-        p = _make_promise(related_votes=["HR.1", "S.200"])
-        result = _filter_promises([p])
-        assert result[0].related_votes == ["HR.1", "S.200"]
 
     def test_no_related_votes_field(self):
         p = _make_promise(alignment="unclear", analysis="No related legislation found.")

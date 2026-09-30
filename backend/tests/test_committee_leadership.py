@@ -111,15 +111,6 @@ def test_directory_leadership_title_none_when_no_role(db_session):
     assert results[0]["leadershipTitle"] is None
 
 
-def test_build_identity_includes_committees_for_senate(db_session):
-    senator = _make_senator(db_session)
-    identity = _build_identity("senate", senator)
-    assert identity["leadershipTitle"] == "Senate Majority Leader"
-    assert identity["committees"] == [
-        {"committeeName": "Senate Committee on Finance", "chamber": "senate", "title": "Chairman"},
-    ]
-
-
 def test_build_identity_includes_committees_for_house(db_session):
     rep = _make_representative(db_session, committees=json.dumps(
         [{"committeeName": "House Committee on Ways and Means", "chamber": "house", "title": None}],
@@ -135,4 +126,6 @@ def test_profile_endpoint_surfaces_committee_data(db_session):
     response = get_politician("test-senator", db=db_session)
     body = json.loads(response.body)
     assert body["identity"]["leadershipTitle"] == "Senate Majority Leader"
-    assert body["identity"]["committees"][0]["title"] == "Chairman"
+    assert body["identity"]["committees"] == [
+        {"committeeName": "Senate Committee on Finance", "chamber": "senate", "title": "Chairman"},
+    ]

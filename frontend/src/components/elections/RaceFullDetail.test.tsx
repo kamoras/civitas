@@ -109,7 +109,7 @@ describe("RaceFullDetail", () => {
     expect(screen.queryByText(/every FEC filer/)).not.toBeInTheDocument();
   });
 
-  it("tiers an unconfirmed race into leader cards plus a collapsed tail", () => {
+  it("tiers an unconfirmed race into leader cards plus a collapsed tail, but charts them all", () => {
     render(
       <RaceFullDetail
         race={race({
@@ -149,44 +149,11 @@ describe("RaceFullDetail", () => {
     expect(screen.queryByText("Long Shot")).not.toBeInTheDocument();
     expect(screen.getByText("1 more filed")).toBeInTheDocument();
     expect(screen.getByText("FEC-filed field")).toBeInTheDocument();
-  });
-
-  it("passes every active candidate to the financials chart, not just leaders", () => {
-    // The bug this guards against: the chart was narrowed to `leaders`
-    // (2-3 candidates), silently dropping a real below-threshold
-    // fundraiser (like Long Shot here) from the "who's actually raising
-    // money" comparison even though they're a genuine active filer.
-    render(
-      <RaceFullDetail
-        race={race({
-          candidateSource: "filers",
-          candidates: [
-            candidate({
-              id: "d",
-              name: "Big Dem",
-              party: "DEM",
-              hasRaisedFunds: true,
-              cashOnHand: 1_000_000,
-            }),
-            candidate({
-              id: "r",
-              name: "Big Rep",
-              party: "REP",
-              hasRaisedFunds: true,
-              cashOnHand: 800_000,
-            }),
-            candidate({
-              id: "long-shot",
-              name: "Long Shot",
-              party: "DEM",
-              hasRaisedFunds: true,
-              cashOnHand: 50,
-            }),
-          ],
-        })}
-      />
-    );
-
+    // ...but the financials chart still gets every active candidate. The bug
+    // this guards against: the chart was narrowed to `leaders` (2-3
+    // candidates), silently dropping a real below-threshold fundraiser (like
+    // Long Shot here) from the "who's actually raising money" comparison even
+    // though they're a genuine active filer.
     expect(screen.getByTestId("financials")).toHaveTextContent("d,r,long-shot");
   });
 

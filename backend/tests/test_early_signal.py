@@ -6,6 +6,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 
 from app.models import ActionIssue, ActionIssueStatus, Senator, SponsoredBill
 from app.pipeline.analyze import early_signal as es
@@ -78,43 +79,23 @@ def _rule(
 
 
 class TestIsFinalPassage:
-    def test_on_passage_of_the_bill_matches(self):
-        assert es._is_final_passage(_vote(question="On Passage of the Bill")) is True
-
-    def test_on_the_joint_resolution_matches(self):
-        assert es._is_final_passage(_vote(question="On the Joint Resolution")) is True
-
-    def test_nomination_does_not_match(self):
-        assert es._is_final_passage(_vote(question="On the Nomination")) is False
-
-    def test_cloture_does_not_match(self):
-        assert es._is_final_passage(
-            _vote(question="On the Motion to Invoke Cloture")
-        ) is False
-
-    def test_amendment_does_not_match(self):
-        assert es._is_final_passage(_vote(question="On the Amendment")) is False
-
-    def test_house_on_passage_matches(self):
-        assert es._is_final_passage(_house_vote(question="On Passage")) is True
-
-    def test_house_suspend_the_rules_and_pass_matches(self):
-        assert es._is_final_passage(
-            _house_vote(question="On Motion to Suspend the Rules and Pass")
-        ) is True
-
-    def test_house_motion_to_recommit_does_not_match(self):
-        assert es._is_final_passage(
-            _house_vote(question="On Motion to Recommit", vote_title="On Motion to Recommit")
-        ) is False
-
-    def test_house_previous_question_does_not_match(self):
-        assert es._is_final_passage(
-            _house_vote(
-                question="On Ordering the Previous Question",
-                vote_title="On Ordering the Previous Question",
-            )
-        ) is False
+    @pytest.mark.parametrize("vote, expected", [
+        pytest.param(_vote(question="On Passage of the Bill"), True, id="on_passage_of_the_bill"),
+        pytest.param(_vote(question="On the Joint Resolution"), True, id="on_the_joint_resolution"),
+        pytest.param(_vote(question="On the Nomination"), False, id="nomination"),
+        pytest.param(_vote(question="On the Motion to Invoke Cloture"), False, id="cloture"),
+        pytest.param(_vote(question="On the Amendment"), False, id="amendment"),
+        pytest.param(_house_vote(question="On Passage"), True, id="house_on_passage"),
+        pytest.param(_house_vote(question="On Motion to Suspend the Rules and Pass"), True,
+                     id="house_suspend_the_rules_and_pass"),
+        pytest.param(_house_vote(question="On Motion to Recommit", vote_title="On Motion to Recommit"), False,
+                     id="house_motion_to_recommit"),
+        pytest.param(_house_vote(question="On Ordering the Previous Question",
+                                 vote_title="On Ordering the Previous Question"), False,
+                     id="house_previous_question"),
+    ])
+    def test_is_final_passage(self, vote, expected):
+        assert es._is_final_passage(vote) is expected
 
 
 class TestChamberLabels:
@@ -135,37 +116,35 @@ class TestVoteUrl:
         assert url == "https://clerk.house.gov/evs/2026/roll42.xml"
 
 
-class TestVoteMarginRatio:
-    def test_lopsided_vote(self):
-        assert es._vote_margin_ratio(_vote(yeas=90, nays=10)) == 0.8
+@pytest.mark.parametrize("yeas, nays, expected", [
+    pytest.param(90, 10, 0.8, id="lopsided"),
+    pytest.param(50, 50, 0.0, id="tied"),
+    pytest.param(0, 0, 0.0, id="no_yea_nay_votes_is_zero"),
+])
+def test_vote_margin_ratio(yeas, nays, expected):
+    assert es._vote_margin_ratio(_vote(yeas=yeas, nays=nays)) == expected
 
-    def test_tied_vote(self):
-        assert es._vote_margin_ratio(_vote(yeas=50, nays=50)) == 0.0
 
-    def test_no_yea_nay_votes_is_zero(self):
-        vote = _vote(yeas=0, nays=0)
-        assert es._vote_margin_ratio(vote) == 0.0
+def _roll_call_signals(db_session, votes, area="DEFENSE", *args):
+    """check_roll_call_signals over `votes`, every one classified `area`."""
+    with patch.object(es, "_fetch_recent_votes", return_value=votes), \
+            patch.object(es, "classify_policy_area", return_value=(area, 0.9)):
+        return es.check_roll_call_signals(db_session, *args)
 
 
 class TestCheckRollCallSignals:
     def test_procedural_vote_is_rejected(self, db_session):
-        with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("PROCEDURAL", 0.9)):
-            created = es.check_roll_call_signals(db_session)
+        created = _roll_call_signals(db_session, [_vote()], "PROCEDURAL")
         assert created == 0
         assert db_session.query(ActionIssue).count() == 0
 
     def test_non_final_passage_vote_is_rejected(self, db_session):
-        with patch.object(es, "_fetch_recent_votes", return_value=[_vote(question="On the Nomination")]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
-            created = es.check_roll_call_signals(db_session)
+        created = _roll_call_signals(db_session, [_vote(question="On the Nomination")])
         assert created == 0
         assert db_session.query(ActionIssue).count() == 0
 
     def test_qualifying_vote_creates_a_developing_issue(self, db_session):
-        with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
-            created = es.check_roll_call_signals(db_session)
+        created = _roll_call_signals(db_session, [_vote()])
         assert created == 1
         row = db_session.query(ActionIssue).one()
         assert row.status == ActionIssueStatus.DEVELOPING
@@ -175,17 +154,13 @@ class TestCheckRollCallSignals:
         assert row.is_current is True
 
     def test_same_vote_is_not_created_twice(self, db_session):
-        with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
-            es.check_roll_call_signals(db_session)
-            created_second_pass = es.check_roll_call_signals(db_session)
+        _roll_call_signals(db_session, [_vote()])
+        created_second_pass = _roll_call_signals(db_session, [_vote()])
         assert created_second_pass == 0
         assert db_session.query(ActionIssue).count() == 1
 
     def test_qualifying_house_vote_creates_a_developing_issue(self, db_session):
-        with patch.object(es, "_fetch_recent_votes", return_value=[_house_vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
-            created = es.check_roll_call_signals(db_session)
+        created = _roll_call_signals(db_session, [_house_vote()])
         assert created == 1
         row = db_session.query(ActionIssue).one()
         assert row.source_type == "house_roll_call_vote"
@@ -196,11 +171,7 @@ class TestCheckRollCallSignals:
         and Senate roll numbers are independent sequences, so a same-
         numbered pair from each chamber must not collide in the per-run
         dedup set."""
-        with patch.object(
-            es, "_fetch_recent_votes",
-            return_value=[_vote(roll_number=42), _house_vote(roll_number=42)],
-        ), patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
-            created = es.check_roll_call_signals(db_session)
+        created = _roll_call_signals(db_session, [_vote(roll_number=42), _house_vote(roll_number=42)])
         assert created == 2
         source_types = {row.source_type for row in db_session.query(ActionIssue).all()}
         assert source_types == {"senate_roll_call_vote", "house_roll_call_vote"}
@@ -216,9 +187,7 @@ class TestCheckRollCallSignals:
             document_title="A bill to protect the name, image, and likeness rights of student athletes.",
         )
         vote.update(documentName="S. 4668", result="Bill Passed")
-        with patch.object(es, "_fetch_recent_votes", return_value=[vote]), \
-                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
-            assert es.check_roll_call_signals(db_session, "2026-09-29") == 1
+        assert _roll_call_signals(db_session, [vote], "EDUCATION", "2026-09-29") == 1
         row = db_session.query(ActionIssue).one()
         assert row.title == "Senate vote on S. 4668: Bill Passed, 77-22"
         assert row.date == "2026-09-29" and row.primary_article_date == "2026-09-28"
@@ -257,28 +226,20 @@ class TestCoveredVotes:
     def test_a_vote_whose_bill_an_issue_names_by_short_title_is_not_drafted(self, db_session):
         self._bill(db_session)
         _reported(db_session, "The Senate passes the Protect College Sports Act, but the bill's future is unclear")
-        with patch.object(es, "_fetch_recent_votes", return_value=[self._vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
-            assert es.check_roll_call_signals(db_session, "2026-09-29") == 0
+        assert _roll_call_signals(db_session, [self._vote()], "EDUCATION", "2026-09-29") == 0
 
     def test_a_vote_whose_bill_an_issue_records_is_not_drafted(self, db_session):
         _reported(db_session, "College sports bill heads to the House", bills=[{"name": "S. 4668", "id": "S.4668"}])
-        with patch.object(es, "_fetch_recent_votes", return_value=[self._vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
-            assert es.check_roll_call_signals(db_session, "2026-09-29") == 0
+        assert _roll_call_signals(db_session, [self._vote()], "EDUCATION", "2026-09-29") == 0
 
     def test_an_unrelated_issue_does_not_stop_the_draft(self, db_session):
         self._bill(db_session)
         _reported(db_session, "US, China agree to cut tariffs on $60B worth of products")
-        with patch.object(es, "_fetch_recent_votes", return_value=[self._vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
-            assert es.check_roll_call_signals(db_session, "2026-09-29") == 1
+        assert _roll_call_signals(db_session, [self._vote()], "EDUCATION", "2026-09-29") == 1
 
     def test_a_draft_gives_way_once_reporting_covers_its_bill(self, db_session):
         self._bill(db_session)
-        with patch.object(es, "_fetch_recent_votes", return_value=[self._vote()]), \
-                patch.object(es, "classify_policy_area", return_value=("EDUCATION", 0.9)):
-            es.check_roll_call_signals(db_session, "2026-09-29")
+        _roll_call_signals(db_session, [self._vote()], "EDUCATION", "2026-09-29")
         draft = db_session.query(ActionIssue).one()
         assert es.retire_covered_developing_issues(db_session) == 0
         news = _reported(db_session, "Senate passes college sports bill", "The Protect College Sports Act passed 77-22.")
@@ -432,24 +393,21 @@ class TestRuleAbstractSentences:
     """The summary quotes the abstract by whole sentences: a period inside
     "U.S." or after an initial is not the end of one."""
 
-    def test_a_dotted_abbreviation_does_not_end_the_quote(self):
+    @pytest.mark.parametrize("abstract, expected", [
         # The only ". " inside the limit is the one in "U.S.": quoting up to
         # it would present "The rule applies across the U.S." as a sentence.
-        abstract = "The rule applies across the U.S. Fish and Wildlife Service " + "lands and waters " * 30 + "alike."
-        assert es._first_sentences(abstract, 400) == ""
-
-    def test_an_initial_or_a_title_does_not_end_the_quote(self):
-        abstract = "Rules by John Q. Public and Acme Inc. Holdings take effect. " + "More text " * 60
-        assert es._first_sentences(abstract, 400) == (
-            "Rules by John Q. Public and Acme Inc. Holdings take effect."
-        )
-
-    def test_a_citation_before_a_number_is_not_a_sentence_end(self):
-        abstract = "It implements 42 U.S.C. 7401 as amended. " + "More text " * 60
-        assert es._first_sentences(abstract, 400) == "It implements 42 U.S.C. 7401 as amended."
-
-    def test_no_whole_sentence_within_the_limit_quotes_nothing(self):
-        assert es._first_sentences("word " * 200, 400) == ""
+        pytest.param("The rule applies across the U.S. Fish and Wildlife Service " + "lands and waters " * 30 + "alike.",
+                     "", id="a_dotted_abbreviation_does_not_end_the_quote"),
+        pytest.param("Rules by John Q. Public and Acme Inc. Holdings take effect. " + "More text " * 60,
+                     "Rules by John Q. Public and Acme Inc. Holdings take effect.",
+                     id="an_initial_or_a_title_does_not_end_the_quote"),
+        pytest.param("It implements 42 U.S.C. 7401 as amended. " + "More text " * 60,
+                     "It implements 42 U.S.C. 7401 as amended.",
+                     id="a_citation_before_a_number_is_not_a_sentence_end"),
+        pytest.param("word " * 200, "", id="no_whole_sentence_within_the_limit_quotes_nothing"),
+    ])
+    def test_first_sentences(self, abstract, expected):
+        assert es._first_sentences(abstract, 400) == expected
 
 
 def test_a_rule_record_missing_its_number_and_date_leaves_them_out():

@@ -34,6 +34,7 @@ class TestGetPresident:
         assert result.score.agency_alignment is None
         assert result.score.historical_legacy is None
         assert result.score.overall == 0.0
+        assert result.score.dimensions_available == 0
 
     def test_partial_scores_renormalize_overall_from_present_dimensions_only(self, db_session):
         # Only effectiveness has a stored score — overall should renormalize
@@ -54,13 +55,6 @@ class TestGetPresident:
 
         result = get_president(db_session, "test-4")
         assert result.score.dimensions_available == 2
-
-    def test_dimensions_available_is_zero_with_no_scores(self, db_session):
-        db_session.add(_make_president("test-5"))
-        db_session.commit()
-
-        result = get_president(db_session, "test-5")
-        assert result.score.dimensions_available == 0
 
 
 class TestGetPresidentLeaderboardExcludesCurrent:

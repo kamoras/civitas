@@ -20,6 +20,13 @@ from app.pipeline.fetch import state_candidates_ks as ks
 _PRIMARY_PDF = (Path(__file__).parent / "fixtures_ks_primary_2026.pdf").read_bytes()
 
 
+# The real listing page's 2026 link.
+_LISTING_HTML = (
+    '<a href="26elec/2026-Primary-Election-Official-Vote-Totals.pdf" target="_blank" '
+    'title="Click to open the 2026 Primary Election Official results in a new window">x</a>'
+)
+
+
 def _resp(*, text=None, content=None):
     return SimpleNamespace(text=text, content=content)
 
@@ -42,6 +49,13 @@ class TestBannerRe:
 
 class TestParseTotalsPdf:
     def test_real_primary_resolves_to_the_real_certified_winners(self):
+        # Exactly these 10. The real document prints ~140 state house/
+        # senate races AFTER the 5 federal ones on page 1 -- the regression
+        # the race-reset logic exists for: without it, every one of those
+        # non-federal candidates falsely inherited "US House 4" (the last
+        # federal section printed) rather than being ignored. And the real
+        # Democratic Senate primary had 11 candidates; only Hamilton's
+        # plurality (34.63%) survives.
         results = ks._parse_totals_pdf(_PRIMARY_PDF)
         assert sorted(
             (r["office"], r["district"], r["party"], r["last_name"]) for r in results
@@ -57,25 +71,8 @@ class TestParseTotalsPdf:
             ("S", None, "D", "Hamilton"),
             ("S", None, "R", "Marshall"),
         ]
-
-    def test_a_crowded_senate_primary_correctly_excludes_the_losers(self):
-        # The real Democratic Senate primary had 11 candidates; only
-        # Hamilton's real plurality (34.63%) survives.
-        results = ks._parse_totals_pdf(_PRIMARY_PDF)
         senate_d = [r for r in results if r["office"] == "S" and r["party"] == "D"]
-        assert senate_d == [{"office": "S", "district": None, "party": "D", "last_name": "Hamilton", "display_name": "Adam Hamilton"}]
-
-    def test_non_federal_races_after_the_federal_section_are_excluded(self):
-        # The real document prints ~140 state house/senate races AFTER
-        # the 5 federal ones on page 1 -- this is the regression the
-        # race-reset logic exists for: without it, every one of those
-        # non-federal candidates falsely inherited "US House 4" (the
-        # last federal section printed) rather than being ignored.
-        results = ks._parse_totals_pdf(_PRIMARY_PDF)
-        assert len(results) == 10
-        assert all(r["office"] in ("H", "S") for r in results)
-        house_districts = {r["district"] for r in results if r["office"] == "H"}
-        assert house_districts == {1, 2, 3, 4}
+        assert senate_d[0]["display_name"] == "Adam Hamilton"
 
 
 class TestStateOffices:
@@ -88,9 +85,6 @@ class TestStateOffices:
             r for r in ks._parse_totals_pdf(_PRIMARY_PDF, state_offices=True)
             if r["office"] not in ("S", "H")
         ]
-
-    def test_without_the_opt_in_nothing_but_federal_is_read(self):
-        assert all(r["office"] in ("S", "H") for r in ks._parse_totals_pdf(_PRIMARY_PDF))
 
     def test_the_opt_in_leaves_the_federal_nominees_unchanged(self):
         federal = [r for r in ks._parse_totals_pdf(_PRIMARY_PDF, state_offices=True) if r["office"] in ("S", "H")]
@@ -183,13 +177,9 @@ class TestDiscoverPdfUrl:
         assert result == "https://sos.ks.gov/elections/26elec/2026-Primary-Election-Official-Vote-Totals.pdf"
 
     async def test_a_year_not_yet_listed_yields_none(self, monkeypatch):
-        html = (
-            '<a href="26elec/2026-Primary-Election-Official-Vote-Totals.pdf" target="_blank" '
-            'title="Click to open the 2026 Primary Election Official results in a new window">x</a>'
-        )
 
         async def fake(client, rl, method, url, **kw):
-            return _resp(text=html)
+            return _resp(text=_LISTING_HTML)
 
         monkeypatch.setattr(ks, "fetch_with_retry", fake)
         assert await ks._discover_pdf_url(None, 2028) is None
@@ -206,17 +196,13 @@ class TestDiscoverPdfUrl:
         # means a bot-manager challenge intercepted the first request,
         # same as state_candidates_tabular.py's identical retry (added
         # for Minnesota) -- the second call succeeding must recover.
-        html = (
-            '<a href="26elec/2026-Primary-Election-Official-Vote-Totals.pdf" target="_blank" '
-            'title="Click to open the 2026 Primary Election Official results in a new window">x</a>'
-        )
         calls = []
 
         async def fake(client, rl, method, url, **kw):
             calls.append(url)
             if len(calls) == 1:
                 return _resp(text="<html>challenge page, no real links</html>")
-            return _resp(text=html)
+            return _resp(text=_LISTING_HTML)
 
         monkeypatch.setattr(ks, "fetch_with_retry", fake)
         result = await ks._discover_pdf_url(None, 2026)
@@ -234,14 +220,10 @@ class TestDiscoverPdfUrl:
 @pytest.mark.asyncio
 class TestFetchConfirmedCandidates:
     def _patched(self, monkeypatch):
-        html = (
-            '<a href="26elec/2026-Primary-Election-Official-Vote-Totals.pdf" target="_blank" '
-            'title="Click to open the 2026 Primary Election Official results in a new window">x</a>'
-        )
 
         async def fake(client, rl, method, url, **kw):
             if url == ks.LISTING_URL:
-                return _resp(text=html)
+                return _resp(text=_LISTING_HTML)
             if url.endswith(".pdf"):
                 return _resp(content=_PRIMARY_PDF)
             raise AssertionError(f"unexpected URL: {url}")
@@ -268,28 +250,20 @@ class TestFetchConfirmedCandidates:
         assert await ks.fetch_confirmed_candidates(None, 2026, "KS", {}) == []
 
     async def test_pdf_download_failure_returns_none(self, monkeypatch):
-        html = (
-            '<a href="26elec/2026-Primary-Election-Official-Vote-Totals.pdf" target="_blank" '
-            'title="Click to open the 2026 Primary Election Official results in a new window">x</a>'
-        )
 
         async def fake(client, rl, method, url, **kw):
             if url == ks.LISTING_URL:
-                return _resp(text=html)
+                return _resp(text=_LISTING_HTML)
             return None
 
         monkeypatch.setattr(ks, "fetch_with_retry", fake)
         assert await ks.fetch_confirmed_candidates(None, 2026, "KS", {}) is None
 
     async def test_an_unparsable_pdf_returns_none(self, monkeypatch):
-        html = (
-            '<a href="26elec/2026-Primary-Election-Official-Vote-Totals.pdf" target="_blank" '
-            'title="Click to open the 2026 Primary Election Official results in a new window">x</a>'
-        )
 
         async def fake(client, rl, method, url, **kw):
             if url == ks.LISTING_URL:
-                return _resp(text=html)
+                return _resp(text=_LISTING_HTML)
             if url.endswith(".pdf"):
                 return _resp(content=b"not a real pdf")
             raise AssertionError(f"unexpected URL: {url}")

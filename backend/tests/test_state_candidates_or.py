@@ -60,13 +60,8 @@ def _patched(monkeypatch, json_body=_DISCOVERY_JSON, pdf=PDF_BYTES):
 
 
 class TestPageOffice:
-    def test_reads_the_real_senate_page(self):
-        with pdfplumber.open(io.BytesIO(PDF_BYTES)) as pdf:
-            assert orm._page_office(pdf.pages[0].extract_text()) == ("S", None)
-
-    def test_reads_the_real_house_district_page(self):
-        with pdfplumber.open(io.BytesIO(PDF_BYTES)) as pdf:
-            assert orm._page_office(pdf.pages[2].extract_text()) == ("H", 1)
+    # The real Senate and CD1 pages are read in
+    # TestFederalContests.test_finds_every_real_federal_candidate_across_all_three_pages.
 
     def test_a_non_federal_office_is_refused(self):
         assert orm._page_office("title\nGovernor\nDemocrat\nmore text") is None
@@ -89,27 +84,6 @@ class TestPageCandidates:
         by_name = {name: votes for name, _party, votes in candidates}
         assert by_name["Smith"] == 107953
         assert "Brock" not in by_name
-
-    def test_finds_all_real_senate_republican_candidates(self):
-        with pdfplumber.open(io.BytesIO(PDF_BYTES)) as pdf:
-            candidates = orm._page_candidates(pdf.pages[1])
-        names = {name for name, _party, _votes in candidates}
-        assert names == {"Barker", "Brown", "Burch", "McAlmond", "Perkins", "Skelton", "Smith"}
-
-    def test_misc_column_is_excluded(self):
-        with pdfplumber.open(io.BytesIO(PDF_BYTES)) as pdf:
-            candidates = orm._page_candidates(pdf.pages[0])
-        assert "Misc" not in {name for name, _party, _votes in candidates}
-
-    def test_both_party_blocks_on_one_page_are_found(self):
-        # CD1's real page carries a complete Democratic block AND a
-        # complete Republican block, one below the other -- proves
-        # current_party actually updates mid-page rather than being
-        # fixed once per page.
-        with pdfplumber.open(io.BytesIO(PDF_BYTES)) as pdf:
-            candidates = orm._page_candidates(pdf.pages[2])
-        by_name = {name: party for name, party, _votes in candidates}
-        assert by_name == {"Ahmad": "D", "Bonamici": "D", "Kahl": "R", "Verbeek": "R"}
 
 
 class _FakePage:
@@ -137,9 +111,19 @@ class TestPageCandidatesTotalRowGuard:
             ["Total", "457006", "30544", "2907"],  # one extra column
         ]
         assert orm._page_candidates(_FakePage(table)) == []
+
+
+class TestFederalContests:
     def test_finds_every_real_federal_candidate_across_all_three_pages(self):
+        # Exactly these: each page's office and district come from its
+        # own text (Senate on pages 1-2, CD1 on page 3), and no "Misc"
+        # write-in column is read as a candidate.
         contests = orm._federal_contests(PDF_BYTES)
         assert sorted((o, d, p, n) for o, d, p, n, _v in contests) == [
+            # CD1's real page carries a complete Democratic block AND a
+            # complete Republican block, one below the other -- proves
+            # current_party updates mid-page rather than being fixed
+            # once per page.
             ("H", 1, "D", "Ahmad"), ("H", 1, "D", "Bonamici"),
             ("H", 1, "R", "Kahl"), ("H", 1, "R", "Verbeek"),
             ("S", None, "D", "Merkley"), ("S", None, "D", "Wells"),
@@ -306,17 +290,14 @@ class TestStatewideContests:
 
 class TestStatewideNominees:
     def test_the_real_governor_nominees(self):
+        # And nothing for BOLI: Christina E Stephenson took 595,583 of
+        # 942,021 -- 63.2% counting write-ins -- and the Abstract marks her
+        # "**" (Elected). ORS 249.088(1)(b): a majority ELECTS, so nobody
+        # runs in November.
         assert orm._statewide_nominees(_contests(), _OR_SOURCE) == [
             {"office": "governor", "district": None, "party": "D", "last_name": "Tina Kotek"},
             {"office": "governor", "district": None, "party": "R", "last_name": "Christine Drazan"},
         ]
-
-    def test_boli_elected_in_may_is_not_a_november_contest(self):
-        # Christina E Stephenson took 595,583 of 942,021 -- 63.2% counting
-        # write-ins -- and the Abstract marks her "**" (Elected). ORS
-        # 249.088(1)(b): a majority ELECTS, so nobody runs in November.
-        records = orm._statewide_nominees(_contests(), _OR_SOURCE)
-        assert not [r for r in records if r["office"] == "labor_commissioner"]
 
     def test_a_no_majority_non_partisan_contest_sends_the_top_two(self):
         # ORS 249.088(1)(a). Hypothetical figures on the real layout.

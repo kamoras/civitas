@@ -47,39 +47,21 @@ def _add(db, **overrides) -> ExploreDocument:
 
 
 class TestBuildMatchExpression:
-    def test_terms_are_quoted_and_or_joined(self):
-        assert build_match_expression("clean water") == '"clean" OR "water"'
-
-    def test_fts5_operators_in_user_input_are_neutralised(self):
+    @pytest.mark.parametrize("query, expected", [
+        pytest.param("clean water", '"clean" OR "water"', id="terms_are_quoted_and_or_joined"),
         # Typed by a person, "NOT" is a word. Passed through raw it is an
         # operator, and the query means the opposite of what was asked.
-        assert build_match_expression("water NOT clean") == (
-            '"water" OR "NOT" OR "clean"'
-        )
-
-    def test_apostrophes_do_not_break_the_grammar(self):
-        assert build_match_expression("veterans' benefits") == (
-            '"veterans" OR "benefits"'
-        )
-
-    def test_punctuation_only_query_yields_nothing(self):
-        assert build_match_expression("!!! ???") == ""
-        assert build_match_expression("") == ""
-
-    def test_quoted_span_becomes_a_phrase_query(self):
-        assert build_match_expression('"clean water act" rules') == (
-            '"clean water act" OR "rules"'
-        )
-
-    def test_identifiers_survive_tokenisation(self):
-        expr = build_match_expression("Executive Order 14110")
-        assert '"14110"' in expr
-
-    def test_single_characters_are_dropped(self):
-        assert build_match_expression("a b clean") == '"clean"'
-
-    def test_duplicate_terms_appear_once(self):
-        assert build_match_expression("water WATER water") == '"water"'
+        pytest.param("water NOT clean", '"water" OR "NOT" OR "clean"', id="fts5_operators_are_neutralised"),
+        pytest.param("veterans' benefits", '"veterans" OR "benefits"', id="apostrophes_do_not_break_the_grammar"),
+        pytest.param("!!! ???", "", id="punctuation_only_query_yields_nothing"),
+        pytest.param("", "", id="empty_query_yields_nothing"),
+        pytest.param('"clean water act" rules', '"clean water act" OR "rules"', id="quoted_span_becomes_a_phrase"),
+        pytest.param("Executive Order 14110", '"Executive" OR "Order" OR "14110"', id="identifiers_survive_tokenisation"),
+        pytest.param("a b clean", '"clean"', id="single_characters_are_dropped"),
+        pytest.param("water WATER water", '"water"', id="duplicate_terms_appear_once"),
+    ])
+    def test_match_expression(self, query, expected):
+        assert build_match_expression(query) == expected
 
 
 class TestSearchLexical:
@@ -157,9 +139,8 @@ class TestSearchLexical:
 
 
 class TestIndexSync:
-    def test_insert_is_indexed_by_the_trigger(self, indexed_db):
-        doc = _add(indexed_db, title="brand new wildfire rule")
-        assert [h["id"] for h in search_lexical(indexed_db, "wildfire", limit=5)] == [doc.id]
+    # Inserts reach the index through the AFTER INSERT trigger; every test in
+    # TestSearchLexical adds its documents that way and asserts they are found.
 
     def test_update_reindexes(self, indexed_db):
         # The ingest pipeline rewrites bodies in place during backfill, so

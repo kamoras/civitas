@@ -219,12 +219,12 @@ class TestBackfillWithheldSponsorshipScores:
         assert "S001" not in ideology_scores
 
     def test_no_missing_keys_is_a_no_op(self, db_session):
-        # Every dict already has every bio_id — no DB query should even
-        # matter here; values pass through untouched.
-        scores = {"S001": 0.4}
-        backfill_withheld_sponsorship_scores(
-            db_session, Senator, {"S001"}, dict(scores), dict(scores), dict(scores), dict(scores),
-        )
+        # Every dict already has every bio_id — the stored values (which
+        # differ) must not replace this run's; values pass through untouched.
+        self._make_senator(db_session, "S001", ideology_score=0.9, leadership_score=0.9)
+        dicts = [{"S001": 0.4} for _ in range(4)]
+        backfill_withheld_sponsorship_scores(db_session, Senator, {"S001"}, *dicts)
+        assert dicts == [{"S001": 0.4}] * 4
 
 
 def test_upsert_senator_persists_confidence(db_session):

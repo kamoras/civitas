@@ -106,6 +106,9 @@ def test_parses_result_fields():
     assert rc["result"] == "Cloture on the Motion to Proceed Rejected"
     assert rc["resultText"] == "Cloture on the Motion to Proceed Rejected (49-45, 3/5 majority required)"
     assert rc["majorityRequirement"] == "3/5"
+    # Read from the result, not the counts: 49 yeas beat 45 nays, yet
+    # cloture failed (three-fifths of the Senate is 60). Counts alone would
+    # call this one passed.
     assert rc["rejected"] is True
     assert rc["documentName"] == "H.R. 5371"
     assert len(rc["members"]) == 8
@@ -117,13 +120,6 @@ def test_result_text_is_the_fallback_when_bare_result_is_absent():
     )
     rc = parse_senate_vote_xml(xml, 119, 1, 571)
     assert rc["result"] == "Cloture on the Motion to Proceed Rejected"
-    assert rc["rejected"] is True
-
-
-def test_rejected_is_read_from_the_result_not_the_counts():
-    # 49 yeas beat 45 nays, yet cloture failed: three-fifths of the Senate
-    # is 60. Counts alone would call this one passed.
-    rc = parse_senate_vote_xml(_REJECTED_CLOTURE, 119, 1, 571)
     assert rc["rejected"] is True
 
 

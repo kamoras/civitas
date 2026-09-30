@@ -93,7 +93,6 @@ describe("JSON-LD", () => {
   });
 
   it("gives members of Congress a party affiliation but not justices", () => {
-    expect(personJsonLd("a", profile("senate", { state: "CA" }))).toHaveProperty("affiliation");
     expect(personJsonLd("a", profile("senate", { state: "CA" })).affiliation).toEqual({
       "@type": "PoliticalParty",
       name: "Democratic Party",

@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -20,21 +21,32 @@ def _request(**overrides):
 
 
 class TestValidation:
-    def test_valid_request_accepted(self):
-        req = _request()
-        assert req.category == "bug"
-
-    def test_invalid_category_rejected(self):
+    # A valid request is what every other test here builds via _request().
+    @pytest.mark.parametrize("overrides", [
+        pytest.param({"category": "not-a-real-category"}, id="invalid_category"),
+        pytest.param({"message": "short"}, id="too_short_message"),
+        pytest.param({"message": "          "}, id="whitespace_only_message"),
+    ])
+    def test_invalid_request_rejected(self, overrides):
         with pytest.raises(ValidationError):
-            _request(category="not-a-real-category")
+            _request(**overrides)
 
-    def test_too_short_message_rejected(self):
-        with pytest.raises(ValidationError):
-            _request(message="short")
 
-    def test_whitespace_only_message_rejected(self):
-        with pytest.raises(ValidationError):
-            _request(message="          ")
+async def _submit_to_github(post: AsyncMock):
+    """submit_feedback with a token configured and GitHub's HTTP client
+    stubbed: `post` is what the client's POST does."""
+    mock_client = AsyncMock()
+    mock_client.post = post
+    with patch("app.api.feedback.settings") as mock_settings, \
+         patch("app.api.feedback.make_async_client") as mock_client_cls:
+        mock_settings.FEEDBACK_TOKEN = "fake-token"
+        mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+        return await submit_feedback(_request(), None)
+
+
+def _github_response(status_code: int, **attrs) -> MagicMock:
+    return MagicMock(status_code=status_code, **attrs)
 
 
 class TestSubmitFeedback:
@@ -48,62 +60,27 @@ class TestSubmitFeedback:
 
     @pytest.mark.asyncio
     async def test_creates_github_issue_on_success(self):
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {
-            "html_url": "https://github.com/kamoras/civitas/issues/99"
-        }
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
+        response = _github_response(201)
+        response.json.return_value = {"html_url": "https://github.com/kamoras/civitas/issues/99"}
+        post = AsyncMock(return_value=response)
 
-        with patch("app.api.feedback.settings") as mock_settings, \
-             patch("app.api.feedback.make_async_client") as mock_client_cls:
-            mock_settings.FEEDBACK_TOKEN = "fake-token"
-            mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-
-            result = await submit_feedback(_request(), None)
+        result = await _submit_to_github(post)
 
         assert result.ok is True
         assert result.issue_url == "https://github.com/kamoras/civitas/issues/99"
-        call_kwargs = mock_client.post.call_args
-        assert "kamoras/civitas" in call_kwargs.args[0]
-        assert "user-feedback" in call_kwargs.kwargs["json"]["labels"]
+        assert "kamoras/civitas" in post.call_args.args[0]
+        assert "user-feedback" in post.call_args.kwargs["json"]["labels"]
 
     @pytest.mark.asyncio
-    async def test_github_error_response_surfaces_as_502(self):
-        mock_response = MagicMock()
-        mock_response.status_code = 422
-        mock_response.text = "Validation failed"
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-
-        with patch("app.api.feedback.settings") as mock_settings, \
-             patch("app.api.feedback.make_async_client") as mock_client_cls:
-            mock_settings.FEEDBACK_TOKEN = "fake-token"
-            mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-
-            with pytest.raises(HTTPException) as exc:
-                await submit_feedback(_request(), None)
-            assert exc.value.status_code == 502
-
-    @pytest.mark.asyncio
-    async def test_network_failure_surfaces_as_502(self):
-        import httpx
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(side_effect=httpx.ConnectError("boom"))
-
-        with patch("app.api.feedback.settings") as mock_settings, \
-             patch("app.api.feedback.make_async_client") as mock_client_cls:
-            mock_settings.FEEDBACK_TOKEN = "fake-token"
-            mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-
-            with pytest.raises(HTTPException) as exc:
-                await submit_feedback(_request(), None)
-            assert exc.value.status_code == 502
+    @pytest.mark.parametrize("post", [
+        pytest.param(AsyncMock(return_value=_github_response(422, text="Validation failed")),
+                     id="github_error_response"),
+        pytest.param(AsyncMock(side_effect=httpx.ConnectError("boom")), id="network_failure"),
+    ])
+    async def test_github_failure_surfaces_as_502(self, post):
+        with pytest.raises(HTTPException) as exc:
+            await _submit_to_github(post)
+        assert exc.value.status_code == 502
 
     def test_issue_body_includes_category_and_page(self):
         from app.api.feedback import _build_issue_body

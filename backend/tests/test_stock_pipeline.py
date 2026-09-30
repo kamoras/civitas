@@ -44,7 +44,7 @@ def _run(
             (mock_house, house_result), (mock_senate, senate_result), (mock_president, president_result),
             (mock_house_h, house_holdings_result), (mock_senate_h, senate_holdings_result),
         ):
-            if isinstance(result, Exception):
+            if isinstance(result, Exception) or callable(result):
                 mock.side_effect = result
             else:
                 mock.return_value = result if result is not None else 0
@@ -72,8 +72,14 @@ class TestStockTradesPipelineRunTracking:
         assert run.elapsed_seconds is not None
 
     def test_in_memory_flag_is_set_during_and_cleared_after(self, db_session):
-        assert stock_pipeline.is_stock_pipeline_running() is False
-        _run(db_session, house_result=0, senate_result=0)
+        seen_during = []
+
+        def house(*_args, **_kwargs):
+            seen_during.append(stock_pipeline.is_stock_pipeline_running())
+            return 0
+
+        _run(db_session, house_result=house, senate_result=0)
+        assert seen_during == [True]
         # Cleared by the finally block once the (synchronous, in this
         # test) run completes.
         assert stock_pipeline.is_stock_pipeline_running() is False
@@ -134,23 +140,20 @@ class TestStockTradesPipelineRunTracking:
         run = db_session.query(StockTradesPipelineRun).one()
         assert "House holdings" in run.error_message and "Senate holdings" in run.error_message
 
-    def test_one_holdings_phase_failing_alerts_for_that_phase(self, db_session):
-        """One chamber failing night after night would otherwise go unseen:
-        the run stays COMPLETED on the trades' account."""
-        result = _run(db_session, house_holdings_result=RuntimeError("down"), senate_holdings_result=3)
-        assert result["status"] == "completed"
-        assert result["_holdings_alerts"] == 1
-
     def test_trade_steps_are_every_non_holdings_step(self):
         assert stock_pipeline.TRADE_STEPS == ("house_ptr", "senate_ptr", "president_ptr")
 
     def test_holdings_failing_alone_leaves_the_trades_run_completed(self, db_session):
+        """One holdings phase failing alerts for that phase — one chamber
+        failing night after night would otherwise go unseen, since the run
+        stays COMPLETED on the trades' account."""
         result = _run(
             db_session, house_result=2, senate_result=1,
             house_holdings_result=RuntimeError("House Clerk down"), senate_holdings_result=40,
         )
 
         assert result["status"] == "completed"
+        assert result["_holdings_alerts"] == 1
         assert result["house_trades"] == 2
         assert result["house_holdings"] == 0
         assert result["senate_holdings"] == 40
@@ -218,20 +221,15 @@ class TestOtherPipelineRunningStaleness:
         db_session.commit()
         assert stock_pipeline._other_pipeline_running(db_session) is False  # its lease: dead
 
-    def test_recent_running_house_row_blocks(self, db_session):
-        db_session.add(HousePipelineRun(started_at=utcnow() - timedelta(minutes=5), status=PipelineStatus.RUNNING))
+    @pytest.mark.parametrize("model, age, blocks", [
+        pytest.param(HousePipelineRun, timedelta(minutes=5), True, id="recent_running_house_row_blocks"),
+        pytest.param(PipelineRun, timedelta(hours=13), False, id="stale_running_senate_row_does_not_block"),
+        pytest.param(HousePipelineRun, timedelta(hours=13), False, id="stale_running_house_row_does_not_block"),
+    ])
+    def test_running_row_by_age(self, db_session, model, age, blocks):
+        db_session.add(model(started_at=utcnow() - age, status=PipelineStatus.RUNNING))
         db_session.commit()
-        assert stock_pipeline._other_pipeline_running(db_session) is True
-
-    def test_stale_running_senate_row_does_not_block(self, db_session):
-        db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=13), status=PipelineStatus.RUNNING))
-        db_session.commit()
-        assert stock_pipeline._other_pipeline_running(db_session) is False
-
-    def test_stale_running_house_row_does_not_block(self, db_session):
-        db_session.add(HousePipelineRun(started_at=utcnow() - timedelta(hours=13), status=PipelineStatus.RUNNING))
-        db_session.commit()
-        assert stock_pipeline._other_pipeline_running(db_session) is False
+        assert stock_pipeline._other_pipeline_running(db_session) is blocks
 
     def test_no_running_rows_does_not_block(self, db_session):
         assert stock_pipeline._other_pipeline_running(db_session) is False
@@ -258,30 +256,6 @@ class TestIngestHouseYearWindow:
         assert result == 0
         years_requested = {call.args[2] for call in mock_fetch.call_args_list}
         assert years_requested == {2025, 2026}
-
-
-class TestIngestSenateColdStartWindow:
-    """_ingest_senate's cold-start lookback (no prior disclosure_date in
-    the DB) must come from the canonical UTC clock, not a local-
-    timezone-dependent date.today() call."""
-
-    async def test_cold_start_since_date_computed_from_canonical_clock(self, db_session):
-        from datetime import datetime, timedelta
-        from unittest.mock import AsyncMock, patch
-
-        from app.pipeline.stock_pipeline import COLD_START_LOOKBACK_DAYS, _ingest_senate
-
-        with (
-            patch("app.pipeline.stock_pipeline.utcnow", return_value=datetime(2026, 3, 15)),
-            patch("app.pipeline.stock_pipeline.senate_accept_terms", new_callable=AsyncMock, return_value="csrf-token"),
-            patch("app.pipeline.stock_pipeline.search_ptr_filings", new_callable=AsyncMock, return_value=[]) as mock_search,
-        ):
-            client = AsyncMock()
-            result = await _ingest_senate(db_session, client)
-
-        assert result == 0
-        expected_since = (datetime(2026, 3, 15) - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
-        mock_search.assert_called_once_with(expected_since)
 
 
 class TestClassifyRowsIndustryUntickered:
