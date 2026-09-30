@@ -1370,6 +1370,19 @@ def _trigger_target(senator: str | None, fetch_only: bool):
     return triggered_chain()
 
 
+def refuse_trigger_while_running(db: Session, senator: str | None, fetch_only: bool) -> None:
+    """409 while the Senate pipeline is running, or — for a full trigger,
+    which runs the whole chain — while a chain is (nightly or triggered):
+    two chains would each run every pipeline, the second a duplicate."""
+    from app.api.pipeline import _is_pipeline_running
+    from app.pipeline_chain import chain_running
+
+    if _is_pipeline_running(db):
+        raise HTTPException(status_code=409, detail="Pipeline is already running")
+    if senator is None and not fetch_only and chain_running():
+        raise HTTPException(status_code=409, detail="A pipeline chain is already running")
+
+
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
 async def admin_trigger_pipeline(
     senator: str | None = Query(default=None),
@@ -1377,10 +1390,7 @@ async def admin_trigger_pipeline(
     db: Session = Depends(get_db),
 ):
     """Trigger a pipeline run from the admin panel."""
-    from app.api.pipeline import _is_pipeline_running
-
-    if _is_pipeline_running(db):
-        raise HTTPException(status_code=409, detail="Pipeline is already running")
+    refuse_trigger_while_running(db, senator, fetch_only)
 
     run_pipeline_in_thread(
         _trigger_target(senator, fetch_only), name="pipeline-run", error_label="Admin-triggered pipeline run failed",

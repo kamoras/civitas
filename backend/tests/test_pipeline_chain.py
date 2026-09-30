@@ -25,7 +25,78 @@ def test_a_crash_is_the_links_outcome_and_the_next_link_runs():
     assert outcomes["A"].status == CRASHED and str(outcomes["A"].error) == "boom"
     assert outcomes["B"].status == "completed"
     second.assert_awaited_once()
-    assert after == ["A"]  # its follow-up runs whatever it did
+    assert after == ["A"]  # its follow-up runs whatever it did, short of a skip
+
+
+def test_a_skipped_links_follow_up_is_not_run():
+    after = []
+    asyncio.run(run_chain([Link("A", AsyncMock(return_value={"status": "skipped", "reason": "busy"}),
+                                after=lambda: after.append("A"))]))
+    assert after == []
+
+
+@pytest.mark.parametrize("result", [None, {}, {"reps_processed": 3}])
+def test_a_result_without_a_status_is_no_success(result):
+    outcomes = asyncio.run(run_chain([Link("A", AsyncMock(return_value=result))]))
+    assert outcomes["A"].status == pipeline_chain.UNKNOWN
+    assert pipeline_chain.UNKNOWN in pipeline_chain.FAILED
+
+
+class TestHeldOffByAnotherRun:
+    """A link skipped because another run holds the machine waits that run
+    out rather than let the chain leapfrog it into the next heavy pipeline
+    beside it."""
+
+    @pytest.fixture(autouse=True)
+    def _no_sleep(self, monkeypatch):
+        monkeypatch.setattr(pipeline_chain, "WAIT_POLL_S", 0)
+
+    def _busy_for(self, polls, seen):
+        answers = iter([True] * polls + [False])
+
+        def busy():
+            seen.append("poll")
+            return next(answers)
+        return busy
+
+    @pytest.mark.parametrize("reason", ["already_running", "held_elsewhere"])
+    def test_another_run_of_the_same_pipeline_is_waited_out_then_the_chain_moves_on(self, reason):
+        polls, order = [], []
+        first = AsyncMock(return_value={"status": "skipped", "reason": reason})
+
+        async def second():
+            order.append(len(polls))
+            return {"status": "completed"}
+
+        outcomes = asyncio.run(run_chain([Link("A", first), Link("B", second)], busy=self._busy_for(2, polls)))
+        assert order == [3]  # B started only once busy() said free
+        first.assert_awaited_once()  # that run refreshed A's data: not rerun
+        assert pipeline_chain.ran_elsewhere(outcomes["A"])
+
+    def test_a_link_held_off_by_a_member_pipeline_is_tried_again(self):
+        stock = AsyncMock(side_effect=[{"status": "skipped", "reason": "member_pipeline_running"},
+                                       {"status": "completed"}])
+        outcomes = asyncio.run(run_chain([Link("Stock", stock)], busy=self._busy_for(1, [])))
+        assert stock.await_count == 2 and outcomes["Stock"].status == "completed"
+
+    def test_a_run_holding_it_past_the_stale_timeout_ends_the_chain(self, monkeypatch):
+        from datetime import timedelta
+
+        monkeypatch.setattr(pipeline_chain, "STALE_PIPELINE_TIMEOUT", timedelta(0))
+        last = AsyncMock()
+        outcomes = asyncio.run(run_chain([
+            Link("A", AsyncMock(return_value={"status": "skipped", "reason": "already_running"})),
+            Link("B", last),
+        ], busy=lambda: True))
+        assert outcomes["A"].status == pipeline_chain.WEDGED
+        assert pipeline_chain.ends_chain(outcomes["A"])
+        last.assert_not_awaited()
+
+    def test_other_skips_do_not_wait(self):
+        busy = []
+        asyncio.run(run_chain([Link("A", AsyncMock(return_value={"status": "skipped", "reason": "busy"})),
+                               Link("B", _completed())], busy=lambda: busy.append(1) or True))
+        assert busy == []
 
 
 def test_skipped_and_failed_links_do_not_stop_the_chain():
@@ -103,6 +174,7 @@ class TestTriggers:
         mocks = {n: _completed() for n in self.NAMES}
         mocks["run_senate_pipeline"] = AsyncMock(return_value={"status": "failed", "error": "boom"})
         with patch.multiple("app.scheduler", **mocks), \
+             patch("app.scheduler.pipelines_running", return_value=False), \
              patch("app.services.bill_service.warm_bill_collection_cache"), \
              patch("app.ops_alerts.send_ops_alert") as alert, \
              patch("app.ops_alerts.resolve_ops_alert"):
@@ -132,8 +204,39 @@ class TestTriggers:
         await pipeline_api.trigger_pipeline(authorization="Bearer x", senator=None, fetch_only=False, db=db_session)
         mocks = {n: _completed() for n in self.NAMES}
         with patch.multiple("app.scheduler", **mocks), \
+             patch("app.scheduler.pipelines_running", return_value=False), \
              patch("app.services.bill_service.warm_bill_collection_cache"), \
              patch("app.ops_alerts.resolve_ops_alert"):
             await started[0]()
         for mock in mocks.values():
             mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("senator,fetch_only,refused", [(None, False, True), ("Smith", False, False), (None, True, False)])
+async def test_a_full_trigger_is_refused_while_a_chain_runs(db_session, monkeypatch, senator, fetch_only, refused):
+    # It would run every pipeline a second time behind the first.
+    from fastapi import HTTPException
+
+    from app.api import admin
+
+    started = []
+    monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda target, **kw: started.append(target))
+    monkeypatch.setitem(pipeline_chain._chains, 1, time.monotonic())
+    if refused:
+        with pytest.raises(HTTPException) as error:
+            await admin.admin_trigger_pipeline(senator=senator, fetch_only=fetch_only, db=db_session)
+        assert error.value.status_code == 409 and not started
+    else:
+        await admin.admin_trigger_pipeline(senator=senator, fetch_only=fetch_only, db=db_session)
+        assert started
+
+
+def test_pipelines_running_reads_each_pipelines_flag_and_run_rows(db_session, monkeypatch):
+    from app import scheduler
+
+    monkeypatch.setattr(scheduler, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
+    assert scheduler.pipelines_running() is False
+    monkeypatch.setattr(scheduler, "is_stock_pipeline_running", lambda: True)
+    assert scheduler.pipelines_running() is True

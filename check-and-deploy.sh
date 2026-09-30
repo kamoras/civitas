@@ -155,7 +155,8 @@ pipeline_is_busy() {
   # next start begins it again.
   #
   # pipelineChainIsRunning: a chain of pipelines (nightly or triggered)
-  # between its links — waiting on the one before it, or another chain's.
+  # between its links, or waiting out another run that held one of them
+  # off — a restart then drops the links it has yet to run.
   #
   # exploreIsRunning: an Explore run holding its lease — a triggered or
   # startup run has no run row, and its top-up can run twenty-odd minutes.

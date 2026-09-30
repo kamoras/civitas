@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
@@ -75,10 +75,9 @@ async def trigger_pipeline(
     """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
     check_pipeline_token(authorization)
 
-    if _is_pipeline_running(db):
-        raise HTTPException(status_code=409, detail="Pipeline is already running")
+    from app.api.admin import _trigger_target, refuse_trigger_while_running
 
-    from app.api.admin import _trigger_target
+    refuse_trigger_while_running(db, senator, fetch_only)
 
     run_pipeline_in_thread(_trigger_target(senator, fetch_only), name="pipeline-run", error_label="Pipeline run failed")
     return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}

@@ -290,7 +290,7 @@ def bluesky_configured(monkeypatch, bluesky_outbox):
 
 
 @pytest.fixture(autouse=True)
-def _fresh_pipeline_chain_queue(monkeypatch):
+def _no_running_pipeline_chains(monkeypatch):
     """Every test starts with no pipeline chain recorded as running
     (app.pipeline_chain keeps that in the process)."""
     from app import pipeline_chain

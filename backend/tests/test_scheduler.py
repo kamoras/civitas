@@ -22,15 +22,6 @@ from app.pipeline.election_pipeline import ballot_tracker
 
 
 @pytest.fixture(autouse=True)
-def _fresh_chains(monkeypatch):
-    """No pipeline chain recorded as running from another test
-    (app.pipeline_chain keeps that in the process)."""
-    from app import pipeline_chain
-
-    monkeypatch.setattr(pipeline_chain, "_chains", {})
-
-
-@pytest.fixture(autouse=True)
 def _job_leases_granted():
     """These tests stub the database, which a lease lives in; the leases
     themselves are tested in test_database_reset.TestLease."""
@@ -214,6 +205,7 @@ class TestNightlyPipelineIndependentLinks:
              patch("app.ops_alerts.check_current_congress_staleness"), \
              patch("app.ops_alerts.check_feedback_token_expiration"), \
              patch("app.ops_alerts.check_state_pvi_staleness"), \
+             patch("app.scheduler.pipelines_running", return_value=False), \
              patch("app.services.bill_service.warm_bill_collection_cache") as mock_warm:
             patches = []
             for key, name in (("senate", "run_senate_pipeline"), ("supplementary", "run_supplementary_pipeline"),
@@ -245,11 +237,20 @@ class TestNightlyPipelineIndependentLinks:
 
     @pytest.mark.parametrize("link", ["senate", "supplementary", "house", "stock", "election"])
     def test_a_skip_anywhere_is_alerted_and_every_link_still_runs(self, link):
-        mocks, alert, _resolve, _warm = self._run_chain(**{link: {"status": "skipped", "reason": "already_running"}})
+        mocks, alert, _resolve, _warm = self._run_chain(**{link: {"status": "skipped", "reason": "busy"}})
         self._all_ran(mocks)
         alert.assert_called_once()
         subject, body = alert.call_args[0][0], alert.call_args[0][1]
         assert "skipped" in subject and "still run" in body
+
+    @pytest.mark.parametrize("reason", ["already_running", "held_elsewhere"])
+    def test_a_link_another_run_of_it_holds_is_no_lost_run(self, reason):
+        # That run refreshes its data (the chain waited it out): nothing to
+        # alert, and nothing of that pipeline's to resolve either.
+        mocks, alert, resolve, _warm = self._run_chain(house={"status": "skipped", "reason": reason})
+        self._all_ran(mocks)
+        alert.assert_not_called()
+        assert not {"nightly-skipped-house", "nightly-crashed-house"} & {c.args[0] for c in resolve.call_args_list}
 
     @pytest.mark.parametrize("link", ["senate", "supplementary", "house", "stock", "election"])
     def test_a_crash_anywhere_is_alerted_and_every_link_still_runs(self, link):
@@ -273,6 +274,11 @@ class TestNightlyPipelineIndependentLinks:
         # Senate rewrote its chamber's bills either way.
         _mocks, _alert, _resolve, warm = self._run_chain(house=RuntimeError("boom"))
         warm.assert_called_once()
+
+    def test_the_bills_cache_is_not_warmed_when_house_was_skipped(self):
+        # Another House run may be writing those rows right then.
+        _mocks, _alert, _resolve, warm = self._run_chain(house={"status": "skipped", "reason": "already_running"})
+        warm.assert_not_called()
 
     def test_a_link_that_ran_resolves_its_skip_and_crash_alerts(self):
         _mocks, _alert, resolve, _warm = self._run_chain()
@@ -541,6 +547,7 @@ def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
          patch("app.scheduler.run_stock_trades_pipeline", completed), \
          patch("app.scheduler.run_election_pipeline", completed), \
          patch("app.services.bill_service.warm_bill_collection_cache"), \
+         patch("app.scheduler.pipelines_running", return_value=False), \
          patch("app.ops_alerts.resolve_ops_alert"), \
          patch("app.background.threading.Thread", _SyncThread), \
          patch("app.ops_alerts.send_ops_alert") as alert, \
