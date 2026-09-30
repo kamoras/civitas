@@ -234,14 +234,30 @@ async def test_every_trigger_is_refused_while_a_chain_runs(db_session, monkeypat
     assert started
 
 
-def test_pipelines_running_reads_each_pipelines_flag_and_run_rows(db_session, monkeypatch):
+def test_pipelines_running_counts_live_runs_not_a_dead_runs_row(db_session, monkeypatch):
+    # A RUNNING row with no live run behind it (its failure couldn't be
+    # committed) would otherwise hold a waiting link for half a day.
     from app import scheduler
+    from app.models import HousePipelineRun, PipelineStatus
+    from app.time_utils import utcnow
 
     monkeypatch.setattr(scheduler, "SessionLocal", lambda: db_session)
     monkeypatch.setattr(db_session, "close", lambda: None)
+    db_session.add(HousePipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING))
+    db_session.commit()
     assert scheduler.pipelines_running() is False
     monkeypatch.setattr(scheduler, "is_stock_pipeline_running", lambda: True)
+    monkeypatch.setattr(scheduler, "stock_pipeline_age", lambda: None)
     assert scheduler.pipelines_running() is True
+
+
+@pytest.mark.parametrize("state,running", [((1, True, False), True), ((1, True, True), False), ((None, False, False), False)])
+def test_pipelines_running_counts_a_senate_row_only_while_its_lease_is_live(db_session, monkeypatch, state, running):
+    from app import scheduler
+
+    monkeypatch.setattr(scheduler, "SessionLocal", lambda: db_session)
+    with patch("app.pipeline.run_tracker.senate_run_state", return_value=state):
+        assert scheduler.pipelines_running() is running
 
 
 def test_pipelines_running_stops_counting_a_hung_run(monkeypatch):
@@ -252,8 +268,7 @@ def test_pipelines_running_stops_counting_a_hung_run(monkeypatch):
 
     monkeypatch.setattr(scheduler, "is_house_pipeline_running", lambda: True)
     monkeypatch.setattr(scheduler, "house_pipeline_age", lambda: timedelta(hours=13))
-    with patch("app.pipeline.run_tracker.senate_run_state", return_value=(None, False, False)), \
-         patch("app.pipeline.run_tracker.run_in_progress", return_value=False):
+    with patch("app.pipeline.run_tracker.senate_run_state", return_value=(None, False, False)):
         assert scheduler.pipelines_running() is False
         monkeypatch.setattr(scheduler, "house_pipeline_age", lambda: timedelta(hours=1))
         assert scheduler.pipelines_running() is True

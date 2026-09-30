@@ -662,7 +662,7 @@ behind a Supplementary failure. One chain runs at a time
 is going, and a nightly run that finds a triggered chain going leaves the
 night to it. A link skipped because another run holds the machine (another
 run of that pipeline, or a member pipeline holding Stock trades off) waits
-until no pipeline is running (`scheduler.pipelines_running`, which stops
+until no pipeline run is live (`scheduler.pipelines_running`, which stops
 counting a run once it is past `STALE_PIPELINE_TIMEOUT`), then is tried once
 more and that attempt is what gets reported: the other run may have been a
 single senator, or have failed, so it never stands in for the link. The one

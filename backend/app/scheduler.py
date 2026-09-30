@@ -100,13 +100,16 @@ def nightly_links() -> "list[Link]":
 
 
 def pipelines_running() -> bool:
-    """Whether any of the chain's pipelines is running, in any process —
-    what a link held off by another run waits on (app.pipeline_chain). Its
-    in-process flag or its live run row, as the admin status reads them,
-    each only until its run is past STALE_PIPELINE_TIMEOUT (hung, and its
-    lock taken over from then — a wait on it must end)."""
-    from app.models import ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun
-    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, run_in_progress, senate_run_state
+    """Whether any of the chain's pipelines is running — what a link held
+    off by another run waits on (app.pipeline_chain). Only a run that is
+    live: every pipeline runs in the one pipeline process, so House,
+    Supplementary, Stock trades and Election count by their in-process flag
+    (a RUNNING row with the flag down is a dead run's leftover — the admin
+    status calls it stuck), and the Senate by a row its live lease speaks
+    for (run_tracker.senate_run_state). Each only until its run is past
+    STALE_PIPELINE_TIMEOUT: hung, its lock taken over from then — a wait on
+    it must end."""
+    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, senate_run_state
 
     for running, age in (
         (is_house_pipeline_running, house_pipeline_age),
@@ -118,9 +121,8 @@ def pipelines_running() -> bool:
             return True
     db = SessionLocal()
     try:
-        return senate_run_state(db)[1] or any(run_in_progress(db, model) for model in (
-            HousePipelineRun, SupplementaryPipelineRun, StockTradesPipelineRun, ElectionPipelineRun,
-        ))
+        _row, senate_running, senate_clearable = senate_run_state(db)
+        return senate_running and not senate_clearable
     finally:
         db.close()
 
