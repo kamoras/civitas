@@ -398,7 +398,7 @@ async def _embed_step(db: Session) -> int:
     from app.ops_alerts import resolve_ops_alert
 
     whole = await _index_is_whole_or_none()
-    outcome = "skipped"  # or "failed", "rebuilt", "topped up"
+    outcome = "skipped"  # or "failed", "rebuilt", "topped up", "whole, top-up skipped"
     embedded = 0
     if whole is False:
         logger.info("Explore pipeline: vector index incomplete — rebuilding it whole...")
@@ -437,7 +437,7 @@ async def _embed_step(db: Session) -> int:
             if not is_busy_error(exc):
                 raise
             logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", exc)
-            return 0
+            outcome = "whole, top-up skipped"  # whole all the same: its alert ends
 
     if outcome == "skipped":
         logger.warning("Explore pipeline: vector index busy — embed step skipped this run")

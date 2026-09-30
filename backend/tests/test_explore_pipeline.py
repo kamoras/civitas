@@ -677,3 +677,18 @@ async def test_both_rechecks_share_one_read_under_the_lock(db_session):
     reads.assert_called_once()
 
 
+
+
+@pytest.mark.asyncio
+async def test_a_locked_top_up_on_a_whole_index_still_ends_the_rebuild_alert(db_session):
+    # Whole all the same (read so, or a start's rebuild waited out): the
+    # rebuild-failed alert describes an index that no longer exists.
+    import sqlite3
+
+    from app.pipeline import explore_pipeline
+
+    with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
+         patch.object(explore_pipeline, "_top_up", side_effect=sqlite3.OperationalError("database is locked")), \
+         patch("app.ops_alerts.resolve_ops_alert") as resolve:
+        assert await explore_pipeline._embed_step(db_session) == 0
+    resolve.assert_called_once_with("explore-index-rebuild")

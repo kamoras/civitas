@@ -424,6 +424,23 @@ class TestTextHashes:
         m.join(5)
         assert done.is_set() and vector_store._get_meta(conn, "k") == "v"
 
+    def test_reads_see_only_committed_rows_and_never_wait_on_a_writer(self, vec_env):
+        # A writer mid-batch: its old chunks deleted, new ones not in yet.
+        vector_store.embed_explore_documents([_doc(1, "A title")])
+        conn = vector_store.get_vec_conn()
+        with vector_store._vec_lock:
+            conn.execute("DELETE FROM vec_explore WHERE doc_id = 1")
+            conn.execute("DELETE FROM vec_explore_text WHERE doc_id = 1")
+            # On this thread, the lock held: a reader waiting on it would
+            # deadlock another thread, and would see the deletes here.
+            assert vector_store.get_embedded_explore_ids() == {1}
+            assert set(vector_store.get_embedded_hashes()) == {1}
+            conn.rollback()
+
+    def test_the_relabel_counts_only_documents_still_embedded(self, vec_env):
+        vector_store.embed_explore_documents([_doc(1, "A title")])
+        assert vector_store.update_explore_metadata([_doc(1, "A title", chamber="Senate"), _doc(2, "Gone")]) == 1
+
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         emptied = _doc(1, "")

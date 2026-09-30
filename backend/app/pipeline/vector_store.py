@@ -102,7 +102,12 @@ _vec_conn: "sqlite3.Connection | None" = None
 # to its commit or rollback: sqlite3 has one transaction per connection, so
 # a writer outside it would have its statements committed or rolled back by
 # another thread's. Reentrant, for a writer that calls another (_set_meta).
+# Reads don't use the shared connection at all (_read_conn).
 _vec_lock = threading.RLock()
+# Bumped each time the shared connection is opened: a thread's read
+# connection from before (another file, in tests) is replaced.
+_vec_generation = 0
+_read_local = threading.local()
 
 
 def get_embedding_model() -> SentenceTransformer:
@@ -306,8 +311,8 @@ def _load_vec(conn: sqlite3.Connection) -> None:
 def _swap_tables(ddl: dict[str, str], *, clear_meta: bool = False, meta: dict[str, str] | None = None) -> None:
     """DROP and recreate each of `ddl`'s tables (name -> CREATE statement)
     in one transaction on a connection of its own, so every other
-    connection — the shared one, whose users commit without _vec_lock, and
-    the API processes' — sees the old tables or the new, never none. (A
+    connection — the shared one, the read connections, and the API
+    processes' — sees the old tables or the new, never none. (A
     vec0 table's vector width and columns are fixed at creation: recreating
     is the only way to change them.)"""
     swap = _open_vec_conn(SQLITE_BUSY_TIMEOUT_S)
@@ -340,15 +345,18 @@ def is_busy_error(error: BaseException) -> bool:
 
 
 def get_vec_conn() -> sqlite3.Connection:
-    """Get or create the sqlite-vec connection (singleton, extension loaded)."""
-    global _vec_conn, _wal_retry_at
+    """Get or create the sqlite-vec connection (singleton, extension loaded)
+    — the one every write goes through, under _vec_lock (_writing)."""
+    global _vec_conn, _wal_retry_at, _vec_generation
+    conn, retry_at = _vec_conn, _wal_retry_at
+    if conn is not None and (retry_at is None or time.monotonic() < retry_at):
+        return conn  # open, no WAL retry due: nothing to wait on a writer for
     with _vec_lock:
         if _vec_conn is not None and _wal_retry_at is not None and time.monotonic() >= _wal_retry_at:
             # On a thread of its own: the try can wait a second, and a
-            # search holding _vec_lock mustn't. The shared connection's
+            # caller waiting on _vec_lock mustn't. The shared connection's
             # synchronous level stays at the safe default (FULL) until the
-            # next open — other threads use it without the lock, so it
-            # isn't changed under them.
+            # next open, rather than be changed under a transaction.
             _wal_retry_at = time.monotonic() + _WAL_RETRY_EVERY_S
             threading.Thread(target=_retry_wal, daemon=True, name="vectors-wal-switch").start()
         if _vec_conn is None:
@@ -377,7 +385,32 @@ def get_vec_conn() -> sqlite3.Connection:
                 raise
             _wal_retry_at = retry_at
             _vec_conn = conn
+            _vec_generation += 1
         return _vec_conn
+
+
+def _read_conn() -> sqlite3.Connection:
+    """This thread's read connection to the vector store. Not the shared
+    one: a writer's open transaction there would show a reader its
+    uncommitted rows (a document's old chunks gone, its new ones not yet
+    in), a writer's rollback would abort a reader's statement, and readers
+    would queue behind _vec_lock for the length of a write. In WAL a read
+    here waits on no writer at all."""
+    get_vec_conn()  # opened once: the schema, and the WAL switch
+    cached = getattr(_read_local, "conn", None)
+    key = (_VECTOR_DB_PATH, _vec_generation)
+    if cached is not None and cached[0] == key:
+        return cached[1]
+    if cached is not None:
+        cached[1].close()
+    conn = _open_vec_conn(_busy_timeout_s())
+    try:
+        conn.execute("PRAGMA query_only = ON")
+    except BaseException:
+        conn.close()
+        raise
+    _read_local.conn = (key, conn)
+    return conn
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -887,14 +920,14 @@ def search_explore_documents(
     so a member-scoped search returns that member's real matches instead
     of the global top-k intersected down to near-empty.
     """
-    conn = get_vec_conn()
+    conn = _read_conn()
 
     try:
         count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
     except sqlite3.OperationalError:
         # A model/schema-version bump briefly DROPs and recreates this
-        # table (see ensure_explore_index) — search doesn't hold _vec_lock
-        # (a read shouldn't block on a rebuild that can take minutes), so
+        # table (see ensure_explore_index) — search reads on its own
+        # connection (a read shouldn't block on a rebuild's writes), so
         # a query landing in that brief gap sees "no such table" rather
         # than "0 rows". Same "not ready yet" contract as the empty-index
         # case below, not a real error.
@@ -974,7 +1007,7 @@ def search_explore_documents(
 def collection_stats() -> dict:
     """Counts + size for the admin dashboard (replaces chroma's
     list_collections/peek API)."""
-    conn = get_vec_conn()
+    conn = _read_conn()
     explore = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
     bills = conn.execute("SELECT COUNT(*) FROM vec_bills").fetchone()[0]
     recorded = _get_meta(conn, _INDEX_MODEL)  # once: a rebuild may be changing it
@@ -1019,7 +1052,7 @@ def get_bill_reference(limit: int = 5000):
     """
     import numpy as np
 
-    conn = get_vec_conn()
+    conn = _read_conn()
     rows = conn.execute(
         "SELECT embedding, policy_area FROM vec_bills "
         "ORDER BY json_extract(meta_json, '$.date') DESC LIMIT ?",
@@ -1096,14 +1129,14 @@ def _record_text_hash(conn: sqlite3.Connection, doc_id: int, digest: str, meta: 
 def get_embedded_explore_ids() -> set[int]:
     """Ids of explore documents with chunks in the index. Distinct `doc_id`,
     not rowid: rows are chunks, and several of them belong to one document."""
-    conn = get_vec_conn()
+    conn = _read_conn()
     return {r[0] for r in conn.execute("SELECT DISTINCT doc_id FROM vec_explore").fetchall()}
 
 
 def get_embedded_hashes() -> dict[int, tuple[str, str]]:
     """Each embedded document's (explore_text_hash, explore_meta_hash), as
     its vectors were written — both from one read of the table."""
-    rows = get_vec_conn().execute("SELECT doc_id, text_hash, meta_hash FROM vec_explore_text").fetchall()
+    rows = _read_conn().execute("SELECT doc_id, text_hash, meta_hash FROM vec_explore_text").fetchall()
     return {doc_id: (text, meta) for doc_id, text, meta in rows}
 
 
@@ -1112,7 +1145,8 @@ def update_explore_metadata(docs: list[dict]) -> int:
     place — for a change of metadata alone (a chamber corrected, a departed
     member's speeches losing politician_id): search filters on these
     columns, and re-encoding the text for them would be wasted work. One
-    transaction; returns how many documents were updated."""
+    transaction; returns how many of them were still embedded to update (a
+    document without text has no chunks, and its recorded hash is updated)."""
     if not docs:
         return 0
     conn = get_vec_conn()
@@ -1124,17 +1158,19 @@ def update_explore_metadata(docs: list[dict]) -> int:
     # chunks are only inserted under _rebuild_lock, which the top-up holds,
     # and a rowid deleted meanwhile is updated as a no-op.
     chunks: dict[int, list[int]] = {}
-    for rowid, doc_id in conn.execute("SELECT rowid, doc_id FROM vec_explore").fetchall():
+    for rowid, doc_id in _read_conn().execute("SELECT rowid, doc_id FROM vec_explore").fetchall():
         if doc_id in wanted:
             chunks.setdefault(doc_id, []).append(rowid)
     update = "UPDATE vec_explore SET " + ", ".join(f"{f} = ?" for f in _META_FIELDS) + " WHERE rowid = ?"
+    updated = 0
     with _writing(conn):
         for doc, meta in rows:
             values = _meta_values(doc)
             for rowid in chunks.get(int(doc["id"]), ()):
                 conn.execute(update, (*values, rowid))
-            conn.execute("UPDATE vec_explore_text SET meta_hash = ? WHERE doc_id = ?", (meta, int(doc["id"])))
-    return len(rows)
+            cur = conn.execute("UPDATE vec_explore_text SET meta_hash = ? WHERE doc_id = ?", (meta, int(doc["id"])))
+            updated += cur.rowcount > 0  # still embedded: a document swept meanwhile isn't
+    return updated
 
 
 def reset_vector_db() -> None:
@@ -1396,7 +1432,7 @@ def index_is_whole() -> bool:
     empty corpus's, empty, included: only a completed build records it.
     The table is read too, so one that can't be raises (and is rebuilt)
     rather than pass on its identity alone."""
-    conn = get_vec_conn()
+    conn = _read_conn()
     conn.execute("SELECT rowid FROM vec_explore LIMIT 1").fetchall()
     return _get_meta(conn, _INDEX_MODEL) == index_identity()
 

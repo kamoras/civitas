@@ -775,7 +775,9 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         }
 
     # --- Vector DB stats ---
-    vector_db_stats = _collect_vector_db_stats(db)
+    # Off the loop: full scans of the vector tables, in the pipeline process
+    # whose loop also streams Explore summaries.
+    vector_db_stats = await off_loop(db, _collect_vector_db_stats)
 
     # --- LLM stats ---
     try:
