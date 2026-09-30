@@ -33,7 +33,9 @@ def on_date(monkeypatch, tmp_path):
 
     monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path / "none"))
     monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
+    monkeypatch.setattr(score_calculator, "_district_pvi_stamp", None)
     monkeypatch.setattr(district_pvi, "_file_cache", None)
+    monkeypatch.setattr(district_pvi, "_file_stamp", None)
 
     def set_clock(dt):
         monkeypatch.setattr("app.pipeline.election_pipeline.utcnow", lambda: dt)

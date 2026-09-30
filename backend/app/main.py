@@ -1,4 +1,6 @@
 import asyncio
+import os
+import threading
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
@@ -14,7 +16,7 @@ from app.api.cache_headers import ETagCacheMiddleware
 from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
-from app.background import WritesHeld, start_writer, writing
+from app.background import WritesElsewhere, WritesHeld, start_writer, writing
 
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
 _level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
@@ -65,11 +67,17 @@ async def _bootstrap_explore() -> None:
         logging.getLogger("app.main").warning("Explore bootstrap failed: %s", e)
 
 
-def _preload_embedding_model() -> None:
-    """Load the sentence-transformers model eagerly so the first search is fast."""
+def _preload_models() -> None:
+    """Load the similarity model Explore search encodes queries with
+    (vector_store.search_explore_documents) at startup, so no read request
+    loads one (AGENTS.md: "never load the embedding model or LLM on API read
+    requests"). Only that one: the primary model served /api/qa's intent
+    classification, which is gone, and every API worker would hold a copy
+    no request uses."""
+    from app.pipeline import vector_store
+
     try:
-        from app.pipeline.vector_store import get_embedding_model
-        get_embedding_model()
+        vector_store.get_similarity_model()
     except Exception as e:
         logging.getLogger("app.main").warning("Embedding model preload failed: %s", e)
 
@@ -93,7 +101,15 @@ def _invalidate_orphaned_pipelines() -> None:
     sweep_orphaned_runs()
 
 
-PROCESS_STARTED_AT: str | None = None
+# How often the API process checks that the pipeline service is alive, and
+# how long it waits after its own start first. Short: the staleness is
+# measured from the heartbeat file's own time (ops_alerts'
+# PIPELINE_SERVICE_SILENT_AFTER), and a restarted pipeline beats at once, so
+# the wait only covers the two services starting together. A long one would
+# restart with every deploy — on a day of frequent deploys, the check would
+# never run at all.
+_LIVENESS_EVERY_S = 300
+_LIVENESS_GRACE_S = 120
 
 
 def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]:
@@ -111,43 +127,38 @@ def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]
         return rescore_stale_constituent_alignment(session_factory, house_lines=lines)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global PROCESS_STARTED_AT
-    from datetime import datetime, timezone
-    PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
-    init_db()
-    _invalidate_orphaned_pipelines()
-    # Install member scoring's district table as a SeatLines before any
-    # scheduler job or request can read it: score_calculator's own loader
-    # would install a plain dict, which district_pvi.lines_of can't steer.
-    try:
-        from app.pipeline.fetch.district_pvi import lines_congress
-        lines_congress()
-    except Exception:
-        logging.getLogger(__name__).exception("District PVI table load failed (non-fatal)")
-    start_scheduler()
-    # Pre-build the bills-in-flight collection cache on a background thread
-    # so the first /api/bills request after a deploy is a cache hit instead
-    # of paying the ~1.5s cold rebuild (see bill_service.py).
-    from app.services.bill_service import warm_bill_collection_cache
-    warm_bill_collection_cache()
-    loop = asyncio.get_running_loop()
-    loop.run_in_executor(None, _preload_embedding_model)
-    # Held for the lifespan: the event loop keeps only a weak reference to a
-    # task, so an unreferenced one can be garbage-collected mid-ingestion.
-    bootstrap_task = asyncio.create_task(_bootstrap_explore())
+async def _watch_pipeline_service() -> None:
+    """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive)."""
+    from app.ops_alerts import check_pipeline_service_alive
 
+    # Every API worker runs this; the alert's dedupe (send_ops_alert) is
+    # what makes a stale heartbeat page once, not once per worker.
+    await asyncio.sleep(_LIVENESS_GRACE_S)
+    while True:
+        try:
+            await asyncio.to_thread(check_pipeline_service_alive)
+        except Exception:
+            logging.getLogger("app.main").warning("Pipeline liveness check failed", exc_info=True)
+        await asyncio.sleep(_LIVENESS_EVERY_S)
+
+
+def _start_pipeline_side_startup_jobs() -> None:
+    """The startup work that writes: run where pipelines run, never in the
+    read-only API process."""
     # Rebuild the sqlite-vec explore index when missing or built by a
     # different model (the 2026-07 chroma->sqlite-vec migration path, and
-    # any future index-model change). Spawns its own daemon thread;
-    # search reports "not ready" until it completes.
-    try:
-        from app.database import SessionLocal
-        from app.pipeline.vector_store import ensure_explore_index
-        ensure_explore_index(SessionLocal)
-    except Exception:
-        logging.getLogger(__name__).exception("Explore index check failed (non-fatal)")
+    # any future index-model change); search reports "not ready" until it
+    # completes. The check itself on a thread too: it reads the vector store,
+    # and waits out a lock another writer holds rather than guess.
+    def _check_explore_index() -> None:
+        try:
+            from app.database import SessionLocal
+            from app.pipeline.vector_store import ensure_explore_index
+            ensure_explore_index(SessionLocal)
+        except Exception:
+            logging.getLogger(__name__).exception("Explore index check failed (non-fatal)")
+
+    threading.Thread(target=_check_explore_index, daemon=True, name="explore-index-check").start()
 
     # A release that rescales Legislative Effectiveness or Constituent
     # Alignment leaves the stored scores and reference on the old scale until
@@ -180,14 +191,143 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     start_writer(_startup_rescore, name="startup-rescore")
 
+
+# The pipeline side must be one process per container: the admin status
+# endpoint reports run flags held in its memory (and check-and-deploy.sh's
+# busy check reads them), the data reset's writer registry is per process,
+# and each process would run its own scheduler. Rather than infer the worker
+# count from how uvicorn was launched, each such process takes this lock and
+# a second one refuses to start. /dev/shm is per container, so a rolling
+# update's old and new tasks never contend for it.
+def _role_lock_path() -> str:
+    """Per container (RAM_DIR) and per database: two processes on different
+    databases — a second local dev server — share no run state to protect.
+    The database is its resolved file, not the URL: the default URL is a
+    relative path, the same string for every checkout's own ./data."""
+    import hashlib
+
+    from sqlalchemy.engine import make_url
+
+    from app.api.throttle import RAM_DIR
+
+    try:
+        database = make_url(settings.DATABASE_URL).database or ""
+    except Exception:
+        database = settings.DATABASE_URL
+    if database and database != ":memory:":
+        database = os.path.realpath(database)
+    digest = hashlib.sha256(database.encode()).hexdigest()[:12]
+    return os.path.join(RAM_DIR, f"civitas_pipeline_process-{digest}.lock")
+
+
+_ROLE_LOCK_PATH = _role_lock_path()
+
+
+def _take_pipeline_role_lock() -> int:
+    """The lock's file descriptor, held for the process's life; raises when
+    another process in this container already runs the pipeline side."""
+    import fcntl
+
+    fd = os.open(_ROLE_LOCK_PATH, os.O_RDWR | os.O_CREAT, 0o666)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        raise RuntimeError(
+            f"PROCESS_ROLE={settings.PROCESS_ROLE}: another process in this container already runs the "
+            "pipeline side, which must be a single process — run one worker (WEB_CONCURRENCY=1); "
+            "only PROCESS_ROLE=api scales out"
+        ) from None
+    return fd
+
+
+PROCESS_STARTED_AT: str | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global PROCESS_STARTED_AT
+    from datetime import datetime, timezone
+    PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
+    role = settings.PROCESS_ROLE
+    serves_reads = role in ("all", "api")
+    runs_pipelines = role in ("all", "worker")
+    logging.getLogger("app.main").info("Backend process role: %s", role)
+    # Before init_db: in a pipeline-side role it already starts background
+    # work (the keyword index backfill), which a second such process must
+    # not start before it refuses.
+    role_lock = _take_pipeline_role_lock() if runs_pipelines else None
+    init_db()
+    # Read member scoring's district table (a district_pvi.SeatLines) before
+    # any scheduler job or request does, in every role: the API reads the
+    # lines for score breakdowns and elections as the pipeline does for
+    # scoring. A file that can't be read is logged here, at start, and
+    # every later read re-reads it once the pipeline rewrites it (its stamp
+    # moves — score_calculator._district_pvi).
+    try:
+        from app.pipeline.fetch.district_pvi import lines_congress
+        lines_congress()
+    except Exception:
+        logging.getLogger(__name__).exception("District PVI table load failed (non-fatal)")
+
+    if runs_pipelines:
+        # Only the process that runs pipelines may sweep their rows: the
+        # API process sweeping on its own restart would mark a run live in
+        # the pipeline process as dead.
+        _invalidate_orphaned_pipelines()
+        start_scheduler()
+    if serves_reads:
+        # Pre-build the bills-in-flight collection cache on a background
+        # thread so the first /api/bills request after a deploy is a cache
+        # hit instead of paying the ~1.5s cold rebuild (see bill_service.py).
+        from app.services.bill_service import warm_bill_collection_cache
+        warm_bill_collection_cache()
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, _preload_models)
+
+    bootstrap_task = None
+    if runs_pipelines:
+        # Held for the lifespan: the event loop keeps only a weak reference
+        # to a task, so an unreferenced one can be garbage-collected
+        # mid-ingestion.
+        bootstrap_task = asyncio.create_task(_bootstrap_explore())
+        _start_pipeline_side_startup_jobs()
+
+    from app.api.throttle import run_maintenance
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())
+    # Drops the rate-limit store's salts on time, traffic or not.
+    throttle_task = asyncio.create_task(run_maintenance())
+    # Only a separate API process can notice the pipeline process is gone:
+    # with both in one process, a dead scheduler means a dead site.
+    liveness_task = asyncio.create_task(_watch_pipeline_service()) if role == "api" else None
+    # The admin dashboard is served by the pipeline process, which sees only
+    # its own container's network counters: the API records its own.
+    net_task = None
+    if role == "api":
+        from app.net_stats import run_recorder
+
+        net_task = asyncio.create_task(run_recorder())
 
     yield
 
     visit_consumer_task.cancel()
-    bootstrap_task.cancel()
+    throttle_task.cancel()
+    if liveness_task is not None:
+        liveness_task.cancel()
+    if net_task is not None:
+        net_task.cancel()
+        from app.net_stats import forget_own_record
+
+        forget_own_record()
+    if bootstrap_task is not None:
+        bootstrap_task.cancel()
+    from app.services import explore_summary
+
+    await explore_summary.stop()
     stop_scheduler()
+    if role_lock is not None:
+        os.close(role_lock)
 
 
 app = FastAPI(
@@ -204,6 +344,14 @@ async def _writes_held(_request, held: WritesHeld) -> JSONResponse:
     """An endpoint's writer refused while the admin data reset holds the
     database (app.background.writing)."""
     return JSONResponse(status_code=409, content={"detail": str(held)})
+
+
+@app.exception_handler(WritesElsewhere)
+async def _writes_elsewhere(_request, refused: WritesElsewhere) -> JSONResponse:
+    """A trigger reached the read-only API process: nginx routes every
+    trigger to the pipeline service, so this one is missing from that list
+    (nginx/civitas.conf, "Background work")."""
+    return JSONResponse(status_code=503, content={"detail": str(refused)})
 
 
 # Added before GZip, so it runs *inside* it and hashes the uncompressed

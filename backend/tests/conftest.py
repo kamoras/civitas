@@ -3,6 +3,10 @@
 import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+# The per-container RAM directory (api/throttle.RAM_DIR: the throttle store,
+# the pipeline-process lock) — one per test run, so a local dev server's, or
+# a parallel run's, never meets this one's.
+os.environ.setdefault("CIVITAS_RAM_DIR", __import__("tempfile").mkdtemp(prefix="civitas-tests-"))
 
 import pytest
 from sqlalchemy import create_engine
@@ -50,6 +54,28 @@ def db_session():
     yield session
     session.close()
     engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def _throttle_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("throttle")
+
+
+@pytest.fixture(autouse=True)
+def throttle_store(_throttle_dir):
+    """A fresh store for api/throttle.py for every test, in a file of its
+    own; yields its path. Autouse: the default lives in /dev/shm, where
+    limits counted by one test (20 writes a minute) would refuse the next
+    test's requests. Nothing is created until a test uses it."""
+    import uuid
+
+    from app.api import throttle
+
+    previous = throttle._path
+    path = str(_throttle_dir / f"{uuid.uuid4().hex}.db")
+    throttle.use_path(path)
+    yield path
+    throttle.use_path(previous)
 
 
 # Explore search's ranking parameters are generated data — measured against

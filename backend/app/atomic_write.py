@@ -56,11 +56,15 @@ def runtime_data_path(name: str) -> str:
     return os.path.join(base, name)
 
 
-def write_text_atomic(path: str | os.PathLike, text: str) -> None:
+def write_text_atomic(path: str | os.PathLike, text: str, *, durable: bool = True) -> None:
     """Write `text` to `path` (UTF-8), replacing it in one step, keeping
     the file's mode (a new one gets the umask's, as open() would give).
     Raises OSError as a plain write would; nothing is left behind on
-    failure."""
+    failure.
+
+    durable=False skips the fsync, for a value rewritten every few minutes
+    that no one needs back after a crash (a heartbeat, a rate): still
+    replaced in one step, so a reader never sees half of it."""
     path = os.fspath(path)
     directory, name = os.path.dirname(os.path.abspath(path)), os.path.basename(path)
     _sweep_leftovers(directory, name)
@@ -74,7 +78,8 @@ def write_text_atomic(path: str | os.PathLike, text: str) -> None:
                 os.fchmod(fh.fileno(), stat.S_IMODE(os.stat(path).st_mode))
             except FileNotFoundError:
                 pass
-            os.fsync(fh.fileno())
+            if durable:
+                os.fsync(fh.fileno())
         os.replace(tmp, path)
     except BaseException:
         try:

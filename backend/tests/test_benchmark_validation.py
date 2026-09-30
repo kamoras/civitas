@@ -32,6 +32,7 @@ def senate(tmp_path, monkeypatch):
     pvi = {st: rng.randint(-20, 20) for st in STATES}
     monkeypatch.setattr(score_calculator, "_state_pvi_cache", pvi)
     monkeypatch.setattr(score_calculator, "_district_pvi_cache", {})
+    monkeypatch.setattr(score_calculator, "_district_pvi_stamp", None)
     members, votes, db_rows = [], [], []
     for i in range(100):
         party = "D" if i < 50 else "R"

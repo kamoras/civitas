@@ -131,6 +131,67 @@ async def test_status_reports_a_data_reset_so_deploys_wait_it_out(db_session):
 
 
 
+
+@pytest.mark.asyncio
+async def test_status_reports_an_explore_index_rebuild_so_deploys_wait_it_out(db_session):
+    from app.api.admin import admin_pipeline_status
+    from app.pipeline import vector_store
+
+    assert (await admin_pipeline_status(db=db_session))["exploreIndexIsRebuilding"] is False
+    with vector_store.rebuild_underway():
+        assert (await admin_pipeline_status(db=db_session))["exploreIndexIsRebuilding"] is True
+
+
+@pytest.mark.asyncio
+async def test_status_reports_an_explore_run_so_deploys_wait_it_out(db_session):
+    # A triggered or startup Explore run has no run row: its lease is it.
+    from app.api.admin import admin_pipeline_status
+    from app.pipeline import lease
+
+    assert (await admin_pipeline_status(db=db_session))["exploreIsRunning"] is False
+    lease.acquire(db_session, lease.EXPLORE)
+    assert (await admin_pipeline_status(db=db_session))["exploreIsRunning"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", ["database is locked", "disk I/O error"])
+async def test_an_unreadable_explore_lease_holds_deploys_off(db_session, monkeypatch, error):
+    # Killing a live run mid-top-up is silent; a deferred poll is logged,
+    # and FORCE_DEPLOY overrides it.
+    import sqlite3
+
+    from sqlalchemy.exc import OperationalError
+
+    from app.api.admin import admin_pipeline_status
+    from app.pipeline import lease
+
+    real = lease.holder
+
+    def unreadable(db, tier):
+        if tier != lease.EXPLORE:
+            return real(db, tier)
+        raise OperationalError("SELECT", {}, sqlite3.OperationalError(error))
+
+    monkeypatch.setattr(lease, "holder", unreadable)
+    assert (await admin_pipeline_status(db=db_session))["exploreIsRunning"] is True
+
+
+@pytest.mark.asyncio
+async def test_check_and_deploy_waits_on_every_busy_flag_the_status_reports(db_session):
+    # electionIsRunning was once published and not read: a deploy killed an
+    # election run five minutes in. Every top-level boolean named for work
+    # in progress is one the deploy script must read.
+    import re
+    from pathlib import Path
+
+    from app.api.admin import admin_pipeline_status
+
+    status = await admin_pipeline_status(db=db_session)
+    flags = {k for k, v in status.items() if isinstance(v, bool) and re.search(r"[iI]s(Running|Rebuilding)$", k)}
+    script = (Path(__file__).resolve().parents[2] / "check-and-deploy.sh").read_text()
+    assert "isRunning" in flags and all(f'"{flag}"' in script for flag in flags), flags
+
+
 _FLAGS = [
     ("app.pipeline.house_pipeline", "is_house_pipeline_running", "houseIsRunning"),
     ("app.pipeline.stock_pipeline", "is_stock_pipeline_running", "stockTradesIsRunning"),

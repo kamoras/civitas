@@ -410,7 +410,9 @@ def _two_congress_setup(monkeypatch, tmp_path, *, rev120=None, live=None, sittin
     monkeypatch.setattr(dp, "_PVI_PATH", str(out))
     monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path))
     monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
+    monkeypatch.setattr(score_calculator, "_district_pvi_stamp", None)
     monkeypatch.setattr(dp, "_file_cache", None)
+    monkeypatch.setattr(dp, "_file_stamp", None)
     if sitting is not None:
         monkeypatch.setattr(dp, "_sitting_congress", lambda: sitting)
     revisions = {
@@ -747,6 +749,7 @@ class TestElectionReader:
     def test_an_unpinned_later_congress_drops_states_redrawn_for_it(self, monkeypatch):
         blocks = {"120": {"districts": {"TN-9": 9, "OH-1": 1}, "_revision": {}}}
         monkeypatch.setattr(dp, "_file_cache", {"congress": 120, "congresses": blocks})
+        monkeypatch.setattr(dp, "_file_stamp", None)
         monkeypatch.setattr(dp, "load_sources", lambda: {"congresses": {
             "120": {}, "121": {"redrawn_states": ["OH"]},
         }})
@@ -756,16 +759,19 @@ class TestElectionReader:
 
     def test_a_congress_older_than_every_pin_gets_no_district_table(self, monkeypatch):
         monkeypatch.setattr(dp, "_file_cache", {"congresses": {"119": {"districts": {"TN-9": -23}}}})
+        monkeypatch.setattr(dp, "_file_stamp", None)
         assert dp.district_pvi_for_congress(118) == ({}, None)
 
     def test_pre_pinning_file_serves_its_one_table(self, monkeypatch, tmp_path):
         monkeypatch.setattr(dp, "_file_cache", {"districts": {"TN-9": -23, "OH-1": 2}})
+        monkeypatch.setattr(dp, "_file_stamp", None)
         assert dp.district_pvi_for_congress(125) == ({"TN-9": -23, "OH-1": 2}, None)
 
     def test_configured_but_missing_table_drops_redrawn_states(self, monkeypatch, tmp_path):
         """Old-lines numbers for a redrawn state describe a different
         district; those seats fall back to the (labelled) state lean."""
         monkeypatch.setattr(dp, "_file_cache", {"districts": {"TN-9": -23, "OH-1": 2, "MO-5": -12}})
+        monkeypatch.setattr(dp, "_file_stamp", None)
         table, meta = dp.district_pvi_for_congress(120)
         assert meta is None
         assert "TN-9" not in table and "OH-1" not in table
@@ -837,6 +843,7 @@ class TestBundledTablesAreOnTheRightLines:
     def test_scoring_reads_the_bundled_top_level_table(self, bundled, monkeypatch, tmp_path):
         monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path / "none"))
         monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
+        monkeypatch.setattr(score_calculator, "_district_pvi_stamp", None)
         top = bundled["districts"]
         assert score_calculator._seat_pvi("TN", 9) == top["TN-9"]
         assert score_calculator._seat_pvi("TX", 35) == top["TX-35"]
@@ -1267,6 +1274,118 @@ class TestStoredScoresKeepTheirLines:
 
         await dp.run_house_on_sitting_lines(house)
         assert seen == {"congress": 120, "tn9": new["TN-9"]}
+
+
+class TestAnotherProcessRewritesTheLines:
+    """The pipeline process rewrites district_pvi.json (new pins, the
+    sitting-Congress switch); the API processes (settings.PROCESS_ROLE) never
+    hear of it except through the file's stamp (app/file_cache.py). Each
+    rewrite here is plain file I/O — no _write/_reset_caches, which only
+    reach the writer's own process."""
+
+    def _setup(self, monkeypatch, tmp_path, sitting):
+        out, base, new = _two_congress_setup(monkeypatch, tmp_path, sitting=sitting)
+        blocks = {
+            "119": {"_source": "s", "_lines": "old", "_window": "w", "districts": base},
+            "120": {"_source": "s", "_lines": "new", "_window": "w", "districts": new},
+        }
+        self._stamp = 1_000_000_000
+        self._rewrite(out, dp._payload(blocks, sitting))
+        return out, base, new
+
+    def _rewrite(self, out, payload):
+        """Another process's atomic rewrite: a new file renamed into place,
+        with a later mtime."""
+        import os
+
+        tmp = out.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload))
+        self._stamp += 1_000_000_000
+        os.utime(tmp, ns=(self._stamp, self._stamp))
+        os.replace(tmp, out)
+
+    def _switch(self, out, congress):
+        self._rewrite(out, dp._reselect(json.loads(out.read_text()), congress))
+
+    def test_member_scoring_picks_up_the_switch_as_a_seat_lines(self, monkeypatch, tmp_path):
+        out, base, new = self._setup(monkeypatch, tmp_path, 119)
+        assert dp.lines_congress() == 119
+        assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+        self._switch(out, 120)
+        assert score_calculator._seat_pvi("TN", 9) == new["TN-9"]
+        assert isinstance(score_calculator._district_pvi_cache, dp.SeatLines)
+        assert dp.lines_congress() == 120
+        # The reloaded SeatLines still steers a breakdown onto older lines.
+        with dp.lines_of(119) as congress:
+            assert congress == 119
+            assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+        assert score_calculator._seat_pvi("TN", 9) == new["TN-9"]
+
+    def test_new_pins_reach_lines_of(self, monkeypatch, tmp_path):
+        """A table pinned after this process first read the file is on hand
+        for a breakdown stored on it."""
+        out, base, new = self._setup(monkeypatch, tmp_path, 120)
+        data = json.loads(out.read_text())
+        del data["congresses"]["119"]
+        self._rewrite(out, data)
+        with dp.lines_of(119) as congress:
+            assert congress == 120  # not on file: the current lines
+        data["congresses"]["119"] = {"_source": "s", "_lines": "old", "_window": "w", "districts": base}
+        self._rewrite(out, data)
+        with dp.lines_of(119) as congress:
+            assert congress == 119
+            assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+
+    def test_a_lines_of_block_keeps_its_table_through_a_rewrite(self, monkeypatch, tmp_path):
+        """A breakdown on the current lines, the file switched mid-way: it
+        reads one table start to finish, and names that table's Congress."""
+        out, base, new = self._setup(monkeypatch, tmp_path, 120)
+        seen = []
+        with dp.lines_of(None) as congress:
+            seen.append(score_calculator._seat_pvi("TN", 9))
+            self._switch(out, 119)
+            seen.append(score_calculator._seat_pvi("TN", 9))
+            assert dp.lines_congress() == 120
+        assert congress == 120
+        assert seen == [new["TN-9"], new["TN-9"]]
+        assert dp.lines_congress() == 119
+        assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+
+    def test_current_lines_keeps_its_table_through_a_rewrite(self, monkeypatch, tmp_path):
+        out, base, _ = self._setup(monkeypatch, tmp_path, 119)
+        with dp.current_lines() as congress:
+            self._switch(out, 120)
+            assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+            assert dp.lines_congress() == congress == 119
+
+    async def test_a_house_run_scores_on_one_read_through_a_rewrite(self, monkeypatch, tmp_path):
+        """Another backend (an older image, mid-rollout) rewriting the file
+        during a House run: the run keeps scoring, and recording, the lines
+        it started on."""
+        out, _, new = self._setup(monkeypatch, tmp_path, 120)
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+        seen = []
+
+        async def house():
+            seen.append((dp.lines_congress(), score_calculator._seat_pvi("TN", 9)))
+            self._switch(out, 119)
+            seen.append((dp.lines_congress(), score_calculator._seat_pvi("TN", 9)))
+            return {"status": "completed"}
+
+        await dp.run_house_on_sitting_lines(house)
+        assert seen == [(120, new["TN-9"]), (120, new["TN-9"])]
+        assert dp.lines_congress() == 119
+
+    def test_the_elections_reader_picks_up_new_pins(self, monkeypatch, tmp_path):
+        out, base, new = self._setup(monkeypatch, tmp_path, 120)
+        data = json.loads(out.read_text())
+        only_119 = dict(data, congresses={"119": data["congresses"]["119"]})
+        self._rewrite(out, dp._reselect(only_119, 120, exact=False))
+        assert dp.district_pvi_for_congress(120)[1]["congress"] == 119
+        self._rewrite(out, data)
+        table, meta = dp.district_pvi_for_congress(120)
+        assert meta["congress"] == 120
+        assert table == new
 
 
 class TestTriggeredRunsCheckTheSittingLines:

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
-from app.database import get_db
+from app.database import get_db, off_loop
 from app.http_client import make_async_client
 from app.pipeline.fetch.congress import expected_current_congress
 from app.services.bill_record import fetch_bill_record, parse_bill_id, shape_record
@@ -90,7 +90,8 @@ async def get_bill_record(
         )
     if raw["not_found"]:
         raise HTTPException(status_code=404, detail="Bill not found")
-    shaped = shape_record(db, congress, bill_id, raw)
+    # Its roll-call queries off the event loop, on a session of their own.
+    shaped = await off_loop(db, lambda session: shape_record(session, congress, bill_id, raw))
     if raw["unavailable"]:
         # Partial: a browser or nginx must not keep it once the rest arrives.
         return JSONResponse(content=shaped, headers={"Cache-Control": "no-store"})

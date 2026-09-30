@@ -257,3 +257,93 @@ def test_candidate_regex_is_not_vulnerable_to_catastrophic_backtracking():
     elapsed = time.monotonic() - start
     assert result is None
     assert elapsed < 1.0, f"regex took {elapsed:.2f}s — catastrophic backtracking regressed"
+
+
+@pytest.mark.parametrize("status", [400, 404, 410])
+async def test_a_failure_that_would_repeat_is_remembered_not_refetched(db_session, monkeypatch, status):
+    """A 404 (or a PDF that parses to nothing) fails the same way on every
+    retry; the route's own failure response lasts seconds, so without this
+    each retry downloaded and parsed the whole PDF again."""
+    import httpx
+
+    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
+        "url": "https://example.com/ballot.pdf", "column_bounds": [[0, 1]],
+    })
+    fetched = []
+
+    def handler(request):
+        fetched.append(request.url)
+        return httpx.Response(status)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville") is None
+        assert await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville") is None
+    assert len(fetched) == 1
+
+
+@pytest.mark.parametrize("status", [429, 500, 503])
+async def test_a_moments_failure_is_not_remembered(db_session, monkeypatch, status):
+    import httpx
+
+    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
+        "url": "https://example.com/ballot.pdf", "column_bounds": [[0, 1]],
+    })
+    fetched = []
+
+    def handler(request):
+        fetched.append(request.url)
+        return httpx.Response(status)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
+    assert len(fetched) == 2
+
+
+async def test_a_refusal_is_not_remembered_as_gone(db_session, monkeypatch):
+    import httpx
+
+    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
+        "url": "https://example.com/ballot.pdf", "column_bounds": [[0, 1]],
+    })
+    fetched = []
+
+    def handler(request):
+        fetched.append(request.url)
+        return httpx.Response(403)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
+    assert len(fetched) == 2
+
+
+async def test_a_fetch_the_cache_cant_answer_is_charged_and_a_refusal_fetches_nothing(db_session, monkeypatch):
+    # The route passes rate_limit.spend_upstream, a coroutine function: a
+    # charge that isn't awaited charges nothing and refuses nothing.
+    import httpx
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
+        "url": f"https://example.com/{town}.pdf", "column_bounds": [[0, 1]],
+    })
+    fetched = []
+
+    def handler(request):
+        fetched.append(request.url)
+        return httpx.Response(404)
+
+    charged = []
+
+    async def spend(n):
+        charged.append(n)
+
+    async def refuse(n):
+        raise HTTPException(status_code=503, detail="budget spent")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville", spend=spend)
+        assert charged == [1] and len(fetched) == 1
+        with pytest.raises(HTTPException):
+            await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Cambridge", spend=refuse)
+    assert len(fetched) == 1

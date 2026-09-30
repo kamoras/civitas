@@ -48,10 +48,13 @@ export function UptimeTracker({
       </TerminalTitlebar>
       <div className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* App Uptime — large ticking counter */}
+          {/* Pipeline process uptime — large ticking counter. The admin API
+              is served by the pipeline process (nginx routes /api/admin/
+              there), so this is its start: the process whose restart ends a
+              running pipeline, not the API workers serving pages. */}
           <div className="sm:col-span-2">
             <div className="text-xs font-mono text-ink-lo tracking-wider mb-2">
-              APPLICATION UPTIME
+              PIPELINE PROCESS UPTIME
             </div>
             <div className="font-mono text-2xl sm:text-3xl text-signal-cyan tabular-nums tracking-wider">
               {appUptimeSec != null ? tickingUptime(appUptimeSec) : "—"}
@@ -227,6 +230,10 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
+          {/* The backend's containers together: the pipeline's own
+              interfaces plus the rate the API containers record
+              (net_stats.py) — a container sees only its own. The byte
+              totals below are the pipeline container's alone. */}
           <span className="text-ink-lo text-xs font-mono tracking-wider">NETWORK</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">
             {rx != null && tx != null ? formatRate(rx + tx) : "—"}
@@ -238,7 +245,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
         </div>
         <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
           {stats.netRxBytes != null
-            ? `↓${formatBytes(stats.netRxBytes)} ↑${formatBytes(stats.netTxBytes ?? 0)}`
+            ? `pipeline ↓${formatBytes(stats.netRxBytes)} ↑${formatBytes(stats.netTxBytes ?? 0)}`
             : ""}
         </div>
       </div>
@@ -337,7 +344,7 @@ export function SystemDashboard({
           />
           <LineChart
             title="NETWORK THROUGHPUT"
-            subtitle="bytes per second"
+            subtitle="bytes per second, API and pipeline together"
             xLabels={labels}
             series={[
               {

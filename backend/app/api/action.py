@@ -40,12 +40,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/action")
 
-# Kept in step with nginx/civitas.conf's proxy_cache_valid for the same
-# /api/action/issues location — the browser's own HTTP cache honors this
-# header independently of nginx's, so a mismatch between the two just
-# moves the staleness window rather than closing it (2026-08 incident: a
+# The one lifetime for /api/action/issues: nginx takes its cache lifetime
+# from this header, and so does the browser's own HTTP cache — which is why
+# it stays short, with no stale-while-revalidate (2026-08 incident: a
 # response cached before a deploy added a field crashed the whole Action
 # Center for any visitor whose BROWSER, not nginx, was still holding it).
+# nginx serves the two lists stale while it refreshes them on its own
+# (nginx/civitas.conf), which a browser never sees.
 _ACTION_ISSUES_CACHE_TTL_S = 30
 
 

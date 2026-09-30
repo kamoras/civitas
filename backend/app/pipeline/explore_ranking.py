@@ -31,7 +31,8 @@ import json
 import logging
 import pathlib
 import threading
-import time
+
+from app.shared_state import PolledRow, decode_json_dict
 
 logger = logging.getLogger(__name__)
 
@@ -40,45 +41,41 @@ _BUNDLED = pathlib.Path(__file__).resolve().parent.parent / "data" / "explore_ra
 _CACHE_NAMESPACE = "explore"
 _CACHE_KEY = "ranking_calibration"
 
-# How long a loaded calibration is reused before the database is consulted
-# again. Not a tuning value: the calibration changes at most once per
-# nightly pipeline run, and this only bounds how long a running process
-# keeps serving the previous one.
-_RELOAD_AFTER_SECONDS = 3600
-
 # The keys every consumer needs present for a calibration to be usable.
 _REQUIRED_KEYS = frozenset({
     "field_weights", "prior_weights", "candidate_pool",
     "source_diversity_cap", "fingerprint", "text_shape",
 })
 
+# How often a process checks whether the stored calibration was replaced.
+# The explore pipeline recalibrates in the pipeline process, and its
+# reset_cache() reaches only that process; Explore search runs in the API
+# processes (settings.PROCESS_ROLE), which notice the new row's timestamp
+# (shared_state.PolledRow).
+_CHECK_STORED_EVERY_SECONDS = 30
+
 _lock = threading.Lock()
-_cached: dict | None = None
-_cached_at: float = 0.0
+_bundled: dict | None = None
 
 
 class RankingCalibrationMissing(RuntimeError):
     """Neither the database nor the bundled file has a calibration."""
 
 
-def _load_from_db() -> dict | None:
-    try:
-        from app.database import SessionLocal
-        from app.pipeline.cache import api_cache_get
+def _stored(db=None):
+    """The stored calibration row: (written at, value), None, or UNREADABLE
+    (shared_state.read_row — read whatever its age: a calibration stands
+    until the explore pipeline replaces it)."""
+    from app.shared_state import read_row
 
-        db = SessionLocal()
-        try:
-            raw = api_cache_get(db, _CACHE_NAMESPACE, _CACHE_KEY)
-        finally:
-            db.close()
-        if isinstance(raw, dict):
-            return raw
-        if isinstance(raw, str):
-            return json.loads(raw)
-    except Exception:
-        logger.debug("No stored ranking calibration; using the bundled one",
-                     exc_info=True)
-    return None
+    return read_row(_CACHE_NAMESPACE, _CACHE_KEY, db)
+
+
+# Read through _stored at call time, so a test can stand in for the row.
+_calibration = PolledRow(
+    _CACHE_NAMESPACE, _CACHE_KEY, every_s=_CHECK_STORED_EVERY_SECONDS,
+    decode=decode_json_dict, reader=lambda db: _stored(db),
+)
 
 
 def _load_bundled() -> dict | None:
@@ -90,7 +87,7 @@ def _load_bundled() -> dict | None:
 
 def ranking(*, force_reload: bool = False) -> dict:
     """The calibration in force, database first, bundled file second."""
-    global _cached, _cached_at
+    global _bundled
 
     # A complete override stands alone — that is what lets the very first
     # calibration run on a corpus that has never been calibrated, with
@@ -98,24 +95,32 @@ def ranking(*, force_reload: bool = False) -> dict:
     if _override is not None and set(_override) >= _REQUIRED_KEYS:
         return _override
 
+    stored = _calibration.get(force=force_reload)
+    if stored is not None:
+        return _with_override(stored)
+    # No stored calibration (or none readable yet): the bundled one, read
+    # once per process — it changes only with a deploy.
     with _lock:
-        fresh = _cached is not None and (time.monotonic() - _cached_at) < _RELOAD_AFTER_SECONDS
-        if fresh and not force_reload:
-            # Merge here too, not only on a cache miss. Overriding one key
-            # against a warm cache used to be silently ignored, which would
-            # have made a weight sweep compare a trial value against itself
-            # and report the starting point as the fitted answer.
-            return {**_cached, **_override} if _override else _cached
+        bundled = _bundled
+    if bundled is None or force_reload:
+        bundled = _load_bundled()
+        with _lock:
+            _bundled = bundled
+    if not bundled:
+        raise RankingCalibrationMissing(
+            "No explore ranking calibration available. Run "
+            "backend/scripts/calibrate_explore_ranking.py --write, or run "
+            "the explore pipeline, which calibrates as its last step."
+        )
+    return _with_override(bundled)
 
-        loaded = _load_from_db() or _load_bundled()
-        if not loaded:
-            raise RankingCalibrationMissing(
-                "No explore ranking calibration available. Run "
-                "backend/scripts/calibrate_explore_ranking.py --write, or run "
-                "the explore pipeline, which calibrates as its last step."
-            )
-        _cached, _cached_at = loaded, time.monotonic()
-        return {**_cached, **_override} if _override else _cached
+
+def _with_override(calibration: dict) -> dict:
+    # Merged on every return, not only a cache miss. Overriding one key
+    # against a warm cache used to be silently ignored, which would have
+    # made a weight sweep compare a trial value against itself and report
+    # the starting point as the fitted answer.
+    return {**calibration, **_override} if _override else calibration
 
 
 _override: dict | None = None
@@ -146,9 +151,10 @@ def override(values: dict):
 
 def reset_cache() -> None:
     """Drop the in-process cache (used after a pipeline recalibration)."""
-    global _cached, _cached_at
+    global _bundled
+    _calibration.reset()
     with _lock:
-        _cached, _cached_at = None, 0.0
+        _bundled = None
 
 
 # ── typed accessors ──────────────────────────────────────────────
@@ -213,7 +219,22 @@ def calibrate_and_store(db) -> dict | None:
     calibration ranks worse than a fresh one, and far better than none.
     """
     from app.pipeline.calibrate_ranking import compute_calibration
+    from app.pipeline.vector_store import index_is_whole, is_busy_error
 
+    try:
+        whole = index_is_whole()
+    except Exception as error:
+        if is_busy_error(error):
+            logger.warning("Explore vector index busy — keeping the previous ranking calibration")
+        else:
+            logger.exception("Explore vector index unreadable — keeping the previous ranking calibration")
+        return None
+    if not whole:
+        # The semantic channel answers nothing while its index isn't a
+        # complete build: measured against it, the priors come out as if the
+        # channels agreed perfectly (freshness and authority 0).
+        logger.warning("Explore vector index not ready — keeping the previous ranking calibration")
+        return None
     try:
         payload = compute_calibration(db)
     except Exception:

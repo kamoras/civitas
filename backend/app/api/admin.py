@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 from datetime import datetime
 from collections.abc import Callable
 from typing import Annotated
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
-from app.database import get_db, get_visits_db
+from app.database import get_db, get_visits_db, off_loop
 from app.http_client import make_async_client
 from app.models import (
     ActionIssue,
@@ -249,35 +250,20 @@ def _read_system_stats() -> dict:
         stats["uptimeSeconds"] = None
 
     try:
-        rx_total = 0
-        tx_total = 0
-        for iface_dir in ("/host/net/eth0", "/host/net/docker-br"):
-            if not os.path.isdir(iface_dir):
-                continue
-            try:
-                with open(os.path.join(iface_dir, "rx_bytes")) as f:
-                    rx_total += int(f.read().strip())
-                with open(os.path.join(iface_dir, "tx_bytes")) as f:
-                    tx_total += int(f.read().strip())
-            except (OSError, ValueError):
-                pass
-        if rx_total == 0 and tx_total == 0:
-            with open("/proc/net/dev") as f:
-                for line in f:
-                    line = line.strip()
-                    if ":" not in line or line.startswith("Inter") or line.startswith("face"):
-                        continue
-                    iface, data = line.split(":", 1)
-                    if iface.strip() == "lo":
-                        continue
-                    cols = data.split()
-                    rx_total += int(cols[0])
-                    tx_total += int(cols[8])
-        stats["netRxBytes"] = rx_total
-        stats["netTxBytes"] = tx_total
+        # This container's counters (the pipeline's, under Swarm), and the
+        # rate the API containers recorded (net_stats: a container sees only
+        # its own interfaces). The dashboard adds the two rates.
+        from app.net_stats import api_rates, own_totals
+
+        stats["netRxBytes"], stats["netTxBytes"] = own_totals() or (None, None)
+        rates = api_rates()
+        stats["apiNetRxRate"] = rates["rxRate"] if rates else None
+        stats["apiNetTxRate"] = rates["txRate"] if rates else None
     except Exception:
-        stats["netRxBytes"] = 0
-        stats["netTxBytes"] = 0
+        # Unknown, never zero: the dashboard would read the next good
+        # counters as a lifetime of bytes in one interval.
+        stats["netRxBytes"] = stats["netTxBytes"] = None
+        stats["apiNetRxRate"] = stats["apiNetTxRate"] = None
 
     return stats
 
@@ -789,7 +775,9 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         }
 
     # --- Vector DB stats ---
-    vector_db_stats = _collect_vector_db_stats(db)
+    # Off the loop: full scans of the vector tables, in the pipeline process
+    # whose loop also streams Explore summaries.
+    vector_db_stats = await off_loop(db, _collect_vector_db_stats)
 
     # --- LLM stats ---
     try:
@@ -808,6 +796,9 @@ async def admin_dashboard(db: Session = Depends(get_db)):
     )
 
     uptime_info: dict = {
+        # This process's start. /api/admin/ is served by the pipeline
+        # process (nginx/civitas.conf), so it is that one's — which is what
+        # the pipeline timeline needs (a restart ends a running pipeline).
         "processStartedAt": PROCESS_STARTED_AT,
         "firstPipelineRun": first_run.isoformat() if first_run else None,
         "totalRestarts": total_runs,
@@ -842,6 +833,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
     from app.pipeline.election_pipeline import is_election_pipeline_running
+    from app.pipeline.vector_store import is_rebuilding as is_explore_index_rebuilding
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
@@ -913,6 +905,14 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         # out like a pipeline run, since killing it mid-wipe leaves the
         # indexes describing rows that are gone.
         "dataResetIsRunning": _data_reset_running(db),
+        # A rebuild of the Explore vector index (at start, in an Explore
+        # run, or an admin re-embed): twenty-odd minutes that a restart
+        # would throw away, with semantic search off until the next one.
+        "exploreIndexIsRebuilding": is_explore_index_rebuilding(),
+        # An Explore run in any process (its lease): a triggered or startup
+        # run has no run row, and its top-up can take twenty-odd minutes a
+        # restart would throw away mid-batch.
+        "exploreIsRunning": _explore_running(db),
     }
 
     if last_supplementary_run:
@@ -1384,7 +1384,7 @@ async def admin_trigger_pipeline(
     }
 
 
-@router.post("/pipeline/reembed-explore", dependencies=[Depends(require_admin)])
+@router.post("/pipeline/reembed-explore", dependencies=[Depends(require_admin)], status_code=202)
 async def admin_reembed_explore(db: Session = Depends(get_db)):
     """Rebuild every search structure over the explore corpus.
 
@@ -1394,57 +1394,120 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     derived from `explore_documents`, so all three are rebuilt together —
     rebuilding only the embeddings is how the vector index and the keyword
     index end up disagreeing about what exists.
+
+    Started in the background and answered at once: re-embedding the corpus
+    takes over twenty minutes on the Pi, far past any request's timeout, and
+    work tied to a request that is dropped partway would leave its lease
+    let go under writes still running. Its progress is in the logs, and the
+    admin data dashboard shows the index rebuilding.
     """
-    from app.models import ExploreDocument
-    from app.background import writing
+    from app.background import start_writer
+    from app.database import SessionLocal
+    from app.pipeline import lease
     from app.pipeline.analyze.document_authority import update_document_authority
     from app.pipeline.lexical_index import rebuild_index
+    from app.ops_alerts import resolve_ops_alert
+    import time
+
     from app.pipeline.vector_store import (
-        _write_model_version,
-        clear_explore,
-        embed_explore_documents,
+        RebuildFailed,
+        alert_rebuild_failed,
+        rebuild_explore_index,
+        rebuild_underway,
+        recalibrate_ranking,
     )
 
-    from app.pipeline import lease
+    # One at a time: a second, while the first is queued or running, would
+    # only be refused its lease in the background after a 202. A rebuild of
+    # another kind running is no reason to refuse: the job waits its turn.
+    # (Released by the job, or here on the way out: a Lock may be released
+    # from another thread.)
+    if not _reembed_slot.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Explore re-embed not started: one is already under way")
 
-    # Registered for the admin data reset: the awaits below free the loop
-    # while threads write the explore tables. And a lease, so a reset or an
-    # explore ingest in another process sees it too.
-    with writing("Explore re-embed"):
-        async with lease.job_async(lease.EXPLORE) as held:
+    def why_not(session: Session) -> str | None:
+        # Checked here so a refusal is answered, not only logged by the job
+        # (which checks again, taking the lease, should one start between).
+        if lease.held(session, lease.DATA_RESET):
+            return lease.refusal_text(lease.REFUSED_BY_RESET)
+        who = lease.holder(session, lease.EXPLORE)
+        return lease.refusal_text(lease.REFUSED_HELD, lease.EXPLORE, who) if who is not None else None
+
+    try:
+        refused = await off_loop(db, why_not)
+    except BaseException:
+        _reembed_slot.release()
+        raise
+    if refused is not None:
+        _reembed_slot.release()
+        raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {refused}")
+
+    asked = time.monotonic()
+
+    def _reembed() -> None:
+        # A lease, so a reset or an explore ingest in another process sees
+        # it too; start_writer registers it for this process's data reset.
+        # Underway as a rebuild once it holds the lease (not while it asks:
+        # refused, it rebuilds nothing, and a start mustn't have left an
+        # incomplete index to it), keyword and authority passes included:
+        # check-and-deploy waits it out. The lease is taken before waiting
+        # out a start's rebuild, not after: that rebuild's own refit asks
+        # for it the moment the rebuild ends, and would win it from an
+        # accepted re-embed that then does nothing.
+        with lease.job(lease.EXPLORE, who="Explore re-embed") as held:
             if not held:
-                raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {held.why}")
+                return  # logged as a skip by lease.job
+            with rebuild_underway():
+                _reembed_held()
+
+    def _reembed_held() -> None:
+        try:
+            # Waiting out a top-up, or a rebuild begun since it was asked
+            # for — which did this work already (None), so it isn't redone.
+            count = rebuild_explore_index(SessionLocal, wait=True, unless_rebuilt_since=asked)
+        except Exception as error:
+            if isinstance(error, RebuildFailed):  # the index is gone
+                logger.exception("Explore re-embed failed — search's vector index is not ready until a "
+                                 "rebuild completes (the next Explore run or start retries it)")
+                alert_rebuild_failed("admin re-embed", error)
+            else:  # before the swap: the index is as it was
+                logger.exception("Explore re-embed not done — the index is unchanged")
+            return
+        resolve_ops_alert("explore-index-rebuild")  # whole again
+        try:
+            # Not _write_model_version: that records the classification
+            # model's vectors as current, which this doesn't touch.
+            db = SessionLocal()
             try:
-                clear_explore()
-            except Exception:
-                logger.warning("Explore re-embed: clearing the old vectors failed", exc_info=True)
+                indexed = rebuild_index(db)
+                authority = update_document_authority(db)
+            finally:
+                db.close()
+            # Last, as in an Explore run: it measures the finished indexes.
+            recalibrate_ranking(SessionLocal)
+            logger.info("Explore re-embed complete: %s embedded, %d keyword-indexed, authority %s",
+                        "none newly" if count is None else count, indexed, authority)
+        except Exception:
+            logger.exception("Explore re-embed: the vector index is rebuilt, but a later pass failed "
+                             "(the next Explore run redoes them)")
 
-            all_docs = db.query(ExploreDocument).all()
-            doc_dicts = [
-                {
-                    "id": d.id,
-                    "title": d.title,
-                    "summary": d.summary,
-                    "body": d.body,
-                    "doc_type": d.doc_type,
-                    "source": d.source,
-                    "date": d.date,
-                    "politician_name": d.politician_name,
-                    "politician_id": d.politician_id,
-                    "chamber": d.chamber,
-                }
-                for d in all_docs
-            ]
+    def _job() -> None:
+        try:
+            _reembed()
+        finally:
+            _reembed_slot.release()
 
-            def _run():
-                count = embed_explore_documents(doc_dicts)
-                _write_model_version()
-                return count
+    try:
+        start_writer(_job, name="explore-reembed")
+    except BaseException:
+        _reembed_slot.release()
+        raise
+    return {"started": True}
 
-            count = await asyncio.to_thread(_run)
-            indexed = await asyncio.to_thread(rebuild_index, db)
-            authority = await asyncio.to_thread(update_document_authority, db)
-    return {"embedded": count, "keywordIndexed": indexed, "authority": authority}
+
+# Held while an admin re-embed is queued or running (the pipeline process is
+# one process).
+_reembed_slot = threading.Lock()
 
 
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])
@@ -1608,6 +1671,20 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running, "Election")
 
 
+def _explore_running(db: Session) -> bool:
+    """Whether an Explore run (or anything else holding its lease) is live.
+    Unreadable counts as running: a deploy waits a poll rather than kill
+    one mid-top-up, which is silent. A read that fails every time is not —
+    each deferred poll logs why — and FORCE_DEPLOY=1 overrides it."""
+    from app.pipeline import lease
+
+    try:
+        return lease.holder(db, lease.EXPLORE) is not None
+    except Exception:
+        logger.warning("Explore lease unreadable — reported as running", exc_info=True)
+        return True
+
+
 def _data_reset_running(db: Session) -> bool:
     from app.pipeline import lease
 
@@ -1671,6 +1748,12 @@ async def admin_reset_data():
         summary = await asyncio.to_thread(_reset_holding_every_writer)
     except WritersBusy as busy:
         raise HTTPException(status_code=409, detail=f"Cannot reset while running: {busy}") from None
+    # Every API process holds a bills collection built from what was just
+    # wiped: tell them (bill_service records the change for other processes).
+    # A database write in the pipeline process: off the event loop.
+    from app.services.bill_service import warm_bill_collection_cache
+
+    await asyncio.to_thread(warm_bill_collection_cache)
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

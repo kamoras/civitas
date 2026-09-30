@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -28,7 +28,12 @@ from app.pipeline import lease
 
 logger = logging.getLogger(__name__)
 
-scheduler = AsyncIOScheduler()
+# A job whose moment passes while the event loop is busy still runs (up to
+# five minutes late, once however many moments it missed) instead of being
+# skipped: APScheduler's default grace is one second, and a skipped
+# heartbeat reads as a dead pipeline service, a skipped nightly as a lost
+# day of data.
+scheduler = AsyncIOScheduler(job_defaults={"misfire_grace_time": 300, "coalesce": True})
 
 
 def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
@@ -670,6 +675,19 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Not through _start_job: a timestamp write isn't a data writer, and
+    # registering one would make an admin data reset refuse while it runs
+    # (and skip it for the length of a reset). APScheduler runs a plain
+    # function on a worker thread; the first beat goes out at once.
+
+    scheduler.add_job(
+        _heartbeat,
+        CronTrigger(minute=f"*/{_HEARTBEAT_MINUTES}"),
+        id="scheduler_heartbeat",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
     scheduler.start()
     logger.info(
         "Scheduler started with cron: %s (+ hourly action refresh at :15, bill status refresh at :45)",
@@ -684,9 +702,70 @@ def stop_scheduler() -> None:
         logger.info("Scheduler stopped")
 
 
-def get_next_run_time() -> str | None:
-    """Return the next scheduled run time as an ISO string, or None."""
+# Where the scheduler's process records its next nightly run, for a process
+# that doesn't run the scheduler (the read-only API, PROCESS_ROLE=api) to
+# report: rewritten every _HEARTBEAT_MINUTES, and reported only while fresh,
+# so a pipeline service that is down stops advertising a run that won't
+# happen. A file on the data volume both services mount, not a database
+# row: a beat must not depend on the database's write lock, which a long
+# pipeline transaction can hold past the busy timeout — a heartbeat that
+# can't be written reads as a service that is gone (the liveness alert,
+# ops_alerts.check_pipeline_service_alive).
+_HEARTBEAT_MINUTES = 5
+_HEARTBEAT_STALE = timedelta(minutes=3 * _HEARTBEAT_MINUTES)
+
+
+def heartbeat_path() -> str:
+    from app.shared_state import record_path
+
+    return record_path("scheduler_heartbeat.json")
+
+
+def read_heartbeat():
+    """(when the scheduler last beat, what it recorded), None when it never
+    has, or shared_state.UNREADABLE (shared_state.read_record)."""
+    from app.shared_state import read_record
+
+    return read_record(heartbeat_path())
+
+
+def _live_next_run() -> str | None:
     job = scheduler.get_job("pipeline_run")
-    if job and job.next_run_time:
-        return job.next_run_time.isoformat()
-    return None
+    if job is None or job.next_run_time is None:
+        return None  # not scheduled, or paused
+    # The trigger's next fire from now, not next_run_time alone: the
+    # scheduler advances that only after submitting the run, so a beat
+    # landing in the same moment as the run (both fire on the hour) would
+    # record the time that has just passed — and the API process would
+    # report it until the next beat.
+    upcoming = job.trigger.get_next_fire_time(None, datetime.now(job.next_run_time.tzinfo))
+    return max(job.next_run_time, upcoming).isoformat() if upcoming else job.next_run_time.isoformat()
+
+
+def _record_next_run() -> None:
+    from app.shared_state import write_record
+
+    write_record(heartbeat_path(), {"nextRun": _live_next_run()})
+
+
+def _heartbeat() -> None:
+    try:
+        _record_next_run()
+    except Exception:
+        logger.warning("Scheduler heartbeat not recorded", exc_info=True)
+
+
+def get_next_run_time() -> str | None:
+    """Return the next scheduled run time as an ISO string, or None.
+
+    Read off the live job where this process runs the scheduler; elsewhere
+    (the read-only API process) from the heartbeat the scheduler's process
+    keeps, and None once that goes stale — the pipeline service is down.
+    """
+    if scheduler.running:
+        return _live_next_run()
+    row = read_heartbeat()
+    if not isinstance(row, tuple) or row[0] < utcnow() - _HEARTBEAT_STALE:
+        return None
+    value = row[1]
+    return value.get("nextRun") if isinstance(value, dict) else None

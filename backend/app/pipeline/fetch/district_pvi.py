@@ -73,6 +73,7 @@ from contextvars import ContextVar
 from datetime import date
 
 from app.atomic_write import write_text_atomic
+from app.file_cache import new_reload_lock, reload_if_moved
 from app.ordinals import ordinal
 from app.pipeline.fetch.house_clerk import fetch_house_apportionment
 from app.http_client import make_async_client
@@ -620,16 +621,19 @@ def _write(path: pathlib.Path, payload: dict) -> None:
 
 
 def _reset_caches() -> None:
-    """Drop this module's cached file, and give member scoring a fresh read
-    of it — installed as a SeatLines in ONE assignment, never None. None
-    would let score_calculator's own loader fill the gap with a plain dict,
-    which a lines_of() block already running in another thread (the API's
-    breakdown, beside a House run's reset) would then read: its override
-    lives only in SeatLines, so it would silently get the sitting lines."""
-    global _file_cache
-    _file_cache = None
+    """Give this process a fresh read of the file now: member scoring's
+    SeatLines (score_calculator._reload_district_pvi, under that cache's
+    lock) and the elections' copy. Other processes — the API's, beside the
+    pipeline's — notice the rewrite by the file's stamp on their next read
+    (_district_pvi, _pvi_file); this only spares the writer's own process
+    waiting on a stat, and lets a House run pin what the file holds as it
+    starts. A lines_of()/current_lines() block already open in any thread
+    keeps the table it pinned."""
+    global _file_cache, _file_stamp
+    with _file_lock:
+        _file_cache, _file_stamp = None, None
     from app.pipeline.analyze import score_calculator
-    score_calculator._district_pvi_cache = _load_scoring_lines()
+    score_calculator._reload_district_pvi()
 
 
 # ── Which Congress's lines a stored House score is on ──────────────────
@@ -654,12 +658,15 @@ def _reset_caches() -> None:
 # after a failed run, or departed) the breakdown can still differ from the
 # stored score. That drift predates the per-Congress lines.
 
-_OTHER_LINES: ContextVar[dict[str, int] | None] = ContextVar("district_pvi_other_lines", default=None)
+# (table, its Congress) pinned by lines_of()/current_lines() in this context.
+_OTHER_LINES: ContextVar[tuple[dict[str, int], int | None] | None] = ContextVar(
+    "district_pvi_other_lines", default=None,
+)
 
 
 class SeatLines(dict):
-    """score_calculator's district table (its _district_pvi_cache) as this
-    module installs it (_scoring_lines): the file's top-level table, plus
+    """score_calculator's district table (its _district_pvi_cache) as its
+    loader builds it (seat_lines): the file's top-level table, plus
     `congress` — the Congress whose pinned table it is, None for a
     pre-pinning file — and every pinned table (`tables`), all from one read
     of the file. So the Congress a House run records for a score is the
@@ -667,22 +674,26 @@ class SeatLines(dict):
 
     A plain dict to every reader except inside lines_of() or
     current_lines(), which, in that call's context only (a ContextVar: other threads and tasks — a House
-    run scoring beside an API request — never see it), answers for another
-    Congress's table (or, for current_lines, one read of this one).
+    run scoring beside an API request — never see it), answers from the
+    table the block pinned as it opened: another Congress's, or one read of
+    this one. Whichever SeatLines is score_calculator's cache by then (the
+    file may be re-read meanwhile, in this process or on its stamp moving)
+    answers the same.
     score_calculator reads it through .get; the other lookups by key ([]
     and `in`) are covered too; nothing that runs inside either block
     iterates the table.
 
     It works only while it IS score_calculator's cache — a plain dict put
-    there instead ignores the override — so nothing outside tests ever
-    sets that cache to None or a plain dict once this module has
-    installed one (see _reset_caches, _scoring_lines)."""
+    there instead ignores the override — so score_calculator's loader
+    builds one (seat_lines) on every read of the file, and only tests set
+    that cache to a plain dict."""
 
     congress: int | None = None
     tables: dict = {}
 
     def _table(self) -> dict | None:
-        return _OTHER_LINES.get()
+        pinned = _OTHER_LINES.get()
+        return pinned[0] if pinned is not None else None
 
     def get(self, key, default=None):
         other = self._table()
@@ -697,11 +708,9 @@ class SeatLines(dict):
         return key in other if other is not None else super().__contains__(key)
 
 
-def _load_scoring_lines() -> SeatLines:
-    """One read of the file, as the SeatLines member scoring reads."""
-    from app.pipeline.analyze import score_calculator as sc
-
-    raw = sc._read_pvi_json("district_pvi.json")
+def seat_lines(raw: dict) -> SeatLines:
+    """One read of the file (its parsed JSON), as the SeatLines member
+    scoring reads — score_calculator._district_pvi's loader."""
     lines = SeatLines({k: int(v) for k, v in (raw.get("districts") or {}).items()})
     if raw.get("congresses") and isinstance(raw.get("congress"), int):
         lines.congress = raw["congress"]
@@ -712,29 +721,27 @@ def _load_scoring_lines() -> SeatLines:
 
 
 def _scoring_lines() -> SeatLines:
-    """The district table member scoring reads, installed as a SeatLines
-    (see there) when score_calculator's cache is empty or a plain dict.
-
-    Every assignment of score_calculator._district_pvi_cache outside tests
-    is this one or _reset_caches's, both SeatLines. score_calculator's own
-    loader installs a plain dict only while the cache is None — at process
-    start, before anything here has run; main's lifespan installs one
-    (it calls lines_congress()) before serving a request, so a lines_of()
-    block never meets that window."""
+    """The district table member scoring reads: score_calculator's cache,
+    re-read when the file's stamp has moved (another process rewrote it).
+    A plain dict there (only a test puts one) is replaced by a read of the
+    file."""
     from app.pipeline.analyze import score_calculator as sc
 
-    cache = sc._district_pvi_cache
-    if isinstance(cache, SeatLines):
-        return cache
-    lines = _load_scoring_lines()
-    sc._district_pvi_cache = lines
-    return lines
+    lines = sc._district_pvi()
+    if isinstance(lines, SeatLines):
+        return lines
+    return sc._reload_district_pvi()
 
 
 def lines_congress() -> int | None:
     """The Congress whose district lines member scoring reads now — what a
-    House run records beside each score it stores (upsert_representative).
-    None for a pre-pinning file, whose one table is of unknown lines."""
+    House run records beside each score it stores (upsert_representative):
+    inside a lines_of()/current_lines() block, the Congress of the table the
+    block pinned; otherwise the file's as last read. None for a pre-pinning
+    file, whose one table is of unknown lines."""
+    pinned = _OTHER_LINES.get()
+    if pinned is not None:
+        return pinned[1]
     return _scoring_lines().congress
 
 
@@ -745,21 +752,25 @@ def lines_of(congress: int | None) -> Iterator[int | None]:
     a stored score (the API's breakdown) on the lines it was computed on.
     Yields the Congress whose lines are in effect. A score with no recorded
     Congress (stored before it was recorded), or one whose table is no
-    longer on file, is read on the current lines, as it always was."""
+    longer on file, is read on the current lines, as it always was — the
+    table as the block opened, like current_lines, so a rewrite of the file
+    meanwhile can't change lines under the computation."""
     lines = _scoring_lines()
-    table = None
+    pinned = None
     if congress is not None and lines.congress is not None and congress != lines.congress:
         block = (lines.tables or {}).get(str(congress))
         if block and block.get("districts"):
-            table = {k: int(v) for k, v in block["districts"].items()}
+            pinned = ({k: int(v) for k, v in block["districts"].items()}, congress)
         else:
             logger.info(
                 "district-pvi: no %s-Congress table on file for a score stored on its lines — "
                 "reading the current lines", ordinal(congress),
             )
-    token = _OTHER_LINES.set(table)
+    if pinned is None:
+        pinned = (dict(lines), lines.congress)
+    token = _OTHER_LINES.set(pinned)
     try:
-        yield congress if table is not None else lines.congress
+        yield pinned[1]
     finally:
         _OTHER_LINES.reset(token)
 
@@ -774,11 +785,14 @@ def current_lines() -> Iterator[int | None]:
     rescored representative in the same commit as the score). Reading the
     Congress separately afterwards could name lines another process wrote
     in between — a Swarm start-first rollout runs two backends on one
-    volume."""
-    lines = _scoring_lines()
-    token = _OTHER_LINES.set(dict(lines))
+    volume. Inside another such block, keeps that block's table."""
+    pinned = _OTHER_LINES.get()
+    if pinned is None:
+        lines = _scoring_lines()
+        pinned = (dict(lines), lines.congress)
+    token = _OTHER_LINES.set(pinned)
     try:
-        yield lines.congress
+        yield pinned[1]
     finally:
         _OTHER_LINES.reset(token)
 
@@ -1099,19 +1113,19 @@ async def _house_run_holding_the_lines(run_house) -> dict:
         logger.info("district-pvi before the House run: %s", outcome)
     except Exception:
         logger.exception("district-pvi: sitting-lines check before the House run failed; running on the file as it is")
-    # Re-read the file now, under the lease: the run scores on it, and
-    # records its Congress beside each score (lines_congress). Another
-    # process may have switched the lines since this one last read them.
+    # Re-read the file now, under the lease, and hold that read for the
+    # whole run (current_lines): the run scores on it, and records its
+    # Congress beside each score (lines_congress). Another process may have
+    # switched the lines since this one last read them — and one on an
+    # older image, mid-rollout, could rewrite them during the run, which
+    # this process's stamp check would otherwise pick up part-way through.
     _reset_caches()
-    try:
-        congress = lines_congress()
+    with current_lines() as congress:
         logger.info(
             "House run scoring on %s", f"the {ordinal(congress)} Congress's district lines"
             if congress else "a pre-pinning district table (lines unknown)",
         )
-    except Exception:
-        logger.exception("district-pvi: reading the lines before the House run failed")
-    return await run_house()
+        return await run_house()
 
 
 def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources: dict) -> str:
@@ -1180,14 +1194,23 @@ def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources:
 # ── Readers for surfaces that are not member scoring ───────────────────
 
 _file_cache: dict | None = None
+# The file's stamp when _file_cache was read: the elections API reads it in
+# the API process, and the pipeline process rewrites it (new pins, the
+# sitting-Congress switch) — see app/file_cache.py.
+_file_stamp = None
+_file_lock = new_reload_lock()
 
 
 def _pvi_file() -> dict:
-    global _file_cache
-    if _file_cache is None:
-        from app.pipeline.analyze.score_calculator import _read_pvi_json
-        _file_cache = _read_pvi_json("district_pvi.json")
-    return _file_cache
+    global _file_cache, _file_stamp
+    from app.pipeline.analyze import score_calculator as sc
+
+    with _file_lock:
+        _file_cache, _file_stamp = reload_if_moved(
+            [pathlib.Path(sc._PVI_PERSISTENT_DIR) / "district_pvi.json"], _file_cache, _file_stamp,
+            lambda: sc._read_pvi_json("district_pvi.json", report_unreadable=True),
+        )
+        return _file_cache
 
 
 def district_pvi_for_congress(congress: int) -> tuple[dict[str, int], dict | None]:

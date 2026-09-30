@@ -319,6 +319,30 @@ class TestCheckPipelineStaleness:
         assert _labels(_check_stale(db_session)) == {"Supplementary pipeline is stale"}
 
 
+def test_an_unreadable_database_does_not_stop_an_alert(monkeypatch):
+    from app import ops_alerts
+
+    def no_database():
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(ops_alerts, "SessionLocal", no_database)
+    monkeypatch.setattr(ops_alerts.settings, "ALERT_NTFY_URL", "https://ntfy.invalid/x")
+    sent = []
+    monkeypatch.setattr(ops_alerts, "_send_ntfy", lambda subject, body: sent.append(subject))
+    monkeypatch.setattr(ops_alerts, "_sent_unrecorded", {})
+    assert ops_alerts.send_ops_alert("down", "b", dedupe_key="k")
+    assert sent == ["down"]
+    # The next tick, database still down: not sent again from this process.
+    assert not ops_alerts.send_ops_alert("down", "b", dedupe_key="k")
+    assert sent == ["down"]
+    # Resolved, the condition may alert again when it recurs.
+    assert ops_alerts.send_ops_alert("down", "b", dedupe_key="c-k", condition="c")
+    assert not ops_alerts.send_ops_alert("down", "b", dedupe_key="c-k", condition="c")
+    ops_alerts.resolve_ops_alert("c")
+    assert ops_alerts.send_ops_alert("down again", "b", dedupe_key="c-k", condition="c")
+    assert sent == ["down", "down", "down again"]
+
+
 class TestOpenAndResolved:
     """An alert about a condition stays open until the code that detects
     it sees it gone (2026-09-29: the dashboard listed ten newest alerts
@@ -410,6 +434,33 @@ class TestOpenAndResolved:
             subjects = [a["subject"] for a in self._alerts(db_session)]
         # The newest three, plus the open one the cap would have dropped.
         assert subjects == ["Open", "event 4", "event 3", "event 2"]
+
+    def test_pruning_keeps_a_superseded_alerts_key_while_its_condition_is_open(self, db_session):
+        # Freed, the key would let the swing back to it send it again.
+        from app import ops_alerts
+
+        with patch.object(ops_alerts, "_HISTORY_KEEP", 2):
+            assert self._send(db_session, "States A failing", dedupe_key="a", condition="states")
+            assert self._send(db_session, "States B failing", dedupe_key="b", condition="states")
+            for i in range(4):
+                self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
+            assert not self._send(db_session, "States A failing", dedupe_key="a", condition="states")
+
+    def test_pruning_keeps_only_so_many_superseded_alerts(self, db_session):
+        # A condition open for weeks under a dated key would otherwise keep
+        # a row a day for good: the newest are kept, the oldest go.
+        from app import ops_alerts
+        from app.models import ApiCache
+
+        with patch.object(ops_alerts, "_HISTORY_KEEP", 2), patch.object(ops_alerts, "_SUPERSEDED_KEPT", 2):
+            self._send(db_session, "States A failing", dedupe_key="states-a", condition="states")
+            self._send(db_session, "States B failing", dedupe_key="states-b", condition="states")
+            for day in range(1, 7):
+                self._send(db_session, "Rebuild failed", dedupe_key=f"rebuild-day{day}", condition="rebuild")
+        keys = {r.cache_key for r in db_session.query(ApiCache).filter(ApiCache.tier == ops_alerts._HISTORY_TIER)}
+        # Each open condition keeps its own newest: one noisy condition
+        # doesn't crowd out another's.
+        assert keys == {f"dedupe-rebuild-day{d}" for d in (3, 4, 5, 6)} | {"dedupe-states-a", "dedupe-states-b"}
 
     def test_the_overrun_watchdog_resolves_once_the_run_is_over(self, db_session):
         self._send(db_session, "House pipeline overrun", condition="overrun-house")

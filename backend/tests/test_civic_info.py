@@ -210,8 +210,11 @@ async def test_a_lookup_the_cache_cant_answer_is_charged_to_the_public_budget(mo
     charged: list[int] = []
     client = _OneShotClient()
 
-    await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=charged.append)
-    await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=charged.append)
+    async def spend(n):  # async, as rate_limit.spend_upstream is
+        charged.append(n)
+
+    await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=spend)
+    await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=spend)
 
     assert client.calls == 1
     assert charged == [1]
@@ -222,7 +225,7 @@ async def test_a_refused_charge_makes_no_request(monkeypatch, db_session):
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
     client = _OneShotClient()
 
-    def refuse(_calls):
+    async def refuse(_calls):
         raise HTTPException(status_code=503, detail="budget spent")
 
     with pytest.raises(HTTPException):
