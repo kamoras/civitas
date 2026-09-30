@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { DayReport } from "@/types/congress";
 import {
+  chamberTile,
   formatStanding,
+  parseCongressDate,
   parseIssueId,
   parsePoliticianId,
   parseStateCode,
@@ -121,5 +124,34 @@ describe("scoreFooterLabel", () => {
     expect(scoreFooterLabel("scotus")).toBe("CIVITAS SCORE");
     expect(scoreFooterLabel("president")).toBe("CIVITAS SCORE");
     expect(scoreFooterLabel(undefined)).toBe("CIVITAS SCORE");
+  });
+});
+
+describe("parseCongressDate", () => {
+  it("accepts an ISO date and nothing else", () => {
+    expect(parseCongressDate("2026-09-29")).toBe("2026-09-29");
+    expect(parseCongressDate("2026-9-29")).toBeNull();
+    expect(parseCongressDate("../admin")).toBeNull();
+    expect(parseCongressDate(null)).toBeNull();
+  });
+});
+
+describe("chamberTile", () => {
+  const day = (status: string, recordVotes: number) =>
+    ({ status, counts: { recordVotes } }) as unknown as DayReport["chambers"]["senate"];
+  const report = (senate: DayReport["chambers"]["senate"], house: DayReport["chambers"]["house"]) =>
+    ({ chambers: { senate, house } }) as DayReport;
+
+  it("shows a chamber's record votes when the day was recorded", () => {
+    const r = report(day("final", 2), day("live", 0));
+    expect(chamberTile(r, "senate")).toEqual({ value: "2", label: "SENATE RECORD VOTES" });
+    expect(chamberTile(r, "house")).toEqual({ value: "0", label: "HOUSE RECORD VOTES" });
+  });
+
+  // A day without a record must never read as "0 record votes".
+  it("says why there is no count instead of showing zero", () => {
+    const r = report(day("not_in_session", 0), day("no_record", 0));
+    expect(chamberTile(r, "senate")).toEqual({ value: "—", label: "SENATE: NOT IN SESSION" });
+    expect(chamberTile(r, "house")).toEqual({ value: "—", label: "HOUSE: NO RECORD YET" });
   });
 });
