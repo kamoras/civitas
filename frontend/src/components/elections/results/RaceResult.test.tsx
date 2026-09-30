@@ -233,6 +233,32 @@ describe("a flip announced earlier that the latest count doesn't show", () => {
       "a change of party was announced earlier (leader's party not given in the latest count)."
     );
     expect(document.body).not.toHaveTextContent(/another party|NOT IN THIS COUNT/);
+    // Its party slot says the same, never "OTHER" beside that wording.
+    expect(document.body).toHaveTextContent("PARTY NOT GIVEN");
+    expect(document.body).not.toHaveTextContent(/\bOTHER\b/i);
+  });
+
+  it("says a House row's leader, or a tied candidate, with no party given as that", () => {
+    const pen = { name: "Indy Pen", party: null, votes: 1000, pct: 52.6, candidateId: null };
+    render(
+      <HouseResultRow
+        result={race({
+          leaderParty: null,
+          candidates: [pen, { ...pen, name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4 }],
+        })}
+      />
+    );
+    expect(document.body).toHaveTextContent("Indy Pen (party not given) 52.6%");
+    cleanup();
+    render(
+      <HouseResultRow
+        result={race({ leaderParty: null, candidates: [pen, { ...pen, name: "Dana Smith" }] })}
+      />
+    );
+    expect(document.body).toHaveTextContent(
+      "Indy Pen (party not given) 52.6% · Dana Smith (party not given) 52.6%"
+    );
+    expect(document.body).not.toHaveTextContent(/\(other\)/);
   });
 });
 

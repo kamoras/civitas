@@ -379,6 +379,11 @@ links to its election office, never as a state where nothing has happened.
   counted says why wherever a reader follows it. Such races are not among the national
   "seats changing party" count, which names such races separately
   (`flipShown` / `flipNotShownText` in `frontend/src/lib/results.ts`).
+  A candidate the feed gives no party for is labelled "party not given"
+  everywhere a party letter would stand (`partyTag`), never "other", and
+  is counted apart from real minor parties in the seats-led tally
+  (`NO_PARTY_KEY`: "D 0 · R 0 · I 1 · party not given 2"); the maps'
+  purple means "other or unstated party leads".
 - A House seat in a state whose congressional map was redrawn for the cycle
   (`app/data/redrawn_congressional_maps.json`: AL, CA, FL, LA, NC, OH, TN,
   TX, UT for 2026) has no known holder going in (`seat_holder_party` returns

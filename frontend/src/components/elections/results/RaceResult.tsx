@@ -7,6 +7,8 @@ import {
   isTied,
   partyBarColor,
   partyLetter,
+  partyTag,
+  PARTY_NOT_GIVEN,
   partyTextClass,
   raceLabel,
   reportingShare,
@@ -118,7 +120,7 @@ export function RaceResultCard({
                 {c.name}
               </span>
               <span className={`font-mono text-xs tracking-[0.1em] ${partyTextClass(c.party)}`}>
-                {c.party ?? "OTHER"}
+                {c.party ?? PARTY_NOT_GIVEN.toUpperCase()}
               </span>
             </span>
             <span
@@ -225,7 +227,7 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
                 .slice(0, 2)
                 .map(
                   (c) =>
-                    `${c.name} (${partyLetter(c.party) || "other"}) ${
+                    `${c.name} (${partyTag(c.party)}) ${
                       c.pct != null ? `${c.pct.toFixed(1)}%` : "—"
                     }`
                 )
@@ -235,8 +237,7 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
             <>
               <span className={partyTextClass(leader.party)}>{leader.name}</span>{" "}
               <span className="text-ink-lo">
-                ({partyLetter(leader.party) || "other"}){" "}
-                {leader.pct != null ? `${leader.pct.toFixed(1)}%` : "—"}
+                ({partyTag(leader.party)}) {leader.pct != null ? `${leader.pct.toFixed(1)}%` : "—"}
               </span>
             </>
           ) : (

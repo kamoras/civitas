@@ -17,7 +17,7 @@ import {
   flipShown,
   heldByPhrase,
   isTied,
-  partyLetter,
+  partyTag,
   partyTextClass,
   raceStatusText,
   reportingText,
@@ -227,7 +227,7 @@ export default function DistrictMap({
           // "no votes yet"), plus the hatch for a district the feed gives
           // no count for.
           <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-ink-min">
-            <li>red = R leads · blue = D leads · purple = other party leads</li>
+            <li>red = R leads · blue = D leads · purple = other or unstated party leads</li>
             <li>fainter = under half in · solid = count listed as official, still not called</li>
             <li className="flex items-center gap-1">
               <span
@@ -477,8 +477,7 @@ function DistrictResultPreview({
               key={c.candidateId ?? c.name}
               className={tied ? "text-ink-hi" : partyTextClass(c.party)}
             >
-              {c.name} ({partyLetter(c.party) || "other"}){" "}
-              {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
+              {c.name} ({partyTag(c.party)}) {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
             </span>
           ))}
           <span className="text-ink-min">{reportingText(result)}</span>

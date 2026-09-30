@@ -153,6 +153,48 @@ describe("DistrictMap", () => {
     expect(screen.getByText(/Ann Rep/)).not.toHaveClass("text-rep-red");
   });
 
+  it("previews a leader with no party given as that, never 'other'", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    const noParty = {
+      raceId: "2026-HOUSE-CT-2",
+      state: "CT",
+      office: "H",
+      district: 2,
+      isSpecial: false,
+      heldBy: "DEM",
+      official: false,
+      votesCounted: 2000,
+      reportingUnits: 90,
+      totalUnits: 100,
+      unitLabel: "towns",
+      sourceName: "CT SOTS",
+      sourceUrl: null,
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: null,
+      flip: false,
+      candidates: [
+        { name: "Indy Pen", party: null, votes: 1100, pct: 55, candidateId: null },
+        { name: "Bo Dem", party: "DEM", votes: 900, pct: 45, candidateId: null },
+      ],
+    } as LiveRaceResult;
+    render(
+      <DistrictMap
+        state="CT"
+        races={RACES}
+        picked={null}
+        onPick={vi.fn()}
+        results={new Map([[2, noParty]])}
+      />
+    );
+    const shape = await screen.findByRole("button", {
+      name: "CT-2: leader's party not given, 90% in",
+    });
+    shape.focus();
+    expect(await screen.findByText(/Indy Pen \(party not given\) 55\.0%/)).toBeInTheDocument();
+    expect(screen.queryByText(/\(other\)/)).not.toBeInTheDocument();
+  });
+
   it("previews an official count as a lead with its flip, and marks a stale count", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
     const flip = {
@@ -247,7 +289,7 @@ describe("DistrictMap", () => {
     expect(other.getAttribute("style") ?? "").toMatch(/fill: url\("?#no-count-/);
     expect(container.querySelector("pattern[id^='no-count-']")).not.toBeNull();
     expect(screen.getByText("no count from the state's feed")).toBeInTheDocument();
-    expect(screen.getByText(/purple = other party leads/)).toBeInTheDocument();
+    expect(screen.getByText(/purple = other or unstated party leads/)).toBeInTheDocument();
     other.focus();
     await waitFor(() =>
       expect(screen.getAllByText("no count from the state's feed")).toHaveLength(2)

@@ -23,7 +23,8 @@ import {
   formatEasternTime,
   formatLed,
   isTied,
-  partyLetter,
+  ledParty,
+  partyTag,
   pollsStillOpen,
   reportingShare,
   seatsLed,
@@ -67,20 +68,23 @@ function senateLine(r: LiveRaceResult, several: boolean): string {
       : `${name}: no votes yet`;
   const share = reportingShare(r);
   const early = !r.official && share != null && share < 0.5;
-  return `${name}: ${lead.name} (${partyLetter(lead.party) || "other"}) ${
+  return `${name}: ${lead.name} (${partyTag(lead.party)}) ${
     r.official ? "leads · official count" : "leads"
   }${early ? " · early" : ""}${flipShown(r) ? " · flip" : announced}`;
 }
 
 function LedTally({ led }: { led: Record<string, number> }) {
-  const others = Object.entries(led).filter(([p]) => p !== "DEM" && p !== "REP");
+  const others = Object.entries(led)
+    .filter(([p]) => p !== "DEM" && p !== "REP")
+    // As formatLed orders them: real parties, then leaders with no party given.
+    .sort(([a], [b]) => Number(ledParty(a) === null) - Number(ledParty(b) === null));
   return (
     <span className="flex flex-wrap items-baseline gap-x-4 font-display text-3xl font-extrabold tabular-nums">
       <span className="text-dem-blue">D {led.DEM ?? 0}</span>
       <span className="text-rep-red">R {led.REP ?? 0}</span>
       {others.map(([p, n]) => (
         <span key={p} className="text-ind-purple">
-          {partyLetter(p)} {n}
+          {partyTag(ledParty(p))} {n}
         </span>
       ))}
     </span>
@@ -281,7 +285,7 @@ export default function ResultsOverview({
               <li className="flex items-center gap-1.5">
                 {/* A Senate race led by an independent (Nebraska's, in 2026)
                     is purple too, not only a House delegation. */}
-                <Swatch color="rgba(201,149,255,0.6)" /> OTHER PARTY LEADS
+                <Swatch color="rgba(201,149,255,0.6)" /> OTHER OR UNSTATED PARTY LEADS
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={POLLS_OPEN_FILL} texture={POLLS_OPEN_SWATCH} /> POLLS NOT YET CLOSED

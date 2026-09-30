@@ -3564,6 +3564,102 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         assert self._match(nv, "Masto leads in Nevada Senate race", db=db) is None
         assert self._match(nv, "Smith leads in Nevada Senate race", db=db) is None
 
+    # --- Round 7: a surname alone, and what follows a district phrase ---
+
+    @pytest.mark.parametrize("race_id,names,text", [
+        # Someone else of the same surname: the given name before it
+        # contradicts the candidate's (a title reads the same way).
+        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
+         "Alicia Johnson wins Georgia's District 2 Public Service Commission seat"),
+        ("2026-HOUSE-OH-2", ("Dave Taylor", "Lee Quimby"), "Judge Taylor of Ohio's 2nd District Court of Appeals rules"),
+        # Another district-numbered body named after the phrase, in capitals
+        # or in lower case.
+        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
+         "Johnson flips Georgia's 2nd District Public Service Commission seat"),
+        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
+         "Johnson wins Georgia's 2nd District county commission seat"),
+        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "Georgia's District 2 PSC race: Johnson leads"),
+        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "Georgia's 2nd seat on the Public Service Commission"),
+        ("2026-HOUSE-OH-2", ("Dave Taylor", "Lee Quimby"), "Ohio's 2nd District Court of Appeals: Taylor writes majority"),
+        # Title case: the capital says nothing, so a lone surname is no name.
+        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "Johnson Wins Georgia's 2nd District School Board Race"),
+        ("2026-HOUSE-CA-2", ("Jared Huffman", "Chris Price"),
+         "Price Gouging Case: California's 2nd District Court of Appeal Rules"),
+        ("2026-HOUSE-CA-2", ("Jared Huffman", "Chris Price"),
+         "California's 2nd District Court of Appeal rules on price gouging law. Price controls upheld."),
+    ])
+    def test_a_surname_alone_or_another_bodys_district_is_not_the_race(self, db_session, race_id, names, text):
+        db = self._count(db_session, race_id, *names)
+        issue = self._flip_issue(race_id, "the race")
+        assert self._match(issue, text, db=db) is None, text
+
+    @pytest.mark.parametrize("text", [
+        "Florida's 2nd District Court of Appeal rules on ballot case",
+        "Georgia's District 2 Public Service Commission seat flips",
+        "Alaska's at-large Board of Regents seat",
+        "Georgia's 2nd District House of Delegates seat",
+    ])
+    def test_another_bodys_district_is_not_the_race_by_the_phrase_alone(self, text):
+        race_id = "2026-HOUSE-AK-0" if "Alaska" in text else f"2026-HOUSE-{'FL' if 'Florida' in text else 'GA'}-2"
+        issue = self._flip_issue(race_id, "the race")
+        assert self._match(issue, text) is None, text
+
+    @pytest.mark.parametrize("text", [
+        "Bishop concedes in Georgia's 2nd District",
+        "Wayne Johnson flips Georgia's 2nd District",
+        "Wayne Johnson Flips Georgia's 2nd District",
+        "Rep. Sanford Bishop trails in Georgia's 2nd District",
+        "Georgia's 2nd District Republican Wayne Johnson leads",
+        "Georgia's 2nd District House race: Johnson leads",
+        "Johnson Flips Georgia's 2nd District Seat From Bishop",
+        "Georgia's 2nd District flips the seat to Johnson",
+        "Georgia's 2nd District heads to a recount; Johnson leads",
+        "Georgia's 2nd District House of Representatives seat goes to Johnson",
+        "Republican leads in Georgia's 2nd District\nJohnson ahead with most precincts in",
+    ])
+    def test_the_race_is_still_named_by_its_candidates(self, db_session, text):
+        # The count prints "Sanford D. Bishop, Jr.": the comma sets off a
+        # suffix, not a given name, so his surname is "bishop".
+        db = self._count(db_session, "2026-HOUSE-GA-2", "Wayne Johnson", "Sanford D. Bishop, Jr.")
+        issue = self._flip_issue()
+        assert self._match(issue, text, db=db) is issue, text
+
+    def test_a_suffix_after_a_comma_is_not_a_last_first_name(self, db_session):
+        from app.pipeline.analyze.action_center import _race_people
+
+        db = self._count(db_session, "2026-HOUSE-GA-2", "Sanford D. Bishop, Jr.", "Wayne Johnson")
+        assert sorted(s for s, _ in _race_people(db, "2026-HOUSE-GA-2")) == ["bishop", "johnson"]
+
+    def test_curly_apostrophes_read_as_straight_ones(self, db_session):
+        db = self._count(db_session, "2026-HOUSE-TX-16", "Beto O'Rourke", "Pat Quimby")
+        issue = self._flip_issue("2026-HOUSE-TX-16", "Texas's 16th")
+        assert self._match(issue, "O’Rourke leads in Texas’ 16th District", db=db) is issue
+        assert self._match(issue, "O'Rourke leads in Texas' 16th District", db=db) is issue
+        curly = self._count(db_session, "2026-HOUSE-TX-15", "Beto O’Rourke", "Pat Quimby")
+        issue = self._flip_issue("2026-HOUSE-TX-15", "Texas's 15th")
+        assert self._match(issue, "O'Rourke leads in Texas's 15th District", db=curly) is issue
+
+    def test_two_races_need_strong_evidence_for_an_unqualified_phrase(self, db_session):
+        """Georgia 2020 with a special candidate named King: one capitalised
+        word equal to a surname does not choose between two races."""
+        db = self._senate_races(db_session, "2020-SEN-GA", "2020-SEN-GA-SPECIAL")
+        self._count(db, "2020-SEN-GA", "David Perdue", "Jon Ossoff")
+        self._count(db, "2020-SEN-GA-SPECIAL", "Raphael Warnock", "Jane King")
+        regular = self._flip_issue("2020-SEN-GA", "Georgia's U.S. Senate")
+        special = self._flip_issue("2020-SEN-GA-SPECIAL", "Georgia's U.S. Senate special election")
+        for text in ("Georgia Senate runoff turnout surges on Martin Luther King Jr. Day",
+                     "King Center: Georgia Senate race drew record early vote"):
+            assert self._match(special, text, db=db) is None, text
+            assert self._match(regular, text, db=db) is None, text
+        # One surname alone is not enough either way round…
+        assert self._match(special, "Warnock leads in Georgia Senate runoff", db=db) is None
+        # …but a fitting given name, or both candidates, is.
+        assert self._match(special, "Raphael Warnock leads in Georgia Senate runoff", db=db) is special
+        assert self._match(special, "Warnock leads King in Georgia Senate runoff", db=db) is special
+        assert self._match(special, "Warnock Defeats King In Georgia Senate Runoff", db=db) is special
+        # "special" still decides with a lone surname.
+        assert self._match(special, "Warnock leads in Georgia's special Senate election", db=db) is special
+
     def test_with_no_candidate_on_record_the_phrase_decides_alone(self, db_session):
         db = self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
         issue = self._flip_issue("2026-SEN-OH-SPECIAL", "the U.S. Senate race")

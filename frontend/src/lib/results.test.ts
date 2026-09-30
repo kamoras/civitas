@@ -22,6 +22,8 @@ import {
   heldByPhrase,
   describeUpdate,
   formatLed,
+  NO_PARTY_KEY,
+  partyTag,
   POLLS_OPEN_FILL,
   pollsClosed,
   pollsStillOpen,
@@ -333,6 +335,18 @@ describe("stateFill", () => {
     expect(stateShade("GA", held, "H", true, true).label).toBe(
       "GA House: seats split evenly, seats led D 2, R 2, of 4 listed, 1 seat changing party, 1 change of party announced earlier that the latest count doesn't show"
     );
+    // Nothing counted in any seat, one with a change of party announced
+    // earlier: that is the latest count, not "no votes yet".
+    const empty = [
+      race({ office: "H", district: 1, votesCounted: 0, flip: false }),
+      heldFlip({ raceId: "2026-HOUSE-GA-2", office: "H", district: 2, votesCounted: 0 }),
+    ];
+    expect(stateShade("GA", empty, "H", true, true).label).toBe(
+      "GA House: no votes in the latest count, 1 change of party announced earlier that the latest count doesn't show"
+    );
+    expect(stateShade("GA", [empty[0], { ...empty[0], district: 2 }], "H", true, true).label).toBe(
+      "GA House: no votes yet"
+    );
     expect(stateShade("GA", [heldFlip()], "S", true, true).label).toBe(
       "GA Senate: Democrat leads, 80% in, change of party announced earlier, holder's party ahead in the latest count"
     );
@@ -641,8 +655,36 @@ describe("seatsLed", () => {
         ],
       }),
     ]);
-    expect(led).toEqual({ DEM: 1, IND: 1, OTHER: 1 });
-    expect(formatLed(led)).toBe("D 1 · R 0 · I 1 · OTHER 1");
+    // A leader with no party given is counted apart from any real party,
+    // and said as that — never "OTHER".
+    expect(led).toEqual({ DEM: 1, IND: 1, [NO_PARTY_KEY]: 1 });
+    expect(formatLed(led)).toBe("D 1 · R 0 · I 1 · party not given 1");
+  });
+
+  it("keeps a real party the vocabulary doesn't name apart from an unstated one", () => {
+    const pat = { name: "Pat Doe", party: null, votes: 1000, pct: 52.6, candidateId: null };
+    const led = seatsLed([
+      race({ office: "H", district: 1, leaderParty: "WFP" }),
+      race({ office: "H", district: 2, leaderParty: null, candidates: [pat] }),
+      race({ office: "H", district: 3, leaderParty: null, candidates: [pat] }),
+    ]);
+    expect(led).toEqual({ WFP: 1, [NO_PARTY_KEY]: 2 });
+    expect(formatLed({ [NO_PARTY_KEY]: 2, WFP: 1 })).toBe("D 0 · R 0 · WFP 1 · party not given 2");
+    expect(partyTag(null)).toBe("party not given");
+    expect(partyTag("IND")).toBe("I");
+  });
+
+  it("says a delegation led by leaders with no party given as that", () => {
+    const pat = { name: "Pat Doe", party: null, votes: 1000, pct: 52.6, candidateId: null };
+    const house = [
+      race({ office: "H", district: 1, leaderParty: null, flip: false, candidates: [pat] }),
+      race({ office: "H", district: 2, leaderParty: null, flip: false, candidates: [pat] }),
+    ];
+    const shade = stateShade("GA", house, "H", true, true);
+    expect(shade.label).toBe(
+      "GA House: leaders whose party isn't given lead in the most seats, seats led D 0, R 0, party not given 2, of 2 listed"
+    );
+    expect(shade.label).not.toMatch(/other/i);
   });
 });
 

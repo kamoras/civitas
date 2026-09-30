@@ -22,6 +22,7 @@ import time
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -3968,7 +3969,8 @@ _ORDINAL_WORD_ALT = "|".join(re.escape(w) for w in sorted(_ORDINAL_WORDS, key=le
 _ORDINAL_WORD_RE = re.compile(
     rf"\b(?:{_ORDINAL_WORD_ALT})\b"
     rf"(?=(?:(?:\s*,\s*|\s+and\s+|\s*,\s*and\s+)(?:{_ORDINAL_WORD_ALT}|{_ORD})\b){{0,8}}"
-    r"\s+(?:congressional\s+|house\s+)?(?:districts?|seat|race|contest)\b)"
+    r"\s+(?:congressional\s+|house\s+)?(?:districts?|seat|race|contest)\b)",
+    re.IGNORECASE,
 )
 
 
@@ -3976,8 +3978,8 @@ def _mark_states(text: str, state_name: str) -> str:
     from app.state_names import STATE_NAMES
 
     names = sorted({v.lower() for v in STATE_NAMES.values()}, key=len, reverse=True)
-    pattern = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b")
-    return pattern.sub(lambda m: _OURS if m.group(0) == state_name else _OTHER, text)
+    pattern = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b", re.IGNORECASE)
+    return pattern.sub(lambda m: _OURS if m.group(0).lower() == state_name else _OTHER, text)
 
 
 def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
@@ -4017,26 +4019,66 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 # stored), the phrase alone decides, as before. A story that names the race
 # without naming a candidate leaves the issue DEVELOPING — a miss, which the
 # next hour's story can still fix; a wrong promotion cannot be undone.
+#
+# A surname alone is weaker evidence than it looks, so how much a mention
+# counts is graded (_candidate_evidence):
+#
+# - A surname directly after a capitalised word is that person's only if
+#   the word can be the candidate's given name — the test the live-results
+#   sync applies to a feed's printing (state_candidates.
+#   given_name_contradicts). "Alicia Johnson" is not Wayne Johnson, and
+#   "Martin Luther King Jr. Day" names no Jane King. A title in that slot
+#   ("Judge Taylor") contradicts the given name too: a miss at worst, never
+#   a wrong promotion. An abbreviation ("Rep. Bishop") or a lone initial
+#   states no given name. A given name that fits is the strongest evidence
+#   there is ("Wayne Johnson flips …").
+# - In a title-case segment (a headline with nearly every word
+#   capitalised: "Price Gouging Case: …") the capital says nothing, so a
+#   bare surname there counts only beside another of the race's candidates
+#   or with a fitting given name. Nor does the word before it: every word
+#   is capitalised, so a verb ("Defeats Loeffler") is not a given name.
+#   All-capital text is not title case — it has no lower case to compare
+#   against, and "BISHOP LEADS …" still names Bishop.
+# - Two of the race's candidates named anywhere in the story, or one named
+#   with a fitting given name, is strong evidence; a lone surname in a
+#   sentence-case line is ordinary evidence and names the race; a lone
+#   surname in a title-case headline names nothing on its own.
+#
+# In a state with two Senate races, a phrase that says neither "special"
+# nor "regular" is told apart only by whose names the story uses, and that
+# takes strong evidence: one capitalised word ("King Center: Georgia Senate
+# race …") equal to a candidate's surname is not enough to choose a race.
+_WEAK_TITLE_EVIDENCE = 1  # a lone surname in a title-case headline
+_EVIDENCE = 2  # a lone surname in a sentence-case line: names the race
+_STRONG_EVIDENCE = 3  # a fitting given name, or two of the race's candidates
+
+# Curly apostrophes and the modifier letter apostrophe, read as "'": a
+# story's "O’Rourke" and "Texas’" are a record's "O'Rourke" and "Texas'".
+_APOSTROPHES = str.maketrans({"’": "'", "‘": "'", "ʼ": "'"})
 
 
 def _strip_accents(text: str) -> str:
-    """Diacritics removed, case kept (the capital is part of the test)."""
+    """Diacritics removed and apostrophes made straight, case kept (the
+    capital is part of the test)."""
     decomposed = unicodedata.normalize("NFKD", text or "")
-    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).translate(_APOSTROPHES)
 
 
-def _race_surnames(db, race_id: str) -> set[str] | None:
-    """The surnames a story about `race_id` would use: the leader's and
-    runner-up's in the stored count, else every certified nominee's, else
-    every Candidate row's. None when nothing is on record (the phrase then
-    decides alone)."""
+def _race_people(db, race_id: str) -> list[tuple[str, str]] | None:
+    """(surname, name) for each person a story about `race_id` would name:
+    the leader and runner-up in the stored count, else every certified
+    nominee, else every Candidate row. The surname is folded to lower case;
+    the name is in FEC's "LAST, FIRST" shape, which the given-name test
+    reads. None when nothing is on record (the phrase then decides
+    alone)."""
     from app.models import Candidate, RaceResult
     from app.pipeline.candidate_dedup import normalized_surname
+    from app.pipeline.fetch.state_candidates import _without_trailing_suffix
     from app.pipeline.fetch.state_candidates_common import surname
 
     if db is None:
         return None
-    names: set[str] = set()
+    people: list[tuple[str, str]] = []
     result = db.get(RaceResult, race_id)
     try:
         tallies = json.loads(result.tallies or "[]") if result is not None else []
@@ -4047,31 +4089,191 @@ def _race_surnames(db, race_id: str) -> set[str] | None:
             continue
         cand = db.get(Candidate, tally["candidateId"]) if tally.get("candidateId") else None
         if cand is not None and cand.race_id == race_id:
-            names.add(normalized_surname(cand.name))  # FEC's "LAST, FIRST"
-        printed = str(tally.get("name") or "")
-        # The source's printing: "Raphael Warnock", or FEC-style "WARNOCK, RAPHAEL".
-        names.add(normalized_surname(printed) if "," in printed else (surname(printed) or ""))
-    if not any(n.strip() for n in names):
+            people.append((normalized_surname(cand.name or ""), cand.name or ""))  # FEC's "LAST, FIRST"
+        # The source's printing: "Raphael Warnock", FEC-style "WARNOCK,
+        # RAPHAEL", or "Sanford D. Bishop, Jr." — whose comma sets off a
+        # suffix, not a given name (_without_trailing_suffix).
+        printed = _without_trailing_suffix(str(tally.get("name") or ""))
+        if "," in printed:
+            people.append((normalized_surname(printed), printed))
+            continue
+        last = surname(printed) or ""
+        words = printed.split()
+        at = max((i for i, w in enumerate(words) if w.strip(".,") == last), default=len(words))
+        given = " ".join(words[:at])
+        people.append((last, f"{last}, {given}" if given else last))
+    if not any(s.strip() for s, _ in people):
         rows = db.query(Candidate.name, Candidate.confirmed_general).filter(Candidate.race_id == race_id).all()
         chosen = [n for n, confirmed in rows if confirmed] or [n for n, _ in rows]
-        names = {normalized_surname(n or "") for n in chosen}
-    folded = {_strip_accents(n).lower().strip() for n in names}
-    return {n for n in folded if len(n) >= 2} or None
+        people = [(normalized_surname(n or ""), n or "") for n in chosen]
+    folded = [(_strip_accents(s).lower().strip(), n) for s, n in people]
+    return [(s, n) for s, n in folded if len(s) >= 2] or None
 
 
-def _names_a_candidate(text: str, surnames: set[str]) -> bool:
-    """Whether `text` names any of `surnames` as a name (see above)."""
-    text = _strip_accents(text)
-    for name in surnames:
-        tokens = [t for t in re.split(r"[\s-]+", name) if t]
-        if not tokens:
-            continue
-        pattern = r"\b" + r"[\s‐-]+".join(re.escape(t) for t in tokens) + r"\b"
-        for m in re.finditer(pattern, text, re.IGNORECASE):
-            last = re.split(r"[\s‐-]+", m.group(0))[-1]
-            if last[:1].isupper():
+# Where a story's lines break: the title, summary and each fact are joined
+# by newlines (_may_match), and a sentence ends at . ! or ? before a space.
+_SEGMENT_BREAK = re.compile(r"\n+|(?<=[.!?])\s+")
+_LONG_WORD = re.compile(r"[A-Za-z][A-Za-z'-]{3,}")
+
+
+def _title_case(segment: str) -> bool:
+    """Whether a line capitalises (nearly) every word, so a capital says
+    nothing about a name: at least two words of four or more letters, and
+    fewer than one in six of them lower case ("in" / "of" are short; a
+    title-cased "with" is tolerated in a long headline). All-capital words
+    are left out of the count either way."""
+    words = [w for w in _LONG_WORD.findall(segment) if not w.isupper()]
+    lower = sum(1 for w in words if w[0].islower())
+    return len(words) >= 2 and lower * 6 < len(words)
+
+
+def _given_name_before(prefix: str) -> str:
+    """The word that would be a given name right before a surname: the
+    nearest of up to three capitalised words that directly precede it
+    (whitespace only between), skipping a middle initial — "Sanford" in
+    "Sanford D. Bishop". An abbreviation ("Rep.", "Sen.") ends the run and
+    states nothing; a lone initial is returned as itself. "" when no
+    capitalised word directly precedes the surname."""
+    if not prefix or not prefix[-1].isspace():
+        return ""
+    run: list[str] = []
+    for word in reversed(prefix.split()[-3:]):
+        bare = word.rstrip(".")
+        if not re.fullmatch(r"[A-Z][A-Za-z'-]*", bare) or (word.endswith(".") and len(bare) > 1):
+            break
+        run.append(word)
+    return next((w for w in run if len(w.rstrip(".")) > 1), run[0] if run else "")
+
+
+def _candidate_evidence(text: str, people: list[tuple[str, str]]) -> int:
+    """How strongly `text` names one of `people` (from _race_people): 0
+    (not at all), _WEAK_TITLE_EVIDENCE, _EVIDENCE or _STRONG_EVIDENCE (see
+    the rules above)."""
+    from app.pipeline.fetch.state_candidates import given_name_contradicts
+
+    names: dict[str, list[str]] = {}
+    for last, name in people:
+        names.setdefault(last, []).append(name)
+    hit: set[str] = set()
+    level = 0
+    for segment in _SEGMENT_BREAK.split(_strip_accents(text)):
+        title = _title_case(segment)
+        for last, theirs in names.items():
+            tokens = [t for t in re.split(r"[\s-]+", last) if t]
+            if not tokens:
+                continue
+            pattern = r"\b" + r"[\s‐-]+".join(re.escape(t) for t in tokens) + r"\b"
+            for m in re.finditer(pattern, segment, re.IGNORECASE):
+                if not re.split(r"[\s‐-]+", m.group(0))[-1][:1].isupper():
+                    continue  # the word, not the name: "a brown envelope"
+                given = _given_name_before(segment[:m.start()])
+                if given:
+                    display = f"{given} {m.group(0)}"
+                    fits = any(
+                        not given_name_contradicts(SimpleNamespace(name=n), display, last) for n in theirs
+                    )
+                    if fits and given.rstrip(".").lower() not in last.split():
+                        hit.add(last)
+                        level = _STRONG_EVIDENCE
+                        continue
+                    if not fits and not title:
+                        continue  # someone else of that surname: "Alicia Johnson", "Judge Taylor"
+                hit.add(last)
+                level = max(level, _WEAK_TITLE_EVIDENCE if title else _EVIDENCE)
+    return _STRONG_EVIDENCE if len(hit) >= 2 else level
+
+
+# What may follow a House district phrase ("Georgia's 2nd District",
+# "Alaska's at-large"). Courts of appeals, public service commissions,
+# school boards and county commissions number their districts too
+# ("Georgia's District 2 Public Service Commission seat", "California's 2nd
+# District Court of Appeal"), and name themselves right after the number.
+# A congressional district phrase is followed by: nothing, punctuation, a
+# race word ("seat", "race"), "House" / "congressional" / "U.S.", or the
+# verb of its own clause ("… 2nd District flips"). So, read structurally
+# rather than from a list of other bodies' names:
+#
+# - a run of capitalised words straight after the phrase is another body's
+#   name ("Public Service Commission", "Court of Appeal", "School Board")
+#   unless it names one of the race's candidates ("Georgia's 2nd District
+#   Republican Wayne Johnson"); with no candidate on record, it never
+#   stands;
+# - lower-case words running straight into a race word with no determiner
+#   or preposition between ("county commission seat", "board of education
+#   race") are the same thing in lower case, while "flips the seat" and
+#   "heads to runoff" are a clause;
+# - a race word followed by "on" / "of" and a capitalised name is a seat
+#   ON something else ("2nd seat on the Public Service Commission"), unless
+#   that is the House, Congress, or a candidate.
+#
+# A phrase that ends in its own punctuation ("… Virginia's 2nd.",
+# "In California's 45th,") is closed and followed by a new clause.
+_AFTER_CONGRESS_WORDS = re.compile(r"(?:(?:u\.?\s?s\.?(?=\s|$)|(?:house|congressional|congress)\b)\s*)*",
+                                   re.IGNORECASE)
+_HOUSE_RACE_WORD = re.compile(r"(?:seats?|races?|contests?|elections?|primary|primaries|runoffs?)",
+                              re.IGNORECASE)
+# Words that end a noun compound: determiners and prepositions ("flips the
+# seat", "heads to runoff"). "of" is left out — it sits inside one ("board
+# of education seat").
+_NOT_IN_A_NAME = frozenset({
+    "the", "a", "an", "its", "his", "her", "their", "our", "this", "that",
+    "to", "in", "into", "for", "on", "at", "with", "from", "by", "after", "as", "over",
+})
+
+
+def _capitalised_run_names(text: str, surnames: list[str] | None, congress_ok: bool = False) -> bool:
+    """Whether the run of capitalised words at the start of `text` names
+    one of `surnames` (or, with `congress_ok`, is the House or Congress)."""
+    run = re.match(r"(?:[A-Z][\w'.-]*\s*)+", text)
+    if run is None:
+        return True
+    words = _strip_accents(run.group(0)).lower()
+    if congress_ok and _AFTER_CONGRESS_WORDS.match(words).end() > 0:
+        return True
+    return any(
+        re.search(r"\b" + r"[\s-]+".join(re.escape(t) for t in re.split(r"[\s-]+", s) if t) + r"\b", words)
+        for s in surnames or ()
+    )
+
+
+def _district_phrase_closes(phrase: str, after: str, surnames: list[str] | None) -> bool:
+    """Whether a matched House district phrase is the congressional
+    district's rather than another district-numbered body's (see above).
+    `after` is the story's text right after the phrase, case kept."""
+    if phrase and not phrase[-1].isalnum():
+        return True
+
+    def seat_on(tail: str) -> bool:
+        on = re.match(r"\s+(?:on|of)\s+(?:the\s+)?(?=[A-Z])", tail)
+        return on is None or _capitalised_run_names(tail[on.end():], surnames, congress_ok=True)
+
+    if re.search(rf"\b{_HOUSE_RACE_WORD.pattern}$", phrase, re.IGNORECASE):
+        return seat_on(after)  # "Georgia's 2nd seat" + " on the Public Service Commission"
+    if re.match(r"[^\S\n]*(?:\n|$)", after):
+        return True  # the end of its line: the title, a fact
+    rest = after.split("\n", 1)[0].lstrip()
+    skipped = _AFTER_CONGRESS_WORDS.match(rest).group(0)
+    rest = rest[len(skipped):]
+    if re.search(r"house\s*$", skipped, re.IGNORECASE) and re.match(r"of\s+(?:the\s+)?[A-Z]", rest):
+        # "House of …" is a chamber's name: the congressional one is "House
+        # of Representatives", a legislature's "House of Delegates".
+        return re.match(r"of\s+Representatives\b", rest, re.IGNORECASE) is not None
+    if not rest or not rest[0].isalnum():
+        return True
+    word = rest.split()[0]
+    if _HOUSE_RACE_WORD.fullmatch(word):
+        return seat_on(rest[len(word):])
+    if word[0].islower():
+        words = re.match(r"[a-z][\w'-]*(?:\s+[a-z][\w'-]*){0,3}", rest)
+        for i, token in enumerate(words.group(0).split() if words else ()):
+            if token in _NOT_IN_A_NAME:
                 return True
-    return False
+            if i and _HOUSE_RACE_WORD.fullmatch(token):
+                return False  # "county commission seat"
+        return True
+    if not word[0].isupper():
+        return True  # a number: "Georgia's 2nd District 2026 race"
+    return _capitalised_run_names(rest, surnames)
 
 
 def _results_race_named(issue, story_text: str, db=None) -> bool:
@@ -4105,20 +4307,38 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
             db = object_session(issue)
         except Exception:  # not a mapped instance (a test double)
             db = None
-    story_text = _URL_RE.sub(" ", story_text)
-    lowered = re.sub(r"\s+", " ", story_text.lower())
-    lowered = _ORDINAL_WORD_RE.sub(lambda m: _ordinal(_ORDINAL_WORDS[m.group(0)]), lowered)
-    marked = _mark_states(lowered, state_name)
+    story_text = _strip_accents(_URL_RE.sub(" ", story_text))
+    # The phrases are read in lower case; `cased` keeps the story's own
+    # capitals at the same offsets, for what follows a district phrase.
+    # Whitespace collapsed, a line break kept as one (a phrase that ends
+    # its line is closed: _district_phrase_closes).
+    cased = re.sub(r"\s+", lambda w: "\n" if "\n" in w.group(0) else " ", story_text)
+    cased = _ORDINAL_WORD_RE.sub(lambda m: _ordinal(_ORDINAL_WORDS[m.group(0).lower()]), cased)
+    cased = _mark_states(cased, state_name)
+    marked = "".join(ch.lower() if len(ch.lower()) == 1 else ch for ch in cased)
 
-    asked: list[bool | None] = []  # asked of the database once, and only once a phrase matches
+    found: list = []  # asked of the database once, and only once a phrase matches
 
-    def candidate_named() -> bool | None:
-        """Whether the story names one of the race's candidates; None when
-        none is on record."""
-        if not asked:
-            ours = _race_surnames(db, race_id)
-            asked.append(None if ours is None else _names_a_candidate(story_text, ours))
-        return asked[0]
+    def people() -> list[tuple[str, str]] | None:
+        if not found:
+            found.append(_race_people(db, race_id))
+        return found[0]
+
+    def evidence() -> int | None:
+        """How strongly the story names one of the race's candidates
+        (_candidate_evidence); None when none is on record."""
+        ours = people()
+        return None if ours is None else _candidate_evidence(story_text, ours)
+
+    def surnames() -> list[str] | None:
+        ours = people()
+        return None if ours is None else [s for s, _ in ours]
+
+    def house_named(m) -> bool:
+        if not _district_phrase_closes(m.group(0), cased[m.end():m.end() + 160], surnames()):
+            return False
+        named = evidence()
+        return named is None or named >= _EVIDENCE
 
     if office == "SEN":
         tell_apart = None  # asked of the database only once a phrase matches
@@ -4128,8 +4348,8 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
                 if _senate_phrase_is_legislature(m.group(0), marked[m.end():m.end() + 60], lead,
                                                  owner_form=i < _SENATE_OWNER_PHRASES):
                     continue
-                named = candidate_named()
-                if named is False:
+                named = evidence()
+                if named is not None and named < _EVIDENCE:
                     return False  # a phrase, but none of this race's candidates
                 if tell_apart is None:
                     tell_apart = _senate_needs_telling_apart(db, int(cycle), state)
@@ -4141,11 +4361,15 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
                         return True
                     continue
                 # A phrase that says neither "special" nor "regular" ("Georgia
-                # Senate runoff") is told apart by whose candidates it names:
-                # this race's and none of the other's names it; both races'
-                # is a story about the two, which names neither. Only with
-                # nothing on record to compare does the old reading stand —
-                # the unqualified phrase is the regular race.
+                # Senate runoff") is told apart by whose candidates it names,
+                # and only on strong evidence (both of them, or one with a
+                # fitting given name): this race's and none of the other's
+                # names it; both races' is a story about the two, which names
+                # neither. Only with nothing on record to compare does the
+                # old reading stand — the unqualified phrase is the regular
+                # race.
+                if named is not None and named < _STRONG_EVIDENCE:
+                    continue
                 other = _other_senate_race_named(db, int(cycle), state, race_id, story_text) if named else None
                 if other is False:
                     return True
@@ -4156,9 +4380,10 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
     # Postal-code form, case-sensitive: "GA-2", "GA-02", "AK-AL".
     code = r"(?:0?0|AL)" if n == 0 else rf"0?{n}"
     if re.search(rf"\b{state}-{code}\b", story_text):
-        return candidate_named() is not False
+        named = evidence()
+        return named is None or named >= _EVIDENCE
     if n == 0:
-        return any(re.search(p, marked) for p in _AT_LARGE_PHRASES) and candidate_named() is not False
+        return any(house_named(m) for p in _AT_LARGE_PHRASES for m in re.finditer(p, marked))
     ordinal = _ordinal(n)
     for phrase in _HOUSE_PHRASES:
         for m in re.finditer(phrase, marked):
@@ -4169,25 +4394,27 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
                 (groups.get("ords") and ordinal in re.findall(_ORD, groups["ords"]))
                 or (groups.get("num") and int(groups["num"]) == n)
                 or ordinal in (groups.get("ord"), groups.get("bare"))
-            ):
-                return candidate_named() is not False
+            ) and house_named(m):
+                return True
     return False
 
 
 def _other_senate_race_named(db, cycle: int, state: str, race_id: str, story_text: str) -> bool | None:
     """Whether the story names a candidate of the state's OTHER Senate race
-    this cycle (Georgia 2020's regular race, for its special). None when
-    that can't be known: no session, no other race found, or no candidate
-    on record for it."""
+    this cycle (Georgia 2020's regular race, for its special) — any mention
+    at all, a lone surname in a headline included, since reading the other
+    race as named only holds a promotion back. None when that can't be
+    known: no session, no other race found, or no candidate on record for
+    it."""
     if db is None:
         return None
     from app.pipeline.fetch.state_candidates import senate_race_ids
 
     others = [rid for rid in senate_race_ids(db, cycle, state) if rid != race_id]
-    known = [theirs for rid in others if (theirs := _race_surnames(db, rid)) is not None]
+    known = [theirs for rid in others if (theirs := _race_people(db, rid)) is not None]
     if not others or len(known) != len(others):
         return None
-    return any(_names_a_candidate(story_text, theirs) for theirs in known)
+    return any(_candidate_evidence(story_text, theirs) >= _WEAK_TITLE_EVIDENCE for theirs in known)
 
 
 def _may_match(candidate, title: str, facts: list, summary: str, db=None) -> bool:
@@ -4203,7 +4430,9 @@ def _may_match(candidate, title: str, facts: list, summary: str, db=None) -> boo
         return True
     if not candidate.is_current:
         return False  # retired (reverted, or its flip retired): never promoted back
-    text = " ".join([title, summary or "", *(str(f) for f in facts or [])])
+    # One line each, so a title-case headline is judged apart from the
+    # sentence-case summary after it (_title_case).
+    text = "\n".join([title, summary or "", *(str(f) for f in facts or [])])
     return _results_race_named(candidate, text, db)
 
 

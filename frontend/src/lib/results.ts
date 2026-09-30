@@ -455,6 +455,28 @@ export function partyLetter(party: string | null | undefined): string {
   return party ? (LETTER[party] ?? party) : "";
 }
 
+/** What stands in a party's slot when the feed gives none. Said as that —
+ * never "other", which claims the candidate belongs to some party other
+ * than the two majors (flipNotShownText's "leader's party not given" is
+ * the same fact). */
+export const PARTY_NOT_GIVEN = "party not given";
+
+/** partyLetter for a label's party slot: "D", "I", a code the vocabulary
+ * doesn't name as itself, or PARTY_NOT_GIVEN where the feed gives none. */
+export function partyTag(party: string | null | undefined): string {
+  return partyLetter(party) || PARTY_NOT_GIVEN;
+}
+
+/** The key seatsLed counts a leader under when the feed gives no party:
+ * not a party code (the backend's are capital letters), so it is never
+ * counted with, or shown as, a real party outside the two majors. */
+export const NO_PARTY_KEY = "(none)";
+
+/** A seatsLed key as the party it stands for: NO_PARTY_KEY is null. */
+export function ledParty(key: string): string | null {
+  return key === NO_PARTY_KEY ? null : key;
+}
+
 export function withParty(p: { name: string; party: string | null } | null | undefined): string {
   if (!p) return "";
   const letter = partyLetter(p.party);
@@ -641,22 +663,26 @@ export function summarizeState(races: LiveRaceResult[]): StateResultSummary {
 }
 
 /** "D 3 · R 2 · I 1" — seats led by party, the two majors always named and
- * any other party that leads one after them (as LedTally draws it). */
+ * any other party that leads one after them (as LedTally draws it), then
+ * leaders the feed gives no party for ("party not given 2"). */
 export function formatLed(led: Record<string, number>): string {
   const others = Object.entries(led)
     .filter(([p, n]) => p !== "DEM" && p !== "REP" && n > 0)
-    .map(([p, n]) => `${partyLetter(p)} ${n}`);
+    .sort(([a], [b]) => Number(a === NO_PARTY_KEY) - Number(b === NO_PARTY_KEY))
+    .map(([p, n]) => `${partyTag(ledParty(p))} ${n}`);
   return [`D ${led.DEM ?? 0}`, `R ${led.REP ?? 0}`, ...others].join(" · ");
 }
 
-/** Seats led, by party, over a set of races. A leader the feed gives no
- * party the vocabulary knows still leads a seat: counted as "OTHER", not
- * dropped. A tie, or nothing counted, is nobody's. */
+/** Seats led, by party, over a set of races. A leader the feed gives a
+ * party the vocabulary doesn't know counts under that party's own code; one
+ * it gives NO party for still leads a seat, counted under NO_PARTY_KEY —
+ * not dropped, and not merged with a real party. A tie, or nothing
+ * counted, is nobody's. */
 export function seatsLed(races: LiveRaceResult[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const r of races) {
     if (!(r.votesCounted > 0) || isTied(r)) continue;
-    const party = r.leaderParty ?? "OTHER";
+    const party = r.leaderParty ?? NO_PARTY_KEY;
     out[party] = (out[party] ?? 0) + 1;
   }
   return out;
@@ -675,12 +701,12 @@ const PARTY_NAME: Record<string, string> = {
  * party the vocabulary doesn't name is "another party"; a leader the feed
  * gives NO party for is said as that ("leader's party not given"), never
  * "another party", which claims to know it differs from the seat's
- * holder. Plural, null is seatsLed's OTHER: unnamed and unlisted together. */
+ * holder. Plural, null is seatsLed's NO_PARTY_KEY. */
 function leadsPhrase(party: string | null | undefined, plural = false): string {
   if (plural) {
     const holders = party && HOLDERS[party];
     if (holders) return `${holders} lead`;
-    return party ? "another party leads" : "other or unstated parties lead";
+    return party ? "another party leads" : "leaders whose party isn't given lead";
   }
   const name = party && PARTY_NAME[party];
   if (name) return `${name} leads`;
@@ -806,8 +832,7 @@ export function stateShade(
   }
   const { party, tied } = pluralityLeader(mine);
   let fill: string;
-  if (party)
-    fill = `rgba(${rgb(party === "OTHER" ? null : party)}, ${aggregateOpacity(mine).toFixed(2)})`;
+  if (party) fill = `rgba(${rgb(ledParty(party))}, ${aggregateOpacity(mine).toFixed(2)})`;
   else fill = tied ? TIED_FILL : AWAITING_FILL;
   let label: string;
   if (chamber === "S") {
@@ -819,15 +844,23 @@ export function stateShade(
     const led = seatsLed(mine);
     const counted = mine.filter((r) => r.votesCounted > 0).length;
     const head = party
-      ? `${leadsPhrase(party === "OTHER" ? null : party, true)} in the most seats`
+      ? `${leadsPhrase(ledParty(party), true)} in the most seats`
       : tied
         ? "seats split evenly"
-        : "no votes yet";
-    const progress = mine.every((r) => r.official && r.votesCounted > 0)
-      ? "every count official"
-      : aggregateOpacity(mine) === 0.3
-        ? "under half in for some seats"
-        : "";
+        : // Nothing counted anywhere; with a change of party announced
+          // earlier in one of them, that is the latest count, not "yet".
+          mine.some((r) => flipNotShownText(r) != null)
+          ? "no votes in the latest count"
+          : "no votes yet";
+    // With nothing counted anywhere the head has said so; "under half in"
+    // beside it would read as a count under way.
+    const progress = !counted
+      ? ""
+      : mine.every((r) => r.official && r.votesCounted > 0)
+        ? "every count official"
+        : aggregateOpacity(mine) === 0.3
+          ? "under half in for some seats"
+          : "";
     const flips = mine.filter(flipShown).length;
     const notShown = mine.filter((r) => flipNotShownText(r) != null).length;
     label = [

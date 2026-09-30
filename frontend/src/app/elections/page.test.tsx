@@ -357,12 +357,14 @@ describe("ElectionsPage", () => {
     const ga = within(await screen.findByRole("region", { name: /By state/ })).getByRole("link", {
       name: /^GA/,
     });
-    expect(ga).toHaveTextContent("Senate: Dan Osborn (other) leads");
+    expect(ga).toHaveTextContent("Senate: Dan Osborn (party not given) leads");
     expect(ga).not.toHaveTextContent("()");
     expect(ga).toHaveTextContent("HOUSE D 0 · R 1 · I 1 LEADING");
     // The Senate map's key has the purple an independent's lead is drawn in.
     expect(screen.getByRole("button", { name: "SENATE" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(/OTHER PARTY LEADS$/, { selector: "li" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/OTHER OR UNSTATED PARTY LEADS$/, { selector: "li" })
+    ).toBeInTheDocument();
     expect(mapFill.current?.("GA")).toMatch(/^rgba\(201,149,255/);
     // Districts with a count so far — not every district "read live".
     const totals = screen.getByRole("region", { name: "Totals" });
