@@ -45,6 +45,14 @@ describe("the elections methodology chapter", () => {
     );
   });
 
+  it("says the sync slows to hourly once counts settle, not five minutes throughout", async () => {
+    backend(["GA"]);
+    render(await ElectionsChapter());
+    expect(document.getElementById("election-night")).toHaveTextContent(
+      /Every five minutes while counts are moving \(hourly once none has moved for a day\)/
+    );
+  });
+
   it("names no number when the list can't be read", async () => {
     backend(null);
     render(await ElectionsChapter());

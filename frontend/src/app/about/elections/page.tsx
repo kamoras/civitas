@@ -247,8 +247,9 @@ export default async function ElectionsChapter() {
         </P>
         <Sub title="Where the numbers come from">
           <P>
-            Every five minutes, from the state&apos;s own election-night results site — the same
-            systems Civitas already reads for confirmed candidates.{" "}
+            Every five minutes while counts are moving (hourly once none has moved for a day), from
+            the state&apos;s own election-night results site — the same systems Civitas already
+            reads for confirmed candidates.{" "}
             {live && live.length > 0 ? (
               <>
                 {capitalize(countWord(live.length))}{" "}

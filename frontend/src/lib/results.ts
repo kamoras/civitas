@@ -40,8 +40,12 @@ export const POLLS_OPEN_FILL = "rgba(77, 227, 232, 0.16)";
  * count of its own from it — a contest the feed doesn't list or that
  * couldn't be matched to the race, an uncontested seat. Neither "no votes
  * yet" (the state is counting) nor uncovered (the state is read live):
- * drawn hatched. The stripe colour; NO_COUNT_SWATCH is the legend key. */
-export const NO_COUNT_STRIPE = "rgba(205, 199, 188, 0.4)";
+ * drawn hatched, over AWAITING_FILL (DistrictMap's pattern). The stripe
+ * colour; NO_COUNT_SWATCH is the legend key. At 0.7 the stripe, as drawn,
+ * stands at least 3:1 against its own base and every other count-less fill
+ * and the page (WCAG 1.4.11; results.test.ts) — at 0.4 it was 2.66:1
+ * against its base. */
+export const NO_COUNT_STRIPE = "rgba(205, 199, 188, 0.7)";
 export const NO_COUNT_SWATCH = `repeating-linear-gradient(45deg, ${NO_COUNT_STRIPE} 0 2px, transparent 2px 5px)`;
 
 /*
@@ -105,6 +109,88 @@ export function pollsStillOpen(results: PollsInfo, state: string, now: number): 
  * already shown. */
 export function feedFailed(feed: { status: string } | null | undefined): boolean {
   return !!feed && ["untrusted", "unavailable", "stale", "failed"].includes(feed.status);
+}
+
+/** How often the backend reads every covered state's feed
+ * (scheduler._election_results_sync): every five minutes, and hourly once
+ * no race's count has changed for a day. Every pass records each state's
+ * read (LiveResultRead.checkedAt), polls-open states included. */
+export const RESULTS_SYNC_MS = 5 * 60_000;
+export const RESULTS_SYNC_SETTLED_MS = 60 * 60_000;
+const SETTLED_AFTER_MS = 24 * 3_600_000;
+/** How far past its due pass a state's last read may be before the page
+ * stops calling its count live: a pass that is slow (a feed timing out) or
+ * skipped once is not a stopped sync; two missed five-minute passes are. */
+export const FEED_BEHIND_SLACK_MS = 10 * 60_000;
+
+/** The wait between the backend's reads of the feeds, as its scheduler
+ * decides it from the last change to any count. */
+export function resultsSyncInterval(
+  phase: Pick<ElectionPhaseInfo, "lastResultChange"> | null | undefined,
+  now: number
+): number {
+  const last = Date.parse(phase?.lastResultChange ?? "");
+  return !Number.isNaN(last) && now - last > SETTLED_AFTER_MS
+    ? RESULTS_SYNC_SETTLED_MS
+    : RESULTS_SYNC_MS;
+}
+
+/** Whether a state's feed hasn't been read for well over a sync pass —
+ * more than 15 minutes while counts move, 70 once hourly: the backend's
+ * sync has stopped or is stuck, so whatever count the page holds for the
+ * state is not a live one, however its last read went. False with no
+ * record to judge by (an older backend). */
+export function feedBehind(
+  feed: { checkedAt: string | null } | null | undefined,
+  phase: Pick<ElectionPhaseInfo, "lastResultChange"> | null | undefined,
+  now: number
+): boolean {
+  const checked = Date.parse(feed?.checkedAt ?? "");
+  if (Number.isNaN(checked)) return false;
+  return now - checked > resultsSyncInterval(phase, now) + FEED_BEHIND_SLACK_MS;
+}
+
+/** When the count on screen was read from the feeds: a state's last good
+ * read, or — from an older backend with no feed record — the newest read
+ * of any of its races. Without `state`, the newest of every state's. Never
+ * the page's own clock: a refresh can be answered from a cache, so "now"
+ * would overstate how fresh the count is. Null with no count read. */
+export function countReadAt(
+  results: Pick<LiveResults, "feeds" | "races">,
+  state?: string
+): string | null {
+  const newest = (times: (string | null | undefined)[]) =>
+    times.reduce<string | null>(
+      (latest, t) =>
+        t && !Number.isNaN(Date.parse(t)) && (!latest || Date.parse(t) > Date.parse(latest))
+          ? t
+          : latest,
+      null
+    );
+  const races = state ? results.races.filter((r) => r.state === state) : results.races;
+  if (state) return results.feeds?.[state]?.lastOkAt ?? newest(races.map((r) => r.fetchedAt));
+  return newest([
+    ...Object.values(results.feeds ?? {}).map((f) => f.lastOkAt),
+    ...races.map((r) => r.fetchedAt),
+  ]);
+}
+
+/** Election day before any covered state's polls close: people are still
+ * voting, so /elections says polls are open — not "results", as if there
+ * were some — and so does what search and link cards show of it. Needs a
+ * live state (with none, `every` is vacuously true and the page would say
+ * polls are open all day) and no count stored anywhere. */
+export function everyLiveStateVoting(
+  results: Pick<LiveResults, "phase" | "pollsClose" | "feeds" | "races" | "liveStates">,
+  now: number
+): boolean {
+  return (
+    showsResults(results.phase) &&
+    results.phase.phase === "election_day" &&
+    results.races.length === 0 &&
+    results.liveStates.length > 0 &&
+    results.liveStates.every((st) => pollsStillOpen(results, st, now))
+  );
 }
 
 /** Votes counted and the top two level: an exact tie, where the backend

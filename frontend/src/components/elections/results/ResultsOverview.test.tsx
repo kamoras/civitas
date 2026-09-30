@@ -129,3 +129,47 @@ describe("the national results map's key", () => {
     expect(screen.queryByText(/paler/i)).not.toBeInTheDocument();
   });
 });
+
+describe("a Senate race on a directory row", () => {
+  it("still says leads in a count the state lists as official — never a bare 'official'", () => {
+    render(
+      <ResultsOverview
+        results={results({
+          senateStates: ["GA"],
+          races: [
+            race({
+              raceId: "2026-SEN-GA",
+              office: "S",
+              district: null,
+              official: true,
+              flip: false,
+              leaderParty: "DEM",
+              candidates: [
+                { name: "Jane Roe", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+                { name: "Sam Poe", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+              ],
+            }),
+          ],
+        })}
+        states={["GA"]}
+      />
+    );
+    const row = within(screen.getByRole("region", { name: /By state/ })).getByRole("link", {
+      name: /^GA/,
+    });
+    expect(row).toHaveTextContent("Senate: Jane Roe (D) leads · official count");
+    expect(row).not.toHaveTextContent(/\(D\) official/);
+  });
+});
+
+describe("the Senate map's footnote", () => {
+  it("says what a two-seat state is shaded by, as stateShade draws it", () => {
+    render(<ResultsOverview results={results()} states={["GA"]} />);
+    expect(
+      screen.getByText(
+        /shaded by the party leading more of its two races, grey when two parties lead equally many/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/leading both/)).not.toBeInTheDocument();
+  });
+});

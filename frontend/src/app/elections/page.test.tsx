@@ -206,6 +206,8 @@ describe("ElectionsPage", () => {
   });
 
   it("draws a covered state whose feed failed as unread, never as no votes yet", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
     fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
     fetchLiveResults.mockResolvedValue({
       ...RESULTS,
@@ -228,6 +230,8 @@ describe("ElectionsPage", () => {
   });
 
   it("marks a state stale when its latest read failed but an older count is shown", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
     fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
     fetchLiveResults.mockResolvedValue({
       ...RESULTS,
@@ -443,6 +447,95 @@ describe("ElectionsPage", () => {
     expect(screen.getByRole("region", { name: "Totals" })).toHaveTextContent(
       "Read live in 1 of the 1 state electing a senator"
     );
+  });
+
+  it("says when a refresh failed and how old the count on screen is", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValueOnce({
+      ...RESULTS,
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T03:00:00Z" },
+      },
+    });
+    render(<ElectionsPage />);
+    expect(await screen.findByText(/^LIVE · LAST CHANGE/)).toBeInTheDocument();
+    // The next refresh fails: the masthead says when, and which count is
+    // still on screen — not just that it is retrying.
+    fetchLiveResults.mockRejectedValue(new Error("502"));
+    vi.setSystemTime(new Date("2026-11-04T03:03:00Z"));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    const status = await screen.findByText(/^REFRESH FAILED/);
+    expect(status).toHaveTextContent(
+      "REFRESH FAILED AT NOV 3, 10:03 PM ET · SHOWING THE COUNT READ AT NOV 3, 10:00 PM ET · RETRYING EVERY MINUTE"
+    );
+    expect(status).not.toHaveTextContent(/LIVE/);
+  });
+
+  it("marks a state STALE, not LIVE, once the backend stops reading its feed", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // Counts still moving (last change 02:42), so the sync reads every five
+    // minutes: a read 20 minutes old is a stopped sync.
+    vi.setSystemTime(new Date("2026-11-04T03:20:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      liveStates: ["GA", "NY"],
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T03:00:00Z" },
+        NY: { status: "ok", checkedAt: "2026-11-04T03:18:00Z", lastOkAt: "2026-11-04T03:18:00Z" },
+      },
+    });
+    render(<ElectionsPage />);
+    const byState = within(await screen.findByRole("region", { name: /By state/ }));
+    const ga = byState.getByRole("link", { name: /^GA/ });
+    expect(ga).toHaveTextContent("STALE");
+    expect(ga).not.toHaveTextContent(/LIVE/);
+    expect(ga).toHaveTextContent(
+      "NOT CHECKED SINCE NOV 3, 10:00 PM ET · COUNT FROM NOV 3, 10:00 PM ET"
+    );
+    expect(mapFill.label?.("GA")).toMatch(/; not live, not checked since Nov 3, 10:00 PM ET/);
+    // A state still read on time stays live, and so does the masthead.
+    expect(byState.getByRole("link", { name: /^NY/ })).toHaveTextContent("LIVE");
+    expect(screen.getByText(/^LIVE · LAST CHANGE/)).toBeInTheDocument();
+  });
+
+  it("says STALE in the masthead, with the count's read time, when no feed is being read", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:20:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T03:00:00Z" },
+      },
+    });
+    render(<ElectionsPage />);
+    const status = await screen.findByText(/^STALE · /);
+    expect(status).toHaveTextContent(
+      "STALE · NO STATE'S FEED READ LATELY · SHOWING THE COUNT READ AT NOV 3, 10:00 PM ET"
+    );
+  });
+
+  it("allows the hourly sync its hour once no count has moved for a day", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-06T03:45:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-06T03:00:00Z", lastOkAt: "2026-11-06T03:00:00Z" },
+      },
+    });
+    render(<ElectionsPage />);
+    const ga = within(await screen.findByRole("region", { name: /By state/ })).getByRole("link", {
+      name: /^GA/,
+    });
+    expect(ga).toHaveTextContent("LIVE");
+    expect(ga).not.toHaveTextContent(/STALE/);
   });
 
   it("says how often it is really retrying", async () => {
