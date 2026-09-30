@@ -15,5 +15,8 @@ COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 EXPOSE 8081
 
+# The probe reaches the frontend through nginx, so it sends the self-fetch
+# marker the site's middleware skips (frontend/src/middleware.ts): otherwise
+# every probe is counted as a visit to "/".
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=10s \
-    CMD wget -q --spider http://localhost:8081/ || exit 1
+    CMD wget -q --spider -U "Civitas-Bot/1.0 (healthcheck)" http://localhost:8081/ || exit 1

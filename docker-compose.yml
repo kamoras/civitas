@@ -157,8 +157,10 @@ services:
       # `wget http://127.0.0.1:3000/` returns the page fine, `wget
       # http://localhost:3000/` gets "Connection refused" on the exact
       # same running container — busybox wget doesn't fall back to a
-      # second resolved address the way curl does).
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      # second resolved address the way curl does). It sends the self-fetch
+      # marker the site's middleware skips (frontend/src/middleware.ts), so
+      # a probe every 15s isn't counted as a visit to "/".
+      test: ["CMD", "wget", "-q", "--spider", "-U", "Civitas-Bot/1.0 (healthcheck)", "http://127.0.0.1:3000/"]
       interval: 15s
       timeout: 5s
       retries: 3

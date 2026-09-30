@@ -40,12 +40,14 @@ into. That check is what makes automatic discovery safe enough to act on.
 import asyncio
 import logging
 import re
+import time
+import weakref
 from collections import defaultdict
-from urllib.parse import urljoin, urlparse
-from urllib.robotparser import RobotFileParser
+from urllib.parse import urljoin, urlparse, urlsplit
 
 import httpx
 
+from app.pipeline.fetch import robots
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, runoff_threshold
 from app.pipeline.rate_limiter import RateLimiter
@@ -55,6 +57,18 @@ from app.state_names import STATE_NAMES  # noqa: E402
 logger = logging.getLogger(__name__)
 
 _HEADERS = BROWSER_HEADERS
+# The name robots.txt rules address us by: the product token our
+# User-Agent carries ("... Civitas/1.0 (+contact)"), matched as RFC 9309
+# says (fetch/robots.py). urllib.robotparser read the whole browser-shaped
+# string as "Mozilla", so a site's "User-agent: Civitas" rules never applied.
+ROBOTS_AGENT = "Civitas"
+# An unreachable robots.txt means "assume complete disallow" (RFC 9309
+# §2.3.1.4) — for this long, then it is asked again, rather than for the
+# life of the process.
+ROBOTS_UNREACHABLE_RETRY_S = 3600
+# A file that was read is trusted this long (§2.4: SHOULD NOT be used for
+# more than 24 hours) — the pipeline process outlives many nightly runs.
+ROBOTS_CACHE_S = 24 * 3600
 _rate_limiter = RateLimiter(rps=1.0)
 # Probing is one request each to fifty DIFFERENT hosts, and a rate limit
 # exists to be polite to ONE host — serialising the whole sweep through
@@ -114,48 +128,131 @@ _NOT_STATEWIDE_RE = re.compile(
 )
 
 
-async def _get(
-    client: httpx.AsyncClient, url: str, label: str, timeout: float = 20.0,
-    probe: bool = False,
-):
-    # ONE attempt (retries counts attempts, not extra tries) and no 4xx
-    # retry: most of what a crawler asks for is expected to be absent — a
-    # host that doesn't exist, a state not on this vendor — and retrying
-    # every miss three times turns a sweep of 50 states into a sweep
-    # nobody will wait for.
-    return await fetch_with_retry(
-        client, _probe_limiter if probe else _rate_limiter, "GET", url,
-        timeout=timeout, retries=1, retry_on_4xx=False,
-        log_label=label, headers=_HEADERS,
-    )
+# scheme://host -> (the rules, the monotonic time they stop being trusted).
+_robots: dict[str, tuple[robots.Robots, float]] = {}
+# One read of an origin's robots.txt at a time: states are swept in
+# parallel, and several can ask about the same host at once. Per event loop
+# — each sweep runs in a loop of its own, and a lock can't be waited on from
+# a loop other than the one it was first used in — and held weakly, so a
+# finished sweep's loop and locks go with it.
+_robots_locks: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Lock]]" = (
+    weakref.WeakKeyDictionary()
+)
+# The last robots.txt actually read from each origin, and when: RFC 9309
+# §2.3.1.4 lets a crawler go on using it while a later read fails, instead
+# of refusing everything there.
+_robots_last_read: dict[str, tuple[robots.Robots, float]] = {}
+ROBOTS_LAST_READ_MAX_AGE_S = 30 * 24 * 3600
+# Origins where a real request was refused only because robots.txt could
+# not be read — reported by the sweep (take_unreadable_refusals), since a
+# state quietly finding nothing looks the same as a state with nothing.
+_unreadable_refusals: set[str] = set()
+# How many redirects a request follows, each hop asking robots.txt first.
+MAX_REDIRECTS = 5
 
 
-_robots: dict[str, RobotFileParser | None] = {}
-
-
-async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
+async def _allowed(client: httpx.AsyncClient, url: str, probe: bool = False) -> bool:
     """Whether this state's site says a robot may read this path.
 
     A weekly sweep of fifty government sites is exactly the kind of thing
     robots.txt exists to govern, and a crawler that ignores it earns a
-    block that takes the whole feature down with it. Fetched once per host
-    per process; a site with no robots.txt, or one that can't be read, is
-    treated as permitting — that is what the standard says absence means.
+    block that takes the whole feature down with it. Read as RFC 9309 says
+    (fetch/robots.py) and kept ROBOTS_CACHE_S: a 4xx means the site has no
+    rules for us; a 5xx, a 429 or no answer at all means we may read
+    nothing there until it can be asked again, ROBOTS_UNREACHABLE_RETRY_S
+    later (logged here, so a refusal it causes isn't mistaken for the
+    site's own).
     """
-    host = urlparse(url).netloc
-    if host not in _robots:
-        parser = RobotFileParser()
-        resp = await _get(
-            client, f"https://{host}/robots.txt", f"{host} robots.txt",
-            timeout=8.0, probe=True,
+    parts = urlsplit(url)
+    origin = f"{(parts.scheme or 'https').lower()}://{parts.netloc.lower()}"
+    locks = _robots_locks.setdefault(asyncio.get_running_loop(), {})
+    async with locks.setdefault(origin, asyncio.Lock()):
+        cached = await _robots_for(client, origin)
+    # urlsplit keeps ";params" in the path, which urlparse would cut off.
+    path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+    allowed = cached.allows(ROBOTS_AGENT, path)
+    if not allowed and cached is robots.DISALLOW_ALL and not probe:
+        # The portal probe's guesses are mostly hosts that don't exist;
+        # everything else refused this way is a source the sweep missed.
+        _unreadable_refusals.add(origin)
+    return allowed
+
+
+def take_unreadable_refusals() -> list[str]:
+    """Origins where a request was refused because robots.txt couldn't be
+    read, since the last call — for the sweep's report."""
+    refused = sorted(_unreadable_refusals)
+    _unreadable_refusals.clear()
+    return refused
+
+
+async def _get_governed(
+    client: httpx.AsyncClient, url: str, label: str, timeout: float = 20.0,
+    probe: bool = False,
+):
+    """_get, asking robots.txt first — and again at every redirect, since
+    a path allowed on one site can redirect to one its own site's
+    robots.txt forbids. None when refused, unreadable or too many hops."""
+    for _ in range(MAX_REDIRECTS + 1):
+        if not await _allowed(client, url, probe=probe):
+            if not probe:
+                logger.info("%s: robots.txt does not allow %s — not reading it", label, url)
+            return None
+        resp = await fetch_with_retry(
+            client, _probe_limiter if probe else _rate_limiter, "GET", url,
+            timeout=timeout, retries=1, retry_on_4xx=False,
+            log_label=label, headers=_HEADERS, follow_redirects=False,
         )
-        if resp is None:
-            _robots[host] = None
+        location = resp.headers.get("location") if resp is not None and resp.is_redirect else None
+        if not location:
+            return resp
+        url = urljoin(str(resp.url), location)
+    logger.info("%s: more than %d redirects — not following to %s", label, MAX_REDIRECTS, url)
+    return None
+
+
+async def _robots_for(client: httpx.AsyncClient, origin: str) -> robots.Robots:
+    """The origin's rules, read at most once per ROBOTS_CACHE_S (or
+    ROBOTS_UNREACHABLE_RETRY_S after a failed read)."""
+    cached = _robots.get(origin)
+    now = time.monotonic()
+    if cached is None or now >= cached[1]:
+        resp = await fetch_with_retry(
+            client, _probe_limiter, "GET", f"{origin}/robots.txt",
+            # Two tries: one refusal here keeps the whole origin out of the
+            # sweep, and every state's Clarity probe shares one origin.
+            timeout=8.0, retries=2, retry_on_4xx=False,
+            # A missing robots.txt is an answer, not a failure to log. A 429
+            # is handled before this, as a failed fetch: asked to slow down,
+            # we read nothing there rather than everything.
+            expected_statuses=tuple(s for s in range(400, 500) if s != 429),
+            log_label=f"{origin} robots.txt", headers=_HEADERS,
+        )
+        last = _robots_last_read.get(origin)
+        if resp is None and last is not None and now - last[1] <= ROBOTS_LAST_READ_MAX_AGE_S:
+            # The copy read before still stands (§2.3.1.4), asked again later.
+            logger.info("%s/robots.txt unreachable — using the copy read before", origin)
+            cached = (last[0], now + ROBOTS_UNREACHABLE_RETRY_S)
+        elif resp is None:
+            # Info here (fetch_with_retry has already logged the failure):
+            # the portal probe asks hosts that mostly don't exist. A real
+            # request this refuses is reported by the sweep instead
+            # (take_unreadable_refusals).
+            logger.info(
+                "%s/robots.txt unreachable — reading nothing there for %d minutes (RFC 9309 §2.3.1.4)",
+                origin, ROBOTS_UNREACHABLE_RETRY_S // 60,
+            )
+            cached = (robots.DISALLOW_ALL, now + ROBOTS_UNREACHABLE_RETRY_S)
+        elif resp.status_code >= 400:
+            cached = (robots.ALLOW_ALL, now + ROBOTS_CACHE_S)
         else:
-            parser.parse(resp.text.splitlines())
-            _robots[host] = parser
-    parser = _robots[host]
-    return parser is None or parser.can_fetch(_HEADERS["User-Agent"], url)
+            # The shared fetch reads the whole body; only the first
+            # MAX_BYTES are parsed (§2.5), cut at a line end.
+            parsed = robots.parse_bytes(resp.content)
+            _robots_last_read[origin] = (parsed, now)
+            cached = (parsed, now + ROBOTS_CACHE_S)
+        _robots[origin] = cached
+    return cached[0]
 
 
 def _hosts_for(state: str) -> list[str]:
@@ -173,7 +270,7 @@ async def _probe_clarity(client: httpx.AsyncClient, state: str, cycle: int) -> d
     """Clarity publishes on one fixed path per state, so the only question
     is whether this cycle is in it yet — Iowa's 2026 primary appeared
     between two probes four days apart."""
-    resp = await _get(client, f"{CLARITY_BASE}/{state}/elections.json", f"{state} Clarity")
+    resp = await _get_governed(client, f"{CLARITY_BASE}/{state}/elections.json", f"{state} Clarity")
     if resp is None:
         return None
     try:
@@ -241,7 +338,7 @@ async def _probe_enhanced_voting(
     hosts = _hosts_for(state)
 
     async def ask(host: str):
-        resp = await _get(
+        resp = await _get_governed(
             client, f"https://{host}/results/public/api/jurisdictions/{name}",
             f"{state} portal probe", timeout=8.0, probe=True,
         )
@@ -307,7 +404,7 @@ async def _probe_enhanced_voting(
         # their files.
         documents = []
         for entry in primaries[:2]:
-            doc = await _get(
+            doc = await _get_governed(
                 client, election_url.format(election_id=entry.get("publicElectionId") or ""),
                 f"{state} election document", timeout=15.0,
             )
@@ -400,10 +497,7 @@ async def _probe_pages(
             if url in seen or len(seen) >= 10 or len(found) > 60:
                 return
             seen.add(url)
-            if not await _allowed(client, url):
-                logger.info("%s: robots.txt disallows %s — not reading it", state, url)
-                return
-            resp = await _get(client, url, f"{state} page scan", timeout=15.0)
+            resp = await _get_governed(client, url, f"{state} page scan", timeout=15.0)
             if resp is None or "html" not in resp.headers.get("content-type", ""):
                 return
             remember(url, resp.text)
@@ -807,10 +901,7 @@ async def _read(client: httpx.AsyncClient, url: str, label: str):
     shape that read it, or (None, None)."""
     from app.pipeline.fetch.state_candidates_tabular import MAX_DOWNLOAD_BYTES, _rows
 
-    if not await _allowed(client, url):
-        logger.info("%s: robots.txt disallows %s — not downloading it", label, url)
-        return None, None
-    resp = await _get(client, url, label, timeout=90.0)
+    resp = await _get_governed(client, url, label, timeout=90.0)
     if resp is None or len(resp.content) > MAX_DOWNLOAD_BYTES:
         return None, None
     shape = _shape_of(resp.content)

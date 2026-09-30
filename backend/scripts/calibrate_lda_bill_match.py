@@ -39,10 +39,11 @@ from datetime import date
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
+from app.contact import BOT_USER_AGENT  # noqa: E402
 from app.pipeline.analyze import lobbying_records as lr  # noqa: E402
 from app.pipeline.fetch.congress import BILL_TYPES, congress_first_year, congress_for_year  # noqa: E402
 
-UA = {"User-Agent": "CivitasCivicPlatform/1.0 (bill title calibration)"}
+UA = {"User-Agent": BOT_USER_AGENT}
 BULK = "https://www.govinfo.gov/bulkdata/BILLSTATUS/{congress}/{kind}/BILLSTATUS-{congress}-{kind}.zip"
 LDA = "https://lda.gov/api/v1/filings/"
 OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "bill_title_token_df.json"
