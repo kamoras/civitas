@@ -481,8 +481,8 @@ class TestTextHashes:
 
     def test_an_embed_takes_the_write_lock_only_to_write(self, vec_env):
         # The identity is recorded already: no write transaction just to
-        # read it — the batch's, and the ratio's one-row write (its counts
-        # are read in a snapshot), nothing else.
+        # read it — the batch's, and the ratio's (its counts and its
+        # nested one-row write together), nothing else.
         vector_store.embed_explore_documents([_doc(1, "A title")])
         real = vector_store._writing
         opened = []
@@ -493,7 +493,7 @@ class TestTextHashes:
 
         with patch.object(vector_store, "_writing", counting):
             vector_store.embed_explore_documents([_doc(2, "B title")])
-        assert len(opened) == 2
+        assert len(opened) == 3
 
     def test_a_batch_deletes_its_documents_old_chunks_in_one_statement(self, vec_env):
         # vec0 scans every chunk per doc_id statement: one per batch, not
@@ -516,6 +516,19 @@ class TestTextHashes:
         assert len(deletes) == 1
         titles = dict(conn.execute("SELECT doc_id, title FROM vec_explore").fetchall())
         assert titles == {i: f"New {i}" for i in range(1, 6)}
+
+    def test_a_purge_recounts_chunks_per_document(self, vec_env):
+        # Search scales k by the ratio: after a purge it must describe what
+        # is left, not what was.
+        model = vector_store.get_similarity_model()
+        model.max_seq_length = 16
+        model.tokenizer.tokenize.side_effect = str.split
+        long_body = " ".join(f"word{i}." for i in range(40))
+        vector_store.embed_explore_documents([_doc(1, "Long", body=long_body), _doc(2, "Short")])
+        conn = vector_store.get_vec_conn()
+        assert float(vector_store._get_meta(conn, "explore_chunks_per_doc")) > 1.0
+        vector_store.delete_explore_vectors({1})
+        assert float(vector_store._get_meta(conn, "explore_chunks_per_doc")) == 1.0
 
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])

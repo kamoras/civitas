@@ -821,17 +821,22 @@ def chunk_text(text: str, max_tokens: int, count_tokens) -> list[str]:
     return windows
 
 
-def _delete_chunks(conn: sqlite3.Connection, doc_ids: list[int]) -> int:
-    """Delete these documents' chunks, inside the caller's transaction:
-    one statement per 500 ids, since vec0 can't index doc_id outside a KNN
-    query — each statement scans every chunk, so one per document would
-    scan the table once per document. Returns the chunks deleted."""
+def _delete_ids(conn: sqlite3.Connection, table: str, doc_ids: list[int]) -> int:
+    """Delete `table`'s rows for these documents, inside the caller's
+    transaction: one statement per 500 ids (SQLite caps host parameters
+    per statement), never one per document — vec0 can't index doc_id
+    outside a KNN query, so each statement scans every chunk. Returns the
+    rows deleted."""
     removed = 0
     for i in range(0, len(doc_ids), 500):
         part = doc_ids[i:i + 500]
-        cur = conn.execute(f"DELETE FROM vec_explore WHERE doc_id IN ({','.join('?' * len(part))})", part)
+        cur = conn.execute(f"DELETE FROM {table} WHERE doc_id IN ({','.join('?' * len(part))})", part)
         removed += cur.rowcount or 0
     return removed
+
+
+def _delete_chunks(conn: sqlite3.Connection, doc_ids: list[int]) -> int:
+    return _delete_ids(conn, "vec_explore", doc_ids)
 
 
 def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = True, fresh: bool = False) -> int:
@@ -954,17 +959,17 @@ def _record_chunks_per_doc(conn: sqlite3.Connection) -> None:
     path needs it to know how many chunk slots to request for a given
     number of documents. Stored because it is a property of the index and
     recomputing it per query is a COUNT DISTINCT over the whole table.
-    Counted in a read snapshot (committed rows only, and no write lock held
-    through two full scans); only the one row is written under it."""
-    with _snapshot() as snap:
-        total_chunks = snap.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-        total_docs = snap.execute(
+    Counted and written in one write transaction: a delete committing
+    between a count and its write would leave a ratio of a table that no
+    longer exists (the two scans hold the lock ~tens of ms)."""
+    with _writing(conn):
+        total_chunks = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+        total_docs = conn.execute(
             "SELECT COUNT(*) FROM (SELECT DISTINCT doc_id FROM vec_explore)"
         ).fetchone()[0]
-    if total_docs:
-        _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
-    else:  # an empty index: no ratio, rather than the last corpus's
-        with _writing(conn):
+        if total_docs:
+            _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
+        else:  # an empty index: no ratio, rather than the last corpus's
             conn.execute("DELETE FROM vec_meta WHERE key = 'explore_chunks_per_doc'")
 
 
@@ -1191,14 +1196,12 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
     if not ids:
         return 0
     conn = get_vec_conn()
-    # SQLite caps host parameters per statement, and this is called with
-    # whole-corpus-sized id sets during a cleanup sweep. One transaction: a
-    # failure part-way leaves nothing half-deleted.
+    # One transaction: a failure part-way leaves nothing half-deleted.
     with _writing(conn):
         removed = _delete_chunks(conn, ids)
-        for i in range(0, len(ids), 500):
-            part = ids[i:i + 500]
-            conn.execute(f"DELETE FROM vec_explore_text WHERE doc_id IN ({','.join('?' * len(part))})", part)
+        _delete_ids(conn, "vec_explore_text", ids)
+    if removed:
+        _record_chunks_per_doc(conn)  # chunks went: the ratio moved
     return removed
 
 
