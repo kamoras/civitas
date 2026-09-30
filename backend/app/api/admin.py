@@ -1444,38 +1444,42 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         # refused, it rebuilds nothing, and a start mustn't have left an
         # incomplete index to it), keyword and authority passes included:
         # check-and-deploy waits it out.
-        with lease.job(lease.EXPLORE, who="Explore re-embed") as held, rebuild_underway():
+        with lease.job(lease.EXPLORE, who="Explore re-embed") as held:
             if not held:
                 return  # logged as a skip by lease.job
+            with rebuild_underway():
+                _reembed_held()
+
+    def _reembed_held() -> None:
+        try:
+            # Waiting out a top-up, or a rebuild begun since it was asked
+            # for — which did this work already (None), so it isn't redone.
+            count = rebuild_explore_index(SessionLocal, wait=True, unless_rebuilt_since=asked)
+        except Exception as error:
+            if isinstance(error, RebuildFailed):  # the index is gone
+                logger.exception("Explore re-embed failed — search's vector index is not ready until a "
+                                 "rebuild completes (the next Explore run or start retries it)")
+                alert_rebuild_failed("admin re-embed", error)
+            else:  # before the swap: the index is as it was
+                logger.exception("Explore re-embed not done — the index is unchanged")
+            return
+        resolve_ops_alert("explore-index-rebuild")  # whole again
+        try:
+            # Not _write_model_version: that records the classification
+            # model's vectors as current, which this doesn't touch.
+            db = SessionLocal()
             try:
-                # Waiting out a top-up, or a rebuild begun since it was asked
-                # for — which did this work already (None), so it isn't redone.
-                count = rebuild_explore_index(SessionLocal, wait=True, unless_rebuilt_since=asked)
-            except Exception as error:
-                if isinstance(error, RebuildFailed):  # the index is gone
-                    logger.exception("Explore re-embed failed — search's vector index is not ready until a "
-                                     "rebuild completes (the next Explore run or start retries it)")
-                    alert_rebuild_failed("admin re-embed", error)
-                else:  # before the swap: the index is as it was
-                    logger.exception("Explore re-embed not done — the index is unchanged")
-                return
-            resolve_ops_alert("explore-index-rebuild")  # whole again
-            try:
-                # Not _write_model_version: that records the classification
-                # model's vectors as current, which this doesn't touch.
-                db = SessionLocal()
-                try:
-                    indexed = rebuild_index(db)
-                    authority = update_document_authority(db)
-                finally:
-                    db.close()
-                # Last, as in an Explore run: it measures the finished indexes.
-                recalibrate_ranking(SessionLocal)
-                logger.info("Explore re-embed complete: %s embedded, %d keyword-indexed, authority %s",
-                            "none newly" if count is None else count, indexed, authority)
-            except Exception:
-                logger.exception("Explore re-embed: the vector index is rebuilt, but a later pass failed "
-                                 "(the next Explore run redoes them)")
+                indexed = rebuild_index(db)
+                authority = update_document_authority(db)
+            finally:
+                db.close()
+            # Last, as in an Explore run: it measures the finished indexes.
+            recalibrate_ranking(SessionLocal)
+            logger.info("Explore re-embed complete: %s embedded, %d keyword-indexed, authority %s",
+                        "none newly" if count is None else count, indexed, authority)
+        except Exception:
+            logger.exception("Explore re-embed: the vector index is rebuilt, but a later pass failed "
+                             "(the next Explore run redoes them)")
 
     def _job() -> None:
         try:

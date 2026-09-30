@@ -224,6 +224,7 @@ class TestOneWritePerDocument:
         # with their old chunks gone and only some new ones in — which the
         # next top-up reads as embedded, and never finishes.
         vector_store.embed_explore_documents([_doc(1, "One old"), _doc(2, "Two old")])
+        monkeypatch.setattr(vector_store, "_EMBED_BATCH", 1)  # a document a batch
         conn = vector_store.get_vec_conn()
         real_execute_count = {"n": 0}
 
@@ -241,8 +242,26 @@ class TestOneWritePerDocument:
         monkeypatch.setattr(vector_store, "get_vec_conn", lambda: _Conn())
         with pytest.raises(sqlite3.OperationalError):
             vector_store.embed_explore_documents([_doc(1, "One new"), _doc(2, "Two new")])
+        # The first batch kept; the second as it was.
         titles = dict(conn.execute("SELECT doc_id, title FROM vec_explore").fetchall())
         assert titles == {1: "One new", 2: "Two old"}
+
+    def test_a_rebuild_measures_chunks_per_document_once_at_its_end(self, vec_env, db_session, monkeypatch):
+        for i in range(3):
+            db_session.add(ExploreDocument(doc_type="House Floor Speech", source="congress.gov",
+                                           title=f"Doc {i}", summary="s", body="b", date="2026-07-01"))
+        db_session.commit()
+        monkeypatch.setattr(vector_store, "_REBUILD_BATCH", 1)
+        measured = []
+        real = vector_store._record_chunks_per_doc
+        monkeypatch.setattr(vector_store, "_record_chunks_per_doc", lambda c: (measured.append(1), real(c)))
+        assert vector_store.rebuild_explore_index(lambda: db_session) == 3
+        assert measured == [1]
+
+    def test_an_empty_index_keeps_no_old_chunks_per_document(self, vec_env, db_session):
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        assert vector_store.rebuild_explore_index(lambda: db_session) == 0
+        assert vector_store.collection_stats()["chunksPerDocument"] == 0.0
 
 
 class TestEnsureExploreIndex:
@@ -295,12 +314,12 @@ class TestEnsureExploreIndex:
         real_embed = vector_store.embed_explore_documents
         seen = []
 
-        def embed_then_delete_the_first(docs):
+        def embed_then_delete_the_first(docs, **kw):
             seen.extend(d["id"] for d in docs)
             if len(seen) == len(docs):  # after the first batch
                 db_session.query(ExploreDocument).filter(ExploreDocument.id == ids[0]).delete()
                 db_session.commit()
-            return real_embed(docs)
+            return real_embed(docs, **kw)
 
         monkeypatch.setattr(vector_store, "embed_explore_documents", embed_then_delete_the_first)
         vector_store.rebuild_explore_index(lambda: db_session)
@@ -493,9 +512,9 @@ class TestEnsureExploreIndex:
         real_embed = vector_store.embed_explore_documents
         calls = []
 
-        def fails_after_a_batch(docs):
+        def fails_after_a_batch(docs, **kw):
             calls.append(1)
-            real_embed(docs)
+            real_embed(docs, **kw)
             raise sqlite3.OperationalError("database is locked")
 
         monkeypatch.setattr(vector_store, "embed_explore_documents", fails_after_a_batch)

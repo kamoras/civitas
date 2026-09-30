@@ -269,6 +269,8 @@ def rebuild_underway() -> Iterator[None]:
 
 # Documents a rebuild reads and embeds at a time.
 _REBUILD_BATCH = 500
+# Chunks encoded and written at a time (rounded up to whole documents).
+_EMBED_BATCH = 200
 
 
 def _open_vec_conn(timeout: float, *, check_same_thread: bool = True, extension: bool = True) -> sqlite3.Connection:
@@ -651,7 +653,7 @@ def chunk_text(text: str, max_tokens: int, count_tokens) -> list[str]:
     return windows
 
 
-def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = True) -> int:
+def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = True, fresh: bool = False) -> int:
     """Embed explore documents for semantic search.
 
     Args:
@@ -661,6 +663,8 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
         record_chunks_per_doc: measure the index's chunks per document
               after (a rebuild measures once, at its end, not per batch
               over a half-built table).
+        fresh: the documents aren't in the index (a rebuild's new table),
+              so there are no old chunks to delete first.
 
     Returns:
         Number of documents embedded.
@@ -692,27 +696,28 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
     if not units:
         return 0
 
-    # Encoded first, all of it, and only then written — each document's old
-    # chunks deleted and its new ones inserted in one transaction. A failure
-    # partway (a lock, an encode error) leaves every document either as it
-    # was or as it now is, never with its old chunks gone and only some of
-    # its new ones in: that state reads as embedded to the next top-up,
-    # which would never finish it.
-    BATCH = 200
-    vectors = []
-    for i in range(0, len(units), BATCH):
-        vectors.extend(model.encode(
-            [t for _, t, _ in units[i:i + BATCH]], show_progress_bar=False, normalize_embeddings=True,
-        ))
-    by_doc: dict[int, list] = {}
-    for (doc_id, text, doc), emb in zip(units, vectors):
-        by_doc.setdefault(doc_id, []).append((text, doc, emb))
-    doc_ids = set(by_doc)
-    for doc_id, chunks in by_doc.items():
+    # In batches of whole documents (about 200 chunks each), each written as
+    # soon as it is encoded, in one transaction: each document's old chunks
+    # deleted and its new ones inserted together. A failure partway (a lock,
+    # an encode error) leaves every document either as it was or as it now
+    # is, never with its old chunks gone and only some new ones in — that
+    # state reads as embedded to the next top-up, which would never finish
+    # it — and keeps every batch written before it. `fresh` (a rebuild's new
+    # table) skips the deletes: there is nothing to replace.
+    batches: list[list[tuple[int, str, dict]]] = [[]]
+    for unit in units:
+        if len(batches[-1]) >= _EMBED_BATCH and batches[-1][-1][0] != unit[0]:
+            batches.append([])
+        batches[-1].append(unit)
+    doc_ids: set[int] = set()
+    for batch in batches:
+        embs = model.encode([t for _, t, _ in batch], show_progress_bar=False, normalize_embeddings=True)
         with _vec_lock:
             try:
-                conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
-                for text, doc, emb in chunks:
+                if not fresh:
+                    for doc_id in dict.fromkeys(d for d, _, _ in batch):
+                        conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
+                for (doc_id, text, doc), emb in zip(batch, embs):
                     conn.execute(
                         "INSERT INTO vec_explore (embedding, doc_id, doc_type, chamber, "
                         "politician_id, title, date, source, politician_name, snippet) "
@@ -733,6 +738,7 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
             except BaseException:
                 conn.rollback()
                 raise
+        doc_ids.update(d for d, _, _ in batch)
 
     if _get_meta(conn, _INDEX_MODEL) is None:
         # A store never built at all (no identity, blank or other): only a
@@ -763,6 +769,9 @@ def _record_chunks_per_doc(conn: sqlite3.Connection) -> None:
     ).fetchone()[0]
     if total_docs:
         _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
+    else:  # an empty index: no ratio, rather than the last corpus's
+        conn.execute("DELETE FROM vec_meta WHERE key = 'explore_chunks_per_doc'")
+        conn.commit()
 
 
 # ── Search ───────────────────────────────────────────────────────
@@ -1131,7 +1140,9 @@ def _embed_all(db_session_factory) -> int:
             )
             if not docs:
                 break
-            total += embed_explore_documents([explore_embed_dict(d) for d in docs])
+            total += embed_explore_documents(
+                [explore_embed_dict(d) for d in docs], record_chunks_per_doc=False, fresh=True,
+            )
             after = docs[-1].id
     finally:
         db.close()
