@@ -6,6 +6,7 @@ from html import unescape
 
 import httpx
 
+from app.contact import BOT_USER_AGENT
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -133,7 +134,7 @@ def og_card(html: str) -> dict[str, str]:
 def fetch_og_card(url: str) -> dict[str, str] | None:
     """`url`'s link card (og_card), or None when the page can't be read."""
     try:
-        resp = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": "Civitas-Bot/1.0"})
+        resp = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": BOT_USER_AGENT})
         resp.raise_for_status()
     except Exception:
         logger.debug("Link card fetch failed for %s", url)

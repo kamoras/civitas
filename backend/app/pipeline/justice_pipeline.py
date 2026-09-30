@@ -12,6 +12,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy.orm import Session
 
+from app.contact import BOT_USER_AGENT
 from app.http_client import make_async_client
 from app.models import President
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
@@ -172,7 +173,7 @@ async def run_justice_pipeline(db: Session) -> dict:
     logger.info("=== Justice pipeline starting ===")
 
     async with make_async_client(
-        headers={"User-Agent": "Civitas/1.0 (civic-transparency-tool) httpx/0.27"},
+        headers={"User-Agent": BOT_USER_AGENT},
         follow_redirects=True,
     ) as client:
         justices = await fetch_current_justices(client)

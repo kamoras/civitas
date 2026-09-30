@@ -1,5 +1,7 @@
 """robots.txt as RFC 9309 reads it (app/pipeline/fetch/robots.py)."""
 
+import pytest
+
 from app.pipeline.fetch import robots
 
 AGENT = "Civitas"
@@ -186,6 +188,25 @@ class TestRecordsAfterReview:
 
     def test_a_colon_inside_a_whitespace_separated_value(self):
         assert _allows("User-agent: *\nDisallow /a:b\n", "/a:b/c") is False
+
+    @pytest.mark.parametrize("line", ["Disallowed: /x", "Diasllow: /x", "Diasllow /x", "Dissalow: /x"])
+    def test_keys_are_read_by_prefix_in_googles_spellings(self, line):
+        assert _allows(f"User-agent: *\n{line}\n", "/x") is False
+
+    def test_a_pluralised_user_agent_key_starts_a_group(self):
+        assert _allows("User-agents: *\nDisallow: /x\n", "/x") is False
+
+    def test_a_site_map_line_ends_nothing(self):
+        text = "User-agent: *\nSite-map: https://x.gov/s.xml\nUser-agent: Civitas\nDisallow: /a\n"
+        # Both agent lines still form one group: the sitemap belongs to none.
+        assert _allows(text, "/a") is False
+        assert robots.parse(text).allows("Other", "/a") is False
+
+    def test_a_byte_that_is_not_utf8_matches_its_own_encoding(self):
+        parsed = robots.parse_bytes(b"User-agent: *\nDisallow: /caf\xe9\n")
+        assert parsed.allows("Civitas", "/caf%E9") is False
+        assert parsed.allows("Civitas", "/caf%e9/menu") is False
+        assert parsed.allows("Civitas", "/cafe") is True
 
     def test_a_space_in_a_pattern_matches_its_encoding(self):
         assert _allows("User-agent: *\nDisallow: /a b\n", "/a%20b") is False

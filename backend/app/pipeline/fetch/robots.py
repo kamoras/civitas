@@ -19,9 +19,11 @@ agent lines is read here as the author laid it out.) Sitemap lines belong
 to no group and end nothing. Lines end at CR, LF or CRLF only. A UTF-8
 byte-order mark is dropped, and only the first MAX_BYTES are read (§2.5
 asks for at least 500 KiB). Like Google's parser, a record may use
-whitespace instead of the colon and the common misspellings of its key
-("useragent", "user agent", "disalow", "dissallow"): a crawler that wants
-to be told no reads a rule its author clearly meant.
+whitespace instead of the colon, and a key is read by its prefix in the
+spellings Google's parser accepts ("useragent", "user agent", "disalow",
+"diasllow"; "Disallowed" and "User-agents" too): a crawler that wants to be
+told no reads a rule its author clearly meant. Bytes that aren't UTF-8 are
+kept as the bytes they are, and percent-encoded as such.
 
 Matching (§2.2): a group applies when one of its user-agent lines names
 our product token, case-insensitively; the groups naming it are combined,
@@ -148,7 +150,9 @@ def normalize(value: str) -> str:
             out.append(decoded if decoded in _UNRESERVED else "%" + value[i + 1:i + 3].upper())
             i += 3
             continue
-        if ord(ch) > 127 or ch not in _URI_SAFE:
+        if "\udc80" <= ch <= "\udcff":  # A byte that wasn't UTF-8 (parse_bytes).
+            out.append(f"%{ord(ch) - 0xDC00:02X}")
+        elif ord(ch) > 127 or ch not in _URI_SAFE:
             out.append("".join(f"%{b:02X}" for b in ch.encode("utf-8")))
         else:
             out.append(ch)
@@ -160,16 +164,17 @@ def normalize(value: str) -> str:
 # with a colon or whitespace after them — so "Sitemap https://…" and
 # "Disallow /a:b" split after the key, not at a colon inside the value.
 _KNOWN_RECORD = re.compile(
-    r"^(user[\s_-]*agent|allow|dis+al+[oa]w|sitemaps?)\s*(?::|\s)\s*(.*)$", re.IGNORECASE,
+    r"^(user[\s_-]*agent|allow|dis+al+[oa]w|diasl+ow|site[\s_-]*maps?)\s*(?::|\s)\s*(.*)$",
+    re.IGNORECASE,
 )
-# Record keys as Google's parser accepts them, spaces, "-" and "_" removed.
-_KEYS = {
-    "useragent": "user-agent",
-    "allow": "allow",
-    "disallow": "disallow", "disalow": "disallow", "dissallow": "disallow",
-    "dissalow": "disallow", "disallaw": "disallow",
-    "sitemap": "sitemap", "sitemaps": "sitemap",
-}
+# Record keys as Google's parser reads them — by prefix, so "Disallowed"
+# and "User-agents" count — with spaces, "-" and "_" removed.
+_KEY_PREFIXES = (
+    ("useragent", "user-agent"),
+    ("allow", "allow"),
+    *((typo, "disallow") for typo in ("disallow", "dissallow", "dissalow", "disalow", "diasllow", "disallaw")),
+    ("sitemap", "sitemap"),
+)
 _RECORD = re.compile(r"^([A-Za-z][A-Za-z _-]*?)\s*(?::|\s)\s*(.*)$")
 
 
@@ -187,17 +192,17 @@ def _record(line: str) -> tuple[str, str] | None:
             return None
         key, value = match.group(1), match.group(2).strip()
     folded = re.sub(r"[\s_-]", "", key.lower())
-    return _KEYS.get(folded, folded), value
+    return next((name for prefix, name in _KEY_PREFIXES if folded.startswith(prefix)), folded), value
 
 
 def parse_bytes(body: bytes) -> Robots:
     """A fetched robots.txt: the first MAX_BYTES (§2.5), cut at the last
     line end within them — a half-read final line would be a rule its
-    author never wrote ("/*a*a…" read as "/*") — then read as UTF-8."""
+    author never wrote ("/*a*a…" read as "/*") — then read as UTF-8, a byte that isn't kept as itself."""
     if len(body) > MAX_BYTES:
         cut = max(body.rfind(b"\n", 0, MAX_BYTES + 1), body.rfind(b"\r", 0, MAX_BYTES + 1))
         body = body[:max(cut, 0)]
-    return _parse_lines(body.decode("utf-8-sig", errors="replace"))
+    return _parse_lines(body.decode("utf-8-sig", errors="surrogateescape"))
 
 
 def parse(text: str) -> Robots:

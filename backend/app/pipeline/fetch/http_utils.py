@@ -78,9 +78,11 @@ redact_url = redact_sensitive_params
 # results portals all went from 403 to 200 with no change of identity,
 # purely by sending the headers a normal client always sends.
 #
-# The User-Agent still says who we are and how to reach us, robots.txt is
-# still honoured (see state_source_crawler._allowed) and the rate limits
-# still apply. This is standards-compliance, not disguise: a site that
+# The User-Agent still says who we are and how to reach us, and the rate
+# limits still apply. robots.txt governs crawling: the one module that
+# wanders a site looking for pages (state_source_crawler) checks it at every
+# request; the readers here fetch the documents a source publishes for
+# exactly this use, at addresses written into their config. This is standards-compliance, not disguise: a site that
 # wants to refuse Civitas can still refuse Civitas.
 CIVIC_CONTACT = f"Civitas/1.0 (+{CONTACT_EMAIL})"
 BROWSER_HEADERS = {

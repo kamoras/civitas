@@ -430,3 +430,40 @@ def test_contact_address_is_real_and_held_once():
         text = _text(path)
         assert _OLD_CONTACT not in text, path
         assert path.resolve() in allowed or CONTACT_EMAIL.lower() not in text, path
+
+
+# The User-Agent written out as a literal on purpose, explained where it is
+# defined: New Hampshire's filter refuses the "(+contact)" comment.
+# (scripts/fetch_site_fonts.py sends next/font's browser string by name, so
+# Google Fonts serves the same files; the sweep doesn't read it as a literal.)
+_BROWSER_ONLY_USER_AGENTS = {
+    "app/pipeline/fetch/state_candidates_nh.py",
+}
+
+
+def test_every_user_agent_names_the_contact():
+    """A User-Agent written as a string literal is one that bypasses the
+    contact: every request that names Civitas says how to reach us, through
+    CIVIC_CONTACT, BROWSER_HEADERS or BOT_USER_AGENT."""
+    import re
+    from pathlib import Path
+
+    from app.contact import BOT_USER_AGENT, CONTACT_EMAIL
+
+    assert BOT_USER_AGENT.endswith(f"+{CONTACT_EMAIL})")
+    backend = Path(__file__).resolve().parents[1]
+    literal = re.compile(r"""["']user-agent["']\s*:\s*(?:\(\s*)?f?["']""", re.IGNORECASE)
+    offenders = []
+    for path in _checked_in(backend):
+        if path.suffix != ".py" or "tests" in path.relative_to(backend).parts:
+            continue
+        rel = path.relative_to(backend).as_posix()
+        if rel in _BROWSER_ONLY_USER_AGENTS:
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines):
+            # A value split over lines ends within the next one or two.
+            value = " ".join(lines[i:i + 3])
+            if literal.search(line) and CONTACT_EMAIL not in value and "CONTACT_EMAIL" not in value:
+                offenders.append(f"{rel}: {line.strip()}")
+    assert offenders == []
