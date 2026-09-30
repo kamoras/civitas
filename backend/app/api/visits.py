@@ -15,8 +15,8 @@ import hmac
 import logging
 import re
 import secrets
+import time
 from dataclasses import dataclass
-from datetime import datetime, UTC
 
 from fastapi import APIRouter, Query, Request
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -195,8 +195,17 @@ async def run_visit_consumer() -> None:
     asyncio.to_thread — the whole point of this consumer disappears if
     its own write blocks the loop the same way the old inline write did.
     """
+    last_check = -_STALE_SALT_CHECK_S
     while True:
-        event = await _visit_queue.get()
+        now = time.monotonic()
+        if now - last_check >= _STALE_SALT_CHECK_S:
+            last_check = now
+            # Off the loop: it deletes an ended day's salt row too.
+            await asyncio.to_thread(_forget_stale_salts)
+        try:
+            event = await asyncio.wait_for(_visit_queue.get(), timeout=_STALE_SALT_CHECK_S)
+        except TimeoutError:
+            continue
         batch = [event]
         while len(batch) < _VISIT_BATCH_MAX:
             try:
@@ -252,23 +261,47 @@ def _parse_device(ua: str) -> str:
 _salt_cache: tuple[str, bytes] | None = None
 
 
-def _load_or_create_salt(date: str) -> bytes:
+def _load_or_create_salt(date: str) -> bytes | None:
     """The shared salt for `date`, creating it if this is the first visit
     of the day. Every other day's salt is deleted in the same transaction —
     once a day's salt is gone, that day's hashes can't be recomputed from
-    an IP by anyone."""
+    an IP by anyone.
+
+    None when another worker has already made a later day's salt: this one
+    read the clock just before midnight, and making `date`'s again would
+    bring back a salt that was deleted."""
+    from sqlalchemy import exists, literal, select
+
     db = VisitsSessionLocal()
     try:
         db.execute(
             sqlite_insert(VisitSalt)
-            .values(date=date, salt=secrets.token_hex(32))
+            .from_select(
+                ["date", "salt"],
+                select(literal(date), literal(secrets.token_hex(32))).where(
+                    ~exists().where(VisitSalt.date > date),
+                ),
+            )
             .on_conflict_do_nothing(index_elements=["date"])
         )
-        db.query(VisitSalt).filter(VisitSalt.date != date).delete()
+        # Earlier days only: with several API workers, one that read the
+        # clock just before midnight must not delete the new day's salt
+        # another already made and cached — the two would then hash the
+        # same visitor differently all day.
+        db.query(VisitSalt).filter(VisitSalt.date < date).delete()
         db.commit()
-        return bytes.fromhex(db.query(VisitSalt.salt).filter(VisitSalt.date == date).scalar())
+        salt = db.query(VisitSalt.salt).filter(VisitSalt.date == date).scalar()
+        return bytes.fromhex(salt) if salt is not None else None
     finally:
         db.close()
+
+
+def _today() -> str:
+    """The current UTC day, as the salts are dated — the throttle store's
+    own clock, since a visit salt can come from there (_shared_salt)."""
+    from app.api import throttle
+
+    return throttle.utc_today()
 
 
 async def _daily_salt(date: str) -> bytes:
@@ -278,13 +311,92 @@ async def _daily_salt(date: str) -> bytes:
     try:
         salt = await asyncio.to_thread(_load_or_create_salt, date)
     except Exception:
-        # Degrade to a process-local salt: this worker's count of today's
-        # uniques may overlap the other worker's, but nothing reversible is
-        # ever stored. Retried on the next visit (not cached).
-        logger.warning("Visit salt unavailable — using a process-local salt for this visit", exc_info=True)
+        # Degrade to a fallback salt; nothing reversible is ever stored. The
+        # shared salt is retried on the next call (this isn't cached as it).
+        # One fallback for the whole container for the day where possible —
+        # derived from a RAM salt every worker shares (throttle.derived_salt,
+        # deleted when the day ends) — so a visitor during the outage counts
+        # once, not once per worker (a fresh salt per call made every visit a
+        # new unique). Visitors
+        # who span the outage and the recovery still count twice: no salt
+        # matching the shared one exists while it can't be read.
+        logger.warning("Visit salt unavailable — using a fallback salt", exc_info=True)
+        # Reads the RAM store on first use in a day: off the event loop.
+        return await asyncio.to_thread(_fallback_salt_for, date)
+    if salt is None:
+        # The day ended a moment ago and its salt is gone: this visit, from
+        # its last instant, is hashed with a salt nobody keeps — it may count
+        # as one more unique for that day, never as a recoverable address.
         return secrets.token_bytes(32)
-    _salt_cache = (date, salt)
+    # Cached only while its day lasts: a salt loaded just before midnight
+    # and returned after it, once the sweep has cleared the cache, must not
+    # put the ended day's salt back in memory.
+    if date == _today():
+        _salt_cache = (date, salt)
     return salt
+
+
+# The UTC day this process last made sure the database holds no earlier
+# day's salt (_forget_stale_salts).
+_salt_swept_day: str | None = None
+
+
+# (date, salt, whether it is the container-shared one)
+_fallback_salt: tuple[str, bytes, bool] | None = None
+
+
+# How often an idle worker checks for a salt left over from a previous day.
+_STALE_SALT_CHECK_S = 60.0
+
+
+def _forget_stale_salts() -> None:
+    """Drop any salt for a day that has ended — from this process's memory,
+    and the shared row from the visits database — without waiting for a new
+    day's first visit: until then, anyone holding it could recompute
+    yesterday's visitor hashes (AGENTS.md §8)."""
+    global _salt_cache, _fallback_salt
+    today = _today()
+    if _salt_cache is not None and _salt_cache[0] != today:
+        _salt_cache = None
+    if _fallback_salt is not None and _fallback_salt[0] != today:
+        _fallback_salt = None
+    # And from the database, once per new day: otherwise an ended day's row
+    # stays until the next day's first visit, hours later on a quiet night.
+    # By making today's salt — the one step that deletes earlier days
+    # (_load_or_create_salt) — never by deleting alone: a worker that read
+    # the clock just before midnight refuses to recreate an ended day's salt
+    # only because a later day's row exists.
+    global _salt_swept_day
+    if _salt_swept_day != today:
+        try:
+            _load_or_create_salt(today)
+            _salt_swept_day = today
+        except Exception:
+            logger.warning("Couldn't drop an ended day's visit salt — retried next tick", exc_info=True)
+    # The RAM store's salts, including the one the fallback derives from,
+    # are dropped by the store's own maintenance (throttle.run_maintenance).
+
+
+def _fallback_salt_for(date: str) -> bytes:
+    """The container's shared fallback (throttle.derived_salt: a RAM salt
+    deleted when the day ends) — or, while that store is down too, this process's own, kept
+    only until the shared one can be made: a private salt kept all day
+    would count this worker's visitors apart from every other worker's."""
+    global _fallback_salt
+    if date != _today():
+        # A visit from a day that has ended: hashed with a salt nobody keeps,
+        # as _daily_salt does once the day's salt is gone — never with a
+        # salt that outlives its day.
+        return secrets.token_bytes(32)
+    if _fallback_salt is None or _fallback_salt[0] != date or not _fallback_salt[2]:
+        from app.api import throttle
+
+        shared = throttle.derived_salt(f"visits:{date}", date)
+        if shared is not None:
+            _fallback_salt = (date, shared, True)
+        elif _fallback_salt is None or _fallback_salt[0] != date:
+            _fallback_salt = (date, secrets.token_bytes(32), False)
+    return _fallback_salt[1]
 
 
 def _visitor_hash(ip: str, salt: bytes) -> str:
@@ -391,7 +503,7 @@ async def track_visit(request: Request, path: str = Query("/")) -> None:
     """
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    date = datetime.now(UTC).date().isoformat()
+    date = _today()
 
     event = _VisitEvent(
         date=date,
@@ -436,7 +548,7 @@ async def track_timing(
     if not buckets:
         return
     event = _TimingEvent(
-        date=datetime.now(UTC).date().isoformat(),
+        date=_today(),
         normalized_path=_normalize_path(path),
         buckets=buckets,
     )

@@ -114,10 +114,18 @@ def test_every_block_that_adds_a_header_keeps_the_security_headers():
 
 
 def test_server_level_includes_the_security_headers():
+    """Every server a client can reach. The loopback-only "api-misses"
+    server is not one: its responses reach clients only through the public
+    server's /api/ locations, which add the headers — added there too,
+    each would go out twice."""
     servers = [b for b in _walk(_parse(CONF.read_text())) if b.head == "server"]
-    assert servers
-    for server in servers:
+    public = [s for s in servers if not any(d.startswith("listen 127.0.0.1:") for d in s.directives)]
+    assert public and len(public) < len(servers)
+    for server in public:
         assert INCLUDE in server.directives
+    for server in servers:
+        if server not in public:
+            assert INCLUDE not in server.directives
 
 
 def test_redirects_nginx_makes_are_relative():
@@ -167,7 +175,7 @@ def test_pages_leave_marked_no_transform():
         and b.head
         not in ("location /_next/static/", "location /photo/", "location = /api/og")
     ]
-    assert {b.head for b in page_locations} >= {"location /", "location /admin"}
+    assert {b.head for b in page_locations} >= {"location /", "location ^~ /admin"}
     for b in page_locations:
         assert "proxy_hide_header Cache-Control" in b.directives, b.head
         assert (

@@ -20,7 +20,10 @@ import {
   fetchTimeline,
   parseExploreSummaryText,
   splitHighlights,
+  abortableSleep,
+  streamExploreDocumentSummary,
   submitDocumentComment,
+  summaryRetryDelayMs,
 } from "./api";
 
 describe("parseExploreSummaryText", () => {
@@ -362,5 +365,349 @@ describe("submitDocumentComment", () => {
     const result = await submitDocumentComment(7, "A comment long enough.");
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/Submission failed/);
+  });
+});
+
+/** The summary's two requests: the cached read (GET, "none yet" unless
+ *  `cached` is given) and the generation (POST, `post`). */
+function stubSummaryFetch(
+  post: (url: string, init?: RequestInit) => Promise<Response> | undefined,
+  cached?: Response
+) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) =>
+      init?.method === "POST"
+        ? post(url, init)
+        : Promise.resolve(cached ?? new Response(null, { status: 204 }))
+    )
+  );
+}
+
+describe("streamExploreDocumentSummary", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const done = () =>
+    new Response('data: {"done": true, "summary": "S", "keyPoints": [], "impact": ""}\n\n', {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+
+  it("asks again after a refusal that says to come back, rather than failing", async () => {
+    // Another reader's generation of the document was under way; by the
+    // retry it is cached.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("", { status: 429, headers: { "Retry-After": "10", "X-Summary-Wait": "1" } })
+      )
+      .mockResolvedValueOnce(new Response("", { status: 503, headers: { "X-Summary-Wait": "1" } }))
+      .mockResolvedValueOnce(done());
+    stubSummaryFetch(fetchMock);
+    const waits: number[] = [];
+    const result = await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async (ms) => {
+        waits.push(ms);
+      }
+    );
+    expect(result.summary).toBe("S");
+    expect(waits).toEqual([10_000, 10_000]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("still fails on a refusal that isn't one to wait out", async () => {
+    stubSummaryFetch(vi.fn().mockResolvedValue(new Response("", { status: 404 })));
+    await expect(
+      streamExploreDocumentSummary(
+        1,
+        () => {},
+        undefined,
+        async () => {}
+      )
+    ).rejects.toThrow("404");
+  });
+
+  it("waits out a request that got no response at all", async () => {
+    const post = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(done());
+    stubSummaryFetch(post);
+    const waited: number[] = [];
+    const result = await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async (ms) => {
+        waited.push(ms);
+      }
+    );
+    expect(result.summary).toBeTruthy();
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(waited).toHaveLength(1);
+  });
+
+  it("reports a request that never gets a response, after a few tries", async () => {
+    const post = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    stubSummaryFetch(post);
+    await expect(
+      streamExploreDocumentSummary(
+        1,
+        () => {},
+        undefined,
+        async () => {}
+      )
+    ).rejects.toThrow("Failed to fetch");
+    expect(post).toHaveBeenCalledTimes(4);
+  });
+
+  it("counts drops in a row, not across a long wait", async () => {
+    const drop = () => Promise.reject(new TypeError("Failed to fetch"));
+    const wait = () =>
+      Promise.resolve(new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } }));
+    const post = vi.fn();
+    for (const next of [drop, drop, drop, wait, drop, drop, drop])
+      post.mockImplementationOnce(next);
+    post.mockResolvedValueOnce(done());
+    stubSummaryFetch(post);
+    const result = await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async () => {}
+    );
+    expect(result.summary).toBeTruthy();
+  });
+
+  it("releases the stream once its final event is read", async () => {
+    const res = done();
+    const cancel = vi.spyOn(ReadableStreamDefaultReader.prototype, "cancel");
+    stubSummaryFetch(vi.fn().mockResolvedValueOnce(res));
+    await streamExploreDocumentSummary(1, () => {});
+    expect(cancel).toHaveBeenCalled();
+    cancel.mockRestore();
+  });
+
+  it("reports a stream whose event it can't read, and releases it", async () => {
+    // The same answer comes back when asked again: not waited out.
+    const cancel = vi.spyOn(ReadableStreamDefaultReader.prototype, "cancel");
+    const post = vi.fn().mockResolvedValue(new Response("data: {not json\n\n"));
+    stubSummaryFetch(post);
+    await expect(
+      streamExploreDocumentSummary(
+        1,
+        () => {},
+        undefined,
+        async () => {}
+      )
+    ).rejects.toThrow("unreadable event");
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalled();
+    cancel.mockRestore();
+  });
+
+  it("releases an error response's body", async () => {
+    const failed = new Response("oops", { status: 500 });
+    const cancel = vi.spyOn(failed.body!, "cancel");
+    stubSummaryFetch(vi.fn().mockResolvedValue(failed));
+    await expect(streamExploreDocumentSummary(1, () => {})).rejects.toThrow("500");
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("says when it is waiting to be let in, and when the stream starts", async () => {
+    const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
+    stubSummaryFetch(vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(done()));
+    const states: boolean[] = [];
+    await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async () => {},
+      (waiting) => states.push(waiting)
+    );
+    expect(states).toEqual([true, false]);
+  });
+
+  it("releases each refusal's body before waiting", async () => {
+    const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
+    const cancel = vi.spyOn(refused.body!, "cancel");
+    stubSummaryFetch(vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(done()));
+    await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async () => {}
+    );
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("doesn't wait out a refusal the server doesn't mark as a wait", async () => {
+    for (const status of [429, 503]) {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response("", { status, headers: { "Retry-After": "5" } }));
+      stubSummaryFetch(fetchMock);
+      await expect(
+        streamExploreDocumentSummary(
+          1,
+          () => {},
+          undefined,
+          async () => {}
+        )
+      ).rejects.toThrow(String(status));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("stops waiting and asking once the reader has left", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("", { status: 429, headers: { "Retry-After": "10", "X-Summary-Wait": "1" } })
+      );
+    stubSummaryFetch(fetchMock);
+    const controller = new AbortController();
+    const pending = streamExploreDocumentSummary(1, () => {}, controller.signal);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    controller.abort();
+    await expect(pending).rejects.toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("summaryRetryDelayMs", () => {
+  it("follows Retry-After within bounds, with a default when there is none", () => {
+    expect(summaryRetryDelayMs("30")).toBe(30_000);
+    expect(summaryRetryDelayMs(null)).toBe(10_000);
+    expect(summaryRetryDelayMs("")).toBe(10_000);
+    expect(summaryRetryDelayMs("0")).toBe(1_000);
+    expect(summaryRetryDelayMs("120")).toBe(120_000);
+    expect(summaryRetryDelayMs("3600")).toBe(180_000);
+  });
+});
+
+describe("abortableSleep", () => {
+  it("leaves no listener behind on a wait that ends normally", async () => {
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    await abortableSleep(1, controller.signal);
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+
+  it("ends at once, rejected, when the signal aborts", async () => {
+    const controller = new AbortController();
+    const waiting = abortableSleep(60_000, controller.signal);
+    controller.abort();
+    await expect(waiting).rejects.toBeDefined();
+  });
+});
+
+describe("streamExploreDocumentSummary's result", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("says when the summary was cut short", async () => {
+    const body =
+      'data: {"done": true, "summary": "S", "keyPoints": [], "impact": "", "partial": true}\n\n';
+    stubSummaryFetch(vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+    expect((await streamExploreDocumentSummary(1, () => {})).partial).toBe(true);
+  });
+});
+
+describe("streamExploreDocumentSummary after its own generation timed out", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks again after the hold-off rather than reporting no summary", async () => {
+    const sse = (body: string) => new Response(`data: ${body}\n\n`, { status: 200 });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        sse('{"done": true, "summary": "", "keyPoints": [], "impact": "", "retryAfter": 120}')
+      )
+      .mockResolvedValueOnce(
+        sse('{"done": true, "summary": "S", "keyPoints": [], "impact": "", "truncated": true}')
+      );
+    stubSummaryFetch(fetchMock);
+    const waits: number[] = [];
+    const result = await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async (ms) => {
+        waits.push(ms);
+      }
+    );
+    expect(result.summary).toBe("S");
+    expect(result.truncated).toBe(true);
+    expect(waits).toEqual([125_000]); // the whole hold-off, and a margin
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("streamExploreDocumentSummary when its stream is cut", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks again rather than reporting no summary", async () => {
+    const cut = new Response('data: {"delta": "SUMMARY: half"}\n\n', { status: 200 });
+    const whole = new Response(
+      'data: {"done": true, "summary": "S", "keyPoints": [], "impact": ""}\n\n',
+      {
+        status: 200,
+      }
+    );
+    const fetchMock = vi.fn().mockResolvedValueOnce(cut).mockResolvedValueOnce(whole);
+    stubSummaryFetch(fetchMock);
+    const seen: string[] = [];
+    const result = await streamExploreDocumentSummary(
+      1,
+      (text) => seen.push(text),
+      undefined,
+      async () => {}
+    );
+    expect(result.summary).toBe("S");
+    expect(seen).toEqual(["SUMMARY: half", ""]); // the cut text is cleared before asking again
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("streamExploreDocumentSummary with a summary already made", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads it from the API without asking the pipeline", async () => {
+    const post = vi.fn();
+    stubSummaryFetch(
+      post,
+      new Response('{"done": true, "summary": "S", "keyPoints": [], "impact": ""}', { status: 200 })
+    );
+    expect((await streamExploreDocumentSummary(1, () => {})).summary).toBe("S");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("still asks the pipeline when the cached read fails", async () => {
+    const post = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('data: {"done": true, "summary": "S", "keyPoints": [], "impact": ""}\n\n')
+      );
+    stubSummaryFetch(post, new Response("", { status: 502 }));
+    expect((await streamExploreDocumentSummary(1, () => {})).summary).toBe("S");
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases a cached read's body it doesn't use", async () => {
+    const missing = new Response('{"detail": "none yet"}', { status: 404 });
+    const cancel = vi.spyOn(missing.body!, "cancel");
+    stubSummaryFetch(
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('data: {"done": true, "summary": "S", "keyPoints": [], "impact": ""}\n\n')
+        ),
+      missing
+    );
+    await streamExploreDocumentSummary(1, () => {});
+    expect(cancel).toHaveBeenCalled();
   });
 });

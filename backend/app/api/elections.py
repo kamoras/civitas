@@ -13,7 +13,7 @@ from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
 from app.database import get_db
 from app.office_terms import term_years
 from app.election_calendar import (
@@ -1447,7 +1447,7 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
             # ingest failure, not a reason to silently fall through to
             # the approximation below — that would quietly downgrade a
             # known-real source to a guess without saying so.
-            return cached_json(_uncovered_town_ballot("ingest_failed"), max_age=CACHE_TTL_DETAIL_S)
+            return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
 
         if not civic_is_configured() or address_for_town(state, town) is None:
             return cached_json(_uncovered_town_ballot("not_yet_covered"), max_age=CACHE_TTL_DETAIL_S)
@@ -1455,7 +1455,7 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
         result = await fetch_town_ballot(client, db, state, town, spend=spend_upstream)
 
     if result is None:
-        return cached_json(_uncovered_town_ballot("ingest_failed"), max_age=CACHE_TTL_DETAIL_S)
+        return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
     return cached_json({
         "status": "covered",
         "address": result["address"],

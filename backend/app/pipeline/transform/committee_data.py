@@ -16,9 +16,10 @@ fresh volume. Same lazy-load-once-and-cache pattern as
 score_calculator.py's _district_pvi().
 """
 
-import json
 import logging
 import pathlib
+
+from app.file_cache import Uncached
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +36,21 @@ def _load_json_cache(filename: str, json_key: str, missing_data_context: str) ->
     auto-refreshed copy (/data/) over the git-tracked bundled fallback
     (app/data/), or an empty dict (logged) if neither exists yet. Shared by
     both loaders below."""
-    for directory in (_PERSISTENT_DATA_DIR, _DATA_DIR):
-        try:
-            return json.loads((directory / filename).read_text())[json_key]
-        except Exception:
-            continue
+    from app.file_cache import read_json_preferring
+
+    def has_section(data) -> bool:
+        return isinstance(data, dict) and isinstance(data.get(json_key), dict)
+
+    try:
+        data = read_json_preferring(
+            _PERSISTENT_DATA_DIR / filename, _DATA_DIR / filename, default=None, accept=has_section,
+        )
+    except Uncached as unreadable:
+        # The volume copy exists but can't be read right now: the fallback's
+        # section, this once (Uncached again, for the caller's cache).
+        raise Uncached(unreadable.value[json_key] if unreadable.value else {}) from None
+    if data is not None:
+        return data[json_key]
     logger.warning(
         "%s unavailable in /data or the bundled fallback — %s until the "
         "first successful committee_leadership refresh",
@@ -52,9 +63,12 @@ def load_committee_membership() -> dict[str, list[dict]]:
     """bioguide_id -> [{committeeName, chamber, title}, ...]."""
     global _committee_membership_cache
     if _committee_membership_cache is None:
-        _committee_membership_cache = _load_json_cache(
-            "committee_membership.json", "membership", "committees will be empty",
-        )
+        try:
+            _committee_membership_cache = _load_json_cache(
+                "committee_membership.json", "membership", "committees will be empty",
+            )
+        except Uncached as unreadable:
+            return unreadable.value  # not kept: read again next time
     return _committee_membership_cache
 
 
@@ -66,9 +80,12 @@ def load_leadership_roles() -> dict[str, str]:
     """
     global _leadership_roles_cache
     if _leadership_roles_cache is None:
-        _leadership_roles_cache = _load_json_cache(
-            "leadership_roles.json", "roles", "leadership titles will be empty",
-        )
+        try:
+            _leadership_roles_cache = _load_json_cache(
+                "leadership_roles.json", "roles", "leadership titles will be empty",
+            )
+        except Uncached as unreadable:
+            return unreadable.value  # not kept: read again next time
     return _leadership_roles_cache
 
 
@@ -80,10 +97,13 @@ def load_leadership_tenures() -> dict[str, list[dict]]:
     """
     global _leadership_tenures_cache
     if _leadership_tenures_cache is None:
-        _leadership_tenures_cache = _load_json_cache(
-            "leadership_tenures.json", "tenures",
-            "leadership tenure checks fall back to current titles",
-        )
+        try:
+            _leadership_tenures_cache = _load_json_cache(
+                "leadership_tenures.json", "tenures",
+                "leadership tenure checks fall back to current titles",
+            )
+        except Uncached as unreadable:
+            return unreadable.value  # not kept: read again next time
     return _leadership_tenures_cache
 
 

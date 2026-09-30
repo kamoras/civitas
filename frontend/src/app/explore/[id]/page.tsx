@@ -43,6 +43,12 @@ function resolveSourceUrl(doc: ExploreDocumentDetail): string {
   return "";
 }
 
+const SUMMARY_UNAVAILABLE: ExploreDocumentSummary = {
+  summary: "Analysis unavailable. Try again later.",
+  keyPoints: [],
+  impact: "",
+};
+
 function scorecardHref(doc: ExploreDocumentDetail): string | null {
   if (!doc.politicianId) return null;
   return `/politicians/${doc.politicianId}`;
@@ -514,6 +520,9 @@ export default function ExploreDetailPage() {
   // deriving from liveText). While streaming, the summary panel renders
   // parseExploreSummaryText(liveText) instead for progressive display.
   const [liveText, setLiveText] = useState("");
+  // Waiting to be let in: the site's few generations are busy, or the
+  // analyzer is restarting. Said so, rather than a pulse that looks stuck.
+  const [summaryQueued, setSummaryQueued] = useState(false);
   const [summary, setSummary] = useState<ExploreDocumentSummary | null>(null);
 
   const docRequest = useAsyncData(
@@ -532,24 +541,25 @@ export default function ExploreDetailPage() {
   useEffect(() => {
     if (!docId || streamStarted.current === docId || summary) return;
     streamStarted.current = docId;
-    const unavailable = (why: string) => setSummary({ summary: why, keyPoints: [], impact: "" });
-    streamExploreDocumentSummary(docId, setLiveText)
-      .then((result) =>
-        // A generation that failed before writing anything ends with an empty
-        // result; shown as-is it left the Analysis panel blank.
-        result.summary || result.keyPoints.length || result.impact
-          ? setSummary(result)
-          : unavailable("Analysis unavailable. Try again later.")
-      )
-      .catch((e: unknown) => {
-        // 429: another reader's request for this document is still being
-        // written (the backend generates each summary once, then stores it).
-        unavailable(
-          e instanceof Error && e.message.endsWith(": 429")
-            ? "An analysis of this document is being written. Reload in a minute to read it."
-            : "Analysis unavailable. Try again later."
+    const controller = new AbortController();
+    streamExploreDocumentSummary(docId, setLiveText, controller.signal, undefined, setSummaryQueued)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        // An empty result is the server saying none could be made.
+        setSummary(
+          result.summary || result.keyPoints.length || result.impact ? result : SUMMARY_UNAVAILABLE
         );
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSummary(SUMMARY_UNAVAILABLE);
       });
+    return () => {
+      // Leaving the document stops the request and any retries (which
+      // could otherwise start a generation nobody reads); a remount of
+      // the same document starts again.
+      controller.abort();
+      if (streamStarted.current === docId) streamStarted.current = null;
+    };
   }, [docId, summary]);
 
   // Both the success and the failure path of the stream set `summary`, so
@@ -714,7 +724,11 @@ export default function ExploreDetailPage() {
                   <span className="text-signal-cyan text-sm font-mono animate-pulse">
                     Analyzing document...
                   </span>
-                  <p className="text-ink-min text-xs mt-2">This may take a moment</p>
+                  <p className="text-ink-min text-xs mt-2">
+                    {summaryQueued
+                      ? "Other analyses are being written — this one is queued and starts as soon as the analyzer is free."
+                      : "This may take a moment"}
+                  </p>
                 </div>
               )}
 
@@ -757,6 +771,19 @@ export default function ExploreDetailPage() {
                         {displayedSummary.impact}
                       </p>
                     </div>
+                  )}
+
+                  {summary?.partial && (
+                    <p className="text-xs text-ink-lo">
+                      This analysis was cut short before it finished. Try again later for the whole
+                      of it.
+                    </p>
+                  )}
+                  {summary?.truncated && (
+                    <p className="text-xs text-ink-lo">
+                      This analysis reached its length limit; the section it was writing is left
+                      out.
+                    </p>
                   )}
                 </div>
               )}

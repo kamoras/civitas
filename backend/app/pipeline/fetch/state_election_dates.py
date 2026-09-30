@@ -40,7 +40,6 @@ Read weekly rather than nightly (see crawl_for_new_sources): a date moves
 once a cycle, and there is nothing to gain from asking every night.
 """
 
-import json
 import logging
 import re
 from typing import Any
@@ -48,8 +47,11 @@ from typing import Any
 import httpx
 
 from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
+from app.file_cache import Stamp, read_json_preferring, reload_if_moved, new_reload_lock
 
 logger = logging.getLogger(__name__)
+
+_reload_lock = new_reload_lock()
 
 # Three pages covers a cycle's ~240 federal election dates with headroom;
 # more than this would mean the endpoint's shape changed, which should stop
@@ -61,6 +63,7 @@ _FILE = "state_election_dates.json"
 _PATH: str | None = None
 
 _cache: dict[str, Any] | None = None
+_cache_stamp: Stamp = None
 
 # Each state's entry ("{cycle}-{ST}") keeps what each source said under its
 # own keys, so neither overwrites the other: "primary"/"runoff" from the
@@ -87,27 +90,24 @@ def _path() -> str:
     return _PATH or runtime_data_path(_FILE)
 
 
+def _read(path: str) -> dict[str, Any]:
+    # file_cache.read_json_preferring: an unreadable file is not an empty
+    # one — returned this once and retried, never kept. (Writes re-read the
+    # file under their lock, so it can never be written back as the whole
+    # file.)
+    data = read_json_preferring(path, default={})
+    return data if isinstance(data, dict) else {}
+
+
 def _load() -> dict[str, Any]:
-    global _cache
-    if _cache is not None:
-        return _cache
+    global _cache, _cache_stamp
     path = _path()
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except FileNotFoundError:
-        data = {}
-    except ValueError:
-        logger.exception("Election dates file %s is not valid JSON", path)
-        data = {}
-    except OSError:
-        # Not cached: an unreadable file is not an empty one, and the next
-        # read tries again. (Writes re-read the file under their lock, so
-        # this can never be written back as the whole file.)
-        logger.exception("Failed to read election dates file %s", path)
-        return {}
-    _cache = data if isinstance(data, dict) else {}
-    return _cache
+    # The election pipeline (the pipeline process) writes the file; the API
+    # processes read it here and reload when its mtime moves
+    # (file_cache.reload_if_moved) — invalidate_cache() reaches only its caller.
+    with _reload_lock:
+        _cache, _cache_stamp = reload_if_moved([path], _cache, _cache_stamp, lambda: _read(path))
+        return _cache
 
 
 def invalidate_cache() -> None:
@@ -123,7 +123,11 @@ def _update(change) -> None:
     global _cache
     path = _path()
     try:
-        _cache = update_json_file(path, change, indent=2, sort_keys=True)
+        update_json_file(path, change, indent=2, sort_keys=True)
+        # Re-read on next use rather than stamp what was written: a stat
+        # taken after the write could already describe a later writer's
+        # file, and would pin this older copy until the next change.
+        _cache = None
     except (OSError, LockTimeout) as error:
         raise NotSaved(f"election dates not saved to {path}: {error}") from error
 

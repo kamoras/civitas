@@ -35,6 +35,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -87,8 +88,13 @@ def api_cache_stamp(
 EMPTY_RESPONSE_TTL_HOURS = 6
 
 
+# How an empty payload is stored (json.dumps of the falsy values a caller
+# passes): what an empty write may replace.
+_EMPTY_JSON = ("null", "[]", "{}", '""', "0", "false", "0.0")
+
+
 def api_cache_set(
-    db: Session, tier: str, key: str, data, *, normal_ttl_hours: int | None = None,
+    db: Session, tier: str, key: str, data, *, normal_ttl_hours: int | None = None, commit: bool = True,
 ) -> None:
     """Store API response in cache (upsert).
 
@@ -109,40 +115,72 @@ def api_cache_set(
     contention) stuck that filing's cache empty for a month instead of
     retrying within EMPTY_RESPONSE_TTL_HOURS.
     """
-    entry = (
-        db.query(ApiCache)
-        .filter(ApiCache.tier == tier, ApiCache.cache_key == key)
-        .first()
-    )
-    is_empty = not data
-    if is_empty and entry and json.loads(entry.data_json):
-        return  # keep the existing non-empty payload
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+    is_empty = not data
     cached_at = utcnow()
     if is_empty:
         normal_ttl = normal_ttl_hours if normal_ttl_hours is not None else settings.PIPELINE_CACHE_TTL_HOURS
         shorten = max(normal_ttl - EMPTY_RESPONSE_TTL_HOURS, 0)
         cached_at -= timedelta(hours=shorten)
 
-    data_json = json.dumps(data, default=str)
-    if entry:
-        entry.data_json = data_json
-        entry.cached_at = cached_at
-    else:
-        entry = ApiCache(
-            tier=tier,
-            cache_key=key,
-            data_json=data_json,
-            cached_at=cached_at,
-        )
-        db.add(entry)
-    db.commit()
+    # One statement, so the rule is decided by the database at write time:
+    # another process (the API workers, the pipeline) may write this key
+    # between any read here and the write. An empty payload replaces only
+    # an empty one — never a non-empty payload, however recently written.
+    upsert = sqlite_insert(ApiCache).values(
+        tier=tier, cache_key=key, data_json=json.dumps(data, default=str), cached_at=cached_at,
+    )
+    db.execute(upsert.on_conflict_do_update(
+        index_elements=["tier", "cache_key"],
+        set_={"data_json": upsert.excluded.data_json, "cached_at": upsert.excluded.cached_at},
+        where=ApiCache.data_json.in_(_EMPTY_JSON) if is_empty else None,
+    ))
+    if commit:
+        db.commit()
+
+
+async def api_cache_set_many_async(db: Session, tier: str, items: dict, **kwargs) -> None:
+    """Several api_cache_set writes in one transaction on one thread hop,
+    best-effort like api_cache_set_async: a request that fetched several
+    parts commits once rather than once per part."""
+    from app.database import off_loop
+
+    def write(session):
+        for key, data in items.items():
+            api_cache_set(session, tier, key, data, commit=False, **kwargs)
+        session.commit()
+
+    if not items:
+        return
+    try:
+        await off_loop(db, write)
+    except Exception:
+        logger.warning("Cache writes to %s failed — not cached", tier, exc_info=True)
+
+
+async def api_cache_set_async(db: Session, tier: str, key: str, data, **kwargs) -> None:
+    """api_cache_set for a request path: off the event loop on a session of
+    its own (database.off_loop), and best-effort — a cache write only saves
+    later work, so one that fails (the pipeline holding the write lock past
+    the busy timeout) is logged, never turned into a failed request."""
+    from app.database import off_loop
+
+    try:
+        await off_loop(db, lambda session: api_cache_set(session, tier, key, data, **kwargs))
+    except Exception:
+        logger.warning("Cache write %s/%s failed — not cached", tier, key, exc_info=True)
 
 
 def analysis_cache_get(
-    db: Session, version: str, input_hash: str
+    db: Session, version: str, input_hash: str, *, raise_db_errors: bool = False,
 ) -> dict | None:
-    """Get cached analysis result (no TTL - invalidated by version change)."""
+    """Get cached analysis result (no TTL - invalidated by version change).
+
+    `raise_db_errors`: a database that can't be read (locked past its
+    timeout) raises instead of reading as a miss — for a caller that would
+    otherwise redo work that may well be stored. Corrupt JSON is a miss
+    either way: redoing it is what replaces it."""
     try:
         entry = (
             db.query(AnalysisCache)
@@ -155,6 +193,11 @@ def analysis_cache_get(
         if not entry:
             return None
         return json.loads(entry.result_json)
+    except SQLAlchemyError:
+        if raise_db_errors:
+            raise
+        logger.debug("analysis_cache_get failed for %s/%s", version, input_hash, exc_info=True)
+        return None
     except Exception:
         # Treat any failure (corrupt cached JSON, DB error) as a miss so the
         # caller recomputes rather than crashing — but log it, since a silent

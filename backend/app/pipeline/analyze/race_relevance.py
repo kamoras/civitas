@@ -50,6 +50,8 @@ because a stale threshold gates better than none.
 import json
 import logging
 
+from app.shared_state import PolledRow, decode_json_dict
+
 logger = logging.getLogger(__name__)
 
 _CACHE_NAMESPACE = "race_relevance"
@@ -65,12 +67,16 @@ BOOTSTRAP_THRESHOLD = 0.276
 # noise rather than topic, and the encoder truncates anyway.
 _TEXT_CHARS = 600
 
-_cached: dict | None = None
+# The calibration is re-derived in the pipeline process, whose reset_cache()
+# reaches only itself; the elections API (PROCESS_ROLE=api) reads it. So a
+# process holding a calibration checks, at most this often, whether the
+# stored row was replaced, and reloads when it was (shared_state.PolledRow).
+_CHECK_STORED_EVERY_SECONDS = 30
+_calibration = PolledRow(_CACHE_NAMESPACE, _CACHE_KEY, every_s=_CHECK_STORED_EVERY_SECONDS, decode=decode_json_dict)
 
 
 def reset_cache() -> None:
-    global _cached
-    _cached = None
+    _calibration.reset()
 
 
 def race_descriptor(race) -> str:
@@ -128,18 +134,13 @@ def otsu_threshold(values: list[float], bins: int = 256) -> float | None:
 
 
 def threshold(db=None) -> float:
-    global _cached
-    if _cached is None and db is not None:
-        from app.pipeline.cache import api_cache_get
-
-        raw = api_cache_get(db, _CACHE_NAMESPACE, _CACHE_KEY)
-        if raw:
-            try:
-                _cached = json.loads(raw)
-            except ValueError:
-                logger.warning("Race-relevance calibration unreadable — using bootstrap")
-    if _cached:
-        return float(_cached.get("threshold", BOOTSTRAP_THRESHOLD))
+    """The calibrated threshold, read from its stored row whatever its age
+    (shared_state.read_row: it stands until the election pipeline replaces
+    it), or the measured bootstrap before the first calibration. Without a
+    session, the one in hand."""
+    calibration = _calibration.get(db) if db is not None else _calibration.current()
+    if calibration:
+        return float(calibration.get("threshold", BOOTSTRAP_THRESHOLD))
     return BOOTSTRAP_THRESHOLD
 
 

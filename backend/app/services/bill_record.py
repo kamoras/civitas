@@ -16,14 +16,15 @@ import html as html_lib
 import re
 import time
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.models import RollCall, RollCallPosition, Representative, Senator
 from app.config import settings
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.database import off_loop
+from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _rate_limiter, congress_gov_bill_url
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.services.congress_service import bill_days, bill_label
@@ -77,15 +78,16 @@ async def _congress_get(client: httpx.AsyncClient, url: str):
 
 async def fetch_bill_record(
     client: httpx.AsyncClient, db: Session, congress: int, bill_id: str,
-    spend: Callable[[int], None] | None = None, deadline_s: float | None = None,
+    spend: Callable[[int], Awaitable[None]] | None = None, deadline_s: float | None = None,
 ) -> dict:
     """{bill, summaries, actions, cosponsors, text, unavailable: [...],
     not_found}: not_found when Congress.gov has no such bill.
 
-    `spend(n)` is charged, before any request goes out, with the number of
-    parts not already cached (the public route's upstream budget; it raises
-    to refuse). A bill Congress.gov has no record of is cached too, so the
-    same wrong id asked again costs nothing upstream.
+    `spend(n)` is charged, before the requests it pays for go out, with the
+    parts not already cached — the bill first, the rest once it exists (the
+    public route's upstream budget; it raises to refuse). A bill Congress.gov
+    has no record of is cached too, so the same wrong id asked again costs
+    nothing upstream.
 
     `deadline_s` bounds the whole fetch. Congress.gov's rate limiter is
     shared with the nightly pipeline, which keeps it busy for hours, and a
@@ -95,45 +97,76 @@ async def fetch_bill_record(
     type_path, number = parse_bill_id(bill_id)
     out: dict = {"unavailable": [], "not_found": False}
     keys = {part: f"bill-record-{part}-{congress}-{type_path}-{number}" for part in _PARTS}
-    cached = {part: api_cache_get(db, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()}
+    # One thread hop for every part's cache read: off the event loop.
+    cached = await off_loop(
+        db, lambda session: {
+            part: api_cache_get(session, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()
+        },
+    )
     if (cached["bill"] or {}).get("not_found"):
         out["not_found"] = True
         return out
-    if spend is not None:
-        spend(sum(1 for part in _PARTS if cached[part] is None))
-    for part, suffix in _PARTS.items():
-        key = keys[part]
-        if cached[part] is not None:
-            out[part] = cached[part].get("value")
-            continue
-        url = f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}"
-        if deadline_s is None:
-            data = await _congress_get(client, url)
-        else:
-            remaining = deadline_s - (time.monotonic() - started)
-            try:
-                data = await asyncio.wait_for(_congress_get(client, url), remaining) if remaining > 0 else None
-            except TimeoutError:
-                data = None
-        if data is NOT_FOUND:
-            if part == "bill":
-                out["not_found"] = True
-                api_cache_set(db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
-                return out
-            data = {}
-        if data is None:
-            out[part] = None
-            out["unavailable"].append(part)
-            continue
-        value = {
-            "bill": data.get("bill"),
-            "summaries": data.get("summaries"),
-            "actions": data.get("actions"),
-            "cosponsors": data.get("cosponsors"),
-            "text": data.get("textVersions"),
-        }[part]
-        out[part] = value
-        api_cache_set(db, _CACHE_TIER, key, {"value": value}, normal_ttl_hours=_CACHE_HOURS)
+    missing = [part for part in _PARTS if cached[part] is None]
+
+    async def charge(n: int) -> None:
+        if spend is not None and n:
+            await spend(n)
+
+    # The bill itself is charged first, the other parts once it exists: a
+    # wrong id stops after that one request and must not be charged for the
+    # four it never makes. Each charge still comes before its requests.
+    await charge(1 if "bill" in missing else 0)
+    rest_charged = False
+    fetched: dict = {}  # written in one transaction, in the finally below
+    try:
+        for part, suffix in _PARTS.items():
+            key = keys[part]
+            if cached[part] is not None:
+                out[part] = cached[part].get("value")
+                continue
+            if part != "bill" and "bill" in out["unavailable"]:
+                # The bill request itself failed (an outage, most likely):
+                # the rest would fail the same way — not fetched, not charged.
+                out[part] = None
+                out["unavailable"].append(part)
+                continue
+            if part != "bill" and not rest_charged:
+                rest_charged = True
+                await charge(sum(1 for p in missing if p != "bill"))
+            url = f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}"
+            if deadline_s is None:
+                data = await _congress_get(client, url)
+            else:
+                remaining = deadline_s - (time.monotonic() - started)
+                try:
+                    data = await asyncio.wait_for(_congress_get(client, url), remaining) if remaining > 0 else None
+                except TimeoutError:
+                    data = None
+            if data is NOT_FOUND:
+                if part == "bill":
+                    out["not_found"] = True
+                    await api_cache_set_async(db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
+                    return out
+                data = {}
+            if data is None:
+                out[part] = None
+                out["unavailable"].append(part)
+                continue
+            value = {
+                "bill": data.get("bill"),
+                "summaries": data.get("summaries"),
+                "actions": data.get("actions"),
+                "cosponsors": data.get("cosponsors"),
+                "text": data.get("textVersions"),
+            }[part]
+            out[part] = value
+            fetched[key] = {"value": value}
+    finally:
+        # Written even when the request is cancelled or fails partway: the
+        # parts already fetched were charged to the shared budget, and the
+        # next reader shouldn't pay for them again. Shielded, so the
+        # cancellation that brought us here doesn't also stop the write.
+        await asyncio.shield(api_cache_set_many_async(db, _CACHE_TIER, fetched, normal_ttl_hours=_CACHE_HOURS))
     return out
 
 

@@ -57,7 +57,47 @@ SUMMARY: <2-3 sentences: what does this document do? What is its purpose and sub
     }
 
 
-def parse_explore_document_summary(text: str) -> dict:
+# What a finished sentence's last character is: its full stop, or a quote or
+# bracket closing after one.
+_SENTENCE_ENDS = (".", "!", "?", '"', "\u201d", ")")
+
+
+def _before_a_partial_marker(text: str) -> str | None:
+    """`text` whole up to where it stopped — without a section marker it
+    ends partway through ("...\nKEY POI"), or all of it when it stopped just
+    after a finished line — or None when the part it was writing may go on."""
+    stopped = text.rstrip(" \t")
+    if stopped.endswith("\n"):
+        # Stopped after a line break (or a blank line). The format asked for
+        # (explore_document_summary_prompt) is a line per part, but a small
+        # model can wrap a sentence, or a key point, onto the next line; so
+        # the line counts as finished only where nothing can follow it in
+        # the same part: the KEY POINTS: marker line, or a line that ends a
+        # sentence. A key point without one may be the first half of two
+        # lines, and is dropped with the part it was writing.
+        head = stopped.rstrip()
+        return head if _finished(head) else None
+    head, newline, last = stopped.rpartition("\n")
+    if not newline:
+        return None
+    for marker in (SUMMARY_KEY_POINTS_MARKER, SUMMARY_IMPACT_MARKER):
+        if marker != last and marker.startswith(last):
+            # Two capitals of a marker are a marker. One alone could as well
+            # begin the next line of a wrapped sentence ("...would\nI"), so
+            # it counts only after a line that was finished anyway.
+            if len(last) >= 2 or _finished(head):
+                return head
+    return None
+
+
+def _finished(head: str) -> bool:
+    """Whether `head`'s last line can't go on in the same part: the KEY
+    POINTS: marker line, or a line that ends a sentence."""
+    line = head.rsplit("\n", 1)[-1].strip()
+    return line == SUMMARY_KEY_POINTS_MARKER or line.endswith(_SENTENCE_ENDS)
+
+
+def parse_explore_document_summary(text: str, *, cut_off: bool = False) -> dict:
     """Split the plain-text SUMMARY/KEY POINTS/IMPACT format back into fields.
 
     Shared by explore.py's streaming endpoint (re-parsed on every chunk to
@@ -66,8 +106,14 @@ def parse_explore_document_summary(text: str) -> dict:
     old JSON-based cache entries used, so cache rows before and after this
     format change stay compatible).
     """
-    summary_part, _, rest = text.partition(SUMMARY_KEY_POINTS_MARKER)
-    key_points_part, _, impact_part = rest.partition(SUMMARY_IMPACT_MARKER)
+    if cut_off:
+        whole = _before_a_partial_marker(text)
+        if whole is not None:
+            # Cut while writing the next section's marker: every section
+            # before it is whole.
+            text, cut_off = whole, False
+    summary_part, key_points_marker, rest = text.partition(SUMMARY_KEY_POINTS_MARKER)
+    key_points_part, impact_marker, impact_part = rest.partition(SUMMARY_IMPACT_MARKER)
 
     summary = summary_part.split("SUMMARY:", 1)[-1].strip()
 
@@ -78,5 +124,19 @@ def parse_explore_document_summary(text: str) -> dict:
     ]
 
     impact = impact_part.strip()
+
+    if cut_off:
+        # The generation stopped before its end: the section it was writing
+        # ends mid-sentence, so it is dropped — decided by the sections as
+        # parsed above, not by where a marker appears in the text (an
+        # "IMPACT:" before "KEY POINTS:", or with none, is still summary).
+        # The impact, else the last key point, else the summary itself
+        # (nothing usable).
+        if impact_marker:
+            impact = ""
+        elif key_points_marker:
+            key_points = key_points[:-1]
+        else:
+            summary = ""
 
     return {"summary": summary, "keyPoints": key_points, "impact": impact}
