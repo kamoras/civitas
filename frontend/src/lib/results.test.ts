@@ -9,6 +9,7 @@ import {
   countReadAt,
   countReadRange,
   resultsNow,
+  serverTimeOf,
   stateFeedBehind,
   everyLiveStateVoting,
   feedBehind,
@@ -638,8 +639,34 @@ describe("the clock the results pages judge time by", () => {
     expect(resultsNow({ clock }, 0)).toBe(clock.serverDate);
   });
 
-  it("stops at the last answer while the page's own refreshes fail", () => {
-    expect(resultsNow({ clock }, 1_000_000 + 45_000, false)).toBe(clock.serverDate);
+  it("stops where it stood when the page's own refresh failed — never back at the last answer", () => {
+    // Failed 45 s after the answer: stays at +45 s however long it fails.
+    expect(resultsNow({ clock }, 1_000_000 + 45_000, 1_000_000 + 45_000)).toBe(
+      clock.serverDate + 45_000
+    );
+    expect(resultsNow({ clock }, 1_000_000 + 30 * 60_000, 1_000_000 + 45_000)).toBe(
+      clock.serverDate + 45_000
+    );
+    // Failed after the run-on was used up: stays at +60 s, where it stood,
+    // rather than jumping back a minute (which re-opened closed polls).
+    expect(resultsNow({ clock }, 1_000_000 + 60_000, null)).toBe(clock.serverDate + 60_000);
+    expect(resultsNow({ clock }, 1_000_000 + 5 * 60_000, 1_000_000 + 61_000)).toBe(
+      clock.serverDate + 60_000
+    );
+  });
+
+  it("dates a browser-measured moment on the server's clock", () => {
+    // A browser three hours slow: the failure 90 s after the answer is 90 s
+    // after the server's Date, not three hours before the count.
+    const slow = {
+      serverDate: Date.parse("2026-11-04T03:00:00Z"),
+      receivedAt: Date.parse("2026-11-04T00:00:00Z"),
+    };
+    expect(serverTimeOf({ clock: slow }, slow.receivedAt + 90_000)).toBe(
+      Date.parse("2026-11-04T03:01:30Z")
+    );
+    expect(serverTimeOf(null, 1234)).toBe(1234);
+    expect(serverTimeOf({ clock: { serverDate: null, receivedAt: 5_000 } }, 6_000)).toBe(6_000);
   });
 
   it("falls back to the arrival time with no Date header, and to the browser without a clock", () => {

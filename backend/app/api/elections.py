@@ -49,7 +49,7 @@ from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.fetch.state_candidates_common import last_name_matches
 from app.election_phase import ActiveElection, active_election, election_today
 from app.pipeline.election_pipeline import current_election_cycle
-from app.live_results.sync import lead_is_back, redrawn_states
+from app.live_results.sync import redrawn_states
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
@@ -1338,17 +1338,18 @@ def _result_json(result: RaceResult, race: Race) -> dict:
         # Null before any votes and on an exact tie.
         "leaderParty": leader.get("party") if leader else None,
         # The change of party the sync has announced (FLIP, until a
-        # FLIP_REVERSED) — the state the Action Center issue and the
-        # Bluesky posts keep, so the page never marks a flip they don't, or
-        # the reverse. Not sync.is_flip: its "enough of the count in" bar
-        # gates only raising a flip, and read here it dropped an announced
-        # flip on a poll that lost its reporting figures, then re-marked it.
-        # Less a lead that has gone back: a poll whose votes-counted fell is
-        # stored but announces nothing, so no FLIP_REVERSED is recorded for
-        # it, while its holder may lead again — the Action Center issue
-        # already reverts on that count (signals.py reads lead_is_back), and
-        # the page must not say "flip" beside the holder's own lead.
-        "flip": bool(result.flip_announced) and not lead_is_back(result),
+        # FLIP_REVERSED) — exactly what the Action Center issue and the
+        # event feed say, so the three never disagree. Not sync.is_flip:
+        # its "enough of the count in" bar gates only raising a flip, and
+        # read here it dropped an announced flip on a poll that lost its
+        # reporting figures, then re-marked it. Nor corrected by
+        # lead_is_back: a poll whose votes-counted fell is stored but
+        # announces nothing (no FLIP_REVERSED, and sync_state keeps it from
+        # the issue), so the issue and feed still say "flip" until the next
+        # poll does; the page says what they say, and the holder's lead in
+        # those figures is shown as a lead, never as the flip's cause (the
+        # frontend's leaderIsChallenger).
+        "flip": bool(result.flip_announced),
         "candidates": [
             {
                 "name": t["name"], "party": t.get("party"), "votes": t["votes"],

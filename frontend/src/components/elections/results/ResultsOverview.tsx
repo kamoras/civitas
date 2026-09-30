@@ -24,13 +24,11 @@ import {
   partyLetter,
   pollsStillOpen,
   reportingShare,
-  resultsNow,
   seatsLed,
   stateFeedBehind,
   stateShade,
   summarizeState,
 } from "@/lib/results";
-import { useNow } from "@/hooks/useNow";
 import type { LiveRaceResult, LiveResults } from "@/types/election";
 
 const DC_FILL = "rgba(255, 255, 255, 0.06)";
@@ -90,13 +88,20 @@ function LedTally({ led }: { led: Record<string, number> }) {
 export default function ResultsOverview({
   results,
   states,
+  now,
   refreshFailed = false,
 }: {
   results: LiveResults;
   states: string[];
-  /** The page's own latest refresh failed (useLiveResults' error): time
-   * stops at the last answer (resultsNow), so no feed is newly called
-   * behind for what is this page's failure to ask. */
+  /** The page's clock (useResultsNow): the server's time as of the last
+   * answer, never the browser's, which can be far off — one clock for the
+   * whole page, read once there. */
+  now: number;
+  /** The page's own latest refresh failed (useLiveResults' error). The
+   * clock stops where it stood (resultsNow), so no feed is newly called
+   * behind for what is this page's failure to ask — and nothing here says
+   * LIVE or blames a state's feed: every covered state reads NOT
+   * REFRESHED, and every count on the map carries the not-live stripe. */
   refreshFailed?: boolean;
 }) {
   const router = useRouter();
@@ -115,18 +120,18 @@ export default function ResultsOverview({
   // States, not races: a state electing both its senators counts once —
   // the response lists which states elect one, not how many seats each.
   const liveSenate = [...senateStates].filter((s) => live.has(s)).length;
-  // The server's time as of the last answer (resultsNow): never the
-  // browser's clock, which can be far off.
-  const now = resultsNow(results, useNow(), !refreshFailed);
   // A covered state whose feed isn't being read: its latest read failed,
   // or the backend hasn't read it for well over a sync pass (feedBehind —
   // its sync has stopped, whatever the last read said). With no count it
   // is "feed not read", never "no votes yet"; with an older count it is
   // stale, never live.
   const feeds = results.feeds ?? {};
-  const behind = (state: string) => live.has(state) && stateFeedBehind(results, state, now);
+  // Not while this page's own refresh has failed: what it holds is then
+  // simply not refreshed, which says nothing about any state's feed.
+  const behind = (state: string) =>
+    !refreshFailed && live.has(state) && stateFeedBehind(results, state, now);
   const readFailed = (state: string) =>
-    live.has(state) && (feedFailed(feeds[state]) || behind(state));
+    !refreshFailed && live.has(state) && (feedFailed(feeds[state]) || behind(state));
   // What a stale count's row and map name say about it: when the feed was
   // last tried or last gave a count.
   const staleParts = (state: string): [string, string] => {
@@ -159,8 +164,8 @@ export default function ResultsOverview({
   const redrawnSet = new Set(redrawn);
   const redrawnCounted = house.filter((r) => redrawnSet.has(r.state) && r.votesCounted > 0).length;
 
-  const shade = (state: string) =>
-    stateShade(
+  const shade = (state: string) => {
+    const s = stateShade(
       state,
       byState.get(state) ?? [],
       chamber,
@@ -169,6 +174,12 @@ export default function ResultsOverview({
       readFailed(state),
       voting(state)
     );
+    // A count this page couldn't refresh is not live either: striped like a
+    // stale one (never solid, which passes for live), named for this
+    // page's failure, not the feed's.
+    const counted = (byState.get(state) ?? []).some((r) => r.office === chamber);
+    return refreshFailed && live.has(state) && counted ? { ...s, stale: true } : s;
+  };
   // Every fill a stale count is drawn in, so the map has a stale pattern
   // for each (useMapTextures).
   const staleFills = states
@@ -183,12 +194,19 @@ export default function ResultsOverview({
   };
   // A count the feed is no longer refreshing says so in its name, as the
   // row's badge does: its colour is who led when it was last read.
-  const label = (state: string) =>
-    state === "DC"
-      ? "DC: no voting member of Congress"
-      : shade(state).stale && !voting(state)
-        ? `${shade(state).label}; not live, ${staleParts(state).join(", ")}`
-        : shade(state).label;
+  const label = (state: string) => {
+    if (state === "DC") return "DC: no voting member of Congress";
+    const s = shade(state);
+    if (refreshFailed && live.has(state)) {
+      const readAt = countReadAt(results, state);
+      return `${s.label}; not live, this page couldn't refresh it${
+        s.stale && readAt ? `, count from ${formatEasternTime(readAt)}` : ""
+      }`;
+    }
+    return s.stale && !voting(state)
+      ? `${s.label}; not live, ${staleParts(state).join(", ")}`
+      : s.label;
+  };
 
   // Covered states first (they have something to show), then the rest.
   const directory = [...states].sort(
@@ -262,7 +280,8 @@ export default function ResultsOverview({
               <li className="flex items-center gap-1.5">
                 {/* A count no longer refreshed keeps its leader's colour
                     under the stripe. */}
-                <Swatch color="rgba(255,137,137,0.6)" texture={STALE_SWATCH} /> STALE: NOT REFRESHED
+                <Swatch color="rgba(255,137,137,0.6)" texture={STALE_SWATCH} />{" "}
+                {refreshFailed ? "NOT LIVE: THIS PAGE COULDN'T REFRESH" : "STALE: NOT REFRESHED"}
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={UNCOVERED_FILL} />{" "}
@@ -289,9 +308,19 @@ export default function ResultsOverview({
             {chamber === "H"
               ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
               : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in."}{" "}
-            Amber stripes mean Civitas couldn&apos;t read that state&apos;s feed, or hasn&apos;t
-            lately: on a dark state, that says nothing about whether counting has started; over a
-            party&apos;s colour, the count is the last one read and is not live.
+            {refreshFailed ? (
+              <>
+                This page couldn&apos;t refresh the count, so none of it is live: stripes over a
+                party&apos;s colour mark the count as this page last read it. That says nothing
+                about the states&apos; own feeds.
+              </>
+            ) : (
+              <>
+                Amber stripes mean Civitas couldn&apos;t read that state&apos;s feed, or hasn&apos;t
+                lately: on a dark state, that says nothing about whether counting has started; over
+                a party&apos;s colour, the count is the last one read and is not live.
+              </>
+            )}
           </p>
         </section>
 
@@ -366,22 +395,29 @@ export default function ResultsOverview({
             const stillVoting = voting(state);
             const badge = !isLive
               ? { text: "NO FEED", className: "border-white/15 text-ink-min" }
-              : stillVoting
+              : refreshFailed
                 ? {
-                    // Not "polls open": from midnight on election day,
-                    // before any poll opens, this is true too.
-                    text: "POLLS NOT CLOSED",
-                    className: "border-signal-cyan/50 text-signal-cyan",
+                    // This page's failure, not the state's: no LIVE, no
+                    // amber, nothing said about its feed.
+                    text: "NOT REFRESHED",
+                    className: "border-dashed border-white/30 text-ink-lo",
                   }
-                : failed
+                : stillVoting
                   ? {
-                      text: hasCount ? "STALE" : "FEED NOT READ",
-                      // Not LIVE's look with other words: dashed, and
-                      // carrying the map's stripe for the same state.
-                      className: "border-dashed border-signal-amber/70 text-ink-hi",
-                      texture: hasCount ? STALE_SWATCH : FEED_FAILED_SWATCH,
+                      // Not "polls open": from midnight on election day,
+                      // before any poll opens, this is true too.
+                      text: "POLLS NOT CLOSED",
+                      className: "border-signal-cyan/50 text-signal-cyan",
                     }
-                  : { text: "LIVE", className: "border-signal-amber/50 text-signal-amber" };
+                  : failed
+                    ? {
+                        text: hasCount ? "STALE" : "FEED NOT READ",
+                        // Not LIVE's look with other words: dashed, and
+                        // carrying the map's stripe for the same state.
+                        className: "border-dashed border-signal-amber/70 text-ink-hi",
+                        texture: hasCount ? STALE_SWATCH : FEED_FAILED_SWATCH,
+                      }
+                    : { text: "LIVE", className: "border-signal-amber/50 text-signal-amber" };
             return (
               <li key={state}>
                 <Link
@@ -415,13 +451,15 @@ export default function ResultsOverview({
                     <span className="text-sm text-ink-lo">
                       {senateStates.has(state)
                         ? isLive
-                          ? stillVoting
-                            ? "Senate: polls not yet closed"
-                            : failed
-                              ? behind(state)
-                                ? "Senate: its feed hasn't been read lately"
-                                : "Senate: couldn't read its feed"
-                              : "Senate: no votes yet"
+                          ? refreshFailed
+                            ? "Senate: no count as this page last read it"
+                            : stillVoting
+                              ? "Senate: polls not yet closed"
+                              : failed
+                                ? behind(state)
+                                  ? "Senate: its feed hasn't been read lately"
+                                  : "Senate: couldn't read its feed"
+                                : "Senate: no votes yet"
                           : "Senate race: check the state's count"
                         : "No Senate race this year"}
                     </span>
@@ -433,6 +471,12 @@ export default function ResultsOverview({
                   )}
                   {failed && hasCount && !stillVoting && (
                     <span className="font-mono text-xs text-signal-amber">{staleNote(state)}</span>
+                  )}
+                  {refreshFailed && isLive && hasCount && countReadAt(results, state) && (
+                    <span className="font-mono text-xs text-ink-min">
+                      COUNT FROM{" "}
+                      {formatEasternTime(countReadAt(results, state) ?? "").toUpperCase()}
+                    </span>
                   )}
                 </Link>
               </li>

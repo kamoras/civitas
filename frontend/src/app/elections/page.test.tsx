@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { afterEach, beforeEach } from "vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import ElectionsPage from "./page";
 
 const fetchPviMap = vi.hoisted(() => vi.fn());
@@ -538,6 +538,65 @@ describe("ElectionsPage", () => {
       "REFRESH FAILED · AT NOV 3, 10:03 PM ET · SHOWING THE COUNT READ AT NOV 3, 10:00 PM ET · RETRYING EVERY MINUTE"
     );
     expect(statusLine()).not.toHaveTextContent(/LIVE/);
+  });
+
+  it("dates a failed refresh on the server's clock, beside the count's own times", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // The browser is three hours slow; the server's Date says 03:02.
+    vi.setSystemTime(new Date("2026-11-04T00:02:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValueOnce({
+      ...RESULTS,
+      clock: { serverDate: Date.parse("2026-11-04T03:02:00Z"), receivedAt: Date.now() },
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T03:00:00Z" },
+      },
+    });
+    render(<ElectionsPage />);
+    await screen.findByText(/LAST CHANGE/);
+    fetchLiveResults.mockRejectedValue(new Error("502"));
+    vi.setSystemTime(new Date("2026-11-04T00:03:00Z"));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await screen.findByText(/SHOWING THE COUNT READ/);
+    // Not "AT NOV 3, 7:03 PM ET" — three hours before the count it failed
+    // to refresh.
+    expect(statusLine()).toHaveTextContent(
+      "REFRESH FAILED · AT NOV 3, 10:03 PM ET · SHOWING THE COUNT READ AT NOV 3, 10:00 PM ET"
+    );
+  });
+
+  it("keeps polls that closed on screen closed when a refresh then fails", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    // GA's polls close 30 s after the answer's Date.
+    fetchLiveResults.mockResolvedValueOnce({
+      ...RESULTS,
+      phase: { ...RESULTS.phase, phase: "election_day", lastResultChange: null },
+      races: [],
+      updates: [],
+      pollsClose: { GA: "2026-11-04T03:02:30Z" },
+      clock: { serverDate: Date.parse("2026-11-04T03:02:00Z"), receivedAt: Date.now() },
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-04T03:02:00Z", lastOkAt: "2026-11-04T03:02:00Z" },
+      },
+    });
+    render(<ElectionsPage />);
+    const h1 = await screen.findByRole("heading", { level: 1 });
+    expect(h1).toHaveTextContent("2026 midterms: election day");
+    expect(statusRegion()).toHaveTextContent(/^ELECTION DAY$/);
+    // 45 s on, the refresh fails: the clock stays at 03:02:45, where it
+    // stood — past GA's close — not back at 03:02:00, which re-opened them.
+    fetchLiveResults.mockRejectedValue(new Error("502"));
+    vi.setSystemTime(new Date("2026-11-04T03:02:45Z"));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(statusRegion()).toHaveTextContent(/^REFRESH FAILED$/));
+    expect(statusLine()).not.toHaveTextContent(/ELECTION DAY|FIRST STATE/);
+    expect(h1).not.toHaveTextContent("election day");
   });
 
   it("while its own refreshes fail, says only that — never newly calls a feed stale", async () => {

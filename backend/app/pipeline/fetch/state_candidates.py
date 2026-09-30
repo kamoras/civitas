@@ -208,6 +208,18 @@ def is_configured(state: str) -> bool:
     return source is not None and source.get("strategy") in STRATEGIES
 
 
+def senate_race_ids(db: Session, cycle: int, state: str) -> list[str]:
+    """Every Senate race `state` holds in `cycle` — one in almost every
+    state, none in a third of them, and two (a regular race and a special
+    one) only when a vacancy falls in a year the other seat is up. Shared
+    by _race_id_for and the Action Center's race matcher
+    (action_center._results_race_named), which both need to know whether
+    "the Senate race" in a state is one race or has to be told apart."""
+    return sorted(rid for (rid,) in db.query(Race.id).filter(
+        Race.cycle_year == cycle, Race.state == state, Race.office == "S",
+    ))
+
+
 def _race_id_for(db: Session, cycle: int, state: str, office: str, district: int | None) -> str:
     """The race a state's record belongs to, by election_pipeline._race_id's
     convention. A Senate record goes to the state's one Senate race this
@@ -218,9 +230,7 @@ def _race_id_for(db: Session, cycle: int, state: str, office: str, district: int
     and a special race in one state (Georgia, 2020) a record carries
     nothing to choose between them, so it stays with the regular race."""
     if office == "S":
-        senate = [rid for (rid,) in db.query(Race.id).filter(
-            Race.cycle_year == cycle, Race.state == state, Race.office == "S",
-        )]
+        senate = senate_race_ids(db, cycle, state)
         if len(senate) == 1:
             return senate[0]
         return f"{cycle}-SEN-{state}"

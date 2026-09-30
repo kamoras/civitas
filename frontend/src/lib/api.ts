@@ -173,7 +173,11 @@ interface FetchedAt<T> {
   receivedAt: number;
 }
 
-async function cachedFetchAt<T>(url: string, ttlMs: number): Promise<FetchedAt<T>> {
+async function cachedFetchAt<T>(
+  url: string,
+  ttlMs: number,
+  init?: RequestInit
+): Promise<FetchedAt<T>> {
   const now = Date.now();
   const hit = _fetchCache.get(url);
   if (hit && hit.expiry > now) return hit.entry as FetchedAt<T>;
@@ -182,7 +186,7 @@ async function cachedFetchAt<T>(url: string, ttlMs: number): Promise<FetchedAt<T
   if (pending) return pending as Promise<FetchedAt<T>>;
 
   const request = (async () => {
-    const res = await fetch(url);
+    const res = await (init ? fetch(url, init) : fetch(url));
     if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const data: T = await res.json();
     const date = Date.parse(res.headers?.get?.("date") ?? "");
@@ -1779,16 +1783,27 @@ export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
  * this, and a longer client cache would hold every poll to a stale copy. */
 export async function fetchLiveResults(state?: string): Promise<LiveResults> {
   const url = `${API_BASE}/elections/results${state ? `?state=${encodeURIComponent(state)}` : ""}`;
-  const { data, serverDate, receivedAt } = await cachedFetchAt(url, TTL.VOLATILE);
+  // "no-cache": the browser's HTTP cache must ask again every time (nginx
+  // still answers from its own cache, so the backend load is unchanged).
+  // The response is public, max-age=30, stale-while-revalidate=30, and
+  // without this a refetch could be answered from the browser's copy with
+  // that copy's original Date while it is received now — the page's clock
+  // (resultsNow) then ran backwards by up to a minute.
+  const { data, serverDate, receivedAt } = await cachedFetchAt(url, TTL.VOLATILE, {
+    cache: "no-cache",
+  });
   const results = withShape<LiveResults>(
     data,
     { lists: ["liveStates", "senateStates", "races", "updates"], records: ["phase"] },
     url
   );
   // The clock the page judges this count by (lib/results resultsNow): the
-  // server's, from the response's Date header — never the browser's alone,
-  // which can be minutes or hours off. A stale body nginx serves from its
-  // cache still carries a fresh Date, so old read times in it read as old.
+  // server's, from the Date header of the response this page last got from
+  // nginx — never the browser's alone, which can be minutes or hours off.
+  // A stale body nginx serves from its cache still carries a fresh Date, so
+  // old read times in it read as old. (A copy from this module's own 30 s
+  // cache keeps the Date and arrival time it came with, and so runs on from
+  // where it stood.)
   return { ...results, clock: { serverDate, receivedAt } };
 }
 

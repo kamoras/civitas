@@ -14,13 +14,12 @@ import {
   formatEasternTime,
   formatLed,
   pollsStillOpen,
-  resultsNow,
+  serverTimeOf,
   seatsLed,
   showsResults,
   stateFeedBehind,
 } from "@/lib/results";
 import { describeInterval, RESULTS_POLL_MS, RETRY_BACKOFF_MS } from "@/hooks/useLiveResults";
-import { useNow } from "@/hooks/useNow";
 import type { LiveRaceResult, LiveResults, StateBallot } from "@/types/election";
 
 /**
@@ -38,6 +37,7 @@ export default function StateResults({
   error = null,
   retryMs = null,
   failedAt = null,
+  now,
   arrivalRace = null,
   lookupHref,
   lookupIsStateSpecific,
@@ -50,8 +50,14 @@ export default function StateResults({
   error?: string | null;
   /** The wait before the next retry after a failure (useLiveResults). */
   retryMs?: number | null;
-  /** When the last refresh failed, ms since epoch (useLiveResults). */
+  /** When the last refresh failed, ms since epoch by the browser's clock
+   * (useLiveResults); said on the server's clock (serverTimeOf). */
   failedAt?: number | null;
+  /** The page's clock (useResultsNow): the server's time as of the last
+   * answer, stopped where it stood while refreshes fail — not the
+   * browser's clock, and not blaming the feeds for this page's failure to
+   * ask. */
+  now: number;
   /** The race a #race- arrival link was handed to the count for, or null
    * (no such link, or it went to research). Decided once by the page. */
   arrivalRace?: string | null;
@@ -99,10 +105,6 @@ export default function StateResults({
   const led = seatsLed(house);
   const pollsClose = results?.pollsClose?.[ballot.state];
   const feed = results?.feeds?.[ballot.state];
-  // The server's time as of the last answer, stopped while this page's own
-  // refreshes fail (resultsNow): not the browser's clock, and not blaming
-  // the feeds for this page's failure to ask.
-  const now = resultsNow(results, useNow(), !error);
   // The backend hasn't read the state's feed for well over a sync pass (or
   // has no record of reading it since its polls closed): its sync has
   // stopped, so the count below is not live whatever the last read said —
@@ -231,7 +233,7 @@ export default function StateResults({
           {error
             ? [
                 failedAt != null
-                  ? `AT ${formatEasternTime(new Date(failedAt).toISOString()).toUpperCase()}`
+                  ? `AT ${formatEasternTime(new Date(serverTimeOf(results, failedAt)).toISOString()).toUpperCase()}`
                   : null,
                 races.length > 0
                   ? countReadAt
@@ -372,7 +374,10 @@ export default function StateResults({
               picked={null}
               results={byDistrict}
               feedAnswered
-              stale={failed}
+              // Striped too while this page's own refresh fails: an old
+              // count never passes for a live one. (Its legend says "the
+              // last count read, not live" — no blame on the feed.)
+              stale={failed || !!error}
               onPick={(raceId) => {
                 // Move focus with the scroll, so a keyboard or screen-reader
                 // user who picked a district lands on its row.

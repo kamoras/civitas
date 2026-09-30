@@ -194,26 +194,45 @@ const CLOCK_RUN_ON_MS = 60_000;
 /**
  * The time the results pages judge the count by: the server's clock as of
  * the last answer (its Date header, LiveResults.clock), run on by the time
- * since it arrived — at most CLOCK_RUN_ON_MS, and not at all while the
- * page's own refreshes are failing (`refreshing` false). Never the
- * browser's clock alone: one a quarter of an hour fast would call every
- * feed behind, one three hours slow would keep saying polls are open long
- * after they closed. And while this page can't refresh, nothing it holds
- * gets older in its own eyes — whether a feed has fallen behind is judged
- * as the last answer stood; the refresh failure is the page's to say, not
- * the feeds'. Without a clock (an older caller) it is `browserNow`.
+ * since it arrived — at most CLOCK_RUN_ON_MS. Never the browser's clock
+ * alone: one a quarter of an hour fast would call every feed behind, one
+ * three hours slow would keep saying polls are open long after they closed.
+ *
+ * While the page's own refreshes are failing (`failedAt`, the browser time
+ * the latest one failed — useLiveResults), the clock stops where it stood
+ * then, not back at the last answer: jumping back up to a minute un-closed
+ * polls that had just closed on screen. Nothing the page holds gets older
+ * in its own eyes after that — whether a feed has fallen behind is judged
+ * as things stood; the refresh failure is the page's to say, not the
+ * feeds'. The pages read it through useResultsNow, which also never lets it
+ * run backwards between answers. Without a clock (an older caller) it is
+ * `browserNow`.
  */
 export function resultsNow(
   results: Pick<LiveResults, "clock"> | null | undefined,
   browserNow: number,
-  refreshing = true
+  failedAt: number | null = null
 ): number {
   const clock = results?.clock;
   if (!clock) return browserNow;
-  const elapsed = refreshing
-    ? Math.min(Math.max(browserNow - clock.receivedAt, 0), CLOCK_RUN_ON_MS)
-    : 0;
+  const until = failedAt ?? browserNow;
+  const elapsed = Math.min(Math.max(until - clock.receivedAt, 0), CLOCK_RUN_ON_MS);
   return (clock.serverDate ?? clock.receivedAt) + elapsed;
+}
+
+/** A moment this browser measured (Date.now(), e.g. when a refresh
+ * failed) on the server's clock, so it can stand beside the count's own
+ * times: a browser three hours slow otherwise dated the failure before the
+ * count it failed to refresh. Not capped like resultsNow: this is when a
+ * thing happened, not the clock the page judges by. Without a clock it is
+ * `browserTime`. */
+export function serverTimeOf(
+  results: Pick<LiveResults, "clock"> | null | undefined,
+  browserTime: number
+): number {
+  const clock = results?.clock;
+  if (!clock) return browserTime;
+  return (clock.serverDate ?? clock.receivedAt) + (browserTime - clock.receivedAt);
 }
 
 /** The oldest and newest times the counts on screen were read, over every
@@ -280,6 +299,21 @@ export function everyLiveStateVoting(
 export function isTied(r: { votesCounted: number; candidates: { votes: number }[] }): boolean {
   const [first, second] = r.candidates;
   return r.votesCounted > 0 && !!first && !!second && first.votes === second.votes;
+}
+
+/** Whether the count's leader is from another party than the seat's
+ * holder, by the figures on screen. Not the same as `flip`, which is what
+ * has been announced: a poll whose total fell announces nothing, so the
+ * flip stays (as it does on the Action Center issue and in the feed) even
+ * when its figures show the holder ahead again. The words "the leader is
+ * from another party" are said only when this is true. */
+export function leaderIsChallenger(r: {
+  leaderParty: string | null;
+  heldBy: string | null;
+  votesCounted: number;
+  candidates: { votes: number }[];
+}): boolean {
+  return !!r.leaderParty && !!r.heldBy && r.leaderParty !== r.heldBy && !isTied(r);
 }
 
 /** Share of reporting units in, 0..1, or null when the state gives none. */

@@ -384,6 +384,33 @@ class TestAnnouncedBaseline:
         assert kinds == [er.LEAD_CHANGE]
 
 
+class TestHeldPollAgreement:
+    """The results page, the Action Center issue and the event feed say the
+    same thing about a flip at every poll — a held poll included."""
+
+    @staticmethod
+    def _three(db, race):
+        from app.api import elections
+
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 4)):
+            data = json.loads(elections.live_results(None, db).body)
+        [page] = [r for r in data["races"] if r["raceId"] == race.id]
+        [issue] = _issues(db)
+        feed = [u["kind"] for u in data["updates"] if u["raceId"] == race.id]
+        return page["flip"], issue.is_current, feed[0]
+
+    def test_a_held_poll_with_the_lead_back_changes_none_of_them(self, db_session):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(900, 1000, 60))
+        assert self._three(db_session, race) == (True, True, er.FLIP)
+        kinds, _ = _apply(db_session, race, _contest(900, 800, 60))  # total fell, holder ahead: held
+        assert kinds == []
+        assert self._three(db_session, race) == (True, True, er.FLIP)
+        kinds, _ = _apply(db_session, race, _contest(950, 800, 65))  # the next poll says it
+        assert kinds == [er.FLIP_REVERSED]
+        assert self._three(db_session, race) == (False, False, er.FLIP_REVERSED)
+
+
 class TestIssueLifecycle:
     def test_an_issue_the_action_center_retired_stays_retired_while_the_flip_merely_holds(self, db_session):
         race = _setup(db_session)

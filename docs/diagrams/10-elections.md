@@ -359,7 +359,11 @@ links to its election office, never as a state where nothing has happened.
   first votes ever (a momentary zero read doesn't restart it), or the
   source's official flag. That bar gates only raising a flip: once said, it
   is undone only by the lead going back to the holder's party or a tie
-  (`lead_is_back`).
+  (`lead_is_back`). The results page marks exactly what has been announced
+  (`RaceResult.flip_announced`), as the DEVELOPING issue and the Live
+  updates feed do: a held poll whose figures show the holder ahead changes
+  none of the three (the page keeps the flip tag, without saying the leader
+  is from another party), and the next poll reverts all three together.
 - A House seat in a state whose congressional map was redrawn for the cycle
   (`app/data/redrawn_congressional_maps.json`: AL, CA, FL, LA, NC, OH, TN,
   TX, UT for 2026) has no known holder going in (`seat_holder_party` returns
@@ -394,12 +398,19 @@ of the two it is, never LIVE. All of this is judged at **the server's time**
 (`resultsNow`): the `Date` header of the page's latest good response, run on
 by at most one poll interval since it arrived — never the browser's clock,
 which may be minutes or hours off, and not run on while a hidden tab has
-stopped polling. A stale body nginx serves from its cache still carries a
-fresh `Date`, so its old `checkedAt` still reads as stale. While the page's
-own refreshes fail its clock stops at the last good answer and "REFRESH
-FAILED", with when the counts on screen were read (oldest and newest), is
-the only statement: no feed is newly called behind for the page's own
-failure to ask. Polls closing is judged on the same clock. Only a change of
+stopped polling. The results endpoint is fetched `cache: "no-cache"`, so the
+browser's HTTP cache (the response is `max-age=30`) never answers a refetch
+with an old copy's `Date`; nginx still answers from its own cache, and a
+stale body it serves carries a fresh `Date`, so its old `checkedAt` still
+reads as stale. Each page reads one clock (`useResultsNow`) and hands it
+down; it never runs backwards. While the page's own refreshes fail its clock
+stops where it stood at the failure (not back at the last answer, which
+re-opened polls that had closed on screen) and "REFRESH FAILED", with when
+it failed (on the server's clock, like the times beside it) and when the
+counts on screen were read (oldest and newest), is the only statement: no
+feed is newly called behind for the page's own failure to ask, no state is
+marked LIVE (the national list says NOT REFRESHED), and every count on the
+national and district maps carries the not-live stripe. Polls closing is judged on the same clock. Only a change of
 state (live, stale, refresh failed, polls closed) is in the pages' polite
 live regions; the times beside it are not, so they aren't re-announced on
 every pass.
@@ -452,8 +463,17 @@ another's (they share a title shape and the state's results page). It
 is a fixed template around the source's figures, never model text. The
 Action Center lists it beside the newest day's confirmed issues whatever its
 own date. News promotes it only by naming its race — state and seat in one
-phrase (`_results_race_named`) — and once promoted it is the news story's,
-matching later coverage like any other issue.
+phrase (`_results_race_named`): "Georgia's 2nd District", "Washington
+state's 3rd District", "Virginia's second district", "Virginia's 2nd" closing
+a clause, "GA-02" (never inside a link), "the U.S. Senate race in Georgia";
+never a state legislature's seat or district, hyphenated or not, nor "the
+Senate race for Georgia's governor". "Special" is read wherever it stands
+("the special U.S. Senate election", "Georgia's special election for U.S.
+Senate"), but regular and special are told apart only where the state holds
+both this cycle (its `Race` rows, `state_candidates.senate_race_ids`, as
+`_race_id_for` reads them): Florida's and Ohio's only 2026 race is a
+special, and "the Ohio Senate race" names it. Once promoted it is the news
+story's, matching later coverage like any other issue.
 
 **Posts** (`bluesky.py`, published through `broadcast.publish`: the
 Elections feed first, then Bluesky): a flip, an official count (Senate, or a House count still showing a flip

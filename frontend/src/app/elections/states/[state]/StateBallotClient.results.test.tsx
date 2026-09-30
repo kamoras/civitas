@@ -24,6 +24,7 @@ type MapProps = {
   results?: Map<number, unknown>;
   feedAnswered?: boolean;
   showLean?: boolean;
+  stale?: boolean;
   onPick: (raceId: string) => void;
 };
 const districtMapProps = vi.hoisted(() => [] as MapProps[]);
@@ -518,6 +519,28 @@ describe("the state page in results mode", () => {
     expect(region).toHaveTextContent(/^REFRESH FAILED$/);
     expect(line).not.toHaveTextContent(/UPDATED/);
     expect(screen.getByText("Eric Conroy")).toBeInTheDocument();
+    // The district map no longer draws the old count solid, as if live.
+    const counted = districtMapProps.filter((p) => p.results !== undefined);
+    expect(counted.at(-1)?.stale).toBe(true);
+  });
+
+  it("dates a failed refresh on the server's clock, not a slow browser's", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // Three hours slow: the server's Date says 03:10.
+    vi.setSystemTime(new Date("2026-11-04T00:10:00Z"));
+    fetchLiveResults
+      .mockResolvedValueOnce(
+        live({ clock: { serverDate: Date.parse("2026-11-04T03:10:00Z"), receivedAt: Date.now() } })
+      )
+      .mockRejectedValue(new Error("502"));
+    render(<StateBallotClient ballot={ballot()} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    const line = screen.getByText(/THIS PAGE CHECKS EVERY MINUTE/).parentElement!;
+    vi.setSystemTime(new Date("2026-11-04T00:11:00Z"));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(line).toHaveTextContent("REFRESH FAILED · AT NOV 3, 10:11 PM ET"));
   });
 
   it("scrolls to the count once, not again when the page writes its own hash", async () => {

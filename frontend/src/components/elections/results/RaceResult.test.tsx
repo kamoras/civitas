@@ -107,6 +107,23 @@ describe("RaceResultCard", () => {
     expect(document.body).not.toHaveTextContent(/held by a/);
   });
 
+  it("keeps an announced flip through a held poll without saying the holder's lead is another party's", () => {
+    // A poll whose total fell announces nothing: the flip stands (as on the
+    // Action Center issue and in the feed) while its figures show the
+    // holder ahead. The page never calls that leader another party's.
+    const held = race({
+      flip: true,
+      leaderParty: "DEM",
+      candidates: [
+        { name: "Dana Smith", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Ray Jones", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+      ],
+    });
+    render(<RaceResultCard result={held} />);
+    expect(screen.getByText("FLIP · LEADING")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/another party/);
+  });
+
   it("says a House seat on new district lines has no previous holder", () => {
     render(<RaceResultCard result={race({ state: "TX", heldBy: null })} newLines />);
     expect(screen.getByText(/new district lines · no previous holder/)).toBeInTheDocument();

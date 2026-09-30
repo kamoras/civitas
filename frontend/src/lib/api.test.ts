@@ -9,6 +9,7 @@ import {
   fetchBillsInFlight,
   fetchJusticeLeaderboard,
   fetchLeaderboard,
+  fetchLiveResults,
   fetchMonitors,
   fetchOpenComments,
   fetchPoliticianDirectory,
@@ -223,6 +224,24 @@ describe("API shape guarantees", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/action/issues/recent?limit=6")
     );
+  });
+
+  it("fetchLiveResults asks past the browser's HTTP cache, and keeps the answer's Date", async () => {
+    // The response is public, max-age=30: without "no-cache" the browser
+    // could answer a refetch with its copy's old Date, received now — and
+    // the page's clock ran backwards.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ phase: { phase: "results" } }),
+      headers: { get: (h: string) => (h === "date" ? "Wed, 04 Nov 2026 03:02:00 GMT" : null) },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await fetchLiveResults("GA");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/elections/results?state=GA"),
+      expect.objectContaining({ cache: "no-cache" })
+    );
+    expect(result.clock?.serverDate).toBe(Date.parse("2026-11-04T03:02:00Z"));
   });
 
   it("fetchTimeline always exposes its four lists", async () => {

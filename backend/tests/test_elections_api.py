@@ -546,10 +546,12 @@ class TestLiveResults:
             [race] = _body(elections.live_results(None, db_session))["races"]
         assert race["flip"] is False
 
-    def test_an_announced_flip_whose_lead_went_back_is_not_marked(self, db_session):
+    def test_an_announced_flip_stays_marked_through_a_held_poll(self, db_session):
         """A poll whose votes-counted fell is stored but announces nothing —
-        no FLIP_REVERSED — so flip_announced stays set while the holder may
-        lead again. The page never says "flip" beside the holder's lead."""
+        no FLIP_REVERSED, and the Action Center issue isn't touched — so the
+        page keeps saying what the issue and the feed say until the next
+        poll reverts all three together (test_election_results_sync's
+        TestHeldPollAgreement runs that through the sync)."""
         import json as _json
 
         from app.models import RaceResult
@@ -560,10 +562,16 @@ class TestLiveResults:
                                    {"name": "Ray Jones", "party": "REP", "votes": 450, "candidateId": None}])
         row.votes_counted = 950
         db_session.flush()
-        assert row.flip_announced is True
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+        [race] = data["races"]
+        assert race["leaderParty"] == race["heldBy"] == "DEM"
+        assert race["flip"] is True
+        assert data["updates"][0]["kind"] == "flip"
+        row.flip_announced = False  # the next poll's FLIP_REVERSED
+        db_session.flush()
         with self._results_window():
             [race] = _body(elections.live_results(None, db_session))["races"]
-        assert race["leaderParty"] == race["heldBy"] == "DEM"
         assert race["flip"] is False
 
     def test_says_how_each_feed_read_went(self, db_session):

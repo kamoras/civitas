@@ -15,6 +15,7 @@ import {
   TIED_FILL,
   heldByPhrase,
   isTied,
+  leaderIsChallenger,
   partyLetter,
   partyTextClass,
   raceStatusText,
@@ -484,7 +485,7 @@ function DistrictResultPreview({
               tied ? "tied" : result.official ? "leads" : "leading",
               result.official ? "official count" : null,
               "not called",
-              result.flip && !tied
+              result.flip && leaderIsChallenger(result)
                 ? `held by ${heldByPhrase(result.heldBy)}, leader from another party`
                 : null,
               stale ? "not live" : null,

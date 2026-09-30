@@ -275,16 +275,20 @@ export default async function ElectionsChapter() {
             the last count it trusted — and says so, with the time, if a state&apos;s feed
             couldn&apos;t be read at all rather than implying counting hasn&apos;t started. If the
             page itself can&apos;t refresh, it says that too, with when the counts still on screen
-            were read, so an old count never passes for a live one &mdash; and that is all it says
-            then: it doesn&apos;t blame a state&apos;s feed for its own failure to ask. If Civitas
-            itself stops reading a state&apos;s feed &mdash; no check in well over a pass, 15
-            minutes while counts move or 70 once they are read hourly, or no record of one at all
-            since the state&apos;s polls closed &mdash; the state is marked <strong>stale</strong>:
-            its row says when its feed was last checked and when the count shown was read, and the
-            map keeps the last leader&apos;s colour under amber stripes. That is judged by the
-            server&apos;s clock, from the time on the page&apos;s latest answer, not by your
-            device&apos;s, which may be off. A count that goes down (a county pulling a bad upload)
-            is shown but announces nothing.
+            were read; no state is marked live and every count on the map is striped, so an old
+            count never passes for a live one &mdash; and that is all it says then: it doesn&apos;t
+            blame a state&apos;s feed for its own failure to ask. If Civitas itself stops reading a
+            state&apos;s feed &mdash; no check in well over a pass, 15 minutes while counts move or
+            70 once they are read hourly, or no record of one at all since the state&apos;s polls
+            closed &mdash; the state is marked <strong>stale</strong>: its row says when its feed
+            was last checked and when the count shown was read, and the map keeps the last
+            leader&apos;s colour under amber stripes. That is judged by the server&apos;s clock,
+            from the time on the page&apos;s latest answer, not by your device&apos;s, which may be
+            off; while the page can&apos;t refresh, that clock stops where it stood, and it never
+            runs backwards. A count that goes down (a county pulling a bad upload) is shown but
+            announces nothing: a seat already described as changing party stays so described &mdash;
+            on the map, in the live updates and in the Action Center alike &mdash; until the next
+            count says otherwise.
           </P>
           <P>
             We never call a race. A candidate &ldquo;leads&rdquo; &mdash; &ldquo;not final&rdquo;
@@ -305,8 +309,9 @@ export default async function ElectionsChapter() {
           <P>
             A seat changing party opens a <em>developing</em> story in the{" "}
             <A href={ACTION_CENTER_HREF}>Action Center</A>, marked as not yet confirmed by the
-            press; it follows the count, and if the lead reverts it comes off the Action Center and
-            is rewritten to say the count no longer shows a change of party. Civitas&apos;s Bluesky
+            press. Until a news story naming that race confirms it, it follows the count, and if the
+            lead reverts it comes off the Action Center and is rewritten to say the count no longer
+            shows a change of party; once confirmed, it is the news story. Civitas&apos;s Bluesky
             account posts fewer moments than the feed shows: a seat changing party, a count the
             state lists as official (a Senate race, or a seat changing party), and the big moves in
             a Senate race — a new leader with most of the count in, every reporting area in. A few

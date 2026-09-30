@@ -3137,10 +3137,19 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         )
 
     @staticmethod
-    def _match(issue, title, facts=(), summary="", urls=None):
+    def _match(issue, title, facts=(), summary="", urls=None, db=None):
         # Same title vector: the issue is always nominated as a candidate.
         return _find_matching_issue(title, list(facts), [issue], np.array([[1.0, 0.0]]),
-                                    np.array([1.0, 0.0]), set(), source_urls=urls, summary=summary)
+                                    np.array([1.0, 0.0]), set(), source_urls=urls, summary=summary, db=db)
+
+    @staticmethod
+    def _senate_races(db, *race_ids):
+        from app.models import Race
+
+        for rid in race_ids:
+            db.add(Race(id=rid, cycle_year=int(rid[:4]), office="S", state=rid.split("-")[2], district=None))
+        db.commit()
+        return db
 
     def test_the_source_type_is_the_one_the_sync_writes(self):
         from app.live_results import signals
@@ -3168,13 +3177,66 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         issue = self._flip_issue(current=False)
         assert self._match(issue, "Republican leads in Georgia's 2nd District") is None
 
-    def test_senate_regular_and_special_are_told_apart(self):
+    @pytest.mark.parametrize("with_db", [True, False])
+    def test_senate_regular_and_special_are_told_apart(self, db_session, with_db):
+        # With both races on the ballot — and, with no session to ask, always.
+        db = self._senate_races(db_session, "2026-SEN-GA", "2026-SEN-GA-SPECIAL") if with_db else None
         regular = self._flip_issue("2026-SEN-GA", "Georgia's U.S. Senate")
         special = self._flip_issue("2026-SEN-GA-SPECIAL", "Georgia's U.S. Senate special election")
-        assert self._match(regular, "Republican leads Georgia's Senate race") is regular
-        assert self._match(special, "Republican leads Georgia's Senate race") is None
-        assert self._match(special, "Republican leads Georgia's Senate special election") is special
-        assert self._match(regular, "Republican leads Georgia's Senate special election") is None
+        assert self._match(regular, "Republican leads Georgia's Senate race", db=db) is regular
+        assert self._match(special, "Republican leads Georgia's Senate race", db=db) is None
+        assert self._match(special, "Republican leads Georgia's Senate special election", db=db) is special
+        assert self._match(regular, "Republican leads Georgia's Senate special election", db=db) is None
+
+    @pytest.mark.parametrize("text,names_special", [
+        # "special" before "Senate" / "U.S.", and "special election for …".
+        ("Ossoff leads in the special Senate election in Georgia", True),
+        ("Special U.S. Senate race in Georgia too close to call", True),
+        ("Count tightens in the special U.S. Senate election in Georgia", True),
+        ("Georgia's special election for U.S. Senate tightens", True),
+        ("Georgia's special U.S. Senate race tightens", True),
+        ("Republican leads the special election for Georgia's Senate seat", True),
+        ("Count tightens in the special election for U.S. Senate in Georgia", True),
+        ("Democrat leads the U.S. Senate race in Georgia", False),
+        ("Republican leads Georgia's Senate race", False),
+    ])
+    def test_special_is_read_wherever_it_stands(self, db_session, text, names_special):
+        db = self._senate_races(db_session, "2026-SEN-GA", "2026-SEN-GA-SPECIAL")
+        regular = self._flip_issue("2026-SEN-GA", "Georgia's U.S. Senate")
+        special = self._flip_issue("2026-SEN-GA-SPECIAL", "Georgia's U.S. Senate special election")
+        assert (self._match(special, text, db=db) is special) is names_special
+        assert (self._match(regular, text, db=db) is regular) is not names_special
+
+    @pytest.mark.parametrize("race_id,text", [
+        ("2026-SEN-OH-SPECIAL", "Brown leads Husted in Ohio Senate race"),
+        ("2026-SEN-OH-SPECIAL", "Democrat leads the U.S. Senate race in Ohio"),
+        ("2026-SEN-OH-SPECIAL", "Count tightens in the special U.S. Senate election in Ohio"),
+        ("2026-SEN-FL-SPECIAL", "Republican leads Florida's U.S. Senate count"),
+        ("2026-SEN-FL-SPECIAL", "Florida's special election for U.S. Senate tightens"),
+        # A state's only race is its only race either way round.
+        ("2026-SEN-GA", "Ossoff leads in the special Senate election in Georgia"),
+    ])
+    def test_a_states_only_senate_race_is_named_by_any_senate_phrase(self, db_session, race_id, text):
+        """Florida and Ohio elect a senator in 2026 only to fill a vacancy:
+        their one race is "…-SPECIAL" (state_candidates._race_id_for keys
+        their records to it), and news calls it "the Ohio Senate race"."""
+        db = self._senate_races(db_session, race_id)
+        issue = self._flip_issue(race_id, "the U.S. Senate race")
+        assert self._match(issue, text, db=db) is issue
+
+    def test_the_issues_own_session_is_asked_when_none_is_passed(self, db_session):
+        self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
+        issue = self._flip_issue("2026-SEN-OH-SPECIAL", "the U.S. Senate race")
+        db_session.add(issue)
+        db_session.commit()
+        assert self._match(issue, "Brown leads Husted in Ohio Senate race") is issue
+
+    def test_a_state_senate_story_never_names_a_states_only_senate_race(self, db_session):
+        db = self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
+        issue = self._flip_issue("2026-SEN-OH-SPECIAL", "the U.S. Senate race")
+        for text in ("Democrats flip Ohio state Senate seat", "Democrats flip a state-senate seat in Ohio",
+                     "The Senate race for Ohio's governor", "The state-senate race in Ohio's 14th district"):
+            assert self._match(issue, text, db=db) is None, text
 
     def test_an_issue_whose_race_cannot_be_read_is_not_promoted(self):
         issue = self._flip_issue()
@@ -3225,6 +3287,25 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         # "Senate" with no race word, beside a state, is not the race.
         ("2026-SEN-WA", "Washington's U.S. Senate", "WASHINGTON (AP) — The Senate returns next week"),
         ("2026-HOUSE-AK-0", "Alaska's at-large seat", "Alaska voters weigh at-large seats on the borough assembly"),
+        # A hyphen doesn't turn a state senate into the U.S. Senate.
+        ("2026-SEN-GA", "Georgia's U.S. Senate", "The state-senate race in Georgia's 14th district"),
+        ("2026-HOUSE-GA-14", "Georgia's 14th Congressional District",
+         "The state-senate race in Georgia's 14th district"),
+        # Something of Georgia's, not Georgia's seat.
+        ("2026-SEN-GA", "Georgia's U.S. Senate", "The Senate race for Georgia's governor"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District", "the 2nd district in Georgia's state Senate"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District", "the 2nd district in Georgia state-house maps"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District", "Georgia district 2 state house race"),
+        # A postal code inside a link is part of an address.
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District", "see https://x.com/GA-2 for results"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District", "more at www.example.com/GA-02"),
+        # A bare ordinal followed by another word is not a district.
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District", "Virginia's 2nd largest city votes"),
+        ("2026-HOUSE-GA-3", "Georgia's 3rd Congressional District", "Georgia's 3rd straight win"),
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District", "Virginia's second-place finisher"),
+        # Decided, not missed: a headline verb after a bare ordinal can't
+        # be told from "largest" without a word list (see _HOUSE_PHRASES).
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District", "Virginia's 2nd flips"),
     ])
     def test_a_story_that_does_not_name_the_race_in_one_phrase_does_not_promote(self, race_id, label, text):
         issue = self._flip_issue(race_id, label)
@@ -3246,6 +3327,18 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         ("2026-SEN-GA", "Georgia's U.S. Senate", "Democrat leads in Georgia's U.S. Senate count"),
         ("2026-SEN-GA-SPECIAL", "Georgia's U.S. Senate special election",
          "Democrat leads the special election for Georgia's Senate seat"),
+        # "Washington state's", spelled ordinals, a bare ordinal closing a clause.
+        ("2026-HOUSE-WA-3", "Washington's 3rd Congressional District",
+         "Republican leads in Washington state's 3rd District"),
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District", "Count tightens in Virginia's second district"),
+        ("2026-HOUSE-TX-21", "Texas's 21st Congressional District",
+         "Count tightens in the Twenty-First Congressional District of Texas"),
+        ("2026-HOUSE-CA-52", "California's 52nd Congressional District",
+         "Count tightens in California's fifty second district"),
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District", "Republican leads in Virginia's 2nd."),
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District", "Republican leads in Virginia's 2nd"),
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District", "Virginia's 2nd House race tightens"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District", "Results: GA-2 (https://x.com/results)"),
     ])
     def test_a_story_naming_the_race_in_one_phrase_does(self, race_id, label, text):
         issue = self._flip_issue(race_id, label)

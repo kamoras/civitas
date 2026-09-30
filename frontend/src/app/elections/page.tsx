@@ -18,11 +18,11 @@ import {
   feedFailed,
   formatEasternTime,
   pollsStillOpen,
-  resultsNow,
+  serverTimeOf,
   showsResults,
   stateFeedBehind,
 } from "@/lib/results";
-import { useNow } from "@/hooks/useNow";
+import { useResultsNow } from "@/hooks/useResultsNow";
 import { fetchPviMap } from "@/lib/api";
 import { describeInterval, useLiveResults } from "@/hooks/useLiveResults";
 import type { PviMap } from "@/types/election";
@@ -122,8 +122,10 @@ export default function ElectionsPage() {
   // close, and for whether the backend is still reading the feeds. Any
   // other time, subscribing would re-render the whole page once a second.
   // It is the server's clock as of the last answer (resultsNow), not the
-  // browser's, and it stops while this page's own refreshes fail.
-  const now = resultsNow(results, useNow(resultsMode), !resultsError);
+  // browser's; it stops where it stood while this page's own refreshes fail,
+  // and never runs backwards (useResultsNow). The one clock for the page:
+  // ResultsOverview is handed it.
+  const now = useResultsNow(results, failedAt, resultsMode);
   // Election day before any covered state's polls close: nothing of any
   // count is shown yet, so the masthead says when the first can be — not
   // "results" as if there were some. Once one state's polls close, the count
@@ -149,7 +151,10 @@ export default function ElectionsPage() {
     : null;
   const refreshFailedDetail = [
     failedAt != null
-      ? `AT ${formatEasternTime(new Date(failedAt).toISOString()).toUpperCase()}`
+      ? // On the server's clock, like the read times beside it: the
+        // browser's can be hours off, and would date the failure before
+        // the count it failed to refresh.
+        `AT ${formatEasternTime(new Date(serverTimeOf(results, failedAt)).toISOString()).toUpperCase()}`
       : null,
     stillVoting ? null : readAtText,
     `RETRYING ${retryEvery}`,
@@ -357,7 +362,12 @@ export default function ElectionsPage() {
           </PageMasthead>
 
           {resultsMode && results && (
-            <ResultsOverview results={results} states={STATES} refreshFailed={!!resultsError} />
+            <ResultsOverview
+              results={results}
+              states={STATES}
+              now={now}
+              refreshFailed={!!resultsError}
+            />
           )}
 
           {error && campaignMode && (

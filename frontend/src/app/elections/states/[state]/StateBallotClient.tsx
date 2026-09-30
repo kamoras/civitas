@@ -19,12 +19,11 @@ import RaceResearch from "@/components/elections/ballot/RaceResearch";
 import StateResults from "@/components/elections/results/StateResults";
 import { electionIsNear, msUntilNear, useLiveResults } from "@/hooks/useLiveResults";
 import { useHashAt } from "@/hooks/useHashAt";
-import { useNow } from "@/hooks/useNow";
+import { useResultsNow } from "@/hooks/useResultsNow";
 import {
   feedFailed,
   pollsClosed,
   pollsStillOpen,
-  resultsNow,
   showsResults,
   stateFeedBehind,
 } from "@/lib/results";
@@ -1539,9 +1538,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // Subscribed only while the live phase shows results (poll close is the
   // one time-dependent switch); otherwise the page would re-render its whole
   // tree once a second all year.
-  // The server's clock as of the last answer, stopped while refreshes fail
-  // (resultsNow) — not the browser's, which can be hours off either way.
-  const now = resultsNow(live, useNow(!!live && showsResults(live.phase)), !liveError);
+  // The server's clock as of the last answer, stopped where it stood while
+  // refreshes fail and never run backwards (useResultsNow) — not the
+  // browser's, which can be hours off either way. StateResults is handed
+  // the same clock.
+  const now = useResultsNow(live, liveFailedAt, !!live && showsResults(live.phase));
   const resultsFraming =
     resultsMode &&
     (ballot.phase?.phase === "results" ||
@@ -1779,6 +1780,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   error={liveError}
                   retryMs={liveRetryMs}
                   failedAt={liveFailedAt}
+                  now={now}
                   arrivalRace={arrival?.toCount ?? null}
                   lookupHref={lookupHref}
                   lookupIsStateSpecific={lookupIsStateSpecific}

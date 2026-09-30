@@ -1,10 +1,27 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import ResultsOverview from "./ResultsOverview";
 import type { LiveRaceResult, LiveResults } from "@/types/election";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-vi.mock("@/components/elections/RaceMap", () => ({ default: () => null }));
+// The map's props, so a test can read each state's fill and name.
+const mapProps = vi.hoisted(() => ({
+  current: null as null | {
+    getFillColor: (s: string) => string;
+    getStateLabel: (s: string) => string;
+  },
+}));
+vi.mock("@/components/elections/RaceMap", () => ({
+  default: (props: {
+    getFillColor: (s: string) => string;
+    getStateLabel: (s: string) => string;
+  }) => {
+    mapProps.current = props;
+    return null;
+  },
+}));
+
+const NOW = Date.parse("2026-11-04T03:00:00Z");
 
 afterEach(cleanup);
 
@@ -61,6 +78,7 @@ describe("the seats-changing-party card", () => {
   it("says House seats on new lines are not counted, naming the states", () => {
     render(
       <ResultsOverview
+        now={NOW}
         results={results({
           redrawnStates: ["TX", "NC"],
           races: [
@@ -102,16 +120,20 @@ describe("the seats-changing-party card", () => {
   });
 
   it("adds no qualifier when no state redrew, or for an older backend", () => {
-    render(<ResultsOverview results={results()} states={["GA"]} />);
+    render(<ResultsOverview now={NOW} results={results()} states={["GA"]} />);
     expect(within(flipsCard()).queryByText(/Not counted/)).not.toBeInTheDocument();
     cleanup();
-    render(<ResultsOverview results={results({ redrawnStates: [] })} states={["GA"]} />);
+    render(<ResultsOverview now={NOW} results={results({ redrawnStates: [] })} states={["GA"]} />);
     expect(within(flipsCard()).queryByText(/Not counted/)).not.toBeInTheDocument();
   });
 
   it("names one state in the singular, before any count", () => {
     render(
-      <ResultsOverview results={results({ redrawnStates: ["UT"], races: [] })} states={["UT"]} />
+      <ResultsOverview
+        now={NOW}
+        results={results({ redrawnStates: ["UT"], races: [] })}
+        states={["UT"]}
+      />
     );
     expect(
       within(flipsCard()).getByText(
@@ -123,7 +145,7 @@ describe("the seats-changing-party card", () => {
 
 describe("the national results map's key", () => {
   it("calls a count under half in fainter, not paler: the fill is opacity over a dark map", () => {
-    render(<ResultsOverview results={results()} states={["GA"]} />);
+    render(<ResultsOverview now={NOW} results={results()} states={["GA"]} />);
     expect(screen.getByText(/FAINTER: UNDER HALF IN/)).toBeInTheDocument();
     expect(screen.getByText(/Fainter means fewer than half/)).toBeInTheDocument();
     expect(screen.queryByText(/paler/i)).not.toBeInTheDocument();
@@ -134,6 +156,7 @@ describe("a Senate race on a directory row", () => {
   it("still says leads in a count the state lists as official — never a bare 'official'", () => {
     render(
       <ResultsOverview
+        now={NOW}
         results={results({
           senateStates: ["GA"],
           races: [
@@ -164,12 +187,56 @@ describe("a Senate race on a directory row", () => {
 
 describe("the Senate map's footnote", () => {
   it("says what a two-seat state is shaded by, as stateShade draws it", () => {
-    render(<ResultsOverview results={results()} states={["GA"]} />);
+    render(<ResultsOverview now={NOW} results={results()} states={["GA"]} />);
     expect(
       screen.getByText(
         /shaded by the party leading more of its two races, grey when two parties lead equally many/
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/leading both/)).not.toBeInTheDocument();
+  });
+});
+
+describe("when this page's own refresh has failed", () => {
+  const withFeeds = () =>
+    results({
+      liveStates: ["GA", "TX"],
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-04T02:58:00Z", lastOkAt: "2026-11-04T02:58:00Z" },
+        TX: { status: "failed", checkedAt: "2026-11-04T02:58:00Z", lastOkAt: null },
+      },
+    } as Partial<LiveResults>);
+  const row = (state: string) =>
+    within(screen.getByRole("region", { name: /By state/ })).getByRole("link", {
+      name: new RegExp(`^${state}`),
+    });
+
+  it("no row says LIVE, and none blames the state's feed", () => {
+    render(<ResultsOverview now={NOW} results={withFeeds()} states={["GA", "TX"]} refreshFailed />);
+    for (const st of ["GA", "TX"]) {
+      expect(row(st)).toHaveTextContent("NOT REFRESHED");
+      expect(row(st)).not.toHaveTextContent(/LIVE|STALE|FEED NOT READ|couldn't read/);
+    }
+    expect(row("GA")).toHaveTextContent(/COUNT FROM/);
+  });
+
+  it("draws every count striped and names it not live, for the page's failure", () => {
+    render(<ResultsOverview now={NOW} results={withFeeds()} states={["GA", "TX"]} refreshFailed />);
+    fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
+    const map = mapProps.current!;
+    expect(map.getFillColor("GA")).toMatch(/^url\(#/);
+    expect(map.getStateLabel("GA")).toMatch(/not live, this page couldn't refresh it, count from/);
+    expect(map.getStateLabel("TX")).not.toMatch(/feed/);
+    expect(screen.getByText(/NOT LIVE: THIS PAGE COULDN'T REFRESH/)).toBeInTheDocument();
+    expect(screen.getByText(/This page couldn.t refresh the count/)).toBeInTheDocument();
+    expect(screen.queryByText(/Amber stripes mean Civitas couldn/)).not.toBeInTheDocument();
+  });
+
+  it("is drawn live and solid again once a refresh answers", () => {
+    render(<ResultsOverview now={NOW} results={withFeeds()} states={["GA", "TX"]} />);
+    fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
+    expect(row("GA")).toHaveTextContent("LIVE");
+    expect(mapProps.current!.getFillColor("GA")).not.toMatch(/^url\(#/);
+    expect(row("TX")).toHaveTextContent("FEED NOT READ");
   });
 });

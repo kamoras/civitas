@@ -2,6 +2,7 @@ import {
   formatEasternTime,
   heldByPhrase,
   isTied,
+  leaderIsChallenger,
   partyBarColor,
   partyLetter,
   partyTextClass,
@@ -136,7 +137,7 @@ export function RaceResultCard({
                 : "Leading, not called. The count is not final.",
           // Who held the seat, whether or not the count is official: an
           // official count's change of party is still one.
-          result.votesCounted && !isTied(result) && result.flip && result.heldBy
+          result.votesCounted && result.flip && leaderIsChallenger(result)
             ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party.`
             : null,
         ]
