@@ -16,9 +16,16 @@ ops_alerts.check_pipeline_staleness is the backstop for that.
 
 Chains run one at a time, in the order they started: a trigger sent while
 the nightly chain runs waits for it, and vice versa, so two pipelines never
-run at once. A chain that has made no progress for STALE_PIPELINE_TIMEOUT
-is hung — its own alerts say so — and loses its turn to the next rather
-than stall every chain after it.
+run at once. The chain holding the turn that makes no progress for
+STALE_PIPELINE_TIMEOUT — one link that long — is hung, its own alerts say
+so, and the next chain takes the turn rather than stall every chain after
+it; should the hung one come back, it queues again before its next link.
+A chain waiting its turn is alive, whatever the wait: it is never the one
+declared hung.
+
+A chain registers as a database writer only for each link it runs
+(app.background.writing): waiting for its turn isn't writing, and a data
+reset needn't wait for a queue.
 
 Pipelines run only in the pipeline process (settings.PROCESS_ROLE), which
 is always one process, so a process-local queue serializes all of them.
@@ -31,7 +38,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT
 
@@ -49,6 +56,14 @@ FAILED = frozenset({CRASHED, "failed", "no_data"})
 FULL = "full"  # the nightly run's five links: the nightly chain, or a full trigger
 
 
+@dataclass
+class _Chain:
+    kind: str
+    # Links it has yet to start: a trigger for one of them would repeat it.
+    pending: set[str]
+    progress: float = field(default_factory=time.monotonic)
+
+
 class _Queue:
     """Chains in the order they started; the first holds the turn. Polled
     from each chain's own event loop (a cancelled waiter leaves the queue),
@@ -57,43 +72,51 @@ class _Queue:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._order: deque[int] = deque()
-        # id -> (kind, monotonic time of its last progress)
-        self._chains: dict[int, tuple[str, float]] = {}
+        self._chains: dict[int, _Chain] = {}
         self._ids = itertools.count(1)
 
     def _hung(self, chain_id: int, now: float) -> bool:
-        return now - self._chains[chain_id][1] > STALE_PIPELINE_TIMEOUT.total_seconds()
+        return now - self._chains[chain_id].progress > STALE_PIPELINE_TIMEOUT.total_seconds()
 
-    def _live(self, kind: str | None, now: float) -> bool:
-        return any((kind is None or k == kind) and not self._hung(i, now) for i, (k, _) in self._chains.items())
+    def _live(self) -> "list[_Chain]":
+        now = time.monotonic()
+        return [chain for i, chain in self._chains.items() if not self._hung(i, now)]
 
-    def join(self, kind: str, *, unless_running: str | None = None) -> int | None:
-        """A place in the queue, or None when a chain of `unless_running`'s
-        kind is in progress. The check and the joining are one step."""
+    def join(self, kind: str, labels: list[str], refuse: "Callable[[list[_Chain]], str | None] | None" = None,
+             ) -> "tuple[int | None, str | None]":
+        """(a place in the queue, None), or (None, why) when `refuse` names a
+        reason among the live chains. The check and the joining are one
+        step: two requests can't both pass."""
         with self._lock:
-            now = time.monotonic()
-            if unless_running is not None and self._live(unless_running, now):
-                return None
+            if refuse is not None and (why := refuse(self._live())) is not None:
+                return None, why
             chain_id = next(self._ids)
-            self._chains[chain_id] = (kind, now)
+            self._chains[chain_id] = _Chain(kind, set(labels))
             self._order.append(chain_id)
-            return chain_id
+            return chain_id, None
 
-    def first(self, chain_id: int) -> bool:
-        """Whether it is `chain_id`'s turn: it is first, or everything ahead
-        of it is hung (and drops out)."""
+    def turn(self, chain_id: int) -> bool:
+        """Whether it is `chain_id`'s turn: it is first, or the chain ahead
+        of it is hung (and loses its place). Asking is progress: a waiting
+        chain is alive. One that lost its place asks again from the back."""
         with self._lock:
             now = time.monotonic()
-            while self._order and self._order[0] != chain_id and self._hung(self._order[0], now):
-                hung = self._order.popleft()
-                logger.warning("Pipeline chain #%d has made no progress in %s — hung; the next goes ahead",
-                               hung, STALE_PIPELINE_TIMEOUT)
-            return bool(self._order) and self._order[0] == chain_id
-
-    def progress(self, chain_id: int) -> None:
-        with self._lock:
             if chain_id in self._chains:
-                self._chains[chain_id] = (self._chains[chain_id][0], time.monotonic())
+                self._chains[chain_id].progress = now
+            if chain_id not in self._order:
+                self._order.append(chain_id)
+            while self._order[0] != chain_id and self._hung(self._order[0], now):
+                hung = self._order.popleft()
+                logger.warning("Pipeline chain #%d has run one link past %s — hung; the next chain goes ahead",
+                               hung, STALE_PIPELINE_TIMEOUT)
+            return self._order[0] == chain_id
+
+    def starting(self, chain_id: int, label: str) -> None:
+        with self._lock:
+            chain = self._chains.get(chain_id)
+            if chain is not None:
+                chain.pending.discard(label)
+                chain.progress = time.monotonic()
 
     def leave(self, chain_id: int) -> None:
         with self._lock:
@@ -103,26 +126,41 @@ class _Queue:
             except ValueError:
                 pass
 
-    def running(self, kind: str | None = None) -> bool:
+    def running(self) -> bool:
         with self._lock:
-            return self._live(kind, time.monotonic())
+            return bool(self._live())
 
 
 _queue = _Queue()
 
 
-def chain_running(kind: str | None = None) -> bool:
+def chain_running() -> bool:
     """A chain in progress, waiting its turn included (none hung): what
     check-and-deploy.sh reads (pipelineChainIsRunning), so a restart doesn't
-    drop links a chain has yet to run — and what a full run is refused on."""
-    return _queue.running(kind)
+    drop links a chain has yet to run."""
+    return _queue.running()
 
 
-def reserve(kind: str) -> int | None:
-    """A place in the queue now, before the chain's thread starts, or None
-    while a chain of `kind` is in progress (two requests can't both pass).
-    Given to run_chain(reserved=...), or leave()-d if it never starts."""
-    return _queue.join(kind, unless_running=kind)
+def reserve(kind: str, labels: list[str]) -> "tuple[int | None, str | None]":
+    """A place in the queue now, before the chain's thread starts — or
+    (None, why) when it would repeat what a live chain will do: a full run
+    while another full run is in progress, or a pipeline another chain has
+    yet to start. Given to run_chain(reserved=...), or leave()-d if the
+    chain never starts."""
+    def refuse(live: "list[_Chain]") -> str | None:
+        if kind == FULL and any(chain.kind == FULL for chain in live):
+            return "a full run of the pipelines is already in progress"
+        for label in labels:
+            if any(label in chain.pending for chain in live):
+                return f"the {label} pipeline is already due to run in the chain in progress"
+        return None
+
+    return _queue.join(kind, labels, refuse)
+
+
+def queued_behind() -> bool:
+    """Whether a chain started now would wait for another."""
+    return _queue.running()
 
 
 def leave(chain_id: int) -> None:
@@ -146,22 +184,47 @@ class Outcome:
 
 
 async def _run_link(link: Link) -> Outcome:
-    """One link and its follow-up. Never raises for the link's own failure
-    (an Exception is its CRASHED outcome); cancellation and exit do."""
+    """One link and its follow-up, registered as a database writer while it
+    runs. Never raises for the link's own failure (an Exception is its
+    CRASHED outcome); cancellation and exit do."""
+    from app.background import WritesHeld, writing
+    from app.pipeline import lease
+
     try:
-        result = await link.run()
-    except Exception as error:
-        logger.exception("%s pipeline crashed", link.label)
-        outcome = Outcome(CRASHED, error=error)
-    else:
-        result = result if isinstance(result, dict) else {}
-        outcome = Outcome(str(result.get("status") or "completed"), result)
-    if link.after is not None:
-        try:
-            link.after()
-        except Exception:
-            logger.exception("After %s: follow-up failed", link.label)
+        with writing(f"pipeline: {link.label}"):
+            try:
+                result = await link.run()
+            except Exception as error:
+                logger.exception("%s pipeline crashed", link.label)
+                outcome = Outcome(CRASHED, error=error)
+            else:
+                result = result if isinstance(result, dict) else {}
+                outcome = Outcome(str(result.get("status") or "completed"), result)
+            if link.after is not None:
+                try:
+                    link.after()
+                except Exception:
+                    logger.exception("After %s: follow-up failed", link.label)
+    except WritesHeld:
+        # A data reset took the database while this chain waited.
+        outcome = Outcome("skipped", {"status": "skipped", "reason": lease.REFUSED_BY_RESET})
     return outcome
+
+
+async def _wait_turn(chain_id: int, what: str) -> None:
+    logged = False
+    while not _queue.turn(chain_id):
+        if not logged:
+            logger.info("Pipeline chain #%d (%s) waiting for the one before it", chain_id, what)
+            logged = True
+        await asyncio.sleep(POLL_S)
+
+
+def ends_chain(outcome: Outcome) -> bool:
+    """A data reset refused it: every later link would be refused too."""
+    from app.pipeline import lease
+
+    return outcome.status == "skipped" and (outcome.result or {}).get("reason") == lease.REFUSED_BY_RESET
 
 
 async def run_chain(
@@ -171,22 +234,15 @@ async def run_chain(
     """Each link in turn, whatever the one before it did, once this chain's
     turn comes. `reserved`: the place a trigger took when it was accepted
     (reserve), else one is taken here."""
-    from app.pipeline import lease
-
-    chain_id = reserved if reserved is not None else _queue.join(kind)
+    chain_id = reserved if reserved is not None else _queue.join(kind, [link.label for link in links])[0]
+    what = ", ".join(link.label for link in links)
     outcomes: dict[str, Outcome] = {}
     try:
-        logged = False
-        while not _queue.first(chain_id):
-            if not logged:
-                logger.info("Pipeline chain #%d (%s) waiting for the one before it",
-                            chain_id, ", ".join(link.label for link in links))
-                logged = True
-            await asyncio.sleep(POLL_S)
         for link in links:
-            _queue.progress(chain_id)
+            await _wait_turn(chain_id, what)  # its turn, still or again
+            _queue.starting(chain_id, link.label)
             outcome = await _run_link(link)
-            _queue.progress(chain_id)
+            _queue.starting(chain_id, link.label)  # progress
             outcomes[link.label] = outcome
             logger.info("%s pipeline: %s", link.label,
                         outcome.result if outcome.result is not None else outcome.status)
@@ -195,8 +251,7 @@ async def run_chain(
                     on_outcome(link, outcome)
                 except Exception:
                     logger.exception("Reporting %s's outcome failed", link.label)
-            if outcome.status == "skipped" and (outcome.result or {}).get("reason") == lease.REFUSED_BY_RESET:
-                # Every later link would be refused the same way.
+            if ends_chain(outcome):
                 logger.info("A data reset holds the database — the rest of this chain is not run")
                 break
     finally:

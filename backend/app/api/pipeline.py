@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
-from app.api.pipeline_runner import run_pipeline_in_thread
 from app.database import get_db
 from app.models import PipelineRun
 from app.schemas import PipelineRunSchema, PipelineStatusSchema
@@ -24,32 +23,55 @@ def _is_pipeline_running(db: Session) -> bool:
     return run_in_progress(db, PipelineRun)
 
 
-def start_triggered_chain(db: Session, senator: str | None, fetch_only: bool, error_label: str) -> None:
-    """What both pipeline triggers do: refuse (409) while a Senate run is
-    live or, for a full run, while a full chain is in progress — the
-    nightly one or another trigger's — which a second would queue behind
-    and redo; else start it (scheduler.triggered_chain). The full-chain
-    check and its registration are one step, so two requests can't both
-    start one."""
-    from app.pipeline_chain import FULL, leave, reserve
-    from app.scheduler import triggered_chain
+def queue_chain(links, *, kind: str, name: str, error_label: str) -> bool:
+    """Start a chain of pipelines (app.pipeline_chain) in a thread of its
+    own, reported under "Triggered"; True when it waits behind a chain in
+    progress (the response says it is queued, not started). A 409 when it
+    would repeat what a live chain will do — a full run during a full run,
+    a pipeline another chain has yet to start — rather than run it twice."""
+    import asyncio
 
-    if _is_pipeline_running(db):
-        raise HTTPException(status_code=409, detail="Pipeline is already running")
-    reserved = None
-    if senator is None and not fetch_only:
-        reserved = reserve(FULL)
-        if reserved is None:
-            raise HTTPException(status_code=409, detail="Pipelines are already running (the nightly run or a trigger)")
+    from app.background import start_waiting_writer
+    from app.pipeline_chain import chain_running, leave, reserve
+    from app.scheduler import chain_of
+
+    queued = chain_running()
+    reserved, why = reserve(kind, [link.label for link in links])
+    if reserved is None:
+        raise HTTPException(status_code=409, detail=f"Not started: {why}")
+    chain = chain_of(links, "Triggered", kind=kind, reserved=reserved)
+
+    def _run() -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(chain())
+        except BaseException:
+            logger.exception(error_label)
+        finally:
+            leave(reserved)
+            loop.close()
+
     try:
-        run_pipeline_in_thread(
-            triggered_chain(senator, fetch_only, reserved), name="pipeline-run", error_label=error_label,
-        )
+        start_waiting_writer(_run, name=name)
     except BaseException:
-        if reserved is not None:
-            leave(reserved)  # never started
+        leave(reserved)  # never started
         raise
+    return queued
 
+
+def start_triggered_chain(senator: str | None, fetch_only: bool, error_label: str) -> bool:
+    """What both pipeline triggers run: the nightly chain's five pipelines,
+    each whatever the one before it did — so a trigger recovers any of
+    them, not only the first — refused while another full run is in
+    progress. A single senator or a fetch-only run is that Senate run
+    alone. True when it is queued behind a chain in progress."""
+    from app.pipeline_chain import FULL
+    from app.scheduler import filtered_senate_link, nightly_links
+
+    if senator is not None or fetch_only:
+        return queue_chain([filtered_senate_link(senator, fetch_only)], kind="", name="pipeline-run",
+                           error_label=error_label)
+    return queue_chain(nightly_links(), kind=FULL, name="pipeline-run", error_label=error_label)
 
 
 @router.get("/pipeline/status", response_model=PipelineStatusSchema)
@@ -102,5 +124,8 @@ async def trigger_pipeline(
 ) -> dict:
     """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
     check_pipeline_token(authorization)
-    start_triggered_chain(db, senator, fetch_only, "Pipeline run failed")
-    return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}
+    queued = start_triggered_chain(senator, fetch_only, "Pipeline run failed")
+    return {
+        "message": "Pipeline run queued behind the one in progress" if queued else "Pipeline run triggered",
+        "queued": queued, "senator_filter": senator, "fetch_only": fetch_only,
+    }

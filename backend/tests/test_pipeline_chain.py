@@ -59,6 +59,18 @@ def test_a_data_reset_ends_the_chain():
     last.assert_not_awaited()
 
 
+def test_a_chain_waiting_its_turn_holds_no_data_reset_off():
+    # It registers as a writer only while a link runs: a reset taken while
+    # it waits refuses its next link, and the chain ends.
+    from app import background
+
+    run = AsyncMock()
+    with background.exclusive("data reset"):
+        outcomes = asyncio.run(run_chain([Link("A", run), Link("B", run)]))
+    run.assert_not_awaited()
+    assert list(outcomes) == ["A"] and outcomes["A"].status == "skipped"
+
+
 def test_cancellation_still_ends_the_chain_and_frees_the_queue():
     last = AsyncMock()
     with pytest.raises(asyncio.CancelledError):
@@ -97,16 +109,48 @@ def test_chains_run_one_at_a_time_in_the_order_they_started():
     assert overlaps == [] and order == ["n0", "n1", "n2", "m0"]
 
 
-def test_a_hung_chain_loses_its_turn(monkeypatch):
+def _age(chain_id, hours):
+    queue = pipeline_chain._queue
+    with queue._lock:
+        queue._chains[chain_id].progress = time.monotonic() - hours * 3600
+
+
+def test_the_holder_hung_past_a_runs_length_loses_the_turn():
     # Waiting on it forever would stall every chain after it.
     queue = pipeline_chain._queue
-    hung = queue.join("")
-    assert queue.first(hung)
-    with queue._lock:
-        queue._chains[hung] = ("", time.monotonic() - 13 * 3600)  # no progress for a run's length
+    hung, _ = queue.join("", ["X"])
+    assert queue.turn(hung)
+    _age(hung, 13)
     ran = _completed()
     assert asyncio.run(run_chain([Link("A", ran)]))["A"].status == "completed"
-    assert not pipeline_chain.chain_running()  # a hung chain isn't reported busy either
+
+
+def test_a_chain_waiting_that_long_is_alive_not_hung():
+    # Behind a 13-hour nightly chain, a queued trigger keeps its place.
+    queue = pipeline_chain._queue
+    holder, _ = queue.join("", ["X"])
+    waiter, _ = queue.join("", ["Y"])
+    later, _ = queue.join("", ["Z"])
+    assert queue.turn(holder)
+    _age(waiter, 13)
+    assert not queue.turn(waiter)  # asking is progress
+    queue.leave(holder)
+    assert not queue.turn(later)  # the waiter is next, not dropped
+    assert queue.turn(waiter)
+
+
+def test_a_hung_holder_that_comes_back_queues_again_before_its_next_link():
+    # Running on beside the chain that took its turn would put two
+    # pipelines in memory at once.
+    queue = pipeline_chain._queue
+    slow, _ = queue.join("", ["A", "B"])
+    assert queue.turn(slow)
+    _age(slow, 13)
+    other, _ = queue.join("", ["C"])
+    assert queue.turn(other)  # took the turn from the hung holder
+    assert not queue.turn(slow)  # back from its long link: behind `other` now
+    queue.leave(other)
+    assert queue.turn(slow)
 
 
 def test_a_chain_is_reported_running_while_it_waits_and_between_links():
@@ -122,12 +166,19 @@ def test_a_chain_is_reported_running_while_it_waits_and_between_links():
     assert seen == [True] and not pipeline_chain.chain_running()
 
 
-def test_reserving_a_full_chain_while_one_runs_is_refused():
-    first = reserve(FULL)
-    assert first is not None and reserve(FULL) is None
-    assert reserve("") is not None  # a single pipeline's chain queues regardless
-    pipeline_chain.leave(first)
-    assert reserve(FULL) is not None
+def test_a_trigger_that_would_repeat_what_a_live_chain_will_do_is_refused():
+    full, _ = reserve(FULL, ["Senate", "House"])
+    assert full is not None
+    assert reserve(FULL, ["Senate", "House"])[0] is None  # a full run during one
+    assert reserve("", ["House"])[0] is None  # still due in the full run
+    pipeline_chain._queue.starting(full, "House")
+    house, _ = reserve("", ["House"])  # started: a rerun after it is a new run
+    assert house is not None
+    assert reserve("", ["Senate (single senator X)"])[0] is not None
+    pipeline_chain.leave(full)
+    assert reserve(FULL, ["Senate", "House"])[0] is None  # the queued House is still due
+    pipeline_chain.leave(house)
+    assert reserve(FULL, ["Senate", "House"])[0] is not None
 
 
 @pytest.mark.asyncio
@@ -135,7 +186,7 @@ async def test_the_status_reports_a_chain_so_deploys_wait_it_out(db_session):
     from app.api.admin import admin_pipeline_status
 
     assert (await admin_pipeline_status(db=db_session))["pipelineChainIsRunning"] is False
-    reserve("")
+    reserve("", ["X"])
     assert (await admin_pipeline_status(db=db_session))["pipelineChainIsRunning"] is True
 
 
@@ -147,8 +198,20 @@ class TestTriggers:
     NAMES = ("run_senate_pipeline", "run_supplementary_pipeline", "run_house_pipeline",
              "run_stock_trades_pipeline", "run_election_pipeline")
 
-    def test_a_full_trigger_runs_every_nightly_link_and_reports_them(self):
-        from app.scheduler import triggered_chain
+    @pytest.fixture()
+    def started(self, monkeypatch):
+        """Threads the triggers start, run here and now."""
+        ran = []
+
+        def start(target, *, name):
+            ran.append(name)
+            target()
+
+        monkeypatch.setattr("app.background.start_waiting_writer", start)
+        return ran
+
+    def test_a_full_trigger_runs_every_nightly_link_and_reports_them(self, started):
+        from app.api.pipeline import start_triggered_chain
 
         mocks = {n: _completed() for n in self.NAMES}
         mocks["run_senate_pipeline"] = AsyncMock(return_value={"status": "failed", "error": "boom"})
@@ -156,45 +219,59 @@ class TestTriggers:
              patch("app.services.bill_service.warm_bill_collection_cache"), \
              patch("app.ops_alerts.send_ops_alert") as alert, \
              patch("app.ops_alerts.resolve_ops_alert"):
-            asyncio.run(triggered_chain(None, False)())
+            assert start_triggered_chain(None, False, "failed") is False  # started, not queued
         for mock in mocks.values():
             mock.assert_awaited_once()
         assert alert.call_args.args[0] == "Triggered Senate run failed"
 
-    @pytest.mark.parametrize("senator,fetch_only", [("Smith", False), (None, True)])
-    def test_a_filtered_trigger_is_the_senate_pipeline_alone(self, senator, fetch_only):
-        from app.scheduler import triggered_chain
+    @pytest.mark.parametrize("senator,fetch_only,label", [
+        ("Smith", False, "Senate (single senator Smith)"), (None, True, "Senate (fetch only)"),
+    ])
+    def test_a_filtered_trigger_is_that_senate_run_alone_labelled_apart(self, senator, fetch_only, label, started):
+        # Labelled apart: its success mustn't clear the full run's alerts.
+        from app.api.pipeline import start_triggered_chain
 
         senate, house = _completed(), AsyncMock()
         with patch("app.scheduler.run_senate_pipeline", senate), patch("app.scheduler.run_house_pipeline", house), \
-             patch("app.ops_alerts.resolve_ops_alert"):
-            asyncio.run(triggered_chain(senator, fetch_only)())
+             patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            start_triggered_chain(senator, fetch_only, "failed")
         senate.assert_awaited_once_with(senator_filter=senator, fetch_only=fetch_only)
         house.assert_not_awaited()
+        resolved = {c.args[0] for c in resolve.call_args_list}
+        assert "nightly-crashed-senate" not in resolved
+        assert f"nightly-crashed-{label.lower().replace(' ', '-')}" in resolved
 
     @pytest.mark.asyncio
-    async def test_a_full_trigger_is_refused_while_a_full_chain_runs(self, db_session, monkeypatch):
-        # It would queue a second chain behind the first and redo its work.
+    async def test_a_full_trigger_is_refused_while_a_full_chain_runs(self, db_session):
         from fastapi import HTTPException
 
         from app.api.admin import admin_trigger_pipeline
 
-        started = []
-        monkeypatch.setattr("app.api.pipeline.run_pipeline_in_thread", lambda *a, **k: started.append(1))
-        await admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
+        reserve(FULL, ["Senate"])
         with pytest.raises(HTTPException) as refused:
             await admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
-        assert refused.value.status_code == 409 and started == [1]
+        assert refused.value.status_code == 409
 
     @pytest.mark.asyncio
-    async def test_a_single_pipeline_chain_does_not_refuse_a_full_trigger(self, db_session, monkeypatch):
-        from app.api.admin import admin_trigger_pipeline
+    async def test_a_trigger_behind_a_chain_says_it_is_queued(self, monkeypatch):
+        from app.api.admin import admin_trigger_house_pipeline
 
-        started = []
-        reserve("")  # an Election trigger's
-        monkeypatch.setattr("app.api.pipeline.run_pipeline_in_thread", lambda *a, **k: started.append(1))
-        await admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
-        assert started == [1]
+        monkeypatch.setattr("app.background.start_waiting_writer", lambda target, *, name: None)
+        reserve("", ["Election"])  # an Election trigger's chain, running
+        answer = await admin_trigger_house_pipeline()
+        assert answer["queued"] is True and "queued" in answer["message"]
+
+    @pytest.mark.asyncio
+    async def test_a_second_house_trigger_while_one_is_due_is_refused(self, monkeypatch):
+        from fastapi import HTTPException
+
+        from app.api.admin import admin_trigger_house_pipeline
+
+        monkeypatch.setattr("app.background.start_waiting_writer", lambda target, *, name: None)
+        await admin_trigger_house_pipeline()
+        with pytest.raises(HTTPException) as refused:
+            await admin_trigger_house_pipeline()
+        assert refused.value.status_code == 409
 
     @pytest.mark.asyncio
     async def test_a_trigger_that_never_starts_leaves_no_place_in_the_queue(self, db_session, monkeypatch):
@@ -204,7 +281,7 @@ class TestTriggers:
         def held(*_a, **_k):
             raise WritesHeld("a data reset holds writes")
 
-        monkeypatch.setattr("app.api.pipeline.run_pipeline_in_thread", held)
+        monkeypatch.setattr("app.background.start_waiting_writer", held)
         with pytest.raises(WritesHeld):
             await admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
         assert not pipeline_chain.chain_running()
@@ -214,10 +291,13 @@ class TestTriggers:
         from app import scheduler
 
         mocks = {n: _completed() for n in self.NAMES}
-        reserve(FULL)
+        reserve(FULL, ["Senate"])
         with patch.multiple("app.scheduler", **mocks), \
-             patch("app.background.threading.Thread",
-                   lambda target, **_k: type("T", (), {"start": lambda self: target()})()):
+             patch("app.ops_alerts.check_current_congress_staleness") as congress, \
+             patch("app.ops_alerts.check_feedback_token_expiration"), \
+             patch("app.ops_alerts.check_state_pvi_staleness"), \
+             patch("app.scheduler.start_waiting_writer", lambda target, *, name: target()):
             scheduler._nightly_pipeline()
         for mock in mocks.values():
             mock.assert_not_awaited()
+        congress.assert_called_once()  # its checks still run

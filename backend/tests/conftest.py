@@ -287,3 +287,13 @@ def bluesky_configured(monkeypatch, bluesky_outbox):
     monkeypatch.setattr(settings, "BSKY_HANDLE", "civitas.test", raising=False)
     monkeypatch.setattr(settings, "BSKY_APP_PASSWORD", "pw", raising=False)
     return bluesky_outbox
+
+
+@pytest.fixture(autouse=True)
+def _fresh_pipeline_chain_queue(monkeypatch):
+    """Every test starts with no pipeline chain queued or running
+    (app.pipeline_chain keeps its queue in the process): a trigger test
+    whose thread never runs would otherwise leave its place behind."""
+    from app import pipeline_chain
+
+    monkeypatch.setattr(pipeline_chain, "_queue", pipeline_chain._Queue())

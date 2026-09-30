@@ -14,7 +14,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
 from app.database import get_db, get_visits_db, off_loop
 from app.http_client import make_async_client
@@ -1364,9 +1363,10 @@ async def admin_trigger_pipeline(
     """Trigger a pipeline run from the admin panel."""
     from app.api.pipeline import start_triggered_chain
 
-    start_triggered_chain(db, senator, fetch_only, "Admin-triggered pipeline run failed")
+    queued = start_triggered_chain(senator, fetch_only, "Admin-triggered pipeline run failed")
     return {
-        "message": "Pipeline triggered",
+        "message": "Pipeline queued behind the run in progress" if queued else "Pipeline triggered",
+        "queued": queued,
         "senatorFilter": senator,
         "fetchOnly": fetch_only,
     }
@@ -1508,14 +1508,15 @@ async def admin_trigger_house_pipeline():
     already running.
     """
     from app.pipeline.house_pipeline import run_house_pipeline
+    from app.api.pipeline import queue_chain
     from app.pipeline_chain import Link
-    from app.scheduler import single_pipeline_chain, warm_bills
+    from app.scheduler import warm_bills
 
-    run_pipeline_in_thread(
-        single_pipeline_chain(Link("House", run_house_pipeline, after=warm_bills)),
-        name="house-pipeline-run", error_label="House pipeline run failed",
-    )
-    return {"message": "House pipeline triggered"}
+    queued = queue_chain([Link("House", run_house_pipeline, after=warm_bills)], kind="", name="house-pipeline-run", error_label="House pipeline run failed")
+    return {
+        "message": "House pipeline queued behind the run in progress" if queued else "House pipeline triggered",
+        "queued": queued,
+    }
 
 
 @router.post("/pipeline/clear-stuck-senate", dependencies=[Depends(require_admin)])
@@ -1588,15 +1589,14 @@ async def admin_trigger_supplementary_pipeline():
     Same self-guarding lock as the house trigger above — no pre-check needed.
     """
     from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
+    from app.api.pipeline import queue_chain
     from app.pipeline_chain import Link
-    from app.scheduler import single_pipeline_chain
 
-    run_pipeline_in_thread(
-        single_pipeline_chain(Link("Supplementary", run_supplementary_pipeline)),
-        name="supplementary-pipeline-run",
-        error_label="Supplementary pipeline run failed",
-    )
-    return {"message": "Supplementary pipeline triggered"}
+    queued = queue_chain([Link("Supplementary", run_supplementary_pipeline)], kind="", name="supplementary-pipeline-run", error_label="Supplementary pipeline run failed")
+    return {
+        "message": "Supplementary pipeline queued behind the run in progress" if queued else "Supplementary pipeline triggered",
+        "queued": queued,
+    }
 
 
 @router.post("/pipeline/clear-stuck-supplementary", dependencies=[Depends(require_admin)])
@@ -1620,15 +1620,14 @@ async def admin_trigger_election_pipeline():
     Same self-guarding lock as the house trigger above — no pre-check needed.
     """
     from app.pipeline.election_pipeline import run_election_pipeline
+    from app.api.pipeline import queue_chain
     from app.pipeline_chain import Link
-    from app.scheduler import single_pipeline_chain
 
-    run_pipeline_in_thread(
-        single_pipeline_chain(Link("Election", run_election_pipeline)),
-        name="election-pipeline-run",
-        error_label="Election pipeline run failed",
-    )
-    return {"message": "Election pipeline triggered"}
+    queued = queue_chain([Link("Election", run_election_pipeline)], kind="", name="election-pipeline-run", error_label="Election pipeline run failed")
+    return {
+        "message": "Election pipeline queued behind the run in progress" if queued else "Election pipeline triggered",
+        "queued": queued,
+    }
 
 
 @router.post("/pipeline/clear-stuck-election", dependencies=[Depends(require_admin)])
