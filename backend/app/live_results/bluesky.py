@@ -261,7 +261,22 @@ def _still_true(kind: str, result: RaceResult, d: dict) -> bool:
     if kind == er.LEAD_CHANGE:
         now_leading = er._leader(json.loads(result.tallies or "[]"))
         return er._key(now_leading) == er._key(d.get("leader"))
+    # A post is worded from the count as it stands (_as_of_now), so what it
+    # announces has to still be so: a held "official" post after the flag
+    # switched back off said "official", and an all-reporting post after
+    # units were added said "all 105 precincts have reported" at 100 of 105.
+    if kind == er.OFFICIAL:
+        return bool(result.official)
+    if kind == er.ALL_REPORTING:
+        return bool(result.total_units) and result.reporting_units == result.total_units
     return True
+
+
+# Kinds the sync raises once per count (announced_state): one that is not
+# true right now — the official flag off for a poll, units added — is held
+# rather than settled, as settling it lost the post for good when the count
+# came back within the age cap.
+_RAISED_ONCE = frozenset({er.OFFICIAL, er.ALL_REPORTING})
 
 
 def _as_of_now(result: RaceResult, d: dict) -> dict:
@@ -316,7 +331,12 @@ def post_result_updates(db: Session, election_date: str) -> int:
         kind = _postable_kind(event, race, result, detail, event.race_id in posted_flip_races)
         max_age = MAX_CORRECTION_AGE_HOURS if kind == CORRECTION else MAX_EVENT_AGE_HOURS
         if kind is None or now - event.created_at > timedelta(hours=max_age) \
-                or not _still_true(kind, result, detail) or _already_said(kind, race.id, h):
+                or _already_said(kind, race.id, h):
+            event.bsky_posted_at = now
+            continue
+        if not _still_true(kind, result, detail):
+            if kind in _RAISED_ONCE:
+                continue  # held: the count raises it once, and it may be true again within the age cap
             event.bsky_posted_at = now
             continue
         queue.append((_PRIORITY[kind], event.created_at, kind, event, race, detail))

@@ -165,6 +165,8 @@ class TestBudget:
 
     def test_a_race_in_its_cooldown_is_held_not_dropped(self, db_session):
         _race(db_session, "2026-SEN-GA")
+        db_session.flush()
+        db_session.get(RaceResult, "2026-SEN-GA").official = True  # the count as it stands says so too
         _said(db_session, "2026-SEN-GA", er.FLIP)
         official = _event(db_session, "2026-SEN-GA", er.OFFICIAL, _detail(reporting=100, official=True))
         assert _run(db_session) == []
@@ -509,3 +511,42 @@ def test_a_pending_flip_still_posts_when_the_count_dips_below_the_bar(db_session
     _event(db_session, "2026-SEN-GA", er.FLIP)
     [(text, _)] = _run(db_session)
     assert "leads in a seat Democrats hold" in text
+
+
+class TestAHeldPostSaysOnlyWhatIsStillSo:
+    """Posts are worded from the count as it stands, so an OFFICIAL or
+    ALL_REPORTING event whose moment has lapsed is not posted — and is
+    held, not dropped, since the count raises either only once."""
+
+    def test_official_after_the_flag_switched_off_is_held(self, db_session):
+        _race(db_session, "2026-SEN-GA")
+        db_session.flush()
+        result = db_session.get(RaceResult, "2026-SEN-GA")
+        result.official = False
+        event = _event(db_session, "2026-SEN-GA", er.OFFICIAL, _detail(official=True))
+        assert _run(db_session) == []
+        assert event.bsky_posted_at is None  # held, not settled
+        result.official = True
+        [(text, _)] = _run(db_session)
+        assert "the state lists its count as official" in text
+
+    def test_all_reporting_after_units_were_added_is_held(self, db_session):
+        _race(db_session, "2026-SEN-GA")
+        db_session.flush()
+        result = db_session.get(RaceResult, "2026-SEN-GA")
+        result.reporting_units, result.total_units = 100, 105
+        event = _event(db_session, "2026-SEN-GA", er.ALL_REPORTING, _detail(reporting=100, total=100))
+        assert _run(db_session) == []
+        assert event.bsky_posted_at is None
+        result.reporting_units = 105
+        [(text, _)] = _run(db_session)
+        assert "all 105 precincts have reported" in text
+
+    def test_a_lapsed_one_is_dropped_at_the_age_cap(self, db_session):
+        _race(db_session, "2026-SEN-GA")
+        db_session.flush()
+        db_session.get(RaceResult, "2026-SEN-GA").official = False
+        event = _event(db_session, "2026-SEN-GA", er.OFFICIAL, _detail(official=True),
+                       age=timedelta(hours=rb.MAX_EVENT_AGE_HOURS, minutes=1))
+        assert _run(db_session) == []
+        assert event.bsky_posted_at is not None and not event.bsky_posted
