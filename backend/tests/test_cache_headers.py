@@ -251,8 +251,17 @@ def real_client():
     per-test.
     """
     from app.main import app
+    from app.scheduler import scheduler
 
     with TestClient(app) as client:
+        # The lifespan started the real scheduler; pause it so a cron
+        # boundary on the wall clock (every job, every five minutes for the
+        # live-results sync) can't run a job mid-test. The test database is
+        # in-memory SQLite, where a job thread's new connection opens an
+        # empty database, and the "no such table" it hit failed these
+        # tests whenever a run crossed one. Starting it still ran.
+        if scheduler.running:
+            scheduler.pause()
         yield client
 
 
