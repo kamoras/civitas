@@ -476,56 +476,6 @@ async def test_a_run_facing_a_locked_index_neither_rebuilds_nor_tops_it_up(db_se
     resolve.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_a_skipped_embed_step_owes_the_backfilled_documents_to_the_next_run(db_session):
-    # The backfill won't return them again and they are in the index
-    # already: nothing else would re-embed them.
-    import sqlite3
-
-    from app.pipeline.cache import api_cache_get
-
-    doc = ExploreDocument(doc_type="Executive Order", source="Federal Register", title="An order",
-                          summary="s", body="b", date="2026-07-01")
-    db_session.add(doc)
-    db_session.commit()
-    doc_id = doc.id  # the run closes the session it is handed
-
-    async def run(**over):
-        empty = AsyncMock(return_value={})
-        patches = {
-            "SessionLocal": MagicMock(return_value=db_session),
-            "fetch_floor_remarks": empty,
-            "fetch_house_floor_remarks": AsyncMock(return_value=[]),
-            "fetch_recent_presidential_actions": AsyncMock(return_value=[]),
-            "fetch_scotus_cases": AsyncMock(return_value=[]),
-            "fetch_fr_rulemaking": AsyncMock(return_value=[]),
-            "_backfill_presidential_bodies": AsyncMock(return_value=[]),
-            "_backfill_rulemaking_bodies": AsyncMock(return_value=[]),
-            "_purge_orphaned_vectors": MagicMock(return_value=0),
-            "get_embedded_explore_ids": MagicMock(return_value={doc_id}),
-            "rebuild_index": MagicMock(return_value=0),
-            "update_document_authority": MagicMock(return_value={"documents": 0, "cited": 0}),
-            "calibrate_and_store": MagicMock(return_value={}),
-            **over,
-        }
-        from contextlib import ExitStack
-
-        with ExitStack() as stack:
-            for name, value in patches.items():
-                stack.enter_context(patch(f"app.pipeline.explore_pipeline.{name}", value))
-            await run_explore_pipeline(days_back=1)
-
-    locked = MagicMock(side_effect=sqlite3.OperationalError("database is locked"))
-    await run(_backfill_presidential_bodies=AsyncMock(return_value=[doc_id]), index_is_whole=locked,
-              top_up_explore_index=MagicMock(return_value=0))
-    assert api_cache_get(db_session, "explore", "reembed_owed", max_age_hours=24) == [doc_id]
-
-    embed = MagicMock(return_value=1)
-    await run(index_is_whole=MagicMock(return_value=True), top_up_explore_index=embed)
-    assert [d["id"] for d in embed.call_args.args[0]()] == [doc_id]
-    assert api_cache_get(db_session, "explore", "reembed_owed", max_age_hours=24) is None
-
-
 def test_ranking_calibration_is_kept_while_the_vector_index_is_not_whole(db_session):
     # Measured against a semantic channel answering nothing, the priors come
     # out as if the channels agreed perfectly.
@@ -553,66 +503,56 @@ def test_a_busy_vector_index_keeps_the_calibration_without_calling_it_a_failure(
     ("database is locked", False),  # a lock: the next run tries, no page
     ("no such module: vec0", True),  # a real failure
 ])
-async def test_a_rebuild_that_raises_owes_the_backfill_and_alerts_only_on_a_real_failure(
+async def test_a_rebuild_that_raises_alerts_only_on_a_real_failure(
     db_session, error, alerted,
 ):
     import sqlite3
 
     from app.pipeline import explore_pipeline
 
-    owe, alert, resolve = MagicMock(), MagicMock(), MagicMock()
-    with patch.object(explore_pipeline, "_owed_reembeds", return_value=set()), \
-         patch.object(explore_pipeline, "_owe_reembeds", owe), \
-         patch.object(explore_pipeline, "index_is_whole", return_value=False), \
+    alert, resolve = MagicMock(), MagicMock()
+    with patch.object(explore_pipeline, "index_is_whole", return_value=False), \
          patch.object(explore_pipeline, "rebuild_explore_index", side_effect=sqlite3.OperationalError(error)), \
          patch.object(explore_pipeline, "top_up_explore_index") as top_up, \
          patch("app.ops_alerts.send_ops_alert", alert), \
          patch("app.ops_alerts.resolve_ops_alert", resolve):
-        assert await explore_pipeline._embed_step(db_session, {7}) == 0
-    owe.assert_called_once_with(db_session, {7})
+        assert await explore_pipeline._embed_step(db_session) == 0
     assert alert.called is alerted
     resolve.assert_not_called()
     top_up.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_a_rebuild_that_completes_pays_what_was_owed_and_resolves_the_alert(db_session):
+async def test_a_rebuild_that_completes_resolves_the_alert(db_session):
     from app.pipeline import explore_pipeline
 
-    owe, resolve = MagicMock(), MagicMock()
-    with patch.object(explore_pipeline, "_owed_reembeds", return_value={3}), \
-         patch.object(explore_pipeline, "_owe_reembeds", owe), \
-         patch.object(explore_pipeline, "index_is_whole", return_value=False), \
+    resolve = MagicMock()
+    with patch.object(explore_pipeline, "index_is_whole", return_value=False), \
          patch.object(explore_pipeline, "rebuild_explore_index", return_value=0), \
          patch("app.ops_alerts.resolve_ops_alert", resolve):
         # Even an empty corpus: the rebuild completed, whatever it held.
-        assert await explore_pipeline._embed_step(db_session, set()) == 0
-    owe.assert_called_once_with(db_session, set())
+        assert await explore_pipeline._embed_step(db_session) == 0
     resolve.assert_called_once_with("explore-index-rebuild")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error,raised", [("database is locked", False), ("disk I/O error", True)])
-async def test_a_top_up_that_raises_owes_the_backfill(db_session, error, raised):
+async def test_a_top_up_whose_read_of_the_index_fails_embeds_nothing(db_session, error, raised):
     # Its reading of what is embedded too: unreadable must not read as
     # empty and re-encode the whole corpus.
     import sqlite3
 
     from app.pipeline import explore_pipeline
 
-    owe = MagicMock()
-    with patch.object(explore_pipeline, "_owed_reembeds", return_value=set()), \
-         patch.object(explore_pipeline, "_owe_reembeds", owe), \
-         patch.object(explore_pipeline, "index_is_whole", return_value=True), \
+    with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
          patch.object(explore_pipeline, "get_embedded_explore_ids", side_effect=sqlite3.OperationalError(error)), \
          patch.object(explore_pipeline, "embed_explore_documents", create=True) as embed, \
          patch("app.pipeline.vector_store.embed_explore_documents") as real_embed:
         if raised:
             with pytest.raises(sqlite3.OperationalError):
-                await explore_pipeline._embed_step(db_session, {7})
+                await explore_pipeline._embed_step(db_session)
         else:
-            assert await explore_pipeline._embed_step(db_session, {7}) == 0
-    owe.assert_called_once_with(db_session, {7})
+            assert await explore_pipeline._embed_step(db_session) == 0
     embed.assert_not_called()
     real_embed.assert_not_called()
 
@@ -629,10 +569,33 @@ async def test_a_lock_after_the_rebuilds_swap_is_a_failure_not_a_skip(db_session
         raise vector_store.RebuildFailed("after the swap") from sqlite3.OperationalError("database is locked")
 
     alert = MagicMock()
-    with patch.object(explore_pipeline, "_owed_reembeds", return_value=set()), \
-         patch.object(explore_pipeline, "_owe_reembeds"), \
-         patch.object(explore_pipeline, "index_is_whole", return_value=False), \
+    with patch.object(explore_pipeline, "index_is_whole", return_value=False), \
          patch.object(explore_pipeline, "rebuild_explore_index", failing), \
          patch.object(explore_pipeline, "alert_rebuild_failed", alert):
-        assert await explore_pipeline._embed_step(db_session, set()) == 0
+        assert await explore_pipeline._embed_step(db_session) == 0
     alert.assert_called_once()
+
+
+def test_a_top_up_takes_documents_missing_or_changed_since_they_were_embedded(db_session):
+    # By each document's text hash, not by who changed it: a body backfilled
+    # or re-ingested in place is stale whichever path wrote it — while one
+    # embedded before hashes were kept is taken as current.
+    from app.pipeline import explore_pipeline, vector_store
+
+    docs = []
+    for title in ("Current", "Changed", "Legacy", "Missing"):
+        d = ExploreDocument(doc_type="Executive Order", source="Federal Register", title=title,
+                            summary="s", body="b", date="2026-07-01")
+        db_session.add(d)
+        docs.append(d)
+    db_session.commit()
+    current, changed, legacy, missing = docs
+    hashes = {
+        current.id: vector_store.explore_text_hash(vector_store.explore_embed_dict(current)),
+        changed.id: "the hash of its old body",
+    }
+    with patch.object(explore_pipeline, "get_embedded_explore_ids",
+                      return_value={current.id, changed.id, legacy.id}), \
+         patch.object(explore_pipeline, "get_embedded_text_hashes", return_value=hashes):
+        wanted = [d["title"] for d in explore_pipeline._to_embed(db_session)]
+    assert wanted == ["Changed", "Missing"]

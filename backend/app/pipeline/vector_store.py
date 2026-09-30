@@ -249,9 +249,10 @@ _rebuild_lock = threading.Lock()
 # dashboard report, and check-and-deploy waits out.
 _rebuilds_underway = 0
 _underway_lock = threading.Lock()
-# When the last rebuild completed (monotonic): lets a re-embed that waited
-# one out see it needn't do the same work again.
-_last_rebuilt_at = float("-inf")
+# When the last rebuild that completed began (monotonic): a re-embed asked
+# for before that needn't do the same work again — every document it wrote
+# was read after the ask.
+_last_rebuild_began_at = float("-inf")
 
 
 @contextmanager
@@ -378,8 +379,30 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # at all, and search_explore_documents for how chunks are folded back
     # into document-level results.
     conn.execute(_EXPLORE_DDL.format(if_not_exists="IF NOT EXISTS "))
+    conn.execute(_TEXT_HASH_DDL.format(if_not_exists="IF NOT EXISTS "))
     conn.execute(_BILLS_DDL.format(if_not_exists="IF NOT EXISTS "))
     conn.commit()
+
+
+# What each document's vectors were built from (explore_text_hash), written
+# with them: a document whose text has changed since — a body backfilled, a
+# re-ingest — reads as stale to the next top-up whatever changed it. A
+# document embedded before this table existed has no row, and is taken as
+# current rather than re-encoded wholesale on the first run after it.
+_TEXT_HASH_DDL = """CREATE TABLE {if_not_exists}vec_explore_text (
+    doc_id INTEGER PRIMARY KEY,
+    text_hash TEXT NOT NULL
+)"""
+
+
+def explore_text_hash(doc: dict) -> str:
+    """A hash of everything embed_explore_documents reads from a document."""
+    import hashlib
+
+    fields = ("title", "summary", "body", "doc_type", "source", "date", "politician_name", "politician_id", "chamber")
+    return hashlib.sha256(
+        json.dumps([doc.get(f) or "" for f in fields], ensure_ascii=False).encode()
+    ).hexdigest()[:32]
 
 
 _EXPLORE_DDL = f"""CREATE VIRTUAL TABLE {{if_not_exists}}vec_explore USING vec0(
@@ -734,6 +757,12 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
                             text[:300],
                         ),
                     )
+                for doc_id, doc in {d: doc for d, _, doc in batch}.items():
+                    conn.execute(
+                        "INSERT INTO vec_explore_text (doc_id, text_hash) VALUES (?, ?) "
+                        "ON CONFLICT(doc_id) DO UPDATE SET text_hash = excluded.text_hash",
+                        (doc_id, explore_text_hash(doc)),
+                    )
                 conn.commit()
             except BaseException:
                 conn.rollback()
@@ -1000,8 +1029,15 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
                 chunk,
             )
             removed += cur.rowcount or 0
+            conn.execute(f"DELETE FROM vec_explore_text WHERE doc_id IN ({placeholders})", chunk)
         conn.commit()
     return removed
+
+
+def get_embedded_text_hashes() -> dict[int, str]:
+    """Each embedded document's explore_text_hash, as recorded when its
+    vectors were written (none for one embedded before hashes were kept)."""
+    return dict(get_vec_conn().execute("SELECT doc_id, text_hash FROM vec_explore_text").fetchall())
 
 
 def reset_vector_db() -> None:
@@ -1012,6 +1048,7 @@ def reset_vector_db() -> None:
     with _rebuild_lock:
         _swap_tables({
             "vec_explore": _EXPLORE_DDL.format(if_not_exists=""),
+            "vec_explore_text": _TEXT_HASH_DDL.format(if_not_exists=""),
             "vec_bills": _BILLS_DDL.format(if_not_exists=""),
         }, clear_meta=True)
     logger.info("Reset vector DB")
@@ -1064,8 +1101,8 @@ def rebuild_explore_index(
     rebuild or top-up is already running here; with it, waiting that out.
     With `if_incomplete`, None when the index is (by then) a complete build
     — an Explore run then tops it up, rather than embedding beside it. With
-    `unless_rebuilt_since` (a time.monotonic()), None when a rebuild
-    completed after it — one this waited out did the work already.
+    `unless_rebuilt_since` (a time.monotonic()), None when a rebuild that
+    began after it has completed — one this waited out did the work already.
 
     DROP + recreate, not DELETE FROM: INDEX_SCHEMA_VERSION signals a COLUMN
     LAYOUT change (e.g. adding doc_id when chunking landed), and a vec0
@@ -1081,7 +1118,7 @@ def rebuild_explore_index(
 
 
 def _rebuild(db_session_factory, wait: bool, if_incomplete: bool, unless_rebuilt_since: float | None) -> int | None:
-    global _last_rebuilt_at
+    global _last_rebuild_began_at
     if not _rebuild_lock.acquire(blocking=wait):
         return None
     try:
@@ -1099,20 +1136,24 @@ def _rebuild(db_session_factory, wait: bool, if_incomplete: bool, unless_rebuilt
             if whole:
                 return None
 
-        if unless_rebuilt_since is not None and _last_rebuilt_at > unless_rebuilt_since:
+        if unless_rebuilt_since is not None and _last_rebuild_began_at > unless_rebuilt_since:
             return None
+        began = time.monotonic()
         conn = get_vec_conn()
         # Not ready from here until the last batch is in (_INDEX_MODEL):
         # blanked with the swap, so a swap that fails leaves a whole index
         # whole.
-        _swap_tables({"vec_explore": _EXPLORE_DDL.format(if_not_exists="")}, meta={_INDEX_MODEL: ""})
+        _swap_tables({
+            "vec_explore": _EXPLORE_DDL.format(if_not_exists=""),
+            "vec_explore_text": _TEXT_HASH_DDL.format(if_not_exists=""),
+        }, meta={_INDEX_MODEL: ""})
         try:
             total = _embed_all(db_session_factory)
             _record_chunks_per_doc(conn)  # once, over the finished index
             _set_meta(conn, _INDEX_MODEL, index_identity())
         except Exception as error:
             raise RebuildFailed(f"explore index rebuild failed after its swap: {error}") from error
-        _last_rebuilt_at = time.monotonic()
+        _last_rebuild_began_at = began
         logger.info("Explore index rebuild complete: %d documents", total)
         return total
     finally:
@@ -1173,7 +1214,8 @@ def top_up_explore_index(docs_to_embed) -> int:
     documents beside it. `docs_to_embed()` is asked under the lock, so what
     it finds missing is what the index lacks then, not before a rebuild
     this waited out. A failure leaves each document as it was or as it now
-    is (embed_explore_documents writes them one transaction each)."""
+    is (embed_explore_documents writes a batch of whole documents per
+    transaction, and a failed batch rolls all of its documents back)."""
     with _rebuild_lock:
         return embed_explore_documents(docs_to_embed())
 

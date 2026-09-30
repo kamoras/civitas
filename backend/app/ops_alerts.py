@@ -559,6 +559,11 @@ def _forget_heartbeat_missing() -> None:
         pass
 
 
+# Whether a "pipeline service silent" alert may be open: true at start (one
+# may be from before this process), then after this process sends one.
+_silent_alert_may_be_open = True
+
+
 def check_pipeline_service_alive() -> None:
     """Watchdog run by the read-only API process: alert when the pipeline
     service's scheduler has stopped writing its heartbeat.
@@ -572,7 +577,7 @@ def check_pipeline_service_alive() -> None:
     from app.scheduler import read_heartbeat
     from app.shared_state import UNREADABLE
 
-    global _heartbeat_unreadable_since
+    global _heartbeat_unreadable_since, _silent_alert_may_be_open
     row = read_heartbeat()
     if row is UNREADABLE:
         # One unreadable round is a moment's I/O error, not evidence of
@@ -606,7 +611,11 @@ def check_pipeline_service_alive() -> None:
     if last is not None:
         _forget_heartbeat_missing()
         if last >= utcnow() - PIPELINE_SERVICE_SILENT_AFTER:
-            resolve_ops_alert("pipeline-service-silent")
+            if _silent_alert_may_be_open:
+                # Only on the way back: resolving reads the whole alert
+                # history, every tick, in every worker, otherwise.
+                resolve_ops_alert("pipeline-service-silent")
+                _silent_alert_may_be_open = False
             return
     elif not _heartbeat_missing_long_enough():
         # No heartbeat file at all: the pipeline service may only be
@@ -626,6 +635,7 @@ def check_pipeline_service_alive() -> None:
         else f"pipeline-service-silent-never-{utcnow():%Y-%m-%d}",
         condition="pipeline-service-silent",
     )
+    _silent_alert_may_be_open = True
 
 
 def check_pipeline_staleness() -> None:

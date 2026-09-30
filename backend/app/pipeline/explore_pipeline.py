@@ -30,8 +30,8 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
-from app.models import ApiCache, ExploreDocument, Justice, Representative, Senator
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.models import ExploreDocument, Justice, Representative, Senator
+from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.house_record import fetch_house_floor_remarks
 from app.pipeline.fetch.presidential_actions import (
@@ -53,6 +53,8 @@ from app.pipeline.vector_store import (
     index_is_whole,
     is_busy_error,
     alert_rebuild_failed,
+    explore_text_hash,
+    get_embedded_text_hashes,
     rebuild_explore_index,
     top_up_explore_index,
     wait_for_rebuild,
@@ -372,29 +374,26 @@ def _purge_duplicate_floor_speeches(db: Session) -> list[int]:
     return doomed
 
 
-async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
+async def _embed_step(db: Session) -> int:
     """Step 7: bring the vector index up to the corpus; returns how many
     documents were embedded.
 
     An index that isn't a complete build by this model (a rebuild that
     failed or was cut off, a model change) is rebuilt whole, here and under
     this run's lease, rather than topped up: an incremental pass can't make
-    it whole, and calibration measures it. Otherwise only documents not yet
-    in it (plus ones whose body was backfilled) are encoded — re-encoding
-    the whole corpus every night is what made the old 72h skip gate look
-    necessary.
+    it whole, and calibration measures it. Otherwise only documents missing
+    from it, or whose text has changed since their vectors were written (a
+    body backfilled, a re-ingest — vector_store.explore_text_hash), are
+    encoded: re-encoding the whole corpus every night is what made the old
+    72h skip gate look necessary.
 
     A look or a rebuild that only meets a lock skips the step: the index may
     well be whole (no reason to drop it) and may not be (a top-up beside a
-    rebuild would insert chunks twice). What the backfill changed is then
-    owed to the next run, since nothing else would re-embed it — the
-    backfill won't return those documents again, and they are in the index
-    already.
+    rebuild would insert chunks twice). Nothing is lost by skipping: what
+    is missing or stale stays so until the next run finds it.
     """
     from app.ops_alerts import resolve_ops_alert
 
-    owed = await asyncio.to_thread(_owed_reembeds, db)
-    refreshed_ids = refreshed_ids | owed
     whole = await _index_is_whole_or_none()
     outcome = "skipped"  # or "failed", "rebuilt", "topped up"
     embedded = 0
@@ -425,48 +424,52 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
                 whole = True
     if whole is True:
         try:
-            embedded = await _top_up(db, refreshed_ids)
+            embedded = await _top_up(db)
             outcome = "topped up"
         except Exception as exc:
-            # Each document is left as it was or as it now is (one write
-            # each): a new one not reached is still missing, and the next
-            # top-up takes it; the backfilled ones are owed. A lock skips
+            # Each document is left as it was or as it now is (a batch of
+            # whole documents per transaction): what wasn't reached is still
+            # missing or stale, and the next top-up finds it. A lock skips
             # the step; anything else fails the run as it always has.
-            if refreshed_ids:
-                await _record_owed(db, refreshed_ids)
             if not is_busy_error(exc):
                 raise
             logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", exc)
             return 0
 
-    if outcome == "skipped" or outcome == "failed":
-        if refreshed_ids:
-            await _record_owed(db, refreshed_ids)
-        if outcome == "skipped":
-            logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
-    else:
-        if owed:
-            await _record_owed(db, set())
+    if outcome == "skipped":
+        logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
+    elif outcome != "failed":
         # Whole now, by this run or a start's: a failed rebuild's alert ends.
         await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
     return embedded
 
 
-def _to_embed(db: Session, refreshed_ids: set[int]) -> list[dict]:
-    """The documents the index lacks, and the ones whose body changed. An
-    unreadable index raises (a lock is a skip): read as empty, it would
-    re-encode the whole corpus. Ids first, then only those documents'
-    rows: bodies are long, and most are embedded already."""
+def _to_embed(db: Session) -> list[dict]:
+    """The documents the index lacks, and the ones whose text changed since
+    their vectors were written. An unreadable index raises (a lock is a
+    skip): read as empty, it would re-encode the whole corpus. Read a batch
+    at a time — bodies are long, and most documents are current."""
     already = get_embedded_explore_ids()
-    wanted = [i for (i,) in db.query(ExploreDocument.id) if i not in already or i in refreshed_ids]
-    docs = []
-    for start in range(0, len(wanted), 500):
-        batch = wanted[start:start + 500]
-        docs += db.query(ExploreDocument).filter(ExploreDocument.id.in_(batch)).order_by(ExploreDocument.id).all()
-    return [explore_embed_dict(d) for d in docs]
+    hashes = get_embedded_text_hashes()
+    wanted: list[dict] = []
+    after = 0
+    while True:
+        docs = (
+            db.query(ExploreDocument).filter(ExploreDocument.id > after)
+            .order_by(ExploreDocument.id).limit(500).all()
+        )
+        if not docs:
+            return wanted
+        for d in docs:
+            doc = explore_embed_dict(d)
+            recorded = hashes.get(d.id)
+            if d.id not in already or (recorded is not None and recorded != explore_text_hash(doc)):
+                wanted.append(doc)
+        after = docs[-1].id
+        db.expunge_all()  # the bodies read, let go of
 
 
-async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
+async def _top_up(db: Session) -> int:
     logger.info("Explore pipeline: embedding documents into vector store...")
     # Off the event loop: encoding is pure CPU inside sentence-transformers
     # and ran for 23 MINUTES in one call against the real corpus (1,557
@@ -483,44 +486,7 @@ async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
     # donor_classifier_ai.py and api/explore.py already give their own
     # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
     # start's rebuild waits for it rather than embed beside it.
-    return await asyncio.to_thread(top_up_explore_index, lambda: _to_embed(db, refreshed_ids))
-
-
-# api_cache: ids whose re-embed a skipped embed step still owes. Rewritten by
-# every run that skips again, so the api_cache prune (by age) can't take it
-# while it is still owed.
-_REEMBED_OWED_KEY = "reembed_owed"
-_OWED_KEPT_H = 24 * 365
-
-
-def _owed_reembeds(db: Session) -> set[int]:
-    return set(api_cache_get(db, "explore", _REEMBED_OWED_KEY, max_age_hours=_OWED_KEPT_H) or [])
-
-
-def _owe_reembeds(db: Session, ids: set[int]) -> None:
-    """Record `ids` as owed — or, empty, clear the record (deleted: an empty
-    payload never overwrites one in api_cache). Rolls the session back on
-    a failure, so the run's later steps use it as before."""
-    try:
-        if ids:
-            api_cache_set(db, "explore", _REEMBED_OWED_KEY, sorted(ids))
-        else:
-            db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _REEMBED_OWED_KEY).delete()
-            db.commit()
-    except Exception:
-        db.rollback()
-        raise
-
-
-async def _record_owed(db: Session, ids: set[int]) -> None:
-    """_owe_reembeds off the loop; a failure is logged, not raised: the
-    step it follows is done either way (an unrecorded debt is re-owed by the
-    next run that skips, and a record left uncleared costs one re-embed)."""
-    try:
-        await asyncio.to_thread(_owe_reembeds, db, ids)
-    except Exception:
-        logger.exception("Explore pipeline: could not %s the owed re-embeds",
-                         "record" if ids else "clear")
+    return await asyncio.to_thread(top_up_explore_index, lambda: _to_embed(db))
 
 
 async def _index_is_whole_or_none() -> bool | None:
@@ -779,8 +745,10 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                 db.rollback()
 
         # --- 6. Backfill docs missing body content ---
-        refreshed_ids = set(await _backfill_presidential_bodies(db, client))
-        refreshed_ids |= set(await _backfill_rulemaking_bodies(db))
+        # (Their vectors are re-embedded because their text changed —
+        # _to_embed compares each document's text hash — not by id.)
+        await _backfill_presidential_bodies(db, client)
+        await _backfill_rulemaking_bodies(db)
 
         # --- 7. Embed new/refreshed documents into ChromaDB ---
         # Before embedding, not after: a duplicate removed now is one
@@ -792,7 +760,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # check-and-deploy polls: it scans every chunk's document id.
         await asyncio.to_thread(_purge_orphaned_vectors, db)
 
-        embedded = await _embed_step(db, refreshed_ids)
+        embedded = await _embed_step(db)
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill

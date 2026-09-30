@@ -233,7 +233,7 @@ class TestOneWritePerDocument:
                 return getattr(conn, name)
 
             def execute(self, sql, *a):
-                if sql.startswith("INSERT INTO vec_explore"):
+                if sql.startswith("INSERT INTO vec_explore ("):
                     real_execute_count["n"] += 1
                     if real_execute_count["n"] == 2:  # the second document's insert
                         raise sqlite3.OperationalError("database is locked")
@@ -262,6 +262,19 @@ class TestOneWritePerDocument:
         vector_store.embed_explore_documents([_doc(1, "Anything")])
         assert vector_store.rebuild_explore_index(lambda: db_session) == 0
         assert vector_store.collection_stats()["chunksPerDocument"] == 0.0
+
+
+class TestTextHashes:
+    def test_embedding_records_what_it_embedded_and_deleting_forgets_it(self, vec_env):
+        doc = _doc(1, "A title")
+        vector_store.embed_explore_documents([doc])
+        assert vector_store.get_embedded_text_hashes() == {1: vector_store.explore_text_hash(doc)}
+        vector_store.delete_explore_vectors({1})
+        assert vector_store.get_embedded_text_hashes() == {}
+
+    def test_the_hash_changes_with_the_text(self):
+        doc = _doc(1, "A title")
+        assert vector_store.explore_text_hash(doc) != vector_store.explore_text_hash({**doc, "body": "new"})
 
 
 class TestEnsureExploreIndex:
@@ -480,7 +493,7 @@ class TestEnsureExploreIndex:
         import time as _time
 
         asked = _time.monotonic()
-        monkeypatch.setattr(vector_store, "_last_rebuilt_at", asked + 1)
+        monkeypatch.setattr(vector_store, "_last_rebuild_began_at", asked + 1)
         embed = MagicMock()
         monkeypatch.setattr(vector_store, "embed_explore_documents", embed)
         assert vector_store.rebuild_explore_index(lambda: db_session, wait=True, unless_rebuilt_since=asked) is None
