@@ -622,15 +622,15 @@ def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):
 
 
 @pytest.mark.asyncio
-async def test_the_old_owed_record_is_paid_once_then_gone(db_session):
-    from app.pipeline import explore_pipeline
-    from app.pipeline.cache import api_cache_get, api_cache_set
+async def test_a_skipped_step_marks_its_backfill_stale(db_session):
+    # A document embedded before hashes were kept would otherwise have its
+    # new text's hash adopted next run, over vectors of the old text.
+    import sqlite3
 
-    api_cache_set(db_session, "explore", "reembed_owed", [9])
-    top_up = AsyncMock(return_value=1)
-    with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
-         patch.object(explore_pipeline, "_top_up", top_up), \
-         patch("app.ops_alerts.resolve_ops_alert"):
-        await explore_pipeline._embed_step(db_session, {3})
-    assert top_up.call_args.args[1] == {3, 9}
-    assert api_cache_get(db_session, "explore", "reembed_owed", max_age_hours=24) is None
+    from app.pipeline import explore_pipeline
+
+    mark = MagicMock()
+    with patch.object(explore_pipeline, "index_is_whole", side_effect=sqlite3.OperationalError("database is locked")), \
+         patch.object(explore_pipeline, "mark_text_stale", mark):
+        assert await explore_pipeline._embed_step(db_session, {4}) == 0
+    mark.assert_called_once_with({4})

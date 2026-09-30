@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
-from app.models import ApiCache, ExploreDocument, Justice, Representative, Senator
+from app.models import ExploreDocument, Justice, Representative, Senator
 from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.house_record import fetch_house_floor_remarks
@@ -55,6 +55,7 @@ from app.pipeline.vector_store import (
     alert_rebuild_failed,
     explore_text_hash,
     get_embedded_text_hashes,
+    mark_text_stale,
     rebuild_explore_index,
     top_up_explore_index,
     wait_for_rebuild,
@@ -394,7 +395,6 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
     """
     from app.ops_alerts import resolve_ops_alert
 
-    refreshed_ids = refreshed_ids | await asyncio.to_thread(_legacy_owed, db)
     whole = await _index_is_whole_or_none()
     outcome = "skipped"  # or "failed", "rebuilt", "topped up"
     embedded = 0
@@ -432,21 +432,31 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
             # whole documents per transaction): what wasn't reached is still
             # missing or stale, and the next top-up finds it. A lock skips
             # the step; anything else fails the run as it always has.
+            if refreshed_ids:
+                try:
+                    await asyncio.to_thread(mark_text_stale, refreshed_ids)
+                except Exception:
+                    logger.warning("Explore pipeline: couldn't mark %d backfilled documents stale",
+                                   len(refreshed_ids), exc_info=True)
             if not is_busy_error(exc):
                 raise
             logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", exc)
             return 0
 
+    if outcome in ("skipped", "failed") and refreshed_ids:
+        # What this run's backfill changed was not re-embedded: marked, so
+        # the next run re-embeds it (a document embedded before text hashes
+        # were kept would otherwise have its new text adopted as current).
+        try:
+            await asyncio.to_thread(mark_text_stale, refreshed_ids)
+        except Exception:
+            logger.warning("Explore pipeline: couldn't mark %d backfilled documents stale", len(refreshed_ids),
+                           exc_info=True)
     if outcome == "skipped":
         logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
     elif outcome != "failed":
         # Whole now, by this run or a start's: a failed rebuild's alert ends.
         await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
-        try:
-            await asyncio.to_thread(_forget_legacy_owed, db)  # paid
-        except Exception:
-            db.rollback()
-            logger.warning("Explore pipeline: couldn't clear the old owed-re-embed record", exc_info=True)
     return embedded
 
 
@@ -514,27 +524,6 @@ async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
     # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
     # start's rebuild waits for it rather than embed beside it.
     return await asyncio.to_thread(top_up_explore_index, lambda: _still_wanted(plan), adopt)
-
-
-# The owed-re-embed record an earlier release kept in api_cache (documents
-# whose body was backfilled while the embed step was skipped): paid once by
-# the next run, then gone — text hashes find such documents now.
-_LEGACY_OWED_KEY = "reembed_owed"
-
-
-def _legacy_owed(db: Session) -> set[int]:
-    row = db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _LEGACY_OWED_KEY).first()
-    if row is None:
-        return set()
-    try:
-        return {int(i) for i in json.loads(row.data_json) or []}
-    except (ValueError, TypeError):
-        return set()
-
-
-def _forget_legacy_owed(db: Session) -> None:
-    db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _LEGACY_OWED_KEY).delete()
-    db.commit()
 
 
 async def _index_is_whole_or_none() -> bool | None:

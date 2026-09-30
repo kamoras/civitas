@@ -396,10 +396,13 @@ _TEXT_HASH_DDL = """CREATE TABLE {if_not_exists}vec_explore_text (
 
 
 def explore_text_hash(doc: dict) -> str:
-    """A hash of everything embed_explore_documents reads from a document."""
+    """A hash of the text embed_explore_documents encodes from a document —
+    its title, summary and body. Not the metadata columns beside it: a
+    member's departure blanking politician_id on their speeches doesn't
+    call for re-encoding them."""
     import hashlib
 
-    fields = ("title", "summary", "body", "doc_type", "source", "date", "politician_name", "politician_id", "chamber")
+    fields = ("title", "summary", "body")
     return hashlib.sha256(
         json.dumps([doc.get(f) or "" for f in fields], ensure_ascii=False).encode()
     ).hexdigest()[:32]
@@ -706,16 +709,31 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
     # of what a document is about, and without them a window drawn from the
     # middle of a rule is a paragraph with no subject.
     units: list[tuple[int, str, dict]] = []
+    textless: list[dict] = []
     for doc in docs:
         head = f"{doc.get('title', '')} {doc.get('summary', '')}".strip()
         body = (doc.get("body") or "").strip()
         pieces = chunk_text(f"{head}\n\n{body}".strip(), max_tokens, _count)
         if not pieces:
+            textless.append(doc)
             continue
         for piece in pieces:
             text = piece if piece.startswith(head[:40]) else f"{head} {piece}".strip()
             units.append((int(doc["id"]), text, doc))
 
+    if textless and not fresh:
+        # No text left to embed: its old chunks go (search would keep
+        # showing them), and its hash is recorded, so it isn't planned again
+        # every run.
+        with _vec_lock:
+            try:
+                for doc in textless:
+                    conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (int(doc["id"]),))
+                    _record_text_hash(conn, int(doc["id"]), explore_text_hash(doc))
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
     if not units:
         return 0
 
@@ -758,11 +776,7 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
                         ),
                     )
                 for doc_id, doc in {d: doc for d, _, doc in batch}.items():
-                    conn.execute(
-                        "INSERT INTO vec_explore_text (doc_id, text_hash) VALUES (?, ?) "
-                        "ON CONFLICT(doc_id) DO UPDATE SET text_hash = excluded.text_hash",
-                        (doc_id, explore_text_hash(doc)),
-                    )
+                    _record_text_hash(conn, doc_id, explore_text_hash(doc))
                 conn.commit()
             except BaseException:
                 conn.rollback()
@@ -1034,6 +1048,37 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
     return removed
 
 
+def _record_text_hash(conn: sqlite3.Connection, doc_id: int, digest: str) -> None:
+    conn.execute(
+        "INSERT INTO vec_explore_text (doc_id, text_hash) VALUES (?, ?) "
+        "ON CONFLICT(doc_id) DO UPDATE SET text_hash = excluded.text_hash",
+        (doc_id, digest),
+    )
+
+
+# A text hash nothing hashes to: marks a document's vectors as older than its
+# text, so the next top-up re-embeds it (mark_text_stale).
+_STALE_HASH = "stale"
+
+
+def mark_text_stale(doc_ids: set[int]) -> None:
+    """Record that these documents' text changed and their vectors weren't
+    rewritten (an Explore run whose embed step was skipped after its
+    backfill): without it, a document embedded before hashes were kept
+    would have its new text's hash adopted as what its vectors say."""
+    if not doc_ids:
+        return
+    conn = get_vec_conn()
+    with _vec_lock:
+        try:
+            for doc_id in doc_ids:
+                _record_text_hash(conn, doc_id, _STALE_HASH)
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+
+
 def get_embedded_text_hashes() -> dict[int, str]:
     """Each embedded document's explore_text_hash, as recorded when its
     vectors were written (none for one embedded before hashes were kept)."""
@@ -1222,16 +1267,15 @@ def top_up_explore_index(docs_to_embed, adopt_hashes: dict[int, str] | None = No
         embedded = embed_explore_documents(docs_to_embed())
         if adopt_hashes:
             conn = get_vec_conn()
+            # Only for documents still in the index (one deleted meanwhile
+            # would leave a hash for vectors that aren't there) — read once,
+            # not a vec0 scan per document — and still without one (a
+            # rebuild this waited out, or this embed, recorded the real thing).
+            present = get_embedded_explore_ids()
             with _vec_lock:
-                # Only for documents still without one: a rebuild this waited
-                # out, or this embed, recorded the real thing.
-                # And only for documents still in the index: one deleted
-                # meanwhile would leave a hash for vectors that aren't there.
                 conn.executemany(
-                    "INSERT INTO vec_explore_text (doc_id, text_hash) SELECT ?, ? "
-                    "WHERE EXISTS (SELECT 1 FROM vec_explore WHERE doc_id = ?) "
-                    "ON CONFLICT(doc_id) DO NOTHING",
-                    [(doc_id, digest, doc_id) for doc_id, digest in adopt_hashes.items()],
+                    "INSERT INTO vec_explore_text (doc_id, text_hash) VALUES (?, ?) ON CONFLICT(doc_id) DO NOTHING",
+                    [(doc_id, digest) for doc_id, digest in adopt_hashes.items() if doc_id in present],
                 )
                 conn.commit()
         return embedded
