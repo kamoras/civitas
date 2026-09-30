@@ -16,20 +16,24 @@ uses), `backend/app/api/elections.py` (what a page is allowed to show).
 flowchart LR
     NIGHTLY(["Nightly chain<br/>(scheduler.py)"]) --> SEN[Senate] --> SUP[Supplementary] --> HOUSE[House] --> STOCK[Stock trades] --> ELEC["<b>Election pipeline</b>"]
     QUARTER(["Every 15 min,<br/>election season only"]) --> COV["Coverage + posting phases only<br/>(_election_coverage_refresh)"]
-    SIX(["Every 6 h at :50 UTC,<br/>election season, up to election day"]) --> BAL["Ballot step only<br/>(_election_ballot_sync → run_ballot_sync)"]
-    FIVE(["Every 5 min, election day through<br/>the results window (hourly once settled)"]) --> RES["Live count<br/>(_election_results_sync → sync_live_results)"]
+    SIX(["Every 6 h at :50 UTC, election season<br/>(60 days out through the results window);<br/>reads only through election day"]) --> BAL["Ballot step only<br/>(_election_ballot_sync → run_ballot_sync)"]
+    FIVE(["Every 5 min, election day through the results window<br/>(hourly once no count has moved for a day)"]) --> RES["Live count<br/>(_election_results_sync → sync_live_results)"]
 ```
 
 The election pipeline is last in the nightly chain, so an earlier pipeline
 that aborts the chain also skips it — check `election_pipeline_runs` after
-any nightly interruption. In the 60-day election season the ballot step
-(certified lists / primary results, then filing lists) also runs on its own
-every 6 hours, so an upstream abort can't hold ballots back; it and the
-nightly ballot phase each step aside while the other is running. From the
-day after an election neither they nor the nightly FEC roster sync read
-that election's candidates or measures again (`election_is_held`): through the results window the site stays on it,
-but its sources have moved on, and a re-read would unwrite what was
-certified.
+any nightly interruption. In election season (`is_election_season`: the 60
+days before an election, and on through its results window) the ballot
+step (certified lists / primary results, then filing lists) is also
+scheduled on its own every 6 hours, so an upstream abort can't hold ballots
+back; it and the nightly ballot phase each step aside while the other is
+running. It reads ballots up to and including election day. From the day
+after (`election_is_held`) each 6-hour tick still fires through the results
+window but returns `skipped` without reading anything, and neither the
+nightly ballot and measure phases nor the nightly FEC roster sync read that
+election's candidates or measures again: the site stays on the election
+through the results window, but its sources have moved on, and a re-read
+would unwrite what was certified.
 
 ## The run
 
@@ -310,7 +314,7 @@ vendor's `fetch_general_results`, `backend/app/live_results/sync.py`
 
 ```mermaid
 flowchart TD
-    TICK(["_election_results_sync<br/>every 5 min"]) --> GATE{"state's last polls<br/>closed? (poll_close.py)"}
+    TICK(["_election_results_sync<br/>every 5 min (hourly once no<br/>count has moved for a day)"]) --> GATE{"state's last polls<br/>closed? (poll_close.py)"}
     GATE -- no --> NONE["nothing read, stored or said"]
     GATE -- yes --> READ["read every covered state at once<br/>(Clarity · Tally ENR · TotalVote · Enhanced Voting)"]
     READ --> TRUST{"test / preview / wrong date?<br/>older than stored? impossible?"}
@@ -324,8 +328,10 @@ flowchart TD
 ```
 
 **Covered states** are the ones whose election office publishes a count one
-of the four vendor readers can read: AR, CO, GA, IA, ID, MT, ND, NE, NM, RI,
-SC, UT, VA, WA, WV. Every other state is drawn as "no live count here" and
+of the four vendor readers can read: `live_results_states()` (every
+`state_candidate_sources.json` entry naming a feed a reader supports),
+served as the results endpoint's `liveStates` — the list is not typed here,
+so it can't drift from the config. Every other state is drawn as "no live count here" and
 links to its election office, never as a state where nothing has happened.
 
 **Trust rules** (a wrong number on election night is worse than none):

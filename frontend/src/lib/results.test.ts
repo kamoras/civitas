@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   AWAITING_FILL,
   AWAITING_MARK,
+  NO_COUNT_STRIPE,
   FEED_FAILED_MARK,
   POLLS_OPEN_MARK,
+  countReadAt,
+  everyLiveStateVoting,
+  feedBehind,
   feedFailed,
   FEED_FAILED_FILL,
+  resultsSyncInterval,
   isTied,
   TIED_FILL,
   UNCOVERED_FILL,
@@ -548,10 +553,134 @@ describe("the count-less fills' textures", () => {
       [POLLS_OPEN_MARK, POLLS_OPEN_FILL],
       [FEED_FAILED_MARK, FEED_FAILED_FILL],
       [AWAITING_MARK, AWAITING_FILL],
+      // DistrictMap's "no count from the state's feed" hatch, drawn over
+      // AWAITING_FILL beside every other count-less fill.
+      [NO_COUNT_STRIPE, AWAITING_FILL],
     ]) {
       // The mark as drawn: over its own fill, over the panel.
       const drawn = over(mark, over(base, SURFACE));
       for (const f of [...fills, SURFACE]) expect(ratio(drawn, f)).toBeGreaterThanOrEqual(3);
     }
+  });
+});
+
+describe("whether the backend is still reading a state's feed", () => {
+  const moving = { lastResultChange: "2026-11-04T02:42:00Z" };
+  const at = (iso: string) => Date.parse(iso);
+
+  it("reads the sync's own cadence: five minutes, hourly once no count has moved for a day", () => {
+    expect(resultsSyncInterval(moving, at("2026-11-04T03:00:00Z"))).toBe(5 * 60_000);
+    expect(resultsSyncInterval({ lastResultChange: null }, at("2026-11-04T03:00:00Z"))).toBe(
+      5 * 60_000
+    );
+    expect(resultsSyncInterval(moving, at("2026-11-05T02:43:00Z"))).toBe(60 * 60_000);
+  });
+
+  it("calls a feed behind past 15 minutes while counts move, 70 once hourly", () => {
+    const feed = { checkedAt: "2026-11-04T03:00:00Z" };
+    expect(feedBehind(feed, moving, at("2026-11-04T03:14:00Z"))).toBe(false);
+    expect(feedBehind(feed, moving, at("2026-11-04T03:16:00Z"))).toBe(true);
+    const settled = { checkedAt: "2026-11-06T03:00:00Z" };
+    expect(feedBehind(settled, moving, at("2026-11-06T04:05:00Z"))).toBe(false);
+    expect(feedBehind(settled, moving, at("2026-11-06T04:11:00Z"))).toBe(true);
+  });
+
+  it("is never behind with no record to judge by", () => {
+    expect(feedBehind(undefined, moving, at("2026-11-20T00:00:00Z"))).toBe(false);
+    expect(feedBehind({ checkedAt: null }, moving, at("2026-11-20T00:00:00Z"))).toBe(false);
+  });
+});
+
+describe("countReadAt", () => {
+  it("is a state's last good read, else its newest race read", () => {
+    const results = {
+      feeds: {
+        GA: {
+          status: "stale",
+          checkedAt: "2026-11-04T03:30:00Z",
+          lastOkAt: "2026-11-04T03:00:00Z",
+        },
+      },
+      races: [
+        race({ state: "GA", fetchedAt: "2026-11-04T03:05:00Z" }),
+        race({ state: "NC", fetchedAt: "2026-11-04T03:20:00Z" }),
+      ],
+    };
+    expect(countReadAt(results, "GA")).toBe("2026-11-04T03:00:00Z");
+    expect(countReadAt(results, "NC")).toBe("2026-11-04T03:20:00Z");
+    expect(countReadAt({ races: [] }, "GA")).toBeNull();
+  });
+
+  it("is the newest read of any state for the whole page", () => {
+    expect(
+      countReadAt({
+        feeds: {
+          GA: { status: "ok", checkedAt: "2026-11-04T03:30:00Z", lastOkAt: "2026-11-04T03:25:00Z" },
+        },
+        races: [race({ fetchedAt: "2026-11-04T03:10:00Z" })],
+      })
+    ).toBe("2026-11-04T03:25:00Z");
+    expect(countReadAt({ races: [] })).toBeNull();
+  });
+});
+
+describe("everyLiveStateVoting", () => {
+  const base = {
+    phase: {
+      phase: "election_day",
+      electionDate: "2026-11-03",
+      resultsUntil: null,
+      lastResultChange: null,
+    } as ElectionPhaseInfo,
+    liveStates: ["GA", "WA"],
+    pollsClose: { GA: "2026-11-04T00:00:00Z", WA: "2026-11-04T04:00:00Z" },
+    races: [] as LiveRaceResult[],
+  };
+
+  it("is true on election day until the first covered state's polls close", () => {
+    expect(everyLiveStateVoting(base, Date.parse("2026-11-03T13:00:00Z"))).toBe(true);
+    expect(everyLiveStateVoting(base, Date.parse("2026-11-04T00:00:00Z"))).toBe(false);
+  });
+
+  it("is false with a count stored, with no live state, or outside election day", () => {
+    const morning = Date.parse("2026-11-03T13:00:00Z");
+    expect(everyLiveStateVoting({ ...base, races: [race()] }, morning)).toBe(false);
+    expect(everyLiveStateVoting({ ...base, liveStates: [] }, morning)).toBe(false);
+    expect(
+      everyLiveStateVoting({ ...base, phase: { ...base.phase, phase: "results" } }, morning)
+    ).toBe(false);
+  });
+});
+
+describe("a state electing both its senators, on the national map", () => {
+  const regular = (o: Partial<LiveRaceResult> = {}) => race({ raceId: "2026-SEN-GA", ...o });
+  const special = (o: Partial<LiveRaceResult> = {}) =>
+    race({ raceId: "2026-SEN-GA-S", isSpecial: true, ...o });
+  const rep = {
+    leaderParty: "REP",
+    candidates: [
+      { name: "A", party: "REP", votes: 1000, pct: 52, candidateId: null },
+      { name: "B", party: "DEM", votes: 900, pct: 48, candidateId: null },
+    ],
+  } as Partial<LiveRaceResult>;
+
+  it("is the party leading more of its two races, as the footnote says", () => {
+    // One race led, the other with nothing counted: that party leads more.
+    expect(
+      stateFill([regular(rep), special({ votesCounted: 0, candidates: [] })], "S", true, true)
+    ).toMatch(/^rgba\(255,137,137,/);
+    // Both led by one party.
+    expect(stateFill([regular(rep), special(rep)], "S", true, true)).toMatch(/^rgba\(255,137,137,/);
+  });
+
+  it("is grey when two parties lead equally many", () => {
+    const dem = {
+      leaderParty: "DEM",
+      candidates: [
+        { name: "C", party: "DEM", votes: 1000, pct: 52, candidateId: null },
+        { name: "D", party: "REP", votes: 900, pct: 48, candidateId: null },
+      ],
+    } as Partial<LiveRaceResult>;
+    expect(stateFill([regular(rep), special(dem)], "S", true, true)).toBe(TIED_FILL);
   });
 });

@@ -5,7 +5,7 @@ import { fetchRecord } from "@/lib/ssrPayload";
 import { stateBallotHref } from "@/lib/elections";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { describeStateBallot } from "@/lib/seo";
-import { showsResults } from "@/lib/results";
+import { pollsClosed, showsResults } from "@/lib/results";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import StateBallotClient from "./StateBallotClient";
 
@@ -26,19 +26,42 @@ function fetchStateBallot(state: string): Promise<StateBallot | null> {
   );
 }
 
-/** Whether Civitas reads `state`'s count live, from the results endpoint's
- * own list; null when that couldn't be checked. Asked only in the results
- * window, when the page leads with the count. */
-async function fetchIsLive(state: string): Promise<boolean | null> {
+/** From the results endpoint: whether Civitas reads `state`'s count live
+ * (its own list; null when that couldn't be checked), and whether the
+ * state's last polls are known to have closed (pollsClosed — the rule the
+ * page's own heading turns on; unknown is "not closed"). Asked only in the
+ * results window. */
+async function fetchLiveStatus(
+  state: string,
+  phase: StateBallot["phase"],
+  now: number
+): Promise<{ live: boolean | null; closed: boolean }> {
+  // The day after election day every state's polls have closed.
+  const resultsDay = phase?.phase === "results";
   try {
     const res = await fetch(`${BACKEND}/api/elections/results?state=${encodeURIComponent(state)}`, {
       next: { revalidate: REVALIDATE_S },
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { live: null, closed: resultsDay };
     const body = (await res.json()) as Partial<LiveResults>;
-    return Array.isArray(body?.liveStates) ? body.liveStates.includes(state) : null;
+    const live = Array.isArray(body?.liveStates) ? body.liveStates.includes(state) : null;
+    const closed =
+      resultsDay ||
+      (!!body?.phase &&
+        showsResults(body.phase) &&
+        pollsClosed(
+          {
+            phase: body.phase,
+            pollsClose: body.pollsClose,
+            feeds: body.feeds,
+            races: Array.isArray(body.races) ? body.races : [],
+          },
+          state,
+          now
+        ));
+    return { live, closed };
   } catch {
-    return null;
+    return { live: null, closed: resultsDay };
   }
 }
 
@@ -66,12 +89,19 @@ export async function generateMetadata({
     });
   }
 
-  // From election day the page leads with the count (its h1 becomes
-  // "<State> results" once polls close), so the title and description say
-  // so — from the same phase the page renders by.
-  const resultsMode = showsResults(ballot.phase);
-  const live = resultsMode ? await fetchIsLive(code) : null;
-  const { title, description } = describeStateBallot(ballot, resultsMode, live);
+  // From election day the page leads with the count, but its h1 becomes
+  // "<State> results" only once the state's polls close; until then people
+  // are voting and the page is still ballot research. The title and
+  // description turn at the same moment, by the same rule — a card shared
+  // that morning must not read "Election Results".
+  const status = showsResults(ballot.phase)
+    ? await fetchLiveStatus(code, ballot.phase, Date.now())
+    : null;
+  const { title, description } = describeStateBallot(
+    ballot,
+    !!status?.closed,
+    status?.live ?? null
+  );
   const ogImage = absoluteUrl(`/api/og?state=${code}`);
   return pageMetadata({
     title,

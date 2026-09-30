@@ -15,6 +15,7 @@ import {
   POLLS_OPEN_SWATCH,
   TIED_FILL,
   UNCOVERED_FILL,
+  feedBehind,
   feedFailed,
   formatEasternTime,
   formatLed,
@@ -45,7 +46,9 @@ function Swatch({ color, texture }: { color: string; texture?: string }) {
 }
 
 /** "Senate: Jane Roe (D) leads · early" — one Senate race on a directory
- * row, with "early" under half in, as the map draws it fainter. */
+ * row, with "early" under half in, as the map draws it fainter. A count
+ * the state lists as official still "leads · official count": never a
+ * bare "official" beside a name, which reads as a result. */
 function senateLine(r: LiveRaceResult, several: boolean): string {
   const name = several ? `Senate${r.isSpecial ? " (special)" : ""}` : "Senate";
   if (isTied(r)) return `${name}: tied${r.official ? " · official" : ""}`;
@@ -54,7 +57,7 @@ function senateLine(r: LiveRaceResult, several: boolean): string {
   const share = reportingShare(r);
   const early = !r.official && share != null && share < 0.5;
   return `${name}: ${lead.name} (${partyLetter(lead.party) || "other"}) ${
-    r.official ? "official" : "leads"
+    r.official ? "leads · official count" : "leads"
   }${early ? " · early" : ""}${r.flip ? " · flip" : ""}`;
 }
 
@@ -104,13 +107,31 @@ export default function ResultsOverview({
   // States, not races: a state electing both its senators counts once —
   // the response lists which states elect one, not how many seats each.
   const liveSenate = [...senateStates].filter((s) => live.has(s)).length;
-  // A covered state whose latest feed read failed: with no count it is
-  // "feed not read", never "no votes yet"; with an older count it is stale.
+  const now = useNow();
+  // A covered state whose feed isn't being read: its latest read failed,
+  // or the backend hasn't read it for well over a sync pass (feedBehind —
+  // its sync has stopped, whatever the last read said). With no count it
+  // is "feed not read", never "no votes yet"; with an older count it is
+  // stale, never live.
   const feeds = results.feeds ?? {};
-  const readFailed = (state: string) => live.has(state) && feedFailed(feeds[state]);
+  const behind = (state: string) => live.has(state) && feedBehind(feeds[state], results.phase, now);
+  const readFailed = (state: string) =>
+    live.has(state) && (feedFailed(feeds[state]) || behind(state));
+  // What a stale count's row and map name say about it: when the feed was
+  // last tried or last gave a count.
+  const staleParts = (state: string): [string, string] => {
+    const feed = feeds[state];
+    const from = feed?.lastOkAt ? `count from ${formatEasternTime(feed.lastOkAt)}` : "older count";
+    return [
+      behind(state) && feed
+        ? `not checked since ${formatEasternTime(feed.checkedAt)}`
+        : "latest read failed",
+      from,
+    ];
+  };
+  const staleNote = (state: string) => staleParts(state).join(" · ").toUpperCase();
   // A covered state still voting: nothing is said about its count — not
   // "no votes yet" — until its last polls close.
-  const now = useNow();
   const voting = (state: string) => live.has(state) && pollsStillOpen(results, state, now);
   // Districts with a count so far: a row with votes in it. Rows are only
   // the races each state's feed lists, not every district in the state.
@@ -135,8 +156,14 @@ export default function ResultsOverview({
       voting(state)
     );
   const fill = (state: string) => (state === "DC" ? DC_FILL : paint(shade(state).fill));
+  // A count the feed is no longer refreshing says so in its name, as the
+  // row's badge does: its colour is who led when it was last read.
   const label = (state: string) =>
-    state === "DC" ? "DC: no voting member of Congress" : shade(state).label;
+    state === "DC"
+      ? "DC: no voting member of Congress"
+      : readFailed(state) && (byState.get(state) ?? []).length > 0 && !voting(state)
+        ? `${shade(state).label}; not live, ${staleParts(state).join(", ")}`
+        : shade(state).label;
 
   // Covered states first (they have something to show), then the rest.
   const directory = [...states].sort(
@@ -231,9 +258,9 @@ export default function ResultsOverview({
             official.{" "}
             {chamber === "H"
               ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
-              : "A state electing both its senators is shaded by the party leading both, grey when they're split, and fainter while either race has under half in."}{" "}
-            Amber stripes mean Civitas couldn&apos;t read that state&apos;s feed, which says nothing
-            about whether counting has started.
+              : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in."}{" "}
+            Amber stripes mean Civitas couldn&apos;t read that state&apos;s feed, or hasn&apos;t
+            lately, which says nothing about whether counting has started.
           </p>
         </section>
 
@@ -305,7 +332,6 @@ export default function ResultsOverview({
             const isLive = live.has(state);
             const failed = readFailed(state);
             const hasCount = (byState.get(state) ?? []).length > 0;
-            const feed = feeds[state];
             const stillVoting = voting(state);
             const badge = !isLive
               ? { text: "NO FEED", className: "border-white/15 text-ink-min" }
@@ -346,7 +372,9 @@ export default function ResultsOverview({
                           ? stillVoting
                             ? "Senate: polls still open"
                             : failed
-                              ? "Senate: couldn't read its feed"
+                              ? behind(state)
+                                ? "Senate: its feed hasn't been read lately"
+                                : "Senate: couldn't read its feed"
                               : "Senate: no votes yet"
                           : "Senate race: check the state's count"
                         : "No Senate race this year"}
@@ -357,12 +385,8 @@ export default function ResultsOverview({
                       HOUSE {formatLed(summary.houseLeads)} LEADING
                     </span>
                   )}
-                  {failed && hasCount && (
-                    <span className="font-mono text-xs text-signal-amber">
-                      {feed?.lastOkAt
-                        ? `LATEST READ FAILED · COUNT FROM ${formatEasternTime(feed.lastOkAt).toUpperCase()}`
-                        : "LATEST READ FAILED · OLDER COUNT"}
-                    </span>
+                  {failed && hasCount && !stillVoting && (
+                    <span className="font-mono text-xs text-signal-amber">{staleNote(state)}</span>
                   )}
                 </Link>
               </li>

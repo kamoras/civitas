@@ -291,6 +291,8 @@ describe("the state page in results mode", () => {
   });
 
   it("says the feed couldn't be read rather than that counting hasn't started", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
     fetchLiveResults.mockResolvedValue(
       live({
         races: [],
@@ -307,6 +309,8 @@ describe("the state page in results mode", () => {
   });
 
   it("says when the count shown is older than a failed read", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
     fetchLiveResults.mockResolvedValue(
       live({
         feeds: {
@@ -322,6 +326,50 @@ describe("the state page in results mode", () => {
     expect(
       await screen.findByText(/COULDN.T BE USED · THE COUNT BELOW WAS READ AT NOV 3, 9:44 PM ET/)
     ).toBeInTheDocument();
+  });
+
+  it("says STALE, not live, when the backend stopped reading the feed with a count shown", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // Counts still moving, so the sync reads every five minutes: a read 20
+    // minutes old is a stopped sync, though the read itself went fine.
+    vi.setSystemTime(new Date("2026-11-04T03:20:00Z"));
+    fetchLiveResults.mockResolvedValue(
+      live({
+        phase: { ...PHASE, lastResultChange: "2026-11-04T02:42:00Z" },
+        feeds: {
+          OH: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T03:00:00Z" },
+        },
+      })
+    );
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(
+      await screen.findByText(
+        /STALE · OHIO.S FEED HASN.T BEEN CHECKED SINCE NOV 3, 10:00 PM ET · THE COUNT BELOW WAS READ AT NOV 3, 10:00 PM ET/
+      )
+    ).toBeInTheDocument();
+    // Not "UPDATED …": that reads as a count still being refreshed.
+    expect(screen.getByText(/REFRESHED EVERY MINUTE/)).not.toHaveTextContent(/UPDATED/);
+  });
+
+  it("says the feed hasn't been read lately, with no count, rather than that counting hasn't started", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:20:00Z"));
+    fetchLiveResults.mockResolvedValue(
+      live({
+        phase: { ...PHASE, lastResultChange: "2026-11-04T02:42:00Z" },
+        races: [],
+        feeds: { OH: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: null } },
+      })
+    );
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
+    expect(
+      await screen.findByText(/hasn.t read Ohio.s results feed since Nov 3, 10:00 PM ET/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/hasn.t started yet/)).not.toBeInTheDocument();
+    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    expect(districtMapProps.every((p) => p.results === undefined)).toBe(true);
   });
 
   it("says when the polls close before any count is shown, in the present tense", async () => {
@@ -494,6 +542,8 @@ describe("the state page in results mode", () => {
   });
 
   it("gives a state whose feed failed, with no count, no count-shaded map", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
     fetchLiveResults.mockResolvedValue(
       live({
         races: [],

@@ -12,7 +12,15 @@ import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
 import { formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
 import { formatUtcDate } from "@/lib/formatting";
-import { formatEasternTime, pollsStillOpen, showsResults } from "@/lib/results";
+import {
+  countReadAt,
+  everyLiveStateVoting,
+  feedBehind,
+  feedFailed,
+  formatEasternTime,
+  pollsStillOpen,
+  showsResults,
+} from "@/lib/results";
 import { useNow } from "@/hooks/useNow";
 import { fetchPviMap } from "@/lib/api";
 import { describeInterval, useLiveResults } from "@/hooks/useLiveResults";
@@ -100,7 +108,7 @@ export default function ElectionsPage() {
   // polls while there are results to show, and — slowly — while election
   // day is near, so a page left open switches over by itself. A request
   // that keeps failing is retried on a growing backoff.
-  const { data: results, error: resultsError, retryMs } = useLiveResults();
+  const { data: results, error: resultsError, retryMs, failedAt } = useLiveResults();
   const retryEvery = describeInterval(retryMs ?? 60_000).toUpperCase();
   const resultsMode = !!results && showsResults(results.phase);
   // The lean map waits until the phase is known: on election night a lean
@@ -109,31 +117,50 @@ export default function ElectionsPage() {
   // check failed); the hook keeps retrying and switches when it answers.
   const phaseKnown = !!results || !!resultsError;
   const campaignMode = phaseKnown && !resultsMode;
+  // The clock is read only while the page shows results — for when polls
+  // close, and for whether the backend is still reading the feeds. Any
+  // other time, subscribing would re-render the whole page once a second.
+  const now = useNow(resultsMode);
   // Election day before any covered state's polls close: people are still
   // voting, so the masthead says results come in as polls close — not
   // "results" as if there were some. Once one state's polls close, the count
-  // leads.
-  // The clock is only read on election day before any count: any other
-  // time, subscribing would re-render the whole page once a second.
-  const beforeAnyCount =
-    resultsMode &&
-    !!results &&
-    results.phase.phase === "election_day" &&
-    results.races.length === 0;
-  const now = useNow(beforeAnyCount);
-  // Every state read live still voting — and there has to be one: with
-  // none (a backend that lists no live state, or none configured) `every`
-  // is vacuously true, and the masthead would say polls are open all day.
-  const stillVoting =
-    beforeAnyCount &&
-    !!results &&
-    results.liveStates.length > 0 &&
-    results.liveStates.every((st) => pollsStillOpen(results, st, now));
+  // leads. The same rule words the page's search and link-card metadata
+  // (elections/layout.tsx).
+  const stillVoting = resultsMode && !!results && everyLiveStateVoting(results, now);
   const firstClose = stillVoting
     ? Object.values(results?.pollsClose ?? {})
         .filter((t) => Date.parse(t) > now)
         .sort((a, b) => Date.parse(a) - Date.parse(b))[0]
     : undefined;
+  // How old the count on screen is: said whenever it may not be live — a
+  // refresh that failed, or a backend that has stopped reading the feeds.
+  const readAt = results ? countReadAt(results) : null;
+  const readAtText = readAt
+    ? `SHOWING THE COUNT READ AT ${formatEasternTime(readAt).toUpperCase()}`
+    : null;
+  const refreshFailed = [
+    failedAt != null
+      ? `REFRESH FAILED AT ${formatEasternTime(new Date(failedAt).toISOString()).toUpperCase()}`
+      : "REFRESH FAILED",
+    stillVoting ? null : readAtText,
+    `RETRYING ${retryEvery}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // Every covered state past its polls is either failing to read or hasn't
+  // been read for well over a sync pass: nothing on the page is live, so
+  // the masthead mustn't say LIVE. (Some but not all: their own rows say
+  // STALE.)
+  const closedLive =
+    resultsMode && results
+      ? results.liveStates.filter((st) => !pollsStillOpen(results, st, now) && results.feeds?.[st])
+      : [];
+  const nothingLive =
+    closedLive.length > 0 &&
+    closedLive.every(
+      (st) =>
+        feedFailed(results?.feeds?.[st]) || feedBehind(results?.feeds?.[st], results?.phase, now)
+    );
 
   // The masthead's one status line (see the masthead below).
   const status: { text: string; tone: "cyan" | "amber" | "muted" } | null =
@@ -141,7 +168,7 @@ export default function ElectionsPage() {
       ? {
           tone: "cyan",
           text: resultsError
-            ? `REFRESH FAILED · RETRYING ${retryEvery}`
+            ? refreshFailed
             : firstClose
               ? `POLLS OPEN · FIRST CLOSE ${formatEasternTime(firstClose).toUpperCase()}`
               : "POLLS OPEN",
@@ -150,10 +177,12 @@ export default function ElectionsPage() {
         ? {
             tone: "amber",
             text: resultsError
-              ? `REFRESH FAILED · RETRYING ${retryEvery}`
-              : results.phase.lastResultChange
-                ? `LIVE · LAST CHANGE ${formatEasternTime(results.phase.lastResultChange)}`
-                : "LIVE · WAITING FOR FIRST COUNTS",
+              ? refreshFailed
+              : nothingLive
+                ? ["STALE · NO STATE'S FEED READ LATELY", readAtText].filter(Boolean).join(" · ")
+                : results.phase.lastResultChange
+                  ? `LIVE · LAST CHANGE ${formatEasternTime(results.phase.lastResultChange)}`
+                  : "LIVE · WAITING FOR FIRST COUNTS",
           }
         : campaignMode && resultsError && !results
           ? { tone: "muted", text: `COULDN'T CHECK FOR LIVE RESULTS · RETRYING ${retryEvery}` }

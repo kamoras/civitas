@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { LiveResults, RaceSummary } from "@/types/election";
 import { pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
-import { showsResults } from "@/lib/results";
+import { everyLiveStateVoting, showsResults } from "@/lib/results";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -21,17 +21,30 @@ async function fetchCycleYear(): Promise<number | null> {
   }
 }
 
-// Whether /elections is in results mode (backend election_phase), read the
-// way the page itself reads it. Revalidated every five minutes, so the
-// description turns within minutes of the phase; an unreachable backend
-// (as under `next build`) is the campaign wording, as the page's own
-// default is.
-async function fetchResultsMode(): Promise<boolean> {
+// Whether /elections leads with results (backend election_phase), read the
+// way the page itself reads it — and, on election day, only once some
+// covered state's polls have closed: before that the page says polls are
+// open (everyLiveStateVoting), and a link shared that morning must not read
+// "Election Results". Revalidated every five minutes, so the description
+// turns within minutes of the phase or the first close; an unreachable
+// backend (as under `next build`) is the campaign wording, as the page's
+// own default is.
+async function fetchResultsMode(now: number): Promise<boolean> {
   try {
     const res = await fetch(`${BACKEND}/api/elections/results`, { next: { revalidate: 300 } });
     if (!res.ok) return false;
     const body = (await res.json()) as Partial<LiveResults>;
-    return showsResults(body?.phase);
+    if (!body?.phase || !showsResults(body.phase)) return false;
+    return !everyLiveStateVoting(
+      {
+        phase: body.phase,
+        pollsClose: body.pollsClose,
+        feeds: body.feeds,
+        races: Array.isArray(body.races) ? body.races : [],
+        liveStates: Array.isArray(body.liveStates) ? body.liveStates : [],
+      },
+      now
+    );
   } catch {
     return false;
   }
@@ -40,7 +53,10 @@ async function fetchResultsMode(): Promise<boolean> {
 // Canonical /elections. The state pages beneath set their own; the
 // /elections/[raceId] route only redirects. See lib/site.ts.
 export async function generateMetadata(): Promise<Metadata> {
-  const [cycleYear, resultsMode] = await Promise.all([fetchCycleYear(), fetchResultsMode()]);
+  const [cycleYear, resultsMode] = await Promise.all([
+    fetchCycleYear(),
+    fetchResultsMode(Date.now()),
+  ]);
   return pageMetadata({ ...describeElections(cycleYear, resultsMode), path: "/elections" });
 }
 

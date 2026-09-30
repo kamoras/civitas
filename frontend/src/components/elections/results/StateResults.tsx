@@ -9,6 +9,8 @@ import {
   RaceResultCard,
 } from "@/components/elections/results/RaceResult";
 import {
+  countReadAt as readAtOf,
+  feedBehind,
   feedFailed,
   formatEasternTime,
   formatLed,
@@ -96,21 +98,17 @@ export default function StateResults({
   const led = seatsLed(house);
   const pollsClose = results?.pollsClose?.[ballot.state];
   const feed = results?.feeds?.[ballot.state];
-  const failed = feedFailed(feed);
   const now = useNow();
+  // The backend hasn't read the state's feed for well over a sync pass: its
+  // sync has stopped, so the count below is not live whatever the last read
+  // said — the same rule that badges the state STALE on /elections.
+  const behind = !!results && feedBehind(feed, results.phase, now);
+  const failed = feedFailed(feed) || behind;
   const stillVoting = !!results && pollsStillOpen(results, ballot.state, now);
 
-  // When the count on screen was read from the state's feed: the backend's
-  // last good read, or — from an older backend with no feed record — the
-  // newest read of any race shown. Never the page's own clock: a refresh
-  // can be answered from a cache, so "now" would overstate how fresh it is.
-  const countReadAt =
-    feed?.lastOkAt ??
-    races.reduce<string | null>(
-      (latest, r) =>
-        !latest || Date.parse(r.fetchedAt) > Date.parse(latest) ? r.fetchedAt : latest,
-      null
-    );
+  // When the count on screen was read from the state's feed (countReadAt
+  // in lib/results: never the page's own clock).
+  const countReadAt = results ? readAtOf(results, ballot.state) : null;
 
   // Land on the arrival race once — scrolled to, and focused, so a keyboard
   // or screen-reader user starts there too rather than at the top of the
@@ -244,9 +242,18 @@ export default function StateResults({
             role="status"
             className="border border-signal-amber/40 bg-surface p-4 text-sm text-ink-lo"
           >
-            Civitas couldn&apos;t read {stateName}&apos;s results feed (last tried{" "}
-            {formatEasternTime(feed.checkedAt)}), so no count is shown here yet. This page keeps
-            trying.{" "}
+            {behind ? (
+              <>
+                Civitas hasn&apos;t read {stateName}&apos;s results feed since{" "}
+                {formatEasternTime(feed.checkedAt)}, so no count is shown here.{" "}
+              </>
+            ) : (
+              <>
+                Civitas couldn&apos;t read {stateName}&apos;s results feed (last tried{" "}
+                {formatEasternTime(feed.checkedAt)}), so no count is shown here yet. This page keeps
+                trying.{" "}
+              </>
+            )}
             <OfficeLink
               href={lookupHref}
               stateName={stateName}
@@ -261,8 +268,17 @@ export default function StateResults({
         ))}
       {races.length > 0 && failed && feed && (
         <p role="status" className="font-mono text-xs tracking-[0.06em] text-signal-amber">
-          THE LAST READ OF {stateName.toUpperCase()}&apos;S FEED, AT{" "}
-          {formatEasternTime(feed.checkedAt).toUpperCase()}, COULDN&apos;T BE USED
+          {behind ? (
+            <>
+              STALE · {stateName.toUpperCase()}&apos;S FEED HASN&apos;T BEEN CHECKED SINCE{" "}
+              {formatEasternTime(feed.checkedAt).toUpperCase()}
+            </>
+          ) : (
+            <>
+              THE LAST READ OF {stateName.toUpperCase()}&apos;S FEED, AT{" "}
+              {formatEasternTime(feed.checkedAt).toUpperCase()}, COULDN&apos;T BE USED
+            </>
+          )}
           {feed.lastOkAt
             ? ` · THE COUNT BELOW WAS READ AT ${formatEasternTime(feed.lastOkAt).toUpperCase()}`
             : ""}

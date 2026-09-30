@@ -20,7 +20,7 @@ import StateResults from "@/components/elections/results/StateResults";
 import { electionIsNear, msUntilNear, useLiveResults } from "@/hooks/useLiveResults";
 import { useHashAt } from "@/hooks/useHashAt";
 import { useNow } from "@/hooks/useNow";
-import { feedFailed, pollsClosed, pollsStillOpen, showsResults } from "@/lib/results";
+import { feedBehind, feedFailed, pollsClosed, pollsStillOpen, showsResults } from "@/lib/results";
 import {
   buildBallotContests,
   contestForHash,
@@ -1535,6 +1535,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // Before the polls close no district is drawn by the count — not even as
   // "no votes yet", which is a statement about the count.
   const stillVoting = !!live && pollsStillOpen(live, ballot.state, now);
+  // The state's feed isn't being read (its latest read failed, or the sync
+  // hasn't read it for well over a pass: feedBehind).
+  const feedDown =
+    !!live &&
+    (feedFailed(live.feeds?.[ballot.state]) ||
+      feedBehind(live.feeds?.[ballot.state], live.phase, now));
   // Only a state read live gets a count-shaded map: for any other, an
   // empty map would draw every district as "no votes yet" — a state with
   // no feed shown as one where nothing has happened. Likewise a state whose
@@ -1543,12 +1549,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const liveByDistrict = useMemo(() => {
     if (!live || !showsResults(live.phase) || !live.liveStates.includes(ballot.state))
       return undefined;
-    if (live.races.length === 0 && (stillVoting || feedFailed(live.feeds?.[ballot.state])))
-      return undefined;
+    if (live.races.length === 0 && (stillVoting || feedDown)) return undefined;
     const m = new Map<number, LiveRaceResult>();
     for (const r of live.races) if (r.office === "H") m.set(r.district ?? 0, r);
     return m;
-  }, [live, ballot.state, stillVoting]);
+  }, [live, ballot.state, stillVoting, feedDown]);
   // The feed has given this state a count for some race: a district with
   // none of its own is "no count from the feed", not "no votes yet".
   const feedAnswered = !!live && live.races.length > 0;

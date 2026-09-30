@@ -235,7 +235,7 @@ export default function DistrictMap({
                 <span
                   aria-hidden="true"
                   className="inline-block h-2 w-3 border border-white/30"
-                  style={{ backgroundImage: NO_COUNT_SWATCH }}
+                  style={{ background: `${NO_COUNT_SWATCH}, ${AWAITING_FILL}` }}
                 />
                 no count from the state&apos;s feed
               </li>
