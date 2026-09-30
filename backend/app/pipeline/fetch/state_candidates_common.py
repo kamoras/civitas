@@ -21,11 +21,12 @@ invented:
 import logging
 import re
 from collections.abc import Callable
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from urllib.parse import urljoin
 
 from app.pipeline.fetch.fec import general_election_day
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -618,7 +619,7 @@ def ballot_final(held: str, today: date | None = None) -> bool:
         election_day = date.fromisoformat(str(held or "")[:10])
     except ValueError:
         return False
-    today = today or datetime.now(UTC).date()
+    today = today or utcnow().date()
     return today >= election_day - timedelta(days=BALLOT_FINAL_DAYS_BEFORE)
 
 
@@ -628,7 +629,7 @@ def in_ballot_window(year: int, today: date | None = None) -> bool:
     election a state's list pages move on to the next cycle, which says
     nothing about this one being broken."""
     election_day = general_election_day(year)
-    today = today or datetime.now(UTC).date()
+    today = today or utcnow().date()
     return ballot_final(election_day.isoformat(), today) and today <= election_day
 
 

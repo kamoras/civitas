@@ -132,7 +132,7 @@ import re
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import defaultdict
-from datetime import UTC, date, datetime
+from datetime import date
 from html.parser import HTMLParser
 from urllib.parse import quote, urljoin
 
@@ -158,6 +158,7 @@ from app.pipeline.fetch.state_candidates_common import (
     vote_for_count,
 )
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +215,7 @@ def _settled(held: str | None, settle_days: int | None) -> bool:
         held_on = date.fromisoformat(str(held or "")[:10])
     except ValueError:
         return False
-    return (datetime.now(UTC).date() - held_on).days >= int(settle_days)
+    return (utcnow().date() - held_on).days >= int(settle_days)
 
 
 def _held_from_rows(rows: list[dict], fmt: dict) -> str | None:
