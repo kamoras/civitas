@@ -218,7 +218,10 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
     >
       <span className="font-mono text-sm text-ink-hi">{raceLabel(result)}</span>
       <span className="min-w-0">
-        <span className="block break-words text-sm text-ink sm:truncate">
+        {/* Wraps at every width: truncated, the name ate the cell and cut
+            the party and share off — at 1024px, beside the state page's
+            side column, it had 94px for "Christina Bohannan (D) 52.0%". */}
+        <span className="block break-words text-sm text-ink">
           {tied ? (
             // Nobody ahead: both names, neither in a party's lead colour.
             <span className="text-ink-lo">

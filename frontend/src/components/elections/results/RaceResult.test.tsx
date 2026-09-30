@@ -276,10 +276,12 @@ describe("a House row on a phone", () => {
     const tag = screen.getByText("FLIP · LEADING");
     expect(tag.className).toContain("col-start-2");
     expect(tag.className).toContain("sm:col-start-auto");
-    // The name wraps on a phone; it is cut short only from `sm`.
+    // The leader wraps at every width, never cut short: from `sm` the
+    // state page's side column leaves this cell under 100px at 1024px, and
+    // a truncated name took the party and share with it.
     const name = screen.getByText("Ray Jones").parentElement!;
-    expect(name.className).not.toMatch(/(^|\s)truncate(\s|$)/);
-    expect(name.className).toContain("sm:truncate");
+    expect(name.className).not.toMatch(/truncate/);
+    expect(name).toHaveTextContent(/Ray Jones \(\w+\) \d+\.\d%/);
   });
 });
 
