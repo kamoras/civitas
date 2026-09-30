@@ -11,10 +11,8 @@ change caller-visible behavior.
 """
 
 import asyncio
-import io
 import re
 import threading
-import tokenize
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -445,98 +443,184 @@ _BROWSER_ONLY_USER_AGENTS = {
     ("frontend/src/lib/remoteImage.ts", "Chrome/128"),
     ("backend/scripts/fetch_site_fonts.py", "Chrome/104"),
 }
-# Where a User-Agent is set: a header key ("User-Agent": / ["User-Agent"] =
-# / ("User-Agent", ...) — but not .get("User-Agent", default), which reads
-# one — or a user_agent= / USER_AGENT = / UA = name.
-_UA_SITE = re.compile(
-    r"""(["']user-agent["']\s*(?:\]\s*=|:)|(?<!\.get)\(\s*["']user-agent["']\s*,|\[\s*["']user-agent["']\s*,)""",
-    re.IGNORECASE,
-)
-# A name given a value (NAME = / NAME: type = / name: in a dict or object /
-# .get("NAME", default)); it is a User-Agent site when one of its parts
-# (split at "_" and at case changes) is ua or user+agent(s): _UA, botUA,
-# DEFAULT_USER_AGENT, USER_AGENT_CHROME, defaultUserAgent, USER_AGENTS.
-_NAME_SITE = re.compile(
-    r"""(?<![\w$.])([A-Za-z_$][\w$]*)\s*(?::\s*[\w\[\]|. ]+?\s*)?(?<![=!<>])[:=](?!=)"""
-    r"""|\.get\(\s*["']([A-Za-z_][\w]*)["']\s*,"""
-)
+# Names that carry the contact: a value built from one names it.
+_CONTACT_NAMES = {"CONTACT_EMAIL", "BOT_USER_AGENT", "SELF_FETCH_USER_AGENT", "CIVIC_CONTACT", "BROWSER_HEADERS"}
+# A string naming Civitas as a client: "Civitas/1.0", "Civitas-OG/1".
+_CIVITAS_TOKEN_TEXT = re.compile(r"\bcivitas[\w-]*/\d", re.IGNORECASE)
 
 
 def _names_a_user_agent(name: str) -> bool:
+    """A name, key or header one of whose parts (split at "_", "-" and case
+    changes) is ua or user+agent(s): _UA, botUA, DEFAULT_USER_AGENT,
+    USER_AGENT_CHROME, defaultUserAgent, USER_AGENTS, "User-Agent"."""
     parts = [p.lower() for p in re.findall(r"[A-Z]{2,}(?![a-z])|[A-Z]?[a-z0-9]+|[A-Z]", name)]
     joined = [a + b for a, b in zip(parts, parts[1:])]
     return "ua" in parts or any(p in ("useragent", "useragents") for p in parts + joined)
 
 
-def _ua_sites(line: str):
-    """Where on a line a User-Agent value starts."""
-    ends = [m.end() for m in _UA_SITE.finditer(line)]
-    ends += [m.end() for m in _NAME_SITE.finditer(line) if _names_a_user_agent(m.group(1) or m.group(2))]
-    return sorted(ends)
-# A string literal naming Civitas as a client: "Civitas/1.0", "Civitas-OG/1".
-_CIVITAS_TOKEN = re.compile(r"""(?:^|[=:(,{\[]\s*)(?:[rbfu]{1,2})?["'`][^"'`\n]*\bcivitas[\w-]*/\d""", re.IGNORECASE)
-# What counts as naming the contact in a value (or a constant built from it).
-_NAMES_CONTACT = re.compile(
-    r"CONTACT_EMAIL|BOT_USER_AGENT|SELF_FETCH_USER_AGENT|CIVIC_CONTACT|BROWSER_HEADERS|\+\$\{SITE_URL\}"
-)
+def _ua_key(value) -> bool:
+    if isinstance(value, bytes):
+        value = value.decode("latin-1")
+    return isinstance(value, str) and bool(re.fullmatch(r"[A-Za-z][\w-]*", value)) and _names_a_user_agent(value)
 
 
-def _code_lines(path) -> list[str]:
-    """A source file's lines with what sends nothing blanked: comments, and
-    in Python triple-quoted strings (docstrings and prose, which may quote
-    a User-Agent). Line numbers are kept."""
-    text = path.read_text(encoding="utf-8")
-    if path.suffix != ".py":
-        return [
-            "" if line.lstrip().startswith(("//", "*", "/*")) else line
-            for line in text.splitlines()
-        ]
+def _python_ua_values(tree):
+    """(line, value node) for every place Python code gives a User-Agent a
+    value: an assignment, annotation, keyword argument or parameter default
+    to a name or attribute with a ua part; a dict key, a (key, value) pair
+    or a subscript naming the header; a .get / getenv / setdefault default
+    for one."""
+    import ast
+
+    def named(target):
+        if isinstance(target, ast.Name):
+            return _names_a_user_agent(target.id)
+        if isinstance(target, ast.Attribute):
+            return _names_a_user_agent(target.attr)
+        if isinstance(target, ast.Subscript) and isinstance(target.slice, ast.Constant):
+            return _ua_key(target.slice.value)
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            yield from ((node.value.lineno, node.value) for t in node.targets if named(t))
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)) and node.value is not None:
+            if named(node.target):
+                yield node.value.lineno, node.value
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if isinstance(key, ast.Constant) and _ua_key(key.value):
+                    yield value.lineno, value
+        elif isinstance(node, ast.keyword):
+            if node.arg and _names_a_user_agent(node.arg):
+                yield node.value.lineno, node.value
+        elif isinstance(node, (ast.Tuple, ast.List)) and len(node.elts) >= 2:
+            first, second = node.elts[:2]
+            # ("User-Agent", "user-agent") pairs two spellings of the key.
+            if isinstance(first, ast.Constant) and _ua_key(first.value) and not (
+                isinstance(second, ast.Constant) and _ua_key(second.value)
+            ):
+                yield second.lineno, second
+        elif isinstance(node, ast.Call) and len(node.args) >= 2:
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+            first = node.args[0]
+            if name in ("get", "getenv", "setdefault", "pop") and isinstance(first, ast.Constant) and _ua_key(
+                first.value
+            ):
+                yield node.args[1].lineno, node.args[1]
+        elif isinstance(node, ast.arguments):
+            positional = node.posonlyargs + node.args
+            pairs = list(zip(positional[len(positional) - len(node.defaults):], node.defaults))
+            pairs += [(a, d) for a, d in zip(node.kwonlyargs, node.kw_defaults) if d is not None]
+            yield from ((d.lineno, d) for a, d in pairs if _names_a_user_agent(a.arg))
+
+
+def _python_offenders(rel, text):
+    """Lines of Python source that send a User-Agent without the contact."""
+    import ast
+
+    from app.contact import CONTACT_EMAIL
+
+    tree = ast.parse(text)
     lines = text.splitlines()
-    blank = []
-    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
-        is_prose = tok.type == tokenize.STRING and re.match(r"[rbfu]{0,2}(\"\"\"|\'\'\')", tok.string, re.I)
-        if tok.type == tokenize.COMMENT or is_prose:
-            blank.append((tok.start, tok.end))
-    for (r0, c0), (r1, c1) in reversed(blank):
-        for r in range(r0, r1 + 1):
-            line = lines[r - 1]
-            a = c0 if r == r0 else 0
-            b = c1 if r == r1 else len(line)
-            lines[r - 1] = line[:a] + " " * (b - a) + line[b:]
-    return lines
+
+    def strings(node):
+        out = []
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, (str, bytes)):
+                out.append(sub.value.decode("latin-1") if isinstance(sub.value, bytes) else sub.value)
+        return out
+
+    def names_contact(node):
+        found = {getattr(sub, "id", None) or getattr(sub, "attr", None) for sub in ast.walk(node)}
+        return bool(found & _CONTACT_NAMES) or any(CONTACT_EMAIL in s for s in strings(node))
+
+    def exempt(node):
+        return any(rel == f and any(frag in s for s in strings(node)) for f, frag in _BROWSER_ONLY_USER_AGENTS)
+
+    def literal(node):
+        """Whether a value is written out here: a non-empty string, or one
+        built from one (f-string, +, %, .format / .join on one, a list of
+        them, a conditional). A name, a call or a header read isn't."""
+        if isinstance(node, ast.Constant):
+            return isinstance(node.value, (str, bytes)) and bool(node.value.strip())
+        if isinstance(node, ast.JoinedStr):
+            return True
+        if isinstance(node, ast.BinOp):
+            return literal(node.left) or literal(node.right)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            return node.func.attr in ("format", "join") and literal(node.func.value)
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            return any(literal(e) for e in node.elts)
+        if isinstance(node, ast.IfExp):
+            return literal(node.body) or literal(node.orelse)
+        return False
+
+    bad = set()
+    for line, value in _python_ua_values(tree):
+        if literal(value) and not names_contact(value) and not exempt(value):
+            bad.add(line)
+    # A string naming Civitas as a client, wherever it sits, outside prose:
+    # its statement must name the contact. Docstrings are prose.
+    docstrings = {
+        id(stmt.value) for stmt in ast.walk(tree)
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)
+    }
+    for stmt in ast.walk(tree):
+        if not isinstance(stmt, ast.stmt) or isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        for sub in ast.walk(stmt):
+            if id(sub) in docstrings or not isinstance(sub, ast.Constant) or not isinstance(sub.value, str):
+                continue
+            if _CIVITAS_TOKEN_TEXT.search(sub.value) and not names_contact(stmt) and not exempt(stmt):
+                bad.add(sub.lineno)
+    return [f"{rel}:{n}: {lines[n - 1].strip()}" for n in sorted(bad)]
 
 
-def _value_from(lines, i, rest):
-    """The text of a value starting at `rest` on line i, carried onto the
-    next lines while it is plainly unfinished: nothing yet but "(", an open
-    bracket before any string, or a string ending the line that the next
-    line continues (implicit concatenation). A value already holding a
-    whole string stops there, so a neighbouring entry can't excuse it."""
-    value, j = rest, i
-    for _ in range(3):
-        nxt = next((k for k in range(j + 1, len(lines)) if lines[k].strip()), None)
-        if nxt is None:
+# The frontend (TypeScript) is read as text, a line at a time: a header key
+# ("User-Agent": / ["User-Agent"] = / ["User-Agent", ...]), or a name with a
+# ua part given a value (NAME = / name: type = / name: in an object).
+_TS_UA_SITE = re.compile(
+    r"""(["']user-agent["']\s*(?:\]\s*=|:)|\[\s*["']user-agent["']\s*,)""",
+    re.IGNORECASE,
+)
+_TS_NAME_SITE = re.compile(r"""(?<![\w$])([A-Za-z_$][\w$]*)\s*(?::\s*[\w\[\]|.<>]+(?:\s+[\w\[\]|.<>]+)*)?\s*(?<![=!<>])[:=](?!=)""")
+_TS_CIVITAS_TOKEN = re.compile(r"""["'`][^"'`\n]*\bcivitas[\w-]*/\d""", re.IGNORECASE)
+_TS_NAMES_CONTACT = re.compile(r"\+\$\{SITE_URL\}")
+
+
+def _ts_offenders(rel, text):
+    lines = ["" if line.lstrip().startswith(("//", "*", "/*")) else line for line in text.splitlines()]
+    bad = []
+    for i, line in enumerate(lines):
+        ends = [m.end() for m in _TS_UA_SITE.finditer(line)]
+        ends += [m.end() for m in _TS_NAME_SITE.finditer(line) if _names_a_user_agent(m.group(1))]
+        values = []
+        for end in ends:
+            # The value: the rest of the line, or the next line when the
+            # line ends at the key.
+            rest = line[end:]
+            if not rest.strip() and i + 1 < len(lines):
+                rest = lines[i + 1]
+            if re.match(r"""\s*[(\[]?\s*["'`]""", rest):
+                values.append(rest)
+        values += [line[m.start():] for m in _TS_CIVITAS_TOKEN.finditer(line)]
+        for value in values:
+            if _TS_NAMES_CONTACT.search(value) or any(rel == f and frag in value for f, frag in _BROWSER_ONLY_USER_AGENTS):
+                continue
+            bad.append(f"{rel}:{i + 1}: {line.strip()}")
             break
-        opened = sum(value.count(c) for c in "([{") - sum(value.count(c) for c in ")]}")
-        continues = re.match(r"""\s*(?:[rbfu]{1,2})?["'`]""", lines[nxt], re.I)
-        has_string = re.search(r"""["'`]""", value)
-        ends_in_string = re.search(r"""["'`]\s*$""", value)
-        if value.strip() in ("", "(") or (opened > 0 and not has_string) or (continues and ends_in_string):
-            value, j = value + " " + lines[nxt].strip(), nxt
-        else:
-            break
-    return value
+    return bad
 
 
 def _user_agent_offenders(backend, files):
-    """(offenders, files read): every User-Agent value written as a
-    literal, and every literal naming Civitas as a client, whose value
-    doesn't name the contact. Paths are named from the repo root
-    ("backend/app/…"), inside a git checkout or not. A browser string kept
-    in a constant under some other name is out of reach of a text sweep;
-    the reviews are the check there."""
-    from app.contact import CONTACT_EMAIL
-
+    """(offenders, files read): every User-Agent given a literal value, and
+    every literal naming Civitas as a client, that doesn't name the contact.
+    Python is read through its syntax tree; the frontend line by line. Paths
+    are named from the repo root ("backend/app/…"), inside a git checkout or
+    not. A browser string kept in a constant under some other name is out of
+    reach of any sweep; the reviews are the check there."""
     offenders, read = [], 0
     for path in files:
         rel = (
@@ -548,23 +632,12 @@ def _user_agent_offenders(backend, files):
         ) or ".test." in path.name or "/tests/" in rel:
             continue
         try:
-            lines = _code_lines(path)
-        except (OSError, SyntaxError, tokenize.TokenError):
+            text = path.read_text(encoding="utf-8")
+            found = _python_offenders(rel, text) if path.suffix == ".py" else _ts_offenders(rel, text)
+        except (OSError, SyntaxError):
             continue
         read += 1
-        for i, line in enumerate(lines):
-            values = [
-                _value_from(lines, i, line[end:]) for end in _ua_sites(line)
-            ]
-            values = [v for v in values if re.match(r"""\s*[(\[]?\s*(?:[rbfu]{1,2})?["'`]""", v, re.I)]
-            values += [_value_from(lines, i, line[m.start():]) for m in _CIVITAS_TOKEN.finditer(line)]
-            for value in values:
-                if _NAMES_CONTACT.search(value) or CONTACT_EMAIL in value:
-                    continue
-                if any(rel == f and frag in value for f, frag in _BROWSER_ONLY_USER_AGENTS):
-                    continue
-                offenders.append(f"{rel}:{i + 1}: {line.strip()}")
-                break  # one entry per line
+        offenders += found
     return offenders, read
 
 
@@ -612,6 +685,13 @@ def test_every_user_agent_names_the_contact():
     'USER_AGENTS = [\n    "Mozilla/5.0 Foo",\n]',
     'ua = os.environ.get("USER_AGENT", "Mozilla/5.0 Foo")',
     'h = dict(user_agent="Mozilla/5.0 Foo")',
+    'self.user_agent = "Mozilla/5.0 Foo"',
+    'settings.USER_AGENT = "Mozilla/5.0 Foo"',
+    'ua = os.getenv("USER_AGENT", "Mozilla/5.0 Foo")',
+    'KW = {"user_agent": "Mozilla/5.0 Foo"}',
+    'h = [(b"user-agent", b"Mozilla/5.0 Foo")]',
+    'UA: Final[str] = "Mozilla/5.0 Foo"',
+    'log.info("sent as Civitas/1.0")',
 ])
 def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     path = tmp_path / "backend" / "app" / "x.py"
@@ -628,6 +708,9 @@ def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     'const defaultUserAgent = "Mozilla/5.0 Foo";',
     'const botUA = "Mozilla/5.0 Foo";',
     'const opts = { userAgent: "Mozilla/5.0 Foo" };',
+    'this.userAgent = "Mozilla/5.0 Foo";',
+    'client.defaults.ua = "Mozilla/5.0 Foo";',
+    'const h = {\n  "User-Agent":\n    "Mozilla/5.0 Foo",\n};',
 ])
 def test_the_user_agent_sweep_sees_the_frontend(tmp_path, source):
     path = tmp_path / "frontend" / "src" / "x.ts"
@@ -641,12 +724,29 @@ def test_the_user_agent_sweep_sees_the_frontend(tmp_path, source):
     'H = {\n    "User-Agent": "CivitasCivicPlatform/1.0 (x; "\n    f"contact: {CONTACT_EMAIL})",\n}',
     'def f():\n    """Sends "Civitas/1.0" as its User-Agent: "x"."""\n',
     '# "User-Agent": "Civitas/1.0"',
+    'H = {\n    "User-Agent": (\n        "Mozilla/5.0 (compatible; x; +"\n        + CONTACT_EMAIL\n        + ")"\n    ),\n}',
+    'UA = "Civitas/1.0 (+{})".format(\n    CONTACT_EMAIL)',
+    'agent = request.headers.get("User-Agent", "")',
+    'if x:\n    pass\nelse:  # ' + "x" * 3000 + "\n    pass",
 ])
 def test_the_user_agent_sweep_passes_what_names_the_contact(tmp_path, source):
     path = tmp_path / "backend" / "app" / "x.py"
     path.parent.mkdir(parents=True)
     path.write_text(source + "\n")
     assert _user_agent_offenders(tmp_path / "backend", [path]) == ([], 1)
+
+
+def test_the_frontend_sweep_is_linear_on_long_lines(tmp_path):
+    """The frontend is read with regular expressions; a long run of spaces
+    (a blanked comment, minified code) must not make them backtrack."""
+    import time
+
+    path = tmp_path / "frontend" / "src" / "x.ts"
+    path.parent.mkdir(parents=True)
+    path.write_text("const a = b ?" + " " * 20000 + "c :" + " " * 20000 + "d;\nx:" + " " * 20000 + "y\n")
+    started = time.monotonic()
+    _user_agent_offenders(tmp_path / "backend", [path])
+    assert time.monotonic() - started < 1
 
 
 def test_the_sweep_names_paths_from_the_repo_root_outside_git(tmp_path):
