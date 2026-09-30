@@ -1002,8 +1002,15 @@ def release_orphaned_holds(*, recheck_after_s: float | None = None) -> "threadin
     window is long enough to ride out a live holder's beats stalling behind
     another writer (see ORPHAN_RECHECK_S); a holder stalled longer than
     that, in a second process the update order should have ruled out, is
-    what this guard can't tell from a dead one. Returns the re-check's
-    timer (None when nothing waits on one); logs, never raises."""
+    what this guard can't tell from a dead one.
+
+    A pass that can't reach the database (locked past its busy timeout by
+    another writer) is tried again, ORPHAN_RETRY_S apart, ORPHAN_ATTEMPTS
+    times in all, and a lease under re-check stays waited for (waits_for)
+    until the last try; one that never gets through is alerted and left to
+    the lease's stale window. Returns the timer whose thread runs the
+    re-check (or the retried pass, then its re-check) — None when nothing
+    waits on one; logs, never raises."""
     from datetime import timedelta
 
     from app.time_utils import utcnow
@@ -1011,15 +1018,79 @@ def release_orphaned_holds(*, recheck_after_s: float | None = None) -> "threadin
     wait = ORPHAN_RECHECK_S if recheck_after_s is None else recheck_after_s
     cutoff = utcnow() - timedelta(seconds=wait)
     fresh = _release_ours(lambda row: row.cached_at < cutoff)
+    if fresh is None:
+        # Couldn't reach the leases at all (the database locked past its
+        # busy timeout): the same pass, tried again from a timer — whose
+        # thread then runs the re-check too.
+        def again() -> None:
+            kept = _retrying(lambda: _release_ours(lambda row: row.cached_at < cutoff), "release")
+            if kept:
+                _recheck_later(kept, wait).join()
+
+        timer = threading.Timer(0, again)
+        timer.daemon = True
+        timer.start()
+        return timer
     if not fresh:
         return None
+    return _recheck_later(fresh, wait)
+
+
+# A pass of release_orphaned_holds that can't reach the database (locked past
+# its busy timeout by another writer) is tried again this often, this many
+# times in all — so a lease under re-check stays waited for (waits_for)
+# through a few minutes of a locked database, not given up the moment one
+# attempt fails. Past the last, the lease is left to its stale window and
+# an ops alert says so.
+ORPHAN_RETRY_S = 60.0
+ORPHAN_ATTEMPTS = 5
+
+
+def _retrying(attempt, what: str):
+    """attempt() again — the first try having failed — until it returns a
+    result (not None): ORPHAN_ATTEMPTS tries in all, ORPHAN_RETRY_S apart.
+    None when every one failed, which sends an ops alert."""
+    from app.time_utils import utcnow
+
+    for _ in range(ORPHAN_ATTEMPTS - 1):
+        time.sleep(ORPHAN_RETRY_S)
+        result = attempt()
+        if result is not None:
+            return result
+    logger.error("Could not %s the district-lines leases left behind after %d tries", what, ORPHAN_ATTEMPTS)
+    try:
+        from app.ops_alerts import send_ops_alert
+
+        send_ops_alert(
+            "District lines: a leftover lease could not be released",
+            f"The pipeline process's startup could not {what} the district-lines lease a killed House "
+            f"run, refresh or rescore left behind: the database stayed locked through {ORPHAN_ATTEMPTS} "
+            f"tries, {ORPHAN_RETRY_S:.0f}s apart. The lease lapses on its own within its stale window "
+            "(an hour); until then House runs are refused or skipped.",
+            dedupe_key=f"district-lines-orphan-{what}-{utcnow():%Y-%m-%d}",
+        )
+    except Exception:
+        logger.exception("Alerting on the district-lines leases failed")
+    return None
+
+
+def _recheck_later(fresh, wait: float) -> threading.Timer:
+    """The re-check of the leases `fresh` (data, beat, who), `wait` seconds
+    from now: each deleted only if it still carries that beat. Its holders
+    are waited for (waits_for) until the re-check is done — through its
+    retries when the database is locked, so a House run doesn't give up on
+    a dead lease because one delete couldn't get the write lock."""
     seen = {(data, beat) for data, beat, _ in fresh}
     whos = {who for _, _, who in fresh}
     _UNDER_RECHECK.update(whos)
 
     def recheck() -> None:
         try:
-            _release_ours(lambda row: (row.data_json, row.cached_at) in seen)
+            release = lambda: _release_ours(lambda row: (row.data_json, row.cached_at) in seen)  # noqa: E731
+            if release() is None:
+                _retrying(release, "re-check")
+        except Exception:
+            logger.exception("Re-checking the district-lines leases failed")
         finally:
             _UNDER_RECHECK.difference_update(whos)
 
@@ -1043,18 +1114,24 @@ def waits_for(holder: str | None) -> bool:
     return holder in WAITED_FOR or holder in _UNDER_RECHECK
 
 
-def _release_ours(dead) -> list[tuple[str, object, str]]:
+def _release_ours(dead) -> list[tuple[str, object, str]] | None:
     """Delete our DISTRICT_LINES lease rows that `dead(row)` says are dead —
     each only while it still carries the beat it was read with. Returns the
-    (data, beat, who) of our rows it left."""
+    (data, beat, who) of our rows it left, or None when it couldn't finish
+    (the database locked past its busy timeout: nothing was released)."""
     from app.database import SessionLocal
     from app.models import ApiCache
     from app.pipeline import lease
 
     ours = {HOUSE_RUN_WHO, REFRESH_WHO, RESCORE_WHO}
     kept: list[tuple[str, object, str]] = []
-    db = SessionLocal()
     try:
+        db = SessionLocal()
+    except Exception:
+        logger.exception("Releasing orphaned district-lines leases failed")
+        return None
+    try:
+        released = []
         for row in db.query(ApiCache).filter(
             ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
         ).all():
@@ -1072,13 +1149,16 @@ def _release_ours(dead) -> list[tuple[str, object, str]]:
                 ApiCache.data_json == row.data_json, ApiCache.cached_at == row.cached_at,
             ).delete(synchronize_session=False)
             if gone:
-                logger.warning("Released the district lines a %s left behind in a process that is gone", who)
+                released.append(who)
         db.commit()
     except Exception:
         db.rollback()
         logger.exception("Releasing orphaned district-lines leases failed")
+        return None
     finally:
         db.close()
+    for who in released:
+        logger.warning("Released the district lines a %s left behind in a process that is gone", who)
     return kept
 
 
@@ -1306,9 +1386,11 @@ async def run_house_on_sitting_lines(
 
     Returns run_house()'s result, or a skip in the shape the nightly
     chain's skip alert reads ({"status": "skipped", "reason": code,
-    "holder": who}): the lease held elsewhere (by another House run, or a
-    refresh past the wait — `holder` names which, from the same read as
-    the code) or a data reset (lease refusal codes), or a House run already
+    "holder": who}): the lease held by another House run (REFUSED_HELD,
+    which the chain waits out and retries), by a holder waited for past
+    the wait (run_tracker.LINES_HELD_TOO_LONG, which it doesn't — this
+    was the wait) — `holder` names which, from the same read as the code —
+    or a data reset (lease refusal codes), or a House run already
     going (run_tracker.ALREADY_RUNNING) — one a process started without
     this lease, e.g. an older image mid-rollout; its lines are left alone.
     A failing check is logged and the run goes ahead on whatever lines the
@@ -1317,7 +1399,10 @@ async def run_house_on_sitting_lines(
 
     from app.pipeline import lease
 
+    from app.pipeline.run_tracker import LINES_HELD_TOO_LONG
+
     deadline = time.monotonic() + refresh_wait_s
+    waited = False
     while True:
         async with lease.job_async(lease.DISTRICT_LINES, who=HOUSE_RUN_WHO) as granted:
             if granted:
@@ -1333,13 +1418,20 @@ async def run_house_on_sitting_lines(
             continue
         if not waits_for(granted.holder):
             break
+        waited = True
         logger.info("House run waiting for the %s that holds the district lines", granted.holder)
         await asyncio.sleep(poll_s)
-    if waits_for(granted.holder):
+    if waited and waits_for(granted.holder):
         logger.warning(
             "House pipeline not started: the %s has held the district lines for over %d minutes",
             granted.holder, refresh_wait_s // 60,
         )
+        # Its own reason, not lease.REFUSED_HELD: that one has the nightly
+        # chain wait for the holder and run the link again (held_off), and
+        # the chain's wait (no pipeline running) never counts a refresh —
+        # it would go straight into a second full wait on the same stuck
+        # holder, doubling the time before the skip is reported.
+        return {"status": "skipped", "reason": LINES_HELD_TOO_LONG, "holder": granted.holder}
     return {"status": "skipped", "reason": granted.code, "holder": granted.holder}
 
 

@@ -384,7 +384,9 @@ The correct pattern, established by `_district_pvi()` /
    refused rather than refreshing twice (a House run that finds a refresh
    holding the lease waits for it, up to `REFRESH_WAIT_S`, rather than
    skipping — and past that, the House link is reported skipped naming the
-   refresh, like any link (`app/pipeline_chain.py`); main's startup Constituent Alignment rescore takes
+   refresh (`run_tracker.LINES_HELD_TOO_LONG`), which the chain does not
+   wait out and retry as it does another run's hold, so the skip alert
+   comes after one `REFRESH_WAIT_S`, not two (`app/pipeline_chain.py`); main's startup Constituent Alignment rescore takes
    the same lease for its House part and waits for a refresh the same
    way, between passes that hold nothing — no lease, no writer — so an
    admin data reset is never refused for the wait). The pipeline process
@@ -393,7 +395,9 @@ The correct pattern, established by `_district_pvi()` /
    gone `ORPHAN_RECHECK_S` (ten minutes, `lease.STALE_S`) without a beat, so
    a deploy mid-run doesn't block House runs for the lease's hour (a House run, trigger or
    the startup rescore refused by a lease still being checked waits for
-   the check, `district_pvi.waits_for`); that a leftover holder is
+   the check, `district_pvi.waits_for`, through its retries while the
+   database is locked, `ORPHAN_RETRY_S` × `ORPHAN_ATTEMPTS`, then an ops
+   alert); that a leftover holder is
    dead rests on the pipeline service's stop-first update order
    (`docker-compose.swarm.yml`); the missed-beat check is a second guard,
    its window long enough that a live holder whose beats stall behind

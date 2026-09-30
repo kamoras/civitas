@@ -276,15 +276,16 @@ class TestNightlyPipelineIndependentLinks:
         one that outlasts the wait costs the House scores, not Stock trades
         and Election. The alert names the refresh — not "another run of
         it"."""
-        from app.pipeline import lease
+        from app.pipeline.run_tracker import LINES_HELD_TOO_LONG
 
         mocks, alert, _resolve, _warm = self._run_chain(
-            house={"status": "skipped", "reason": lease.REFUSED_HELD, "holder": "District PVI refresh"},
+            house={"status": "skipped", "reason": LINES_HELD_TOO_LONG, "holder": "District PVI refresh"},
         )
         self._all_ran({k: v for k, v in mocks.items() if k != "house"})
+        assert mocks["house"].await_count == 1  # the wait was the House run's own: not waited again
         subject, body = alert.call_args[0][0], alert.call_args[0][1]
         assert "House" in subject
-        assert "District PVI refresh is already running" in body
+        assert "the District PVI refresh held them through the House run's whole wait" in body
         assert "another run of it" not in body
 
     def test_a_superseded_house_step_is_not_alerted_and_clears_an_old_skip(self):

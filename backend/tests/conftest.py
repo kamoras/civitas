@@ -2,20 +2,27 @@
 
 import functools
 import os
+import tempfile
 import threading
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+# Always the test run's own, never inherited: the documented container run
+# (`docker compose run --rm --no-deps backend python -m pytest tests/`)
+# carries the site's environment — DATABASE_URL=sqlite:////data/civitas.db
+# from docker-compose.yml, with the live volume mounted at /data — and a
+# setdefault would have kept it, pointing the app's engine at the
+# production database. Every path the app reads from the environment is
+# set here, before anything imports app.config (test_data_volume_guard
+# checks a run started with the site's values).
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 # The per-container RAM directory (api/throttle.RAM_DIR: the throttle store,
 # the pipeline-process lock) — one per test run, so a local dev server's, or
 # a parallel run's, never meets this one's.
-os.environ.setdefault("CIVITAS_RAM_DIR", __import__("tempfile").mkdtemp(prefix="civitas-tests-"))
+os.environ["CIVITAS_RAM_DIR"] = tempfile.mkdtemp(prefix="civitas-tests-")
+os.environ["THROTTLE_DB_PATH"] = os.path.join(os.environ["CIVITAS_RAM_DIR"], "civitas_throttle.db")
 # The data volume (/data) is the running site's, where one is mounted — a
 # test run must never write it (_data_volume_untouched below). The vector
 # store's path is read once, at import: set before anything imports it.
-os.environ.setdefault(
-    "VECTOR_DB_PATH",
-    os.path.join(__import__("tempfile").mkdtemp(prefix="civitas-tests-vectors-"), "vectors.db"),
-)
+os.environ["VECTOR_DB_PATH"] = os.path.join(tempfile.mkdtemp(prefix="civitas-tests-vectors-"), "vectors.db")
 
 import pathlib
 import sys
@@ -384,60 +391,183 @@ def _no_running_pipeline_chains(monkeypatch):
 # it is the site's: the live references, the vector store, the heartbeat the
 # API process reads to decide the pipeline service is alive. Tests used to
 # write it — the rescore tests replaced signal_overlap.json, the app-startup
-# test the heartbeat and vectors.db, the election tests senate_classes.json.
-# Every runtime path is pointed into the test's tmp_path below, and an audit
-# hook refuses (PermissionError, as a read-only volume would) and records any
-# write that still reaches /data, failing the test that made it.
+# test the heartbeat and vectors.db, the election tests senate_classes.json —
+# and to read it, so a host with a live volume ran them on its data (its
+# senate_classes.json, state_candidate_sources.json, district_pvi.json)
+# while CI ran them on the bundled files.
+#
+# Every runtime path is pointed into the test's tmp_path
+# (redirect_data_volume), and an audit hook in this process refuses and
+# records whatever still reaches /data, failing the test that did it: a write
+# gets PermissionError, as a read-only volume would give it; a read gets
+# FileNotFoundError, as a host with no volume gives it, so what a test sees
+# never depends on the host. What the hook covers, exactly:
+#   - this process only — a subprocess a test starts has no hook;
+#   - paths as given, made absolute and also resolved through symlinks
+#     (os.path.realpath), under /data or under whatever /data itself
+#     resolves to; a relative path given with dir_fd is not resolved;
+#   - writes: open() for writing, sqlite3.connect (any connect but a
+#     read-only URI, mode=ro or immutable=1 — a plain connect creates the
+#     file), os.mkdir (always, whether or not the directory exists, so a
+#     makedirs(exist_ok=True) counts the same on every host), os.remove,
+#     rmdir, rename, link, truncate, utime, chmod, chown, setxattr,
+#     removexattr, mkfifo and mknod (the last two have no audit event and
+#     are wrapped below), and shutil's rmtree, move, chown, and the
+#     destination of copyfile, copytree, copymode and copystat;
+#   - reads: open() for reading, a read-only sqlite3 URI, os.listdir,
+#     os.scandir, and the source of those shutil copies. os.stat and
+#     os.path.exists raise no audit event: an existence check on /data is
+#     not seen, which is why the paths are redirected rather than only
+#     refused.
 
 _DATA_DIR = "/data"
+# A host may mount the volume elsewhere and symlink /data to it.
+_DATA_ROOTS = tuple({_DATA_DIR, os.path.realpath(_DATA_DIR)})
 _data_writes: list[str] = []
+_data_reads: list[str] = []
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
-_PATH_EVENTS = {"os.rename", "os.remove", "os.rmdir", "os.truncate", "os.utime", "os.link", "os.symlink",
-                "os.chmod", "shutil.rmtree", "shutil.copyfile", "shutil.move"}
+# Events whose first two arguments are paths it changes.
+_WRITE_EVENTS = {"os.rename", "os.remove", "os.rmdir", "os.truncate", "os.utime", "os.link", "os.chmod",
+                 "os.chown", "os.setxattr", "os.removexattr", "os.mkdir", "os.mkfifo", "os.mknod",
+                 "shutil.rmtree", "shutil.move", "shutil.chown"}
+# (source, destination): the source is read, the destination written.
+_COPY_EVENTS = {"shutil.copyfile", "shutil.copytree", "shutil.copymode", "shutil.copystat"}
+_READ_EVENTS = {"os.listdir", "os.scandir"}
+
+
+def _under_data(path: str) -> bool:
+    if path.startswith("//") and not path.startswith("///"):
+        path = path[1:]  # POSIX leaves a leading "//" to the system; Linux reads it as "/"
+    return any(path == root or path.startswith(root.rstrip(os.sep) + os.sep) for root in _DATA_ROOTS)
 
 
 def _on_data_volume(path) -> str | None:
-    if isinstance(path, int):
+    if isinstance(path, int) or path is None:
         return None
     try:
-        resolved = os.path.abspath(os.fsdecode(path))
+        raw = os.fsdecode(path)
     except (TypeError, ValueError):
         return None
-    return resolved if resolved == _DATA_DIR or resolved.startswith(_DATA_DIR + os.sep) else None
+    if not raw or raw == ":memory:":
+        return None
+    for resolved in (os.path.normpath(os.path.abspath(raw)), os.path.realpath(raw)):
+        if _under_data(resolved):
+            return resolved
+    return None
 
 
-def _refuse_data_writes(event: str, args: tuple) -> None:
-    hit = None
+def _sqlite_read_only(database) -> bool:
+    import urllib.parse
+
+    try:
+        text = os.fsdecode(database)
+    except (TypeError, ValueError):
+        return False
+    if not text.startswith("file:"):
+        return False
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(text).query)
+    return query.get("mode") == ["ro"] or query.get("immutable") == ["1"]
+
+
+def _sqlite_path(database):
+    import urllib.parse
+
+    try:
+        text = os.fsdecode(database)
+    except (TypeError, ValueError):
+        return None
+    return urllib.parse.unquote(urllib.parse.urlsplit(text).path) if text.startswith("file:") else text
+
+
+def _guard_data_volume(event: str, args: tuple) -> None:
+    wrote = read = None
     if event == "open":
         path, mode, flags = args
         writes = (isinstance(mode, str) and any(c in mode for c in "wax+")) or (
             isinstance(flags, int) and flags & _WRITE_FLAGS)
-        if writes:
-            hit = _on_data_volume(path)
-    elif event == "os.mkdir":
-        hit = _on_data_volume(args[0])
-        if hit and os.path.isdir(hit):
-            hit = None  # makedirs(exist_ok=True) of a directory already there
-    elif event in _PATH_EVENTS:
-        hit = next((h for h in map(_on_data_volume, args[:2]) if h), None)
+        hit = _on_data_volume(path)
+        wrote, read = (hit, None) if writes else (None, hit)
+    elif event == "os.symlink":  # (target, link): only the link is made
+        wrote = _on_data_volume(args[1])
+    elif event in _WRITE_EVENTS:
+        wrote = next((h for h in map(_on_data_volume, args[:2]) if h), None)
+    elif event in _COPY_EVENTS:
+        wrote = _on_data_volume(args[1])
+        read = None if wrote else _on_data_volume(args[0])
+    elif event in _READ_EVENTS:
+        read = _on_data_volume(args[0])
     elif event == "sqlite3.connect":
-        hit = _on_data_volume(args[0]) if isinstance(args[0], (str, bytes, os.PathLike)) else None
-    if hit:
-        _data_writes.append(f"{event} {hit}")
-        raise PermissionError(f"test run wrote the data volume: {event} {hit}")
+        hit = _on_data_volume(_sqlite_path(args[0]))
+        wrote, read = (None, hit) if _sqlite_read_only(args[0]) else (hit, None)
+    if wrote:
+        _data_writes.append(f"{event} {wrote}")
+        raise PermissionError(f"test run wrote the data volume: {event} {wrote}")
+    if read:
+        _data_reads.append(f"{event} {read}")
+        raise FileNotFoundError(2, f"test run read the data volume: {event}", read)
 
 
-sys.addaudithook(_refuse_data_writes)
+sys.addaudithook(_guard_data_volume)
+
+
+def _audited(function, event: str):
+    @functools.wraps(function)
+    def audited(path, *args, **kwargs):
+        sys.audit(event, path)
+        return function(path, *args, **kwargs)
+
+    return audited
+
+
+# No audit event of their own.
+os.mkfifo = _audited(os.mkfifo, "os.mkfifo")
+os.mknod = _audited(os.mknod, "os.mknod")
+
+
+# Modules whose module-level constants name a file on /data (a "/data/…"
+# string or Path, or a tuple of them). Imported here so the sweep in
+# redirect_data_volume sees them before any test runs; the audit hook
+# catches one this list misses, as a read or write of /data.
+_DATA_PATH_MODULES = (
+    "app.election_calendar",
+    "app.pipeline.analyze.population_reference",
+    "app.pipeline.analyze.score_calculator",
+    "app.pipeline.fetch.ballot_lookup",
+    "app.pipeline.fetch.ballot_measure_pdf_sources",
+    "app.pipeline.fetch.ballot_pdf_sources",
+    "app.pipeline.fetch.committee_leadership",
+    "app.pipeline.fetch.district_pvi",
+    "app.pipeline.fetch.senate_classes",
+    "app.pipeline.fetch.state_candidate_sources",
+    "app.pipeline.fetch.state_election_dates",
+    "app.pipeline.fetch.town_directory",
+    "app.pipeline.transform.committee_data",
+)
+for _module in _DATA_PATH_MODULES:
+    __import__(_module)
+
+
+def _data_literal(value) -> bool:
+    return isinstance(value, (str, pathlib.PurePath)) and (str(value) == _DATA_DIR or str(value).startswith(_DATA_DIR + "/"))
+
+
+def _moved(value, data: pathlib.Path):
+    moved = data.joinpath(*pathlib.PurePosixPath(str(value)).parts[2:])
+    return moved if isinstance(value, pathlib.PurePath) else str(moved)
+
+
+# (module, name) -> the /data path it held before any redirect moved it.
+_DATA_PATH_ORIGINALS: dict[tuple[str, str], object] = {}
 
 
 def redirect_data_volume(monkeypatch, data) -> None:
     """Point the runtime data paths (what production keeps on /data) into
-    the directory `data`. A fixture with a wider scope than a test — one
-    that starts the real app's lifespan, whose scheduler writes its
-    heartbeat — calls this with its own MonkeyPatch."""
-    from app import election_calendar
-    from app.pipeline.fetch import senate_classes
-
+    the directory `data`: runtime_data_path, and every module-level
+    constant of a loaded app module that names a path on /data (a string,
+    a Path, or a tuple of them), each moved to the same name under `data`.
+    A fixture with a wider scope than a test — one that starts the real
+    app's lifespan, whose scheduler writes its heartbeat — calls this with
+    its own MonkeyPatch."""
     data = pathlib.Path(data)
     data.mkdir(parents=True, exist_ok=True)
 
@@ -445,35 +575,54 @@ def redirect_data_volume(monkeypatch, data) -> None:
         return str(data / name)
 
     monkeypatch.setattr("app.atomic_write.runtime_data_path", runtime_data_path)
+    for name, module in list(sys.modules.items()):
+        if not (name == "app" or name.startswith("app.")) or module is None:
+            continue
+        for attr, value in list(vars(module).items()):
+            # The value as the module defined it: the run-wide redirect has
+            # already moved the ones found at import.
+            value = _DATA_PATH_ORIGINALS.get((name, attr), value)
+            if _data_literal(value):
+                moved = _moved(value, data)
+            elif isinstance(value, tuple) and value and any(map(_data_literal, value)) and all(
+                    isinstance(v, (str, pathlib.PurePath)) for v in value):
+                moved = tuple(_moved(v, data) if _data_literal(v) else v for v in value)
+            else:
+                continue
+            _DATA_PATH_ORIGINALS[(name, attr)] = value
+            monkeypatch.setattr(module, attr, moved)
+    # Bound by name at their import.
     for module in ("app.pipeline.fetch.state_candidate_sources", "app.pipeline.fetch.state_election_dates"):
-        if module in sys.modules:  # bound by name at their import
+        if module in sys.modules:
             monkeypatch.setattr(f"{module}.runtime_data_path", runtime_data_path)
-    monkeypatch.setattr(senate_classes, "_PERSISTENT_PATH", str(data / "senate_classes.json"))
-    monkeypatch.setattr(
-        election_calendar, "_CLASS_FILES", (data / "senate_classes.json", *election_calendar._CLASS_FILES[1:]),
-    )
-    # Heavy to import (sentence-transformers): patched only once loaded — a
-    # write before then is refused by the hook, and the store logs it.
-    if "app.pipeline.vector_store" in sys.modules:
-        monkeypatch.setattr("app.pipeline.vector_store._VERSION_FILE", str(data / "classification_model_version"))
+
+
+# For the whole run, from here: a test module reading a data file as it is
+# collected (test_election_calendar's senate_classes() at import) reads the
+# run's own empty directory — so the bundled fallback — before any test's
+# redirect below. Never undone; each test's redirect sits on top of it.
+redirect_data_volume(pytest.MonkeyPatch(), tempfile.mkdtemp(prefix="civitas-tests-data-volume-"))
 
 
 @pytest.fixture(autouse=True)
 def _data_volume_untouched(tmp_path, monkeypatch):
-    """Point the runtime data paths into tmp_path, and fail a test that still
-    wrote /data (the audit hook above refused it)."""
+    """Point the runtime data paths into tmp_path, and fail a test that
+    still read or wrote /data (the audit hook above refused it)."""
     redirect_data_volume(monkeypatch, tmp_path / "data-volume")
-    before = len(_data_writes)
+    wrote_before, read_before = len(_data_writes), len(_data_reads)
     yield
-    wrote = _data_writes[before:]
-    del _data_writes[before:]
-    if wrote:
-        pytest.fail("wrote the data volume: " + "; ".join(sorted(set(wrote))), pytrace=False)
+    wrote, read = _data_writes[wrote_before:], _data_reads[read_before:]
+    del _data_writes[wrote_before:], _data_reads[read_before:]
+    problems = [f"{what} the data volume: " + "; ".join(sorted(set(hits)))
+                for what, hits in (("wrote", wrote), ("read", read)) if hits]
+    if problems:
+        pytest.fail(" / ".join(problems), pytrace=False)
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """A write refused outside any test (a module fixture's background
-    thread, between tests) still fails the run."""
-    if _data_writes:
-        print("\nThe test run tried to write the data volume outside a test: " + "; ".join(sorted(set(_data_writes))))
-        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+    """A read or write refused outside any test (at import, in a module
+    fixture's background thread, between tests) still fails the run."""
+    for what, hits in (("write", _data_writes), ("read", _data_reads)):
+        if hits:
+            print(f"\nThe test run tried to {what} the data volume outside a test: " + "; ".join(sorted(set(hits))))
+            session.exitstatus = pytest.ExitCode.TESTS_FAILED

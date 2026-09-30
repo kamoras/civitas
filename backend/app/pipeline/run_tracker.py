@@ -221,6 +221,12 @@ ALREADY_RUNNING = "already_running"
 SUPERSEDED = "superseded_congress"
 # The stock pipeline's own: it waits for the member pipelines.
 MEMBER_PIPELINE_RUNNING = "member_pipeline_running"
+# A House run that waited its whole wait (fetch/district_pvi.REFRESH_WAIT_S)
+# for a refresh, the startup rescore, or a leftover lease under re-check that
+# held the district lines throughout: that holder is stuck. Not "held off" —
+# the wait already was the House link's wait, and the nightly chain doesn't
+# wait again (pipeline_chain.held_off).
+LINES_HELD_TOO_LONG = "district_lines_held_too_long"
 
 
 def skip_reason_text(reason: str | None, tier: str | None = None, who: str | None = None) -> str:
@@ -239,6 +245,10 @@ def skip_reason_text(reason: str | None, tier: str | None = None, who: str | Non
             "and been scored — the next job scores the House on the new Congress"
         ),
         MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",
+        LINES_HELD_TOO_LONG: (
+            f"the {who or 'holder of the district lines'} held them through the House run's whole wait "
+            "— likely stuck"
+        ),
     }.get(reason or "", f"it was skipped ({reason or 'no reason given'})")
 
 

@@ -989,7 +989,7 @@ class TestAHouseRunWaitsForARefresh:
 
     async def test_a_refresh_that_outlasts_the_wait_is_named_in_the_skip(self, db_session):
         from app.pipeline import lease
-        from app.pipeline.run_tracker import skip_reason_text
+        from app.pipeline.run_tracker import LINES_HELD_TOO_LONG, skip_reason_text
 
         assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO) is not None
 
@@ -997,9 +997,34 @@ class TestAHouseRunWaitsForARefresh:
             raise AssertionError("must not run")
 
         result = await dp.run_house_on_sitting_lines(house, refresh_wait_s=0.03, poll_s=0.01)
-        assert result == {"status": "skipped", "reason": "held_elsewhere", "holder": dp.REFRESH_WHO}
+        assert result == {"status": "skipped", "reason": LINES_HELD_TOO_LONG, "holder": dp.REFRESH_WHO}
         text = skip_reason_text(result["reason"], who=result["holder"])
-        assert text.startswith("District PVI refresh is already running")
+        assert text.startswith("the District PVI refresh held them through the House run's whole wait")
+
+    async def test_a_nightly_house_link_waits_out_a_stuck_refresh_once(self, db_session):
+        """The skip after a waited-out refresh is not "held off": the chain
+        doesn't retry the link, whose retry would wait the whole
+        REFRESH_WAIT_S again on the same stuck refresh — the skip alert
+        would come at twice the documented wait."""
+        from app.pipeline import lease
+        from app.pipeline.run_tracker import LINES_HELD_TOO_LONG
+        from app.pipeline_chain import Link, held_off, run_chain
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO) is not None
+        waits = []
+
+        async def house_link():
+            waits.append(1)
+
+            async def house():
+                raise AssertionError("must not run")
+
+            return await dp.run_house_on_sitting_lines(house, refresh_wait_s=0.03, poll_s=0.01)
+
+        outcomes = await run_chain([Link("House", house_link)], busy=lambda: False)
+        assert waits == [1]
+        assert outcomes["House"].result["reason"] == LINES_HELD_TOO_LONG
+        assert not held_off(outcomes["House"])
 
     async def test_a_refresh_released_mid_take_is_retried_not_skipped(self, monkeypatch, db_session):
         """The take fails while the refresh holds the lease, which is gone
@@ -1454,6 +1479,11 @@ class TestStoredScoresKeepTheirLines:
         assert dp.ORPHAN_RECHECK_S >= SQLITE_BUSY_TIMEOUT_S + 5 * lease.BEAT_S
         assert dp.ORPHAN_RECHECK_S < lease.stale_after(lease.DISTRICT_LINES).total_seconds()
         assert dp.REFRESH_WAIT_S > dp.ORPHAN_RECHECK_S + dp.REFRESH_POLL_S
+        # ...its retries on a locked database included.
+        assert dp.REFRESH_WAIT_S > (
+            dp.ORPHAN_RECHECK_S + (dp.ORPHAN_ATTEMPTS - 1) * (dp.ORPHAN_RETRY_S + SQLITE_BUSY_TIMEOUT_S)
+            + dp.REFRESH_POLL_S
+        )
 
     def test_a_holder_still_beating_keeps_its_lease(self, db_session):
         """A lease beaten recently may be live in another process (the role
@@ -1475,6 +1505,61 @@ class TestStoredScoresKeepTheirLines:
         timer.join(5)
         assert lease.holder(db_session, lease.DISTRICT_LINES) is None
         assert not dp.waits_for(dp.HOUSE_RUN_WHO)  # the re-check is over
+
+    def _failing_first(self, monkeypatch, failures):
+        """_release_ours as when the database stays locked past its busy
+        timeout for its first `failures` calls."""
+        real, calls = dp._release_ours, []
+
+        def release(dead):
+            calls.append(set(dp._UNDER_RECHECK))  # what a House run would wait for, at each try
+            return None if len(calls) <= failures else real(dead)
+
+        monkeypatch.setattr(dp, "_release_ours", release)
+        monkeypatch.setattr(dp, "ORPHAN_RETRY_S", 0.05)
+        return calls
+
+    def test_a_recheck_that_cannot_reach_the_database_tries_again_and_is_waited_for(self, monkeypatch, db_session):
+        """The re-check's delete meets a database locked past its busy
+        timeout: it tries again, and the lease stays waited for meanwhile —
+        not given up on, and so left to refuse House runs for its hour."""
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None  # then killed
+        timer = dp.release_orphaned_holds(recheck_after_s=0.05)
+        calls = self._failing_first(monkeypatch, failures=2)  # the re-check's first two tries
+        timer.join(5)
+        # Waited for through every try, the ones after a failure included.
+        assert calls == [{dp.HOUSE_RUN_WHO}] * 3
+        assert lease.holder(db_session, lease.DISTRICT_LINES) is None
+        assert not dp.waits_for(dp.HOUSE_RUN_WHO)
+
+    def test_a_recheck_that_never_gets_through_is_alerted_and_stops_waiting(self, monkeypatch, db_session):
+        from unittest.mock import patch
+
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO) is not None  # then killed
+        timer = dp.release_orphaned_holds(recheck_after_s=0.05)
+        calls = self._failing_first(monkeypatch, failures=100)
+        with patch("app.ops_alerts.send_ops_alert") as alert:
+            timer.join(5)
+        assert len(calls) == dp.ORPHAN_ATTEMPTS
+        assert "could not be released" in alert.call_args.args[0]
+        assert lease.holder(db_session, lease.DISTRICT_LINES) == dp.REFRESH_WHO  # left to its stale window
+        assert not dp.waits_for(dp.HOUSE_RUN_WHO) and dp._UNDER_RECHECK == set()
+
+    def test_a_startup_pass_that_cannot_reach_the_database_is_tried_again(self, monkeypatch, db_session):
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None  # then killed
+        self._age(db_session, dp.ORPHAN_RECHECK_S + lease.BEAT_S)
+        calls = self._failing_first(monkeypatch, failures=2)
+        timer = dp.release_orphaned_holds()
+        assert timer is not None
+        timer.join(5)
+        assert len(calls) == 3
+        assert lease.holder(db_session, lease.DISTRICT_LINES) is None
 
     def test_the_startup_rescore_waits_out_a_killed_house_run_s_lease(self, monkeypatch, tmp_path, db_session):
         """The deploy that starts this process killed a House run moments
