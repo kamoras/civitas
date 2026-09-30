@@ -49,7 +49,7 @@ from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.fetch.state_candidates_common import last_name_matches
 from app.election_phase import ActiveElection, active_election, election_today
 from app.pipeline.election_pipeline import current_election_cycle
-from app.live_results.sync import is_flip, redrawn_states
+from app.live_results.sync import redrawn_states
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
@@ -1337,10 +1337,13 @@ def _result_json(result: RaceResult, race: Race) -> dict:
         "lastChangeAt": result.last_change_at.isoformat() + "Z",
         # Null before any votes and on an exact tie.
         "leaderParty": leader.get("party") if leader else None,
-        # The same rule the Action Center issue and the Bluesky posts use
-        # (enough of the count in), so the page never marks a flip they
-        # don't, or the reverse.
-        "flip": is_flip(result),
+        # The change of party the sync has announced (FLIP, until a
+        # FLIP_REVERSED) — the state the Action Center issue and the
+        # Bluesky posts keep, so the page never marks a flip they don't, or
+        # the reverse. Not sync.is_flip: its "enough of the count in" bar
+        # gates only raising a flip, and read here it dropped an announced
+        # flip on a poll that lost its reporting figures, then re-marked it.
+        "flip": bool(result.flip_announced),
         "candidates": [
             {
                 "name": t["name"], "party": t.get("party"), "votes": t["votes"],

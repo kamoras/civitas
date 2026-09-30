@@ -497,6 +497,7 @@ class TestLiveResults:
             tallies=_json.dumps([{"name": "Ray Jones", "party": "REP", "votes": 600, "candidateId": None},
                                  {"name": "Dana Smith", "party": "DEM", "votes": 400, "candidateId": "H1"}]),
             votes_counted=1000, reporting_units=70, total_units=100, held_by_party="DEM",
+            flip_announced=True,
         ))
         db_session.add(ElectionResultEvent(race_id="2026-HOUSE-GA-2", election_date="2026-11-03",
                                            kind="flip", detail="{}"))
@@ -525,6 +526,25 @@ class TestLiveResults:
         assert data["senateStates"] == ["CO"]
         assert "UT" in data["redrawnStates"] and "MO" not in data["redrawnStates"]
         assert data["pollsClose"]["GA"] == "2026-11-04T00:00:00Z"  # 7 PM ET
+
+    def test_flip_is_what_the_sync_announced_not_the_bar_right_now(self, db_session):
+        """An announced flip whose count lost its reporting figures stays
+        marked (the issue and posts keep it too); a count that clears the
+        bar but hasn't been announced yet isn't marked."""
+        from app.models import RaceResult
+
+        self._seed(db_session)
+        row = db_session.get(RaceResult, "2026-HOUSE-GA-2")
+        row.reporting_units = row.total_units = None  # no longer qualifies
+        db_session.flush()
+        with self._results_window():
+            [race] = _body(elections.live_results(None, db_session))["races"]
+        assert race["flip"] is True
+        row.reporting_units, row.total_units, row.flip_announced = 100, 100, None  # qualifies, never said
+        db_session.flush()
+        with self._results_window():
+            [race] = _body(elections.live_results(None, db_session))["races"]
+        assert race["flip"] is False
 
     def test_says_how_each_feed_read_went(self, db_session):
         from datetime import datetime

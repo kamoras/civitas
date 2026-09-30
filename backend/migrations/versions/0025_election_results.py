@@ -58,6 +58,7 @@ def upgrade() -> None:
     sa.Column('official', sa.Boolean(), nullable=False),
     sa.Column('held_by_party', sa.String(length=8), nullable=True),
     sa.Column('developing_issue_id', sa.Integer(), nullable=True),
+    sa.Column('flip_announced', sa.Boolean(), nullable=True),
     sa.Column('source_updated_at', sa.DateTime(), nullable=True),
     sa.Column('source_version', sa.String(length=40), nullable=True),
     sa.Column('first_reported_at', sa.DateTime(), nullable=False),

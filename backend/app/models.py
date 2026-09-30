@@ -1050,6 +1050,16 @@ class RaceResult(Base):
     held_by_party: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # The Action Center DEVELOPING issue this race's flip opened, if any.
     developing_issue_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Whether a change of party is announced for this count as it stands:
+    # set by apply_count when it raises FLIP, cleared when it raises
+    # FLIP_REVERSED, the same state the issue and the posts keep. What the
+    # results page marks as a flip — not sync.is_flip, which also asks
+    # whether enough of the count is in right now and so can lapse (a poll
+    # dropping its reporting figures, units added, an official flag
+    # switched off) with the same challenger ahead, or turn true by the
+    # clock (COUNTY_FLIP_SETTLE) before the sync has said anything. NULL
+    # (never announced) reads as False.
+    flip_announced: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # The source's own update time and version for the count stored here;
     # a later read claiming an OLDER one is a rolled-back feed and refused.
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

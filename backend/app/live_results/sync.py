@@ -462,6 +462,10 @@ def apply_count(
     result.source_version = state.source_version
     result.fetched_at = now
 
+    # What has been announced so far (the page's "flip"): kept in step with
+    # the events on every poll, so a row from before the column existed
+    # picks it up at its next read.
+    result.flip_announced = said["flip"]
     if before and counted < old_counted:
         logger.warning("%s: votes counted fell %d -> %d; stored, nothing announced this poll",
                        race.id, old_counted, counted)
@@ -494,6 +498,10 @@ def apply_count(
     if ALL_REPORTING in present or FLIP in present:
         kinds = [(k, x) for k, x in kinds if k != FIRST_RETURNS]
     events = [_event(db, result, kind, **extra) for kind, extra in kinds]
+    if FLIP in present:
+        result.flip_announced = True
+    elif FLIP_REVERSED in present:
+        result.flip_announced = False
     return Applied(result, events)
 
 

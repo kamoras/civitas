@@ -529,6 +529,20 @@ class TestCountyUnits:
                                   first + er.COUNTY_FLIP_SETTLE)
         assert er.FLIP in kinds
 
+    def test_a_flip_the_clock_qualifies_is_not_marked_before_it_is_announced(self, db_session):
+        """is_flip turns true by elapsed time (COUNTY_FLIP_SETTLE) between
+        syncs; the page marks only what the sync has announced."""
+        race = self._race(db_session)
+        first = datetime(2026, 11, 4, 2)
+        _, result = self._apply_at(db_session, race, _contest(90, 100, 3, total=3, district=8), first)
+        assert result.flip_announced is False
+        with patch.object(er, "utcnow", return_value=first + er.COUNTY_FLIP_SETTLE):
+            assert er.is_flip(result)
+        assert result.flip_announced is False
+        _, result = self._apply_at(db_session, race, _contest(95, 110, 3, total=3, district=8),
+                                   first + er.COUNTY_FLIP_SETTLE)
+        assert result.flip_announced is True
+
     def test_half_the_counties_never_qualifies(self, db_session):
         race = self._race(db_session)
         first = datetime(2026, 11, 4, 2)
@@ -697,6 +711,8 @@ class TestAnAnnouncedFlipStaysUntilTheLeadGoesBack:
         assert er.FLIP_REVERSED not in kinds and er.FLIP not in kinds
         assert _issues(db) == [issue] and issue.is_current
         assert "no longer" not in issue.title and "leads" in issue.title
+        # What the results page marks as a flip stays with the issue.
+        assert db.get(RaceResult, "2026-HOUSE-GA-2").flip_announced is True
 
     def test_a_county_feeds_zero_read_does_not_restart_the_clock(self, db_session, _on_election_day):
         race = _setup(db_session)
@@ -749,8 +765,9 @@ class TestAnAnnouncedFlipStaysUntilTheLeadGoesBack:
         race = _setup(db_session)
         _apply(db_session, race, _contest(400, 600, 60))
         [issue] = _issues(db_session)
-        kinds, _ = _apply(db_session, race, _contest(650, 650, 70))
+        kinds, result = _apply(db_session, race, _contest(650, 650, 70))
         assert er.FLIP_REVERSED in kinds and not issue.is_current
+        assert result.flip_announced is False
 
     def test_a_reverted_issue_is_not_rewritten_as_a_flip_nobody_announced(self, db_session, _on_election_day):
         race = _setup(db_session)
