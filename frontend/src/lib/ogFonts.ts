@@ -1,3 +1,5 @@
+import { SITE_URL } from "@/lib/site";
+
 /** Fetches Archivo Bold, subset to only the glyphs `text` actually uses,
  *  as raw font bytes for a next/og (Satori) ImageResponse. Shared by every
  *  Satori-rendered OG image (opengraph-image.tsx, api/og/route.tsx) so
@@ -32,7 +34,7 @@ export async function loadArchivoBold(text: string): Promise<ArrayBuffer> {
   const css = await (
     await fetch(
       `https://fonts.googleapis.com/css2?family=Archivo:wght@700&text=${encodeURIComponent(text)}`,
-      { headers: { "User-Agent": "civitas-og-image-generator" } }
+      { headers: { "User-Agent": `Civitas-OG/1.0 (+${SITE_URL})` } }
     )
   ).text();
   const src = css.match(/src: url\(([^)]+)\) format\('(?:opentype|truetype)'\)/);

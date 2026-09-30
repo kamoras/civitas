@@ -75,6 +75,7 @@ from contextvars import ContextVar
 from datetime import date
 
 from app.atomic_write import write_text_atomic
+from app.contact import BOT_USER_AGENT
 from app.file_cache import new_reload_lock, reload_if_moved
 from app.ordinals import ordinal
 from app.pipeline.fetch.house_clerk import fetch_house_apportionment
@@ -92,8 +93,9 @@ logger = logging.getLogger(__name__)
 # picked up with no edit here.
 
 API = "https://en.wikipedia.org/w/api.php"
-# Generic, and deliberately carries no personal contact detail.
-HEADERS = {"User-Agent": "CivitasCivicPlatform/1.0 (district PVI ingestion)"}
+# Names Civitas and how to reach us, as Wikimedia's User-Agent policy asks
+# (app.contact).
+HEADERS = {"User-Agent": BOT_USER_AGENT}
 _PVI_PATH = "/data/district_pvi.json"
 SOURCES_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "district_pvi_sources.json"
 BUNDLED_PATH = SOURCES_PATH.parent / "district_pvi.json"

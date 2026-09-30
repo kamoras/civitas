@@ -75,6 +75,7 @@ from app.pipeline.fetch.state_candidate_sources import (
 from app.pipeline.fetch import state_election_dates as election_dates
 from app.pipeline.fetch.state_candidate_filings import fetch_ballot_candidates
 from app.pipeline.fetch.state_source_crawler import (
+    take_unreadable_refusals,
     ELECTION_DOMAINS,
     discover_filings,
     discover_source,
@@ -902,6 +903,7 @@ async def crawl_for_new_sources(
     outcomes: dict[str, str] = {}
     problems: list[str] = []
     raised_token = _RAISED.set([])
+    take_unreadable_refusals()  # only this pass's
     try:
         await _crawl_due_states(db, client, cycle, hand_verified, outcomes, problems)
     finally:
@@ -912,6 +914,16 @@ async def crawl_for_new_sources(
             "These states' crawl raised or couldn't save (an \"error\" or \"save failed\" is "
             "retried the next night; a raise inside a step was treated as not fetching).",
             problems + (_RAISED.get() or []), "election-source-crawl",
+        )
+        # A site whose robots.txt couldn't be read is read not at all
+        # (RFC 9309 §2.3.1.4) — which looks, in the outcomes, exactly like
+        # a state with nothing to find.
+        report_file_problems(
+            "Election source crawl skipped sites whose robots.txt couldn't be read",
+            "Nothing was read from these sites this pass: their robots.txt answered with a "
+            "server error or not at all, which the crawler takes as \"read nothing here\".",
+            [f"{origin.split('://', 1)[-1]}: robots.txt unreadable" for origin in take_unreadable_refusals()],
+            "election-source-crawl-robots",
         )
         _RAISED.reset(raised_token)
     return outcomes

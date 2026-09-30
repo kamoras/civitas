@@ -57,6 +57,7 @@ import re
 
 import httpx
 
+from app.contact import CONTACT_EMAIL
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
@@ -80,7 +81,7 @@ STATE_OFFICE_TYPES = frozenset({"SW", "SR"})
 # (verified live) — an honest, identifying UA (same convention
 # sec_tickers.py uses for the SEC's own documented UA request) works
 # fine; no need to spoof a real browser's string.
-_HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-research.org"}
+_HEADERS = {"User-Agent": f"Civitas civic-transparency-platform {CONTACT_EMAIL}"}
 
 # Two real requests per sync run (elections list, then candidates) — a
 # light, polite pace is enough; this isn't FEC's thousands-of-calls scale.

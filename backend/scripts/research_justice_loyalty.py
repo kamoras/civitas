@@ -28,6 +28,7 @@ import gzip
 import argparse
 import io
 import pathlib
+import sys
 import urllib.request
 import zipfile
 
@@ -35,6 +36,9 @@ import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
 from scipy.stats import spearmanr
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from app.contact import BOT_USER_AGENT  # noqa: E402
 
 SOURCES = {
     "JusticePresident.zip": "https://epstein.wustl.edu/s/JusticePresident.zip",
@@ -65,7 +69,7 @@ def fetch(cache: pathlib.Path) -> dict[str, pathlib.Path]:
         path = cache / name
         if not path.exists():
             print(f"fetching {url}")
-            req = urllib.request.Request(url, headers={"User-Agent": "civitas-research/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
             with urllib.request.urlopen(req) as resp:
                 path.write_bytes(resp.read())
         paths[name] = path

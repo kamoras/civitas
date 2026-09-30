@@ -48,6 +48,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # The build/gate logic is the automated ingest's own, imported rather than
 # copied, so the bundled fallback can't drift from what the pipeline writes.
+from app.contact import CONTACT_EMAIL  # noqa: E402
 from app.pipeline.fetch.committee_leadership import (  # noqa: E402
     build_committee_membership,
     build_leadership_roles,
@@ -57,7 +58,7 @@ from app.pipeline.fetch.committee_leadership import (  # noqa: E402
 
 UA = {
     "User-Agent": "CivitasCivicPlatform/1.0 (committee/leadership ingestion; "
-                  "contact: mack.ryanm@gmail.com)",
+                  f"contact: {CONTACT_EMAIL})",
 }
 SOURCE_BASE = "https://raw.githubusercontent.com/unitedstates/congress-legislators/main"
 

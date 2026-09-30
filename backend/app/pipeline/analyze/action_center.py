@@ -30,6 +30,7 @@ from scipy.spatial.distance import squareform
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.contact import BOT_USER_AGENT
 from app.config import settings
 from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.database import SessionLocal
@@ -987,7 +988,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
         return url
     try:
         resp = httpx.head(url, follow_redirects=True, timeout=timeout, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0)",
+            "User-Agent": BOT_USER_AGENT,
         })
         final = str(resp.url)
         if "google.com" not in final:
@@ -997,7 +998,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
         logger.debug("Google News URL resolution (HEAD) failed for %s", url[:100], exc_info=True)
     try:
         resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0)",
+            "User-Agent": BOT_USER_AGENT,
         })
         final = str(resp.url)
         if "google.com" not in final:
