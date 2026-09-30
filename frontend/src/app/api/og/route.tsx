@@ -5,6 +5,9 @@ import { loadArchivoBold } from "@/lib/ogFonts";
 import { fetchRemoteImage } from "@/lib/remoteImage";
 import { STATE_CODES } from "@/lib/stateCodes";
 import { usableRecord } from "@/lib/ssrPayload";
+import { ISO_DATE, fetchDay, fetchWeek } from "@/lib/congressServer";
+import { longDate } from "@/lib/congress";
+import type { Chamber, ChamberStatus, DayReport, PeriodReport } from "@/types/congress";
 import type { StateBallot } from "@/types/election";
 
 export const runtime = "nodejs";
@@ -439,6 +442,93 @@ function StatTile({ value, label }: { value: string; label: string }) {
   );
 }
 
+// A title, one line under it, and a row of stat tiles: the state ballot
+// card and the Congress day and week cards.
+async function tileCard({
+  section,
+  title,
+  description,
+  tiles,
+  footerLabel,
+}: {
+  section: string;
+  title: string;
+  description: string;
+  tiles: { value: string; label: string }[];
+  footerLabel: string;
+}) {
+  // See lib/ogFonts.ts: subset text must cover every string actually
+  // rendered below, or the leftover characters fall back to Satori's own
+  // default face instead of Archivo. Every label is interpolated rather
+  // than hand-typed as a word list: a hand-typed guess at "the extra
+  // characters these labels need" once left "BALLOT MEASURES" with a
+  // mismatched fallback-font glyph.
+  let archivoBold: ArrayBuffer | null = null;
+  try {
+    archivoBold = await loadArchivoBold(
+      `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}` +
+        tiles.map((t) => `${t.value}${t.label}`).join("")
+    );
+  } catch {
+    // fall through with archivoBold still null — degrade to Satori's
+    // default face rather than fail the whole image over a font fetch.
+  }
+
+  return new ImageResponse(
+    <div
+      style={{
+        width: 1200,
+        height: 630,
+        background: SURFACE_BASE,
+        display: "flex",
+        flexDirection: "column",
+        padding: "60px 72px",
+        fontFamily: "Archivo",
+        border: `1px solid ${HAIRLINE}`,
+      }}
+    >
+      <Header section={section} />
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
+        <div
+          style={{
+            color: INK_HI,
+            fontSize: title.length > 30 ? 44 : 56,
+            fontWeight: 700,
+            lineHeight: 1.2,
+          }}
+        >
+          {title}
+        </div>
+        <div style={{ color: INK, fontSize: 24, marginTop: 16, marginBottom: 48 }}>
+          {description}
+        </div>
+        <div style={{ display: "flex", gap: 20 }}>
+          {tiles.map((t) => (
+            <StatTile key={t.label} value={t.value} label={t.label} />
+          ))}
+        </div>
+      </div>
+      <Footer label={footerLabel} />
+    </div>,
+    {
+      width: 1200,
+      height: 630,
+      ...(archivoBold
+        ? {
+            fonts: [
+              {
+                name: "Archivo",
+                data: archivoBold,
+                weight: 700 as const,
+                style: "normal" as const,
+              },
+            ],
+          }
+        : {}),
+    }
+  );
+}
+
 const SENATE_LABEL = "U.S. SENATE RACE";
 const HOUSE_LABEL = "U.S. HOUSE RACES";
 const MEASURES_LABEL = "BALLOT MEASURES";
@@ -471,72 +561,104 @@ async function electionImage(ballot: StateBallot | null, code: string) {
   const houseCount = String(ballot.houseRaces.length);
   const measureCount = String(ballot.measures.length);
 
-  // See lib/ogFonts.ts: subset text must cover every string actually
-  // rendered below, or the leftover characters fall back to Satori's own
-  // default face instead of Archivo. Every literal label is interpolated
-  // here rather than hand-typed as a word list, the same way issueImage/
-  // politicianImage build their subsets — a hand-typed guess at "the
-  // extra characters these labels need" previously left the OG cards
-  // rendering "BALLOT MEASURES" with a mismatched fallback-font glyph.
-  let archivoBold: ArrayBuffer | null = null;
-  try {
-    archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}` +
-        `${SENATE_LABEL}${HOUSE_LABEL}${MEASURES_LABEL}${senateCount}${houseCount}${measureCount}`
-    );
-  } catch {
-    // fall through with archivoBold still null — degrade to Satori's
-    // default face rather than fail the whole image over a font fetch.
-  }
-
-  return new ImageResponse(
-    <div
-      style={{
-        width: 1200,
-        height: 630,
-        background: SURFACE_BASE,
-        display: "flex",
-        flexDirection: "column",
-        padding: "60px 72px",
-        fontFamily: "Archivo",
-        border: `1px solid ${HAIRLINE}`,
-      }}
-    >
-      <Header section={section} />
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
-        <div style={{ color: INK_HI, fontSize: 56, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
-        <div style={{ color: INK, fontSize: 24, marginTop: 16, marginBottom: 48 }}>
-          {description}
-        </div>
-        <div style={{ display: "flex", gap: 20 }}>
-          <StatTile value={senateCount} label={SENATE_LABEL} />
-          <StatTile value={houseCount} label={HOUSE_LABEL} />
-          <StatTile value={measureCount} label={MEASURES_LABEL} />
-        </div>
-      </div>
-      <Footer label={footerLabel} />
-    </div>,
-    {
-      width: 1200,
-      height: 630,
-      ...(archivoBold
-        ? {
-            fonts: [
-              {
-                name: "Archivo",
-                data: archivoBold,
-                weight: 700 as const,
-                style: "normal" as const,
-              },
-            ],
-          }
-        : {}),
-    }
-  );
+  return tileCard({
+    section,
+    title,
+    description,
+    tiles: [
+      { value: senateCount, label: SENATE_LABEL },
+      { value: houseCount, label: HOUSE_LABEL },
+      { value: measureCount, label: MEASURES_LABEL },
+    ],
+    footerLabel,
+  });
 }
 
 // Every real link on the site points at an issue's public id (backend
 // issue_ids.py: "i" + 8 lowercase hex chars, e.g. "i9e3779b1") via
+const CHAMBER_NAME: Record<Chamber, string> = { senate: "SENATE", house: "HOUSE" };
+
+// What a chamber's tile says when its day has no counts to show: the day
+// page's own distinction, so a day without a record never reads as zero.
+const NO_COUNT_LABEL: Partial<Record<ChamberStatus, string>> = {
+  not_in_session: "NOT IN SESSION",
+  no_record: "NO RECORD YET",
+  no_record_published: "NO RECORD PUBLISHED",
+};
+
+export function chamberTile(report: DayReport, chamber: Chamber): { value: string; label: string } {
+  const day = report.chambers[chamber];
+  const none = NO_COUNT_LABEL[day.status];
+  return none
+    ? { value: "—", label: `${CHAMBER_NAME[chamber]}: ${none}` }
+    : { value: String(day.counts.recordVotes), label: `${CHAMBER_NAME[chamber]} RECORD VOTES` };
+}
+
+function summaryLine(sentence: string): string {
+  return sentence.length > 140 ? sentence.slice(0, 137) + "…" : sentence;
+}
+
+// Fetch failures throw (lib/congressServer), and a date the backend has no
+// record of is null: either way the card says only what is certain.
+async function tryFetch<T>(fetcher: () => Promise<T | null>): Promise<T | null> {
+  try {
+    return await fetcher();
+  } catch {
+    return null;
+  }
+}
+
+async function congressDayImage(date: string) {
+  const section = "CONGRESS";
+  const footerLabel = "CONGRESSIONAL RECORD";
+  const report = await tryFetch(() => fetchDay(date));
+  if (!report) {
+    return genericCard({
+      section,
+      title: `Congress on ${longDate(date)}`,
+      description: "What the Senate and the House did, from the official record.",
+      footerLabel,
+    });
+  }
+  return tileCard({
+    section,
+    title: `Congress on ${longDate(report.date)}`,
+    description: summaryLine(report.sentence),
+    tiles: [chamberTile(report, "senate"), chamberTile(report, "house")],
+    footerLabel,
+  });
+}
+
+async function congressWeekImage(date: string) {
+  const section = "CONGRESS";
+  const footerLabel = "CONGRESSIONAL RECORD";
+  const report: PeriodReport | null = await tryFetch(() => fetchWeek(date));
+  if (!report) {
+    return genericCard({
+      section,
+      title: "Congress this week",
+      description: "What the Senate and the House did, from the official record.",
+      footerLabel,
+    });
+  }
+  return tileCard({
+    section,
+    title: `Congress, week of ${longDate(report.start).replace(/^\w+, /, "")}`,
+    description: summaryLine(report.sentence),
+    tiles: [
+      { value: String(report.totals.senate.recordVotes), label: "SENATE RECORD VOTES" },
+      { value: String(report.totals.house.recordVotes), label: "HOUSE RECORD VOTES" },
+      { value: String(report.becameLaw.length), label: "BECAME LAW" },
+    ],
+    footerLabel,
+  });
+}
+
+// A day's or week's date, checked before it reaches the backend URL.
+export function parseCongressDate(raw: string | null): string | null {
+  return raw && ISO_DATE.test(raw) ? raw : null;
+}
+
 // issue.publicId — page.tsx's generateMetadata builds this OG URL from
 // that same route param. A digits-only check here rejected every real
 // request and silently fell through to the generic fallback card for
@@ -582,6 +704,12 @@ export async function GET(req: NextRequest) {
     const ballot = await fetchStateBallot(stateCode);
     return electionImage(ballot, stateCode);
   }
+
+  const congressDay = parseCongressDate(req.nextUrl.searchParams.get("congress"));
+  if (congressDay) return congressDayImage(congressDay);
+
+  const congressWeek = parseCongressDate(req.nextUrl.searchParams.get("congressWeek"));
+  if (congressWeek) return congressWeekImage(congressWeek);
 
   const issueId = parseIssueId(req.nextUrl.searchParams.get("issue"));
   const issue = issueId ? await fetchIssue(issueId) : null;
