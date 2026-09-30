@@ -3114,3 +3114,74 @@ def test_a_bill_named_by_its_short_title_is_resolved():
     # longer word run doesn't count.
     assert _resolve_bills([], ["The College Athlete Protection Act advanced."], titles) == []
     assert _resolve_bills([], ["The Protect College Sports Actors Guild met."], titles) == []
+
+
+class TestElectionResultsIssuesMatchOnlyTheirRace:
+    """An election-night flip issue (live_results/signals.py) is a fixed
+    template — state, "District", a party, figures — so signature overlap
+    alone let news about another race in the same state promote it."""
+
+    @staticmethod
+    def _flip_issue(race_id="2026-HOUSE-GA-2", label="Georgia's 2nd Congressional District", current=True):
+        from app.models import ActionIssueStatus
+
+        return ActionIssue(
+            id=900, date="2026-11-04", rank=999, is_current=current, status=ActionIssueStatus.DEVELOPING,
+            source_type="election_results",
+            title=f"Republican leads {label} count in a seat Democrats hold",
+            facts=json.dumps(["Ray Jones (R): 600 votes, 60.0%", "Dana Smith (D): 400 votes, 40.0%",
+                              "The seat is held by a Democrat going into this election"]),
+            actions=json.dumps([{"text": f"Follow the count for {label}", "type": "follow_results",
+                                 "url": f"/elections/states/GA#race-{race_id}"}]),
+            source_urls=json.dumps(["https://results.example/ga"]),
+        )
+
+    @staticmethod
+    def _match(issue, title, facts=(), summary="", urls=None):
+        # Same title vector: the issue is always nominated as a candidate.
+        return _find_matching_issue(title, list(facts), [issue], np.array([[1.0, 0.0]]),
+                                    np.array([1.0, 0.0]), set(), source_urls=urls, summary=summary)
+
+    def test_the_source_type_is_the_one_the_sync_writes(self):
+        from app.live_results import signals
+        from app.pipeline.analyze import action_center
+
+        assert action_center._ELECTION_RESULTS_SOURCE == signals.SOURCE_TYPE
+
+    def test_news_about_another_district_does_not_promote_it(self):
+        issue = self._flip_issue()
+        assert self._match(issue, issue.title.replace("2nd", "6th"),
+                           ["Republican Ray Jones leads in Georgia's 6th District, a seat Democrats hold"]) is None
+
+    def test_news_naming_its_district_does(self):
+        issue = self._flip_issue()
+        assert self._match(issue, "Republican leads in Georgia's 2nd District",
+                           ["Ray Jones (R): 600 votes, 60.0%"]) is issue
+        assert self._match(issue, "Republicans gain a seat in Georgia",
+                           summary="Jones is ahead in GA-02 with most precincts in.") is issue
+
+    def test_a_shared_source_url_is_not_enough(self):
+        issue = self._flip_issue()
+        assert self._match(issue, "A different story", urls=["https://results.example/ga"]) is None
+
+    def test_a_retired_issue_is_never_promoted_back(self):
+        issue = self._flip_issue(current=False)
+        assert self._match(issue, "Republican leads in Georgia's 2nd District") is None
+
+    def test_senate_regular_and_special_are_told_apart(self):
+        regular = self._flip_issue("2026-SEN-GA", "Georgia's U.S. Senate")
+        special = self._flip_issue("2026-SEN-GA-SPECIAL", "Georgia's U.S. Senate special election")
+        assert self._match(regular, "Republican leads Georgia's Senate race") is regular
+        assert self._match(special, "Republican leads Georgia's Senate race") is None
+        assert self._match(special, "Republican leads Georgia's Senate special election") is special
+        assert self._match(regular, "Republican leads Georgia's Senate special election") is None
+
+    def test_an_issue_whose_race_cannot_be_read_is_not_promoted(self):
+        issue = self._flip_issue()
+        issue.actions = "[]"
+        assert self._match(issue, "Republican leads in Georgia's 2nd District") is None
+
+    def test_other_issues_are_unaffected(self):
+        issue = self._flip_issue()
+        issue.source_type = "vote"
+        assert self._match(issue, issue.title.replace("2nd", "6th"), json.loads(issue.facts)) is issue

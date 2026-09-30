@@ -3758,6 +3758,63 @@ def refresh_action_issues(db: Session | None = None) -> int:
             db.close()
 
 
+# An election-night DEVELOPING issue (app/live_results/signals.py, source
+# type "election_results") is about one race: a seat changing party in the
+# live count. Its title and facts are a fixed template — a state, "District",
+# a party, vote figures — so signature overlap alone matched news about a
+# DIFFERENT race in the same state (a story on GA-6's flip promoting GA-2's
+# issue, which the sync then stops updating for good). A news story may
+# promote one only when it names that race. This is identity matching on a
+# structured identifier (the race id in the issue's own action link), the
+# way a bill number is resolved — not a classification.
+_ELECTION_RESULTS_SOURCE = "election_results"
+_RACE_LINK_RE = re.compile(r"#race-(\d{4})-(SEN|HOUSE)-([A-Z]{2})(?:-(\d+|SPECIAL))?$")
+
+
+def _results_race_named(issue, story_text: str) -> bool:
+    """Whether `story_text` (a news cluster's title, summary and facts)
+    names the race an election-results issue is about. False when the
+    issue's race can't be read, so an unreadable row is never promoted."""
+    from app.state_names import STATE_NAMES
+
+    race = None
+    try:
+        for action in json.loads(issue.actions or "[]"):
+            race = _RACE_LINK_RE.search(str((action or {}).get("url") or "")) or race
+    except (ValueError, TypeError, AttributeError):
+        return False
+    if race is None:
+        return False
+    _, office, state, part = race.groups()
+    lower = story_text.lower()
+    state_name = STATE_NAMES.get(state, "").lower()
+    names_state = bool(state_name) and re.search(rf"\b{re.escape(state_name)}\b", lower) is not None
+    if office == "SEN":
+        special = re.search(r"\bspecial\b", lower) is not None
+        return names_state and "senate" in lower and special == (part == "SPECIAL")
+    n = int(part or 0)
+    if re.search(rf"\b{state}-0?{n}\b", story_text):  # "GA-2", "GA-02"
+        return True
+    if not names_state:
+        return False
+    if n == 0:
+        return re.search(r"\bat[- ]large\b", lower) is not None
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return re.search(
+        rf"\b{n}{suffix}\s+(?:congressional\s+)?district\b|\bdistrict\s+{n}\b", lower,
+    ) is not None
+
+
+def _may_match(candidate, title: str, facts: list, summary: str) -> bool:
+    """Whether a news cluster may update `candidate` at all: any issue but
+    an election-results one, which only a story naming its race may."""
+    if candidate.source_type != _ELECTION_RESULTS_SOURCE:
+        return True
+    if not candidate.is_current:
+        return False  # retired (reverted, or its flip retired): never promoted back
+    return _results_race_named(candidate, " ".join([title, summary or "", *(str(f) for f in facts or [])]))
+
+
 def _find_matching_issue(
     title: str,
     facts: list,
@@ -3766,6 +3823,7 @@ def _find_matching_issue(
     title_emb: "np.ndarray",
     matched_issue_ids: set,
     source_urls: list | None = None,
+    summary: str = "",
 ):
     """Find the existing issue (if any) this new cluster's title/facts
     should update instead of becoming a new row — extracted from
@@ -3803,7 +3861,7 @@ def _find_matching_issue(
         new_urls = {u for u in source_urls if u}
         if new_urls:
             for candidate in recent_issues:
-                if candidate.id in matched_issue_ids:
+                if candidate.id in matched_issue_ids or not _may_match(candidate, title, facts, summary):
                     continue
                 try:
                     cand_urls = set(json.loads(candidate.source_urls or "[]"))
@@ -3821,7 +3879,7 @@ def _find_matching_issue(
         if sim < _TOPIC_MATCH_CANDIDATE_FLOOR:
             break
         candidate = recent_issues[int(cand_idx)]
-        if candidate.id in matched_issue_ids:
+        if candidate.id in matched_issue_ids or not _may_match(candidate, title, facts, summary):
             continue
         try:
             cand_facts = json.loads(candidate.facts or "[]")
@@ -4066,11 +4124,18 @@ def _run_refresh(db: Session) -> int:
     # means a longer confirmation_deadline later doesn't silently need a
     # matching change here too.
     _lookback = (datetime.now(_US_EAST) - timedelta(days=2)).strftime("%Y-%m-%d")
+    # A retired election-results issue (the count reverted, or the refresh
+    # retired it) is left out: promoted, it came back as current news.
     _recent_issues: list[ActionIssue] = (
         db.query(ActionIssue)
         .filter(or_(
             ActionIssue.date >= _lookback,
             ActionIssue.status == ActionIssueStatus.DEVELOPING,
+        ))
+        .filter(or_(
+            ActionIssue.source_type.is_(None),
+            ActionIssue.source_type != _ELECTION_RESULTS_SOURCE,
+            ActionIssue.is_current.is_(True),
         ))
         .all()
     )
@@ -4397,7 +4462,7 @@ def _run_refresh(db: Session) -> int:
         # docstring for the matching rules and their history.
         match = _find_matching_issue(
             title, facts, _recent_issues, _recent_embs, title_emb, _matched_issue_ids,
-            source_urls=source_urls,
+            source_urls=source_urls, summary=summary,
         )
 
         _new_values: dict = {
