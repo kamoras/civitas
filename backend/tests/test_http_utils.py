@@ -464,7 +464,7 @@ def _ua_key(value) -> bool:
     return isinstance(value, str) and bool(re.fullmatch(r"[A-Za-z][\w-]*", value)) and _names_a_user_agent(value)
 
 
-def _python_ua_values(tree):
+def _python_ua_values(nodes):
     """(line, value node) for every place Python code gives a User-Agent a
     value: an assignment, annotation, keyword argument or parameter default
     to a name or attribute with a ua part; a dict key, a (key, value) pair
@@ -481,7 +481,7 @@ def _python_ua_values(tree):
             return _ua_key(target.slice.value)
         return False
 
-    for node in ast.walk(tree):
+    for node in nodes:
         if isinstance(node, ast.Assign):
             yield from ((node.value.lineno, node.value) for t in node.targets if named(t))
         elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)) and node.value is not None:
@@ -505,9 +505,10 @@ def _python_ua_values(tree):
             func = node.func
             name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
             first = node.args[0]
-            if name in ("get", "getenv", "setdefault", "pop") and isinstance(first, ast.Constant) and _ua_key(
-                first.value
-            ):
+            # A default for one, or a header setter (urllib's add_header,
+            # http.client's putheader).
+            setters = ("get", "getenv", "setdefault", "pop", "add_header", "add_unredirected_header", "putheader")
+            if name in setters and isinstance(first, ast.Constant) and _ua_key(first.value):
                 yield node.args[1].lineno, node.args[1]
         elif isinstance(node, ast.arguments):
             positional = node.posonlyargs + node.args
@@ -524,6 +525,19 @@ def _python_offenders(rel, text):
 
     tree = ast.parse(text)
     lines = text.splitlines()
+    # One walk: every node, the innermost statement holding it, and the
+    # docstrings (prose).
+    nodes, statement_of, docstrings = [], {}, set()
+    stack = [(tree, None)]
+    while stack:
+        node, stmt = stack.pop()
+        if isinstance(node, ast.stmt):
+            stmt = node
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+                docstrings.add(id(node.value))
+        nodes.append(node)
+        statement_of[id(node)] = stmt
+        stack.extend((child, stmt) for child in ast.iter_child_nodes(node))
 
     def strings(node):
         out = []
@@ -558,23 +572,18 @@ def _python_offenders(rel, text):
         return False
 
     bad = set()
-    for line, value in _python_ua_values(tree):
+    for line, value in _python_ua_values(nodes):
         if literal(value) and not names_contact(value) and not exempt(value):
             bad.add(line)
     # A string naming Civitas as a client, wherever it sits, outside prose:
-    # its statement must name the contact. Docstrings are prose.
-    docstrings = {
-        id(stmt.value) for stmt in ast.walk(tree)
-        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)
-    }
-    for stmt in ast.walk(tree):
-        if not isinstance(stmt, ast.stmt) or isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+    # the innermost statement holding it must name the contact.
+    for sub in nodes:
+        if id(sub) in docstrings or not isinstance(sub, ast.Constant) or not isinstance(sub.value, (str, bytes)):
             continue
-        for sub in ast.walk(stmt):
-            if id(sub) in docstrings or not isinstance(sub, ast.Constant) or not isinstance(sub.value, str):
-                continue
-            if _CIVITAS_TOKEN_TEXT.search(sub.value) and not names_contact(stmt) and not exempt(stmt):
-                bad.add(sub.lineno)
+        text = sub.value.decode("latin-1") if isinstance(sub.value, bytes) else sub.value
+        stmt = statement_of.get(id(sub))
+        if _CIVITAS_TOKEN_TEXT.search(text) and not (stmt and (names_contact(stmt) or exempt(stmt))):
+            bad.add(sub.lineno)
     return [f"{rel}:{n}: {lines[n - 1].strip()}" for n in sorted(bad)]
 
 
@@ -582,16 +591,23 @@ def _python_offenders(rel, text):
 # ("User-Agent": / ["User-Agent"] = / ["User-Agent", ...]), or a name with a
 # ua part given a value (NAME = / name: type = / name: in an object).
 _TS_UA_SITE = re.compile(
-    r"""(["']user-agent["']\s*(?:\]\s*=|:)|\[\s*["']user-agent["']\s*,)""",
+    r"""(["']user-agent["']\s*(?:\]\s*=|:)|\[\s*["']user-agent["']\s*,|\.(?:set|append)\(\s*["']user-agent["']\s*,)""",
     re.IGNORECASE,
 )
 _TS_NAME_SITE = re.compile(r"""(?<![\w$])([A-Za-z_$][\w$]*)\s*(?::\s*[\w\[\]|.<>]+(?:\s+[\w\[\]|.<>]+)*)?\s*(?<![=!<>])[:=](?!=)""")
 _TS_CIVITAS_TOKEN = re.compile(r"""["'`][^"'`\n]*\bcivitas[\w-]*/\d""", re.IGNORECASE)
-_TS_NAMES_CONTACT = re.compile(r"\+\$\{SITE_URL\}")
+# The site's address in a template literal (the frontend can't import the
+# email): `…(+${SITE_URL})`.
+_TS_NAMES_CONTACT = re.compile(r"`[^`\n]*\+\$\{SITE_URL\}[^`\n]*`")
 
 
 def _ts_offenders(rel, text):
-    lines = ["" if line.lstrip().startswith(("//", "*", "/*")) else line for line in text.splitlines()]
+    # Comments blanked: a whole // or block-comment line, or a /* … */
+    # closed on the line it opens (code after it is still read).
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r"/\*.*?\*/", lambda m: " " * len(m.group(0)), line)
+        lines.append("" if line.lstrip().startswith(("//", "*", "/*")) else line)
     bad = []
     for i, line in enumerate(lines):
         ends = [m.end() for m in _TS_UA_SITE.finditer(line)]
@@ -692,6 +708,8 @@ def test_every_user_agent_names_the_contact():
     'h = [(b"user-agent", b"Mozilla/5.0 Foo")]',
     'UA: Final[str] = "Mozilla/5.0 Foo"',
     'log.info("sent as Civitas/1.0")',
+    'req.add_header("User-Agent", "Mozilla/5.0 Foo")',
+    'x = b"Civitas/1.0"',
 ])
 def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     path = tmp_path / "backend" / "app" / "x.py"
@@ -711,6 +729,10 @@ def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     'this.userAgent = "Mozilla/5.0 Foo";',
     'client.defaults.ua = "Mozilla/5.0 Foo";',
     'const h = {\n  "User-Agent":\n    "Mozilla/5.0 Foo",\n};',
+    'headers.set("User-Agent", "Mozilla/5.0 Foo");',
+    'h.append("user-agent", "Mozilla/5.0 Foo");',
+    '/* x */ const UA = "Mozilla/5.0 Foo";',
+    'const h = { "User-Agent": "Foo/1.0 (+${SITE_URL})" };',
 ])
 def test_the_user_agent_sweep_sees_the_frontend(tmp_path, source):
     path = tmp_path / "frontend" / "src" / "x.ts"
