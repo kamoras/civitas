@@ -3,11 +3,22 @@ from senator_service.py's _compute_trend_map and representative_service.py's
 _compute_rep_trend_map (previously copy-pasted, down to the same lookback
 window and change threshold)."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+
+import pytest
+
 from app.time_utils import utcnow
 
 from app.models import ScoreSnapshot
 from app.services.score_trends import compute_score_trend_map
+
+
+# Mid-congress, so "a week ago" is never in the previous congress (which
+# would be a reset, not a trend: January 3-9 of an odd year). The congress
+# boundary itself is tested below with explicit dates.
+@pytest.fixture(autouse=True)
+def _mid_congress(freeze_utcnow):
+    freeze_utcnow(datetime(2026, 9, 30, 12, 0))
 
 
 def _snapshot(entity_type, entity_id, date, overall_score):

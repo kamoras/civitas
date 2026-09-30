@@ -29,7 +29,7 @@ already-final canvass can push forward with no data change.
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 from urllib.parse import quote
 from urllib.request import urlopen
 from xml.etree import ElementTree as ET
@@ -41,6 +41,7 @@ from app.pipeline.fetch.state_candidates_common import (
     pick_nominees,
     federal_record,
 )
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def _settled(root: ET.Element, settle_days: int) -> bool:
         held_on = datetime.fromisoformat(raw[:10]).date()
     except ValueError:
         return False
-    return (datetime.now(UTC).date() - held_on).days >= settle_days
+    return (utcnow().date() - held_on).days >= settle_days
 
 
 def _nominee(contest: ET.Element, runoff_threshold_pct: float | None) -> tuple[str, str] | None:
