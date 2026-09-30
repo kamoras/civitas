@@ -1196,12 +1196,15 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
     if not ids:
         return 0
     conn = get_vec_conn()
-    # One transaction: a failure part-way leaves nothing half-deleted.
+    # One transaction, the ratio's recount included: a failure part-way
+    # leaves nothing half-deleted, and none is reported for a delete that
+    # landed. Recounted only over a complete index — a rebuild's partial
+    # table records its own at its end.
     with _writing(conn):
         removed = _delete_chunks(conn, ids)
         _delete_ids(conn, "vec_explore_text", ids)
-    if removed:
-        _record_chunks_per_doc(conn)  # chunks went: the ratio moved
+        if removed and _get_meta(conn, _INDEX_MODEL) == index_identity():
+            _record_chunks_per_doc(conn)  # chunks went: the ratio moved
     return removed
 
 
@@ -1243,18 +1246,18 @@ def update_explore_metadata(docs: list[dict]) -> int:
     conn = get_vec_conn()
     rows = [(doc, explore_meta_hash(doc)) for doc in docs]
     wanted = {int(doc["id"]) for doc in docs}
-    # By rowid, read once: vec0 can't index doc_id outside a KNN query, so
-    # a WHERE doc_id per document scans every chunk each time (measured
-    # ~50x slower on a production-sized table). Read before the write lock:
-    # chunks are only inserted under _rebuild_lock, which the top-up holds,
-    # and a rowid deleted meanwhile is updated as a no-op.
-    chunks: dict[int, list[int]] = {}
-    for rowid, doc_id in _read_conn().execute("SELECT rowid, doc_id FROM vec_explore").fetchall():
-        if doc_id in wanted:
-            chunks.setdefault(doc_id, []).append(rowid)
     update = "UPDATE vec_explore SET " + ", ".join(f"{f} = ?" for f in _META_FIELDS) + " WHERE rowid = ?"
     updated = 0
     with _writing(conn):
+        # By rowid, read once: vec0 can't index doc_id outside a KNN query,
+        # so a WHERE doc_id per document scans every chunk each time
+        # (measured ~50x slower on a production-sized table). Read in the
+        # write transaction, so no chunk inserted meanwhile is missed while
+        # its document's hash records the relabel as done.
+        chunks: dict[int, list[int]] = {}
+        for rowid, doc_id in conn.execute("SELECT rowid, doc_id FROM vec_explore").fetchall():
+            if doc_id in wanted:
+                chunks.setdefault(doc_id, []).append(rowid)
         for doc, meta in rows:
             values = _meta_values(doc)
             for rowid in chunks.get(int(doc["id"]), ()):

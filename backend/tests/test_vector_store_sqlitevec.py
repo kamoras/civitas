@@ -530,6 +530,15 @@ class TestTextHashes:
         vector_store.delete_explore_vectors({1})
         assert float(vector_store._get_meta(conn, "explore_chunks_per_doc")) == 1.0
 
+    def test_a_purge_during_a_rebuild_leaves_the_ratio_to_it(self, vec_env):
+        # A partial table's ratio would stay behind if the rebuild failed.
+        vector_store.embed_explore_documents([_doc(1, "One"), _doc(2, "Two")])
+        conn = vector_store.get_vec_conn()
+        vector_store._set_meta(conn, vector_store._INDEX_MODEL, "")  # a rebuild under way
+        vector_store._set_meta(conn, "explore_chunks_per_doc", "7.0")
+        vector_store.delete_explore_vectors({1})
+        assert vector_store._get_meta(conn, "explore_chunks_per_doc") == "7.0"
+
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         emptied = _doc(1, "")
