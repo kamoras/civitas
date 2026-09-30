@@ -834,6 +834,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
     from app.pipeline.election_pipeline import is_election_pipeline_running
     from app.pipeline.vector_store import is_rebuilding as is_explore_index_rebuilding
+    from app.pipeline_chain import chain_running
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
@@ -913,6 +914,9 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         # run has no run row, and its top-up can take twenty-odd minutes a
         # restart would throw away mid-batch.
         "exploreIsRunning": _explore_running(db),
+        # A chain of pipelines (nightly or triggered) between its links:
+        # a restart then would drop the links it has yet to run.
+        "pipelineChainIsRunning": chain_running(),
     }
 
     if last_supplementary_run:
@@ -1350,6 +1354,50 @@ async def admin_pipeline_timings(
     }
 
 
+def refuse_while_chain_runs() -> None:
+    """409 while a pipeline chain (nightly or triggered) is running: what a
+    trigger starts would run beside the chain's current link, and the chain
+    runs that pipeline itself."""
+    from app.pipeline_chain import chain_running
+
+    if chain_running():
+        raise HTTPException(status_code=409, detail="A pipeline chain is already running")
+
+
+def start_pipeline_trigger(db: Session, senator: str | None, fetch_only: bool, *, error_label: str) -> None:
+    """Start what a pipeline trigger asks for, or 409. A single senator or a
+    fetch-only run is the Senate pipeline alone; otherwise the nightly
+    chain's five pipelines, each whatever the one before it did
+    (scheduler.triggered_chain) — so a trigger recovers any of them, not only
+    the first. Refused while the Senate pipeline or a chain is running. A
+    full trigger claims the chain slot here, before answering, so two of
+    them can't both find it free."""
+    from app import pipeline_chain
+    from app.api.pipeline import _is_pipeline_running
+    from app.pipeline.senate_pipeline import run_senate_pipeline
+    from app.scheduler import triggered_chain
+
+    if _is_pipeline_running(db):
+        raise HTTPException(status_code=409, detail="Pipeline is already running")
+    if senator is not None or fetch_only:
+        refuse_while_chain_runs()
+
+        async def senate_only() -> None:
+            await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
+
+        run_pipeline_in_thread(senate_only, name="pipeline-run", error_label=error_label)
+        return
+    chain_id = pipeline_chain.claim()
+    if chain_id is None:
+        raise HTTPException(status_code=409, detail="A pipeline chain is already running")
+    try:
+        run_pipeline_in_thread(triggered_chain(chain_id), name="pipeline-run", error_label=error_label)
+    except BaseException:
+        # Never started (a data reset holds writes): the slot isn't its.
+        pipeline_chain.release(chain_id)
+        raise
+
+
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
 def admin_trigger_pipeline(
     senator: str | None = Query(default=None),
@@ -1359,26 +1407,7 @@ def admin_trigger_pipeline(
     """Trigger a pipeline run from the admin panel. A plain def: its
     run-in-progress check is a blocking database read, so FastAPI runs it
     on the threadpool rather than the event loop."""
-    from app.api.pipeline import _is_pipeline_running
-    from app.pipeline.senate_pipeline import run_senate_pipeline
-
-    if _is_pipeline_running(db):
-        raise HTTPException(status_code=409, detail="Pipeline is already running")
-
-    async def _run_pipelines():
-        from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
-        from app.pipeline.house_pipeline import run_house_pipeline
-        from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
-        result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
-        if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
-            logger.info("Senate pipeline done — starting supplementary pipeline")
-            await run_supplementary_pipeline()
-            logger.info("Supplementary pipeline done — starting House pipeline")
-            await run_house_on_sitting_lines(run_house_pipeline)
-
-    run_pipeline_in_thread(
-        _run_pipelines, name="pipeline-run", error_label="Admin-triggered pipeline run failed",
-    )
+    start_pipeline_trigger(db, senator, fetch_only, error_label="Admin-triggered pipeline run failed")
     return {
         "message": "Pipeline triggered",
         "senatorFilter": senator,
@@ -1516,14 +1545,16 @@ _reembed_slot = threading.Lock()
 def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     """Trigger a House representative pipeline run.
 
-    409 when a House run is already going (or holds the district-lines
-    lease every House run takes), like /pipeline/trigger's Senate check,
-    naming what holds it. A District PVI refresh or the startup rescore
-    holding that lease (district_pvi.waits_for — so is a lease a killed
-    holder left, while the startup release re-checks it) is not a refusal: the run
-    waits for it (run_house_on_sitting_lines), and the
-    answer says so. Neither check is the lock — the run's own lease and run
-    lock are (fetch/district_pvi.run_house_on_sitting_lines,
+    409 while a pipeline chain is running (refuse_while_chain_runs: it
+    would run beside the chain's current link, and the chain runs House
+    itself), or when a House run is already going (or holds the
+    district-lines lease every House run takes), like /pipeline/trigger's
+    Senate check, naming what holds it. A District PVI refresh or the
+    startup rescore holding that lease (district_pvi.waits_for — so is a
+    lease a killed holder left, while the startup release re-checks it) is
+    not a refusal: the run waits for it (run_house_on_sitting_lines), and
+    the answer says so. Neither check is the lock — the run's own lease and
+    run lock are (fetch/district_pvi.run_house_on_sitting_lines,
     run_house_pipeline), and a trigger that slips past both checks is
     refused by them — but they turn the common double click into an answer
     instead of a silent skip. A plain def, since both checks are blocking
@@ -1535,6 +1566,7 @@ def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     from app.pipeline.house_pipeline import run_house_pipeline
     from app.pipeline.run_tracker import run_in_progress
 
+    refuse_while_chain_runs()
     if run_in_progress(db, HousePipelineRun):
         raise HTTPException(status_code=409, detail="House pipeline is already running")
     holder = lease.holder(db, lease.DISTRICT_LINES)
@@ -1621,11 +1653,12 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
 async def admin_trigger_supplementary_pipeline():
     """Trigger a supplementary (explore docs/SCOTUS/presidents) pipeline run.
 
-    No pre-check: the run takes its own run lock (acquire_tracked_run on
-    SupplementaryPipelineRun) and skips, logged, if another is running.
+    Refused while a pipeline chain is running, like the house trigger above;
+    otherwise the pipeline's own run lock refuses a duplicate.
     """
     from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
 
+    refuse_while_chain_runs()
     run_pipeline_in_thread(
         run_supplementary_pipeline,
         name="supplementary-pipeline-run",
@@ -1652,11 +1685,12 @@ async def admin_trigger_election_pipeline():
     """Trigger a midterm-elections pipeline run (candidate roster,
     financials, coverage ingestion, Bluesky posting).
 
-    No pre-check: the run takes its own run lock (acquire_tracked_run on
-    ElectionPipelineRun) and skips, logged, if another is running.
+    Refused while a pipeline chain is running, like the house trigger above;
+    otherwise the pipeline's own run lock refuses a duplicate.
     """
     from app.pipeline.election_pipeline import run_election_pipeline
 
+    refuse_while_chain_runs()
     run_pipeline_in_thread(
         run_election_pipeline,
         name="election-pipeline-run",

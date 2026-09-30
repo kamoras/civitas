@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -25,6 +26,9 @@ from app.pipeline.analyze.congress_bluesky import post_daily_congress, post_week
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
 from app.pipeline import lease
+
+if TYPE_CHECKING:
+    from app.pipeline_chain import Link
 
 logger = logging.getLogger(__name__)
 
@@ -75,17 +79,165 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
             )
 
 
+def warm_bills() -> None:
+    """After House ran (the nightly run's or a trigger's — not when it was
+    skipped): both chambers' sponsored-bill rows may have been rewritten —
+    swapped into the /api/bills collection cache now rather than after its
+    TTL."""
+    from app.services.bill_service import warm_bill_collection_cache
+
+    warm_bill_collection_cache()
+
+
+async def run_house_on_the_sitting_lines() -> dict:
+    """The chain's House link: the House run settles the sitting Congress's
+    district lines first, under a lease it holds until its scoring is done
+    (fetch/district_pvi.run_house_on_sitting_lines), waiting out a District
+    PVI refresh or the startup rescore holding them. The sitting Congress is
+    the one this whole job holds (app.config.scoring_congress, via
+    start_writer) — the same value every scored window reads — so the first
+    job to start after noon ET on Jan 3 of an odd year (with the default
+    03:00 UTC schedule, the chain that starts that evening) switches windows
+    and lines together, to the new Congress's pinned table from disk — no
+    fetch, no restart — and a pin advanced in district_pvi_sources.json is
+    fetched the next run."""
+    from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
+
+    # Through the module's name at run time: tests patch it.
+    return await run_house_on_sitting_lines(lambda: run_house_pipeline())
+
+
+def nightly_links() -> "list[Link]":
+    """The nightly run's pipelines, in order (app.pipeline_chain). A full
+    trigger runs the same list (triggered_chain)."""
+    from app.pipeline_chain import Link
+
+    # Called through the module's names at run time: tests patch them.
+    return [
+        Link("Senate", lambda: run_senate_pipeline()),
+        Link("Supplementary", lambda: run_supplementary_pipeline()),
+        Link("House", run_house_on_the_sitting_lines, after=warm_bills),
+        Link("Stock trades", lambda: run_stock_trades_pipeline()),
+        Link("Election", lambda: run_election_pipeline()),
+    ]
+
+
+def pipelines_running() -> bool:
+    """Whether any of the chain's pipelines is running — what a link held
+    off by another run waits on (app.pipeline_chain). Only a run that is
+    live: every pipeline runs in the one pipeline process, so House,
+    Supplementary, Stock trades and Election count by their in-process flag
+    (a RUNNING row with the flag down is a dead run's leftover — the admin
+    status calls it stuck), and the Senate by a row its live lease speaks
+    for (run_tracker.senate_run_state). Each only until its run is past
+    STALE_PIPELINE_TIMEOUT: hung, its lock taken over from then — a wait on
+    it must end."""
+    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, senate_run_state
+
+    for running, age in (
+        (is_house_pipeline_running, house_pipeline_age),
+        (is_supplementary_pipeline_running, supplementary_pipeline_age),
+        (is_stock_pipeline_running, stock_pipeline_age),
+        (is_election_pipeline_running, election_pipeline_age),
+    ):
+        if running() and not _is_stale(age(), STALE_PIPELINE_TIMEOUT):
+            return True
+    db = SessionLocal()
+    try:
+        _row, senate_running, senate_clearable = senate_run_state(db)
+        return senate_running and not senate_clearable
+    finally:
+        db.close()
+
+
+def reporter(run_name: str):
+    """Each link's outcome in a chain of runs `run_name` ("Nightly",
+    "Triggered"): alerted when it didn't run, failed or crashed — never
+    silent, since its data otherwise goes a day stale with no signal — and
+    its alerts resolved when it ran. One set of conditions per pipeline,
+    whichever run reports: a trigger that runs it cleanly clears the
+    nightly one's alert."""
+    from app.ops_alerts import resolve_ops_alert, send_ops_alert
+    from app.pipeline.run_tracker import SUPERSEDED, skip_reason_text
+    from app.pipeline_chain import CRASHED, FAILED, ends_chain
+
+    def report(link, outcome) -> None:
+        slug = link.label.lower().replace(" ", "-")
+        skipped, crashed = f"nightly-skipped-{slug}", f"nightly-crashed-{slug}"
+        tag = f"{run_name.lower()}-{slug}-{utcnow():%Y-%m-%d}"
+        if outcome.status == "skipped":
+            reason = (outcome.result or {}).get("reason")
+            if reason == SUPERSEDED:
+                # A House step whose job started before noon ET on Jan 3,
+                # after a newer job had moved to the new Congress: nothing is
+                # wrong, the next job scores the House on it
+                # (district_pvi._superseded). Not a skip to alert on — and it
+                # clears one left from before.
+                logger.info("%s step left to the next job: %s", link.label, skip_reason_text(SUPERSEDED))
+                resolve_ops_alert(skipped)
+                return
+            logger.info("%s pipeline skipped — %s", link.label, reason or "unknown reason")
+            rest = ("The rest of its chain is not run: every later pipeline would be refused the same way."
+                    if ends_chain(outcome) else "The rest of its chain still runs.")
+            send_ops_alert(
+                f"{run_name} {link.label} run skipped",
+                # Naming the lease's holder when the skip recorded it (a
+                # House run held off by a stuck District PVI refresh).
+                f"The {link.label} pipeline did not start because "
+                f"{skip_reason_text(reason, who=(outcome.result or {}).get('holder'))}. "
+                f"{link.label} data will be a day stale unless triggered again. {rest}",
+                dedupe_key=f"skipped-{tag}",
+                condition=skipped,
+            )
+            return
+        resolve_ops_alert(skipped)
+        # A link reached: a reset no longer holds the nightly run off.
+        resolve_ops_alert("nightly-skipped-reset")
+        if outcome.status in FAILED:
+            # Raised, or caught its own error and said so (House,
+            # Supplementary and Election return "failed"; House "no_data"
+            # for an empty roster).
+            if outcome.status == CRASHED:
+                why = f"{type(outcome.error).__name__}: {outcome.error}"
+            else:
+                detail = (outcome.result or {}).get("error") or (outcome.result or {}).get("reason")
+                why = f"it ended {outcome.status} ({detail or 'see its run row'})"
+            send_ops_alert(
+                f"{run_name} {link.label} run {'crashed' if outcome.status == CRASHED else 'failed'}",
+                f"{why}. {link.label} data will be a day stale unless triggered again. The rest of its "
+                "chain still runs.",
+                dedupe_key=f"crashed-{tag}",
+                condition=crashed,
+            )
+        else:
+            resolve_ops_alert(crashed)
+
+    return report
+
+
+def triggered_chain(chain_id: int):
+    """What a full pipeline trigger runs, under the chain slot it claimed
+    (pipeline_chain.claim): the nightly chain's five pipelines, each
+    whatever the one before it did (so a trigger recovers any of them, not
+    only the first), reported like the nightly run."""
+    from app.pipeline_chain import run_chain
+
+    async def chain() -> None:
+        await run_chain(nightly_links(), reporter("Triggered"), busy=pipelines_running, chain_id=chain_id)
+
+    return chain
+
+
 def _nightly_pipeline() -> None:
     """Run the nightly sequence: Senate, then explore docs/SCOTUS/
     presidents, then House, then stock trades, then elections — five
     independent pipelines run one after another, not one combined
-    pipeline. A skip or a crash anywhere ends the chain there.
+    pipeline. One at a time for the Pi's memory, but none waits on the
+    one before it succeeding: a skip, failure or crash is alerted and the
+    next still runs (app.pipeline_chain).
 
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.
-
-    Safe to call from multiple containers: ``run_senate_pipeline`` acquires
-    a database-level lock and skips if another instance is already running.
     """
     from app.ops_alerts import (
         check_current_congress_staleness,
@@ -94,46 +246,7 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
-    from app.pipeline.fetch.district_pvi import WAITED_FOR as DISTRICT_LINES_WAITED_FOR
-    from app.pipeline.run_tracker import SUPERSEDED, skip_reason_text
-    from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
-
-    _CHAIN = ["Senate", "Supplementary", "House", "Stock trades", "Election"]
-
-    def _alert_if_skipped(label: str, result: dict, *, chain_continues: bool = False) -> bool:
-        """Returns True (and alerts) if `result` reports the step was
-        skipped. Every step in the nightly chain shares the same DB-row
-        lock, and a skip anywhere silently takes the rest of the chain
-        down with it — this alert exists so a skip is never silent,
-        since downstream data can otherwise go stale for days with no
-        signal that anything is wrong. `chain_continues`: this skip does
-        not end the chain (the alert says so).
-        """
-        condition = f"nightly-skipped-{label.lower().replace(' ', '-')}"
-        if result.get("status") != "skipped":
-            resolve_ops_alert(condition)  # it ran tonight
-            return False
-        logger.info("%s pipeline skipped — %s", label, result.get("reason", "unknown reason"))
-        rest = _CHAIN[_CHAIN.index(label) + 1:] if label in _CHAIN else []
-        after = (
-            "" if not rest else
-            f"The rest of tonight's chain ({', '.join(rest)}) still runs." if chain_continues else
-            f"The chain stops here — {', '.join(rest)} did not run tonight either."
-        )
-        send_ops_alert(
-            f"Nightly {label} run skipped",
-            f"The scheduled {label} pipeline did not start because {_skip_cause(result)}. {label} data will be a "
-            f"day stale unless triggered manually. {after}".rstrip(),
-            dedupe_key=f"skipped-{label.lower()}-{utcnow():%Y-%m-%d}",
-            condition=condition,
-        )
-        return True
-
-    def _skip_cause(result: dict) -> str:
-        """What held the run off: the skip's own reason (every pipeline's
-        lock refusal carries one — run_tracker.acquire_pipeline_lock_why),
-        naming the lease's holder when the skip recorded it."""
-        return skip_reason_text(result.get("reason"), who=result.get("holder"))
+    from app.pipeline_chain import run_chain
 
     def _run():
         # Loud, deduped alerts before another night's scoring. Each is a
@@ -158,70 +271,18 @@ def _nightly_pipeline() -> None:
                 logger.exception("Pre-pipeline check %s failed", check.__name__)
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(run_senate_pipeline())
-            if _alert_if_skipped("Senate", result):
-                return
-            # The chain started, so a reset no longer holds it off.
-            resolve_ops_alert("nightly-skipped-reset")
-
-            logger.info("Senate pipeline done — starting supplementary pipeline")
-            supp_result = loop.run_until_complete(run_supplementary_pipeline())
-            logger.info("Supplementary pipeline: %s", supp_result)
-            if _alert_if_skipped("Supplementary", supp_result):
-                return
-
-            logger.info("Supplementary pipeline done — starting House pipeline")
-            # The House run settles the sitting Congress's district lines
-            # first, under a lease it holds until its scoring is done
-            # (fetch/district_pvi.run_house_on_sitting_lines). The sitting
-            # Congress is the one this whole job holds
-            # (app.config.scoring_congress, via start_writer) — the same
-            # value every scored window reads — so the first job to start
-            # after noon ET on Jan 3 of an odd year (with the default 03:00
-            # UTC schedule, the chain that starts that evening) switches
-            # windows and lines together, to the new Congress's pinned table
-            # from disk — no fetch, no restart — and a pin advanced in
-            # district_pvi_sources.json is fetched the next run. Triggered
-            # House runs go through it too.
-            house_result = loop.run_until_complete(run_house_on_sitting_lines(run_house_pipeline))
-            logger.info("House pipeline: %s", house_result)
-            # A District PVI refresh (or the startup rescore) is waited for;
-            # one that outlasts the wait (stuck) costs tonight's House scores but not Stock
-            # trades or Election, which don't read them.
-            held_by_refresh = house_result.get("holder") in DISTRICT_LINES_WAITED_FOR
-            superseded = house_result.get("reason") == SUPERSEDED
-            if superseded:
-                # This chain started before noon ET on Jan 3 and a job since
-                # has moved to the new Congress: nothing is wrong, the next
-                # job scores the House on it (district_pvi._superseded). Not
-                # a skip to alert on — and it clears one left from before.
-                logger.info("House step left to the next job: %s", skip_reason_text(SUPERSEDED))
-                resolve_ops_alert("nightly-skipped-house")
-            elif _alert_if_skipped("House", house_result, chain_continues=held_by_refresh) and not held_by_refresh:
-                return
-
-            # Both chambers' sponsored-bill rows were just rewritten —
-            # swap fresh data into the /api/bills collection cache now
-            # instead of waiting out its TTL.
-            from app.services.bill_service import warm_bill_collection_cache
-            warm_bill_collection_cache()
-            logger.info("House pipeline done — starting stock trades pipeline")
-            stock_result = loop.run_until_complete(run_stock_trades_pipeline())
-            logger.info("Stock trades pipeline: %s", stock_result)
-            if _alert_if_skipped("Stock trades", stock_result):
-                return
-
-            logger.info("Stock trades pipeline done — starting election pipeline")
-            election_result = loop.run_until_complete(run_election_pipeline())
-            logger.info("Election pipeline: %s", election_result)
-            _alert_if_skipped("Election", election_result)
-            # The chain reached its end without raising.
-            resolve_ops_alert("nightly-crashed")
+            # None: a triggered chain is running the same five pipelines,
+            # and reports them — tonight is left to it.
+            if loop.run_until_complete(run_chain(nightly_links(), reporter("Nightly"), busy=pipelines_running)) is not None:
+                # The whole chain's alert, from before each link had its own.
+                resolve_ops_alert("nightly-crashed")
         except BaseException as e:
-            logger.exception("Nightly pipeline failed")
+            # Only what the chain itself doesn't absorb — cancellation, an
+            # exit — ends it early.
+            logger.exception("Nightly pipeline chain stopped")
             send_ops_alert(
-                "Nightly pipeline crashed",
-                f"{type(e).__name__}: {e}",
+                "Nightly pipeline chain stopped",
+                f"{type(e).__name__}: {e}. The pipelines after the one running then did not run tonight.",
                 dedupe_key=f"crashed-{utcnow():%Y-%m-%d}",
                 condition="nightly-crashed",
             )
@@ -490,10 +551,10 @@ def _election_ballot_sync() -> None:
     """Every state's ballot list, between nightly runs, in election season.
 
     The nightly election pipeline runs LAST in the chain (Senate ->
-    Supplementary -> House -> Stock -> Election), and a skip or crash
-    anywhere upstream ends the chain for the night — ballots would go a
-    day stale for reasons unrelated to elections, in exactly the weeks
-    voters are reading them. This runs only the ballot step
+    Supplementary -> House -> Stock -> Election): it starts only once the
+    four before it are done, hours into the night, and ballots would go
+    most of a day between refreshes in exactly the weeks voters are
+    reading them. This runs only the ballot step
     (run_ballot_sync) on its own clock, so a withdrawal or replacement
     reaches the page within hours. It reads state election offices'
     published lists only — a few requests per state at one per second — so

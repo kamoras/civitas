@@ -685,21 +685,21 @@ def check_pipeline_staleness() -> None:
     cannot, and it is not hypothetical — it is why the 2026-09-01
     outage ran 19 nights before anyone noticed (see PR #562). In that
     incident the container was SIGKILLed by Swarm's healthcheck partway
-    through Supplementary, and House, Stock trades and Election — which
-    are chained behind it in scheduler.py — simply never started again:
+    through Supplementary, and House, Stock trades and Election, which
+    ran after it in the nightly chain, never started that night:
 
-    - ``_alert_if_skipped`` never fired: nothing was *skipped*, the
-      chain just stopped existing partway down.
+    - the per-link skip and crash alerts (scheduler._nightly_pipeline)
+      never fired: nothing was *skipped* or raised, the process was gone.
     - ``check_pipeline_overrun`` never fired: it reads rows whose status
       is RUNNING, and a pipeline that never started has no row at all
       (``if run is None: continue``).
-    - the scheduler's ``except BaseException`` crash alert never fired:
-      SIGKILL cannot be caught by a handler.
 
-    Every one of those watches a run that EXISTS. This one watches for
-    the absence of one, which is the only signal a silently-stopped
-    chain actually emits. It also covers Election, which
-    check_pipeline_overrun omits entirely.
+    Since 2026-09 a link's own skip, failure or crash no longer stops the
+    ones after it (app.pipeline_chain), but a killed process still ends
+    that night's chain, and a pipeline can fail every night. Every other
+    alert watches a run that EXISTS; this one watches for the absence of
+    a good one. It also covers Election, which check_pipeline_overrun
+    omits entirely.
 
     A pipeline with no runs at all is left alone: that is a fresh
     deployment, not a stall. One that has runs but has never completed
@@ -751,11 +751,10 @@ def check_pipeline_staleness() -> None:
             f"The {label} pipeline {detail} (expected nightly, alert "
             f"threshold {budget.days}d). It is not overrunning — there is no "
             f"run to overrun — so this is the only signal it emits. Likely "
-            f"causes: the nightly chain stopped partway (every pipeline after "
-            f"the failure point silently never starts), or the container was "
-            f"killed mid-run. Check the phase ABOVE this one in scheduler.py's "
-            f"chain first: Senate -> Supplementary -> House -> Stock trades -> "
-            f"Election.",
+            f"causes: its own nightly run keeps being skipped, failing or "
+            f"crashing (see its nightly-skipped / nightly-crashed alerts), the "
+            f"nightly job itself isn't running, or the container was killed "
+            f"mid-run.",
             # Per pipeline per day: a genuine multi-day stall should keep
             # reminding, but not once per watchdog tick.
             dedupe_key=f"stale-pipeline-{label.lower().replace(' ', '-')}-{utcnow():%Y-%m-%d}",

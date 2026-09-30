@@ -186,48 +186,54 @@ class TestSupplementaryOverlapGuard:
         mock_refresh.assert_called_once()
 
 
-
 async def _passthrough(run_house):
     """run_house_on_sitting_lines without its lease and lines check."""
     return await run_house()
 
 
-class TestNightlyPipelineCascadingSkip:
+class TestNightlyPipelineIndependentLinks:
     """_nightly_pipeline's chain (Senate -> Supplementary -> House ->
-    Stock) runs each step only if the previous one didn't report
-    "skipped" — until 2026-07-23 only Senate's skip was even checked,
-    and even that alert never mentioned the rest of the chain also
-    silently not running that night. Confirmed live as the likely root
-    cause of stock-trades data going stale 4+ days and supplementary
-    data 1+ day, since a Senate (or, after this fix, any step's) skip
-    took the whole rest of the chain with it with no visible signal.
+    Stock trades -> Election) runs every link whatever the one before it
+    did. Until 2026-09 a skip, failure or crash anywhere ended the chain
+    there: Stock trades and Election once went 19 nights without running
+    behind a Supplementary failure. Each link's skip or crash has its own
+    alert; the rest run regardless.
     """
 
-    def _run_chain(
-        self, senate_result, supplementary_result=None, house_result=None,
-        stock_result=None, election_result=None,
-    ):
+    def _run_chain(self, **results):
         from app import scheduler
 
+        mocks = {}
         with patch("app.background.threading.Thread", _SyncThread), \
-             patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock) as mock_senate, \
-             patch("app.scheduler.run_supplementary_pipeline", new_callable=AsyncMock) as mock_supp, \
-             patch("app.scheduler.run_house_pipeline", new_callable=AsyncMock) as mock_house, \
-             patch("app.scheduler.run_stock_trades_pipeline", new_callable=AsyncMock) as mock_stock, \
-             patch("app.scheduler.run_election_pipeline", new_callable=AsyncMock) as mock_election, \
              patch("app.ops_alerts.send_ops_alert") as mock_alert, \
+             patch("app.ops_alerts.resolve_ops_alert") as mock_resolve, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
+             patch("app.ops_alerts.check_feedback_token_expiration"), \
+             patch("app.ops_alerts.check_state_pvi_staleness"), \
+             patch("app.scheduler.pipelines_running", return_value=False), \
              patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", _passthrough), \
-             patch("app.services.bill_service.warm_bill_collection_cache"):
-            mock_senate.return_value = senate_result
-            mock_supp.return_value = supplementary_result or {"status": "completed"}
-            mock_house.return_value = house_result or {"status": "completed"}
-            mock_stock.return_value = stock_result or {"status": "completed"}
-            mock_election.return_value = election_result or {"status": "completed"}
+             patch("app.services.bill_service.warm_bill_collection_cache") as mock_warm:
+            patches = []
+            for key, name in (("senate", "run_senate_pipeline"), ("supplementary", "run_supplementary_pipeline"),
+                              ("house", "run_house_pipeline"), ("stock", "run_stock_trades_pipeline"),
+                              ("election", "run_election_pipeline")):
+                outcome = results.get(key, {"status": "completed"})
+                mock = AsyncMock(side_effect=outcome) if isinstance(outcome, (BaseException, list)) \
+                    else AsyncMock(return_value=outcome)
+                patches.append(patch(f"app.scheduler.{name}", mock))
+                mocks[key] = mock
+            for p_ in patches:
+                p_.start()
+            try:
+                scheduler._nightly_pipeline()
+            finally:
+                for p_ in patches:
+                    p_.stop()
+        return mocks, mock_alert, mock_resolve, mock_warm
 
-            scheduler._nightly_pipeline()
-
-            return mock_senate, mock_supp, mock_house, mock_stock, mock_election, mock_alert
+    def _all_ran(self, mocks):
+        for mock in mocks.values():
+            mock.assert_called_once()
 
     def test_the_house_run_goes_through_the_sitting_lines_check(self):
         """The nightly House run settles the district lines under the lease
@@ -248,130 +254,118 @@ class TestNightlyPipelineCascadingSkip:
              patch("app.scheduler.run_supplementary_pipeline", new_callable=AsyncMock,
                    side_effect=lambda: order.append("supplementary") or {"status": "completed"}), \
              patch("app.scheduler.run_house_pipeline", new_callable=AsyncMock,
-                   side_effect=lambda: order.append("house") or {"status": "skipped", "reason": "held_elsewhere"}), \
+                   side_effect=lambda: order.append("house") or {"status": "skipped", "reason": "busy"}), \
+             patch("app.scheduler.run_stock_trades_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("stock") or {"status": "completed"}), \
+             patch("app.scheduler.run_election_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("election") or {"status": "completed"}), \
+             patch("app.scheduler.pipelines_running", return_value=False), \
              patch("app.ops_alerts.send_ops_alert") as alert, \
+             patch("app.ops_alerts.resolve_ops_alert"), \
              patch("app.ops_alerts.check_current_congress_staleness"), \
              patch("app.ops_alerts.check_feedback_token_expiration"), \
              patch("app.ops_alerts.check_state_pvi_staleness"), \
+             patch("app.services.bill_service.warm_bill_collection_cache"), \
              patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", wrapper):
             scheduler._nightly_pipeline()
-        assert order == ["senate", "supplementary", "pvi", "house"]
+        assert order == ["senate", "supplementary", "pvi", "house", "stock", "election"]
         assert "Nightly House run skipped" in alert.call_args.args[0]
 
-    def test_all_five_run_when_nothing_skips(self):
-        senate, supp, house, stock, election, alert = self._run_chain({"status": "completed"})
-        senate.assert_called_once()
-        supp.assert_called_once()
-        house.assert_called_once()
-        stock.assert_called_once()
-        election.assert_called_once()
-        alert.assert_not_called()
-
-    def test_senate_skip_stops_the_whole_chain(self):
-        senate, supp, house, stock, election, alert = self._run_chain(
-            {"status": "skipped", "reason": "already_running"},
-        )
-        senate.assert_called_once()
-        supp.assert_not_called()
-        house.assert_not_called()
-        stock.assert_not_called()
-        election.assert_not_called()
-        alert.assert_called_once()
-        subject, body = alert.call_args[0][0], alert.call_args[0][1]
-        assert "Senate" in subject
-        assert "Supplementary, House, Stock trades, Election did not run tonight either" in body
-
-    def test_supplementary_skip_stops_house_and_stock_but_senate_already_ran(self):
-        senate, supp, house, stock, election, alert = self._run_chain(
-            {"status": "completed"},
-            supplementary_result={"status": "skipped", "reason": "already_running"},
-        )
-        senate.assert_called_once()
-        supp.assert_called_once()
-        house.assert_not_called()
-        stock.assert_not_called()
-        election.assert_not_called()
-        alert.assert_called_once()
-        assert "Supplementary" in alert.call_args[0][0]
-
-    def test_house_skip_stops_stock_but_earlier_steps_already_ran(self):
-        senate, supp, house, stock, election, alert = self._run_chain(
-            {"status": "completed"},
-            house_result={"status": "skipped", "reason": "already_running"},
-        )
-        supp.assert_called_once()
-        house.assert_called_once()
-        stock.assert_not_called()
-        election.assert_not_called()
-        alert.assert_called_once()
-        assert "House" in alert.call_args[0][0]
-
-    def test_stock_skip_stops_election_but_earlier_steps_already_ran(self):
-        senate, supp, house, stock, election, alert = self._run_chain(
-            {"status": "completed"},
-            stock_result={"status": "skipped", "reason": "already_running"},
-        )
-        stock.assert_called_once()
-        election.assert_not_called()
-        alert.assert_called_once()
-        assert "Stock trades" in alert.call_args[0][0]
-
-    def test_election_skip_alerts_with_nothing_left_to_stop(self):
-        senate, supp, house, stock, election, alert = self._run_chain(
-            {"status": "completed"},
-            election_result={"status": "skipped", "reason": "already_running"},
-        )
-        election.assert_called_once()
-        alert.assert_called_once()
-        assert "Election" in alert.call_args[0][0]
-        assert "did not run tonight either" not in alert.call_args[0][1]
-
-    def test_a_house_skip_behind_a_stuck_district_pvi_refresh_does_not_end_the_chain(self):
+    def test_a_house_skip_behind_a_stuck_district_pvi_refresh_names_it(self):
         """run_house_on_sitting_lines waits for a refresh holding the lines;
         one that outlasts the wait costs the House scores, not Stock trades
-        and Election, which don't read them. The alert names the refresh —
-        not "another run of it" — and says the chain went on."""
-        senate, supp, house, stock, election, alert = self._run_chain(
-            {"status": "completed"},
-            house_result={"status": "skipped", "reason": "held_elsewhere", "holder": "District PVI refresh"},
+        and Election. The alert names the refresh — not "another run of
+        it"."""
+        from app.pipeline import lease
+
+        mocks, alert, _resolve, _warm = self._run_chain(
+            house={"status": "skipped", "reason": lease.REFUSED_HELD, "holder": "District PVI refresh"},
         )
-        stock.assert_called_once()
-        election.assert_called_once()
-        alert.assert_called_once()
+        self._all_ran({k: v for k, v in mocks.items() if k != "house"})
         subject, body = alert.call_args[0][0], alert.call_args[0][1]
         assert "House" in subject
         assert "District PVI refresh is already running" in body
         assert "another run of it" not in body
-        assert "The rest of tonight's chain (Stock trades, Election) still runs" in body
 
-    def test_a_house_skip_behind_another_house_run_names_it_and_ends_the_chain(self):
-        senate, supp, house, stock, election, alert = self._run_chain(
-            {"status": "completed"},
-            house_result={"status": "skipped", "reason": "held_elsewhere", "holder": "House run"},
-        )
-        stock.assert_not_called()
-        election.assert_not_called()
-        body = alert.call_args[0][1]
-        assert "House run is already running" in body and "another run of it" not in body
-
-
-    def test_a_superseded_house_step_continues_the_chain_without_an_alert(self):
+    def test_a_superseded_house_step_is_not_alerted_and_clears_an_old_skip(self):
         """A chain that started before noon ET on Jan 3, whose House step
         finds a newer job already on the new Congress (district_pvi.
-        _superseded): nothing is wrong — Stock trades and Election still
-        run, no ops alert is sent, and a House-skip alert left from before
-        is resolved."""
+        _superseded): nothing is wrong — no ops alert, a House-skip alert
+        left from before is resolved, and the rest still runs."""
         from app.pipeline.run_tracker import SUPERSEDED
 
-        with patch("app.ops_alerts.resolve_ops_alert") as resolved:
-            senate, supp, house, stock, election, alert = self._run_chain(
-                {"status": "completed"}, house_result={"status": "skipped", "reason": SUPERSEDED},
-            )
-        house.assert_called_once()
-        stock.assert_called_once()
-        election.assert_called_once()
+        mocks, alert, resolve, _warm = self._run_chain(house={"status": "skipped", "reason": SUPERSEDED})
+        self._all_ran(mocks)
         alert.assert_not_called()
-        assert any(c.args == ("nightly-skipped-house",) for c in resolved.call_args_list)
+        assert "nightly-skipped-house" in {c.args[0] for c in resolve.call_args_list}
+
+    def test_all_five_run_when_nothing_skips(self):
+        mocks, alert, _resolve, warm = self._run_chain()
+        self._all_ran(mocks)
+        alert.assert_not_called()
+        warm.assert_called_once()
+
+    @pytest.mark.parametrize("link", ["senate", "supplementary", "house", "stock", "election"])
+    def test_a_skip_anywhere_is_alerted_and_every_link_still_runs(self, link):
+        mocks, alert, _resolve, _warm = self._run_chain(**{link: {"status": "skipped", "reason": "busy"}})
+        self._all_ran(mocks)
+        alert.assert_called_once()
+        subject, body = alert.call_args[0][0], alert.call_args[0][1]
+        assert "skipped" in subject and "still run" in body
+
+    def test_a_link_held_off_by_another_run_is_tried_again_and_reported(self):
+        # The other run may have been one senator, or failed: the retry's
+        # outcome is what is reported.
+        mocks, alert, _resolve, _warm = self._run_chain(
+            house=[{"status": "skipped", "reason": "already_running"}, {"status": "failed", "error": "boom"}])
+        assert mocks["house"].await_count == 2
+        assert alert.call_args.kwargs["condition"] == "nightly-crashed-house"
+
+    def test_a_nightly_run_leaves_the_night_to_a_chain_already_running(self):
+        from app import pipeline_chain
+
+        chain_id = pipeline_chain.claim()
+        try:
+            mocks, alert, resolve, _warm = self._run_chain()
+        finally:
+            pipeline_chain.release(chain_id)
+        for mock in mocks.values():
+            mock.assert_not_called()
+        alert.assert_not_called()
+        assert "nightly-crashed" not in {c.args[0] for c in resolve.call_args_list}
+
+    @pytest.mark.parametrize("link", ["senate", "supplementary", "house", "stock", "election"])
+    def test_a_crash_anywhere_is_alerted_and_every_link_still_runs(self, link):
+        mocks, alert, _resolve, _warm = self._run_chain(**{link: RuntimeError("boom")})
+        self._all_ran(mocks)
+        alert.assert_called_once()
+        assert "crashed" in alert.call_args[0][0] and "boom" in alert.call_args[0][1]
+        assert alert.call_args.kwargs["condition"].startswith("nightly-crashed-")
+
+    def test_a_failed_link_is_alerted_and_the_rest_run(self):
+        # House, Supplementary and Election catch their own errors and
+        # return "failed": as much a lost night as a crash.
+        mocks, alert, resolve, _warm = self._run_chain(house={"status": "failed", "error": "db locked"})
+        self._all_ran(mocks)
+        alert.assert_called_once()
+        assert "failed" in alert.call_args[0][0] and "db locked" in alert.call_args[0][1]
+        assert alert.call_args.kwargs["condition"] == "nightly-crashed-house"
+        assert "nightly-crashed-house" not in {c.args[0] for c in resolve.call_args_list}
+
+    def test_the_bills_cache_is_warmed_after_house_even_when_it_crashed(self):
+        # Senate rewrote its chamber's bills either way.
+        _mocks, _alert, _resolve, warm = self._run_chain(house=RuntimeError("boom"))
+        warm.assert_called_once()
+
+    def test_the_bills_cache_is_not_warmed_when_house_was_skipped(self):
+        # Another writer may be writing those rows right then.
+        _mocks, _alert, _resolve, warm = self._run_chain(house={"status": "skipped", "reason": "busy"})
+        warm.assert_not_called()
+
+    def test_a_link_that_ran_resolves_its_skip_and_crash_alerts(self):
+        _mocks, _alert, resolve, _warm = self._run_chain()
+        resolved = {c.args[0] for c in resolve.call_args_list}
+        assert {"nightly-skipped-stock-trades", "nightly-crashed-stock-trades", "nightly-crashed"} <= resolved
 
 
 class TestElectionCoverageRefresh:
@@ -627,8 +621,17 @@ class TestLeasedJobs:
 def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
     from app import scheduler
 
+    completed = AsyncMock(return_value={"status": "completed"})
     with patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock,
                return_value={"status": "skipped", "reason": reason}), \
+         patch("app.scheduler.run_supplementary_pipeline", completed), \
+         patch("app.scheduler.run_house_pipeline", completed), \
+         patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", _passthrough), \
+         patch("app.scheduler.run_stock_trades_pipeline", completed), \
+         patch("app.scheduler.run_election_pipeline", completed), \
+         patch("app.services.bill_service.warm_bill_collection_cache"), \
+         patch("app.scheduler.pipelines_running", return_value=False), \
+         patch("app.ops_alerts.resolve_ops_alert"), \
          patch("app.background.threading.Thread", _SyncThread), \
          patch("app.ops_alerts.send_ops_alert") as alert, \
          patch("app.ops_alerts.check_current_congress_staleness"), \

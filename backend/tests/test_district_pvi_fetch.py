@@ -2001,24 +2001,25 @@ class TestTriggeredRunsCheckTheSittingLines:
         order, captured = [], {}
         monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: order.append("pvi"))
 
-        async def house():
-            order.append("house")
-            return {}
+        def step(name):
+            async def run(**_kw):
+                order.append(name)
+                return {"status": "completed"}
+            return run
 
-        async def senate(**kw):
-            order.append("senate")
-            return {"status": "completed"}
-
-        async def supp():
-            order.append("supplementary")
-            return {}
-
-        monkeypatch.setattr("app.pipeline.house_pipeline.run_house_pipeline", house)
-        monkeypatch.setattr("app.pipeline.supplementary_pipeline.run_supplementary_pipeline", supp)
-        monkeypatch.setattr("app.pipeline.senate_pipeline.run_senate_pipeline", senate)
-        monkeypatch.setattr("app.api.pipeline.run_senate_pipeline", senate)
-        for mod in ("app.api.admin", "app.api.pipeline"):
-            monkeypatch.setattr(f"{mod}.run_pipeline_in_thread", lambda f, **kw: captured.setdefault("run", f))
+        # The admin House trigger calls run_house_pipeline by its home
+        # module; a full trigger runs the nightly chain's links
+        # (scheduler.nightly_links), through app.scheduler's names.
+        monkeypatch.setattr("app.pipeline.house_pipeline.run_house_pipeline", step("house"))
+        for name, label in (("run_senate_pipeline", "senate"), ("run_supplementary_pipeline", "supplementary"),
+                            ("run_house_pipeline", "house"), ("run_stock_trades_pipeline", "stock trades"),
+                            ("run_election_pipeline", "election")):
+            monkeypatch.setattr(f"app.scheduler.{name}", step(label))
+        monkeypatch.setattr("app.scheduler.pipelines_running", lambda: False)
+        monkeypatch.setattr("app.scheduler.warm_bills", lambda: None)
+        monkeypatch.setattr("app.ops_alerts.send_ops_alert", lambda *a, **kw: None)
+        monkeypatch.setattr("app.ops_alerts.resolve_ops_alert", lambda *a, **kw: None)
+        monkeypatch.setattr("app.api.admin.run_pipeline_in_thread", lambda f, **kw: captured.setdefault("run", f))
         return order, captured
 
     async def test_house_trigger(self, recorded, db_session):
@@ -2061,7 +2062,7 @@ class TestTriggeredRunsCheckTheSittingLines:
         order, captured = recorded
         admin.admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
         await captured["run"]()
-        assert order == ["senate", "supplementary", "pvi", "house"]
+        assert order == ["senate", "supplementary", "pvi", "house", "stock trades", "election"]
 
     async def test_token_trigger(self, recorded, db_session, monkeypatch):
         from app.api import pipeline
@@ -2071,4 +2072,5 @@ class TestTriggeredRunsCheckTheSittingLines:
         monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "t")
         pipeline.trigger_pipeline(authorization="Bearer t", senator=None, fetch_only=False, db=db_session)
         await captured["run"]()
-        assert order == ["senate", "pvi", "house"]
+        # The same chain as the admin trigger (app.pipeline_chain).
+        assert order == ["senate", "supplementary", "pvi", "house", "stock trades", "election"]
