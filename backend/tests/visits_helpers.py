@@ -1,6 +1,6 @@
 """Request and queue helpers for the visit-counting tests. Shared by
-test_visits and test_visitor_hash_privacy; not a test module, so nothing
-here is collected.
+test_visits, test_visitor_hash_privacy and test_admin_dashboard_trends;
+not a test module, so nothing here is collected.
 """
 
 from unittest.mock import MagicMock
