@@ -106,7 +106,9 @@ def render_atom(*, title: str, subtitle: str, path: str, posts: list[BroadcastPo
     author = _sub(feed, "author")
     _sub(author, "name", "Civitas")
     _sub(author, "uri", SITE_URL)
-    _sub(feed, "icon", f"{SITE_URL}/icon.svg")
+    # A PNG, not the SVG favicon: Discord and most feed readers don't draw
+    # SVG, and a feed reader or bot shows this beside every entry.
+    _sub(feed, "icon", f"{SITE_URL}/apple-icon.png")
     for post in posts:
         entry = _sub(feed, "entry")
         # A tag URI on the row id, which is never reused: stable across
