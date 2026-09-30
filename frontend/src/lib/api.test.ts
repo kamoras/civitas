@@ -517,6 +517,20 @@ describe("streamExploreDocumentSummary", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
+  it("says when it is waiting to be let in, and when the stream starts", async () => {
+    const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
+    stubSummaryFetch(vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(done()));
+    const states: boolean[] = [];
+    await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async () => {},
+      (waiting) => states.push(waiting)
+    );
+    expect(states).toEqual([true, false]);
+  });
+
   it("releases each refusal's body before waiting", async () => {
     const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
     const cancel = vi.spyOn(refused.body!, "cancel");

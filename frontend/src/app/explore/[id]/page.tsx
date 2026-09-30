@@ -520,6 +520,9 @@ export default function ExploreDetailPage() {
   // deriving from liveText). While streaming, the summary panel renders
   // parseExploreSummaryText(liveText) instead for progressive display.
   const [liveText, setLiveText] = useState("");
+  // Waiting to be let in: the site's few generations are busy, or the
+  // analyzer is restarting. Said so, rather than a pulse that looks stuck.
+  const [summaryQueued, setSummaryQueued] = useState(false);
   const [summary, setSummary] = useState<ExploreDocumentSummary | null>(null);
 
   const docRequest = useAsyncData(
@@ -539,7 +542,7 @@ export default function ExploreDetailPage() {
     if (!docId || streamStarted.current === docId || summary) return;
     streamStarted.current = docId;
     const controller = new AbortController();
-    streamExploreDocumentSummary(docId, setLiveText, controller.signal)
+    streamExploreDocumentSummary(docId, setLiveText, controller.signal, undefined, setSummaryQueued)
       .then((result) => {
         if (controller.signal.aborted) return;
         // An empty result is the server saying none could be made.
@@ -721,7 +724,11 @@ export default function ExploreDetailPage() {
                   <span className="text-signal-cyan text-sm font-mono animate-pulse">
                     Analyzing document...
                   </span>
-                  <p className="text-ink-min text-xs mt-2">This may take a moment</p>
+                  <p className="text-ink-min text-xs mt-2">
+                    {summaryQueued
+                      ? "Other analyses are being written — this one is queued and starts as soon as the analyzer is free."
+                      : "This may take a moment"}
+                  </p>
                 </div>
               )}
 

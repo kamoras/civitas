@@ -60,4 +60,23 @@ describe("Explore document analysis", () => {
     render(<ExploreDetailPage />);
     expect(await screen.findByText("Analysis unavailable. Try again later.")).toBeInTheDocument();
   });
+
+  it("says it is queued while waiting to be let in", async () => {
+    // A pulse alone for minutes behind other readers' analyses looked stuck.
+    withDocument();
+    api.streamExploreDocumentSummary.mockImplementation(
+      (
+        _id: number,
+        _onDelta: unknown,
+        _signal: unknown,
+        _wait: unknown,
+        onWaiting: (w: boolean) => void
+      ) => {
+        onWaiting(true);
+        return new Promise(() => {});
+      }
+    );
+    render(<ExploreDetailPage />);
+    expect(await screen.findByText(/this one is queued/)).toBeInTheDocument();
+  });
 });

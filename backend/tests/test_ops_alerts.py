@@ -452,11 +452,15 @@ class TestOpenAndResolved:
         from app import ops_alerts
         from app.models import ApiCache
 
-        with patch.object(ops_alerts, "_HISTORY_KEEP", 2):
+        with patch.object(ops_alerts, "_HISTORY_KEEP", 2), patch.object(ops_alerts, "_SUPERSEDED_KEPT", 2):
+            self._send(db_session, "States A failing", dedupe_key="states-a", condition="states")
+            self._send(db_session, "States B failing", dedupe_key="states-b", condition="states")
             for day in range(1, 7):
                 self._send(db_session, "Rebuild failed", dedupe_key=f"rebuild-day{day}", condition="rebuild")
         keys = {r.cache_key for r in db_session.query(ApiCache).filter(ApiCache.tier == ops_alerts._HISTORY_TIER)}
-        assert keys == {f"dedupe-rebuild-day{d}" for d in (3, 4, 5, 6)}
+        # Each open condition keeps its own newest: one noisy condition
+        # doesn't crowd out another's.
+        assert keys == {f"dedupe-rebuild-day{d}" for d in (3, 4, 5, 6)} | {"dedupe-states-a", "dedupe-states-b"}
 
     def test_the_overrun_watchdog_resolves_once_the_run_is_over(self, db_session):
         self._send(db_session, "House pipeline overrun", condition="overrun-house")

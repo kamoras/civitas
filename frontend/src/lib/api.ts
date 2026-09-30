@@ -961,7 +961,10 @@ export async function streamExploreDocumentSummary(
   id: number,
   onDelta: (fullTextSoFar: string) => void,
   signal?: AbortSignal,
-  wait: (ms: number, signal?: AbortSignal) => Promise<void> = abortableSleep
+  wait: (ms: number, signal?: AbortSignal) => Promise<void> = abortableSleep,
+  // Told true while waiting to be let in (busy, restarting, held off),
+  // false once a stream starts: the page says it is queued, not stuck.
+  onWaiting?: (waiting: boolean) => void
 ): Promise<ExploreDocumentSummary> {
   // A summary already made is read from the API (and nginx's cache): it
   // never waits on the pipeline process that makes them. Anything but a 200
@@ -977,8 +980,11 @@ export async function streamExploreDocumentSummary(
   }
   const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
   let unanswered = 0;
-  const waitFor = (retryAfter: string | null) =>
-    wait(Math.min(summaryRetryDelayMs(retryAfter), Math.max(0, giveUpAt - Date.now())), signal);
+  const pause = (ms: number) => {
+    onWaiting?.(true);
+    return wait(Math.min(ms, Math.max(0, giveUpAt - Date.now())), signal);
+  };
+  const waitFor = (retryAfter: string | null) => pause(summaryRetryDelayMs(retryAfter));
   for (;;) {
     let res: Response;
     try {
@@ -1008,6 +1014,7 @@ export async function streamExploreDocumentSummary(
       await res.body?.cancel().catch(() => {});
       throw new Error(`Summary failed: ${res.status}`);
     }
+    onWaiting?.(false);
     let result: Awaited<ReturnType<typeof readSummaryStream>>;
     try {
       result = await readSummaryStream(res.body, onDelta);
@@ -1031,10 +1038,7 @@ export async function streamExploreDocumentSummary(
       onDelta("");
       // The whole hold-off, not Retry-After's ceiling: asked sooner, the
       // server would only refuse again.
-      await wait(
-        Math.min(result.retryAfter * 1000 + 5_000, Math.max(0, giveUpAt - Date.now())),
-        signal
-      );
+      await pause(result.retryAfter * 1000 + 5_000);
       continue;
     }
     return result;

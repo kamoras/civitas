@@ -46,6 +46,9 @@ logger = logging.getLogger(__name__)
 
 _HISTORY_TIER = "_ops_alerts"
 _HISTORY_KEEP = 50
+# Superseded alerts kept past the history window per condition still open:
+# their dedupe keys are what stop a swing back re-sending them.
+_SUPERSEDED_KEPT = 10
 # How far back the dashboard lists alerts that are no longer open. A week
 # spans one cycle of the slowest regular jobs (the Sunday justice and
 # committee refreshes), so every job's latest outcome stays in view.
@@ -273,16 +276,19 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
         )
         decoded = [(row, json.loads(row.data_json)) for row in history]
         still_open = {data.get("condition") for _, data in decoded if data.get("condition") and _is_open(data)}
-        # Kept past the window: at most _HISTORY_KEEP of them, newest first
-        # — a condition open for weeks under a dated key would otherwise
-        # keep a row a day for good; the newest are the keys a swing back
-        # is likeliest to reuse.
-        spare = _HISTORY_KEEP
+        # Kept past the window: at most _SUPERSEDED_KEPT per open condition,
+        # newest first — a condition open for weeks under a dated key would
+        # otherwise keep a row a day for good, and a shared allowance would
+        # let one noisy condition crowd out another's keys; the newest are
+        # the ones a swing back is likeliest to reuse.
+        kept: dict[str, int] = {}
         for row, data in decoded[_HISTORY_KEEP:]:
             if _is_open(data):
                 continue
-            if spare and row.cache_key.startswith("dedupe-") and data.get("condition") in still_open:
-                spare -= 1
+            condition = data.get("condition")
+            if (row.cache_key.startswith("dedupe-") and condition in still_open
+                    and kept.get(condition, 0) < _SUPERSEDED_KEPT):
+                kept[condition] = kept.get(condition, 0) + 1
                 continue
             db.delete(row)
         db.commit()
