@@ -449,8 +449,8 @@ _BROWSER_ONLY_USER_AGENTS = {
 # / ("User-Agent", ...) — but not .get("User-Agent", default), which reads
 # one — or a user_agent= / USER_AGENT = / UA = name.
 _UA_SITE = re.compile(
-    r"""(["']user-agent["']\s*(?:\]\s*=|:)|(?<!get)\(\s*["']user-agent["']\s*,"""
-    r"""|\b(?:user_?agent|ua)\b\s*[:=](?!=))""",
+    r"""(["']user-agent["']\s*(?:\]\s*=|:)|(?<!\.get)\(\s*["']user-agent["']\s*,|\[\s*["']user-agent["']\s*,"""
+    r"""|(?<![a-z0-9])(?:user_?agent|ua)\b\s*(?::\s*[\w\[\]|. ]+?\s*)?[:=](?!=))""",
     re.IGNORECASE,
 )
 # A string literal naming Civitas as a client: "Civitas/1.0", "Civitas-OG/1".
@@ -578,6 +578,11 @@ def test_every_user_agent_names_the_contact():
     'A = {"User-Agent": "Mozilla/5.0 Foo"}\nB = BROWSER_HEADERS',
     'ua = get(); h = {"User-Agent": "Mozilla/5.0 Foo"}',
     'H = {"User-Agent": "Foo/1.0"}; DOC = """x"""',
+    '_UA = "Mozilla/5.0 (X11) Foo"',
+    'DEFAULT_USER_AGENT = "Foo/1.0"',
+    'USER_AGENT: str = "Mozilla/5.0 Foo"',
+    'def f(user_agent: str = "Mozilla/5.0 Foo"):\n    pass',
+    'h = [["User-Agent", "Mozilla/5.0 Foo"]]',
 ])
 def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     path = tmp_path / "backend" / "app" / "x.py"
@@ -587,10 +592,15 @@ def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     assert read == 1 and offenders != []
 
 
-def test_the_user_agent_sweep_sees_the_frontend(tmp_path):
+@pytest.mark.parametrize("source", [
+    'fetch(u, { headers: { "User-Agent": `civitas-og` } });',
+    'new Headers([["User-Agent", "Mozilla/5.0 Foo"]]);',
+    'const BROWSER_UA = "Mozilla/5.0 Foo";',
+])
+def test_the_user_agent_sweep_sees_the_frontend(tmp_path, source):
     path = tmp_path / "frontend" / "src" / "x.ts"
     path.parent.mkdir(parents=True)
-    path.write_text('fetch(u, { headers: { "User-Agent": `civitas-og` } });\n')
+    path.write_text(source + "\n")
     assert _user_agent_offenders(tmp_path / "backend", [path])[0] != []
 
 
@@ -618,19 +628,38 @@ def test_the_sweep_names_paths_from_the_repo_root_outside_git(tmp_path):
     assert read == 1 and offenders == ["backend/app/x.py:1: H = {\"User-Agent\": \"Civitas/1.0\"}"]
 
 
-def test_the_frontend_healthcheck_is_a_self_fetch():
-    """The frontend container probes "/" every 15s; without the marker the
-    middleware counts each probe as a visit."""
+def _healthcheck_probes(root):
+    """(file, probe) for every container healthcheck: compose `test:` lists
+    and Dockerfile HEALTHCHECK commands (continuation lines joined)."""
+    probes = []
+    for path in [*root.glob("docker-compose*.yml"), *root.glob("*/Dockerfile")]:
+        text = path.read_text(encoding="utf-8").replace("\\\n", " ")
+        probes += [(path.name, m.group(0)) for m in re.finditer(r"test: \[[^\]]*\]", text)]
+        probes += [(str(path.relative_to(root)), m.group(0)) for m in re.finditer(r"HEALTHCHECK[^\n]*", text)]
+    return probes
+
+
+def test_healthchecks_that_load_a_page_are_self_fetches():
+    """A probe of a page (anything but the API or a /health endpoint) goes
+    through the site's middleware; without the marker every probe, every
+    15s, is counted as a visit."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
-    compose, middleware = root / "docker-compose.yml", root / "frontend" / "src" / "middleware.ts"
-    if not (compose.exists() and middleware.exists()):
+    middleware = root / "frontend" / "src" / "middleware.ts"
+    if not middleware.exists():
         pytest.skip("no full checkout")
     marker = re.search(r'userAgent\.startsWith\("([^"]+)"\)', middleware.read_text(encoding="utf-8")).group(1)
-    probe = re.search(r'test: \["CMD", "wget",[^\]]*\]', compose.read_text(encoding="utf-8")).group(0)
-    agent = re.search(r'"-U", "([^"]+)"', probe)
-    assert agent and agent.group(1).startswith(marker)
+    probes = _healthcheck_probes(root)
+    page_probes = [
+        (name, probe) for name, probe in probes
+        if (url := re.search(r"https?://[^\s\"']+", probe))
+        and not re.match(r"https?://[^/]+/(api/|health\b)", url.group(0))
+    ]
+    assert len(page_probes) >= 2  # the frontend's and nginx's
+    for name, probe in page_probes:
+        agent = re.search(r"""(?:-U|--user-agent|-A)["',\s]+["']?([^"']+)""", probe)
+        assert agent and agent.group(1).startswith(marker), (name, probe)
 
 
 def test_the_link_card_reader_is_the_user_agent_the_site_skips():

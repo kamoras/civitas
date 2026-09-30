@@ -21,8 +21,8 @@ export function middleware(request: NextRequest, event: NextFetchEvent) {
   // Civitas's own link-card fetcher (backend/app/pipeline/analyze/
   // bluesky_utils.py's fetch_og_card) requests the site's own pages to
   // scrape OG metadata for Bluesky posts, self-identifying with this UA
-  // (SELF_FETCH_USER_AGENT in backend/app/contact.py), as does the frontend
-  // container's healthcheck (docker-compose.yml) — don't count the app
+  // (SELF_FETCH_USER_AGENT in backend/app/contact.py), as do the frontend
+  // and nginx healthchecks (docker-compose.yml, nginx/Dockerfile) — don't count the app
   // visiting itself as a visitor. backend/tests/test_http_utils.py checks
   // they agree.
   if (userAgent.startsWith("Civitas-Bot/")) {
