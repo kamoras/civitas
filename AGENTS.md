@@ -657,13 +657,17 @@ database holds, so a link that is skipped, fails or crashes is alerted
 (`nightly-skipped-*`, `nightly-crashed-*`) and the next runs anyway. Until
 then any of those ended the chain, and Stock trades and Election once went
 19 nights without running behind a Supplementary failure. Every chain in the
-pipeline process shares one lock held per link, so a manual run and the
-nightly one interleave rather than run two pipelines at once, and a link
-whose pipeline is already running elsewhere is waited out, not repeated.
-Neither wait outlasts `STALE_PIPELINE_TIMEOUT`, so a hung run can't stall
-the rest. `POST /api/admin/pipeline/trigger` runs the same five-link chain
-(a single senator or a fetch-only run is Senate alone), and the
-single-pipeline triggers are one-link chains under the same lock.
+pipeline process takes turns on one queue, a link at a time in arrival
+order, so a manual run and the nightly one interleave rather than run two
+pipelines at once. A link whose pipeline is running outside any chain is
+waited out, and one another chain began a whole run of since this chain
+started is not repeated. A turn held past `STALE_PIPELINE_TIMEOUT` counts
+as hung and the next link goes ahead, so a hung run can't stall the rest.
+A killed process still ends that night's chain; the staleness watch below
+is the backstop for that. `POST /api/admin/pipeline/trigger` runs the same
+five-link chain and is refused while any chain is in progress (a single
+senator or a fetch-only run is Senate alone). The single-pipeline triggers
+are one-link chains on the same queue.
 `ops_alerts.check_pipeline_staleness` still watches for a pipeline with no
 successful completion in `PIPELINE_STALE_ALERT_DAYS`; `check_pipeline_
 overrun` watches the opposite case of a run that started and is taking too

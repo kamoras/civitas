@@ -74,21 +74,22 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
             )
 
 
+def warm_bills() -> None:
+    """After House (the nightly run's or a trigger's): both chambers'
+    sponsored-bill rows may have been rewritten — swapped into the
+    /api/bills collection cache now rather than after its TTL."""
+    from app.services.bill_service import warm_bill_collection_cache
+
+    warm_bill_collection_cache()
+
+
 def nightly_links() -> "list[Link]":
-    """The nightly run's pipelines, in order (app.pipeline_chain). The
-    admin trigger runs the same list."""
+    """The nightly run's pipelines, in order (app.pipeline_chain). A full
+    trigger runs the same list (triggered_chain)."""
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
     from app.pipeline_chain import Link
-
-    def warm_bills() -> None:
-        # Both chambers' sponsored-bill rows were rewritten (by one or
-        # both): swap them into the /api/bills collection cache now rather
-        # than wait out its TTL.
-        from app.services.bill_service import warm_bill_collection_cache
-
-        warm_bill_collection_cache()
 
     # Called through the module's names at run time: tests patch them.
     return [
@@ -98,6 +99,26 @@ def nightly_links() -> "list[Link]":
         Link("Stock trades", lambda: run_stock_trades_pipeline(), StockTradesPipelineRun),
         Link("Election", lambda: run_election_pipeline(), ElectionPipelineRun),
     ]
+
+
+def triggered_chain(senator: str | None, fetch_only: bool):
+    """What a pipeline trigger runs: the nightly chain's five pipelines,
+    each whatever the one before it did — so a trigger recovers any of
+    them, not only the first. A single senator or a fetch-only run is the
+    Senate pipeline alone, and not a whole run another chain can skip."""
+    from app.models import PipelineRun
+    from app.pipeline_chain import Link, one_link, run_chain
+
+    if senator is not None or fetch_only:
+        return one_link(Link(
+            "Senate", lambda: run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only), PipelineRun,
+            whole=False,
+        ))
+
+    async def chain() -> None:
+        await run_chain(nightly_links())
+
+    return chain
 
 
 def _nightly_pipeline() -> None:
@@ -118,7 +139,7 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
-    from app.pipeline_chain import CRASHED, run_chain
+    from app.pipeline_chain import CRASHED, RAN_ELSEWHERE, run_chain
 
     def _skip_cause(reason: str | None) -> str:
         """What held the run off: the skip's own reason (every pipeline's
@@ -133,14 +154,19 @@ def _nightly_pipeline() -> None:
         signal — and resolved when it ran."""
         slug = link.label.lower().replace(" ", "-")
         skipped, crashed = f"nightly-skipped-{slug}", f"nightly-crashed-{slug}"
+        if outcome.status == RAN_ELSEWHERE:
+            # Another run of it (a trigger's) did tonight's work: its own
+            # run row and the staleness watch report how that went; this
+            # link neither alerts nor clears an alert on its behalf.
+            return
         if outcome.status == "skipped":
             reason = (outcome.result or {}).get("reason")
             logger.info("%s pipeline skipped — %s", link.label, reason or "unknown reason")
             send_ops_alert(
                 f"Nightly {link.label} run skipped",
                 f"The scheduled {link.label} pipeline did not start because {_skip_cause(reason)}. "
-                f"{link.label} data will be a day stale unless triggered manually. The rest of tonight's "
-                "pipelines ran regardless.",
+                f"{link.label} data will be a day stale unless triggered manually. The other pipelines "
+                "in tonight's chain still run.",
                 dedupe_key=f"skipped-{link.label.lower()}-{utcnow():%Y-%m-%d}",
                 condition=skipped,
             )
@@ -152,7 +178,7 @@ def _nightly_pipeline() -> None:
             send_ops_alert(
                 f"Nightly {link.label} run crashed",
                 f"{type(outcome.error).__name__}: {outcome.error}. {link.label} data will be a day stale "
-                "unless triggered manually. The rest of tonight's pipelines ran regardless.",
+                "unless triggered manually. The other pipelines in tonight's chain still run.",
                 dedupe_key=f"crashed-{slug}-{utcnow():%Y-%m-%d}",
                 condition=crashed,
             )

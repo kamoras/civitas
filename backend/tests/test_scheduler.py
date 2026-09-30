@@ -200,7 +200,7 @@ class TestNightlyPipelineIndependentLinks:
 
         mocks = {}
         with patch("app.background.threading.Thread", _SyncThread), \
-             patch("app.pipeline_chain._running_elsewhere", return_value=False), \
+             patch("app.pipeline_chain._check_elsewhere", AsyncMock(return_value=None)), \
              patch("app.ops_alerts.send_ops_alert") as mock_alert, \
              patch("app.ops_alerts.resolve_ops_alert") as mock_resolve, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
@@ -241,7 +241,7 @@ class TestNightlyPipelineIndependentLinks:
         self._all_ran(mocks)
         alert.assert_called_once()
         subject, body = alert.call_args[0][0], alert.call_args[0][1]
-        assert "skipped" in subject and "ran regardless" in body
+        assert "skipped" in subject and "still run" in body
 
     @pytest.mark.parametrize("link", ["senate", "supplementary", "house", "stock", "election"])
     def test_a_crash_anywhere_is_alerted_and_every_link_still_runs(self, link):
@@ -529,7 +529,7 @@ def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
          patch("app.scheduler.run_stock_trades_pipeline", completed), \
          patch("app.scheduler.run_election_pipeline", completed), \
          patch("app.services.bill_service.warm_bill_collection_cache"), \
-         patch("app.pipeline_chain._running_elsewhere", return_value=False), \
+         patch("app.pipeline_chain._check_elsewhere", AsyncMock(return_value=None)), \
          patch("app.ops_alerts.resolve_ops_alert"), \
          patch("app.background.threading.Thread", _SyncThread), \
          patch("app.ops_alerts.send_ops_alert") as alert, \

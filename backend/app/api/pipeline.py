@@ -14,14 +14,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 def _is_pipeline_running(db: Session) -> bool:
-    """Check the shared database for a currently running pipeline.
+    """Whether a Senate run is live in the shared database, or a chain of
+    pipelines is in progress (app.pipeline_chain) — a trigger then would
+    queue a second chain behind the first and redo its pipelines.
 
     A leftover row a dead run left is ignored (run_tracker.live_run), so it
     can't wedge the "is a pipeline already running?" guard.
     """
     from app.pipeline.run_tracker import run_in_progress
+    from app.pipeline_chain import chain_running
 
-    return run_in_progress(db, PipelineRun)
+    return chain_running() or run_in_progress(db, PipelineRun)
 
 
 @router.get("/pipeline/status", response_model=PipelineStatusSchema)
@@ -78,7 +81,7 @@ async def trigger_pipeline(
     if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
-    from app.api.admin import _triggered_chain
+    from app.scheduler import triggered_chain
 
-    run_pipeline_in_thread(_triggered_chain(senator, fetch_only), name="pipeline-run", error_label="Pipeline run failed")
+    run_pipeline_in_thread(triggered_chain(senator, fetch_only), name="pipeline-run", error_label="Pipeline run failed")
     return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}
