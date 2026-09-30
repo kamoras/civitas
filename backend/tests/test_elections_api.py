@@ -605,3 +605,16 @@ class TestPhaseCacheLifetime:
                 patch("app.api.elections.election_today", return_value=date(2026, 11, 3)):
             response = elections.pvi_map(db_session)
         assert f"max-age={elections.CACHE_TTL_RESULTS_S}," in response.headers["Cache-Control"]
+
+    def test_the_race_list_uses_it(self, db_session):
+        """Its cycle turns over when the results window closes: the long
+        list lifetime kept serving the held election's races after."""
+        from datetime import date
+        from unittest.mock import patch
+
+        for day, ttl in ((date(2026, 11, 10), elections.CACHE_TTL_RESULTS_S),
+                         (date(2026, 10, 1), elections.CACHE_TTL_LIST_S)):
+            with patch("app.election_phase.election_today", return_value=day), \
+                    patch("app.api.elections.election_today", return_value=day):
+                response = elections.list_races(db_session)
+            assert f"max-age={ttl}," in response.headers["Cache-Control"]

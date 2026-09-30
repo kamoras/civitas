@@ -1446,12 +1446,17 @@ def live_results(
 @router.get("/races")
 def list_races(db: Session = Depends(get_db)):
     """All races for the current cycle, with PVI and top-2-by-funds
-    candidates — backs the map + directory."""
+    candidates — backs the map + directory.
+
+    Cached for phase_cache_s: its cycle is the active election's, which
+    turns to the next one when the results window closes, and the long list
+    lifetime served the held election's races for up to ten minutes after."""
+    election = active_election(db)
     races = (
         db.query(Race)
         # Filter matches the docstring's contract — harmless while only
         # one cycle exists, load-bearing the day a second cycle syncs.
-        .filter(Race.cycle_year == current_election_cycle(db))
+        .filter(Race.cycle_year == election.cycle)
         # ~470 races each lazy-loading .candidates is an N+1 of ~500
         # queries per request on a Pi — batch them.
         .options(selectinload(Race.candidates))
@@ -1459,12 +1464,12 @@ def list_races(db: Session = Depends(get_db)):
     )
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
-    markers = _ballot_basis_markers(db, current_election_cycle(db))
+    markers = _ballot_basis_markers(db, election.cycle)
     data = [
         _race_summary(r, state_pvi, district_pvi, _race_complete(markers.get(r.state), r.state, r.id))
         for r in races
     ]
-    return cached_json(data, max_age=CACHE_TTL_LIST_S)
+    return cached_json(data, max_age=phase_cache_s(election))
 
 
 @router.get("/pvi")
