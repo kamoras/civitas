@@ -488,13 +488,13 @@ def _top_up_plan(db: Session) -> tuple[list[tuple[dict, str, str | None]], list[
             scan.expunge_all()  # the bodies read, let go of
 
 
-def _still_wanted(plan: list[tuple[dict, str, str | None]]) -> list[dict]:
+def _still_wanted(plan: list[tuple[dict, str, str | None]], held: dict[int, tuple[str, str]]) -> list[dict]:
     """The embed plan re-checked under the rebuild lock, against the index
     alone (no bodies read or hashed again): only documents the index holds
     as this plan found them. One written since — by a rebuild this waited
     out — was written from the database at least as late as this plan
-    read it: not embedded twice, nor put back to the plan's older text."""
-    held = get_embedded_hashes()
+    read it: not embedded twice, nor put back to the plan's older text.
+    `held`: get_embedded_hashes() as read under the lock."""
     return [
         {**doc, "_text_hash": current}
         for doc, current, was in plan
@@ -502,10 +502,10 @@ def _still_wanted(plan: list[tuple[dict, str, str | None]]) -> list[dict]:
     ]
 
 
-def _still_to_relabel(plan: list[tuple[dict, str, str]]) -> list[dict]:
+def _still_to_relabel(plan: list[tuple[dict, str, str]], held: dict[int, tuple[str, str]]) -> list[dict]:
     """The relabel plan re-checked the same way: documents whose recorded
-    metadata is still what this plan found."""
-    held = get_embedded_hashes()
+    metadata is still what this plan found. The same read serves both: the
+    embed between them writes only its own documents, none of these."""
     return [doc for doc, _meta, was in plan if held.get(doc["id"], (None, None))[1] == was]
 
 
@@ -527,9 +527,13 @@ async def _top_up(db: Session) -> int:
     # donor_classifier_ai.py and api/explore.py already give their own
     # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
     # start's rebuild waits for it rather than embed beside it.
-    return await asyncio.to_thread(
-        top_up_explore_index, lambda: _still_wanted(plan), lambda: _still_to_relabel(relabel),
-    )
+    held: dict[int, tuple[str, str]] = {}
+
+    def to_embed() -> list[dict]:
+        held.update(get_embedded_hashes())  # under the lock, read once
+        return _still_wanted(plan, held)
+
+    return await asyncio.to_thread(top_up_explore_index, to_embed, lambda: _still_to_relabel(relabel, held))
 
 
 async def _index_is_whole_or_none() -> bool | None:

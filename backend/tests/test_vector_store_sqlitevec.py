@@ -400,6 +400,30 @@ class TestTextHashes:
         assert set(real().execute("SELECT DISTINCT doc_id FROM vec_explore").fetchall()) == {(1,), (2,), (3,)}
         assert set(vector_store.get_embedded_hashes()) == {1, 2, 3}
 
+    def test_meta_writes_wait_for_another_threads_write(self, vec_env):
+        # sqlite3 has one transaction per connection: a meta write outside
+        # the lock would be committed, or rolled back, by another thread's.
+        import threading
+
+        conn = vector_store.get_vec_conn()
+        held, release, done = threading.Event(), threading.Event(), threading.Event()
+
+        def writer():
+            with vector_store._writing(conn):
+                held.set()
+                release.wait(5)
+
+        t = threading.Thread(target=writer)
+        t.start()
+        held.wait(5)
+        m = threading.Thread(target=lambda: (vector_store._set_meta(conn, "k", "v"), done.set()))
+        m.start()
+        assert not done.wait(0.3)
+        release.set()
+        t.join(5)
+        m.join(5)
+        assert done.is_set() and vector_store._get_meta(conn, "k") == "v"
+
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         emptied = _doc(1, "")

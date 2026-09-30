@@ -656,15 +656,24 @@ def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):
         ({5: ("newer than the plan", "m")}, []),
         ({}, []),
     ):
-        with patch.object(explore_pipeline, "get_embedded_hashes", return_value=held):
-            assert explore_pipeline._still_wanted(plan) == wanted
-    never_embedded = [(doc, current, None)]
-    with patch.object(explore_pipeline, "get_embedded_hashes", return_value={}):
-        assert explore_pipeline._still_wanted(never_embedded) == [{**doc, "_text_hash": current}]
+        assert explore_pipeline._still_wanted(plan, held) == wanted
+    assert explore_pipeline._still_wanted([(doc, current, None)], {}) == [{**doc, "_text_hash": current}]
     relabel = [({"id": 5}, "new meta", "old meta")]
     for held, wanted in (({5: (current, "old meta")}, [{"id": 5}]),
                          ({5: (current, "rebuilt meta")}, []), ({}, [])):
-        with patch.object(explore_pipeline, "get_embedded_hashes", return_value=held):
-            assert explore_pipeline._still_to_relabel(relabel) == wanted
+        assert explore_pipeline._still_to_relabel(relabel, held) == wanted
+
+
+@pytest.mark.asyncio
+async def test_both_rechecks_share_one_read_under_the_lock(db_session):
+    from app.pipeline import explore_pipeline
+
+    reads = MagicMock(return_value={})
+    with patch.object(explore_pipeline, "_top_up_plan", return_value=([], [])), \
+         patch.object(explore_pipeline, "get_embedded_hashes", reads), \
+         patch.object(explore_pipeline, "top_up_explore_index",
+                      lambda embed, relabel: (embed(), relabel(), 0)[-1]):
+        await explore_pipeline._top_up(db_session)
+    reads.assert_called_once()
 
 

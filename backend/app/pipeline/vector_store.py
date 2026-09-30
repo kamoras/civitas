@@ -98,7 +98,11 @@ _similarity_model: "SentenceTransformer | None" = None
 _model_load_lock = threading.Lock()
 _similarity_load_lock = threading.Lock()
 _vec_conn: "sqlite3.Connection | None" = None
-_vec_lock = threading.Lock()
+# Every write on the shared connection holds this from its first statement
+# to its commit or rollback: sqlite3 has one transaction per connection, so
+# a writer outside it would have its statements committed or rolled back by
+# another thread's. Reentrant, for a writer that calls another (_set_meta).
+_vec_lock = threading.RLock()
 
 
 def get_embedding_model() -> SentenceTransformer:
@@ -478,13 +482,27 @@ def _get_meta(conn: sqlite3.Connection, key: str) -> str | None:
     return row[0] if row else None
 
 
+@contextmanager
+def _writing(conn: sqlite3.Connection):
+    """One write transaction on the shared connection: under _vec_lock from
+    its first statement to its commit, rolled back if anything in it raises
+    — so a failure leaves nothing pending for another writer's commit."""
+    with _vec_lock:
+        try:
+            yield conn
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+
+
 def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
-    conn.execute(
-        "INSERT INTO vec_meta (key, value) VALUES (?, ?) "
-        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        (key, value),
-    )
-    conn.commit()
+    with _writing(conn):
+        conn.execute(
+            "INSERT INTO vec_meta (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
 
 
 # ── Legacy model-version tracking (classification side) ──────────
@@ -628,7 +646,7 @@ def embed_bills(bills: list[dict]) -> None:
         })
 
     embeddings = model.encode(documents, show_progress_bar=False, normalize_embeddings=True)
-    with _vec_lock:
+    with _writing(conn):
         for bid, emb, meta in zip(ids, embeddings, metas):
             rowid = _bill_rowid(bid)
             conn.execute("DELETE FROM vec_bills WHERE rowid = ?", (rowid,))
@@ -638,7 +656,6 @@ def embed_bills(bills: list[dict]) -> None:
                 (rowid, _serialize(emb), meta.get("policyArea") or "PROCEDURAL",
                  json.dumps(meta)),
             )
-        conn.commit()
 
     logger.info("Stored %d bill embeddings in vector DB", len(bills))
 
@@ -774,16 +791,11 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
             (int(doc["id"]), doc.get("_text_hash") or explore_text_hash(doc), explore_meta_hash(doc))
             for doc in textless
         ]
-        with _vec_lock:
-            try:
-                for doc_id, digest, meta in textless_hashes:
-                    if not fresh:
-                        conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
-                    _record_text_hash(conn, doc_id, digest, meta)
-                conn.commit()
-            except BaseException:
-                conn.rollback()
-                raise
+        with _writing(conn):
+            for doc_id, digest, meta in textless_hashes:
+                if not fresh:
+                    conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
+                _record_text_hash(conn, doc_id, digest, meta)
     if not units:
         if textless and not fresh and record_chunks_per_doc:
             _record_chunks_per_doc(conn)  # chunks went: the ratio moved
@@ -808,22 +820,17 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
         # Hashed before the write lock (or taken from the plan that already
         # hashed it: "_text_hash"), not over long bodies inside it.
         digests = {d: (doc.get("_text_hash") or explore_text_hash(doc), explore_meta_hash(doc)) for d, _, doc in batch}
-        with _vec_lock:
-            try:
-                if not fresh:
-                    for doc_id in dict.fromkeys(d for d, _, _ in batch):
-                        conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
-                for (doc_id, text, doc), emb in zip(batch, embs):
-                    conn.execute(
-                        _CHUNK_INSERT,
-                        (_serialize(emb), doc_id, *_meta_values(doc), (doc.get("title") or "")[:200], text[:300]),
-                    )
-                for doc_id, (digest, meta) in digests.items():
-                    _record_text_hash(conn, doc_id, digest, meta)
-                conn.commit()
-            except BaseException:
-                conn.rollback()
-                raise
+        with _writing(conn):
+            if not fresh:
+                for doc_id in dict.fromkeys(d for d, _, _ in batch):
+                    conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
+            for (doc_id, text, doc), emb in zip(batch, embs):
+                conn.execute(
+                    _CHUNK_INSERT,
+                    (_serialize(emb), doc_id, *_meta_values(doc), (doc.get("title") or "")[:200], text[:300]),
+                )
+            for doc_id, (digest, meta) in digests.items():
+                _record_text_hash(conn, doc_id, digest, meta)
         doc_ids.update(d for d, _, _ in batch)
 
     if _get_meta(conn, _INDEX_MODEL) is None:
@@ -856,8 +863,8 @@ def _record_chunks_per_doc(conn: sqlite3.Connection) -> None:
     if total_docs:
         _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
     else:  # an empty index: no ratio, rather than the last corpus's
-        conn.execute("DELETE FROM vec_meta WHERE key = 'explore_chunks_per_doc'")
-        conn.commit()
+        with _writing(conn):
+            conn.execute("DELETE FROM vec_meta WHERE key = 'explore_chunks_per_doc'")
 
 
 # ── Search ───────────────────────────────────────────────────────
@@ -1032,21 +1039,19 @@ def purge_bills(bill_ids: list[str]) -> int:
         return 0
     conn = get_vec_conn()
     removed = 0
-    with _vec_lock:
+    with _writing(conn):
         for bid in bill_ids:
             cur = conn.execute("DELETE FROM vec_bills WHERE rowid = ?", (_bill_rowid(bid),))
             removed += cur.rowcount if cur.rowcount > 0 else 0
-        conn.commit()
     return removed
 
 
 def clear_bills() -> int:
     """Delete all bill embeddings; returns how many existed."""
     conn = get_vec_conn()
-    with _vec_lock:
+    with _writing(conn):
         n = conn.execute("SELECT COUNT(*) FROM vec_bills").fetchone()[0]
         conn.execute("DELETE FROM vec_bills")
-        conn.commit()
     return n
 
 
@@ -1064,25 +1069,19 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
         return 0
     conn = get_vec_conn()
     removed = 0
-    with _vec_lock:
-        # Chunked: SQLite caps host parameters per statement, and this is
-        # called with whole-corpus-sized id sets during a cleanup sweep.
-        # One transaction: a failure part-way leaves nothing half-deleted
-        # on the shared connection for its next commit to write.
-        try:
-            for i in range(0, len(ids), 500):
-                chunk = ids[i:i + 500]
-                placeholders = ",".join("?" * len(chunk))
-                cur = conn.execute(
-                    f"DELETE FROM vec_explore WHERE doc_id IN ({placeholders})",
-                    chunk,
-                )
-                removed += cur.rowcount or 0
-                conn.execute(f"DELETE FROM vec_explore_text WHERE doc_id IN ({placeholders})", chunk)
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
+    # Chunked: SQLite caps host parameters per statement, and this is
+    # called with whole-corpus-sized id sets during a cleanup sweep. One
+    # transaction: a failure part-way leaves nothing half-deleted.
+    with _writing(conn):
+        for i in range(0, len(ids), 500):
+            chunk = ids[i:i + 500]
+            placeholders = ",".join("?" * len(chunk))
+            cur = conn.execute(
+                f"DELETE FROM vec_explore WHERE doc_id IN ({placeholders})",
+                chunk,
+            )
+            removed += cur.rowcount or 0
+            conn.execute(f"DELETE FROM vec_explore_text WHERE doc_id IN ({placeholders})", chunk)
     return removed
 
 
@@ -1121,23 +1120,20 @@ def update_explore_metadata(docs: list[dict]) -> int:
     wanted = {int(doc["id"]) for doc in docs}
     # By rowid, read once: vec0 can't index doc_id outside a KNN query, so
     # a WHERE doc_id per document scans every chunk each time (measured
-    # ~50x slower on a production-sized table).
+    # ~50x slower on a production-sized table). Read before the write lock:
+    # chunks are only inserted under _rebuild_lock, which the top-up holds,
+    # and a rowid deleted meanwhile is updated as a no-op.
+    chunks: dict[int, list[int]] = {}
+    for rowid, doc_id in conn.execute("SELECT rowid, doc_id FROM vec_explore").fetchall():
+        if doc_id in wanted:
+            chunks.setdefault(doc_id, []).append(rowid)
     update = "UPDATE vec_explore SET " + ", ".join(f"{f} = ?" for f in _META_FIELDS) + " WHERE rowid = ?"
-    with _vec_lock:
-        chunks: dict[int, list[int]] = {}
-        for rowid, doc_id in conn.execute("SELECT rowid, doc_id FROM vec_explore").fetchall():
-            if doc_id in wanted:
-                chunks.setdefault(doc_id, []).append(rowid)
-        try:
-            for doc, meta in rows:
-                values = _meta_values(doc)
-                for rowid in chunks.get(int(doc["id"]), ()):
-                    conn.execute(update, (*values, rowid))
-                conn.execute("UPDATE vec_explore_text SET meta_hash = ? WHERE doc_id = ?", (meta, int(doc["id"])))
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
+    with _writing(conn):
+        for doc, meta in rows:
+            values = _meta_values(doc)
+            for rowid in chunks.get(int(doc["id"]), ()):
+                conn.execute(update, (*values, rowid))
+            conn.execute("UPDATE vec_explore_text SET meta_hash = ? WHERE doc_id = ?", (meta, int(doc["id"])))
     return len(rows)
 
 
