@@ -93,3 +93,19 @@ class TestHousePipelineRecentRollCallYearWindow:
         years_requested = {call.kwargs.get("year") for call in mock_rcs.call_args_list}
         assert 2026 in years_requested
         assert 2025 in years_requested
+
+
+def test_a_house_run_invalidates_stale_analysis_like_a_senate_one(db_session):
+    """It may be the first member pipeline to run after a deploy — it no
+    longer waits on a Senate run succeeding (app.pipeline_chain) — so it
+    clears analysis data from changed code before fetching, under its lock."""
+    import asyncio
+
+    order = []
+    with patch("app.pipeline.house_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.senate_pipeline.invalidate_stale_analysis",
+               side_effect=lambda db: order.append("invalidate")), \
+         patch("app.pipeline.house_pipeline.fetch_representatives",
+               side_effect=lambda *a: order.append("fetch") or (_ for _ in ()).throw(RuntimeError("off"))):
+        asyncio.run(house_pipeline.run_house_pipeline())
+    assert order == ["invalidate", "fetch"]

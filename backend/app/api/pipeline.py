@@ -1,13 +1,11 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
-from app.api.pipeline_runner import run_pipeline_in_thread
 from app.database import get_db
 from app.models import PipelineRun
-from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.schemas import PipelineRunSchema, PipelineStatusSchema
 
 logger = logging.getLogger(__name__)
@@ -76,15 +74,7 @@ async def trigger_pipeline(
     """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
     check_pipeline_token(authorization)
 
-    if _is_pipeline_running(db):
-        raise HTTPException(status_code=409, detail="Pipeline is already running")
+    from app.api.admin import start_pipeline_trigger
 
-    async def _run_pipelines():
-        from app.pipeline.house_pipeline import run_house_pipeline
-        result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
-        if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
-            logger.info("Senate pipeline done — starting House pipeline")
-            await run_house_pipeline()
-
-    run_pipeline_in_thread(_run_pipelines, name="pipeline-run", error_label="Pipeline run failed")
+    start_pipeline_trigger(db, senator, fetch_only, error_label="Pipeline run failed")
     return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}
