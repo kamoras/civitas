@@ -22,6 +22,16 @@ from app.pipeline.election_pipeline import ballot_tracker
 
 
 @pytest.fixture(autouse=True)
+def _fresh_chains(monkeypatch):
+    """Each test's chains start with nothing recorded as completed by
+    another chain (app.pipeline_chain keeps that in the process)."""
+    from app import pipeline_chain
+
+    monkeypatch.setattr(pipeline_chain, "_completed", {})
+    monkeypatch.setattr(pipeline_chain, "_chains", {})
+
+
+@pytest.fixture(autouse=True)
 def _job_leases_granted():
     """These tests stub the database, which a lease lives in; the leases
     themselves are tested in test_database_reset.TestLease."""
@@ -200,7 +210,7 @@ class TestNightlyPipelineIndependentLinks:
 
         mocks = {}
         with patch("app.background.threading.Thread", _SyncThread), \
-             patch("app.pipeline_chain._check_elsewhere", AsyncMock(return_value=None)), \
+             patch("app.pipeline_chain._is_running_elsewhere", AsyncMock(return_value=False)), \
              patch("app.ops_alerts.send_ops_alert") as mock_alert, \
              patch("app.ops_alerts.resolve_ops_alert") as mock_resolve, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
@@ -251,11 +261,15 @@ class TestNightlyPipelineIndependentLinks:
         assert "crashed" in alert.call_args[0][0] and "boom" in alert.call_args[0][1]
         assert alert.call_args.kwargs["condition"].startswith("nightly-crashed-")
 
-    def test_a_failed_link_is_not_an_alert_of_its_own_and_the_rest_run(self):
-        # Its run row and the staleness watch report a failed run.
-        mocks, alert, _resolve, _warm = self._run_chain(house={"status": "failed"})
+    def test_a_failed_link_is_alerted_and_the_rest_run(self):
+        # House, Supplementary and Election catch their own errors and
+        # return "failed": as much a lost night as a crash.
+        mocks, alert, resolve, _warm = self._run_chain(house={"status": "failed", "error": "db locked"})
         self._all_ran(mocks)
-        alert.assert_not_called()
+        alert.assert_called_once()
+        assert "failed" in alert.call_args[0][0] and "db locked" in alert.call_args[0][1]
+        assert alert.call_args.kwargs["condition"] == "nightly-crashed-house"
+        assert "nightly-crashed-house" not in {c.args[0] for c in resolve.call_args_list}
 
     def test_the_bills_cache_is_warmed_after_house_even_when_it_crashed(self):
         # Senate rewrote its chamber's bills either way.
@@ -529,7 +543,7 @@ def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
          patch("app.scheduler.run_stock_trades_pipeline", completed), \
          patch("app.scheduler.run_election_pipeline", completed), \
          patch("app.services.bill_service.warm_bill_collection_cache"), \
-         patch("app.pipeline_chain._check_elsewhere", AsyncMock(return_value=None)), \
+         patch("app.pipeline_chain._is_running_elsewhere", AsyncMock(return_value=False)), \
          patch("app.ops_alerts.resolve_ops_alert"), \
          patch("app.background.threading.Thread", _SyncThread), \
          patch("app.ops_alerts.send_ops_alert") as alert, \

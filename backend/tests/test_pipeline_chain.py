@@ -4,7 +4,6 @@ before it did."""
 import asyncio
 import threading
 import time
-from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -19,7 +18,8 @@ def _fresh(monkeypatch):
     monkeypatch.setattr(pipeline_chain, "POLL_S", 0.005)
     monkeypatch.setattr(pipeline_chain, "ELSEWHERE_POLL_S", 0.005)
     monkeypatch.setattr(pipeline_chain, "_turns", pipeline_chain._Turns())
-    monkeypatch.setattr(pipeline_chain, "_began", {})
+    monkeypatch.setattr(pipeline_chain, "_completed", {})
+    monkeypatch.setattr(pipeline_chain, "_chains", {})
 
 
 def _link(label, run, after=None, whole=True):
@@ -138,6 +138,36 @@ def test_a_pipeline_another_chain_just_ran_is_not_run_again():
     assert results["n"]["House"].status == RAN_ELSEWHERE
 
 
+@pytest.mark.parametrize("status", ["skipped", "failed"])
+def test_a_run_that_did_not_complete_is_not_one_another_chain_skips(status):
+    # A trigger's House that failed or was refused hasn't done tonight's
+    # work: the nightly chain still runs it.
+    asyncio.run(run_chain([_link("House", AsyncMock(return_value={"status": status}))]))
+    again = _completed()
+    asyncio.run(run_chain([_link("House", again)]))
+    again.assert_awaited_once()
+
+
+def test_a_crashed_run_is_not_one_another_chain_skips():
+    asyncio.run(run_chain([_link("House", AsyncMock(side_effect=RuntimeError("boom")))]))
+    again = _completed()
+    asyncio.run(run_chain([_link("House", again)]))
+    again.assert_awaited_once()
+
+
+def test_a_run_another_chain_began_earlier_and_completed_since_is_not_repeated():
+    # A full trigger's Senate started before the nightly chain and finished
+    # after it began: the nightly Senate doesn't run it back to back.
+    import datetime as dt
+
+    from app.time_utils import utcnow
+
+    pipeline_chain._completed["Senate"] = utcnow() + dt.timedelta(seconds=1)
+    run = _completed()
+    assert asyncio.run(run_chain([_link("Senate", run)]))["Senate"].status == RAN_ELSEWHERE
+    run.assert_not_awaited()
+
+
 def test_a_partial_run_is_not_one_another_chain_skips():
     # A single-senator run isn't the Senate pipeline's whole run.
     first = asyncio.run(run_chain([_link("Senate", _completed(), whole=False)]))
@@ -147,17 +177,23 @@ def test_a_partial_run_is_not_one_another_chain_skips():
     whole.assert_awaited_once()
 
 
-def test_a_hung_turn_holds_the_next_link_off_only_so_long(monkeypatch):
-    # Waiting on it forever would stall every later link.
-    monkeypatch.setattr(pipeline_chain, "STALE_PIPELINE_TIMEOUT", timedelta(seconds=0.05))
+def test_a_hung_turn_is_taken_over_and_the_queue_goes_on_serializing():
+    # Waiting on it forever would stall every later link; letting every
+    # waiter past it would run them all at once.
     turns = pipeline_chain._turns
     hung = object()
     turns.join(hung)
-    assert turns.try_take(hung, 60) is True  # a hung run's turn, never released
-    ran = _completed()
-    started = time.monotonic()
-    assert asyncio.run(run_chain([_link("A", ran)]))["A"].status == "completed"
-    assert time.monotonic() - started < 5
+    assert turns.try_take(hung, 60) == "held"  # a hung run's turn, never released
+    time.sleep(0.06)
+    first, second = object(), object()
+    turns.join(first)
+    turns.join(second)
+    assert turns.try_take(first, 0.05) == "taken"
+    assert turns.try_take(second, 0.05) is None  # waits for `first`, not past it
+    turns.release(hung)  # the hung run's late release frees nothing
+    assert turns.try_take(second, 60) is None
+    turns.release(first)
+    assert turns.try_take(second, 60) == "held"
 
 
 def test_a_chain_is_reported_running_between_its_links():
@@ -184,8 +220,14 @@ async def test_the_status_reports_a_chain_so_deploys_wait_it_out(db_session, mon
     from app.api.admin import admin_pipeline_status
 
     assert (await admin_pipeline_status(db=db_session))["pipelineChainIsRunning"] is False
-    monkeypatch.setattr(pipeline_chain, "_chains", 1)
+    monkeypatch.setitem(pipeline_chain._chains, 99, ("", time.monotonic()))
     assert (await admin_pipeline_status(db=db_session))["pipelineChainIsRunning"] is True
+
+
+def test_a_chain_with_no_progress_for_a_runs_length_is_not_busy(monkeypatch):
+    # Wedged: reported busy forever, it would hold every deploy off.
+    monkeypatch.setitem(pipeline_chain._chains, 1, ("", time.monotonic() - 13 * 3600))
+    assert not pipeline_chain.chain_running()
 
 
 class TestTriggers:
@@ -217,13 +259,38 @@ class TestTriggers:
         house.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_a_trigger_is_refused_while_a_chain_runs(self, db_session, monkeypatch):
+    async def test_a_full_trigger_is_refused_while_a_full_chain_runs(self, db_session, monkeypatch):
         # It would queue a second chain behind the first and redo its work.
         from fastapi import HTTPException
 
         from app.api.admin import admin_trigger_pipeline
 
-        monkeypatch.setattr(pipeline_chain, "_chains", 1)
+        started = []
+        monkeypatch.setattr("app.api.pipeline.run_pipeline_in_thread", lambda *a, **k: started.append(1))
+        await admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
         with pytest.raises(HTTPException) as refused:
             await admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
-        assert refused.value.status_code == 409
+        assert refused.value.status_code == 409 and started == [1]
+
+    @pytest.mark.asyncio
+    async def test_a_single_pipeline_chain_does_not_refuse_a_full_trigger(self, db_session, monkeypatch):
+        from app.api.admin import admin_trigger_pipeline
+
+        started = []
+        monkeypatch.setitem(pipeline_chain._chains, 5, ("", time.monotonic()))  # an Election trigger's
+        monkeypatch.setattr("app.api.pipeline.run_pipeline_in_thread", lambda *a, **k: started.append(1))
+        await admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
+        assert started == [1]
+
+    @pytest.mark.asyncio
+    async def test_a_trigger_that_never_starts_leaves_no_registration(self, db_session, monkeypatch):
+        from app.api.admin import admin_trigger_pipeline
+        from app.background import WritesHeld
+
+        def held(*_a, **_k):
+            raise WritesHeld("a data reset holds writes")
+
+        monkeypatch.setattr("app.api.pipeline.run_pipeline_in_thread", held)
+        with pytest.raises(WritesHeld):
+            await admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session)
+        assert not pipeline_chain.chain_running()

@@ -101,13 +101,15 @@ def nightly_links() -> "list[Link]":
     ]
 
 
-def triggered_chain(senator: str | None, fetch_only: bool):
+def triggered_chain(senator: str | None, fetch_only: bool, reserved: int | None = None):
     """What a pipeline trigger runs: the nightly chain's five pipelines,
     each whatever the one before it did — so a trigger recovers any of
-    them, not only the first. A single senator or a fetch-only run is the
-    Senate pipeline alone, and not a whole run another chain can skip."""
+    them, not only the first. `reserved`: its full-chain registration,
+    taken when the trigger was accepted (pipeline_chain.reserve). A single
+    senator or a fetch-only run is the Senate pipeline alone, and not a
+    whole run another chain can skip."""
     from app.models import PipelineRun
-    from app.pipeline_chain import Link, one_link, run_chain
+    from app.pipeline_chain import FULL, Link, one_link, run_chain
 
     if senator is not None or fetch_only:
         return one_link(Link(
@@ -116,7 +118,7 @@ def triggered_chain(senator: str | None, fetch_only: bool):
         ))
 
     async def chain() -> None:
-        await run_chain(nightly_links())
+        await run_chain(nightly_links(), kind=FULL, reserved=reserved)
 
     return chain
 
@@ -139,7 +141,7 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
-    from app.pipeline_chain import CRASHED, RAN_ELSEWHERE, run_chain
+    from app.pipeline_chain import CRASHED, FULL, RAN_ELSEWHERE, run_chain
 
     def _skip_cause(reason: str | None) -> str:
         """What held the run off: the skip's own reason (every pipeline's
@@ -155,9 +157,8 @@ def _nightly_pipeline() -> None:
         slug = link.label.lower().replace(" ", "-")
         skipped, crashed = f"nightly-skipped-{slug}", f"nightly-crashed-{slug}"
         if outcome.status == RAN_ELSEWHERE:
-            # Another run of it (a trigger's) did tonight's work: its own
-            # run row and the staleness watch report how that went; this
-            # link neither alerts nor clears an alert on its behalf.
+            # Another run of it did tonight's work (a trigger's, completed):
+            # this link neither alerts nor clears an alert on its behalf.
             return
         if outcome.status == "skipped":
             reason = (outcome.result or {}).get("reason")
@@ -174,11 +175,15 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert(skipped)  # it ran tonight (or another run of it did)
         # A link reached: a reset no longer holds the chain off.
         resolve_ops_alert("nightly-skipped-reset")
-        if outcome.status == CRASHED:
+        if outcome.status in (CRASHED, "failed"):
+            # Raised, or caught its own error and said so (the House,
+            # Supplementary and Election pipelines return "failed").
+            why = (f"{type(outcome.error).__name__}: {outcome.error}" if outcome.status == CRASHED
+                   else f"it ended failed ({(outcome.result or {}).get('error') or 'see its run row'})")
             send_ops_alert(
-                f"Nightly {link.label} run crashed",
-                f"{type(outcome.error).__name__}: {outcome.error}. {link.label} data will be a day stale "
-                "unless triggered manually. The other pipelines in tonight's chain still run.",
+                f"Nightly {link.label} run {'crashed' if outcome.status == CRASHED else 'failed'}",
+                f"{why}. {link.label} data will be a day stale unless triggered manually. The other "
+                "pipelines in tonight's chain still run.",
                 dedupe_key=f"crashed-{slug}-{utcnow():%Y-%m-%d}",
                 condition=crashed,
             )
@@ -208,7 +213,7 @@ def _nightly_pipeline() -> None:
                 logger.exception("Pre-pipeline check %s failed", check.__name__)
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(run_chain(nightly_links(), _report))
+            loop.run_until_complete(run_chain(nightly_links(), _report, kind=FULL))
             # The whole chain's alert, from before each link had its own.
             resolve_ops_alert("nightly-crashed")
         except BaseException as e:

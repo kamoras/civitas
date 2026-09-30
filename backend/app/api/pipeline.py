@@ -14,17 +14,42 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 def _is_pipeline_running(db: Session) -> bool:
-    """Whether a Senate run is live in the shared database, or a chain of
-    pipelines is in progress (app.pipeline_chain) — a trigger then would
-    queue a second chain behind the first and redo its pipelines.
+    """Check the shared database for a currently running Senate pipeline.
 
     A leftover row a dead run left is ignored (run_tracker.live_run), so it
     can't wedge the "is a pipeline already running?" guard.
     """
     from app.pipeline.run_tracker import run_in_progress
-    from app.pipeline_chain import chain_running
 
-    return chain_running() or run_in_progress(db, PipelineRun)
+    return run_in_progress(db, PipelineRun)
+
+
+def start_triggered_chain(db: Session, senator: str | None, fetch_only: bool, error_label: str) -> None:
+    """What both pipeline triggers do: refuse (409) while a Senate run is
+    live or, for a full run, while a full chain is in progress — the
+    nightly one or another trigger's — which a second would queue behind
+    and redo; else start it (scheduler.triggered_chain). The full-chain
+    check and its registration are one step, so two requests can't both
+    start one."""
+    from app.pipeline_chain import FULL, forget, reserve
+    from app.scheduler import triggered_chain
+
+    if _is_pipeline_running(db):
+        raise HTTPException(status_code=409, detail="Pipeline is already running")
+    reserved = None
+    if senator is None and not fetch_only:
+        reserved = reserve(FULL)
+        if reserved is None:
+            raise HTTPException(status_code=409, detail="Pipelines are already running (the nightly run or a trigger)")
+    try:
+        run_pipeline_in_thread(
+            triggered_chain(senator, fetch_only, reserved), name="pipeline-run", error_label=error_label,
+        )
+    except BaseException:
+        if reserved is not None:
+            forget(reserved)  # never started
+        raise
+
 
 
 @router.get("/pipeline/status", response_model=PipelineStatusSchema)
@@ -77,11 +102,5 @@ async def trigger_pipeline(
 ) -> dict:
     """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
     check_pipeline_token(authorization)
-
-    if _is_pipeline_running(db):
-        raise HTTPException(status_code=409, detail="Pipeline is already running")
-
-    from app.scheduler import triggered_chain
-
-    run_pipeline_in_thread(triggered_chain(senator, fetch_only), name="pipeline-run", error_label="Pipeline run failed")
+    start_triggered_chain(db, senator, fetch_only, "Pipeline run failed")
     return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}

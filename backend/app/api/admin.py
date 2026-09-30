@@ -1362,16 +1362,9 @@ async def admin_trigger_pipeline(
     db: Session = Depends(get_db),
 ):
     """Trigger a pipeline run from the admin panel."""
-    from app.api.pipeline import _is_pipeline_running
+    from app.api.pipeline import start_triggered_chain
 
-    if _is_pipeline_running(db):
-        raise HTTPException(status_code=409, detail="Pipeline is already running")
-
-    from app.scheduler import triggered_chain
-
-    run_pipeline_in_thread(
-        triggered_chain(senator, fetch_only), name="pipeline-run", error_label="Admin-triggered pipeline run failed",
-    )
+    start_triggered_chain(db, senator, fetch_only, "Admin-triggered pipeline run failed")
     return {
         "message": "Pipeline triggered",
         "senatorFilter": senator,
