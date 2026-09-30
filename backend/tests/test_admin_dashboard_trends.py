@@ -14,12 +14,13 @@ from app.api.admin import (
     _histogram_percentile, admin_load_times, admin_pipeline_trend, admin_visitor_stats,
 )
 from app.api.visits import (
-    LOAD_TIMING_BUCKETS_MS, _bucket_for, _visit_queue, _write_visit_batch, track_timing,
+    LOAD_TIMING_BUCKETS_MS, _bucket_for, track_timing,
 )
 from app.models import (
     HousePipelineRun, PageLoadTiming, PageView, PipelineRun, PipelineStatus, SiteVisit,
 )
 from app.time_utils import utcnow
+from tests.visits_helpers import _drain_queue_and_write
 
 
 def _today() -> str:
@@ -28,15 +29,6 @@ def _today() -> str:
 
 def _days_ago(n: int) -> str:
     return (datetime.now(UTC).date() - timedelta(days=n)).isoformat()
-
-
-def _drain(db) -> int:
-    batch = []
-    while not _visit_queue.empty():
-        batch.append(_visit_queue.get_nowait())
-    if batch:
-        _write_visit_batch(batch, db)
-    return len(batch)
 
 
 class TestBucketFor:
@@ -56,7 +48,7 @@ class TestBucketFor:
 class TestTrackTiming:
     async def test_records_each_reported_metric_in_its_bucket(self, db_session):
         await track_timing(path="/politicians/jane-doe", ttfb=80, fcp=420, load=900)
-        assert _drain(db_session) == 1
+        assert _drain_queue_and_write(db_session) == 1
 
         rows = {
             (r.path, r.metric, r.bucket_ms): r.count
@@ -72,14 +64,14 @@ class TestTrackTiming:
     async def test_repeat_loads_accumulate_in_the_same_cell(self, db_session):
         for _ in range(3):
             await track_timing(path="/leaderboard", ttfb=None, fcp=None, load=700)
-        _drain(db_session)
+        _drain_queue_and_write(db_session)
 
         row = db_session.query(PageLoadTiming).one()
         assert (row.metric, row.bucket_ms, row.count) == ("load", 750, 3)
 
     async def test_nothing_in_range_queues_nothing(self, db_session):
         await track_timing(path="/leaderboard", ttfb=-5, fcp=None, load=10 ** 7)
-        assert _drain(db_session) == 0
+        assert _drain_queue_and_write(db_session) == 0
 
 
 class TestHistogramPercentile:
@@ -186,7 +178,7 @@ class TestTrackTimingPath:
     async def test_unknown_path_buckets_to_other_not_a_new_row_per_string(self, db_session):
         await track_timing(path="/<script>alert(1)</script>", ttfb=None, fcp=None, load=500)
         await track_timing(path="/wp-admin/x.php", ttfb=None, fcp=None, load=500)
-        _drain(db_session)
+        _drain_queue_and_write(db_session)
         rows = db_session.query(PageLoadTiming).all()
         assert [(r.path, r.count) for r in rows] == [("/other", 2)]
 
