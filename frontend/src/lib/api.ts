@@ -965,6 +965,9 @@ export async function streamExploreDocumentSummary(
   try {
     const cached = await fetch(`${API_BASE}/explore/${id}/cached-summary`, { signal });
     if (cached.status === 200) return toSummary(await cached.json());
+    // Released, as below: a 404 or a refusal's body left unread holds its
+    // connection while the page goes on to ask.
+    await cached.body?.cancel().catch(() => {});
   } catch (error) {
     if (signal?.aborted) throw error;
   }

@@ -273,10 +273,15 @@ def _record(subject: str, body: str, dedupe_key: str | None, condition: str | No
         )
         decoded = [(row, json.loads(row.data_json)) for row in history]
         still_open = {data.get("condition") for _, data in decoded if data.get("condition") and _is_open(data)}
+        # A dated key (…-YYYY-MM-DD) recurs only within its day: kept that
+        # long, not for as long as a condition stays open, which would keep
+        # a row a day forever.
+        key_matters_since = now - timedelta(days=2)
         for row, data in decoded[_HISTORY_KEEP:]:
             if _is_open(data):
                 continue
-            if row.cache_key.startswith("dedupe-") and data.get("condition") in still_open:
+            if (row.cache_key.startswith("dedupe-") and data.get("condition") in still_open
+                    and row.cached_at >= key_matters_since):
                 continue
             db.delete(row)
         db.commit()

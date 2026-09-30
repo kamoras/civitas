@@ -1381,8 +1381,12 @@ def _rebuild(db_session_factory, wait: bool, if_incomplete: bool, unless_rebuilt
         }, meta={_INDEX_MODEL: ""})
         try:
             total = _embed_all(db_session_factory)
-            _record_chunks_per_doc(conn, finished_rebuild=True)  # once, over the finished index
-            _set_meta(conn, _INDEX_MODEL, index_identity())
+            # Together: a purge committing between the two would see the
+            # index incomplete, skip its recount, and leave this ratio
+            # describing chunks it removed.
+            with _writing(conn):
+                _record_chunks_per_doc(conn, finished_rebuild=True)  # once, over the finished index
+                _set_meta(conn, _INDEX_MODEL, index_identity())
         except Exception as error:
             raise RebuildFailed(f"explore index rebuild failed after its swap: {error}") from error
         _last_rebuild_began_at = began

@@ -187,10 +187,40 @@ class TestStreaming:
         patches, _ = _llm(_unreachable)
         with patches[0], patches[1], patches[2]:
             assert "retryAfter" in (await _events(doc, db_session))[-1]
-            monkeypatch.setattr(explore_summary, "_unreachable_since",
-                                explore_summary.time.monotonic() - explore_summary.UNREACHABLE_WAIT_S - 1)
+            now = explore_summary.time.monotonic()
+            # Failing since over a restart's length ago, and just now too.
+            monkeypatch.setattr(explore_summary, "_unreachable", (now - explore_summary.UNREACHABLE_WAIT_S - 1, now))
             explore_summary._llm_busy_until = 0.0
             assert await _events(doc, db_session) == [_NONE]
+
+    async def test_a_blip_long_ago_does_not_cut_a_later_restarts_wait(self, db_session, monkeypatch):
+        doc = _make_doc(db_session)
+
+        async def _unreachable(*_args, **_kwargs):
+            raise httpx.ConnectError("refused")
+            yield  # pragma: no cover
+
+        long_ago = explore_summary.time.monotonic() - 5 * 3600
+        monkeypatch.setattr(explore_summary, "_unreachable", (long_ago, long_ago))
+        patches, _ = _llm(_unreachable)
+        with patches[0], patches[1], patches[2]:
+            assert "retryAfter" in (await _events(doc, db_session))[-1]
+
+    async def test_an_error_from_a_reachable_llm_does_not_restart_the_wait(self, db_session, monkeypatch):
+        # A crash loop's 500 between refusals isn't the LLM back.
+        doc = _make_doc(db_session)
+
+        async def _fails(*_args, **_kwargs):
+            raise httpx.HTTPStatusError("bad", request=httpx.Request("POST", "http://llm"),
+                                        response=httpx.Response(500))
+            yield  # pragma: no cover
+
+        began = explore_summary.time.monotonic() - 60
+        monkeypatch.setattr(explore_summary, "_unreachable", (began, began))
+        patches, _ = _llm(_fails)
+        with patches[0], patches[1], patches[2]:
+            await _events(doc, db_session)
+        assert explore_summary._unreachable == (began, began)
 
     async def test_a_stream_waiting_on_the_llm_keeps_the_connection_alive(self, db_session, monkeypatch):
         # nginx drops a response silent for its read timeout.

@@ -594,4 +594,19 @@ describe("streamExploreDocumentSummary with a summary already made", () => {
     expect((await streamExploreDocumentSummary(1, () => {})).summary).toBe("S");
     expect(post).toHaveBeenCalledTimes(1);
   });
+
+  it("releases a cached read's body it doesn't use", async () => {
+    const missing = new Response('{"detail": "none yet"}', { status: 404 });
+    const cancel = vi.spyOn(missing.body!, "cancel");
+    stubSummaryFetch(
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('data: {"done": true, "summary": "S", "keyPoints": [], "impact": ""}\n\n')
+        ),
+      missing
+    );
+    await streamExploreDocumentSummary(1, () => {});
+    expect(cancel).toHaveBeenCalled();
+  });
 });

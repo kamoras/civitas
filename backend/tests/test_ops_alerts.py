@@ -446,6 +446,23 @@ class TestOpenAndResolved:
                 self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
             assert not self._send(db_session, "States A failing", dedupe_key="a", condition="states")
 
+    def test_pruning_lets_a_superseded_alert_go_once_its_day_has_passed(self, db_session):
+        # Dated keys recur only within their day: kept for as long as a
+        # condition stays open, a row a day would pile up for good.
+        from app import ops_alerts
+        from app.models import ApiCache
+
+        with patch.object(ops_alerts, "_HISTORY_KEEP", 2):
+            self._send(db_session, "Rebuild failed", dedupe_key="rebuild-day1", condition="rebuild")
+            row = db_session.query(ApiCache).filter(ApiCache.cache_key == "dedupe-rebuild-day1").one()
+            row.cached_at = utcnow() - timedelta(days=3)
+            db_session.commit()
+            self._send(db_session, "Rebuild failed", dedupe_key="rebuild-day4", condition="rebuild")
+            for i in range(3):
+                self._send(db_session, f"event {i}", dedupe_key=f"e{i}")
+        keys = {r.cache_key for r in db_session.query(ApiCache).filter(ApiCache.tier == ops_alerts._HISTORY_TIER)}
+        assert "dedupe-rebuild-day1" not in keys and "dedupe-rebuild-day4" in keys
+
     def test_the_overrun_watchdog_resolves_once_the_run_is_over(self, db_session):
         self._send(db_session, "House pipeline overrun", condition="overrun-house")
         _check(db_session)  # no House run is running any more

@@ -568,7 +568,12 @@ def _purge_orphaned_vectors(db: Session) -> int:
     except Exception:
         logger.warning("Could not read the vector index — skipping orphan sweep")
         return 0
-    live = {row[0] for row in db.query(ExploreDocument.id).all()}
+    from app.database import own_session
+
+    # On a session of its own: this runs on a worker thread, and the run's
+    # session is closed under it if the run is cancelled meanwhile.
+    with own_session(db) as own:
+        live = {row[0] for row in own.query(ExploreDocument.id).all()}
     orphans = embedded - live
     if not orphans:
         return 0
