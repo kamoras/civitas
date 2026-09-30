@@ -23,8 +23,8 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.pipeline.analyze.signal_overlap import measure  # noqa: E402
 from app.contact import CONTACT_EMAIL  # noqa: E402
+from app.pipeline.analyze.signal_overlap import measure  # noqa: E402
 from app.time_utils import utcnow  # noqa: E402
 
 API_BASE = "https://civitas-research.org/api"

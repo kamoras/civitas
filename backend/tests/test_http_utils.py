@@ -349,66 +349,72 @@ async def test_a_moved_page_is_followed_not_read_as_an_empty_success():
     assert resp is not None and resp.text == "the list"
 
 
-
-# Directories the whole-repo sweep never reads: dependencies, build output,
-# caches, and the tests themselves (this one names the old address).
-_SWEEP_SKIP = {".git", "node_modules", ".next", ".venv", "__pycache__", "tests", ".pytest_cache", ".ruff_cache"}
-_SWEEP_SUFFIXES = {
-    ".py", ".md", ".json", ".ts", ".tsx", ".js", ".mjs", ".yml", ".yaml", ".toml",
-    ".txt", ".conf", ".sh", ".html", ".example", ".cfg", ".ini",
-}
+# The address the pipeline and scripts used to give, which never existed.
+_OLD_CONTACT = "contact@civitas-research.org"
 
 
-def _repo_text_files(backend):
-    """Every text file in the checkout around the backend (docs, nginx,
-    workflows, .env.example, the frontend), for the stale-address sweep."""
-    import os
-    from pathlib import Path
+def _tracked_files(repo):
+    """Every file git tracks in `repo`, or None outside a git checkout (the
+    backend image). Tracked files only: what is checked in, never a local
+    worktree, virtualenv, coverage report or .env beside it."""
+    import subprocess
 
-    out = []
-    for root, dirs, files in os.walk(backend.parent):
-        dirs[:] = [d for d in dirs if d not in _SWEEP_SKIP]
-        for name in files:
-            path = Path(root) / name
-            if path.suffix in _SWEEP_SUFFIXES or name.startswith((".env", "Dockerfile")):
-                out.append(path)
-    return out
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo), "ls-files", "-z"], capture_output=True, check=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return [repo / name for name in out.decode().split("\0") if name]
 
-def test_every_user_agent_names_the_real_contact_address():
+
+def _text(path) -> str:
+    """A file's text, or "" for a binary file (a NUL byte) or one tracked
+    but deleted from the working tree."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    return "" if b"\0" in data else data.decode("utf-8", errors="ignore")
+
+
+def test_contact_address_is_real_and_held_once():
     """Sources are told how to reach us; the address has to be one that is
     read. contact@civitas-research.org never existed, and SEC's fair-access
-    policy asks for a working email."""
+    policy asks for a working email. (Some requests name no contact at all:
+    the WAFs that refuse the comment, and fetchers that never named one.)"""
+    import re
     from pathlib import Path
 
     from app.contact import CONTACT_EMAIL
     from app.pipeline.fetch import sec_tickers, state_candidates_tx
     from app.pipeline.fetch.http_utils import BROWSER_HEADERS, CIVIC_CONTACT
 
-    assert "@" in CONTACT_EMAIL
+    assert re.fullmatch(r"[^@\s()]+@[^@\s()]+\.[a-z]{2,}", CONTACT_EMAIL)
     assert CONTACT_EMAIL in CIVIC_CONTACT
     assert BROWSER_HEADERS["User-Agent"].endswith(f"(+{CONTACT_EMAIL})")
     assert sec_tickers._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
     assert state_candidates_tx._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
 
-    # The backend tree is always here; the repo around it (top-level docs,
-    # the frontend) only in a checkout, not in the backend image.
-    backend = Path(__file__).resolve().parents[1]
-    code = [
-        *backend.glob("app/**/*.py"),
-        *backend.glob("app/data/*.json"),
-        *backend.glob("scripts/*.py"),
-    ]
-    assert code
-    around = _repo_text_files(backend) if (backend.parent / "frontend").is_dir() else []
-    stale = [
-        str(p) for p in code + around
-        if "contact@civitas-research.org" in p.read_text(errors="ignore")
-    ]
+    # A checkout: every tracked file. The backend image has no git and no
+    # repo around it: the backend tree it does have.
+    this = Path(__file__).resolve()
+    backend = this.parents[1]
+    files = _tracked_files(backend.parent)
+    if files is None:
+        files = [p for p in backend.rglob("*") if p.is_file() and "__pycache__" not in p.parts]
+    files = [p for p in files if p.resolve() != this]
+    assert any(p.name == "contact.py" for p in files)
+
+    stale = [str(p) for p in files if _OLD_CONTACT in _text(p).lower()]
     assert not stale
-    # Code names the address through the constant, never a copy of it.
+    # The backend names the address through the constant, never a copy of
+    # it — not even split across adjacent string literals, which is why
+    # this looks for the local part alone. (SECURITY.md and the code of
+    # conduct, outside the backend, give it to people, not to servers.)
+    local = CONTACT_EMAIL.split("@")[0]
     copies = [
-        str(p.relative_to(backend))
-        for p in code
-        if p.suffix == ".py" and p != backend / "app" / "contact.py" and CONTACT_EMAIL in p.read_text()
+        str(p) for p in files
+        if backend in p.resolve().parents and p.name != "contact.py" and local in _text(p)
     ]
     assert not copies
