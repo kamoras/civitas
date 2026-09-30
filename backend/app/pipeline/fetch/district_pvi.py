@@ -66,6 +66,7 @@ import json
 import logging
 import pathlib
 import re
+import threading
 import time
 import urllib.parse
 from collections.abc import Iterator
@@ -946,49 +947,6 @@ RESCORE_WHO = "startup Constituent Alignment rescore"
 WAITED_FOR = (REFRESH_WHO, RESCORE_WHO)
 
 
-def release_orphaned_holds() -> int:
-    """At pipeline-process startup only (main._invalidate_orphaned_pipelines,
-    beside run_tracker.sweep_orphaned_runs; never from the API process):
-    drop the DISTRICT_LINES lease a killed process left behind — a House
-    run, a refresh or the startup rescore, all threads of the pipeline
-    process, which holds the role lock, so no live holder can exist in
-    another one. The same premise the sweep marks their run rows stale on
-    (check-and-deploy.sh doesn't deploy while a run is going). Without it
-    the dead holder's lease stood for its hour-long stale window: House
-    triggers refused, a nightly House step ended the chain, and the startup
-    rescore skipped the House. Returns how many were released; logs, never
-    raises."""
-    from app.database import SessionLocal
-    from app.models import ApiCache
-    from app.pipeline import lease
-
-    ours = {HOUSE_RUN_WHO, REFRESH_WHO, RESCORE_WHO}
-    db = SessionLocal()
-    try:
-        released = 0
-        for row in db.query(ApiCache).filter(
-            ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
-        ).all():
-            try:
-                who = json.loads(row.data_json).get("who")
-            except (TypeError, ValueError, AttributeError):
-                who = None
-            if who not in ours:
-                continue
-            released += db.query(ApiCache).filter(
-                ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
-                ApiCache.data_json == row.data_json,
-            ).delete(synchronize_session=False)
-            logger.warning("Released the district lines a %s left behind in a process that is gone", who)
-        db.commit()
-        return released
-    except Exception:
-        db.rollback()
-        logger.exception("Releasing orphaned district-lines leases failed")
-        return 0
-    finally:
-        db.close()
-
 # How long a House run waits for a District PVI refresh that holds the
 # lines. A refresh is a handful of requests (one per pinned Congress, plus
 # the live revision), each retried with backoff (_RETRIES, _BACKOFF_S) —
@@ -1000,6 +958,104 @@ REFRESH_POLL_S = 30.0
 # released between the take and the read) is retried this soon, within the
 # same wait.
 BUSY_RETRY_S = 1.0
+
+
+def release_orphaned_holds(*, recheck_after_s: float | None = None) -> "threading.Timer | None":
+    """At pipeline-process startup only (main._invalidate_orphaned_pipelines,
+    beside run_tracker.sweep_orphaned_runs; never from the API process):
+    release the DISTRICT_LINES lease a killed House run, refresh or startup
+    rescore left behind. Without it the dead holder's lease stood for its
+    hour-long stale window: House triggers refused, a nightly House step
+    ended the chain, and the startup rescore skipped the House.
+
+    What makes a leftover lease dead is not the role lock (that is per
+    container, /dev/shm) but the pipeline service's stop-first update
+    order (docker-compose.swarm.yml) and check-and-deploy.sh's busy check:
+    no other pipeline process should be running. This does not rely on it
+    alone: a live holder beats every lease.BEAT_S, so a lease is released
+    only once it has gone a beat interval and a half without one — at once
+    when its last beat is already that old, otherwise by a re-check that
+    long after this call, which deletes it only if it still carries the
+    beat it had now. A live holder elsewhere (a start-first change, a
+    second worker container on the volume) keeps its lease. Returns the
+    re-check's timer (None when nothing waits on one); logs, never raises."""
+    from datetime import timedelta
+
+    from app.pipeline import lease
+    from app.time_utils import utcnow
+
+    wait = lease.BEAT_S * 1.5 if recheck_after_s is None else recheck_after_s
+    cutoff = utcnow() - timedelta(seconds=wait)
+    fresh = _release_ours(lambda row: row.cached_at < cutoff)
+    if not fresh:
+        return None
+    seen = {(data, beat) for data, beat, _ in fresh}
+    whos = {who for _, _, who in fresh}
+    _UNDER_RECHECK.update(whos)
+
+    def recheck() -> None:
+        try:
+            _release_ours(lambda row: (row.data_json, row.cached_at) in seen)
+        finally:
+            _UNDER_RECHECK.difference_update(whos)
+
+    timer = threading.Timer(wait, recheck)
+    timer.daemon = True
+    timer.start()
+    return timer
+
+
+# The holders whose lease release_orphaned_holds is still re-checking: most
+# likely dead (killed moments before this process started, by the deploy
+# that started it), so a House run or the startup rescore refused by one
+# waits for the re-check rather than giving up on a holder that is gone.
+_UNDER_RECHECK: set[str] = set()
+
+
+def waits_for(holder: str | None) -> bool:
+    """Whether a House run (or the startup rescore) refused the district
+    lines by `holder` waits and retries: a refresh or the startup rescore
+    (WAITED_FOR), or a leftover lease release_orphaned_holds is re-checking."""
+    return holder in WAITED_FOR or holder in _UNDER_RECHECK
+
+
+def _release_ours(dead) -> list[tuple[str, object, str]]:
+    """Delete our DISTRICT_LINES lease rows that `dead(row)` says are dead —
+    each only while it still carries the beat it was read with. Returns the
+    (data, beat, who) of our rows it left."""
+    from app.database import SessionLocal
+    from app.models import ApiCache
+    from app.pipeline import lease
+
+    ours = {HOUSE_RUN_WHO, REFRESH_WHO, RESCORE_WHO}
+    kept: list[tuple[str, object, str]] = []
+    db = SessionLocal()
+    try:
+        for row in db.query(ApiCache).filter(
+            ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
+        ).all():
+            try:
+                who = json.loads(row.data_json).get("who")
+            except (TypeError, ValueError, AttributeError):
+                who = None
+            if who not in ours:
+                continue
+            if not dead(row):
+                kept.append((row.data_json, row.cached_at, who))
+                continue
+            gone = db.query(ApiCache).filter(
+                ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
+                ApiCache.data_json == row.data_json, ApiCache.cached_at == row.cached_at,
+            ).delete(synchronize_session=False)
+            if gone:
+                logger.warning("Released the district lines a %s left behind in a process that is gone", who)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Releasing orphaned district-lines leases failed")
+    finally:
+        db.close()
+    return kept
 
 
 async def refresh_district_pvi() -> bool:
@@ -1251,11 +1307,11 @@ async def run_house_on_sitting_lines(
             # the House run — and with it the rest of the nightly chain.
             await asyncio.sleep(min(poll_s, BUSY_RETRY_S))
             continue
-        if granted.holder not in WAITED_FOR:
+        if not waits_for(granted.holder):
             break
         logger.info("House run waiting for the %s that holds the district lines", granted.holder)
         await asyncio.sleep(poll_s)
-    if granted.holder in WAITED_FOR:
+    if waits_for(granted.holder):
         logger.warning(
             "House pipeline not started: the %s has held the district lines for over %d minutes",
             granted.holder, refresh_wait_s // 60,
@@ -1289,13 +1345,29 @@ def _superseded(data: dict) -> int | None:
     read) to the new one. Letting it settle ITS lines would switch the file
     back and rescore every House member on the old map — and the next job
     would switch them forward again. Never with an environment pin, which
-    may deliberately put the lines on an older Congress."""
+    may deliberately put the lines on an older Congress.
+
+    The file's Congress counts only while that Congress is actually in
+    office by the clock (congress_in_session): a file AHEAD of the clock
+    was written under an environment pin since removed (an operator
+    pinning the next Congress early), not by a newer job — treating it as
+    newer would skip every House run until that Congress took office. It
+    is logged, and the House run reselects the held Congress's lines."""
     from app.config import settings
+    from app.time_utils import congress_in_session
 
     if settings.current_congress_pinned:
         return None
     held = _sitting_congress()
     on_file = data.get("congress") if data.get("congresses") and isinstance(data.get("congress"), int) else 0
+    in_office = congress_in_session()
+    if on_file > in_office:
+        logger.warning(
+            "district-pvi: the file is on the %s Congress's lines, ahead of the %s in office — written "
+            "under an environment pin since removed; the %s's lines are settled over it",
+            ordinal(on_file), ordinal(in_office), ordinal(held),
+        )
+        on_file = 0
     newer = max(settings.__dict__["CURRENT_CONGRESS"], on_file)
     return newer if newer > held else None
 

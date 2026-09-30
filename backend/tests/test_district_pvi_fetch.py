@@ -1287,60 +1287,127 @@ class TestStoredScoresKeepTheirLines:
             lease.release(db_session, lease.DISTRICT_LINES, token)
         assert taken == []
 
-    def test_the_startup_rescore_waits_for_a_refresh(self, monkeypatch, tmp_path, db_session):
-        """A District PVI refresh holding the lines is waited for (bounded),
-        not given up on: nothing retries the rescore later."""
-        import threading
-        import time
-
-        from app.main import rescore_constituent_alignment_on_current_lines
+    def _stale_house_held_by_refresh(self, monkeypatch, tmp_path, db_session):
         from app.pipeline import lease
-        from tests.test_constituent_rescore import _factory
 
         self._file(monkeypatch, tmp_path, 120)
         self._stale_house_on_119(db_session, monkeypatch, tmp_path)
         token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO)
         assert token is not None
+        return token
 
-        def finish_refresh():
-            time.sleep(0.2)
+    def _house_lines(self, db_session):
+        from app.models import Representative
+
+        db_session.expire_all()
+        return db_session.get(Representative, "H000").district_lines_congress
+
+    def test_the_startup_rescore_waits_for_a_refresh_holding_nothing(self, monkeypatch, tmp_path, db_session):
+        """A District PVI refresh holding the lines is waited for (bounded;
+        nothing else retries the rescore) — between passes that hold
+        nothing: no STARTUP_RESCORE lease and no writer registration, so a
+        data reset isn't refused for the wait."""
+        import time
+
+        from app import background
+        from app.main import _run_startup_rescore
+        from app.pipeline import lease
+        from tests.test_constituent_rescore import _factory
+
+        token = self._stale_house_held_by_refresh(monkeypatch, tmp_path, db_session)
+        timer = _run_startup_rescore(_factory(db_session), deadline=time.monotonic() + 30, poll_s=0.3)
+        assert timer is not None
+        assert self._house_lines(db_session) == 119
+        # Waiting: nothing held.
+        assert lease.holder(db_session, lease.STARTUP_RESCORE) is None
+        assert "startup-rescore" not in background.running_writers()
+        with background.exclusive("admin data reset"):
+            pass
+        lease.release(db_session, lease.DISTRICT_LINES, token)  # the refresh finishes
+        timer.join(5)  # the next pass has been started as a writer
+        for _ in range(200):  # ...and runs to the end before teardown closes the database
+            if "startup-rescore" not in background.running_writers():
+                break
+            time.sleep(0.05)
+        assert "startup-rescore" not in background.running_writers()
+        assert self._house_lines(db_session) == 120
+
+    def test_a_reset_during_the_wait_drops_the_rescore(self, monkeypatch, tmp_path, db_session):
+        import time
+
+        from app import background
+        from app.main import _run_startup_rescore
+        from app.pipeline import lease
+        from tests.test_constituent_rescore import _factory
+
+        token = self._stale_house_held_by_refresh(monkeypatch, tmp_path, db_session)
+        timer = _run_startup_rescore(_factory(db_session), deadline=time.monotonic() + 30, poll_s=0.1)
+        try:
+            with background.exclusive("admin data reset"):
+                timer.join(5)  # the next pass is refused, not queued
+        finally:
             lease.release(db_session, lease.DISTRICT_LINES, token)
+        assert self._house_lines(db_session) == 119
 
-        t = threading.Thread(target=finish_refresh)
-        t.start()
-        assert rescore_constituent_alignment_on_current_lines(
-            _factory(db_session), refresh_wait_s=10, poll_s=0.02,
-        ) == ["house"]
-        t.join()
+    def test_the_startup_rescore_gives_up_on_a_stuck_refresh(self, monkeypatch, tmp_path, db_session, caplog):
+        import time
 
-    def test_the_startup_rescore_gives_up_on_a_stuck_refresh(self, monkeypatch, tmp_path, db_session):
-        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.main import _run_startup_rescore
+        from app.pipeline import lease
+        from tests.test_constituent_rescore import _factory
+
+        token = self._stale_house_held_by_refresh(monkeypatch, tmp_path, db_session)
+        try:
+            with caplog.at_level("WARNING", logger="app.main"):
+                assert _run_startup_rescore(_factory(db_session), deadline=time.monotonic(), poll_s=0.01) is None
+        finally:
+            lease.release(db_session, lease.DISTRICT_LINES, token)
+        assert "gave up: the District PVI refresh held the district lines" in caplog.text
+        assert self._house_lines(db_session) == 119
+
+    def test_the_startup_rescore_leaves_the_house_to_a_house_run(self, monkeypatch, tmp_path, db_session, caplog):
+        import time
+
+        from app.main import _run_startup_rescore
         from app.pipeline import lease
         from tests.test_constituent_rescore import _factory
 
         self._file(monkeypatch, tmp_path, 120)
         self._stale_house_on_119(db_session, monkeypatch, tmp_path)
-        token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO)
+        token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO)
         try:
-            assert rescore_constituent_alignment_on_current_lines(
-                _factory(db_session), refresh_wait_s=0.1, poll_s=0.02,
-            ) == []
+            with caplog.at_level("INFO", logger="app.main"):
+                assert _run_startup_rescore(_factory(db_session), deadline=time.monotonic() + 30, poll_s=0.01) is None
         finally:
             lease.release(db_session, lease.DISTRICT_LINES, token)
+        assert "left to the House run holding the district lines" in caplog.text
+
+    def _age(self, db_session, seconds):
+        from datetime import timedelta
+
+        from app.models import ApiCache
+        from app.pipeline import lease
+        from app.time_utils import utcnow
+
+        db_session.query(ApiCache).filter(ApiCache.tier == lease.DISTRICT_LINES).update(
+            {"cached_at": utcnow() - timedelta(seconds=seconds)}, synchronize_session=False,
+        )
+        db_session.commit()
 
     async def test_a_restart_releases_the_lines_a_killed_holder_left(self, monkeypatch, tmp_path, db_session):
         """A deploy or OOM kills a House run (or refresh, or rescore)
-        holding DISTRICT_LINES. The restarted pipeline process — the only
-        one, it holds the role lock — releases the lease beside sweeping
-        the run rows, instead of leaving it to its hour-long stale window:
-        the House trigger doesn't 409 for a dead run, a House run goes
-        ahead, and the startup rescore can take the lines."""
+        holding DISTRICT_LINES. The restarted pipeline process releases the
+        lease beside sweeping the run rows — its last beat already a beat
+        interval and a half old — instead of leaving it to its hour-long
+        stale window: the House trigger doesn't 409 for a dead run, and a
+        House run goes ahead."""
         from app.api import admin
         from app.main import _invalidate_orphaned_pipelines
         from app.pipeline import lease
 
         for who in (dp.HOUSE_RUN_WHO, dp.REFRESH_WHO, dp.RESCORE_WHO):
             assert lease.acquire(db_session, lease.DISTRICT_LINES, who=who) is not None  # then killed
+            self._age(db_session, lease.BEAT_S * 2)
             assert lease.holder(db_session, lease.DISTRICT_LINES) == who
             _invalidate_orphaned_pipelines()
             assert lease.holder(db_session, lease.DISTRICT_LINES) is None
@@ -1348,6 +1415,7 @@ class TestStoredScoresKeepTheirLines:
         started = []
         monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda f, **kw: started.append(f))
         assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None
+        self._age(db_session, lease.BEAT_S * 2)
         _invalidate_orphaned_pipelines()
         assert admin.admin_trigger_house_pipeline(db=db_session) == {"message": "House pipeline triggered"}
 
@@ -1355,6 +1423,76 @@ class TestStoredScoresKeepTheirLines:
             return {"status": "completed"}
 
         assert await dp.run_house_on_sitting_lines(house, refresh_wait_s=0) == {"status": "completed"}
+
+    def test_a_holder_still_beating_keeps_its_lease(self, db_session):
+        """A lease beaten recently may be live in another process (the role
+        lock is per container; only the pipeline service's stop-first update
+        rules that out). It is released only if it misses the next beat."""
+        from app.pipeline import lease
+
+        live = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO)
+        timer = dp.release_orphaned_holds(recheck_after_s=0.3)
+        assert timer is not None and lease.holder(db_session, lease.DISTRICT_LINES) == dp.HOUSE_RUN_WHO
+        assert lease.beat(db_session, lease.DISTRICT_LINES, live)  # beaten after this process started
+        timer.join(5)
+        assert lease.holder(db_session, lease.DISTRICT_LINES) == dp.HOUSE_RUN_WHO
+        lease.release(db_session, lease.DISTRICT_LINES, live)
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO) is not None  # then killed
+        timer = dp.release_orphaned_holds(recheck_after_s=0.3)
+        assert lease.holder(db_session, lease.DISTRICT_LINES) == dp.REFRESH_WHO
+        timer.join(5)
+        assert lease.holder(db_session, lease.DISTRICT_LINES) is None
+        assert not dp.waits_for(dp.HOUSE_RUN_WHO)  # the re-check is over
+
+    def test_the_startup_rescore_waits_out_a_killed_house_run_s_lease(self, monkeypatch, tmp_path, db_session):
+        """The deploy that starts this process killed a House run moments
+        ago: its lease is too fresh to release at once, and the startup
+        rescore must not leave the House to a run that is gone — it waits
+        for the re-check to release it, then rescores."""
+        import time
+
+        from app import background
+        from app.main import _run_startup_rescore
+        from app.pipeline import lease
+        from tests.test_constituent_rescore import _factory
+
+        self._file(monkeypatch, tmp_path, 120)
+        self._stale_house_on_119(db_session, monkeypatch, tmp_path)
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None  # then killed
+        recheck = dp.release_orphaned_holds(recheck_after_s=0.1)
+        assert recheck is not None and dp.waits_for(dp.HOUSE_RUN_WHO)
+        timer = _run_startup_rescore(_factory(db_session), deadline=time.monotonic() + 30, poll_s=0.6)
+        assert timer is not None  # waiting, not left to the dead run
+        recheck.join(5)
+        assert lease.holder(db_session, lease.DISTRICT_LINES) is None
+        timer.join(5)  # the next pass has been started as a writer
+        # ...and runs to the end (the test's session is shared with it, so
+        # nothing reads it until then).
+        for _ in range(200):
+            if "startup-rescore" not in background.running_writers():
+                break
+            time.sleep(0.05)
+        assert "startup-rescore" not in background.running_writers()
+        assert self._house_lines(db_session) == 120
+
+    async def test_a_house_run_waits_out_a_killed_house_run_s_lease(self, monkeypatch, db_session):
+        from app.pipeline import lease
+
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None  # then killed
+        recheck = dp.release_orphaned_holds(recheck_after_s=0.2)
+        ran = []
+
+        async def house():
+            ran.append(True)
+            return {"status": "completed"}
+
+        try:
+            assert await dp.run_house_on_sitting_lines(house, refresh_wait_s=5, poll_s=0.05) == {"status": "completed"}
+        finally:
+            recheck.join(5)
+        assert ran == [True]
 
     async def test_a_house_run_waits_for_the_startup_rescore(self, monkeypatch, db_session):
         import asyncio
@@ -1640,6 +1778,7 @@ class TestJan3Boundary:
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=120)
         assert await dp.refresh_district_pvi() is True
         before = out.read_text()
+        monkeypatch.setattr("app.time_utils.utcnow", lambda: datetime(2027, 1, 4, 3))  # the 120th in office
         monkeypatch.setattr(config, "settings", config.Settings())
         monkeypatch.setattr(dp, "_sitting_congress", lambda: 119)
         assert await _in_thread(dp._ensure_sitting_lines) == "superseded"
@@ -1650,6 +1789,32 @@ class TestJan3Boundary:
 
         assert await dp.run_house_on_sitting_lines(house) == {"status": "skipped", "reason": SUPERSEDED}
         assert out.read_text() == before
+
+    async def test_a_forward_pin_since_removed_does_not_stall_the_house(self, monkeypatch, tmp_path):
+        """An operator pins CURRENT_CONGRESS=120 early (the file goes to the
+        120th's lines), then removes the pin. The file is ahead of the clock
+        — not a newer job — so the unpinned 119th's House run reselects the
+        119th's lines and runs, instead of being skipped until Jan 3."""
+        from app import config
+
+        monkeypatch.setattr("app.time_utils.utcnow", lambda: datetime(2026, 10, 1))
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=120))
+        out, base, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
+        assert await dp.refresh_district_pvi() is True
+        assert json.loads(out.read_text())["congress"] == 120
+        monkeypatch.setattr(config, "settings", config.Settings())  # the pin removed; restarted
+        assert config.settings.CURRENT_CONGRESS == 119
+        seen = {}
+
+        async def house():
+            seen["windows"], seen["lines"] = config.settings.CURRENT_CONGRESS, dp.lines_congress()
+            seen["tn9"] = score_calculator._seat_pvi("TN", 9)
+            return {"status": "completed"}
+
+        assert await dp.run_house_on_sitting_lines(house) == {"status": "completed"}
+        assert seen == {"windows": 119, "lines": 119, "tn9": base["TN-9"]}
+        assert json.loads(out.read_text())["congress"] == 119
+        assert await dp.refresh_district_pvi() is True
 
     def test_every_writer_holds_one_congress(self):
         """app.background.start_writer (every scheduled job, every trigger,

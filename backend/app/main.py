@@ -116,61 +116,133 @@ _LIVENESS_EVERY_S = 300
 _LIVENESS_GRACE_S = 120
 
 
-def rescore_constituent_alignment_on_current_lines(
-    session_factory, *, refresh_wait_s: float | None = None, poll_s: float | None = None,
-) -> list[str]:
+def _rescore_house_on_current_lines(session_factory) -> "tuple[list[str], object | None]":
+    """One attempt at the House part of the startup Constituent Alignment
+    rescore: (chambers rescored, None), or ([], the lease refusal) when the
+    district lines are held elsewhere. Only when the House is stale.
+
+    Under the DISTRICT_LINES lease (who=RESCORE_WHO) across the read and
+    the commit: a House run (or a refresh) takes it before it switches the
+    lines, and a triggered House run has no HousePipelineRun row yet while
+    it does — the rescore's run_in_progress check can't see it, and would
+    commit the old lines' scores over the run's fresh ones. A House run
+    that finds the rescore holding it waits (district_pvi.WAITED_FOR)."""
+    from app.pipeline import lease
+    from app.pipeline.constituent_rescore import _stale_chambers, rescore_stale_constituent_alignment
+    from app.pipeline.fetch.district_pvi import RESCORE_WHO, current_lines
+
+    if "house" not in _stale_chambers():
+        return [], None
+    with lease.job(lease.DISTRICT_LINES, who=RESCORE_WHO) as granted:
+        if not granted:
+            return [], granted
+        with current_lines() as lines:
+            return rescore_stale_constituent_alignment(session_factory, house_lines=lines, chambers=("house",)), None
+
+
+def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]:
     """The startup Constituent Alignment rescore (constituent_rescore.py) on
     one read of the district table, recording that read's Congress on each
     rescored representative in the same commit as their score. The file can
     be rewritten meanwhile (another backend, mid-rollout); the Congress
     recorded must be the lines the score used, so the breakdown — and the
     overlap check the rescore re-measures from it — recompute on the same
-    ones. Never raises (the rescore's own contract).
+    ones. The Senate goes first and reads no lines; then one attempt at the
+    House (_rescore_house_on_current_lines — _startup_rescore retries it
+    while a refresh holds the lines). Never raises (the rescore's own
+    contract)."""
+    from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
 
-    The Senate goes first and reads no lines. The House part, only when
-    the House is stale, holds the DISTRICT_LINES lease (who=RESCORE_WHO)
-    across the read and the commit: a House run (or a refresh) takes it
-    before it switches the lines, and a triggered House run has no
-    HousePipelineRun row yet while it does — the rescore's run_in_progress
-    check can't see it, and would commit the old lines' scores over the
-    run's fresh ones. A House run that finds the rescore holding it waits
-    (district_pvi.WAITED_FOR). A District PVI refresh holding it is waited
-    for, as a House run waits (up to REFRESH_WAIT_S, re-trying every
-    REFRESH_POLL_S): nothing retries the rescore later, so giving up would
-    leave the House on the old scale until the next House run. A House run
-    holding it is not waited for — it scores the House itself."""
-    import time
-
-    from app.pipeline import lease
-    from app.pipeline.constituent_rescore import _stale_chambers, rescore_stale_constituent_alignment
-    from app.pipeline.fetch import district_pvi
-    from app.pipeline.fetch.district_pvi import RESCORE_WHO, REFRESH_WHO, current_lines
-
-    wait_s = district_pvi.REFRESH_WAIT_S if refresh_wait_s is None else refresh_wait_s
-    poll = district_pvi.REFRESH_POLL_S if poll_s is None else poll_s
-    log = logging.getLogger("app.main")
     done = rescore_stale_constituent_alignment(session_factory, house_lines=None, chambers=("senate",))
     try:
-        if "house" not in _stale_chambers():
-            return done
-        deadline = time.monotonic() + wait_s
-        while True:
-            with lease.job(lease.DISTRICT_LINES, who=RESCORE_WHO) as granted:
-                if granted:
-                    with current_lines() as lines:
-                        return done + rescore_stale_constituent_alignment(
-                            session_factory, house_lines=lines, chambers=("house",),
-                        )
-            waitable = granted.holder == REFRESH_WHO or (
-                granted.code == lease.REFUSED_BUSY and granted.holder is None
-            )
-            if not waitable or time.monotonic() >= deadline:
-                log.info("Startup rescore (house) left to the House run: %s", granted.why)
-                return done
-            time.sleep(min(poll, district_pvi.BUSY_RETRY_S) if granted.holder is None else poll)
+        return done + _rescore_house_on_current_lines(session_factory)[0]
     except Exception:
-        log.exception("Startup rescore (house): taking the district lines failed")
+        logging.getLogger("app.main").exception("Startup rescore (house): taking the district lines failed")
         return done
+
+
+def _run_startup_rescore(
+    session_factory, *, deadline: float, poll_s: float, house_only: bool = False,
+) -> "threading.Timer | None":
+    """One pass of the startup rescore, in a writer thread (start_writer),
+    under the STARTUP_RESCORE lease so an admin data reset in another
+    process sees it and it sees the reset: Legislative Effectiveness and
+    the Senate's Constituent Alignment (first pass only), then the House.
+
+    A District PVI refresh holding the district lines is waited for, as a
+    House run waits (up to REFRESH_WAIT_S from the first pass): nothing
+    else retries the rescore, and giving up would leave the House on the
+    old scale until the next House run. The wait happens between passes,
+    holding nothing — no lease, no writer registration — so a data reset
+    is never refused for it: the next pass is a new writer (start_writer
+    refuses while a reset holds the database, and the rescore is dropped:
+    the reset rebuilds the data). A House run holding the lines is not
+    waited for; it scores the House itself. Returns the timer of the next
+    pass, when one is scheduled."""
+    import time
+
+    from app.background import WritesHeld, start_writer
+    from app.pipeline import lease
+    from app.pipeline.fetch.district_pvi import BUSY_RETRY_S, waits_for
+    from app.pipeline.les_rescore import rescore_stale_legislative_effectiveness
+
+    log = logging.getLogger("app.main")
+    refused = None
+    db = session_factory()
+    try:
+        with lease.holding(db, lease.STARTUP_RESCORE, yield_to=lease.DATA_RESET) as token:
+            if token is None:
+                log.info("Startup rescore skipped: %s", lease.refusal(db, lease.STARTUP_RESCORE))
+                return None
+            # One Congress for the pass: start_writer runs it inside
+            # app.config.scoring_congress.
+            if not house_only:
+                rescore_stale_legislative_effectiveness(session_factory)
+                from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
+
+                rescore_stale_constituent_alignment(session_factory, house_lines=None, chambers=("senate",))
+            try:
+                refused = _rescore_house_on_current_lines(session_factory)[1]
+            except Exception:
+                log.exception("Startup rescore (house): taking the district lines failed")
+    except Exception:
+        # Each rescore logs its own failures; this is the lease's.
+        log.exception("Startup rescore failed")
+    finally:
+        db.close()
+    if refused is None:
+        return None
+    busy = refused.code == lease.REFUSED_BUSY and refused.holder is None
+    # A refresh (or another startup rescore) is waited for, and so is a
+    # leftover lease release_orphaned_holds is still re-checking: a House
+    # run killed by the deploy that started this process will not score the
+    # House, so it is not left to.
+    if not (busy or waits_for(refused.holder)):
+        log.info(
+            "Startup rescore (house) left to the %s holding the district lines: it scores the House itself",
+            refused.holder or "run",
+        )
+        return None
+    if time.monotonic() >= deadline:
+        log.warning(
+            "Startup rescore (house) gave up: the %s held the district lines past the wait — the House "
+            "stays on the old scale until the next House run", refused.holder or "database lock",
+        )
+        return None
+
+    def next_pass() -> None:
+        try:
+            start_writer(
+                lambda: _run_startup_rescore(session_factory, deadline=deadline, poll_s=poll_s, house_only=True),
+                name="startup-rescore",
+            )
+        except WritesHeld as held:
+            log.info("Startup rescore (house) dropped: %s — the reset rebuilds the data", held)
+
+    timer = threading.Timer(min(poll_s, BUSY_RETRY_S) if busy else poll_s, next_pass)
+    timer.daemon = True
+    timer.start()
+    return timer
 
 
 async def _watch_pipeline_service() -> None:
@@ -219,33 +291,16 @@ def _start_pipeline_side_startup_jobs() -> None:
     # the nightly run; bring them over now so pages and their breakdowns agree
     # (les_rescore.py, constituent_rescore.py). One thread, one after the
     # other, so the two never contend for SQLite's write lock.
+    import time
+
     from app.database import SessionLocal as _rescore_session
-    from app.pipeline.les_rescore import rescore_stale_legislative_effectiveness
+    from app.pipeline.fetch.district_pvi import REFRESH_POLL_S, REFRESH_WAIT_S
 
-    def _startup_rescore() -> None:
-        from app.pipeline import lease
-
-        # A lease, so an admin data reset in another process sees this run
-        # and this run sees the reset (lease.DATA_RESET).
-        db = _rescore_session()
-        try:
-            with lease.holding(db, lease.STARTUP_RESCORE, yield_to=lease.DATA_RESET) as token:
-                if token is None:
-                    logging.getLogger("app.main").info(
-                        "Startup rescore skipped: %s", lease.refusal(db, lease.STARTUP_RESCORE),
-                    )
-                    return
-                # One Congress for both: start_writer runs this inside
-                # app.config.scoring_congress.
-                rescore_stale_legislative_effectiveness(_rescore_session)
-                rescore_constituent_alignment_on_current_lines(_rescore_session)
-        except Exception:
-            # Each rescore logs its own failures; this is the lease's.
-            logging.getLogger("app.main").exception("Startup rescore failed")
-        finally:
-            db.close()
-
-    start_writer(_startup_rescore, name="startup-rescore")
+    deadline = time.monotonic() + REFRESH_WAIT_S
+    start_writer(
+        lambda: _run_startup_rescore(_rescore_session, deadline=deadline, poll_s=REFRESH_POLL_S),
+        name="startup-rescore",
+    )
 
 
 # The pipeline side must be one process per container: the admin status

@@ -355,6 +355,25 @@ class TestNightlyPipelineCascadingSkip:
         assert "House run is already running" in body and "another run of it" not in body
 
 
+    def test_a_superseded_house_step_continues_the_chain_without_an_alert(self):
+        """A chain that started before noon ET on Jan 3, whose House step
+        finds a newer job already on the new Congress (district_pvi.
+        _superseded): nothing is wrong — Stock trades and Election still
+        run, no ops alert is sent, and a House-skip alert left from before
+        is resolved."""
+        from app.pipeline.run_tracker import SUPERSEDED
+
+        with patch("app.ops_alerts.resolve_ops_alert") as resolved:
+            senate, supp, house, stock, election, alert = self._run_chain(
+                {"status": "completed"}, house_result={"status": "skipped", "reason": SUPERSEDED},
+            )
+        house.assert_called_once()
+        stock.assert_called_once()
+        election.assert_called_once()
+        alert.assert_not_called()
+        assert any(c.args == ("nightly-skipped-house",) for c in resolved.call_args_list)
+
+
 class TestElectionCoverageRefresh:
     """The tighter-cadence election-season coverage refresh: a no-op
     outside is_election_season's window, and otherwise runs only the

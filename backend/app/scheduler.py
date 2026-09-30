@@ -189,11 +189,14 @@ def _nightly_pipeline() -> None:
             # one that outlasts the wait (stuck) costs tonight's House scores but not Stock
             # trades or Election, which don't read them.
             held_by_refresh = house_result.get("holder") in DISTRICT_LINES_WAITED_FOR
-            if house_result.get("reason") == SUPERSEDED:
+            superseded = house_result.get("reason") == SUPERSEDED
+            if superseded:
                 # This chain started before noon ET on Jan 3 and a job since
                 # has moved to the new Congress: nothing is wrong, the next
-                # job scores the House on it (district_pvi._superseded).
+                # job scores the House on it (district_pvi._superseded). Not
+                # a skip to alert on — and it clears one left from before.
                 logger.info("House step left to the next job: %s", skip_reason_text(SUPERSEDED))
+                resolve_ops_alert("nightly-skipped-house")
             elif _alert_if_skipped("House", house_result, chain_continues=held_by_refresh) and not held_by_refresh:
                 return
 

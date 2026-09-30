@@ -386,11 +386,20 @@ The correct pattern, established by `_district_pvi()` /
    skipping — and past that, the nightly chain still goes on to Stock
    trades and Election; main's startup Constituent Alignment rescore takes
    the same lease for its House part and waits for a refresh the same
-   way). The pipeline process releases a lease a killed holder left
-   (`district_pvi.release_orphaned_holds`, beside the startup run-row
-   sweep), so a deploy mid-run doesn't block House runs for the lease's
-   hour. A job still holding the outgoing Congress after a newer job has
-   moved to the new one (the process value, or the file's lines) neither
+   way, between passes that hold nothing — no lease, no writer — so an
+   admin data reset is never refused for the wait). The pipeline process
+   releases a lease a killed holder left (`district_pvi.
+   release_orphaned_holds`, beside the startup run-row sweep) once it has
+   gone a beat interval and a half without a beat, so a deploy mid-run
+   doesn't block House runs for the lease's hour (a House run, trigger or
+   the startup rescore refused by a lease still being checked waits for
+   the check, `district_pvi.waits_for`); that a leftover holder is
+   dead rests on the pipeline service's stop-first update order
+   (`docker-compose.swarm.yml`), and the missed-beat check keeps a live
+   one's lease anyway. A job still holding the outgoing Congress after a
+   newer job has moved to the new one (the process value, or the file's
+   lines while that Congress is in office by the clock — a file ahead of
+   the clock is a removed pin's, and is settled over) neither
    refreshes nor settles the lines, and its House step is skipped
    (`district_pvi._superseded`, `run_tracker.SUPERSEDED`) — otherwise it
    would switch the site back to the old map until the next job. Each stored House score records the Congress

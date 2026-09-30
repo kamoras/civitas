@@ -142,10 +142,9 @@ def roll_call_year(congress: int, now) -> tuple[int, bool]:
 
 
 def in_congress(roll_calls: list[dict], congress: int) -> list[dict]:
-    """The roll calls of `congress`: any the Clerk's XML labels with another
-    Congress is dropped (the first days of an odd year's roll calls can be
-    either). One with no Congress in its metadata (0) is kept — its year
-    already bounds it."""
+    """The roll calls of `congress`: any whose Clerk XML names another
+    Congress is dropped, whichever year's folder it was read from. One with
+    no Congress in its metadata (0) is kept — its year already bounds it."""
     return [rc for rc in roll_calls if (rc.get("congress") or congress) == congress]
 
 
@@ -298,8 +297,8 @@ async def run_house_pipeline() -> dict:
             # holds (app.config.scoring_congress): a job that started before
             # noon ET on Jan 3 and reaches this step after the new
             # Congress's first votes still reads its own Congress's last
-            # year. And a roll call the Clerk labels with another Congress
-            # (Jan 1-3 of an odd year belong to the outgoing one) is dropped.
+            # year. And any roll call whose XML names another Congress is
+            # dropped, whatever folder it came from.
             scored = settings.CURRENT_CONGRESS
             current_year, year_is_young = roll_call_year(scored, utcnow())
             recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=120)
