@@ -449,10 +449,30 @@ _BROWSER_ONLY_USER_AGENTS = {
 # / ("User-Agent", ...) — but not .get("User-Agent", default), which reads
 # one — or a user_agent= / USER_AGENT = / UA = name.
 _UA_SITE = re.compile(
-    r"""(["']user-agent["']\s*(?:\]\s*=|:)|(?<!\.get)\(\s*["']user-agent["']\s*,|\[\s*["']user-agent["']\s*,"""
-    r"""|(?<![a-z0-9])(?:user_?agent|ua)\b\s*(?::\s*[\w\[\]|. ]+?\s*)?[:=](?!=))""",
+    r"""(["']user-agent["']\s*(?:\]\s*=|:)|(?<!\.get)\(\s*["']user-agent["']\s*,|\[\s*["']user-agent["']\s*,)""",
     re.IGNORECASE,
 )
+# A name given a value (NAME = / NAME: type = / name: in a dict or object /
+# .get("NAME", default)); it is a User-Agent site when one of its parts
+# (split at "_" and at case changes) is ua or user+agent(s): _UA, botUA,
+# DEFAULT_USER_AGENT, USER_AGENT_CHROME, defaultUserAgent, USER_AGENTS.
+_NAME_SITE = re.compile(
+    r"""(?<![\w$.])([A-Za-z_$][\w$]*)\s*(?::\s*[\w\[\]|. ]+?\s*)?(?<![=!<>])[:=](?!=)"""
+    r"""|\.get\(\s*["']([A-Za-z_][\w]*)["']\s*,"""
+)
+
+
+def _names_a_user_agent(name: str) -> bool:
+    parts = [p.lower() for p in re.findall(r"[A-Z]{2,}(?![a-z])|[A-Z]?[a-z0-9]+|[A-Z]", name)]
+    joined = [a + b for a, b in zip(parts, parts[1:])]
+    return "ua" in parts or any(p in ("useragent", "useragents") for p in parts + joined)
+
+
+def _ua_sites(line: str):
+    """Where on a line a User-Agent value starts."""
+    ends = [m.end() for m in _UA_SITE.finditer(line)]
+    ends += [m.end() for m in _NAME_SITE.finditer(line) if _names_a_user_agent(m.group(1) or m.group(2))]
+    return sorted(ends)
 # A string literal naming Civitas as a client: "Civitas/1.0", "Civitas-OG/1".
 _CIVITAS_TOKEN = re.compile(r"""(?:^|[=:(,{\[]\s*)(?:[rbfu]{1,2})?["'`][^"'`\n]*\bcivitas[\w-]*/\d""", re.IGNORECASE)
 # What counts as naming the contact in a value (or a constant built from it).
@@ -489,7 +509,9 @@ def _code_lines(path) -> list[str]:
 def _value_from(lines, i, rest):
     """The text of a value starting at `rest` on line i, carried onto the
     next lines while it is plainly unfinished: nothing yet but "(", an open
-    bracket, or a next line that continues it with another string."""
+    bracket before any string, or a string ending the line that the next
+    line continues (implicit concatenation). A value already holding a
+    whole string stops there, so a neighbouring entry can't excuse it."""
     value, j = rest, i
     for _ in range(3):
         nxt = next((k for k in range(j + 1, len(lines)) if lines[k].strip()), None)
@@ -497,7 +519,9 @@ def _value_from(lines, i, rest):
             break
         opened = sum(value.count(c) for c in "([{") - sum(value.count(c) for c in ")]}")
         continues = re.match(r"""\s*(?:[rbfu]{1,2})?["'`]""", lines[nxt], re.I)
-        if value.strip() in ("", "(") or opened > 0 or continues:
+        has_string = re.search(r"""["'`]""", value)
+        ends_in_string = re.search(r"""["'`]\s*$""", value)
+        if value.strip() in ("", "(") or (opened > 0 and not has_string) or (continues and ends_in_string):
             value, j = value + " " + lines[nxt].strip(), nxt
         else:
             break
@@ -530,9 +554,9 @@ def _user_agent_offenders(backend, files):
         read += 1
         for i, line in enumerate(lines):
             values = [
-                _value_from(lines, i, line[site.end():]) for site in _UA_SITE.finditer(line)
+                _value_from(lines, i, line[end:]) for end in _ua_sites(line)
             ]
-            values = [v for v in values if re.match(r"""\s*\(?\s*(?:[rbfu]{1,2})?["'`]""", v, re.I)]
+            values = [v for v in values if re.match(r"""\s*[(\[]?\s*(?:[rbfu]{1,2})?["'`]""", v, re.I)]
             values += [_value_from(lines, i, line[m.start():]) for m in _CIVITAS_TOKEN.finditer(line)]
             for value in values:
                 if _NAMES_CONTACT.search(value) or CONTACT_EMAIL in value:
@@ -583,6 +607,11 @@ def test_every_user_agent_names_the_contact():
     'USER_AGENT: str = "Mozilla/5.0 Foo"',
     'def f(user_agent: str = "Mozilla/5.0 Foo"):\n    pass',
     'h = [["User-Agent", "Mozilla/5.0 Foo"]]',
+    '_H = {\n    "a.gov": {"User-Agent": "Mozilla/5.0 Foo"},\n    "b.gov": {"User-Agent": BOT_USER_AGENT},\n}',
+    'USER_AGENT_CHROME = "Mozilla/5.0 Foo"',
+    'USER_AGENTS = [\n    "Mozilla/5.0 Foo",\n]',
+    'ua = os.environ.get("USER_AGENT", "Mozilla/5.0 Foo")',
+    'h = dict(user_agent="Mozilla/5.0 Foo")',
 ])
 def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     path = tmp_path / "backend" / "app" / "x.py"
@@ -596,6 +625,9 @@ def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     'fetch(u, { headers: { "User-Agent": `civitas-og` } });',
     'new Headers([["User-Agent", "Mozilla/5.0 Foo"]]);',
     'const BROWSER_UA = "Mozilla/5.0 Foo";',
+    'const defaultUserAgent = "Mozilla/5.0 Foo";',
+    'const botUA = "Mozilla/5.0 Foo";',
+    'const opts = { userAgent: "Mozilla/5.0 Foo" };',
 ])
 def test_the_user_agent_sweep_sees_the_frontend(tmp_path, source):
     path = tmp_path / "frontend" / "src" / "x.ts"
