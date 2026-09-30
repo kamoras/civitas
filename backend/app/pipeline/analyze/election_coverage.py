@@ -34,6 +34,7 @@ and it is restricted to items matched on the stronger "full_name" basis
 (match_basis is stored per item for exactly that gate).
 """
 
+import functools
 import logging
 import re
 from dataclasses import dataclass
@@ -201,6 +202,9 @@ def _state_name_pattern(state_name: str) -> "re.Pattern[str]":
     return re.compile(guards + r"\b" + re.escape(state_name) + r"\b", re.IGNORECASE)
 
 
+_lowered = functools.lru_cache(maxsize=1)(str.lower)
+
+
 @dataclass
 class CandidateMatcher:
     """Compiled match predicates for one candidate."""
@@ -210,9 +214,19 @@ class CandidateMatcher:
     surname_re: "re.Pattern[str]"
     full_name_re: "re.Pattern[str] | None"
     state_re: "re.Pattern[str]"
+    surname_key: str  # surname.lower(), for the prefilter below
 
     def match_basis(self, text: str) -> str | None:
         """"full_name" / "surname_context" / None — see module docstring."""
+        # Every article is tried against every candidate (4,251 on
+        # 2026-09-30), and a case-insensitive regex scan of the whole text
+        # costs ~90µs: 277s of CPU per 15-minute refresh, which starved the
+        # event loop until Swarm's health check killed the process mid-run.
+        # A substring test is a necessary condition for the surname regex
+        # and runs in C, so almost every pair stops here. _lowered caches
+        # the one text all matchers are being tried against in turn.
+        if self.surname_key not in _lowered(text):
+            return None
         if not _matches_as_a_name(self.surname_re, text):
             return None
         if self.full_name_re is not None and _matches_full_name(self.full_name_re, text):
@@ -244,6 +258,7 @@ def _build_matchers(db: Session) -> list[CandidateMatcher]:
             surname_re=_word_pattern(surname),
             full_name_re=_full_name_pattern(first, surname) if first else None,
             state_re=_state_name_pattern(state_name),
+            surname_key=surname.lower(),
         ))
     return matchers
 
