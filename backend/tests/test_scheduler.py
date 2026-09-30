@@ -285,7 +285,7 @@ class TestNightlyPipelineIndependentLinks:
         assert mocks["house"].await_count == 1  # the wait was the House run's own: not waited again
         subject, body = alert.call_args[0][0], alert.call_args[0][1]
         assert "House" in subject
-        assert "the District PVI refresh held them through the House run's whole wait" in body
+        assert "the District PVI refresh held the district lines through the House run's whole wait" in body
         assert "another run of it" not in body
 
     def test_a_superseded_house_step_is_not_alerted_and_clears_an_old_skip(self):

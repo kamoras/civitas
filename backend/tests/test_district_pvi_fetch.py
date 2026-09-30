@@ -999,7 +999,7 @@ class TestAHouseRunWaitsForARefresh:
         result = await dp.run_house_on_sitting_lines(house, refresh_wait_s=0.03, poll_s=0.01)
         assert result == {"status": "skipped", "reason": LINES_HELD_TOO_LONG, "holder": dp.REFRESH_WHO}
         text = skip_reason_text(result["reason"], who=result["holder"])
-        assert text.startswith("the District PVI refresh held them through the House run's whole wait")
+        assert text.startswith("the District PVI refresh held the district lines through the House run's whole wait")
 
     async def test_a_nightly_house_link_waits_out_a_stuck_refresh_once(self, db_session):
         """The skip after a waited-out refresh is not "held off": the chain
@@ -1464,7 +1464,7 @@ class TestStoredScoresKeepTheirLines:
             assert lease.holder(db_session, lease.DISTRICT_LINES) == dp.HOUSE_RUN_WHO
         finally:
             timer.cancel()
-            dp._UNDER_RECHECK.discard(dp.HOUSE_RUN_WHO)
+            dp._unhold({dp.HOUSE_RUN_WHO})
         lease.release(db_session, lease.DISTRICT_LINES, live)
 
     def test_the_recheck_window_rides_out_stalled_beats_and_the_waits_outlast_it(self):
@@ -1513,7 +1513,11 @@ class TestStoredScoresKeepTheirLines:
 
         def release(dead):
             calls.append(set(dp._UNDER_RECHECK))  # what a House run would wait for, at each try
-            return None if len(calls) <= failures else real(dead)
+            if len(calls) > failures:
+                return real(dead)
+            # In WAL the read gets through the writer's lock; the delete fails.
+            read, _ = real(lambda row: False)
+            return read, None
 
         monkeypatch.setattr(dp, "_release_ours", release)
         monkeypatch.setattr(dp, "ORPHAN_RETRY_S", 0.05)
@@ -1547,7 +1551,7 @@ class TestStoredScoresKeepTheirLines:
         assert len(calls) == dp.ORPHAN_ATTEMPTS
         assert "could not be released" in alert.call_args.args[0]
         assert lease.holder(db_session, lease.DISTRICT_LINES) == dp.REFRESH_WHO  # left to its stale window
-        assert not dp.waits_for(dp.HOUSE_RUN_WHO) and dp._UNDER_RECHECK == set()
+        assert not dp.waits_for(dp.HOUSE_RUN_WHO) and dp._UNDER_RECHECK == {}
 
     def test_a_startup_pass_that_cannot_reach_the_database_is_tried_again(self, monkeypatch, db_session):
         from app.pipeline import lease
@@ -1560,6 +1564,71 @@ class TestStoredScoresKeepTheirLines:
         timer.join(5)
         assert len(calls) == 3
         assert lease.holder(db_session, lease.DISTRICT_LINES) is None
+
+    def test_a_failed_startup_pass_waits_for_what_it_read_through_its_retries(self, monkeypatch, db_session):
+        """The startup pass reads a dead House run's lease but can't delete
+        it (the database locked past its busy timeout). Through the retries
+        that follow, that holder is waited for — so the House trigger
+        doesn't 409 and the startup rescore doesn't leave the House to a
+        run that is gone — and the retries delete that row, not whatever a
+        fresh read would find."""
+        from app.api import admin
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None  # then killed
+        self._age(db_session, dp.ORPHAN_RECHECK_S + lease.BEAT_S)
+        calls = self._failing_first(monkeypatch, failures=2)
+        monkeypatch.setattr(dp, "ORPHAN_RETRY_S", 0.2)
+        timer = dp.release_orphaned_holds()
+        try:
+            assert timer is not None
+            assert dp.waits_for(dp.HOUSE_RUN_WHO)  # from the first failure, not the first success
+            monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+            started = []
+            monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda f, **kw: started.append(f))
+            answer = admin.admin_trigger_house_pipeline(db=db_session)
+            assert "starts when the House run holding the district lines finishes" in answer["message"]
+        finally:
+            timer.join(5)
+        assert calls == [set(), {dp.HOUSE_RUN_WHO}, {dp.HOUSE_RUN_WHO}]
+        assert lease.holder(db_session, lease.DISTRICT_LINES) is None
+        assert not dp.waits_for(dp.HOUSE_RUN_WHO) and dp._UNDER_RECHECK == {}
+
+    def test_a_lease_taken_after_a_failed_startup_pass_is_not_waited_for(self, monkeypatch, db_session):
+        """A House run takes the lines after startup, while the startup pass
+        is still retrying: the retries act on the rows the failed pass read,
+        so the live run's lease is neither released nor put under re-check
+        — a House run refused by it is refused, not left waiting on a live
+        run for REFRESH_WAIT_S."""
+        from app.models import ApiCache
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO) is not None  # then killed
+        self._age(db_session, dp.ORPHAN_RECHECK_S + lease.BEAT_S)
+        taken = []
+        real = dp._release_ours
+
+        def release(dead):
+            if not taken:  # the startup pass: reads the dead refresh, can't delete it
+                read, _ = real(lambda row: False)
+                taken.append(read)
+                return read, None
+            if len(taken) == 1:  # before the retry, the dead lease lapses and a House run takes the lines
+                db_session.query(ApiCache).filter_by(tier=lease.DISTRICT_LINES).delete()
+                db_session.commit()
+                taken.append(lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO))
+            return real(dead)
+
+        monkeypatch.setattr(dp, "_release_ours", release)
+        monkeypatch.setattr(dp, "ORPHAN_RETRY_S", 0.05)
+        timer = dp.release_orphaned_holds(recheck_after_s=0.05)
+        assert timer is not None and dp.waits_for(dp.REFRESH_WHO) and not dp.waits_for(dp.HOUSE_RUN_WHO)
+        timer.join(5)
+        live = taken[1]
+        assert live is not None
+        assert lease.holder(db_session, lease.DISTRICT_LINES) == dp.HOUSE_RUN_WHO  # not released
+        assert not dp.waits_for(dp.HOUSE_RUN_WHO) and dp._UNDER_RECHECK == {}  # nor waited on
+        lease.release(db_session, lease.DISTRICT_LINES, live)
 
     def test_the_startup_rescore_waits_out_a_killed_house_run_s_lease(self, monkeypatch, tmp_path, db_session):
         """The deploy that starts this process killed a House run moments

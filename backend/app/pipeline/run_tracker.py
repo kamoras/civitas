@@ -246,7 +246,7 @@ def skip_reason_text(reason: str | None, tier: str | None = None, who: str | Non
         ),
         MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",
         LINES_HELD_TOO_LONG: (
-            f"the {who or 'holder of the district lines'} held them through the House run's whole wait "
+            f"the {who or 'lease holder'} held the district lines through the House run's whole wait "
             "— likely stuck"
         ),
     }.get(reason or "", f"it was skipped ({reason or 'no reason given'})")

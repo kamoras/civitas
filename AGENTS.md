@@ -397,7 +397,9 @@ The correct pattern, established by `_district_pvi()` /
    the startup rescore refused by a lease still being checked waits for
    the check, `district_pvi.waits_for`, through its retries while the
    database is locked, `ORPHAN_RETRY_S` × `ORPHAN_ATTEMPTS`, then an ops
-   alert); that a leftover holder is
+   alert — from the startup pass's first failed delete, and only for the
+   leases that pass read, so a lease a live House run takes later is never
+   waited on); that a leftover holder is
    dead rests on the pipeline service's stop-first update order
    (`docker-compose.swarm.yml`); the missed-beat check is a second guard,
    its window long enough that a live holder whose beats stall behind

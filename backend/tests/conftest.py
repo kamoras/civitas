@@ -81,33 +81,56 @@ def db_session():
 _THREAD_JOIN_S = 10
 
 
+def _timer_pending(thread: threading.Timer) -> bool:
+    """Whether a threading.Timer is still waiting out its interval (its
+    function not yet called): its run() is blocked in finished.wait."""
+    frame = sys._current_frames().get(thread.ident)
+    inner = None
+    while frame is not None:
+        if frame.f_code is threading.Timer.run.__code__:
+            return inner is not None and inner.f_code is threading.Event.wait.__code__
+        inner, frame = frame, frame.f_back
+    return False
+
+
 def _join_app_threads_started_since(before: set) -> None:
     """Wait for the app's own background threads the test started (the
     bills-cache rebuild admin_reset_data kicks off, a start_writer job):
     one still querying the shared in-memory connection when the engine is
     disposed crashes SQLite outright (a segfault that killed a CI run).
-    Only threads running app code (by their target, or by a Thread
-    subclass the app defines): a library's long-lived monitor thread
-    started along the way would never finish. One that outlives the join
-    fails the test by name — a test that takes a lease must release it, or
-    its heartbeat (lease._keep) is exactly such a thread. Executor workers
-    (asyncio.to_thread, ThreadPoolExecutor) run no app target of their
-    own and aren't joined: work sent there must be awaited in the test."""
-    stuck = []
+    Only threads running app code (by their target — a threading.Timer's
+    is its .function — or by a Thread subclass the app defines): a
+    library's long-lived monitor thread started along the way would never
+    finish. One that outlives the join fails the test by name — a test that
+    takes a lease must release it, or its heartbeat (lease._keep) is
+    exactly such a thread. So does a Timer still waiting to call app code:
+    it is cancelled (it would fire into the next test, on a disposed
+    engine) and the test that left it fails — it must join or cancel what
+    it schedules. Executor workers (asyncio.to_thread, ThreadPoolExecutor)
+    run no app target of their own and aren't joined: work sent there must
+    be awaited in the test."""
+    stuck, pending = [], []
     for thread in set(threading.enumerate()) - before:
-        target = getattr(thread, "_target", None)
-        while isinstance(target, functools.partial):
-            target = target.func
         if thread is threading.current_thread():
             continue
+        target = getattr(thread, "_target", None)
+        if target is None:
+            target = getattr(thread, "function", None)  # threading.Timer
+        while isinstance(target, functools.partial):
+            target = target.func
         modules = (getattr(target, "__module__", "") or "", type(thread).__module__)
-        if any(m.startswith("app.") for m in modules):
-            thread.join(_THREAD_JOIN_S)
-            if thread.is_alive():
-                stuck.append(thread.name)
+        if not any(m.startswith("app.") for m in modules):
+            continue
+        if isinstance(thread, threading.Timer) and _timer_pending(thread):
+            thread.cancel()
+            pending.append(thread.name)
+        thread.join(_THREAD_JOIN_S)
+        if thread.is_alive():
+            stuck.append(thread.name)
     # Disposing under a live thread is the crash this exists to prevent:
     # say which thread, rather than carry on into it.
     assert not stuck, f"background threads still running at teardown: {stuck}"
+    assert not pending, f"timers still waiting to run app code at teardown (cancelled): {pending}"
 
 
 @pytest.fixture()

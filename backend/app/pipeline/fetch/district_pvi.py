@@ -1007,8 +1007,10 @@ def release_orphaned_holds(*, recheck_after_s: float | None = None) -> "threadin
     A pass that can't reach the database (locked past its busy timeout by
     another writer) is tried again, ORPHAN_RETRY_S apart, ORPHAN_ATTEMPTS
     times in all, and a lease under re-check stays waited for (waits_for)
-    until the last try; one that never gets through is alerted and left to
-    the lease's stale window. Returns the timer whose thread runs the
+    until the last try — from the first failure, when it is this startup
+    pass that failed, and only the leases that pass read (see
+    _retry_startup_pass); one that never gets through is alerted and left
+    to the lease's stale window. Returns the timer whose thread runs the
     re-check (or the retried pass, then its re-check) — None when nothing
     waits on one; logs, never raises."""
     from datetime import timedelta
@@ -1016,24 +1018,63 @@ def release_orphaned_holds(*, recheck_after_s: float | None = None) -> "threadin
     from app.time_utils import utcnow
 
     wait = ORPHAN_RECHECK_S if recheck_after_s is None else recheck_after_s
-    cutoff = utcnow() - timedelta(seconds=wait)
-    fresh = _release_ours(lambda row: row.cached_at < cutoff)
+    started = utcnow()
+    cutoff = started - timedelta(seconds=wait)
+    read, fresh = _release_ours(lambda row: row.cached_at < cutoff)
     if fresh is None:
-        # Couldn't reach the leases at all (the database locked past its
-        # busy timeout): the same pass, tried again from a timer — whose
-        # thread then runs the re-check too.
-        def again() -> None:
-            kept = _retrying(lambda: _release_ours(lambda row: row.cached_at < cutoff), "release")
-            if kept:
-                _recheck_later(kept, wait).join()
-
-        timer = threading.Timer(0, again)
-        timer.daemon = True
-        timer.start()
-        return timer
+        return _retry_startup_pass(read, cutoff, started, wait)
     if not fresh:
         return None
     return _recheck_later(fresh, wait)
+
+
+def _retry_startup_pass(read, cutoff, started, wait: float) -> threading.Timer:
+    """The startup pass couldn't finish (the database locked past its busy
+    timeout; in WAL the read gets through, the delete doesn't): the same
+    pass, tried again from a timer — whose thread then runs the re-check.
+
+    The rows the failed pass read are the ones it is about, and the only
+    ones: their holders are waited for (waits_for) from now, through the
+    retries, not only once one gets through — else a House run or the
+    startup rescore refused meanwhile by a dead House run's lease reads a
+    holder nobody is checking and gives up on it. Each retry deletes just
+    the rows that pass found dead, still carrying the beat it read, and
+    hands just the ones it found beating to the re-check: never a fresh
+    read, which would sweep in a lease a live House run took after startup
+    and have the next House run wait on that live run for REFRESH_WAIT_S.
+    Only when the failed pass read nothing at all (the read itself locked
+    out) does a retry read afresh, keeping for the re-check only the rows
+    not beaten since this process started — a lease beaten since is live."""
+    dead_seen = {(data, beat) for data, beat, _ in read or () if beat < cutoff}
+    live_seen = {(data, beat) for data, beat, _ in read or () if beat >= cutoff}
+    held = _hold({who for _, _, who in read or ()})
+
+    if read:
+        def attempt():
+            _, kept = _release_ours(lambda row: (row.data_json, row.cached_at) in dead_seen)
+            return None if kept is None else [r for r in kept if (r[0], r[1]) in live_seen]
+    else:
+        def attempt():
+            _, kept = _release_ours(lambda row: row.cached_at < cutoff)
+            return None if kept is None else [r for r in kept if r[1] < started]
+
+    def again() -> None:
+        recheck = None
+        try:
+            kept = _retrying(attempt, "release")
+            if kept:
+                recheck = _recheck_later(kept, wait)  # holds its own holders from here
+        except Exception:
+            logger.exception("Retrying the release of the district-lines leases failed")
+        finally:
+            _unhold(held)
+        if recheck is not None:
+            recheck.join()
+
+    timer = threading.Timer(0, again)
+    timer.daemon = True
+    timer.start()
+    return timer
 
 
 # A pass of release_orphaned_holds that can't reach the database (locked past
@@ -1081,18 +1122,19 @@ def _recheck_later(fresh, wait: float) -> threading.Timer:
     retries when the database is locked, so a House run doesn't give up on
     a dead lease because one delete couldn't get the write lock."""
     seen = {(data, beat) for data, beat, _ in fresh}
-    whos = {who for _, _, who in fresh}
-    _UNDER_RECHECK.update(whos)
+    held = _hold({who for _, _, who in fresh})
 
     def recheck() -> None:
         try:
-            release = lambda: _release_ours(lambda row: (row.data_json, row.cached_at) in seen)  # noqa: E731
+            def release():
+                return _release_ours(lambda row: (row.data_json, row.cached_at) in seen)[1]
+
             if release() is None:
                 _retrying(release, "re-check")
         except Exception:
             logger.exception("Re-checking the district-lines leases failed")
         finally:
-            _UNDER_RECHECK.difference_update(whos)
+            _unhold(held)
 
     timer = threading.Timer(wait, recheck)
     timer.daemon = True
@@ -1100,11 +1142,32 @@ def _recheck_later(fresh, wait: float) -> threading.Timer:
     return timer
 
 
-# The holders whose lease release_orphaned_holds is still re-checking: most
-# likely dead (killed moments before this process started, by the deploy
-# that started it), so a House run or the startup rescore refused by one
-# waits for the re-check rather than giving up on a holder that is gone.
-_UNDER_RECHECK: set[str] = set()
+# The holders whose lease release_orphaned_holds is still re-checking (or
+# still retrying to release): most likely dead (killed moments before this
+# process started, by the deploy that started it), so a House run or the
+# startup rescore refused by one waits for the re-check rather than giving
+# up on a holder that is gone. A count per holder, not a set: a retried
+# startup pass and the re-check it hands off to can hold the same holder at
+# once, and the first to finish must not drop the other's hold.
+_UNDER_RECHECK: dict[str, int] = {}
+_UNDER_RECHECK_LOCK = threading.Lock()
+
+
+def _hold(whos: set[str]) -> set[str]:
+    with _UNDER_RECHECK_LOCK:
+        for who in whos:
+            _UNDER_RECHECK[who] = _UNDER_RECHECK.get(who, 0) + 1
+    return whos
+
+
+def _unhold(whos: set[str]) -> None:
+    with _UNDER_RECHECK_LOCK:
+        for who in whos:
+            left = _UNDER_RECHECK.get(who, 0) - 1
+            if left > 0:
+                _UNDER_RECHECK[who] = left
+            else:
+                _UNDER_RECHECK.pop(who, None)
 
 
 def waits_for(holder: str | None) -> bool:
@@ -1114,24 +1177,28 @@ def waits_for(holder: str | None) -> bool:
     return holder in WAITED_FOR or holder in _UNDER_RECHECK
 
 
-def _release_ours(dead) -> list[tuple[str, object, str]] | None:
+def _release_ours(dead) -> tuple[list[tuple[str, object, str]], list[tuple[str, object, str]] | None]:
     """Delete our DISTRICT_LINES lease rows that `dead(row)` says are dead —
-    each only while it still carries the beat it was read with. Returns the
-    (data, beat, who) of our rows it left, or None when it couldn't finish
-    (the database locked past its busy timeout: nothing was released)."""
+    each only while it still carries the beat it was read with. Returns
+    (read, kept): the (data, beat, who) of every row of ours it read, and
+    of those it left — kept is None when it couldn't finish (the database
+    locked past its busy timeout: nothing was released), and read then
+    holds whatever it had read before failing (in WAL the read gets
+    through a writer's lock; the delete is what fails)."""
     from app.database import SessionLocal
     from app.models import ApiCache
     from app.pipeline import lease
 
     ours = {HOUSE_RUN_WHO, REFRESH_WHO, RESCORE_WHO}
+    read: list[tuple[str, object, str]] = []
     kept: list[tuple[str, object, str]] = []
     try:
         db = SessionLocal()
     except Exception:
         logger.exception("Releasing orphaned district-lines leases failed")
-        return None
+        return read, None
     try:
-        released = []
+        rows = []
         for row in db.query(ApiCache).filter(
             ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
         ).all():
@@ -1139,14 +1206,17 @@ def _release_ours(dead) -> list[tuple[str, object, str]] | None:
                 who = json.loads(row.data_json).get("who")
             except (TypeError, ValueError, AttributeError):
                 who = None
-            if who not in ours:
-                continue
+            if who in ours:
+                rows.append(row)
+                read.append((row.data_json, row.cached_at, who))
+        released = []
+        for row, (data, beat, who) in zip(rows, read):
             if not dead(row):
-                kept.append((row.data_json, row.cached_at, who))
+                kept.append((data, beat, who))
                 continue
             gone = db.query(ApiCache).filter(
                 ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
-                ApiCache.data_json == row.data_json, ApiCache.cached_at == row.cached_at,
+                ApiCache.data_json == data, ApiCache.cached_at == beat,
             ).delete(synchronize_session=False)
             if gone:
                 released.append(who)
@@ -1154,12 +1224,12 @@ def _release_ours(dead) -> list[tuple[str, object, str]] | None:
     except Exception:
         db.rollback()
         logger.exception("Releasing orphaned district-lines leases failed")
-        return None
+        return read, None
     finally:
         db.close()
     for who in released:
         logger.warning("Released the district lines a %s left behind in a process that is gone", who)
-    return kept
+    return read, kept
 
 
 async def refresh_district_pvi() -> bool:
