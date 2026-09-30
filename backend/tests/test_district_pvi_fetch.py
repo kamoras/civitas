@@ -1464,7 +1464,6 @@ class TestStoredScoresKeepTheirLines:
             assert lease.holder(db_session, lease.DISTRICT_LINES) == dp.HOUSE_RUN_WHO
         finally:
             timer.cancel()
-            dp._unhold({dp.HOUSE_RUN_WHO})
         lease.release(db_session, lease.DISTRICT_LINES, live)
 
     def test_the_recheck_window_rides_out_stalled_beats_and_the_waits_outlast_it(self):
@@ -1479,11 +1478,13 @@ class TestStoredScoresKeepTheirLines:
         assert dp.ORPHAN_RECHECK_S >= SQLITE_BUSY_TIMEOUT_S + 5 * lease.BEAT_S
         assert dp.ORPHAN_RECHECK_S < lease.stale_after(lease.DISTRICT_LINES).total_seconds()
         assert dp.REFRESH_WAIT_S > dp.ORPHAN_RECHECK_S + dp.REFRESH_POLL_S
-        # ...its retries on a locked database included.
-        assert dp.REFRESH_WAIT_S > (
-            dp.ORPHAN_RECHECK_S + (dp.ORPHAN_ATTEMPTS - 1) * (dp.ORPHAN_RETRY_S + SQLITE_BUSY_TIMEOUT_S)
-            + dp.REFRESH_POLL_S
-        )
+        # ...its retries on a locked database included — and, at startup,
+        # the failed first pass's own retries before it hands the lease to
+        # the re-check, whose retries come after.
+        retries = (dp.ORPHAN_ATTEMPTS - 1) * (dp.ORPHAN_RETRY_S + SQLITE_BUSY_TIMEOUT_S)
+        first_pass = SQLITE_BUSY_TIMEOUT_S + retries
+        recheck = dp.ORPHAN_RECHECK_S + SQLITE_BUSY_TIMEOUT_S + retries
+        assert dp.REFRESH_WAIT_S > first_pass + recheck + dp.REFRESH_POLL_S
 
     def test_a_holder_still_beating_keeps_its_lease(self, db_session):
         """A lease beaten recently may be live in another process (the role

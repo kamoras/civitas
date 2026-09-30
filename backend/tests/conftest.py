@@ -83,7 +83,11 @@ _THREAD_JOIN_S = 10
 
 def _timer_pending(thread: threading.Timer) -> bool:
     """Whether a threading.Timer is still waiting out its interval (its
-    function not yet called): its run() is blocked in finished.wait."""
+    function not yet called): its run() is blocked in finished.wait. A
+    cancelled one isn't: cancel() sets `finished`, and the thread leaves
+    its wait without calling anything — it only hasn't been scheduled yet."""
+    if thread.finished.is_set():
+        return False
     frame = sys._current_frames().get(thread.ident)
     inner = None
     while frame is not None:
@@ -397,6 +401,17 @@ def bluesky_configured(monkeypatch, bluesky_outbox):
     monkeypatch.setattr(settings, "BSKY_HANDLE", "civitas.test", raising=False)
     monkeypatch.setattr(settings, "BSKY_APP_PASSWORD", "pw", raising=False)
     return bluesky_outbox
+
+
+@pytest.fixture(autouse=True)
+def _no_district_lines_under_recheck(monkeypatch):
+    """Every test starts with no district-lines holder under re-check
+    (district_pvi keeps that count in the process): a re-check a test
+    cancelled never releases its hold, which would otherwise make every
+    later test wait on a holder that isn't there."""
+    from app.pipeline.fetch import district_pvi
+
+    monkeypatch.setattr(district_pvi, "_UNDER_RECHECK", {})
 
 
 @pytest.fixture(autouse=True)
