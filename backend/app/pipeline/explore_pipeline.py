@@ -52,6 +52,7 @@ from app.pipeline.vector_store import (
     explore_embed_dict,
     index_is_whole,
     is_busy_error,
+    TopUpFailed,
     rebuild_explore_index,
     top_up_explore_index,
     wait_for_rebuild,
@@ -434,18 +435,30 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
             embedded = await _top_up(db, refreshed_ids)
             outcome = "topped up"
         except Exception as exc:
-            # Owed either way; a lock skips the step, anything else fails
-            # the run as it always has.
-            if refreshed_ids:
-                await asyncio.to_thread(_owe_reembeds, db, refreshed_ids)
-            if not is_busy_error(exc):
-                raise
-            logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", exc)
+            # Owed either way — the backfill, and whatever the top-up was
+            # writing when it failed (some of its chunks may be in, and the
+            # next top-up would take it for embedded). A lock skips the
+            # step; anything else fails the run as it always has.
+            cause = exc.__cause__ if isinstance(exc, TopUpFailed) else exc
+            owed_now = refreshed_ids | (exc.ids if isinstance(exc, TopUpFailed) else set())
+            if owed_now:
+                try:
+                    await asyncio.to_thread(_owe_reembeds, db, owed_now)
+                except Exception:
+                    logger.exception("Explore pipeline: could not record %d documents' re-embeds as owed",
+                                     len(owed_now))
+            if not is_busy_error(cause):
+                raise cause from None
+            logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", cause)
             return 0
 
     if outcome == "skipped" or outcome == "failed":
         if refreshed_ids:
-            await asyncio.to_thread(_owe_reembeds, db, refreshed_ids)
+            try:
+                await asyncio.to_thread(_owe_reembeds, db, refreshed_ids)
+            except Exception:
+                logger.exception("Explore pipeline: could not record %d documents' re-embeds as owed",
+                                 len(refreshed_ids))
         if outcome == "skipped":
             logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
     else:

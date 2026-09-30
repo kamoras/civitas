@@ -615,3 +615,24 @@ async def test_a_top_up_that_raises_owes_the_backfill(db_session, error, raised)
     owe.assert_called_once_with(db_session, {7})
     embed.assert_not_called()
     real_embed.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_top_up_failing_partway_owes_what_it_was_writing(db_session):
+    # Some of those documents' chunks may be in: the next top-up would take
+    # them for embedded, and leave the rest of their text out for good.
+    import sqlite3
+
+    from app.pipeline import explore_pipeline, vector_store
+
+    owe = MagicMock()
+
+    def failing(docs_to_embed):
+        raise vector_store.TopUpFailed({11, 12}) from sqlite3.OperationalError("database is locked")
+
+    with patch.object(explore_pipeline, "_owed_reembeds", return_value=set()), \
+         patch.object(explore_pipeline, "_owe_reembeds", owe), \
+         patch.object(explore_pipeline, "index_is_whole", return_value=True), \
+         patch.object(explore_pipeline, "top_up_explore_index", failing):
+        assert await explore_pipeline._embed_step(db_session, {7}) == 0
+    owe.assert_called_once_with(db_session, {7, 11, 12})

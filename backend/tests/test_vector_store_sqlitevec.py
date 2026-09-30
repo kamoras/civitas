@@ -403,19 +403,47 @@ class TestEnsureExploreIndex:
         vector_store.top_up_explore_index(lambda: [vector_store._rebuild_lock.locked(), vector_store.is_rebuilding()])
         assert seen == [[True, False]] and not vector_store._rebuild_lock.locked()
 
+    def test_a_rebuild_waiting_its_turn_counts_as_underway(self, vec_env):
+        # check-and-deploy mustn't restart the pipeline just as it begins.
+        import threading as _t
+
+        with vector_store._rebuild_lock:
+            waiting = _t.Thread(target=vector_store.rebuild_explore_index, args=(lambda: None,),
+                                kwargs={"wait": True, "if_incomplete": True})
+            waiting.start()
+            for _ in range(100):
+                if vector_store.is_rebuilding():
+                    break
+                import time as _time
+                _time.sleep(0.01)
+            assert vector_store.is_rebuilding()
+        waiting.join(timeout=5)
+
+    def test_a_rebuild_completed_while_a_re_embed_waited_is_not_redone(self, vec_env, db_session, monkeypatch):
+        import time as _time
+
+        asked = _time.monotonic()
+        monkeypatch.setattr(vector_store, "_last_rebuilt_at", asked + 1)
+        embed = MagicMock()
+        monkeypatch.setattr(vector_store, "embed_explore_documents", embed)
+        assert vector_store.rebuild_explore_index(lambda: db_session, wait=True, unless_rebuilt_since=asked) is None
+        embed.assert_not_called()
+
+    def test_a_table_that_cannot_be_read_is_not_whole_by_its_identity_alone(self, vec_env):
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        vector_store.get_vec_conn().execute("DROP TABLE vec_explore")
+        with pytest.raises(sqlite3.OperationalError):
+            vector_store.index_is_whole()
+
     def test_a_rebuild_already_running_is_not_started_again(self, vec_env):
         # Two overlapping would each clear what the other built.
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
-        with vector_store._rebuild_lock:
-            vector_store._rebuilding.set()
-            try:
-                with patch.object(vector_store, "start_writer") as thread:
-                    vector_store.ensure_explore_index(lambda: None)
-                thread.assert_not_called()
-                assert vector_store.rebuild_explore_index(lambda: None) is None
-                assert vector_store.collection_stats()["indexRebuild"] == "running"
-            finally:
-                vector_store._rebuilding.clear()
+        with vector_store._rebuild_lock, vector_store.rebuild_underway():
+            with patch.object(vector_store, "start_writer") as thread:
+                vector_store.ensure_explore_index(lambda: None)
+            thread.assert_not_called()
+            assert vector_store.rebuild_explore_index(lambda: None) is None
+            assert vector_store.collection_stats()["indexRebuild"] == "running"
 
     def test_a_rebuild_that_raised_is_not_ready_until_one_completes(self, vec_env, db_session, monkeypatch):
         db_session.add(ExploreDocument(
@@ -609,13 +637,13 @@ async def test_the_admin_re_embed_runs_in_the_background_and_refuses_when_it_can
     monkeypatch.setattr(lease, "job", _Granted)
     assert await admin_reembed_explore(db=db_session) == {"started": True}
     assert done.wait(5)
+    for t in _t.enumerate():
+        if t.name == "explore-reembed":
+            t.join(timeout=10)  # underway until its last pass is done
 
-    vector_store._rebuilding.set()
-    try:
+    with vector_store.rebuild_underway():
         with pytest.raises(HTTPException) as refused:
             await admin_reembed_explore(db=db_session)
-    finally:
-        vector_store._rebuilding.clear()
     assert refused.value.status_code == 409
 
     # Held by an Explore run: refused with the reason, not started to skip.

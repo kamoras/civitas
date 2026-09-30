@@ -269,6 +269,18 @@ class TestCandidates:
         assert ev._candidates(contest) == []
 
 
+def _index_dated(date: str) -> dict:
+    """INDEX with the primary's indexed date moved — the date the settle
+    window is measured from. "Unsettled" pinned to a future one: the
+    fixture's own 2026-09-09 settled on 2026-09-30, and a test leaning on it
+    began asserting the opposite of its name that day."""
+    index = json.loads(json.dumps(INDEX))
+    for entry in index["elections"]:
+        if entry["publicElectionId"] == "RI2026StatewidePrimary":
+            entry["electionDate"] = date
+    return index
+
+
 class TestFreshnessGate:
     @pytest.mark.asyncio
     async def test_certified_results_pass_immediately(self, monkeypatch):
@@ -283,7 +295,7 @@ class TestFreshnessGate:
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
         results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, results=results)
+        _patched(monkeypatch, index=_index_dated("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio
@@ -451,7 +463,7 @@ class TestStatewideExecutiveResults:
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
         results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, results=results)
+        _patched(monkeypatch, index=_index_dated("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio
@@ -533,7 +545,7 @@ class TestStateLegislativeResults:
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
         results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, results=results)
+        _patched(monkeypatch, index=_index_dated("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio

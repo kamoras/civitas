@@ -1399,7 +1399,9 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     from app.pipeline.analyze.document_authority import update_document_authority
     from app.pipeline.lexical_index import rebuild_index
     from app.ops_alerts import resolve_ops_alert
-    from app.pipeline.vector_store import is_rebuilding, rebuild_explore_index, recalibrate_ranking
+    import time
+
+    from app.pipeline.vector_store import is_rebuilding, rebuild_explore_index, rebuild_underway, recalibrate_ranking
 
     if is_rebuilding():
         raise HTTPException(status_code=409, detail="Explore re-embed not started: the index is already being rebuilt")
@@ -1416,15 +1418,20 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     if refused is not None:
         raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {refused}")
 
+    asked = time.monotonic()
+
     def _reembed() -> None:
         # A lease, so a reset or an explore ingest in another process sees
         # it too; start_writer registers it for this process's data reset.
-        with lease.job(lease.EXPLORE, who="Explore re-embed") as held:
+        # Underway as a rebuild from the start, keyword and authority passes
+        # included: check-and-deploy waits it out.
+        with rebuild_underway(), lease.job(lease.EXPLORE, who="Explore re-embed") as held:
             if not held:
                 return  # logged as a skip by lease.job
             try:
-                # Waiting out a top-up (or a rebuild begun since the check).
-                count = rebuild_explore_index(SessionLocal, wait=True)
+                # Waiting out a top-up, or a rebuild begun since it was asked
+                # for — which did this work already (None), so it isn't redone.
+                count = rebuild_explore_index(SessionLocal, wait=True, unless_rebuilt_since=asked)
                 resolve_ops_alert("explore-index-rebuild")  # whole again
                 # Not _write_model_version: that records the classification
                 # model's vectors as current, which this doesn't touch.
@@ -1436,8 +1443,8 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
                     db.close()
                 # Last, as in an Explore run: it measures the finished indexes.
                 recalibrate_ranking(SessionLocal)
-                logger.info("Explore re-embed complete: %d embedded, %d keyword-indexed, authority %s",
-                            count, indexed, authority)
+                logger.info("Explore re-embed complete: %s embedded, %d keyword-indexed, authority %s",
+                            "none newly" if count is None else count, indexed, authority)
             except Exception:
                 logger.exception("Explore re-embed failed — search's vector index is not ready until a rebuild "
                                  "completes (the next Explore run or start retries it)")
