@@ -186,6 +186,7 @@ from app.pipeline.analyze.population_reference import (
     FUNDING_REFERENCE,
     LES_REFERENCE,
 )
+from app.pipeline.analyze.score_bounds import clamp
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -502,11 +503,6 @@ def _state_population() -> dict[str, float]:
             logger.warning("state_population.json unavailable — small-donor baseline will use the national mean for every state")
             _state_population_cache = {}
     return _state_population_cache
-
-
-def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
-    """Clamp a value to [min_val, max_val] and round to int."""
-    return max(min_val, min(max_val, round(value)))
 
 
 # A fetch/district_pvi.SeatLines (a dict of the sitting table that also

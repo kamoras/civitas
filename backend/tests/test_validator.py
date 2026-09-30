@@ -5,22 +5,7 @@ for assembled senator records before they're persisted.
 """
 
 
-from app.pipeline.assemble.validator import validate_senator, clamp
-
-
-class TestClamp:
-    def test_within_range(self):
-        assert clamp(50.3) == 50
-
-    def test_below_min(self):
-        assert clamp(-10.0) == 0
-
-    def test_above_max(self):
-        assert clamp(150.0) == 100
-
-    def test_custom_range(self):
-        assert clamp(200.0, 0, 1000) == 200
-        assert clamp(-5.0, 0, 1000) == 0
+from app.pipeline.assemble.validator import validate_senator
 
 
 def _make_senator(**overrides):
