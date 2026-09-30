@@ -464,6 +464,24 @@ describe("streamExploreDocumentSummary", () => {
     expect(post).toHaveBeenCalledTimes(4);
   });
 
+  it("counts drops in a row, not across a long wait", async () => {
+    const drop = () => Promise.reject(new TypeError("Failed to fetch"));
+    const wait = () =>
+      Promise.resolve(new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } }));
+    const post = vi.fn();
+    for (const next of [drop, drop, drop, wait, drop, drop, drop])
+      post.mockImplementationOnce(next);
+    post.mockResolvedValueOnce(done());
+    stubSummaryFetch(post);
+    const result = await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async () => {}
+    );
+    expect(result.summary).toBeTruthy();
+  });
+
   it("releases each refusal's body before waiting", async () => {
     const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
     const cancel = vi.spyOn(refused.body!, "cancel");

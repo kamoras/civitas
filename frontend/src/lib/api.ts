@@ -993,6 +993,7 @@ export async function streamExploreDocumentSummary(
       await waitFor(null);
       continue;
     }
+    unanswered = 0; // a response: the drops before it were a passing reset
     // Only a refusal marked as a wait (X-Summary-Wait — the backend's, and
     // nginx's own limits and outages on this route): a 404 or a 500 is not
     // waited out.

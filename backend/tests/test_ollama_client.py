@@ -441,3 +441,13 @@ class TestHttpErrorLogsResponseBody:
 
         assert result is None
         assert any("could not read response body" in r.message for r in caplog.records)
+
+
+def test_an_answered_call_records_that_the_llm_was_up(db_session, monkeypatch):
+    # explore_summary reads it to tell one outage from the next.
+    monkeypatch.setattr(ollama_client, "last_answered_at", 0.0)
+    p1, p2, p3 = _patched_call(db_session, [{"ok": True}])
+    with p1, p2, p3:
+        ollama_client.call_llm(prompt_version="v", system_prompt="s", user_prompt="u",
+                               cache_key=None, db_session=db_session)
+    assert ollama_client.last_answered_at > 0.0

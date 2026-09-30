@@ -193,6 +193,42 @@ class TestStreaming:
             explore_summary._llm_busy_until = 0.0
             assert await _events(doc, db_session) == [_NONE]
 
+    async def test_past_the_wait_an_unreachable_llm_is_not_tried_again_at_once(self, db_session, monkeypatch):
+        # Each try would hold a generation slot for its connect timeout.
+        doc = _make_doc(db_session)
+        tries = []
+
+        async def _unreachable(*_args, **_kwargs):
+            tries.append(1)
+            raise httpx.ConnectError("refused")
+            yield  # pragma: no cover
+
+        now = explore_summary.time.monotonic()
+        monkeypatch.setattr(explore_summary, "_unreachable", (now - explore_summary.UNREACHABLE_WAIT_S - 1, now))
+        patches, _ = _llm(_unreachable)
+        with patches[0], patches[1], patches[2]:
+            assert await _events(doc, db_session) == [_NONE]
+            assert await _events(doc, db_session) == [_NONE]
+        assert tries == [1]
+
+    async def test_the_llm_answering_other_calls_ends_an_outage(self, db_session, monkeypatch):
+        # Up in between (the pipeline's own calls): a new refusal is a new
+        # restart, with its own wait.
+        from app.pipeline.analyze import ollama_client
+
+        doc = _make_doc(db_session)
+
+        async def _unreachable(*_args, **_kwargs):
+            raise httpx.ConnectError("refused")
+            yield  # pragma: no cover
+
+        now = explore_summary.time.monotonic()
+        monkeypatch.setattr(explore_summary, "_unreachable", (now - explore_summary.UNREACHABLE_WAIT_S - 1, now - 10))
+        monkeypatch.setattr(ollama_client, "last_answered_at", now - 5)
+        patches, _ = _llm(_unreachable)
+        with patches[0], patches[1], patches[2]:
+            assert "retryAfter" in (await _events(doc, db_session))[-1]
+
     async def test_a_blip_long_ago_does_not_cut_a_later_restarts_wait(self, db_session, monkeypatch):
         doc = _make_doc(db_session)
 

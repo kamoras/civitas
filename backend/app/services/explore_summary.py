@@ -191,6 +191,10 @@ _llm_busy_until = 0.0
 # unreachable, time last found so). Over when it next answers, or when no
 # attempt has failed for UNREACHABLE_WAIT_S (the next failure is a new one).
 _unreachable: tuple[float, float] | None = None
+# Past the wait, until when an unreachable LLM is answered as unavailable
+# without trying it: each try would hold a generation slot for its connect
+# timeout and log again, for every reader.
+_llm_down_until = 0.0
 # Text key -> (monotonic time it's forgotten, its final event): a run just
 # over, kept briefly — a reader whose cache read raced its cache write (and
 # missed it) gets this rather than generating the same text again.
@@ -243,6 +247,8 @@ async def request(doc_id: int, prompt: dict, key_: dict, ip: str, *, limit=None)
         return once({"done": True, **_NOTHING})  # unusable: the answer, not a wait
     # After the text's own holds: an unusable text's answer doesn't wait on
     # the LLM.
+    if _llm_down_until > now:
+        return once({"done": True, **_NOTHING})  # down past a restart's length: unavailable
     if _llm_busy_until > now:
         raise _busy(_llm_busy_until - now)
     # Only runs still generating count: one whose last event is out is only
@@ -294,10 +300,14 @@ def _unreachable_is_a_wait() -> bool:
     UNREACHABLE_WAIT_S from the first failure of this outage, a restart's
     length; after that a failure the page reports, not waits out for ten
     minutes. A failure after a quiet gap that long starts a new outage — a
-    blip hours ago says nothing about a restart now."""
+    blip hours ago says nothing about a restart now — as does one after the
+    LLM answered anything else in this process (the pipeline's own calls)."""
     global _unreachable
+    from app.pipeline.analyze import ollama_client
+
     now = time.monotonic()
-    if _unreachable is None or now - _unreachable[1] >= UNREACHABLE_WAIT_S:
+    if (_unreachable is None or now - _unreachable[1] >= UNREACHABLE_WAIT_S
+            or ollama_client.last_answered_at > _unreachable[1]):
         _unreachable = (now, now)
     else:
         _unreachable = (_unreachable[0], now)
@@ -310,6 +320,7 @@ def _reached() -> None:
 
 
 async def _generate(run: _Run) -> None:
+    global _llm_down_until
     from app.pipeline.analyze import ollama_client
 
     text = ""
@@ -342,6 +353,8 @@ async def _generate(run: _Run) -> None:
             llm_busy = True
         elif isinstance(error, (httpx.ConnectError, httpx.ConnectTimeout)) and not text:
             llm_busy = _unreachable_is_a_wait()
+            if not llm_busy:
+                _llm_down_until = time.monotonic() + BUSY_RETRY_AFTER_S
             if llm_busy:
                 logger.warning("Explore doc summary for doc_id=%s: the LLM is unreachable (%s)", run.doc_id, error)
             else:
@@ -432,11 +445,12 @@ async def stop() -> None:
 
 def reset() -> None:
     """Forget everything (tests)."""
-    global _llm_busy_until
+    global _llm_busy_until, _llm_down_until
     _runs.clear()
     _by_client.clear()
     _holds.clear()
     _strikes.clear()
     _finished.clear()
     _llm_busy_until = 0.0
+    _llm_down_until = 0.0
     _reached()
