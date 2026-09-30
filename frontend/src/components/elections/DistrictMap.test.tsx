@@ -255,6 +255,50 @@ describe("DistrictMap", () => {
     expect(screen.queryByText("no votes counted yet")).not.toBeInTheDocument();
   });
 
+  it("names a flip announced earlier whose latest count has no votes, before 'no votes'", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    const empty = {
+      raceId: "2026-HOUSE-CT-2",
+      state: "CT",
+      office: "H",
+      district: 2,
+      isSpecial: false,
+      heldBy: "DEM",
+      official: false,
+      votesCounted: 0,
+      reportingUnits: 0,
+      totalUnits: 100,
+      unitLabel: "towns",
+      sourceName: "CT SOTS",
+      sourceUrl: null,
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: null,
+      flip: true,
+      candidates: [
+        { name: "Ray Rep", party: "REP", votes: 0, pct: null, candidateId: null },
+        { name: "Bo Dem", party: "DEM", votes: 0, pct: null, candidateId: null },
+      ],
+    } as LiveRaceResult;
+    render(
+      <DistrictMap
+        state="CT"
+        races={RACES}
+        picked={null}
+        onPick={vi.fn()}
+        results={new Map([[2, empty]])}
+      />
+    );
+    const shape = await screen.findByRole("button", {
+      name: "CT-2: no votes in the latest count, change of party announced earlier",
+    });
+    shape.focus();
+    expect(
+      await screen.findByText("no votes in the latest count · change of party announced earlier")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("no votes counted yet")).not.toBeInTheDocument();
+  });
+
   it("leaves new-map districts unshaded and says why, not red/blue", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
     // A redrawn state: every race carries the flagged statewide lean.

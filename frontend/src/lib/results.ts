@@ -313,7 +313,9 @@ export function leaderIsChallenger(r: {
   votesCounted: number;
   candidates: { votes: number }[];
 }): boolean {
-  return !!r.leaderParty && !!r.heldBy && r.leaderParty !== r.heldBy && !isTied(r);
+  return (
+    r.votesCounted > 0 && !!r.leaderParty && !!r.heldBy && r.leaderParty !== r.heldBy && !isTied(r)
+  );
 }
 
 /** Whether to say a seat is changing party: announced (`flip`) AND borne
@@ -334,9 +336,14 @@ export function flipShown(r: {
 
 /** For a change of party that was announced (and still stands on the
  * Action Center issue and in the feed) but that the figures on screen no
- * longer show: what they do show, in words — "tied in the latest count",
- * "holder's party ahead in the latest count". Null for every other race,
- * including a flip the count still bears out (flipShown). */
+ * longer show: what they do show, in words — "no votes in the latest
+ * count", "tied in the latest count", "holder's party ahead in the latest
+ * count", "leader's party not given in the latest count" (what is unknown,
+ * never "another party", which would read as the change itself). Null for
+ * every other race, including a flip the count still bears out
+ * (flipShown). Every surface checks this BEFORE its "no votes yet" and
+ * "tied" wording, so a race the counter lists as "not counted" says why
+ * wherever a reader follows it. */
 export function flipNotShownText(r: {
   flip: boolean;
   leaderParty: string | null;
@@ -345,10 +352,30 @@ export function flipNotShownText(r: {
   candidates: { votes: number }[];
 }): string | null {
   if (!r.flip || leaderIsChallenger(r)) return null;
+  if (!(r.votesCounted > 0)) return "no votes in the latest count";
   if (isTied(r)) return "tied in the latest count";
   if (r.leaderParty && r.leaderParty === r.heldBy)
     return "holder's party ahead in the latest count";
+  if (!r.leaderParty) return "leader's party not given in the latest count";
   return "latest count doesn't show the change";
+}
+
+/** flipNotShownText, short enough for a tag: "NO VOTES IN THIS COUNT",
+ * "TIED", "HOLDER'S PARTY LEADS", "LEADER'S PARTY NOT GIVEN". Null where
+ * flipNotShownText is. */
+export function flipNotShownTag(r: {
+  flip: boolean;
+  leaderParty: string | null;
+  heldBy: string | null;
+  votesCounted: number;
+  candidates: { votes: number }[];
+}): string | null {
+  if (!flipNotShownText(r)) return null;
+  if (!(r.votesCounted > 0)) return "NO VOTES IN THIS COUNT";
+  if (isTied(r)) return "TIED";
+  if (r.leaderParty && r.leaderParty === r.heldBy) return "HOLDER'S PARTY LEADS";
+  if (!r.leaderParty) return "LEADER'S PARTY NOT GIVEN";
+  return "NOT IN THIS COUNT";
 }
 
 /** Share of reporting units in, 0..1, or null when the state gives none. */
@@ -644,14 +671,20 @@ const PARTY_NAME: Record<string, string> = {
   CON: "Constitution Party",
 };
 
-/** "Democrat leads", "Democrats lead" — for a map's accessible names. */
+/** "Democrat leads", "Democrats lead" — for a map's accessible names. A
+ * party the vocabulary doesn't name is "another party"; a leader the feed
+ * gives NO party for is said as that ("leader's party not given"), never
+ * "another party", which claims to know it differs from the seat's
+ * holder. Plural, null is seatsLed's OTHER: unnamed and unlisted together. */
 function leadsPhrase(party: string | null | undefined, plural = false): string {
   if (plural) {
     const holders = party && HOLDERS[party];
-    return holders ? `${holders} lead` : "another party leads";
+    if (holders) return `${holders} lead`;
+    return party ? "another party leads" : "other or unstated parties lead";
   }
   const name = party && PARTY_NAME[party];
-  return name ? `${name} leads` : "another party leads";
+  if (name) return `${name} leads`;
+  return party ? "another party leads" : "leader's party not given";
 }
 
 /** How far one race's count is, in words: "official count", "25% in,
@@ -671,14 +704,18 @@ function progressPhrase(r: LiveRaceResult): string {
  * named as that ("…, change of party announced earlier, holder's party
  * ahead in the latest count"), never as a seat changing party. */
 export function raceStatusText(r: LiveRaceResult): string {
-  if (!(r.votesCounted > 0)) return "no votes yet";
+  const notShown = flipNotShownText(r);
+  if (!(r.votesCounted > 0))
+    return notShown
+      ? "no votes in the latest count, change of party announced earlier"
+      : "no votes yet";
   const progress = progressPhrase(r);
   const head = isTied(r) ? "tied" : leadsPhrase(r.leaderParty);
-  const notShown = flipNotShownText(r);
   const flip = flipShown(r)
     ? "seat changing party"
     : notShown
-      ? `change of party announced earlier, ${notShown}`
+      ? // A tie, or a leader whose party isn't given, the head already says.
+        `change of party announced earlier${r.leaderParty && !isTied(r) ? `, ${notShown}` : ""}`
       : "";
   return [head, progress, flip].filter(Boolean).join(", ");
 }

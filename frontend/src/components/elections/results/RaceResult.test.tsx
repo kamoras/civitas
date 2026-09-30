@@ -187,6 +187,76 @@ describe("RaceResultCard", () => {
   });
 });
 
+describe("a flip announced earlier that the latest count doesn't show", () => {
+  it("is said before 'no votes yet' when the held poll has none, on the card and the row", () => {
+    // The counter lists it as "not counted" and points at the card: the
+    // card must then say why, not only "no votes yet".
+    const empty = race({
+      office: "S",
+      district: null,
+      flip: true,
+      votesCounted: 0,
+      leaderParty: null,
+      candidates: [
+        { name: "Ray Jones", party: "REP", votes: 0, pct: null, candidateId: null },
+        { name: "Dana Smith", party: "DEM", votes: 0, pct: null, candidateId: null },
+      ],
+    });
+    expect(statusTag(empty).text).toBe("FLIP ANNOUNCED · NO VOTES IN THIS COUNT");
+    render(<RaceResultCard result={empty} />);
+    expect(document.body).toHaveTextContent(
+      "No votes in the latest count. The seat was held by a Democrat; a change of party was announced earlier."
+    );
+    expect(document.body).not.toHaveTextContent(/No votes counted yet|NO VOTES YET/);
+    cleanup();
+    render(
+      <ol>
+        <HouseResultRow result={{ ...empty, office: "H", district: 2 }} />
+      </ol>
+    );
+    expect(document.body).toHaveTextContent("No votes in the latest count");
+    expect(document.body).toHaveTextContent("FLIP ANNOUNCED · NO VOTES IN THIS COUNT");
+  });
+
+  it("says a leader with no party given is that, not 'another party'", () => {
+    const noParty = race({
+      flip: true,
+      leaderParty: null,
+      candidates: [
+        { name: "Indy Pen", party: null, votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
+      ],
+    });
+    expect(statusTag(noParty).text).toBe("FLIP ANNOUNCED · LEADER'S PARTY NOT GIVEN");
+    render(<RaceResultCard result={noParty} />);
+    expect(document.body).toHaveTextContent(
+      "a change of party was announced earlier (leader's party not given in the latest count)."
+    );
+    expect(document.body).not.toHaveTextContent(/another party|NOT IN THIS COUNT/);
+  });
+});
+
+describe("a House row on a phone", () => {
+  it("puts the status tag under the leader, not in a column beside the name", () => {
+    render(
+      <ol>
+        <HouseResultRow result={race({ flip: true })} />
+      </ol>
+    );
+    const li = document.querySelector("li")!;
+    // Two columns below `sm` (label, the rest); four from `sm`.
+    expect(li.className).toMatch(/(^|\s)grid-cols-\[3\.75rem_minmax\(0,1fr\)\](\s|$)/);
+    expect(li.className).toContain("sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]");
+    const tag = screen.getByText("FLIP · LEADING");
+    expect(tag.className).toContain("col-start-2");
+    expect(tag.className).toContain("sm:col-start-auto");
+    // The name wraps on a phone; it is cut short only from `sm`.
+    const name = screen.getByText("Ray Jones").parentElement!;
+    expect(name.className).not.toMatch(/(^|\s)truncate(\s|$)/);
+    expect(name.className).toContain("sm:truncate");
+  });
+});
+
 describe("the count's own words", () => {
   it("says no votes are counted yet on a card with none, not 'leading'", () => {
     render(<RaceResultCard result={race({ office: "S", district: null, votesCounted: 0 })} />);

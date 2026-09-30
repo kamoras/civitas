@@ -311,16 +311,17 @@ export default async function ElectionsChapter() {
           <P>
             A seat changing party opens a <em>developing</em> story in the{" "}
             <A href={ACTION_CENTER_HREF}>Action Center</A>, marked as not yet confirmed by the
-            press. Until a news story naming that race confirms it, it follows the count, and if the
-            lead reverts it comes off the Action Center and is rewritten to say the count no longer
-            shows a change of party; once confirmed, it is the news story. Civitas&apos;s Bluesky
-            account posts fewer moments than the feed shows: a seat changing party, a count the
-            state lists as official (a Senate race, or a seat changing party), and the big moves in
-            a Senate race — a new leader with most of the count in, every reporting area in. A few
-            an hour at most; one that can&apos;t go out within two hours, or that a newer post about
-            the same race overtakes, is dropped rather than posted late, and a posted change of
-            party that reverts gets a correction. Every sentence in the feed, the story and the
-            posts is a fixed template around the state&apos;s own figures — no AI writes any of it.
+            press. Until a news story naming that race — the state&apos;s seat and one of its
+            candidates by name — confirms it, it follows the count, and if the lead reverts it comes
+            off the Action Center and is rewritten to say the count no longer shows a change of
+            party; once confirmed, it is the news story. Civitas&apos;s Bluesky account posts fewer
+            moments than the feed shows: a seat changing party, a count the state lists as official
+            (a Senate race, or a seat changing party), and the big moves in a Senate race — a new
+            leader with most of the count in, every reporting area in. A few an hour at most; one
+            that can&apos;t go out within two hours, or that a newer post about the same race
+            overtakes, is dropped rather than posted late, and a posted change of party that reverts
+            gets a correction. Every sentence in the feed, the story and the posts is a fixed
+            template around the state&apos;s own figures — no AI writes any of it.
           </P>
         </Sub>
         <P>

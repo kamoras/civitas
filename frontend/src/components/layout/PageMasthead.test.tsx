@@ -29,6 +29,19 @@ describe("PageMasthead", () => {
     expect(screen.getByText("Standing line.")).toBeInTheDocument();
   });
 
+  it("caps the aside at the header's width, so a long one wraps instead of widening the page", () => {
+    render(
+      <PageMasthead
+        eyebrow="E"
+        title="T"
+        aside={<span>REFRESH FAILED · LAST READ 9:02 PM ET</span>}
+      />
+    );
+    const cell = screen.getByText(/REFRESH FAILED/).parentElement!;
+    expect(cell.className).toContain("max-w-full");
+    expect(cell.className).toContain("min-w-0");
+  });
+
   it("carries the section rule every page relies on", () => {
     const { container } = render(<PageMasthead eyebrow="E" title="T" />);
     expect(container.querySelector("header")?.className).toContain("border-b-3");

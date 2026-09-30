@@ -1,4 +1,5 @@
 import {
+  flipNotShownTag,
   flipNotShownText,
   flipShown,
   formatEasternTime,
@@ -23,22 +24,19 @@ import type { LiveRaceResult } from "@/types/election";
  * standing — but only while the figures show it (flipShown): a change of
  * party announced earlier that this count no longer shows (a poll whose
  * total fell announces nothing, so the flip stands on the issue and in the
- * feed) says exactly that, never FLIP · LEADING beside the holder's lead. */
+ * feed) says exactly that, never FLIP · LEADING beside the holder's lead
+ * — checked before NO VOTES YET, since a count that fell to zero votes is
+ * one of them (the overview counts it as "not counted" and points here). */
 export function statusTag(r: LiveRaceResult): { text: string; className: string } {
-  if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
-  if (flipNotShownText(r))
+  const notShown = flipNotShownTag(r);
+  if (notShown)
     return {
       // Short, as a tag must be; the card's sentence and the maps' names
       // say it in full ("holder's party ahead in the latest count").
-      text: `FLIP ANNOUNCED · ${
-        isTied(r)
-          ? "TIED"
-          : r.leaderParty === r.heldBy
-            ? "HOLDER'S PARTY LEADS"
-            : "NOT IN THIS COUNT"
-      }${r.official ? " · OFFICIAL COUNT" : ""}`,
+      text: `FLIP ANNOUNCED · ${notShown}${r.official ? " · OFFICIAL COUNT" : ""}`,
       className: "border-signal-amber/40 text-ink-hi",
     };
+  if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
   if (isTied(r))
     return {
       text: r.official ? "TIED · OFFICIAL COUNT" : "TIED",
@@ -144,7 +142,9 @@ export function RaceResultCard({
       <p className="mt-4 text-sm text-ink-lo">
         {[
           !result.votesCounted
-            ? "No votes counted yet."
+            ? flipNotShownText(result)
+              ? "No votes in the latest count."
+              : "No votes counted yet."
             : isTied(result)
               ? result.official
                 ? "Tied in the count the state lists as official; not called."
@@ -159,8 +159,11 @@ export function RaceResultCard({
             : null,
           // Announced earlier (and still standing on the issue and in the
           // feed), but not what these figures show: say both.
-          result.votesCounted && flipNotShownText(result)
-            ? `The seat was held by ${heldByPhrase(result.heldBy)}; a change of party was announced earlier (${flipNotShownText(result)}).`
+          // With no votes in this count the sentence before says so.
+          flipNotShownText(result)
+            ? `The seat was held by ${heldByPhrase(result.heldBy)}; a change of party was announced earlier${
+                result.votesCounted ? ` (${flipNotShownText(result)})` : ""
+              }.`
             : null,
         ]
           .filter(Boolean)
@@ -183,6 +186,14 @@ export function RaceResultCard({
   );
 }
 
+/** A House row's grid: two columns on a phone (label, then everything
+ * else, the tag wrapping under the leader), four from `sm`. */
+const HOUSE_ROW_GRID =
+  "scroll-mt-[var(--header-clearance)] grid grid-cols-[3.75rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-b border-white/[0.07] px-4 py-3 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]";
+/** The status tag's cell: under the leader on a phone, its own column from `sm`. */
+const HOUSE_ROW_TAG =
+  "col-start-2 justify-self-start sm:col-start-auto sm:justify-self-end sm:text-right";
+
 /** One House district on a line: its leader, a two-party bar, reporting,
  * status. The rows expand nothing — the full count is the card above. */
 export function HouseResultRow({ result }: { result: LiveRaceResult }) {
@@ -198,11 +209,14 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
       // The district map moves focus here when a district is picked, and a
       // #race- link lands here clear of the fixed header.
       tabIndex={-1}
-      className="scroll-mt-[var(--header-clearance)] grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-white/[0.07] px-4 py-3 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]"
+      // On a phone: the label, then the leader in the rest of the width,
+      // the status tag on its own line under it. A tag column beside the
+      // name left the name 38px at 320px wide — truncated past reading.
+      className={HOUSE_ROW_GRID}
     >
       <span className="font-mono text-sm text-ink-hi">{raceLabel(result)}</span>
       <span className="min-w-0">
-        <span className="block truncate text-sm text-ink">
+        <span className="block break-words text-sm text-ink sm:truncate">
           {tied ? (
             // Nobody ahead: both names, neither in a party's lead colour.
             <span className="text-ink-lo">
@@ -226,7 +240,9 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
               </span>
             </>
           ) : (
-            <span className="text-ink-min">No votes counted yet</span>
+            <span className="text-ink-min">
+              {flipNotShownText(result) ? "No votes in the latest count" : "No votes counted yet"}
+            </span>
           )}
         </span>
         <span className="mt-1 flex h-1.5 bg-surface-raised" aria-hidden="true">
@@ -248,9 +264,7 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
         {reportingText(result) || "—"}
       </span>
       <span
-        // Capped on a phone so a long tag wraps instead of squeezing the
-        // names column (its grid track is `auto`).
-        className={`max-w-[7.5rem] justify-self-end border px-2 py-0.5 text-right font-mono text-[11px] tracking-[0.08em] sm:max-w-none ${tag.className}`}
+        className={`${HOUSE_ROW_TAG} border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] ${tag.className}`}
       >
         {tag.text}
       </span>
@@ -273,17 +287,15 @@ export function HouseNoCountRow({
   district: number | null;
 }) {
   return (
-    <li
-      id={`result-${raceId}`}
-      tabIndex={-1}
-      className="scroll-mt-[var(--header-clearance)] grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-white/[0.07] px-4 py-3 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]"
-    >
+    <li id={`result-${raceId}`} tabIndex={-1} className={HOUSE_ROW_GRID}>
       <span className="font-mono text-sm text-ink-hi">
         {raceLabel({ state, office: "H", district })}
       </span>
       <span className="min-w-0 text-sm text-ink-min">No count from the state&apos;s feed</span>
       <span className="hidden font-mono text-xs text-ink-min sm:block">—</span>
-      <span className="justify-self-end border border-dashed border-white/25 px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] text-ink-min">
+      <span
+        className={`${HOUSE_ROW_TAG} border border-dashed border-white/25 px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] text-ink-min`}
+      >
         NO COUNT
       </span>
     </li>

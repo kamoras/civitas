@@ -36,6 +36,7 @@ import {
   stateShade,
   summarizeState,
   flipShown,
+  flipNotShownTag,
   flipNotShownText,
 } from "./results";
 import type { ElectionPhaseInfo, LiveRaceResult, ResultEvent } from "@/types/election";
@@ -484,12 +485,44 @@ describe("describeUpdate", () => {
 
 describe("raceStatusText", () => {
   it("says where a race stands without calling it", () => {
-    expect(raceStatusText(race({ votesCounted: 0 }))).toBe("no votes yet");
+    expect(raceStatusText(race({ votesCounted: 0, flip: false }))).toBe("no votes yet");
     expect(raceStatusText(race({ official: true, flip: false }))).toBe(
       "Republican leads, official count"
     );
-    expect(raceStatusText(race({ totalUnits: null, flip: false, leaderParty: null }))).toBe(
+    // A party the vocabulary doesn't name is another party; no party given
+    // is said as that, never "another party".
+    expect(raceStatusText(race({ totalUnits: null, flip: false, leaderParty: "WFP" }))).toBe(
       "another party leads"
+    );
+    expect(raceStatusText(race({ totalUnits: null, flip: false, leaderParty: null }))).toBe(
+      "leader's party not given"
+    );
+  });
+
+  it("says an announced flip before 'no votes yet' and 'tied'", () => {
+    // A held poll that fell to zero votes: the counter lists it as not
+    // counted, so its own wording must say why.
+    expect(raceStatusText(heldFlip({ votesCounted: 0, leaderParty: null }))).toBe(
+      "no votes in the latest count, change of party announced earlier"
+    );
+    const tied = heldFlip({
+      leaderParty: null,
+      candidates: [
+        { name: "Dana Smith", party: "DEM", votes: 950, pct: 50, candidateId: null },
+        { name: "Ray Jones", party: "REP", votes: 950, pct: 50, candidateId: null },
+      ],
+    });
+    expect(raceStatusText(tied)).toBe("tied, 80% in, change of party announced earlier");
+    // A leader whose party isn't given: said once, as what is unknown.
+    const noParty = heldFlip({
+      leaderParty: null,
+      candidates: [
+        { name: "Indy Pen", party: null, votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
+      ],
+    });
+    expect(raceStatusText(noParty)).toBe(
+      "leader's party not given, 80% in, change of party announced earlier"
     );
   });
 
@@ -530,6 +563,24 @@ describe("flipShown / flipNotShownText", () => {
     });
     expect(flipShown(tied)).toBe(false);
     expect(flipNotShownText(tied)).toBe("tied in the latest count");
+    expect(flipNotShownTag(tied)).toBe("TIED");
+    // Zero votes in a held poll: announced, not shown — never "seat changing party".
+    const empty = heldFlip({ votesCounted: 0, leaderParty: "REP" });
+    expect(flipShown(empty)).toBe(false);
+    expect(flipNotShownText(empty)).toBe("no votes in the latest count");
+    expect(flipNotShownTag(empty)).toBe("NO VOTES IN THIS COUNT");
+    // A leader with no party given: what is unknown, not "another party".
+    const noParty = heldFlip({
+      leaderParty: null,
+      candidates: [
+        { name: "Indy Pen", party: null, votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
+      ],
+    });
+    expect(flipNotShownText(noParty)).toBe("leader's party not given in the latest count");
+    expect(flipNotShownTag(noParty)).toBe("LEADER'S PARTY NOT GIVEN");
+    expect(flipNotShownTag(heldFlip())).toBe("HOLDER'S PARTY LEADS");
+    expect(flipNotShownTag(race())).toBeNull();
     // No flip announced: neither.
     expect(flipShown(race({ flip: false }))).toBe(false);
     expect(flipNotShownText(race({ flip: false }))).toBeNull();

@@ -12,7 +12,11 @@ import React from "react";
  * `aside` is for a figure or control that belongs to the page as a whole
  * rather than to any section under it — a partisan-lean readout, a record
  * count. It sits on the baseline of the title on wide screens and wraps
- * underneath on narrow ones.
+ * underneath on narrow ones — never wider than the page: `shrink-0` keeps a
+ * short aside from being squeezed beside the title, and `max-w-full` caps a
+ * long one (the /elections status line, "REFRESH FAILED · …") at the
+ * header's width so its text wraps. Without the cap the aside took its
+ * one-line width and the whole page scrolled sideways on a phone.
  */
 export default function PageMasthead({
   eyebrow,
@@ -37,7 +41,7 @@ export default function PageMasthead({
             {title}
           </h1>
         </div>
-        {aside && <div className="shrink-0">{aside}</div>}
+        {aside && <div className="min-w-0 max-w-full shrink-0">{aside}</div>}
       </div>
       {children && (
         <div className="mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo">

@@ -370,7 +370,13 @@ links to its election office, never as a state where nothing has happened.
   HOLDER'S PARTY LEADS" on the race, "change of party announced earlier,
   holder's party ahead in the latest count" in the maps' names, never
   "FLIP · LEADING" or "seat
-  changing party" beside the holder's lead, and not among the national
+  changing party" beside the holder's lead. A held poll with no votes in
+  it, or whose leader the feed gives no party for, says exactly that ("FLIP
+  ANNOUNCED · NO VOTES IN THIS COUNT" / "· LEADER'S PARTY NOT GIVEN"; "no
+  votes in the latest count", "leader's party not given"), never "no votes
+  yet" or "another party" — every surface checks the announced flip before
+  its "no votes" and "tied" wording, so the race the counter lists as not
+  counted says why wherever a reader follows it. Such races are not among the national
   "seats changing party" count, which names such races separately
   (`flipShown` / `flipNotShownText` in `frontend/src/lib/results.ts`).
 - A House seat in a state whose congressional map was redrawn for the cycle
@@ -488,8 +494,26 @@ still does. "Regular" names the regular race. "Special" is read wherever it stan
 Senate"), but regular and special are told apart only where the state holds
 both this cycle (its `Race` rows, `state_candidates.senate_race_ids`, as
 `_race_id_for` reads them): Florida's and Ohio's only 2026 race is a
-special, and "the Ohio Senate race" names it. Once promoted it is the news
-story's, matching later coverage like any other issue.
+special, and "the Ohio Senate race" names it. A district or seat number
+after the phrase, whatever punctuation stands between ("Ohio Senate race,
+District 5", "— SD 14"), and a district, legislature or possessive after a
+state named last ("the Senate race in Ohio District 5", "the only House
+seat in Alaska's Legislature"), make it a legislature's.
+
+The phrase is only half: the story must also name one of the race's own
+candidates — the surname of the leader or runner-up in the stored count
+(`RaceResult.tallies`), or, before a count, of the race's certified
+nominees (else its `Candidate` rows) — whole-word, capitalised, accents
+folded, a multi-word or hyphenated surname as a unit. A legislature or
+commission story names other people, so no prose regex has to foresee it.
+Where a state holds two Senate races, a phrase saying neither "special" nor
+"regular" is told apart by whose candidates it names ("Warnock defeats
+Loeffler in Georgia Senate runoff" is the 2020 special; naming both races'
+candidates names neither). With no candidate on record the phrase decides
+alone. A story naming the race but no candidate leaves the issue
+DEVELOPING — a miss the next story can fix, where a wrong promotion can't
+be undone. Once promoted it is the news story's, matching later coverage
+like any other issue.
 
 **Posts** (`bluesky.py`, published through `broadcast.publish`: the
 Elections feed first, then Bluesky): a flip, an official count (Senate, or a House count still showing a flip

@@ -56,16 +56,20 @@ function Swatch({ color, texture }: { color: string; texture?: string }) {
  * earlier that this count doesn't show says so instead. */
 function senateLine(r: LiveRaceResult, several: boolean): string {
   const name = several ? `Senate${r.isSpecial ? " (special)" : ""}` : "Senate";
-  if (isTied(r)) return `${name}: tied${r.official ? " · official count" : ""}`;
+  // Announced earlier: said before "tied" and "no votes yet", as every
+  // other surface says it, so no line drops what the counter counts.
+  const announced = flipNotShownText(r) ? " · flip announced, not in latest count" : "";
+  if (isTied(r)) return `${name}: tied${r.official ? " · official count" : ""}${announced}`;
   const lead = r.candidates[0];
-  if (!lead || !r.votesCounted) return `${name}: no votes yet`;
+  if (!lead || !r.votesCounted)
+    return announced
+      ? `${name}: no votes in the latest count${announced}`
+      : `${name}: no votes yet`;
   const share = reportingShare(r);
   const early = !r.official && share != null && share < 0.5;
   return `${name}: ${lead.name} (${partyLetter(lead.party) || "other"}) ${
     r.official ? "leads · official count" : "leads"
-  }${early ? " · early" : ""}${
-    flipShown(r) ? " · flip" : flipNotShownText(r) ? " · flip announced, not in latest count" : ""
-  }`;
+  }${early ? " · early" : ""}${flipShown(r) ? " · flip" : announced}`;
 }
 
 function LedTally({ led }: { led: Record<string, number> }) {

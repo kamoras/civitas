@@ -19,6 +19,7 @@ import re
 import threading
 from functools import lru_cache
 import time
+import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -3787,22 +3788,35 @@ _POSS = r"(?:['’]s?)?"  # Georgia's / Texas' / bare
 _OWNER = rf"{_OURS}(?:\s+state['’]s?|{_POSS})"
 _ORD = r"\d+(?:st|nd|rd|th)"
 # After a trailing state name, what makes the phrase about the state's
-# LEGISLATURE ("the 2nd district in Georgia's state Senate").
-_NOT_LEGISLATURE = r"(?!(?:['’]s?)?\s+state[-\s]+(?:senate|house|assembly|legislature)\b)"
+# LEGISLATURE ("the 2nd district in Georgia's state Senate", "the 2nd
+# District in Georgia Senate"), or about a district or numbered seat INSIDE
+# the state ("the Senate race in Ohio District 5", "… in Georgia House
+# district 14"): a U.S. race's own phrase ends at the state.
+_NOT_LEGISLATURE = r"(?!(?:['’]s?)?\s+(?:state[-\s]+)?(?:senate|house|assembly|legislature)\b)"
+_NO_PLACE_AFTER = r"(?!\s+(?:(?:state|congressional|legislative|senate|house)\s+)*(?:district\b|#?\d))"
+# A state named last: never possessive ("… in Georgia's legislature"), never
+# followed by a legislature or a district of its own.
+_OURS_LAST = rf"{_OURS}(?!['’]){_NOT_LEGISLATURE}{_NO_PLACE_AFTER}"
+# After "[State]'s 2nd District" / "[State]'s District 2": a legislature
+# seat's own words ("Michigan's 2nd District state House seat", "Georgia
+# state's District 14 senate"). A congressional district is never followed
+# by "state" or "Senate"; "House" alone is left alone, since "Georgia's 2nd
+# District House race" is the congressional one.
+_NOT_LEGISLATURE_AFTER_DISTRICT = r"(?!\s+(?:state|senate)\b)"
 _HOUSE_PHRASES = (
     # "Georgia's 2nd District", "Georgia's 2nd and 6th congressional districts"
     rf"{_OWNER}\s+(?P<ords>{_ORD}(?:(?:\s*,\s*|\s+and\s+|\s*,\s*and\s+){_ORD})*)"
-    r"(?:\s+congressional)?\s+districts?\b",
+    r"(?:\s+congressional)?\s+districts?\b" + _NOT_LEGISLATURE_AFTER_DISTRICT,
     # "Georgia's District 2", "Georgia congressional district 2". Bare
     # "Georgia District 2" is also how a commission or school board names
     # its seats ("Georgia District 2 commissioner race"), so without the
     # possessive it needs "congressional".
     rf"(?:{_OURS}(?:\s+state)?['’]s?\s+(?:congressional\s+)?|{_OURS}\s+congressional\s+)"
-    r"district\s+(?P<num>\d+)\b(?!\s+state[-\s]+(?:senate|house|assembly)\b)",
+    r"district\s+(?P<num>\d+)\b" + _NOT_LEGISLATURE_AFTER_DISTRICT,
     # "the 2nd congressional district of Georgia", "2nd District in Georgia"
     # — never "… in Georgia's" something ("the second district in
     # Georgia's school board").
-    rf"\b(?P<ord>{_ORD})\s+(?:congressional\s+)?district\s+(?:of|in)\s+{_OURS}(?!['’]){_NOT_LEGISLATURE}",
+    rf"\b(?P<ord>{_ORD})\s+(?:congressional\s+)?district\s+(?:of|in)\s+{_OURS_LAST}",
     # "Virginia's 2nd seat", "Virginia's 2nd House race", and "Virginia's
     # 2nd" closing a clause ("…leads in Virginia's 2nd."). A bare ordinal
     # followed by any other word is not read as a district: "Virginia's
@@ -3818,15 +3832,16 @@ _HOUSE_PHRASES = (
     rf"\bin\s+{_OURS}['’]s?\s+(?P<bare>{_ORD})\s*,",
 )
 _AT_LARGE_PHRASES = (
-    rf"{_OWNER}\s+at[- ]large\b",
-    r"\bat[- ]large\s+(?:congressional\s+)?(?:district|seat|race|contest)\s+(?:of|in)\s+" + _OURS,
+    # Never "Alaska's at-large state Senate seat" / "… Assembly seat".
+    rf"{_OWNER}\s+at[- ]large\b(?!\s+(?:state|senate|assembly)\b)",
+    r"\bat[- ]large\s+(?:congressional\s+)?(?:district|seat|race|contest)\s+(?:of|in)\s+" + _OURS_LAST,
     # "Alaska's lone House seat", "Alaska's only congressional seat": a
     # state with one seat has only its at-large one. "House" right after
     # the adjective, never "state House" (a legislature has many seats).
     rf"{_OWNER}\s+(?:lone|only|sole|single)\s+(?:u\.?s\.?\s+)?(?:congressional|house)\s+"
     r"(?:seat|district|race|contest)\b",
     r"\b(?:lone|only|sole|single)\s+(?:u\.?s\.?\s+)?(?:congressional|house)\s+(?:seat|district|race|contest)"
-    r"\s+(?:of|in)\s+" + _OURS,
+    r"\s+(?:of|in)\s+" + _OURS_LAST,
 )
 # A legislature's district read as a House seat: "the state-senate race in
 # Georgia's 14th district" is a state senate district, not GA-14.
@@ -3850,9 +3865,9 @@ _SENATE_PHRASES = (
     rf"{_OWNER}\s+(?:special\s+)?u\.?s\.?\s+senate\b",
     rf"{_OWNER}\s+{_SPECIAL_FOR}\b",
     rf"(?:\b(?:special|regular)\s+)?(?:\bu\.?s\.?\s+)?{_NOT_STATE_SENATE}\bsenate\s+(?:special\s+)?{_RACE_WORD}\s+"
-    rf"(?:in|for|from)\s+{_OURS}(?!['’])",
-    rf"(?:\bspecial\s+)?\bu\.?s\.?\s+senate\s+(?:in|for|from)\s+{_OURS}(?!['’])",
-    rf"\b{_SPECIAL_FOR}\s+(?:race\s+)?(?:in|for|from)\s+{_OURS}(?!['’])",
+    rf"(?:in|for|from)\s+{_OURS_LAST}",
+    rf"(?:\bspecial\s+)?\bu\.?s\.?\s+senate\s+(?:in|for|from)\s+{_OURS_LAST}",
+    rf"\b{_SPECIAL_FOR}\s+(?:race\s+)?(?:in|for|from)\s+{_OURS_LAST}",
 )
 _SENATE_OWNER_PHRASES = 3  # the first three start with the state as owner
 # "[State] Senate" is also the name of the state legislature's upper
@@ -3868,15 +3883,22 @@ _SENATE_OWNER_PHRASES = 3  # the first three start with the state as owner
 #   Senate race for District 14", "… seat in Tampa", "… race for Georgia's
 #   governor". Only the state itself, a year or a month may follow "in" /
 #   "for" / "from" (months are the calendar's own names, not a word list
-#   classifying anything).
+#   classifying anything). Punctuation between the phrase and the number
+#   changes nothing — "Ohio Senate race, District 5", "(District 5)",
+#   "- District 5", ": District 5 flips", "— SD 14", "No. 5": a district
+#   word, or a number with at most a short designator before it, after
+#   nothing but separators. A year is not a seat number.
 _SENATE_LEGISLATURE_WORDS = re.compile(r"\b(?:seat|election)$")
 _US = re.compile(r"\bu\.?s\.?\s")
 _MONTHS = ("january|february|march|april|may|june|july|august|september|october|november|december")
+_SEPARATORS = r"[\s,:;()\[\]–—-]*"
 _SENATE_QUALIFIED_AWAY = re.compile(
-    r"^(?:\s*(?:#|no\.\s*)?\d(?!\d{3}\b)|\s+district\b|\s+(?:in|for|from)\s+(?:the\s+)?"
+    rf"^(?:{_SEPARATORS}(?:(?:#|[a-z]{{1,3}}\.?)[\s-]*)?\d(?!\d{{3}}\b)|{_SEPARATORS}district\b"
+    r"|\s+(?:in|for|from)\s+(?:the\s+)?"
     rf"(?!{_OURS}(?!['’])|\d{{4}}\b|(?:{_MONTHS})\b))"
 )
 _SPECIAL_WORD = re.compile(r"\bspecial\b")
+_REGULAR_WORD = re.compile(r"\bregular\b")
 
 
 def _senate_phrase_is_legislature(phrase: str, after: str, lead: str, owner_form: bool) -> bool:
@@ -3974,13 +3996,93 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
     return len(senate_race_ids(db, cycle, state)) != 1
 
 
+# The phrase is half the rule. Six review rounds each found new prose that
+# pairs a state with a seat word and is about something else — a
+# legislature's district, a commission seat, a race car's second race — and
+# a seventh would find more. So a story must ALSO name one of the race's
+# own candidates: the surname of the leader or runner-up in the stored
+# count (RaceResult.tallies — the two people a flip is between), or, before
+# any count is stored, of a Candidate row for the race (the certified
+# nominees when a state has confirmed them). This is identity resolution
+# against the race's own structured records, the way a bill number is
+# resolved, not a classification. A legislature story names other people;
+# "Warnock defeats Loeffler in Georgia Senate runoff" names the 2020
+# special's candidates, so it names that race and never the regular one,
+# whatever the phrase says. The surname is matched whole-word and
+# capitalised (a name, not the word: "Brown" the senator, not a brown
+# envelope), accents folded, a multi-word or hyphenated surname as a
+# unit ("Cortez Masto", "Ocasio-Cortez").
+#
+# With no candidate on record for the race (no session to ask, or none
+# stored), the phrase alone decides, as before. A story that names the race
+# without naming a candidate leaves the issue DEVELOPING — a miss, which the
+# next hour's story can still fix; a wrong promotion cannot be undone.
+
+
+def _strip_accents(text: str) -> str:
+    """Diacritics removed, case kept (the capital is part of the test)."""
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def _race_surnames(db, race_id: str) -> set[str] | None:
+    """The surnames a story about `race_id` would use: the leader's and
+    runner-up's in the stored count, else every certified nominee's, else
+    every Candidate row's. None when nothing is on record (the phrase then
+    decides alone)."""
+    from app.models import Candidate, RaceResult
+    from app.pipeline.candidate_dedup import normalized_surname
+    from app.pipeline.fetch.state_candidates_common import surname
+
+    if db is None:
+        return None
+    names: set[str] = set()
+    result = db.get(RaceResult, race_id)
+    try:
+        tallies = json.loads(result.tallies or "[]") if result is not None else []
+    except (ValueError, TypeError):
+        tallies = []
+    for tally in tallies[:2] if isinstance(tallies, list) else []:
+        if not isinstance(tally, dict):
+            continue
+        cand = db.get(Candidate, tally["candidateId"]) if tally.get("candidateId") else None
+        if cand is not None and cand.race_id == race_id:
+            names.add(normalized_surname(cand.name))  # FEC's "LAST, FIRST"
+        printed = str(tally.get("name") or "")
+        # The source's printing: "Raphael Warnock", or FEC-style "WARNOCK, RAPHAEL".
+        names.add(normalized_surname(printed) if "," in printed else (surname(printed) or ""))
+    if not any(n.strip() for n in names):
+        rows = db.query(Candidate.name, Candidate.confirmed_general).filter(Candidate.race_id == race_id).all()
+        chosen = [n for n, confirmed in rows if confirmed] or [n for n, _ in rows]
+        names = {normalized_surname(n or "") for n in chosen}
+    folded = {_strip_accents(n).lower().strip() for n in names}
+    return {n for n in folded if len(n) >= 2} or None
+
+
+def _names_a_candidate(text: str, surnames: set[str]) -> bool:
+    """Whether `text` names any of `surnames` as a name (see above)."""
+    text = _strip_accents(text)
+    for name in surnames:
+        tokens = [t for t in re.split(r"[\s-]+", name) if t]
+        if not tokens:
+            continue
+        pattern = r"\b" + r"[\s‐-]+".join(re.escape(t) for t in tokens) + r"\b"
+        for m in re.finditer(pattern, text, re.IGNORECASE):
+            last = re.split(r"[\s‐-]+", m.group(0))[-1]
+            if last[:1].isupper():
+                return True
+    return False
+
+
 def _results_race_named(issue, story_text: str, db=None) -> bool:
     """Whether `story_text` (a news cluster's title, summary and facts)
-    names the race an election-results issue is about. False when the
-    issue's race can't be read, so an unreadable row is never promoted.
-    `db` answers whether a Senate race is its state's only one this cycle
-    (see _senate_needs_telling_apart); the issue's own session is used
-    when none is passed."""
+    names the race an election-results issue is about: a phrase naming the
+    state's seat AND, where the race has candidates on record, one of
+    them by surname (see the rule above). False when the issue's race
+    can't be read, so an unreadable row is never promoted. `db` answers
+    whether a Senate race is its state's only one this cycle (see
+    _senate_needs_telling_apart) and who the race's candidates are; the
+    issue's own session is used when none is passed."""
     from sqlalchemy.orm import object_session
 
     from app.state_names import STATE_NAMES
@@ -3994,19 +4096,31 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
     if race is None:
         return False
     cycle, office, state, part = race.groups()
+    race_id = race.group(0).removeprefix("#race-")
     state_name = STATE_NAMES.get(state, "").lower()
     if not state_name:
         return False
+    if db is None:
+        try:
+            db = object_session(issue)
+        except Exception:  # not a mapped instance (a test double)
+            db = None
     story_text = _URL_RE.sub(" ", story_text)
     lowered = re.sub(r"\s+", " ", story_text.lower())
     lowered = _ORDINAL_WORD_RE.sub(lambda m: _ordinal(_ORDINAL_WORDS[m.group(0)]), lowered)
     marked = _mark_states(lowered, state_name)
+
+    asked: list[bool | None] = []  # asked of the database once, and only once a phrase matches
+
+    def candidate_named() -> bool | None:
+        """Whether the story names one of the race's candidates; None when
+        none is on record."""
+        if not asked:
+            ours = _race_surnames(db, race_id)
+            asked.append(None if ours is None else _names_a_candidate(story_text, ours))
+        return asked[0]
+
     if office == "SEN":
-        if db is None:
-            try:
-                db = object_session(issue)
-            except Exception:  # not a mapped instance (a test double)
-                db = None
         tell_apart = None  # asked of the database only once a phrase matches
         for i, phrase in enumerate(_SENATE_PHRASES):
             for m in re.finditer(phrase, marked):
@@ -4014,34 +4128,66 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
                 if _senate_phrase_is_legislature(m.group(0), marked[m.end():m.end() + 60], lead,
                                                  owner_form=i < _SENATE_OWNER_PHRASES):
                     continue
+                named = candidate_named()
+                if named is False:
+                    return False  # a phrase, but none of this race's candidates
                 if tell_apart is None:
                     tell_apart = _senate_needs_telling_apart(db, int(cycle), state)
                 if not tell_apart:
                     return True
                 special = _SPECIAL_WORD.search(m.group(0)) is not None or _SPECIAL_LEAD.search(lead) is not None
-                if special == (part == "SPECIAL"):
+                if special or _REGULAR_WORD.search(m.group(0)):
+                    if special == (part == "SPECIAL"):
+                        return True
+                    continue
+                # A phrase that says neither "special" nor "regular" ("Georgia
+                # Senate runoff") is told apart by whose candidates it names:
+                # this race's and none of the other's names it; both races'
+                # is a story about the two, which names neither. Only with
+                # nothing on record to compare does the old reading stand —
+                # the unqualified phrase is the regular race.
+                other = _other_senate_race_named(db, int(cycle), state, race_id, story_text) if named else None
+                if other is False:
+                    return True
+                if other is None and part != "SPECIAL":
                     return True
         return False
     n = int(part or 0)
     # Postal-code form, case-sensitive: "GA-2", "GA-02", "AK-AL".
     code = r"(?:0?0|AL)" if n == 0 else rf"0?{n}"
     if re.search(rf"\b{state}-{code}\b", story_text):
-        return True
+        return candidate_named() is not False
     if n == 0:
-        return any(re.search(p, marked) for p in _AT_LARGE_PHRASES)
+        return any(re.search(p, marked) for p in _AT_LARGE_PHRASES) and candidate_named() is not False
     ordinal = _ordinal(n)
     for phrase in _HOUSE_PHRASES:
         for m in re.finditer(phrase, marked):
             if _STATE_LEGISLATURE_LEAD.search(marked[max(0, m.start() - 60):m.start()]):
                 continue
             groups = m.groupdict()
-            if groups.get("ords") and ordinal in re.findall(_ORD, groups["ords"]):
-                return True
-            if groups.get("num") and int(groups["num"]) == n:
-                return True
-            if ordinal in (groups.get("ord"), groups.get("bare")):
-                return True
+            if (
+                (groups.get("ords") and ordinal in re.findall(_ORD, groups["ords"]))
+                or (groups.get("num") and int(groups["num"]) == n)
+                or ordinal in (groups.get("ord"), groups.get("bare"))
+            ):
+                return candidate_named() is not False
     return False
+
+
+def _other_senate_race_named(db, cycle: int, state: str, race_id: str, story_text: str) -> bool | None:
+    """Whether the story names a candidate of the state's OTHER Senate race
+    this cycle (Georgia 2020's regular race, for its special). None when
+    that can't be known: no session, no other race found, or no candidate
+    on record for it."""
+    if db is None:
+        return None
+    from app.pipeline.fetch.state_candidates import senate_race_ids
+
+    others = [rid for rid in senate_race_ids(db, cycle, state) if rid != race_id]
+    known = [theirs for rid in others if (theirs := _race_surnames(db, rid)) is not None]
+    if not others or len(known) != len(others):
+        return None
+    return any(_names_a_candidate(story_text, theirs) for theirs in known)
 
 
 def _may_match(candidate, title: str, facts: list, summary: str, db=None) -> bool:

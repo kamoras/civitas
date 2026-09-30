@@ -465,7 +465,11 @@ function DistrictResultPreview({
       {!result && feedAnswered ? (
         <span className="text-ink-min">no count from the state&apos;s feed</span>
       ) : !result || !result.votesCounted ? (
-        <span className="text-ink-min">no votes counted yet</span>
+        <span className="text-ink-min">
+          {result && flipNotShownText(result)
+            ? "no votes in the latest count · change of party announced earlier"
+            : "no votes counted yet"}
+        </span>
       ) : (
         <>
           {[first, second].filter(Boolean).map((c) => (
@@ -480,8 +484,10 @@ function DistrictResultPreview({
           <span className="text-ink-min">{reportingText(result)}</span>
           <span className="text-ink-lo">
             {/* Never a bare "official" beside the names: that reads as a
-                result. An official count still only leads, and a seat
-                changing party says so whatever the count's standing. */}
+                result. An official count still only leads. A seat changing
+                party says so only while the figures show it (flipShown);
+                one announced earlier that this count doesn't show says
+                that instead, never "leader from another party". */}
             {[
               tied ? "tied" : result.official ? "leads" : "leading",
               result.official ? "official count" : null,

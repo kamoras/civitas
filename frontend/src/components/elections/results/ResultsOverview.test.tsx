@@ -194,6 +194,57 @@ describe("a flip announced earlier that the latest count doesn't show", () => {
   });
 });
 
+describe("a held Senate flip that the counter lists as not counted", () => {
+  const base = { raceId: "2026-SEN-GA", office: "S" as const, district: null };
+
+  it("keeps its note on a tie", () => {
+    const tied = race({
+      ...base,
+      leaderParty: null,
+      candidates: [
+        { name: "Ray Jones", party: "REP", votes: 950, pct: 50, candidateId: null },
+        { name: "Dana Smith", party: "DEM", votes: 950, pct: 50, candidateId: null },
+      ],
+    });
+    render(
+      <ResultsOverview
+        now={NOW}
+        results={results({ senateStates: ["GA"], races: [tied] })}
+        states={["GA"]}
+      />
+    );
+    expect(
+      screen.getByText("Senate: tied · flip announced, not in latest count")
+    ).toBeInTheDocument();
+  });
+
+  it("says no votes are in the latest count, not 'no votes yet'", () => {
+    const empty = race({
+      ...base,
+      votesCounted: 0,
+      leaderParty: null,
+      candidates: [
+        { name: "Ray Jones", party: "REP", votes: 0, pct: null, candidateId: null },
+        { name: "Dana Smith", party: "DEM", votes: 0, pct: null, candidateId: null },
+      ],
+    });
+    render(
+      <ResultsOverview
+        now={NOW}
+        results={results({ senateStates: ["GA"], races: [empty] })}
+        states={["GA"]}
+      />
+    );
+    expect(
+      screen.getByText("Senate: no votes in the latest count · flip announced, not in latest count")
+    ).toBeInTheDocument();
+    expect(within(flipsCard()).getByText(/Not counted: 1 change of party/)).toBeInTheDocument();
+    expect(mapProps.current!.getStateLabel("GA")).toBe(
+      "GA Senate: no votes in the latest count, change of party announced earlier"
+    );
+  });
+});
+
 describe("the national results map's key", () => {
   it("calls a count under half in fainter, not paler: the fill is opacity over a dark map", () => {
     render(<ResultsOverview now={NOW} results={results()} states={["GA"]} />);
