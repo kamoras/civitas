@@ -31,6 +31,8 @@ from defusedxml import ElementTree as SafeET
 
 import httpx
 
+from app.contact import BOT_USER_AGENT
+
 logger = logging.getLogger(__name__)
 
 FETCH_TIMEOUT = 15.0
@@ -58,7 +60,7 @@ def _fetch_google_trends() -> list[TrendingTopic] | None:
             _GOOGLE_TRENDS_RSS,
             timeout=FETCH_TIMEOUT,
             follow_redirects=True,
-            headers={"User-Agent": "Civitas/1.0"},
+            headers={"User-Agent": BOT_USER_AGENT},
         )
         resp.raise_for_status()
         root = SafeET.fromstring(resp.content)

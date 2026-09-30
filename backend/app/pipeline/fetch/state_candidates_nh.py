@@ -144,7 +144,7 @@ _ROOT_URL = "https://www.sos.nh.gov/elections"
 # Identical to BROWSER_HEADERS in every real respect (Accept, Accept-
 # Language, the Sec-Fetch-* set, Upgrade-Insecure-Requests) EXCEPT the
 # User-Agent drops this codebase's usual self-identifying contact suffix
-# ("Civitas/1.0 (+contact@...)") -- live-verified 2026-09-10 that NH's
+# ("Civitas/1.0 (+<contact email>)") -- live-verified 2026-09-10 that NH's
 # WAF specifically rejects that suffix (403, every other state's exact
 # same header shape unaffected) and accepts an otherwise-identical,
 # genuinely standard browser UA cleanly. Nothing here is forged or

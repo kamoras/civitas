@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 _rate_limiter = RateLimiter(rps=1.0)
 
-# BROWSER_HEADERS with the User-Agent's trailing "(+contact@...)" comment
+# BROWSER_HEADERS with the User-Agent's trailing "(+<contact email>)" comment
 # dropped (still ending "Civitas/1.0"). Akamai-fronted state sites refuse
 # that bracketed crawler-contact form with a 403 and serve the same
 # request without it: michigan.gov (ballot_measures_mi.py) and nh.gov —

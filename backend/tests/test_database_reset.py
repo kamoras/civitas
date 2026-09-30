@@ -144,6 +144,10 @@ class TestResetGuard:
         from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 
         monkeypatch.setattr(action_center, "_run_refresh", lambda db: 7)
+        # The reset's bills-cache rebuild runs on a thread of its own; here
+        # it would share this test's one session with the assertions below.
+        # Its own test is test_a_reset_tells_the_api_processes_their_bills_are_stale.
+        monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", lambda: None)
         during = {}
 
         def wipe():
