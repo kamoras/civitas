@@ -962,6 +962,51 @@ class TestPollCloseScript:
         script = _poll_script()
         assert script.last_close("Varies by municipality", ["America/New_York"], date(2026, 11, 10)) is None
 
+    def test_election_day(self):
+        script = _poll_script()
+        assert script.election_day(2026) == date(2026, 11, 3)
+        assert script.election_day(2032) == date(2032, 11, 2)
+        assert script.election_day(2028) == date(2028, 11, 7)
+
+    def test_arizona_closes_on_phoenix_time_whenever_the_election_falls(self):
+        """Phoenix and Denver tie on a November date after DST ends, and
+        the Nov 10 reference picked Denver; on 2032's November 2, before DST
+        ends, Denver's 7 p.m. is an hour before Phoenix's."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        script = _poll_script()
+        for year in (2026, 2028, 2032):
+            on = script.election_day(year)
+            close, zone = script.last_close("6 a.m. to 7 p.m.", script.STATE_ZONES["AZ"], on)
+            assert (close, zone) == ("19:00", "America/Phoenix")
+            assert datetime.combine(on, datetime.min.time().replace(hour=19), ZoneInfo(zone)) >= max(
+                datetime.combine(on, datetime.min.time().replace(hour=19), ZoneInfo(z))
+                for z in script.STATE_ZONES["AZ"])
+
+    def test_the_checked_in_file_is_what_the_script_derives(self):
+        """Every state's stored close and zone are what last_close derives
+        from its stored hours on the file's election day."""
+        import json as _json
+
+        from app.pipeline.fetch import poll_close
+
+        script = _poll_script()
+        data = _json.loads(poll_close._PATH.read_text())
+        on = script.election_day(data["year"])
+        for code, entry in data["states"].items():
+            derived = script.last_close(entry["hours"], script.STATE_ZONES[code], on)
+            assert (entry["close"], entry["zone"]) == (derived or (None, script.STATE_ZONES[code][-1])), code
+        assert data["states"]["AZ"]["zone"] == "America/Phoenix"
+
+    def test_arizonas_gate_holds_until_phoenix_closes_in_2032(self):
+        from datetime import datetime
+
+        from app.pipeline.fetch import poll_close
+
+        assert poll_close.last_poll_close("AZ", date(2032, 11, 2)) == datetime(2032, 11, 3, 2, 0)
+        assert poll_close.last_poll_close("AZ", date(2026, 11, 3)) == datetime(2026, 11, 4, 2, 0)  # unchanged
+
 
 def test_totalvote_keeps_a_named_write_ins_votes_in_a_general_count():
     """A primary drops every write-in (never a nominee); a general count

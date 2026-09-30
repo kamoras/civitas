@@ -1,5 +1,5 @@
 {
-  "_source": "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_(2026) (polling hours per state statute, all times local), fetched 2026-09-28 by backend/scripts/fetch_poll_close_times.py. Close is the latest closing time the row states, in the zone it names or else the state's westernmost zone (49 CFR Part 71); null = varies.",
+  "_source": "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_(2026) (polling hours per state statute, all times local), fetched 2026-09-28 by backend/scripts/fetch_poll_close_times.py. Close is the latest closing time the row states: in the zone it names, or else the latest instant across the state's zones (49 CFR Part 71) on election day, ties broken by midsummer; null = varies. Closes and zones re-derived from the stored hours on 2026-09-30 (--rederive).",
   "states": {
     "AK": {
       "close": "20:00",
@@ -19,7 +19,7 @@
     "AZ": {
       "close": "19:00",
       "hours": "6 a.m. to 7 p.m.",
-      "zone": "America/Denver"
+      "zone": "America/Phoenix"
     },
     "CA": {
       "close": "20:00",
