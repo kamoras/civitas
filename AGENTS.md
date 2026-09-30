@@ -619,6 +619,19 @@ bucket) — no hash, no User-Agent, no exact duration. The endpoint reads nothin
 about the caller at all. Keep it that way: a timing row that could be joined to
 a `SiteVisit` would turn a performance histogram into a per-visitor log.
 
+The site is served through Cloudflare, which by default rewrites pages on the
+way out: it injected its Web Analytics beacon (loaded from
+`static.cloudflareinsights.com`) and a JavaScript Detections script that sets
+a one-year `cf_clearance` cookie, found 2026-09-30 in a real browser (curl
+never runs either). The dashboard is not changed for this; instead nginx marks
+every page `Cache-Control: ..., no-transform`
+(`$cache_control_no_transform` in `nginx/civitas.conf`, enforced by
+`test_nginx_config.py`), which Cloudflare honours. Don't drop it. What
+Cloudflare still does (relays each request and sees the IP, caches static
+files, Network Error Logging, a clearance cookie only if it challenges a
+visitor) is disclosed on `/about/data#cloudflare`; check that section still
+matches when anything about the proxy changes.
+
 The same line covers the visitor's own browser. The Action Center used to
 remember a "your state" pick in `localStorage` (also read by the compare
 page), a "log my action" diary with streaks, and which issues the browser had

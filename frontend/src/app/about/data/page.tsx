@@ -50,8 +50,8 @@ export default function DataChapter() {
           Every model runs on the same small computer as the site. No data is sent to an AI company.
         </Point>
         <Point>
-          No accounts, no cookies, no ad or analytics trackers. Visits are counted in a way that
-          can&apos;t be traced back to anyone once the day is over.
+          No accounts, no cookies of our own, no ad or analytics trackers. Visits are counted in a
+          way that can&apos;t be traced back to anyone once the day is over.
         </Point>
       </Summary>
 
@@ -314,9 +314,9 @@ export default function DataChapter() {
 
       <Section id="privacy" title="What we record about you">
         <P>
-          No accounts, no cookies, no ad networks and no third-party analytics. We count visits on
-          our own server in a way designed so that, once a day is over, nobody — including us — can
-          recover who visited:
+          No accounts, no cookies of our own, no ad networks and no third-party analytics. We count
+          visits on our own server in a way designed so that, once a day is over, nobody — including
+          us — can recover who visited:
         </P>
         <List>
           <Item label="Daily unique visits">
@@ -337,6 +337,29 @@ export default function DataChapter() {
           listed above, and none carries anything about a visitor. Nothing is kept in your browser
           either: the site stores no preferences, history or record of what you did there.
         </P>
+        <Sub title="The one company between you and this server" id="cloudflare">
+          <P>
+            Every visit reaches this server through Cloudflare&apos;s network. It shields a site
+            served from a home connection and keeps copies of the site&apos;s scripts and styles
+            closer to readers. Like any network provider it sees your IP address and which page you
+            asked for, under{" "}
+            <a
+              href="https://www.cloudflare.com/privacypolicy/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-signal-cyan underline underline-offset-2 hover:text-phos"
+            >
+              Cloudflare&apos;s privacy policy
+            </a>
+            .
+          </P>
+          <P>
+            It also asks your browser to tell it when a page fails to load (Network Error Logging),
+            and if it ever challenges a visitor as a possible bot, it sets a cookie to remember that
+            they passed. It does not add its analytics or any other script to these pages: every
+            page leaves this server marked so that Cloudflare may not change it.
+          </P>
+        </Sub>
       </Section>
 
       <Section id="infrastructure" title="The computer it runs on">
