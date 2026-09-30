@@ -55,6 +55,12 @@ from app.state_names import STATE_NAMES  # noqa: E402
 logger = logging.getLogger(__name__)
 
 _HEADERS = BROWSER_HEADERS
+# The name robots.txt rules address us by: the product token our
+# User-Agent carries ("... Civitas/1.0 (+contact)"). RobotFileParser
+# matches a group against the User-Agent only up to its first "/", which
+# for the whole browser-shaped string is "Mozilla", so a site's
+# "User-agent: Civitas" rules never applied.
+ROBOTS_AGENT = "Civitas"
 _rate_limiter = RateLimiter(rps=1.0)
 # Probing is one request each to fifty DIFFERENT hosts, and a rate limit
 # exists to be polite to ONE host — serialising the whole sweep through
@@ -155,7 +161,7 @@ async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
             parser.parse(resp.text.splitlines())
             _robots[host] = parser
     parser = _robots[host]
-    return parser is None or parser.can_fetch(_HEADERS["User-Agent"], url)
+    return parser is None or parser.can_fetch(ROBOTS_AGENT, url)
 
 
 def _hosts_for(state: str) -> list[str]:

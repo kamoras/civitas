@@ -246,6 +246,22 @@ class TestRobots:
         assert await crawler._allowed(None, "https://x.gov/elections/results.csv") is True
 
     @pytest.mark.asyncio
+    async def test_rules_addressed_to_civitas_apply(self, monkeypatch):
+        """A site that names us gets its rules honoured, whatever it says
+        to everyone else — and the token is the one our User-Agent sends."""
+        class _Resp:
+            text = "User-agent: Civitas\nDisallow: /results/\n\nUser-agent: *\nAllow: /\n"
+
+        async def fake_get(client, url, label, timeout=20.0, probe=False):
+            return _Resp()
+
+        monkeypatch.setattr(crawler, "_get", fake_get)
+        monkeypatch.setattr(crawler, "_robots", {})
+        assert f"{crawler.ROBOTS_AGENT}/" in crawler._HEADERS["User-Agent"]
+        assert await crawler._allowed(None, "https://x.gov/results/live.csv") is False
+        assert await crawler._allowed(None, "https://x.gov/elections/") is True
+
+    @pytest.mark.asyncio
     async def test_no_robots_file_means_permitted(self, monkeypatch):
         """What the standard says absence means."""
         async def fake_get(client, url, label, timeout=20.0, probe=False):

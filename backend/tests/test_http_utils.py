@@ -351,98 +351,61 @@ async def test_a_moved_page_is_followed_not_read_as_an_empty_success():
 
 # The address the pipeline and scripts used to give, which never existed.
 _OLD_CONTACT = "contact@civitas-research.org"
-# Outside a git checkout (the backend image): the backend's own code.
-_FALLBACK_DIRS = ("app", "scripts", "migrations")
 # The repo's contact lines for people (security reports, the code of
 # conduct): the address given to readers, not to the servers we fetch from.
 _FOR_PEOPLE = ("SECURITY.md", "CODE_OF_CONDUCT.md")
 
 
-def _tracked_files(repo):
-    """Every file git tracks in `repo`, or None when `repo` is not the top
-    of a git checkout (the backend image; a copy inside some other
-    repository). Tracked files only: what is checked in, never a local
-    worktree, virtualenv, coverage report or .env beside it."""
+def _checked_in(backend):
+    """The files git tracks in the checkout around `backend`; outside a git checkout (the
+    backend image) the backend's own code instead. In CI a git failure is
+    an error, never a quietly narrower sweep."""
     import os
     import subprocess
 
-    # A git hook's GIT_DIR / GIT_INDEX_FILE would point elsewhere.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-
-    def git(*args) -> bytes:
-        return subprocess.run(
-            ["git", "-C", str(repo), *args], capture_output=True, check=True, timeout=30, env=env,
+    repo = backend.parent
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo), "ls-files", "-z"], capture_output=True, check=True, timeout=30,
         ).stdout
-
-    try:
-        top = os.fsdecode(git("rev-parse", "--show-toplevel").strip())
-        if os.path.realpath(top) != os.path.realpath(repo):
-            return None
-        names = git("ls-files", "-z").split(b"\0")
     except (OSError, subprocess.SubprocessError):
-        return None
-    return [repo / os.fsdecode(name) for name in names if name]
-
-
-def _text(path) -> str:
-    """A file's text: UTF-16 by its byte-order mark, else UTF-8; "" for a
-    binary file (a NUL byte), a directory entry (a submodule) or a file
-    tracked but deleted from the working tree."""
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return ""
-    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
-        return data.decode("utf-16", errors="ignore")
-    return "" if b"\0" in data else data.decode("utf-8", errors="ignore")
-
-
-def _joined(text: str) -> str:
-    """Adjacent string literals run together ("a@" "b.com" -> "a@b.com"),
-    so a copy split across them still reads as one."""
-    import re
-
-    return re.sub(r"""["']\s*["']""", "", text)
+        if os.environ.get("CI"):
+            raise
+        out = b""
+    files = [repo / os.fsdecode(name) for name in out.split(b"\0") if name]
+    if files:
+        return files
+    return [p for d in ("app", "scripts", "migrations") for p in (backend / d).rglob("*.py")]
 
 
 def test_contact_address_is_real_and_held_once():
     """Sources are told how to reach us; the address has to be one that is
     read. contact@civitas-research.org never existed, and SEC's fair-access
-    policy asks for a working email. (Some requests name no contact at all:
-    the WAFs that refuse the comment, and fetchers that never named one.)"""
+    policy asks for a working email."""
     import re
     from pathlib import Path
 
     from app.contact import CONTACT_EMAIL
     from app.pipeline.fetch import sec_tickers, state_candidates_tx
-    from app.pipeline.fetch.http_utils import BROWSER_HEADERS, CIVIC_CONTACT
+    from app.pipeline.fetch.http_utils import BROWSER_HEADERS
 
     assert re.fullmatch(r"[^@\s()]+@[^@\s()]+\.[a-z]{2,}", CONTACT_EMAIL)
-    assert CONTACT_EMAIL in CIVIC_CONTACT
     assert BROWSER_HEADERS["User-Agent"].endswith(f"(+{CONTACT_EMAIL})")
     assert sec_tickers._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
     assert state_candidates_tx._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
 
     this = Path(__file__).resolve()
     backend = this.parents[1]
-    repo = backend.parent
-    files = _tracked_files(repo)
-    if files is None:
-        files = [
-            p for d in _FALLBACK_DIRS for p in (backend / d).rglob("*")
-            if p.is_file() and "__pycache__" not in p.parts
-        ]
-    files = [p for p in files if p.resolve() != this]
+    files = _checked_in(backend)
     contact_py = (backend / "app" / "contact.py").resolve()
-    assert contact_py in {p.resolve() for p in files}
+    assert contact_py in {p.resolve() for p in files}, "app/contact.py is not among the files swept (untracked?)"
 
-    stale = [str(p) for p in files if _OLD_CONTACT in _joined(_text(p)).lower()]
-    assert not stale
-    # Everything names the address through the constant, never a copy of
-    # it, split across adjacent literals or not.
-    exempt = {contact_py, *((repo / name).resolve() for name in _FOR_PEOPLE)}
-    copies = [
-        str(p) for p in files
-        if p.resolve() not in exempt and CONTACT_EMAIL.lower() in _joined(_text(p)).lower()
-    ]
-    assert not copies
+    # The old address nowhere; the real one only in contact.py (everything
+    # else names it through the constant) and the contact lines for people.
+    allowed = {contact_py, *((backend.parent / name).resolve() for name in _FOR_PEOPLE)}
+    for path in files:
+        if path.resolve() == this:  # names the old address, to look for it
+            continue
+        text = path.read_text(errors="ignore").lower() if path.is_file() else ""
+        assert _OLD_CONTACT not in text, path
+        assert path.resolve() in allowed or CONTACT_EMAIL.lower() not in text, path

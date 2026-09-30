@@ -1,6 +1,7 @@
 """Shared test fixtures."""
 
 import os
+import threading
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 # The per-container RAM directory (api/throttle.RAM_DIR: the throttle store,
@@ -51,9 +52,30 @@ def db_session():
     # is not a test of production.
     Session = sessionmaker(bind=engine, autoflush=False)
     session = Session()
+    before = set(threading.enumerate())
     yield session
+    _join_app_threads_started_since(before)
     session.close()
     engine.dispose()
+
+
+# How long teardown waits for one background thread the test left running.
+_THREAD_JOIN_S = 10
+
+
+def _join_app_threads_started_since(before: set) -> None:
+    """Wait for the app's own background threads the test started (the
+    bills-cache rebuild admin_reset_data kicks off, a start_writer job):
+    one still querying the shared in-memory connection when the engine is
+    disposed crashes SQLite outright (a segfault that killed a CI run).
+    Only threads running app code: a library's long-lived monitor thread
+    started along the way would never finish."""
+    for thread in set(threading.enumerate()) - before:
+        target = getattr(thread, "_target", None)
+        if thread is threading.current_thread() or target is None:
+            continue
+        if (getattr(target, "__module__", "") or "").startswith("app."):
+            thread.join(_THREAD_JOIN_S)
 
 
 @pytest.fixture(scope="session")
