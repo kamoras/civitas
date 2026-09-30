@@ -59,7 +59,10 @@ def _ordinal(n: int) -> str:
 
 
 def party_letter(group: str | None) -> str:
-    return _PARTY_LETTER.get(group or "", group or "")
+    """"R" — a candidate's party beside their name. A group this has no
+    letter for (United Citizen's "UC", a state's "N" or "OTH") gets none:
+    "Pat Doe (UC)" printed a feed's internal code as if it were a party."""
+    return _PARTY_LETTER.get(group or "", "")
 
 
 def holders_word(group: str | None) -> str:

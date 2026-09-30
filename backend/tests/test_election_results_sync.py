@@ -810,6 +810,23 @@ def test_a_party_code_without_words_is_not_printed_raw(db_session, _on_election_
     [issue] = _issues(db_session)
     assert issue.title.startswith("A candidate from another party leads Georgia's 2nd Congressional District")
     assert "UC" not in issue.title
+    # Nor beside the name, in the facts or the summary.
+    facts = json.loads(issue.facts)
+    assert facts[0].startswith("Pat Doe: 600 votes") and "(U" not in issue.summary
+    assert "Pat Doe ahead of Dana Smith (D)" in issue.summary
+
+
+def test_a_party_code_without_a_letter_is_not_printed_in_a_post():
+    from app.live_results import bluesky as rb
+
+    race = Race(id="2026-HOUSE-GA-2", cycle_year=2026, office="H", state="GA", district=2)
+    detail = {"leader": {"name": "Pat Doe", "party": "UC", "votes": 600, "pct": 60.0},
+              "runnerUp": {"name": "Dana Smith", "party": "DEM", "votes": 400, "pct": 40.0},
+              "votesCounted": 1000, "reportingUnits": 60, "totalUnits": 100, "unitLabel": "precincts",
+              "heldBy": "DEM", "official": False}
+    text = rb.compose(er.FLIP, race, detail)
+    assert "Pat Doe leads" in text and "(UC)" not in text and "Dana Smith (D) 40.0%" in text
+    assert signals.party_letter("UC") == "" and signals.party_letter(None) == "" and signals.party_letter("REP") == "R"
 
 
 class TestTalliesMatchNominees:
