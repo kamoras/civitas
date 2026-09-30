@@ -19,15 +19,9 @@ from app.pipeline.fetch.fec import (
 )
 
 
-def test_cycle_query_formats_repeated_params():
-    q = _cycle_query([2024, 2018])
-    assert "two_year_transaction_period=2024" in q
-    assert "two_year_transaction_period=2018" in q
-
-
-def test_cycle_query_dedupes_and_sorts():
+def test_cycle_query_formats_repeated_params_deduped_and_sorted():
     q = _cycle_query([2024, 2022, 2024])
-    # sorted ascending, each cycle appears exactly once
+    # one repeated param per cycle, sorted ascending, each exactly once
     assert q == "&two_year_transaction_period=2022&two_year_transaction_period=2024"
 
 

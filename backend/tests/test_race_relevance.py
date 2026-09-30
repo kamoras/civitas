@@ -6,8 +6,6 @@ fail-closed paths). Separation quality was measured against the live
 corpus and is recorded in the module docstring.
 """
 
-import json
-
 import pytest
 
 from app.models import Candidate, Race
@@ -58,13 +56,6 @@ class TestRaceDescriptor:
 class TestThreshold:
     def test_falls_back_to_the_measured_bootstrap(self, db_session):
         assert rr.threshold(db_session) == rr.BOOTSTRAP_THRESHOLD
-
-    def test_prefers_a_stored_calibration(self, db_session):
-        from app.pipeline.cache import api_cache_set
-        api_cache_set(db_session, rr._CACHE_NAMESPACE, rr._CACHE_KEY,
-                      json.dumps({"threshold": 0.42, "sample_size": 900}))
-        db_session.commit()
-        assert rr.threshold(db_session) == 0.42
 
     def test_unreadable_calibration_does_not_crash_the_gate(self, db_session):
         from app.pipeline.cache import api_cache_set

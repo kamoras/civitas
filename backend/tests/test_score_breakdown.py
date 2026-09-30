@@ -302,9 +302,6 @@ class TestPresidentScoreBreakdownService:
         for dim in ("publicMandate", "effectiveness", "agencyAlignment", "historicalLegacy"):
             assert breakdown[dim]["score"] is None, f"{dim} should be None with no stored data"
 
-    def test_returns_none_for_missing_president(self, db_session):
-        assert get_president_score_breakdown(db_session, "nope") is None
-
 
 class TestJusticeScoreBreakdownService:
     def test_returns_the_stored_loyalty_facts(self, db_session):

@@ -46,13 +46,9 @@ def test_looks_corrupted_flags_internal_repeat():
     assert geo.looks_corrupted("no change in who can marry no change in who marry.") is True
 
 
-def test_looks_corrupted_false_for_clean_sentence():
-    assert geo.looks_corrupted("The state could borrow $10 billion to build schools.") is False
-
-
-def test_looks_corrupted_does_not_compare_across_fields():
-    """The false-positive this deliberately avoids: two independently
-    clean sentences (a real yes/no pair) that happen to share a long tail
+def test_looks_corrupted_false_for_clean_sentences_that_share_a_tail():
+    """Clean, punctuated sentences are not corrupted. The false-positive
+    this deliberately avoids: two independently clean sentences (a real yes/no pair) that happen to share a long tail
     should not flag each other — only self-repetition within ONE string
     matters."""
     yes = "The state could borrow $10 billion to build new or renovate existing public school and community college facilities."

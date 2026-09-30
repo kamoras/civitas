@@ -28,7 +28,8 @@ class TestCandidateAffiliation:
             "GOLDMAN SACHS PAC",
             candidate_name="CRUZ, TED",
         )
-        assert result != "CandidateAffiliated" or result is None
+        # An ordinary PAC, not one tied to the candidate.
+        assert result == "PAC"
 
     @pytest.mark.slow
     def test_empty_candidate(self):
@@ -51,9 +52,7 @@ class TestCleanDonorName:
         assert _clean_donor_name("GOLDMAN SACHS") == "Goldman Sachs"
 
     def test_acronyms_preserved(self):
-        result = _clean_donor_name("SOME CORP LLC")
-        assert "LLC" in result
-        assert "CORP" in result
+        assert _clean_donor_name("SOME CORP LLC") == "Some CORP LLC"
 
     def test_already_mixed_case_unchanged(self):
         assert _clean_donor_name("Goldman Sachs") == "Goldman Sachs"

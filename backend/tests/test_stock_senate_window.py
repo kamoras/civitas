@@ -30,6 +30,10 @@ def _senator(db, sid, name):
 
 class TestSearchWindow:
     def test_cold_start_uses_the_lookback(self, db_session):
+        # From the canonical UTC clock (stock_pipeline.utcnow), not a
+        # local-timezone-dependent date.today(). TestSkippedFilingIsRetried
+        # shows _ingest_senate searches from whatever _senate_search_since
+        # returns, so the two together pin the cold-start search date.
         with patch("app.pipeline.stock_pipeline.utcnow", lambda: datetime(2026, 9, 24)):
             assert stock_pipeline._senate_search_since(db_session) == "2026-05-27"  # 120 days
 

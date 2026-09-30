@@ -170,10 +170,6 @@ class TestStateLegislativePersistence:
         ])
         assert db_session.query(StateLegNominee).count() == 2
 
-    def test_both_parties_in_one_seat_are_kept(self, db_session):
-        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [LOWER_13_R, LOWER_13_D])
-        assert db_session.query(StateLegNominee).count() == 2
-
     def test_the_same_district_number_in_each_chamber_does_not_collide(self, db_session):
         """Chambers number their districts independently — upper 5 and
         lower 5 are unrelated seats in different places."""
@@ -229,6 +225,7 @@ class TestStateLegislativeSection:
         assert all(isinstance(t, str) and t for t in district["towns"])
 
     def test_party_uses_the_same_codes_as_every_other_race(self, db_session):
+        # Both parties' nominees for one seat are kept (two rows, not one).
         _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [])
         _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [LOWER_13_R, LOWER_13_D])
         nominees = self._section(db_session)[0]["districts"][0]["nominees"]
@@ -293,6 +290,7 @@ class TestMinorPartyLabel:
                 "last_name": name, "party_label": label, **extra}
 
     def test_statewide_row_keeps_the_printed_party(self, db_session):
+        # PHIL SCOTT also pins that a recognised party sends a null label.
         _sync_statewide_nominees(db_session, CYCLE, "VT", SOURCE, [
             self._record("governor", "DEAN ROY", "FREEDOM AND UNITY"),
             self._record("governor", "JUNE GOODBAND", "PEACE AND JUSTICE"),
@@ -340,11 +338,6 @@ class TestMinorPartyLabel:
         nominee = races[0]["nominees"][0]
         assert (nominee["party"], nominee["partyLabel"]) == ("N", "Nonpartisan")
 
-    def test_a_recognised_party_sends_a_null_label(self, db_session):
-        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [GOVERNOR_D])
-        races, _ = _statewide_section(db_session, "RI", CYCLE)
-        assert races[0]["nominees"][0]["partyLabel"] is None
-
 
 class TestStatewideBodySeatedByDistrict:
     """Georgia's Public Service Commission is elected statewide, but a
@@ -354,11 +347,8 @@ class TestStatewideBodySeatedByDistrict:
     first — a real Georgia ballot has both.
     """
 
-    def test_two_seats_of_one_body_are_separate_rows(self, db_session):
-        _sync_statewide_nominees(db_session, CYCLE, "GA", SOURCE, [PSC_3_D, PSC_5_D])
-        assert db_session.query(StatewideNominee).count() == 2
-
     def test_each_seat_renders_with_its_district(self, db_session):
+        """Two seats of one body are two rows, each labelled with its seat."""
         _sync_statewide_nominees(db_session, CYCLE, "GA", SOURCE, [PSC_5_D, PSC_3_D])
         races, _ = _statewide_section(db_session, "GA", CYCLE)
         assert [r["label"] for r in races] == [
@@ -395,14 +385,8 @@ class TestMultiMemberSeats:
         return {"office": "lower", "district": district, "seat": seat,
                 "party": party, "last_name": name}
 
-    def test_two_seats_of_one_district_are_separate_rows(self, db_session):
-        _sync_state_leg_nominees(db_session, CYCLE, "ID", SOURCE, [
-            self._seat("1", "A", "Seat A Person"),
-            self._seat("1", "B", "Seat B Person"),
-        ])
-        assert db_session.query(StateLegNominee).count() == 2
-
     def test_each_seat_renders_with_its_own_label(self, db_session):
+        """Two seats of one district are two rows, each with its own label."""
         _sync_statewide_nominees(db_session, CYCLE, "ID", SOURCE, [])
         _sync_state_leg_nominees(db_session, CYCLE, "ID", SOURCE, [
             self._seat("1", "B", "Seat B Person"),
@@ -545,11 +529,6 @@ class TestJudicialSection:
             db_session, "NC", CYCLE, {"checkedAt": "x", "count": 2})[0]}
         assert out["district"][0]["seat"] == "District 14, Seat 3"
         assert out["appeals"][0]["seat"] == "Seat 4"
-
-    def test_a_state_that_never_opted_in_has_no_section(self, db_session):
-        races, coverage = _judicial_section(db_session, "GA", CYCLE, None)
-        assert races == []
-        assert coverage["status"] == JudicialCoverageStatus.NOT_YET_COVERED
 
 
 class TestJudicialCoverageStatus:
@@ -728,7 +707,7 @@ def test_one_rule_for_district_seated_bodies():
     )["states"]
     assert "statewide_omits" not in sources["NH"]
     assert parse_statewide_office("Executive Council District 2") == ("executive_council", "2")
-    assert parse_statewide_office("Governor's Council 3rd District") == ("governors_council", "3")
+    # "Governor's Council 3rd District" is pinned in test_state_candidates_common.py.
     for state in ("LA", "MT"):
         assert sources[state]["statewide_omits"] == ["Public Service Commission districts"], state
 

@@ -94,15 +94,11 @@ class TestFetchBallotCandidates:
 
     async def test_reads_the_primary_date_from_the_file(self, _served):
         """The other half of why this is worth reading: a primary date is
-        not derivable from any statute, and here the state states it."""
+        not derivable from any statute, and here the state states it. The
+        file carries both elections; only the earlier one is a primary, so
+        the November filings must not set it."""
         found = await filings.fetch_ballot_candidates(None, 2026, "NC", _SOURCE)
         assert found["primary_date"] == "2026-03-03"
-
-    async def test_the_november_filings_do_not_set_the_primary_date(self, _served):
-        """The file carries both elections; only the earlier one is a
-        primary."""
-        found = await filings.fetch_ballot_candidates(None, 2026, "NC", _SOURCE)
-        assert found["primary_date"] != "2026-11-03"
 
     async def test_a_state_race_that_looks_federal_is_still_refused(self, _served):
         """Same control the results adapters use: North Carolina's own

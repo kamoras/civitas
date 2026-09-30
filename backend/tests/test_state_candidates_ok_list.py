@@ -113,10 +113,10 @@ def test_a_name_with_its_own_comma_keeps_it():
 
 @pytest.mark.asyncio
 async def test_the_fixed_address_is_read_only_for_this_years_november_list(monkeypatch):
-    # Early in the cycle: the ballot need not be final yet.
-    monkeypatch.setattr(common, "ballot_final", lambda held, today=None: False)
     """The address always shows the NEXT election; in August it was the
     runoff's list, whose candidates are not November's."""
+    # Early in the cycle: the ballot need not be final yet.
+    monkeypatch.setattr(common, "ballot_final", lambda held, today=None: False)
     august = PAGE.replace(b"NOVEMBER / 2026 LIST OF ELECTIONS", b"AUGUST / 2026 LIST OF ELECTIONS")
     async with httpx.AsyncClient(transport=httpx.MockTransport(
         lambda request: httpx.Response(200, content=PAGE),

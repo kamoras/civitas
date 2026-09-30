@@ -16,18 +16,21 @@ import pytest
 from app.pipeline.fetch.justice_votes import fetch_case_votes
 
 
-def _cases_list_response(cases):
+def _json_response(payload):
     resp = MagicMock()
     resp.status_code = 200
-    resp.json = MagicMock(return_value=cases)
+    resp.json = MagicMock(return_value=payload)
     return resp
 
 
-def _case_detail_response(case_data):
-    resp = MagicMock()
-    resp.status_code = 200
-    resp.json = MagicMock(return_value=case_data)
-    return resp
+async def _fetch_one_case(case_data, docket, term="2023"):
+    """fetch_case_votes over a term whose case list holds just this case."""
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=[
+        _json_response([{"docket_number": docket, "href": "http://x/case"}]),
+        _json_response(case_data),
+    ])
+    return await fetch_case_votes(client, terms=[term])
 
 
 def _decided_timeline(date_ms):
@@ -66,13 +69,7 @@ class TestFetchCaseVotes:
                 },
             ],
         }
-        client = MagicMock()
-        client.get = AsyncMock(side_effect=[
-            _cases_list_response([{"docket_number": "23-726", "href": "http://x/case"}]),
-            _case_detail_response(case_data),
-        ])
-
-        votes = await fetch_case_votes(client, terms=["2023"])
+        votes = await _fetch_one_case(case_data, "23-726")
 
         jackson_votes = [v for v in votes if v["justice_id"] == "jackson"]
         assert len(jackson_votes) == 1
@@ -98,13 +95,7 @@ class TestFetchCaseVotes:
                 },
             ],
         }
-        client = MagicMock()
-        client.get = AsyncMock(side_effect=[
-            _cases_list_response([{"docket_number": "23-1", "href": "http://x/case"}]),
-            _case_detail_response(case_data),
-        ])
-
-        votes = await fetch_case_votes(client, terms=["2023"])
+        votes = await _fetch_one_case(case_data, "23-1")
 
         assert len(votes) == 1
         assert votes[0]["justice_id"] == "roberts"
@@ -113,13 +104,7 @@ class TestFetchCaseVotes:
     @pytest.mark.asyncio
     async def test_a_case_with_no_decisions_yields_nothing(self):
         case_data = {"name": "Undecided", "timeline": _decided_timeline(1700000000), "decisions": []}
-        client = MagicMock()
-        client.get = AsyncMock(side_effect=[
-            _cases_list_response([{"docket_number": "23-2", "href": "http://x/case"}]),
-            _case_detail_response(case_data),
-        ])
-
-        votes = await fetch_case_votes(client, terms=["2023"])
+        votes = await _fetch_one_case(case_data, "23-2")
         assert votes == []
 
     @pytest.mark.asyncio
@@ -129,13 +114,7 @@ class TestFetchCaseVotes:
             "timeline": [],
             "decisions": [{"votes": [_vote("John Roberts", "roberts", "majority")]}],
         }
-        client = MagicMock()
-        client.get = AsyncMock(side_effect=[
-            _cases_list_response([{"docket_number": "23-3", "href": "http://x/case"}]),
-            _case_detail_response(case_data),
-        ])
-
-        votes = await fetch_case_votes(client, terms=["2023"])
+        votes = await _fetch_one_case(case_data, "23-3")
         assert votes == []
 
 
@@ -151,12 +130,7 @@ class TestDuplicateJusticeInOneDecision:
             "timeline": _decided_timeline(1700000000),
             "decisions": [{"majority_vote": 9, "minority_vote": 0, "votes": decision_votes}],
         }
-        client = MagicMock()
-        client.get = AsyncMock(side_effect=[
-            _cases_list_response([{"docket_number": "24-783", "href": "http://x/case"}]),
-            _case_detail_response(case_data),
-        ])
-        return await fetch_case_votes(client, terms=["2025"])
+        return await _fetch_one_case(case_data, "24-783", term="2025")
 
     @pytest.mark.asyncio
     async def test_identical_duplicate_rows_are_one_vote(self):

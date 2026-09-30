@@ -2,7 +2,6 @@
 typo cannot silently leave an office without its term."""
 
 import json
-import os
 
 from app.office_terms import _PATH, term_years
 from app.pipeline.analyze.election_coverage import STATE_NAMES
@@ -38,7 +37,3 @@ def test_a_seat_of_a_district_body_uses_the_bodys_term_and_nothing_is_guessed():
     # wrong for New Hampshire's two-year governors before they were listed.
     assert term_years("statewide", "NH", "attorney_general") is None
     assert term_years("statewide", "NH", "governor") == 2
-
-
-def test_the_file_is_where_the_loader_looks():
-    assert os.path.exists(_PATH)

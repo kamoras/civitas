@@ -23,29 +23,33 @@ from app.pipeline.analyze.donor_classifier_ai import (
 )
 
 
+_KNOWN_ENTITY_TYPES = [
+    ("PAC", "PAC"),
+    ("ORG", "Org/Employees"),
+    ("IND", "Org/Employees"),
+    ("CCM", "CandidateAffiliated"),
+    ("CAN", "Self-Funded"),
+    ("PTY", "Party/Ideological"),
+]
+
+
 class TestFECTypeClassification:
     """Tier 1: FEC entity type and receipt type codes."""
 
-    @pytest.mark.parametrize(
-        "entity_type, expected",
-        [
-            ("PAC", "PAC"),
-            ("ORG", "Org/Employees"),
-            ("IND", "Org/Employees"),
-            ("CCM", "CandidateAffiliated"),
-            ("CAN", "Self-Funded"),
-            ("PTY", "Party/Ideological"),
-        ],
-    )
+    @pytest.mark.parametrize("entity_type, expected", _KNOWN_ENTITY_TYPES)
     def test_known_entity_types(self, entity_type, expected):
         receipt = {"entity_type": entity_type}
         assert classify_donor_type_from_fec(receipt) == expected
 
-    def test_com_defers_to_semantic_classifier(self):
-        """COM (generic committee) is ambiguous — returns None to defer to
-        embedding-based classification which can distinguish corporate
-        employee PACs from purely political PACs."""
-        receipt = {"entity_type": "COM"}
+    @pytest.mark.parametrize("receipt", [
+        # COM (generic committee) is ambiguous — returns None to defer to
+        # embedding-based classification which can distinguish corporate
+        # employee PACs from purely political PACs.
+        pytest.param({"entity_type": "COM"}, id="com_defers_to_semantic_classifier"),
+        pytest.param({"entity_type": "ZZZ"}, id="unknown_entity_type"),
+        pytest.param({}, id="missing_fields"),
+    ])
+    def test_undecided_by_fec_metadata_returns_none(self, receipt):
         assert classify_donor_type_from_fec(receipt) is None
 
     def test_affiliated_receipt_types(self):
@@ -53,15 +57,9 @@ class TestFECTypeClassification:
             receipt = {"receipt_type": rt}
             assert classify_donor_type_from_fec(receipt) == "CandidateAffiliated"
 
-    def test_unknown_entity_type_returns_none(self):
-        receipt = {"entity_type": "ZZZ"}
-        assert classify_donor_type_from_fec(receipt) is None
+    def test_every_mapped_entity_type_has_a_case_above(self):
+        assert set(FEC_ENTITY_TYPE_MAP) == {code for code, _ in _KNOWN_ENTITY_TYPES}
 
-    def test_missing_fields_returns_none(self):
-        assert classify_donor_type_from_fec({}) is None
-
-    def test_fec_entity_type_map_covers_expected_codes(self):
-        assert len(FEC_ENTITY_TYPE_MAP) == 6
 
 class TestSkipDetection:
     """Tier 2: Payment processor skip detection."""

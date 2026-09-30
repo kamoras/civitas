@@ -23,29 +23,25 @@ from app.pipeline.analyze.document_authority import (
 
 
 class TestExtractCitations:
-    def test_executive_order_long_and_abbreviated_forms(self):
-        found = extract_citations(
-            "Consistent with Executive Order 12866 and E.O. 13563, agencies shall..."
-        )
-        assert found == {"eo:12866", "eo:13563"}
-
-    def test_executive_order_with_no_prefix(self):
-        assert extract_citations("Executive Order No. 14110 directs") == {"eo:14110"}
+    @pytest.mark.parametrize("text, expected", [
+        pytest.param("Consistent with Executive Order 12866 and E.O. 13563, agencies shall...",
+                     {"eo:12866", "eo:13563"}, id="executive_order_long_and_abbreviated_forms"),
+        pytest.param("Executive Order No. 14110 directs", {"eo:14110"}, id="executive_order_with_no_prefix"),
+        # "fr" in ordinary prose is not a Federal Register citation. Matching
+        # it case-insensitively invents edges out of sentences like this one.
+        pytest.param("we waited 89 fr 12345 seconds", set(), id="federal_register_citation_is_case_sensitive"),
+        pytest.param("RIN 2060-AV50 ... FR Doc. 2024-01234 Filed 1-1-24",
+                     {"rin:2060-AV50", "frdoc:2024-01234"}, id="rin_and_fr_doc_number"),
+        pytest.param("Proclamation 10714 of June 1", {"proc:10714"}, id="proclamation"),
+        pytest.param("E.O. 12866. " * 6, {"eo:12866"}, id="repeated_citation_counts_once"),
+        pytest.param("", set(), id="empty"),
+        pytest.param(None, set(), id="none"),
+    ])
+    def test_extracts(self, text, expected):
+        assert extract_citations(text) == expected
 
     def test_federal_register_citation(self):
         assert "fr:89-12345" in extract_citations("published at 89 FR 12345 on Tuesday")
-
-    def test_federal_register_citation_is_case_sensitive(self):
-        # "fr" in ordinary prose is not a Federal Register citation. Matching
-        # it case-insensitively invents edges out of sentences like this one.
-        assert extract_citations("we waited 89 fr 12345 seconds") == set()
-
-    def test_rin_and_fr_doc_number(self):
-        found = extract_citations("RIN 2060-AV50 ... FR Doc. 2024-01234 Filed 1-1-24")
-        assert found == {"rin:2060-AV50", "frdoc:2024-01234"}
-
-    def test_proclamation(self):
-        assert extract_citations("Proclamation 10714 of June 1") == {"proc:10714"}
 
     def test_leading_zeros_normalize(self):
         # "Executive Order 09999" and "Executive Order 9999" are the same
@@ -54,14 +50,6 @@ class TestExtractCitations:
         assert extract_citations("Executive Order 09999") == extract_citations(
             "Executive Order 9999"
         )
-
-    def test_repeated_citation_counts_once(self):
-        text = "E.O. 12866. " * 6
-        assert extract_citations(text) == {"eo:12866"}
-
-    def test_empty_and_none_safe(self):
-        assert extract_citations("") == set()
-        assert extract_citations(None) == set()
 
 
 class TestDeclaredIdentifiers:

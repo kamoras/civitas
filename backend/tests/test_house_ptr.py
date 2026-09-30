@@ -62,21 +62,14 @@ async def test_fetch_ptr_filing_index_filters_to_ptr_only(db_session):
 
 
 @pytest.mark.asyncio
-async def test_fetch_ptr_filing_index_bad_zip_returns_empty(db_session):
+@pytest.mark.parametrize("body", [
+    pytest.param(b"not a zip file", id="bad_zip"),
+    pytest.param(None, id="fetch_failure"),
+])
+async def test_fetch_ptr_filing_index_failure_returns_empty(db_session, body):
     with patch(
-        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
-    ) as mock_fetch:
-        mock_fetch.return_value = b"not a zip file"
-        filings = await fetch_ptr_filing_index(None, db_session, 2026)
-    assert filings == []
-
-
-@pytest.mark.asyncio
-async def test_fetch_ptr_filing_index_fetch_failure_returns_empty(db_session):
-    with patch(
-        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
-    ) as mock_fetch:
-        mock_fetch.return_value = None
+        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock, return_value=body,
+    ):
         filings = await fetch_ptr_filing_index(None, db_session, 2026)
     assert filings == []
 

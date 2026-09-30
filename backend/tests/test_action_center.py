@@ -251,10 +251,26 @@ class TestDeduplicateTopClusters:
 class TestNationalMonitorCreation:
     """Tests for importance and breadth requirements in monitor creation."""
 
+    @staticmethod
+    def _db(today_issue, past_issues):
+        """A mock session answering _update_national_monitors' queries:
+        today's issues, the past issues, and no existing monitors."""
+        def query(model):
+            q = MagicMock()
+            if model == ActionIssue:
+                q.filter.return_value.order_by.return_value.all.return_value = [today_issue]
+                q.filter.return_value.all.return_value = past_issues
+            elif model == NationalMonitor:
+                q.all.return_value = []
+            return q
+
+        db = MagicMock()
+        db.query.side_effect = query
+        return db
+
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_insufficient_breadth_skips_monitor(self, mock_get_model):
         """Monitor should NOT be created if only one source covers the topic over multiple days."""
-        mock_db = MagicMock()
         mock_model = MagicMock()
         mock_get_model.return_value = mock_model
         
@@ -266,29 +282,12 @@ class TestNationalMonitorCreation:
         
         # Today's issue - only 1 source
         today_issue = _make_issue(today, topic, ["Local News Source"])
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [today_issue]
-        
         # Past issues - all from same source
         past_issues = [
             _make_issue((datetime(2026, 3, 13) - timedelta(days=i)).strftime("%Y-%m-%d"), topic, ["Local News Source"])
             for i in range(1, 5)
         ]
-        
-        # Mock the queries for past issues and existing monitors
-        def mock_query(model):
-            if model == ActionIssue:
-                q = MagicMock()
-                q.filter.return_value.all.return_value = past_issues
-                # For today's issues query
-                q.filter.return_value.order_by.return_value.all.return_value = [today_issue]
-                return q
-            if model == NationalMonitor:
-                q = MagicMock()
-                q.all.return_value = [] # No existing monitors
-                return q
-            return MagicMock()
-
-        mock_db.query.side_effect = mock_query
+        mock_db = self._db(today_issue, past_issues)
 
         _update_national_monitors(today, mock_db)
 
@@ -302,7 +301,6 @@ class TestNationalMonitorCreation:
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_sufficient_breadth_creates_monitor(self, mock_get_model, mock_gen_meta):
         """Monitor SHOULD be created if multiple sources cover the topic over 5+ days."""
-        mock_db = MagicMock()
         mock_model = MagicMock()
         mock_get_model.return_value = mock_model
         
@@ -329,24 +327,7 @@ class TestNationalMonitorCreation:
             _make_issue((datetime(2026, 3, 13) - timedelta(days=3)).strftime("%Y-%m-%d"), topic, ["NPR Politics"]),
             _make_issue((datetime(2026, 3, 13) - timedelta(days=4)).strftime("%Y-%m-%d"), topic, ["Reuters"]),
         ]
-        
-        def mock_query(model):
-            if model == ActionIssue:
-                q = MagicMock()
-                # Use a side effect to return different values for different calls if needed
-                # But for now we just return our data
-                mock_filter = MagicMock()
-                mock_filter.order_by.return_value.all.return_value = [today_issue] # today_issues call
-                mock_filter.all.return_value = past_issues # past_issues call
-                q.filter.return_value = mock_filter
-                return q
-            if model == NationalMonitor:
-                q = MagicMock()
-                q.all.return_value = []
-                return q
-            return MagicMock()
-
-        mock_db.query.side_effect = mock_query
+        mock_db = self._db(today_issue, past_issues)
 
         _update_national_monitors(today, mock_db)
 
@@ -359,7 +340,6 @@ class TestNationalMonitorCreation:
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_insufficient_days_skips_monitor(self, mock_get_model):
         """Monitor should NOT be created if it has only appeared for 4 days (min is now 5)."""
-        mock_db = MagicMock()
         mock_model = MagicMock()
         mock_get_model.return_value = mock_model
         mock_model.encode.return_value = np.array([[1.0] * 384 for _ in range(4)], dtype=np.float32)
@@ -373,22 +353,7 @@ class TestNationalMonitorCreation:
             _make_issue((datetime(2026, 3, 13) - timedelta(days=2)).strftime("%Y-%m-%d"), topic, ["Reuters"]),
             _make_issue((datetime(2026, 3, 13) - timedelta(days=3)).strftime("%Y-%m-%d"), topic, ["NPR Politics"]),
         ]
-        
-        def mock_query(model):
-            if model == ActionIssue:
-                q = MagicMock()
-                mock_filter = MagicMock()
-                mock_filter.order_by.return_value.all.return_value = [today_issue]
-                mock_filter.all.return_value = past_issues
-                q.filter.return_value = mock_filter
-                return q
-            if model == NationalMonitor:
-                q = MagicMock()
-                q.all.return_value = []
-                return q
-            return MagicMock()
-
-        mock_db.query.side_effect = mock_query
+        mock_db = self._db(today_issue, past_issues)
 
         _update_national_monitors(today, mock_db)
 
@@ -493,37 +458,18 @@ class TestNationalMonitorCreation:
         assert result is None
 
     @patch("app.pipeline.analyze.action_center.call_llm")
-    @patch("app.pipeline.analyze.action_center._merge_monitors")
-    @patch("app.pipeline.analyze.action_center.get_embedding_model")
-    def test_llm_assisted_merge(self, mock_get_model, mock_merge, mock_call_llm):
+    def test_llm_assisted_merge(self, mock_call_llm):
         """Monitors with moderate similarity should merge if LLM approves."""
-        mock_db = MagicMock()
-        mock_model = MagicMock()
-        mock_get_model.return_value = mock_model
-        
-        # Moderate similarity (0.45)
-        mock_model.encode.side_effect = [
-            np.array([[1.0, 0.0]], dtype=np.float32), # today issue
-            np.array([[0.45, 0.89]], dtype=np.float32), # existing monitor
-        ]
+        from app.pipeline.analyze.action_center import _should_merge_monitors_llm
 
-        m1 = NationalMonitor(id=1, title="Iran War", description="War in Iran")
-        mock_db.query.return_value.all.return_value = [m1]
-        
-        # today issue matches existing monitor at 0.45 (Step 2 uses 0.62, so it falls to Step 3)
-        # Step 3 skips creation if sim > 0.62. Since 0.45 < 0.62, it creates a new monitor.
-        # Then Step 3b (merge) is called.
-        
         mock_call_llm.return_value = json.dumps({
             "should_merge": True,
             "reason": "Both about Iran conflict"
         })
-        
-        # We'll just test the helper directly for simplicity
-        from app.pipeline.analyze.action_center import _should_merge_monitors_llm
+        m1 = NationalMonitor(id=1, title="Iran War", description="War in Iran")
         m2 = NationalMonitor(id=2, title="Iranian School", description="Targeted school")
-        
-        result = _should_merge_monitors_llm(m1, m2, mock_db)
+
+        result = _should_merge_monitors_llm(m1, m2, MagicMock())
         assert result is True
         mock_call_llm.assert_called_once()
 
@@ -533,36 +479,23 @@ class TestFullStoryShouldInvalidate:
     on the same row (e.g. two senators' health events). full_story must be
     regenerated when that happens, not left describing the old event."""
 
-    def test_unchanged_title_and_facts_does_not_invalidate(self):
-        assert _full_story_should_invalidate(
-            "Senator X hospitalized", '["fact a"]',
-            "Senator X hospitalized", '["fact a"]',
-        ) is False
-
-    def test_changed_title_invalidates(self):
+    @pytest.mark.parametrize("old_title, old_facts, new_title, new_facts, expected", [
+        # Rank/date churn alone (no title/facts change) must not invalidate —
+        # this function only ever sees title/facts, so callers don't need to
+        # regenerate on every hourly refresh of an unchanged story.
+        pytest.param("Senator X hospitalized", '["fact a"]', "Senator X hospitalized", '["fact a"]', False,
+                     id="unchanged_title_and_facts_does_not_invalidate"),
         # The real 2026-07 bug: a McConnell hospitalization story's row got
         # re-matched onto a later, different senator's death.
-        assert _full_story_should_invalidate(
-            "Mitch McConnell hospitalized", '["fact a"]',
-            "Lindsey Graham dies at 71", '["fact a"]',
-        ) is True
-
-    def test_changed_facts_alone_invalidates(self):
+        pytest.param("Mitch McConnell hospitalized", '["fact a"]', "Lindsey Graham dies at 71", '["fact a"]', True,
+                     id="changed_title_invalidates"),
         # Same headline, but the underlying facts were updated (story
         # evolved) — the old full_story may cite facts no longer true.
-        assert _full_story_should_invalidate(
-            "Senator X hospitalized", '["fact a"]',
-            "Senator X hospitalized", '["fact a", "fact b"]',
-        ) is True
-
-    def test_only_rank_or_date_changing_is_not_passed_here(self):
-        # Rank/date churn alone (no title/facts change) must not invalidate —
-        # this function only ever sees title/facts, confirming callers don't
-        # need to regenerate on every hourly refresh of an unchanged story.
-        assert _full_story_should_invalidate(
-            "Senator X hospitalized", '["fact a"]',
-            "Senator X hospitalized", '["fact a"]',
-        ) is False
+        pytest.param("Senator X hospitalized", '["fact a"]', "Senator X hospitalized", '["fact a", "fact b"]', True,
+                     id="changed_facts_alone_invalidates"),
+    ])
+    def test_invalidation(self, old_title, old_facts, new_title, new_facts, expected):
+        assert _full_story_should_invalidate(old_title, old_facts, new_title, new_facts) is expected
 
 
 
@@ -1026,35 +959,26 @@ class TestSurnameOwnedByOtherName:
     the guard is deterministic: a surname occurrence immediately preceded
     by a different person's given name is not the member."""
 
-    def _match(self, text, surname):
-        import re
-        return re.search(r"\b" + surname + r"\b", text)
-
-    def test_live_ferran_torres_case(self):
-        text = "Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal."
-        m = self._match(text, "Torres")
-        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is True
-
-    def test_own_first_name_is_not_another_owner(self):
-        text = "The bill from Ritchie Torres advanced on Tuesday."
-        m = self._match(text, "Torres")
-        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
-
-    def test_title_prefix_is_not_another_owner(self):
-        text = "On the floor, Rep. Torres criticized the amendment."
-        m = self._match(text, "Torres")
-        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
-
-    def test_sentence_boundary_capitalized_word_is_not_an_owner(self):
+    @pytest.mark.parametrize("text, expected", [
+        pytest.param("Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal.", True,
+                     id="live_ferran_torres_case"),
+        pytest.param("The bill from Ritchie Torres advanced on Tuesday.", False,
+                     id="own_first_name_is_not_another_owner"),
+        pytest.param("On the floor, Rep. Torres criticized the amendment.", False,
+                     id="title_prefix_is_not_another_owner"),
         # "Georgia." ends the previous sentence — it does not own "Torres".
-        text = "The delegation visited Georgia. Torres said the trip was productive."
-        m = self._match(text, "Torres")
-        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
+        pytest.param("The delegation visited Georgia. Torres said the trip was productive.", False,
+                     id="sentence_boundary_capitalized_word_is_not_an_owner"),
+        pytest.param("A spokesman for Torres confirmed the schedule.", False,
+                     id="lowercase_preceding_word_is_not_an_owner"),
+        pytest.param("Torres said the housing bill would advance this week.", False,
+                     id="surname_at_text_start_has_no_owner"),
+    ])
+    def test_owner(self, text, expected):
+        import re
 
-    def test_lowercase_preceding_word_is_not_an_owner(self):
-        text = "A spokesman for Torres confirmed the schedule."
-        m = self._match(text, "Torres")
-        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
+        m = re.search(r"\bTorres\b", text)
+        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is expected
 
 
 class TestFindRelatedSenatorsSurnameOwnedByOtherPerson:
@@ -1542,43 +1466,26 @@ class TestRetireUntouchedIssues:
         row.is_current = True
         return row
 
-    def test_a_matched_issue_is_never_retired_regardless_of_age(self):
-        now = utcnow()
-        ancient = self._issue(1, now - timedelta(days=5))
-
-        n_retired, n_graced = _retire_untouched_issues([ancient], {1}, now - timedelta(hours=24))
-
-        assert (n_retired, n_graced) == (0, 0)
-        assert ancient.is_current is True
-
-    def test_unmatched_issue_past_the_grace_cutoff_is_retired(self):
-        now = utcnow()
-        old = self._issue(2, now - timedelta(hours=25))
-
-        n_retired, n_graced = _retire_untouched_issues([old], set(), now - timedelta(hours=24))
-
-        assert (n_retired, n_graced) == (1, 0)
-        assert old.is_current is False
-
-    def test_unmatched_issue_within_the_grace_cutoff_is_spared(self):
-        now = utcnow()
-        recent = self._issue(3, now - timedelta(hours=1))
-
-        n_retired, n_graced = _retire_untouched_issues([recent], set(), now - timedelta(hours=24))
-
-        assert (n_retired, n_graced) == (0, 1)
-        assert recent.is_current is True
-
-    def test_missing_created_at_is_treated_as_eligible_for_retirement(self):
+    @pytest.mark.parametrize("age, matched, counts, still_current", [
+        pytest.param(timedelta(days=5), True, (0, 0), True,
+                     id="a_matched_issue_is_never_retired_regardless_of_age"),
+        pytest.param(timedelta(hours=25), False, (1, 0), False,
+                     id="unmatched_issue_past_the_grace_cutoff_is_retired"),
+        pytest.param(timedelta(hours=1), False, (0, 1), True,
+                     id="unmatched_issue_within_the_grace_cutoff_is_spared"),
         # Can't prove it's young without a timestamp — fails closed rather
         # than sparing indefinitely.
+        pytest.param(None, False, (1, 0), False,
+                     id="missing_created_at_is_treated_as_eligible_for_retirement"),
+    ])
+    def test_a_single_issue(self, age, matched, counts, still_current):
         now = utcnow()
-        undated = self._issue(4, None)
+        issue = self._issue(1, None if age is None else now - age)
 
-        n_retired, n_graced = _retire_untouched_issues([undated], set(), now - timedelta(hours=24))
+        result = _retire_untouched_issues([issue], {1} if matched else set(), now - timedelta(hours=24))
 
-        assert (n_retired, n_graced) == (1, 0)
-        assert undated.is_current is False
+        assert result == counts
+        assert issue.is_current is still_current
 
     def test_mixed_batch_counts_each_correctly(self):
         now = utcnow()
@@ -2104,139 +2011,113 @@ class TestBskyRepostHasNewInformation:
     fresher timestamp, which let a story repost with nothing new to say
     (reported live 2026-07: Bluesky repeatedly posting about the same
     thing). This checks the actual new-information gate, not just the
-    date comparison _run_refresh does before calling it."""
+    date comparison _run_refresh does before calling it.
 
-    def test_reworded_recap_of_the_same_facts_has_no_new_information(self):
+    An empty baseline ("" — a row with no stored facts) counts everything
+    as new; that case is pinned in TestApplyMatchedIssueUpdate's
+    test_row_last_posted_before_the_baseline_column_falls_back_to_facts."""
+
+    @pytest.mark.parametrize("old_facts, new_facts, expected", [
         # Same pair as test_same_defense_bill_rows_match above (ids
         # 394/405) — same $95B framework, same 216-212 vote, purely
         # reworded with no new name or figure.
-        old_facts = json.dumps([
-            "A defense policy bill was passed with a narrow 216-212 vote.",
-            "House Republicans approved a $95 billion framework for a third budget reconciliation package.",
-        ])
-        new_facts = [
-            "A $95 billion framework was approved for defense spending.",
-            "The vote resulted in a narrow 216-212 outcome.",
-        ]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
-
-    def test_a_genuine_update_within_the_same_story_counts_as_new_information(self):
+        pytest.param(
+            ["A defense policy bill was passed with a narrow 216-212 vote.",
+             "House Republicans approved a $95 billion framework for a third budget reconciliation package."],
+            ["A $95 billion framework was approved for defense spending.",
+             "The vote resulted in a narrow 216-212 outcome."],
+            False, id="reworded_recap_of_the_same_facts_has_no_new_information",
+        ),
         # A sample initially flagged positive later confirmed a false
         # positive is a real narrative development (outbreak scare
         # downgraded), not just a reword — "FDA" as the named source of
         # that correction is new even though this reads as "the same
         # story" for matching purposes.
-        old_facts = json.dumps([
-            "A lettuce sample from Taylor Farms was initially flagged as positive for cyclospora.",
-            "Multiple states are reporting over 7,000 confirmed cases of cyclosporiasis nationwide.",
-        ])
-        new_facts = [
-            "Over 7,000 cases have been reported across several states.",
-            "The FDA has stated that a sample from Taylor Farms was later identified as a false positive.",
-        ]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
-
-    def test_a_new_named_entity_counts_as_new_information(self):
-        old_facts = json.dumps(["The House passed a temporary funding measure to avoid a shutdown."])
-        new_facts = [
-            "The House passed a temporary funding measure to avoid a shutdown.",
-            "Senator Susan Collins said she would support the measure in the Senate.",
-        ]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
-
-    def test_a_new_figure_counts_as_new_information(self):
-        old_facts = json.dumps(["A defense policy bill was passed with a narrow 216-212 vote."])
-        new_facts = ["A defense policy bill was passed with a narrow 216-212 vote, costing $95 billion."]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
-
-    def test_expanding_a_known_entity_to_its_full_name_is_not_new_information(self):
+        pytest.param(
+            ["A lettuce sample from Taylor Farms was initially flagged as positive for cyclospora.",
+             "Multiple states are reporting over 7,000 confirmed cases of cyclosporiasis nationwide."],
+            ["Over 7,000 cases have been reported across several states.",
+             "The FDA has stated that a sample from Taylor Farms was later identified as a false positive."],
+            True, id="a_genuine_update_within_the_same_story_counts_as_new_information",
+        ),
+        pytest.param(
+            ["The House passed a temporary funding measure to avoid a shutdown."],
+            ["The House passed a temporary funding measure to avoid a shutdown.",
+             "Senator Susan Collins said she would support the measure in the Senate."],
+            True, id="a_new_named_entity_counts_as_new_information",
+        ),
+        pytest.param(
+            ["A defense policy bill was passed with a narrow 216-212 vote."],
+            ["A defense policy bill was passed with a narrow 216-212 vote, costing $95 billion."],
+            True, id="a_new_figure_counts_as_new_information",
+        ),
         # Live 2026-08-27 case (issue 624): old facts named "Saudi" (from
         # "The Saudi delegation referenced the agreement"); new facts
         # spelled the same country out as "Saudi Arabia". The signature
         # diff was the lone token "arabia" — read as a brand-new entity
         # when it's the same country already known.
-        old_facts = json.dumps([
-            "A nuclear cooperation agreement was presented to Congress this week.",
-            "The agreement includes provisions for uranium enrichment activities.",
-            "The Saudi delegation referenced the agreement in a recent briefing.",
-        ])
-        new_facts = [
-            "A nuclear cooperation agreement was presented to Congress this week.",
-            "The agreement allows Saudi Arabia to enrich uranium under specific conditions.",
-        ]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
-
-    def test_a_genuinely_new_entity_still_counts_even_beside_a_known_one(self):
+        pytest.param(
+            ["A nuclear cooperation agreement was presented to Congress this week.",
+             "The agreement includes provisions for uranium enrichment activities.",
+             "The Saudi delegation referenced the agreement in a recent briefing."],
+            ["A nuclear cooperation agreement was presented to Congress this week.",
+             "The agreement allows Saudi Arabia to enrich uranium under specific conditions."],
+            False, id="expanding_a_known_entity_to_its_full_name_is_not_new_information",
+        ),
         # The entity-expansion filter must not swallow an unrelated new
         # entity just because it also appears in a two-word capitalized
         # phrase alongside an already-known word.
-        old_facts = json.dumps(["The Saudi delegation attended the summit."])
-        new_facts = [
-            "The Saudi delegation attended the summit.",
-            "Qatar Airways provided the delegation's transportation.",
-        ]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
-
-    def test_missing_old_facts_json_treated_as_empty(self):
-        assert _bsky_repost_has_new_information(
-            "", ["Senator Susan Collins commented on the bill."],
-        ) is True
+        pytest.param(
+            ["The Saudi delegation attended the summit."],
+            ["The Saudi delegation attended the summit.",
+             "Qatar Airways provided the delegation's transportation."],
+            True, id="a_genuinely_new_entity_still_counts_even_beside_a_known_one",
+        ),
+        # The marker check is differential: a recap that says "vetoed"
+        # again, having already said it, has still added nothing.
+        pytest.param(
+            ["The president vetoed the defense measure.",
+             "The bill had passed with a 216-212 vote."],
+            ["The defense measure was vetoed by the president.",
+             "It had passed 216-212."],
+            False, id="repeating_the_same_development_is_not_new_information",
+        ),
+        # "announced"/"reported"/"said" appear in every recap, so treating
+        # them as developments would re-open the bug this gate exists for.
+        pytest.param(
+            ["The committee will review the funding measure."],
+            ["The committee will review the funding measure.",
+             "The chair announced that the review is ongoing and reported no timetable."],
+            False, id="weak_reporting_verbs_are_not_developments",
+        ),
+    ])
+    def test_new_information_gate(self, old_facts, new_facts, expected):
+        assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is expected
 
     # The signature answers "is a new PARTICIPANT involved?", which is not
     # the same question as "did anything HAPPEN?" — a story can move
     # decisively without naming anyone or anything new, and those updates
     # were being suppressed as rewords (reported live 2026-07: the poster
     # stopped following stories through to their outcome). Each case below
-    # deliberately introduces NO new capitalized entity and NO new figure,
-    # so only the development-marker path can carry it.
-
-    def test_a_veto_counts_as_new_information_without_a_new_name_or_figure(self):
-        old_facts = [
-            "A defense policy bill was passed with a narrow 216-212 vote.",
-            "The measure includes a $95 billion framework.",
-        ]
-        new_facts = old_facts + ["The president vetoed the measure."]
-        assert _issue_signature("", new_facts) - _issue_signature("", old_facts) == set()
-        assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is True
-
-    def test_a_court_blocking_the_measure_counts_as_new_information(self):
-        old_facts = ["A temporary funding measure took effect this week."]
-        new_facts = old_facts + ["A federal judge blocked the order."]
-        assert _issue_signature("", new_facts) - _issue_signature("", old_facts) == set()
-        assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is True
-
-    def test_a_failed_override_counts_as_new_information(self):
-        old_facts = json.dumps(["The president vetoed the defense measure."])
-        new_facts = [
-            "The president vetoed the defense measure.",
+    # deliberately introduces NO new capitalized entity and NO new figure
+    # (asserted), so only the development-marker path can carry it.
+    @pytest.mark.parametrize("old_facts, added_fact", [
+        pytest.param(
+            ["A defense policy bill was passed with a narrow 216-212 vote.",
+             "The measure includes a $95 billion framework."],
+            "The president vetoed the measure.",
+            id="a_veto",
+        ),
+        pytest.param(
+            ["A temporary funding measure took effect this week."],
+            "A federal judge blocked the order.",
+            id="a_court_blocking_the_measure",
+        ),
+        pytest.param(
+            ["The president vetoed the defense measure."],
             "The override attempt failed.",
-        ]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
-
-    def test_repeating_the_same_development_is_not_new_information(self):
-        # The marker check is differential: a recap that says "vetoed"
-        # again, having already said it, has still added nothing.
-        old_facts = json.dumps([
-            "The president vetoed the defense measure.",
-            "The bill had passed with a 216-212 vote.",
-        ])
-        new_facts = [
-            "The defense measure was vetoed by the president.",
-            "It had passed 216-212.",
-        ]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
-
-    def test_weak_reporting_verbs_are_not_developments(self):
-        # "announced"/"reported"/"said" appear in every recap, so treating
-        # them as developments would re-open the bug this gate exists for.
-        old_facts = json.dumps(["The committee will review the funding measure."])
-        new_facts = [
-            "The committee will review the funding measure.",
-            "The chair announced that the review is ongoing and reported no timetable.",
-        ]
-        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
-
-    def test_a_new_lawsuit_being_filed_counts_as_new_information(self):
+            id="a_failed_override",
+        ),
         # Prompted by a live 2026-08-26 issue (id 615) whose real facts
         # included "Democratic-controlled states filed a new lawsuit
         # challenging the executive order" as a genuinely new
@@ -2246,16 +2127,21 @@ class TestBskyRepostHasNewInformation:
         # stripped the way bare "Democratic" is), so this uses a
         # deliberately cleaner example ("State officials", both stripped
         # as generic civic vocabulary) to isolate the marker path itself.
-        old_facts = ["A court order had blocked the agency's new rule."]
-        new_facts = old_facts + ["State officials filed a new lawsuit against the rule."]
-        assert _issue_signature("", new_facts) - _issue_signature("", old_facts) == set()
-        assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is True
-
-    def test_a_court_lifting_an_order_counts_as_new_information(self):
+        pytest.param(
+            ["A court order had blocked the agency's new rule."],
+            "State officials filed a new lawsuit against the rule.",
+            id="a_new_lawsuit_being_filed",
+        ),
         # "lifted" added the same day, same real issue, alongside "filed" —
         # both real judicial-outcome verbs missing from the tracked list.
-        old_facts = ["A court order had blocked the agency's new rule."]
-        new_facts = old_facts + ["A judge lifted the order blocking the rule."]
+        pytest.param(
+            ["A court order had blocked the agency's new rule."],
+            "A judge lifted the order blocking the rule.",
+            id="a_court_lifting_an_order",
+        ),
+    ])
+    def test_a_development_counts_as_new_information_without_a_new_name_or_figure(self, old_facts, added_fact):
+        new_facts = old_facts + [added_fact]
         assert _issue_signature("", new_facts) - _issue_signature("", old_facts) == set()
         assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is True
 
@@ -2271,35 +2157,28 @@ class TestValidateFactsAuditAdditions:
         clean = _validate_facts(facts, source_text="Thune announced details. The Senate held a vote on Thursday.")
         assert clean == ["The Senate held a vote on Thursday."]
 
-    def test_articles_as_subject_meta_fact_dropped(self):
-        facts = ["The articles focused on internal party dynamics rather than public policy outcomes."]
-        assert _validate_facts(facts) == []
-
-    def test_articles_referenced_meta_fact_dropped(self):
-        facts = ["The articles referenced specific names and dates related to the discussion."]
-        assert _validate_facts(facts) == []
-
-    def test_ungrounded_family_relationship_fact_dropped(self):
-        facts = ["Senator Graham announced her candidacy for the seat left by her brother."]
-        source = "Darline Graham announced her candidacy for the vacant seat."
-        assert _validate_facts(facts, source_text=source) == []
-
-    def test_grounded_family_relationship_fact_kept(self):
-        facts = ["Senator Graham announced her candidacy for the seat left by her brother."]
-        source = "Darline Graham, whose brother held the seat, announced her candidacy."
-        assert _validate_facts(facts, source_text=source) == facts
-
-    def test_ungrounded_former_status_fact_dropped(self):
+    @pytest.mark.parametrize("fact, source, kept", [
+        pytest.param("The articles focused on internal party dynamics rather than public policy outcomes.",
+                     None, False, id="articles_as_subject_meta_fact_dropped"),
+        pytest.param("The articles referenced specific names and dates related to the discussion.",
+                     None, False, id="articles_referenced_meta_fact_dropped"),
+        pytest.param("Senator Graham announced her candidacy for the seat left by her brother.",
+                     "Darline Graham announced her candidacy for the vacant seat.",
+                     False, id="ungrounded_family_relationship_fact_dropped"),
+        pytest.param("Senator Graham announced her candidacy for the seat left by her brother.",
+                     "Darline Graham, whose brother held the seat, announced her candidacy.",
+                     True, id="grounded_family_relationship_fact_kept"),
         # 2026-07 live case: "former President Donald Trump" published while
         # the source material said "President Trump".
-        facts = ["Former President Donald Trump announced new tariffs on steel imports."]
-        source = "President Trump announced tariffs on steel imports."
-        assert _validate_facts(facts, source_text=source) == []
-
-    def test_grounded_former_status_fact_kept(self):
-        facts = ["Former President Obama criticized the ruling on Tuesday."]
-        source = "Former President Barack Obama criticized the court's ruling Tuesday."
-        assert _validate_facts(facts, source_text=source) == facts
+        pytest.param("Former President Donald Trump announced new tariffs on steel imports.",
+                     "President Trump announced tariffs on steel imports.",
+                     False, id="ungrounded_former_status_fact_dropped"),
+        pytest.param("Former President Obama criticized the ruling on Tuesday.",
+                     "Former President Barack Obama criticized the court's ruling Tuesday.",
+                     True, id="grounded_former_status_fact_kept"),
+    ])
+    def test_single_fact(self, fact, source, kept):
+        assert _validate_facts([fact], source_text=source) == ([fact] if kept else [])
 
 
 class TestValidateFactsAbsenceOfInformation:
@@ -2308,38 +2187,25 @@ class TestValidateFactsAbsenceOfInformation:
     event — a second meta-fact shape _META_PHRASES (which only catches
     "the article(s)" as subject) didn't cover. Live examples below."""
 
-    def test_no_specific_x_was_provided_is_dropped(self):
-        facts = ["No specific date was provided for when the new block may take effect."]
-        assert _validate_facts(facts) == []
-
-    def test_specific_x_were_not_disclosed_is_dropped(self):
-        facts = ["Specific names of officials were not disclosed in the provided articles."]
-        assert _validate_facts(facts) == []
-
-    def test_no_official_x_was_provided_is_dropped(self):
-        facts = ["No official timeline was provided regarding when renovations would proceed."]
-        assert _validate_facts(facts) == []
-
-    def test_a_genuine_positive_fact_with_the_same_verb_is_kept(self):
+    @pytest.mark.parametrize("fact, kept", [
+        pytest.param("No specific date was provided for when the new block may take effect.", False,
+                     id="no_specific_x_was_provided_is_dropped"),
+        pytest.param("Specific names of officials were not disclosed in the provided articles.", False,
+                     id="specific_x_were_not_disclosed_is_dropped"),
+        pytest.param("No official timeline was provided regarding when renovations would proceed.", False,
+                     id="no_official_x_was_provided_is_dropped"),
         # Must not catch the ordinary positive form just because it shares
         # a qualifying word and a verb with the absence pattern.
-        facts = ["The official statement was provided to reporters on Tuesday."]
-        assert _validate_facts(facts) == facts
-
-    def test_a_real_absence_fact_without_a_qualifier_is_kept(self):
+        pytest.param("The official statement was provided to reporters on Tuesday.", True,
+                     id="a_genuine_positive_fact_with_the_same_verb_is_kept"),
         # "No injuries were reported" is a real, substantive fact, not
         # padding — the qualifier requirement (specific/official/further/
         # additional) is what keeps facts like this one out of scope.
-        facts = ["No injuries were reported at the scene."]
-        assert _validate_facts(facts) == facts
-
-
-class TestSurnameGuardEdges:
-    def test_surname_at_text_start_has_no_owner(self):
-        import re
-        text = "Torres said the housing bill would advance this week."
-        m = re.search(r"\bTorres\b", text)
-        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
+        pytest.param("No injuries were reported at the scene.", True,
+                     id="a_real_absence_fact_without_a_qualifier_is_kept"),
+    ])
+    def test_single_fact(self, fact, kept):
+        assert _validate_facts([fact]) == ([fact] if kept else [])
 
 
 class TestValidateFactsMetricPaths:
@@ -2784,89 +2650,34 @@ class TestCleanupOldUnpostedIssues:
     also switched its cutoff computation from the module's own utcnow()
     (already correct) to confirm it stays on the canonical clock."""
 
-    def test_old_unposted_issue_is_deleted(self, db_session):
-        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
-
-        old_date = (utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
-        db_session.add(ActionIssue(
-            date=old_date, rank=1, title="Old unposted issue", bsky_posted_at=None,
-        ))
-        db_session.commit()
-
-        deleted = _cleanup_old_unposted_issues(db_session)
-
-        assert deleted == 1
-        assert db_session.query(ActionIssue).count() == 0
-
-    def test_old_but_posted_issue_is_preserved(self, db_session):
-        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
-
-        old_date = (utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
-        db_session.add(ActionIssue(
-            date=old_date, rank=1, title="Old but posted issue",
-            bsky_posted_at=utcnow() - timedelta(days=19),
-        ))
-        db_session.commit()
-
-        deleted = _cleanup_old_unposted_issues(db_session)
-
-        assert deleted == 0
-        assert db_session.query(ActionIssue).count() == 1
-
-    def test_recent_unposted_issue_is_preserved(self, db_session):
-        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
-
-        recent_date = (utcnow() - timedelta(days=2)).strftime("%Y-%m-%d")
-        db_session.add(ActionIssue(
-            date=recent_date, rank=1, title="Recent unposted issue", bsky_posted_at=None,
-        ))
-        db_session.commit()
-
-        deleted = _cleanup_old_unposted_issues(db_session)
-
-        assert deleted == 0
-        assert db_session.query(ActionIssue).count() == 1
-
-    def test_published_issue_awaiting_a_repost_is_not_deleted(self, db_session):
+    @pytest.mark.parametrize("age_days, posted_days_ago, post_fields, deleted", [
+        pytest.param(20, None, {}, True, id="old_unposted_issue_is_deleted"),
+        pytest.param(20, 19, {}, False, id="old_but_posted_issue_is_preserved"),
+        pytest.param(2, None, {}, False, id="recent_unposted_issue_is_preserved"),
         # bsky_posted_at is NULL for two different reasons: never published,
         # and published-then-flagged-for-a-repost (_apply_matched_issue_update
         # clears it to hand the issue back to the poster). If that repost then
         # fails to publish, or the story stops being matched, the row sits at
         # NULL while a real post pointing at /issue/<id> is live in the feed —
         # and deleting it 404s a link readers can still click.
-        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
-
-        old_date = (utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
-        db_session.add(ActionIssue(
-            date=old_date, rank=1, title="Published, then flagged for a repost",
-            bsky_posted_at=None,
-            bsky_last_post_text="The House passed the defense bill 216-212.",
-        ))
-        db_session.commit()
-
-        deleted = _cleanup_old_unposted_issues(db_session)
-
-        assert deleted == 0
-        assert db_session.query(ActionIssue).count() == 1
-
-    def test_near_duplicate_suppressed_issue_is_still_deleted(self, db_session):
+        pytest.param(20, None, {"bsky_last_post_text": "The House passed the defense bill 216-212."},
+                     False, id="published_issue_awaiting_a_repost_is_not_deleted"),
         # The other side of the same rule: suppression marks the issue handled
         # without publishing anything, so it has no permalink to protect and
         # must not be retained forever by the fix above.
+        pytest.param(20, None, {"bsky_last_post_text": None, "bsky_posted_facts": '["nothing new to say"]'},
+                     True, id="near_duplicate_suppressed_issue_is_still_deleted"),
+    ])
+    def test_cleanup(self, db_session, age_days, posted_days_ago, post_fields, deleted):
         from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
 
-        old_date = (utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
-        db_session.add(ActionIssue(
-            date=old_date, rank=1, title="Suppressed as a near-duplicate",
-            bsky_posted_at=None, bsky_last_post_text=None,
-            bsky_posted_facts='["nothing new to say"]',
-        ))
+        date = (utcnow() - timedelta(days=age_days)).strftime("%Y-%m-%d")
+        posted_at = None if posted_days_ago is None else utcnow() - timedelta(days=posted_days_ago)
+        db_session.add(ActionIssue(date=date, rank=1, title="Issue", bsky_posted_at=posted_at, **post_fields))
         db_session.commit()
 
-        deleted = _cleanup_old_unposted_issues(db_session)
-
-        assert deleted == 1
-        assert db_session.query(ActionIssue).count() == 0
+        assert _cleanup_old_unposted_issues(db_session) == int(deleted)
+        assert db_session.query(ActionIssue).count() == int(not deleted)
 
 
 class TestPeriodicBlueskyPosts:

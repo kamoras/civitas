@@ -57,37 +57,23 @@ class TestFetchWithRetryHangBackstop:
         return client
 
     @pytest.mark.asyncio
-    async def test_hung_request_is_bounded_and_gives_up(self):
-        client = self._hanging_client()
-        result = await fetch_with_retry(
-            client, _limiter(), "GET", "https://example.test",
-            retries=1, timeout=0.01,
-        )
-        assert result is None
-        assert client.request.call_count == 1
-
-    @pytest.mark.asyncio
-    async def test_hung_request_is_retried_like_any_other_failed_attempt(self):
-        """The backstop raises into the same `except` the retry loop already
-        uses, so a hang burns attempts rather than aborting the fetch on the
-        first one."""
-        client = self._hanging_client()
-        result = await fetch_with_retry(
-            client, _limiter(), "GET", "https://example.test",
-            retries=3, backoff_s=0.001, timeout=0.01,
-        )
-        assert result is None
-        assert client.request.call_count == 3
-
-    @pytest.mark.asyncio
-    async def test_hung_requests_backstop_is_bounded_in_wall_clock(self):
+    @pytest.mark.parametrize("retries", [
+        pytest.param(1, id="gives_up"),
+        # The backstop raises into the same `except` the retry loop already
+        # uses, so a hang burns attempts rather than aborting the fetch on
+        # the first one.
+        pytest.param(3, id="retried_like_any_other_failed_attempt"),
+    ])
+    async def test_hung_request_is_bounded_in_wall_clock(self, retries):
         client = self._hanging_client()
         start = asyncio.get_running_loop().time()
-        await fetch_with_retry(
+        result = await fetch_with_retry(
             client, _limiter(), "GET", "https://example.test",
-            retries=2, backoff_s=0.001, timeout=0.01,
+            retries=retries, backoff_s=0.001, timeout=0.01,
         )
         elapsed = asyncio.get_running_loop().time() - start
+        assert result is None
+        assert client.request.call_count == retries
         assert elapsed < 1.0  # vs. the unbounded 12h+ this replaces
 
     @pytest.mark.asyncio
@@ -276,21 +262,6 @@ class TestFetchBytesWithRetry:
         assert client.request.await_args.kwargs["headers"] is None
 
 
-if __name__ == "__main__":
-    import asyncio
-
-    async def demo():
-        await TestFetchWithRetryHangBackstop().test_hung_request_is_bounded_and_gives_up()
-        await TestFetchWithRetryRequests().test_returns_response_on_success()
-        await TestFetchJsonWithRetry().test_returns_the_parsed_json_body_on_success()
-        await TestFetchWithRetryRequests().test_returns_none_after_exhausting_retries_on_4xx()
-        await TestFetchWithRetryRequests().test_recovers_after_a_transient_failure()
-        await TestFetchWithRetryRequests().test_429_retries_then_succeeds()
-        print("OK")
-
-    asyncio.run(demo())
-
-
 class TestExpectedStatuses:
     """`expected_statuses` exists for a caller needing three outcomes,
     not two: Google Civic's voterinfo answers 404 "No information for
@@ -307,21 +278,14 @@ class TestExpectedStatuses:
         return client
 
     @pytest.mark.asyncio
-    async def test_an_expected_status_comes_back_as_the_response(self):
+    async def test_an_expected_status_comes_back_as_the_response_unretried(self):
         client = self._client(404)
         resp = await fetch_with_retry(
             client, _limiter(), "GET", "https://example.test/x", expected_statuses=(404,),
         )
         assert resp is not None and resp.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_an_expected_status_is_not_retried(self):
-        """The cost half of the bug: 4xx is retried by default, so every
-        one of these was 3 requests plus backoff sleeps per address."""
-        client = self._client(404)
-        await fetch_with_retry(
-            client, _limiter(), "GET", "https://example.test/x", expected_statuses=(404,),
-        )
+        # The cost half of the bug: 4xx is retried by default, so every
+        # one of these was 3 requests plus backoff sleeps per address.
         assert client.request.await_count == 1
 
     @pytest.mark.asyncio

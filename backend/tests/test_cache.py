@@ -38,8 +38,11 @@ class TestApiCacheEmptyTtl:
         monkeypatch.setattr("app.pipeline.cache.utcnow", lambda: future)
         assert api_cache_get(db_session, "t", "k", max_age_hours=24 * 30) is not None
 
-    def test_non_empty_result_honors_the_long_custom_ttl(self, db_session):
+    def test_non_empty_result_honors_the_long_custom_ttl(self, db_session, monkeypatch):
         api_cache_set(db_session, "t", "k", [{"row": 1}], normal_ttl_hours=24 * 30)
+        # Past both the empty-result TTL and the 72h default window.
+        future = utcnow() + timedelta(hours=73)
+        monkeypatch.setattr("app.pipeline.cache.utcnow", lambda: future)
         assert api_cache_get(db_session, "t", "k", max_age_hours=24 * 30) == [{"row": 1}]
 
     def test_empty_never_overwrites_existing_non_empty(self, db_session):

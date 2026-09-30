@@ -80,24 +80,6 @@ class TestFetchConfirmedCandidates:
         await pa.fetch_confirmed_candidates(None, 2026, "PA", {})
         assert "electionid=117" in seen["url"]
 
-    async def test_only_federal_offices_are_read(self, monkeypatch):
-        """Pennsylvania's own General Assembly is in the same list, and
-        its "Representative in the General Assembly" must never be taken
-        for a seat in Congress."""
-        asked = []
-
-        async def fake_get(client, url, label):
-            if "GetAllElections" in url:
-                return _ELECTIONS
-            if "GetOfficeNames" in url:
-                return _OFFICES
-            asked.append(url)
-            return _RESULTS
-
-        monkeypatch.setattr(pa, "_get", fake_get)
-        await pa.fetch_confirmed_candidates(None, 2026, "PA", {})
-        assert len(asked) == 1 and "officeId=11" in asked[0]
-
     async def test_a_cycle_with_no_primary_yields_none(self, monkeypatch):
         _serve(monkeypatch)
         assert await pa.fetch_confirmed_candidates(None, 2030, "PA", {}) is None
@@ -211,6 +193,9 @@ def _serve_state(monkeypatch, results=_STATE_RESULTS):
 @pytest.mark.asyncio
 class TestStateOffices:
     async def test_without_the_flag_only_federal_offices_are_fetched(self, monkeypatch):
+        """Pennsylvania's own General Assembly is in the same office list,
+        and its "Representative in the General Assembly" must never be
+        taken for a seat in Congress."""
         asked = _serve_state(monkeypatch)
         records = await pa.fetch_confirmed_candidates(None, 2026, "PA", {})
         assert asked == [11]

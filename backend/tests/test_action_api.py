@@ -130,19 +130,6 @@ class TestLatestCurrentIssues:
         assert [i.title for i in _latest_current_issues(db_session)] == ["Leads in a seat"]
 
 class TestRenumberForDisplay:
-    def test_preserves_relative_order_when_ranks_already_distinct(self, db_session):
-        from app.api.action import _renumber_for_display
-
-        first = _make_issue("2026-08-20", 1, "First", is_current=False)
-        second = _make_issue("2026-08-20", 2, "Second", is_current=False)
-        db_session.add_all([first, second])
-        db_session.commit()
-
-        result = _renumber_for_display([first, second])
-
-        assert [i.title for i in result] == ["First", "Second"]
-        assert [i.rank for i in result] == [1, 2]
-
     def test_breaks_a_rank_tie_by_most_recently_touched_first(self, db_session):
         from datetime import datetime
 
@@ -164,7 +151,7 @@ class TestRenumberForDisplay:
         assert [i.title for i in result] == ["Newer #1", "Older #1"]
         assert [i.rank for i in result] == [1, 2]
 
-    def test_closes_gaps_from_skipped_ranks(self, db_session):
+    def test_distinct_ranks_keep_their_order_and_close_gaps(self, db_session):
         from app.api.action import _renumber_for_display
 
         a = _make_issue("2026-08-20", 3, "A", is_current=False)
@@ -174,6 +161,7 @@ class TestRenumberForDisplay:
 
         result = _renumber_for_display([a, b])
 
+        assert [i.title for i in result] == ["A", "B"]
         assert [i.rank for i in result] == [1, 2]
 
     def test_does_not_persist_the_renumbering(self, db_session):
@@ -731,25 +719,13 @@ class TestRecentActionIssues:
 
         assert [i["title"] for i in result["issues"]] == ["Beef import tariffs", "Something else"]
 
-    async def test_includes_retired_issues(self, db_session):
-        from fastapi import Response
-
-        from app.api.action import get_recent_action_issues
-
-        db_session.add(_make_issue("2026-08-20", 1, "Retired yesterday", is_current=False))
-        db_session.add(_make_issue("2026-08-21", 1, "Live today", is_current=True))
-        db_session.commit()
-
-        resp = Response()
-        result = await get_recent_action_issues(resp, limit=10, db=db_session)
-
-        assert {i["title"] for i in result["issues"]} == {"Retired yesterday", "Live today"}
-
     async def test_ordered_by_date_then_rank_newest_first(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_recent_action_issues
 
+        # "Older day" is retired (is_current=False): listing it at all is the
+        # 2026-08-22 fix — the homepage record keeps retired issues.
         db_session.add(_make_issue("2026-08-20", 1, "Older day", is_current=False))
         db_session.add(_make_issue("2026-08-21", 2, "Newer day, rank 2", is_current=True))
         db_session.add(_make_issue("2026-08-21", 1, "Newer day, rank 1", is_current=True))

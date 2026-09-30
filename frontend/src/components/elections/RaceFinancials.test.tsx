@@ -35,17 +35,7 @@ describe("RaceFinancials", () => {
     );
     expect(screen.getByText("Has Cash")).toBeInTheDocument();
     expect(screen.queryByText("In Debt")).not.toBeInTheDocument();
-  });
-
-  it("still renders the chart from the remaining non-negative candidates", () => {
-    render(
-      <RaceFinancials
-        candidates={[
-          candidate({ id: "a", name: "Has Cash", cashOnHand: 1000 }),
-          candidate({ id: "b", name: "In Debt", cashOnHand: -3500 }),
-        ]}
-      />
-    );
+    // ...while the chart still renders from the remaining non-negative ones.
     expect(screen.getByText("Cash on hand")).toBeInTheDocument();
     expect(screen.queryByText(/No fundraising data synced/)).not.toBeInTheDocument();
   });

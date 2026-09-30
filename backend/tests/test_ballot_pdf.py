@@ -178,6 +178,8 @@ def test_page_title_fragments_do_not_bleed_into_first_office():
 
 def test_multi_candidate_race_captures_every_candidate():
     contests = ballot_pdf._parse_column(REAL_COLUMN_TEXT_MULTI_CANDIDATE)
+    # The district qualifier on the line after the office folds into the
+    # office name (the lookup below fails if it doesn't).
     senate = next(
         c for c in contests if c["office"] == "SENATOR IN GENERAL COURT SECOND MIDDLESEX DISTRICT"
     )
@@ -207,12 +209,6 @@ def test_corrupted_office_line_is_never_silently_corrected():
         for cand in c["candidates"] if cand["name"] == "AYANNA S. PRESSLEY"
     )
     assert pressley["office"] == "SEVENTH DISTRICT"
-
-
-def test_multi_line_district_qualifier_folds_into_office_name():
-    contests = ballot_pdf._parse_column(REAL_COLUMN_TEXT_MULTI_CANDIDATE)
-    offices = [c["office"] for c in contests]
-    assert "SENATOR IN GENERAL COURT SECOND MIDDLESEX DISTRICT" in offices
 
 
 def test_parse_column_empty_on_no_offices():
@@ -281,7 +277,9 @@ async def test_a_failure_that_would_repeat_is_remembered_not_refetched(db_sessio
     assert len(fetched) == 1
 
 
-@pytest.mark.parametrize("status", [429, 500, 503])
+@pytest.mark.parametrize("status", [
+    pytest.param(403, id="a_refusal_is_not_remembered_as_gone"), 429, 500, 503,
+])
 async def test_a_moments_failure_is_not_remembered(db_session, monkeypatch, status):
     import httpx
 
@@ -293,24 +291,6 @@ async def test_a_moments_failure_is_not_remembered(db_session, monkeypatch, stat
     def handler(request):
         fetched.append(request.url)
         return httpx.Response(status)
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
-        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
-    assert len(fetched) == 2
-
-
-async def test_a_refusal_is_not_remembered_as_gone(db_session, monkeypatch):
-    import httpx
-
-    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
-        "url": "https://example.com/ballot.pdf", "column_bounds": [[0, 1]],
-    })
-    fetched = []
-
-    def handler(request):
-        fetched.append(request.url)
-        return httpx.Response(403)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")

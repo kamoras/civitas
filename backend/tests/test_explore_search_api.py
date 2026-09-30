@@ -95,11 +95,6 @@ class TestValidation:
             await _search(indexed_db, "wildfire", doc_type="Blog Post")
         assert excinfo.value.status_code == 422
 
-    async def test_known_doc_type_is_accepted(self, indexed_db):
-        doc = _add(indexed_db, title="wildfire rule", doc_type="Final Rule")
-        response = await _search(indexed_db, "wildfire", doc_type="Final Rule")
-        assert [r["id"] for r in _body(response)["results"]] == [doc.id]
-
     async def test_every_valid_doc_type_passes_validation(self, indexed_db):
         # VALID_DOC_TYPES has to stay in step with what the pipeline actually
         # writes: a stale entry here is a filter the UI can offer and the
@@ -132,13 +127,8 @@ class TestIndexNotReady:
         # Not "no results". With half the engine unavailable the endpoint
         # genuinely cannot say the corpus has no match, and "still indexing,
         # check back" is the honest answer — the same contract the
-        # semantic-only implementation had.
+        # semantic-only implementation had. Never cached.
         _add(indexed_db, title="grazing permits")
-        response = await _search(indexed_db, "wildfire")
-        assert response.status_code == 503
-        assert _body(response)["indexEmpty"] is True
-
-    async def test_503_only_when_neither_channel_can_answer(self, indexed_db):
         response = await _search(indexed_db, "wildfire")
         assert response.status_code == 503
         assert _body(response)["indexEmpty"] is True
@@ -208,6 +198,9 @@ class TestFiltersAndSort:
     async def test_sort_date_returns_the_newest_matching_not_the_newest_of_the_page(
         self, indexed_db
     ):
+        # The bug this replaces: the old implementation sorted the twenty
+        # results it had already picked by relevance, so "newest" meant
+        # "newest of the twenty most similar".
         newest = _add(indexed_db, title="wildfire notice newest", date="2026-07-01",
                       body="the most recent wildfire document in the corpus")
         for i in range(40):
@@ -222,6 +215,7 @@ class TestFiltersAndSort:
                  body=f"wildfire document numbered {i}")
         body = _body(await _search(indexed_db, "wildfire", limit=3))
         assert body["count"] == 3
+        assert len(body["results"]) == 3
 
 
 class TestDegradedMode:

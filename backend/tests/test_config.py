@@ -2,6 +2,8 @@
 
 import datetime
 
+import pytest
+
 from app.config import _default_current_congress
 from app.pipeline.fetch.congress import congress_for_year
 
@@ -18,15 +20,11 @@ class TestDefaultCurrentCongress:
         year = datetime.date.today().year
         assert _default_current_congress() == congress_for_year(year)
 
-    def test_matches_pipeline_formula_across_years(self):
-        for year in (2025, 2026, 2027, 2028, 2033):
-            assert congress_for_year(year) == 1 + (year - 1789) // 2
-
-    def test_returns_119_for_2026(self):
-        assert congress_for_year(2026) == 119
-
-    def test_returns_120_for_2027(self):
-        assert congress_for_year(2027) == 120
+    @pytest.mark.parametrize("year, congress", [
+        (2025, 119), (2026, 119), (2027, 120), (2028, 120), (2033, 123),
+    ])
+    def test_pipeline_formula_across_years(self, year, congress):
+        assert congress_for_year(year) == congress
 
     def test_the_new_congress_starts_when_it_convenes(self):
         # January 3 of an odd year (20th Amendment), not January 1: a day

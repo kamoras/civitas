@@ -63,23 +63,18 @@ class TestEidDiscovery:
 class TestFetch:
     async def test_returns_the_federal_ballot(self):
         got = await fetch_confirmed_candidates(_client(FIXTURE), 2026, "SD", {"eid": "774"})
-        federal = {(r["office"], r["party"], r["last_name"]) for r in got}
-        assert ("S", "R", "Rounds") in federal
-        assert ("H", "D", "Gronli") in federal
-        assert ("H", "R", "Jackley") in federal
-
-    async def test_keeps_the_independent_a_primary_could_never_show(self):
-        """Brian Bengs is on the November Senate ballot as an IND. A
-        primary-results source structurally cannot see him, which is the
-        whole reason this reads a ballot instead."""
-        got = await fetch_confirmed_candidates(_client(FIXTURE), 2026, "SD", {"eid": "774"})
-        assert ("S", "I", "Bengs") in {(r["office"], r["party"], r["last_name"]) for r in got}
-
-    async def test_drops_a_withdrawn_candidate_still_printed_on_the_page(self):
-        """The portal keeps withdrawn filers listed, marked in the name.
-        They are on the page and not on the ballot."""
-        got = await fetch_confirmed_candidates(_client(FIXTURE), 2026, "SD", {"eid": "774"})
-        assert all("Beaudion" != r["last_name"] for r in got)
+        assert {(r["office"], r["party"], r["last_name"]) for r in got} == {
+            ("S", "R", "Rounds"),
+            # Brian Bengs is on the November Senate ballot as an IND. A
+            # primary-results source structurally cannot see him, which is
+            # the whole reason this reads a ballot instead.
+            ("S", "I", "Bengs"),
+            ("H", "D", "Gronli"),
+            ("H", "R", "Jackley"),
+            # Not Beaudion: the portal keeps withdrawn filers listed,
+            # marked in the name. They are on the page and not on the
+            # ballot.
+        }
 
     async def test_statewide_offices_only_when_the_state_opts_in(self):
         base = await fetch_confirmed_candidates(_client(FIXTURE), 2026, "SD", {"eid": "774"})

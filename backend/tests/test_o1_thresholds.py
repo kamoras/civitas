@@ -28,18 +28,15 @@ class TestThresholdDefaultsRaised:
     def test_bill_analyzer_embedding_confidence_threshold(self):
         assert bill_analyzer.EMBEDDING_CONFIDENCE_THRESHOLD >= 0.65
 
-    def test_nn_classifier_batch_min_similarity(self):
-        assert _default(nn_classifier.classify_batch_nn, "min_similarity") >= 0.60
-
-    def test_bill_learning_reference_min_similarity(self):
-        assert _default(bill_learning.classify_bill_by_reference, "min_similarity") >= 0.60
-
-    def test_donor_classifier_thresholds(self):
-        assert _default(donor_classifier_ai.classify_donor_type_semantic, "threshold") >= 0.55
-        assert _default(donor_classifier_ai.classify_donor_type_semantic, "skip_threshold") >= 0.70
-
-    def test_get_related_policies_threshold(self):
-        assert _default(get_related_policies, "threshold") >= 0.70
+    @pytest.mark.parametrize("func, param, floor", [
+        pytest.param(nn_classifier.classify_batch_nn, "min_similarity", 0.60, id="nn_classifier_batch"),
+        pytest.param(bill_learning.classify_bill_by_reference, "min_similarity", 0.60, id="bill_learning_reference"),
+        pytest.param(donor_classifier_ai.classify_donor_type_semantic, "threshold", 0.55, id="donor_type_threshold"),
+        pytest.param(donor_classifier_ai.classify_donor_type_semantic, "skip_threshold", 0.70, id="donor_skip_threshold"),
+        pytest.param(get_related_policies, "threshold", 0.70, id="get_related_policies"),
+    ])
+    def test_default_threshold_is_above_the_dead_floor(self, func, param, floor):
+        assert _default(func, param) >= floor
 
 
 @pytest.mark.slow

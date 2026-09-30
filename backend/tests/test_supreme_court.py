@@ -14,30 +14,24 @@ from app.pipeline.fetch.supreme_court import (
 )
 
 
-class TestStripHtml:
-    def test_removes_tags(self):
-        assert _strip_html("<p>Hello <b>world</b></p>") == "Hello world"
-
-    def test_handles_empty(self):
-        assert _strip_html("") == ""
-        assert _strip_html(None) == ""
-
-    def test_plain_text_unchanged(self):
-        assert _strip_html("No tags here") == "No tags here"
-
-    def test_strips_whitespace(self):
-        assert _strip_html("  <p>text</p>  ") == "text"
+@pytest.mark.parametrize("raw, expected", [
+    pytest.param("<p>Hello <b>world</b></p>", "Hello world", id="removes_tags"),
+    pytest.param("", "", id="empty"),
+    pytest.param(None, "", id="none"),
+    pytest.param("No tags here", "No tags here", id="plain_text_unchanged"),
+    pytest.param("  <p>text</p>  ", "text", id="strips_whitespace"),
+])
+def test_strip_html(raw, expected):
+    assert _strip_html(raw) == expected
 
 
-class TestUnixToDate:
-    def test_valid_timestamp(self):
-        assert _unix_to_date(1740117600) == "2025-02-21"
-
-    def test_none_returns_empty(self):
-        assert _unix_to_date(None) == ""
-
-    def test_zero_returns_date(self):
-        assert _unix_to_date(0) == "1970-01-01"
+@pytest.mark.parametrize("ts, expected", [
+    pytest.param(1740117600, "2025-02-21", id="valid_timestamp"),
+    pytest.param(None, "", id="none_returns_empty"),
+    pytest.param(0, "1970-01-01", id="zero_returns_date"),
+])
+def test_unix_to_date(ts, expected):
+    assert _unix_to_date(ts) == expected
 
 
 class TestFetchScotusCases:

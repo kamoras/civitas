@@ -74,10 +74,6 @@ def test_a_changed_body_is_never_answered_304(client):
     assert resp.headers["ETag"] != etag
 
 
-def test_an_unchanged_body_keeps_its_etag(client):
-    assert client.get("/api/senators").headers["ETag"] == client.get("/api/senators").headers["ETag"]
-
-
 # --- Header behaviour --------------------------------------------------
 
 def test_cacheable_endpoint_gets_etag_and_cache_control(client):
@@ -119,6 +115,7 @@ def test_matching_conditional_request_also_respects_route_own_cache_control(clie
 
 
 def test_matching_conditional_request_gets_304_with_no_body(client):
+    # An unchanged body keeps its ETag, so the revalidation matches.
     etag = client.get("/api/senators").headers["ETag"]
     resp = client.get("/api/senators", headers={"If-None-Match": etag})
 
@@ -212,10 +209,6 @@ def test_existing_vary_header_is_preserved(monkeypatch):
     vary = TestClient(app).get("/api/senators").headers["Vary"]
     assert "Origin" in vary
     assert "Accept-Encoding" in vary
-
-
-def test_a_changed_body_produces_a_different_etag():
-    assert ch._etag_for(b"v1") != ch._etag_for(b"v2")
 
 
 # --- Against the real app ----------------------------------------------

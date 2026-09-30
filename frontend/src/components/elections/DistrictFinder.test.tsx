@@ -37,25 +37,20 @@ describe("DistrictFinder", () => {
     expect(onPick).toHaveBeenCalledWith("2026-HOUSE-GA-3");
   });
 
-  it("offers the choices when a county spans districts instead of guessing", async () => {
+  it("lists a split county once and offers its districts instead of guessing", async () => {
     // 13% of US counties span more than one district — Effingham is one.
     const onPick = vi.fn();
     render(<DistrictFinder races={RACES} onPick={onPick} picked={null} />);
 
     await userEvent.click(screen.getByRole("button", { name: "E" }));
-    expect(screen.getByText("Effingham County")).toBeInTheDocument();
+    // A (part) county is the same place as the whole county: one entry, not
+    // "Effingham County" and "Effingham County (part)".
+    expect(screen.getAllByText(/^Effingham County$/)).toHaveLength(1);
+    expect(screen.queryByText(/\(part\)/)).not.toBeInTheDocument();
     expect(screen.getByText("split:")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "GA-12" }));
     expect(onPick).toHaveBeenCalledWith("2026-HOUSE-GA-12");
-  });
-
-  it("treats a (part) county as the same place as the whole county", async () => {
-    render(<DistrictFinder races={RACES} onPick={vi.fn()} picked={null} />);
-    await userEvent.click(screen.getByRole("button", { name: "E" }));
-    // One entry, not "Effingham County" and "Effingham County (part)".
-    expect(screen.getAllByText(/^Effingham County$/)).toHaveLength(1);
-    expect(screen.queryByText(/\(part\)/)).not.toBeInTheDocument();
   });
 
   it("can clear the choice and show every district again", async () => {

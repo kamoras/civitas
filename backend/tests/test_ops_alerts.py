@@ -8,6 +8,8 @@ and supplementary data 1+ day with nothing telling an operator to look.
 from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.models import (
     ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus,
     StockTradesPipelineRun, SupplementaryPipelineRun,
@@ -34,13 +36,6 @@ class TestCheckPipelineOverrunAllFourPipelines:
         mock_alert = _check(db_session)
         mock_alert.assert_not_called()
 
-    def test_senate_overrunning_its_8h_budget_alerts(self, db_session):
-        db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
-        db_session.commit()
-        mock_alert = _check(db_session)
-        mock_alert.assert_called_once()
-        assert "Senate" in mock_alert.call_args[0][0]
-
     def test_a_senate_run_its_lease_proves_dead_is_not_an_overrun(self, db_session):
         from tests.conftest import start_senate_run_then_stop_beating
 
@@ -49,43 +44,32 @@ class TestCheckPipelineOverrunAllFourPipelines:
         db_session.commit()
         _check(db_session).assert_not_called()  # check_pipeline_staleness reports a run that never finished
 
-    def test_house_overrunning_its_8h_budget_alerts(self, db_session):
-        db_session.add(HousePipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
-        db_session.commit()
-        mock_alert = _check(db_session)
-        mock_alert.assert_called_once()
-        assert "House" in mock_alert.call_args[0][0]
-
-    def test_supplementary_overrunning_its_8h_budget_alerts(self, db_session):
+    @pytest.mark.parametrize("model, hours_ago, label", [
+        pytest.param(PipelineRun, 9, "Senate", id="senate_over_its_8h_budget"),
+        pytest.param(HousePipelineRun, 9, "House", id="house_over_its_8h_budget"),
         # 8h, not stock's 2h: the weekly SCOTUS refresh includes an
         # uncached Oyez crawl that took 5h+ in run 69 — a tighter budget
         # would misfire on a run that's just legitimately slow that day.
-        db_session.add(SupplementaryPipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
-        db_session.commit()
-        mock_alert = _check(db_session)
-        mock_alert.assert_called_once()
-        assert "Supplementary" in mock_alert.call_args[0][0]
-
-    def test_supplementary_within_its_8h_budget_does_not_alert(self, db_session):
-        db_session.add(SupplementaryPipelineRun(started_at=utcnow() - timedelta(hours=5), status=PipelineStatus.RUNNING))
-        db_session.commit()
-        mock_alert = _check(db_session)
-        mock_alert.assert_not_called()
-
-    def test_stock_overrunning_its_tighter_2h_budget_alerts(self, db_session):
+        pytest.param(SupplementaryPipelineRun, 9, "Supplementary", id="supplementary_over_its_8h_budget"),
         # Confirmed live run took ~90min (2026-07-15) — 2h budget, not
         # House/Supplementary's 8h.
-        db_session.add(StockTradesPipelineRun(started_at=utcnow() - timedelta(hours=3), status=PipelineStatus.RUNNING))
+        pytest.param(StockTradesPipelineRun, 3, "Stock trades", id="stock_over_its_tighter_2h_budget"),
+    ])
+    def test_overrunning_its_budget_alerts(self, db_session, model, hours_ago, label):
+        db_session.add(model(started_at=utcnow() - timedelta(hours=hours_ago), status=PipelineStatus.RUNNING))
         db_session.commit()
         mock_alert = _check(db_session)
         mock_alert.assert_called_once()
-        assert "Stock trades" in mock_alert.call_args[0][0]
+        assert label in mock_alert.call_args[0][0]
 
-    def test_stock_within_its_2h_budget_does_not_alert(self, db_session):
-        db_session.add(StockTradesPipelineRun(started_at=utcnow() - timedelta(hours=1), status=PipelineStatus.RUNNING))
+    @pytest.mark.parametrize("model, hours_ago", [
+        pytest.param(SupplementaryPipelineRun, 5, id="supplementary_within_its_8h_budget"),
+        pytest.param(StockTradesPipelineRun, 1, id="stock_within_its_2h_budget"),
+    ])
+    def test_within_its_budget_does_not_alert(self, db_session, model, hours_ago):
+        db_session.add(model(started_at=utcnow() - timedelta(hours=hours_ago), status=PipelineStatus.RUNNING))
         db_session.commit()
-        mock_alert = _check(db_session)
-        mock_alert.assert_not_called()
+        _check(db_session).assert_not_called()
 
     def test_multiple_overrunning_pipelines_each_alert_independently(self, db_session):
         db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
@@ -178,26 +162,20 @@ class TestCheckStatePviStaleness:
             check_state_pvi_staleness()
         return mock_alert
 
-    def test_silent_well_before_next_cycle_is_due(self):
-        mock_alert = self._check("2020+2024", today=date(2027, 1, 1))
-        mock_alert.assert_not_called()
-
-    def test_alerts_once_next_cycle_data_should_be_available(self):
-        mock_alert = self._check("2020+2024", today=date(2029, 1, 1))
-        mock_alert.assert_called_once()
-        assert "2028" in mock_alert.call_args.args[1]
-
-    def test_silent_right_before_the_due_date(self):
-        mock_alert = self._check("2020+2024", today=date(2028, 12, 14))
-        mock_alert.assert_not_called()
-
-    def test_alerts_on_the_due_date(self):
-        mock_alert = self._check("2020+2024", today=date(2028, 12, 15))
-        mock_alert.assert_called_once()
-
-    def test_silent_when_window_metadata_missing(self):
-        mock_alert = self._check("", today=date(2030, 1, 1))
-        mock_alert.assert_not_called()
+    @pytest.mark.parametrize("window, today, alerts", [
+        pytest.param("2020+2024", date(2027, 1, 1), False, id="silent_well_before_next_cycle_is_due"),
+        pytest.param("2020+2024", date(2028, 12, 14), False, id="silent_right_before_the_due_date"),
+        pytest.param("2020+2024", date(2028, 12, 15), True, id="alerts_on_the_due_date"),
+        pytest.param("2020+2024", date(2029, 1, 1), True, id="alerts_once_next_cycle_data_should_be_available"),
+        pytest.param("", date(2030, 1, 1), False, id="silent_when_window_metadata_missing"),
+    ])
+    def test_alerts_once_the_next_cycle_is_due(self, window, today, alerts):
+        mock_alert = self._check(window, today=today)
+        if alerts:
+            mock_alert.assert_called_once()
+            assert "2028" in mock_alert.call_args.args[1]
+        else:
+            mock_alert.assert_not_called()
 
 
 def _check_stale(db_session):

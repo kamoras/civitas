@@ -34,41 +34,48 @@ FIXTURE = json.loads((Path(__file__).parent / "fixtures_ky_certification_words.j
 
 
 class TestTitleOnPage:
-    def test_senate_republican_title(self):
-        text = "United States Senator\nRepublican Party"
-        assert ky._title_on_page(text) == ("S", None, "R")
-
-    def test_house_district_democratic_title_short_form(self):
-        text = "US Representative\n2nd Congressional District\nDemocratic Party"
-        assert ky._title_on_page(text) == ("H", 2, "D")
-
-    def test_house_district_title_long_form(self):
-        text = "United States Representative in Congress\n1st Congressional District\nRepublican Party"
-        assert ky._title_on_page(text) == ("H", 1, "R")
-
-    def test_section_divider_has_no_party_and_is_not_a_title(self):
-        # "For the office of United States Senator" — a real section
+    @pytest.mark.parametrize("text,expected", [
+        pytest.param("United States Senator\nRepublican Party", ("S", None, "R"),
+                     id="senate_republican"),
+        pytest.param("US Representative\n2nd Congressional District\nDemocratic Party",
+                     ("H", 2, "D"), id="house_short_form"),
+        pytest.param("United States Representative in Congress\n1st Congressional District\nRepublican Party",
+                     ("H", 1, "R"), id="house_long_form"),
+        # "For the office of United States Senator" -- a real section
         # divider page in this document, carrying the office but no
         # party, must not be mistaken for a real contest's title.
-        text = "Official 2026 Primary Election Results\nFor the office of\nUnited States Senator"
-        assert ky._title_on_page(text) is None
-
-    def test_state_senator_is_not_united_states_senator(self):
-        text = "State Senator\nDemocratic Party"
-        assert ky._title_on_page(text) is None
+        pytest.param("Official 2026 Primary Election Results\nFor the office of\nUnited States Senator",
+                     None, id="section_divider_has_no_party"),
+        pytest.param("State Senator\nDemocratic Party", None,
+                     id="state_senator_is_not_us_senator"),
+    ])
+    def test_title_on_page(self, text, expected):
+        assert ky._title_on_page(text) == expected
 
 
 class TestParseTotalPage:
-    def test_senate_republican_rotated_header_11_candidates(self):
-        result = ky._parse_total_page(FIXTURE["senate_gop_total"], "S", None, "R")
-        assert result == [{"office": "S", "district": None, "party": "R", "last_name": "BARR"}]
-
-    def test_senate_democratic_seven_candidate_field_with_a_mc_surname(self):
+    @pytest.mark.parametrize("key,office,district,party,winner", [
+        pytest.param("senate_gop_total", "S", None, "R", "BARR",
+                     id="senate_republican_rotated_header_11_candidates"),
         # Real 2026 field: Cory Booker won; Amy McGrath ("McGRATH" in
         # this document's own header style) is a real, unambiguous
-        # runner-up — confirms Mc/Mac surnames are matched correctly.
-        result = ky._parse_total_page(FIXTURE["senate_dem_total"], "S", None, "D")
-        assert result == [{"office": "S", "district": None, "party": "D", "last_name": "BOOKER"}]
+        # runner-up -- confirms Mc/Mac surnames are matched correctly.
+        pytest.param("senate_dem_total", "S", None, "D", "BOOKER",
+                     id="senate_democratic_seven_candidates_with_a_mc_surname"),
+        pytest.param("district1_total", "H", 1, "R", "COMER",
+                     id="district1_upright_header_few_candidates"),
+        # GUTHRIE won this real primary; PERRY-ADELMANN (a long,
+        # hyphenated name) is the real 3rd-place finisher whose left
+        # edge sits closer to the WRONG column's x0 than to its own --
+        # only word-center matching gets this right.
+        pytest.param("district2_gop_total", "H", 2, "R", "GUTHRIE",
+                     id="district2_hyphenated_surname_matches_correct_column"),
+        pytest.param("district6_dem_total", "H", 6, "D", "DEMBO",
+                     id="district6_democratic_seven_candidate_field"),
+    ])
+    def test_real_total_page_resolves_to_the_real_winner(self, key, office, district, party, winner):
+        result = ky._parse_total_page(FIXTURE[key], office, district, party)
+        assert result == [{"office": office, "district": district, "party": party, "last_name": winner}]
 
     def test_ambiguous_column_refuses_the_whole_contest(self):
         # Constructed, not a fixture: column 1 resolves cleanly to
@@ -85,22 +92,6 @@ class TestParseTotalPage:
             {"text": "DOE", "x0": 195.0, "x1": 220.0, "top": 160.0},
         ]
         assert ky._parse_total_page(words, "H", 1, "R") == []
-
-    def test_district1_upright_header_few_candidates(self):
-        result = ky._parse_total_page(FIXTURE["district1_total"], "H", 1, "R")
-        assert result == [{"office": "H", "district": 1, "party": "R", "last_name": "COMER"}]
-
-    def test_district2_hyphenated_surname_matches_correct_column(self):
-        # GUTHRIE won this real primary; PERRY-ADELMANN (a long,
-        # hyphenated name) is the real 3rd-place finisher whose left
-        # edge sits closer to the WRONG column's x0 than to its own —
-        # only word-center matching gets this right.
-        result = ky._parse_total_page(FIXTURE["district2_gop_total"], "H", 2, "R")
-        assert result == [{"office": "H", "district": 2, "party": "R", "last_name": "GUTHRIE"}]
-
-    def test_district6_democratic_seven_candidate_field(self):
-        result = ky._parse_total_page(FIXTURE["district6_dem_total"], "H", 6, "D")
-        assert result == [{"office": "H", "district": 6, "party": "D", "last_name": "DEMBO"}]
 
     def test_no_total_row_returns_empty(self):
         words = [w for w in FIXTURE["district1_total"] if w["text"] not in ("Total", "Votes")]

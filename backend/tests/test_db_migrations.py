@@ -269,7 +269,7 @@ class TestStateOfficeTableRebuild:
         )
     """
 
-    def test_a_table_missing_a_column_is_dropped(self, patched_engine):
+    def test_a_table_missing_a_column_is_dropped_and_create_all_rebuilds_it(self, patched_engine):
         with patched_engine.begin() as conn:
             conn.execute(text(self._PRODUCTION_SHAPE))
             conn.execute(text(
@@ -279,11 +279,6 @@ class TestStateOfficeTableRebuild:
             ))
         database._migrate_state_office_tables()
         assert not inspect(patched_engine).has_table("statewide_nominees")
-
-    def test_create_all_then_rebuilds_it_with_the_column(self, patched_engine):
-        with patched_engine.begin() as conn:
-            conn.execute(text(self._PRODUCTION_SHAPE))
-        database._migrate_state_office_tables()
         database.Base.metadata.create_all(bind=patched_engine)
         columns = {c["name"] for c in inspect(patched_engine).get_columns("statewide_nominees")}
         assert "district" in columns

@@ -9,6 +9,8 @@ Two properties the self-training design depends on:
    evidence.
 """
 
+import pytest
+
 from app.models import LearnedClassification
 from app.pipeline.analyze.nn_classifier import KNN_SOURCE, _load_references
 from app.pipeline.senate_pipeline import (
@@ -52,22 +54,26 @@ def _referenced_names(source: str) -> set[str]:
 
 
 class TestNormalizedSource:
-    def test_comment_edit_does_not_change_fingerprint(self):
-        edited = BASE.replace("# explain the rule", "# a completely rewritten explanation")
-        edited = edited.replace("# calibrated 2026-07", "# recalibrated 2026-09 after audit")
-        assert _normalized_source(edited) == _normalized_source(BASE)
-
-    def test_docstring_edit_does_not_change_fingerprint(self):
-        edited = (
+    @pytest.mark.parametrize("edited", [
+        pytest.param(
+            BASE.replace("# explain the rule", "# a completely rewritten explanation")
+            .replace("# calibrated 2026-07", "# recalibrated 2026-09 after audit"),
+            id="comment_edit",
+        ),
+        pytest.param(
             BASE.replace('"""Module docstring."""', '"""Rewritten module docs."""')
             .replace('"""Function docstring."""', '"""New wording."""')
             .replace('"""Class docstring."""', '"""Other."""')
-            .replace('"""Method docstring."""', '"""Also changed."""')
-        )
-        assert _normalized_source(edited) == _normalized_source(BASE)
-
-    def test_blank_line_and_formatting_edit_does_not_change_fingerprint(self):
-        edited = BASE.replace("return x > THRESHOLD", "return (x\n            > THRESHOLD)")
+            .replace('"""Method docstring."""', '"""Also changed."""'),
+            id="docstring_edit",
+        ),
+        pytest.param(
+            BASE.replace("return x > THRESHOLD", "return (x\n            > THRESHOLD)"),
+            id="blank_line_and_formatting_edit",
+        ),
+    ])
+    def test_edit_that_cannot_change_behavior_does_not_change_fingerprint(self, edited):
+        assert edited != BASE
         assert _normalized_source(edited) == _normalized_source(BASE)
 
     def test_threshold_change_changes_fingerprint(self):

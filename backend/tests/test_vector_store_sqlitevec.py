@@ -191,6 +191,13 @@ class TestBillsAndMaintenance:
         assert vector_store.embed_explore_documents([_doc(2, "Fresh")]) == 1
 
 
+def _join_reindex():
+    """Wait out the daemon thread ensure_explore_index spawns, found by name."""
+    for t in threading.enumerate():
+        if t.name == "explore-reindex":
+            t.join(timeout=10)
+
+
 class _Granted:
     """lease.job, granted: a rebuild holds the Explore lease, whose own
     session these tests' database doesn't back."""
@@ -566,10 +573,7 @@ class TestEnsureExploreIndex:
         # than read "incomplete" at every start until a run happens by.
         vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
         vector_store.ensure_explore_index(lambda: db_session)
-        import threading as _t
-        for t in _t.enumerate():
-            if t.name == "explore-reindex":
-                t.join(timeout=10)
+        _join_reindex()
         assert vector_store.index_is_whole()
 
     def test_a_lock_while_checking_raises_rather_than_rebuild(self, vec_env, monkeypatch):
@@ -835,12 +839,7 @@ class TestEnsureExploreIndex:
         db_session.commit()
 
         vector_store.ensure_explore_index(lambda: db_session)
-        # The daemon thread runs the reindex; wait for it via join on the
-        # spawned thread found by name.
-        import threading as _t
-        for t in _t.enumerate():
-            if t.name == "explore-reindex":
-                t.join(timeout=10)
+        _join_reindex()  # the daemon thread runs the reindex
         results = vector_store.search_explore_documents("A real doc", n_results=1)
         assert results is not None and results[0]["title"] == "A real doc"
         # And the ranking is refitted: the one in force was measured against
@@ -864,10 +863,7 @@ class TestEnsureExploreIndex:
                                        title="A real doc", summary="s", body="b", date="2026-07-01"))
         db_session.commit()
         vector_store.ensure_explore_index(lambda: db_session)
-        import threading as _t
-        for t in _t.enumerate():
-            if t.name == "explore-reindex":
-                t.join(timeout=10)
+        _join_reindex()
         assert vector_store.index_is_whole() and recalibrated == []
 
         # Refused for anything else (the lease's database busy): refitted
@@ -910,10 +906,7 @@ class TestEnsureExploreIndex:
         db_session.commit()
 
         vector_store.ensure_explore_index(lambda: db_session)
-        import threading as _t
-        for t in _t.enumerate():
-            if t.name == "explore-reindex":
-                t.join(timeout=10)
+        _join_reindex()
 
         results = vector_store.search_explore_documents("A real doc", n_results=1)
         assert results is not None and results[0]["title"] == "A real doc"
