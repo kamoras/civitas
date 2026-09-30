@@ -356,8 +356,11 @@ def freeze_utcnow(monkeypatch):
         def frozen():
             return when
 
-        for name, module in list(sys.modules.items()):
-            if getattr(module, "utcnow", None) is real:
+        # A module's own __dict__, never getattr: a lazy package's module
+        # __getattr__ (transformers) imports optional backends on any
+        # attribute it doesn't have.
+        for module in list(sys.modules.values()):
+            if (getattr(module, "__dict__", None) or {}).get("utcnow") is real:
                 monkeypatch.setattr(module, "utcnow", frozen)
         return when
 
