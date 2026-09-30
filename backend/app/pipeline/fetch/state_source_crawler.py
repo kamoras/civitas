@@ -145,6 +145,11 @@ async def _get(
 
 # scheme://host -> (the rules, the monotonic time they stop being trusted).
 _robots: dict[str, tuple[robots.Robots, float]] = {}
+# One read of an origin's robots.txt at a time: states are swept in
+# parallel, and several can ask about the same host at once. Keyed by the
+# event loop too — each sweep runs in a loop of its own, and a lock can't
+# be waited on from a loop other than the one it was first used in.
+_robots_locks: dict[tuple[int, str], asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
@@ -160,7 +165,17 @@ async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
     site's own).
     """
     parts = urlsplit(url)
-    origin = f"{parts.scheme or 'https'}://{parts.netloc}"
+    origin = f"{(parts.scheme or 'https').lower()}://{parts.netloc.lower()}"
+    async with _robots_locks[(id(asyncio.get_running_loop()), origin)]:
+        cached = await _robots_for(client, origin)
+    # urlsplit keeps ";params" in the path, which urlparse would cut off.
+    path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+    return cached.allows(ROBOTS_AGENT, path)
+
+
+async def _robots_for(client: httpx.AsyncClient, origin: str) -> robots.Robots:
+    """The origin's rules, read at most once per ROBOTS_CACHE_S (or
+    ROBOTS_UNREACHABLE_RETRY_S after a failed read)."""
     cached = _robots.get(origin)
     now = time.monotonic()
     if cached is None or now >= cached[1]:
@@ -171,10 +186,12 @@ async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
             # is handled before this, as a failed fetch: asked to slow down,
             # we read nothing there rather than everything.
             expected_statuses=tuple(s for s in range(400, 500) if s != 429),
-            log_label=f"{parts.netloc} robots.txt", headers=_HEADERS,
+            log_label=f"{origin} robots.txt", headers=_HEADERS,
         )
         if resp is None:
-            logger.warning(
+            # Info, not warning: the portal probe asks hosts that mostly
+            # don't exist, and every one of those lands here.
+            logger.info(
                 "%s/robots.txt unreachable — reading nothing there for %d minutes (RFC 9309 §2.3.1.4)",
                 origin, ROBOTS_UNREACHABLE_RETRY_S // 60,
             )
@@ -182,12 +199,13 @@ async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
         elif resp.status_code >= 400:
             cached = (robots.ALLOW_ALL, now + ROBOTS_CACHE_S)
         else:
+            # The shared fetch reads the whole body; only the first
+            # MAX_BYTES are parsed (§2.5), so an oversized file costs one
+            # download a day, not parsing time.
             text = resp.content[:robots.MAX_BYTES].decode("utf-8-sig", errors="replace")
             cached = (robots.parse(text), now + ROBOTS_CACHE_S)
         _robots[origin] = cached
-    # urlsplit keeps ";params" in the path, which urlparse would cut off.
-    path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
-    return cached[0].allows(ROBOTS_AGENT, path)
+    return cached[0]
 
 
 def _hosts_for(state: str) -> list[str]:
@@ -205,7 +223,11 @@ async def _probe_clarity(client: httpx.AsyncClient, state: str, cycle: int) -> d
     """Clarity publishes on one fixed path per state, so the only question
     is whether this cycle is in it yet — Iowa's 2026 primary appeared
     between two probes four days apart."""
-    resp = await _get(client, f"{CLARITY_BASE}/{state}/elections.json", f"{state} Clarity")
+    url = f"{CLARITY_BASE}/{state}/elections.json"
+    if not await _allowed(client, url):
+        logger.info("%s: robots.txt does not allow %s — not probing Clarity", state, url)
+        return None
+    resp = await _get(client, url, f"{state} Clarity")
     if resp is None:
         return None
     try:
@@ -273,10 +295,10 @@ async def _probe_enhanced_voting(
     hosts = _hosts_for(state)
 
     async def ask(host: str):
-        resp = await _get(
-            client, f"https://{host}/results/public/api/jurisdictions/{name}",
-            f"{state} portal probe", timeout=8.0, probe=True,
-        )
+        url = f"https://{host}/results/public/api/jurisdictions/{name}"
+        if not await _allowed(client, url):
+            return None
+        resp = await _get(client, url, f"{state} portal probe", timeout=8.0, probe=True)
         if resp is None:
             return None
         try:
@@ -339,10 +361,11 @@ async def _probe_enhanced_voting(
         # their files.
         documents = []
         for entry in primaries[:2]:
-            doc = await _get(
-                client, election_url.format(election_id=entry.get("publicElectionId") or ""),
-                f"{state} election document", timeout=15.0,
-            )
+            doc_url = election_url.format(election_id=entry.get("publicElectionId") or "")
+            if not await _allowed(client, doc_url):
+                logger.info("%s: robots.txt does not allow %s — not reading it", state, doc_url)
+                continue
+            doc = await _get(client, doc_url, f"{state} election document", timeout=15.0)
             if doc is None:
                 continue
             try:

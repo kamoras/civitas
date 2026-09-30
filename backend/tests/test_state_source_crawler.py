@@ -277,6 +277,33 @@ class TestRobots:
         assert await crawler._allowed(None, "https://x.gov/anything") is True
 
     @pytest.mark.asyncio
+    async def test_one_read_per_site_however_many_ask_at_once(self, monkeypatch):
+        """States are swept in parallel; the host's case is not a new site."""
+        import asyncio
+
+        calls = []
+        self._serve(monkeypatch, status=404, calls=calls)
+        results = await asyncio.gather(*(
+            crawler._allowed(None, f"https://{host}/p{i}")
+            for i, host in enumerate(["x.gov", "X.gov", "x.GOV", "x.gov"])
+        ))
+        assert results == [True] * 4
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_the_clarity_probe_asks_robots_first(self, monkeypatch):
+        """Every request the sweep makes is governed by robots.txt, the
+        fixed API paths included."""
+        self._serve(monkeypatch, text="User-agent: Civitas\nDisallow: /\n")
+
+        async def must_not_fetch(*args, **kwargs):
+            raise AssertionError("fetched a path robots.txt disallows")
+
+        monkeypatch.setattr(crawler, "_get", must_not_fetch)
+        assert await crawler._probe_clarity(None, "IA", 2026) is None
+        assert await crawler._probe_enhanced_voting(None, "GA", 2026) is None
+
+    @pytest.mark.asyncio
     async def test_path_parameters_are_part_of_the_path(self, monkeypatch):
         self._serve(monkeypatch, text="User-agent: *\nDisallow: /dir/page;\n")
         assert await crawler._allowed(None, "https://x.gov/dir/page;jsessionid=1") is False
@@ -305,7 +332,7 @@ class TestRobots:
     @pytest.mark.asyncio
     async def test_an_unreachable_file_says_so_in_the_log(self, monkeypatch, caplog):
         self._serve(monkeypatch, status=None)
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("INFO"):
             assert await crawler._allowed(None, "https://x.gov/anything") is False
         assert "robots.txt unreachable" in caplog.text
 

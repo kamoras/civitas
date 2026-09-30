@@ -73,7 +73,9 @@ def _join_app_threads_started_since(before: set) -> None:
     subclass the app defines): a library's long-lived monitor thread
     started along the way would never finish. One that outlives the join
     fails the test by name — a test that takes a lease must release it, or
-    its heartbeat (lease._keep) is exactly such a thread."""
+    its heartbeat (lease._keep) is exactly such a thread. Executor workers
+    (asyncio.to_thread, ThreadPoolExecutor) run no app target of their
+    own and aren't joined: work sent there must be awaited in the test."""
     stuck = []
     for thread in set(threading.enumerate()) - before:
         target = getattr(thread, "_target", None)

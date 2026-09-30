@@ -134,6 +134,43 @@ class TestHostileFiles:
     def test_a_byte_order_mark_does_not_hide_the_first_line(self):
         assert _allows("﻿User-agent: *\nDisallow: /private\n", "/private") is False
 
+    def test_a_line_cut_by_the_limit_is_dropped_not_half_read(self):
+        """Read to MAX_BYTES mid-line, "Disallow: /private-area" would have
+        become "Disallow: /" — a rule nobody wrote."""
+        rule = "Disallow: /private-area-with-a-long-name\n"
+        # Padded so the limit falls right after "Disallow: /p".
+        pad = robots.MAX_BYTES - len("User-agent: *\n#\n") - len("Disallow: /p")
+        text = "User-agent: *\n#" + "x" * pad + "\n" + rule
+        assert text[: robots.MAX_BYTES].endswith("Disallow: /p")
+        assert _allows(text, "/public") is True
+
     def test_only_the_first_max_bytes_are_read(self):
         padding = "#" * robots.MAX_BYTES + "\n"
         assert _allows(f"User-agent: *\n{padding}Disallow: /\n", "/x") is True
+
+
+class TestLenientRecords:
+    """Like Google's parser: a rule its author clearly meant is read."""
+
+    def test_whitespace_instead_of_a_colon(self):
+        assert _allows("User-agent *\nDisallow /x\n", "/x/1") is False
+
+    def test_common_misspellings(self):
+        assert _allows("useragent: *\ndisalow: /a\ndissallow: /b\n", "/a") is False
+        assert _allows("user agent: *\nDissallow: /b\n", "/b/1") is False
+
+    def test_only_cr_and_lf_end_a_line(self):
+        """A form feed inside a value is part of it, not a line break
+        that would cut the pattern short and over-block."""
+        assert _allows("User-agent: *\rDisallow: /a\x0c/b\r\n", "/a/other") is True
+
+
+def test_ten_thousand_star_rules_against_a_long_path_are_fast():
+    import time
+
+    # 8,000 rules of 57 bytes: about 450 KiB, all of it read.
+    text = "User-agent: *\n" + "".join("Disallow: /" + "*a" * 25 + "*b\n" for _ in range(8000))
+    parsed = robots.parse(text)
+    started = time.perf_counter()
+    assert parsed.allows(AGENT, "/" + "a" * 2000) is True
+    assert time.perf_counter() - started < 1.0
