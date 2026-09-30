@@ -30,6 +30,17 @@ describe("useNow", () => {
     expect(Number(screen.getByTestId("now").textContent)).toBe(start + 1000);
   });
 
+  it("follows a clock that stepped back while no ticker ran", () => {
+    vi.setSystemTime(new Date("2026-11-04T03:20:00Z"));
+    const first = render(<Clock />);
+    first.unmount();
+    // The system clock is corrected back; the next reader must not see the
+    // later time the stopped ticker left behind.
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
+    render(<Clock enabled={false} />);
+    expect(Number(screen.getByTestId("now").textContent)).toBe(Date.now());
+  });
+
   it("gives every subscriber the same instant", () => {
     render(
       <>

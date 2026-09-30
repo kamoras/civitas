@@ -42,8 +42,10 @@ function getSnapshot(): number {
   // every call would make React see a changed snapshot on every render and
   // loop forever, while a value left from when the last ticker stopped
   // could be hours old — the first render of a reader just enabled would
-  // show that stale time for a frame.
-  if (timer === null && Date.now() - current >= 1000) current = Date.now();
+  // show that stale time for a frame. Either way: a clock that stepped
+  // back (a corrected system clock) would otherwise read the old, later
+  // time until real time caught up with it.
+  if (timer === null && Math.abs(Date.now() - current) >= 1000) current = Date.now();
   return current;
 }
 
