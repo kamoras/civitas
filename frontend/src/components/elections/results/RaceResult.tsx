@@ -48,8 +48,9 @@ export function RaceResultCard({
     <article
       id={`result-${result.raceId}`}
       aria-labelledby={`result-${result.raceId}-title`}
-      // A #race- link lands here: clear of the fixed header, as AboutPage's
-      // anchors are.
+      // A #race- link lands here, focused (StateResults), and clear of the
+      // fixed header, as AboutPage's anchors are.
+      tabIndex={-1}
       className="scroll-mt-[var(--header-clearance)] border border-white/[0.09] bg-surface p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -113,11 +114,13 @@ export function RaceResultCard({
       <p className="mt-4 text-sm text-ink-lo">
         {result.official
           ? "The state lists this count as official."
-          : isTied(result)
-            ? "Tied, not called. The count is not final."
-            : result.flip && result.heldBy
-              ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party. The count is not final.`
-              : "Leading, not called. The count is not final."}{" "}
+          : !result.votesCounted
+            ? "No votes counted yet."
+            : isTied(result)
+              ? "Tied, not called. The count is not final."
+              : result.flip && result.heldBy
+                ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party. The count is not final.`
+                : "Leading, not called. The count is not final."}{" "}
         {sourceHref ? (
           <a
             href={sourceHref}
@@ -190,6 +193,11 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
             className="ml-auto"
             style={{ width: `${(100 * (rep?.votes ?? 0)) / total}%`, backgroundColor: "#ff8989" }}
           />
+        </span>
+        {/* On a phone the reporting column is folded in here: a lead with
+            no "how much is in" beside it reads as a result. */}
+        <span className="mt-1 block font-mono text-xs text-ink-min sm:hidden">
+          {reportingText(result) || "no reporting figure from the state"}
         </span>
       </span>
       <span className="hidden font-mono text-xs text-ink-min sm:block">

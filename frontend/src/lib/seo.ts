@@ -145,3 +145,70 @@ export function articleJsonLd(issue: ActionIssue) {
     publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
   };
 }
+
+/**
+ * /elections' title and description. From election day until the results
+ * window closes (backend election_phase, `resultsMode`) the page leads with
+ * the live count and draws no partisan lean, so the lean map is not what
+ * it offers; the rest of the time it is a ballot-research index. The
+ * results wording is kept under metaDescription's 160 characters, so the
+ * part that says Civitas calls no race is never the part cut off.
+ */
+export function describeElections(
+  cycleYear: number | null,
+  resultsMode: boolean
+): { title: string; description: string } {
+  const year = cycleYear ? `${cycleYear} ` : "";
+  if (resultsMode) {
+    return {
+      title: `${year}Election Results by State: Senate & House Count`,
+      description: `The ${year}Senate and House count by state, as each state's election office publishes it. A race leads until the state calls it official; Civitas calls none.`,
+    };
+  }
+  return {
+    title: `${year}Elections by State: Senate, House & Ballot Measures`,
+    description: `Every ${year}U.S. Senate and House race by state — candidates, FEC fundraising, partisan lean, and statewide ballot measures quoted from official sources.`,
+  };
+}
+
+/**
+ * A state page's title and description. In the results window the page
+ * leads with the state's count where Civitas reads one live (`live`), and
+ * otherwise says where the state publishes it; the ballot research stays
+ * below either. `live` is null when that couldn't be checked, and the
+ * wording then promises neither. Results wording fits in 160 characters.
+ */
+export function describeStateBallot(
+  ballot: {
+    stateName?: string | null;
+    state: string;
+    cycleYear: number;
+    electionDate: string;
+    measures: unknown[];
+  },
+  resultsMode: boolean,
+  live: boolean | null
+): { title: string; description: string } {
+  const name = ballot.stateName ?? ballot.state;
+  const year = ballot.cycleYear;
+  if (resultsMode) {
+    return {
+      title: `${name} Election Results ${year}: Senate & House Count and Ballot`,
+      description:
+        live === true
+          ? `${name}'s ${year} Senate and House count, as its election office publishes it — leading until official; Civitas calls no race — and who was on the ballot.`
+          : live === false
+            ? `Where ${name}'s election office publishes its ${year} count (Civitas doesn't read it live), and who was on the ballot, with their FEC fundraising.`
+            : `${name}'s ${year} election: where the state publishes its count, and who was on the ballot, with their FEC fundraising.`,
+    };
+  }
+  const n = ballot.measures.length;
+  const measures =
+    n > 0
+      ? `, and ${n} statewide ballot ${n === 1 ? "measure" : "measures"} quoted from official sources`
+      : "";
+  return {
+    title: `${name} Ballot ${year}: Senate, House Races & Ballot Measures`,
+    description: `What's on the ${year} ${name} ballot (${ballot.electionDate}): U.S. Senate and House candidates with FEC fundraising${measures}.`,
+  };
+}

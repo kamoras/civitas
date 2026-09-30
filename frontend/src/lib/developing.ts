@@ -13,7 +13,8 @@ const DEVELOPING_SOURCE: Record<string, string> = {
 
 /** `countOfficial`: whether an election-results issue's count is the one
  * the state lists as official (countIsOfficial) — then "not final" would
- * contradict the "wins … in the official count" title right above it. */
+ * contradict the "leads … in the count the state lists as official" title
+ * right above it. */
 export function developingSource(
   sourceType: string | null | undefined,
   { countOfficial = false }: { countOfficial?: boolean } = {}
@@ -57,10 +58,11 @@ export function factsSectionId(issue: IssueKind): string {
 
 /** Whether a count issue's figures are the state's official count: the
  * backend's own flag (countOfficial). An older backend sends none, and
- * then only its fixed title template (signals._content: "... wins <race>
- * in the official count, ...") says so; anything else reads as not final,
- * the conservative way to be wrong. */
+ * then only its fixed title template says so — signals._content's current
+ * "... leads <race> in the count the state lists as official, ...", or the
+ * "... wins <race> in the official count, ..." an earlier backend wrote;
+ * anything else reads as not final, the conservative way to be wrong. */
 export function countIsOfficial(issue: { title: string; countOfficial?: boolean | null }): boolean {
   if (typeof issue.countOfficial === "boolean") return issue.countOfficial;
-  return / in the official count\b/.test(issue.title);
+  return / in the (?:official count|count the state lists as official)\b/.test(issue.title);
 }

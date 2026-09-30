@@ -5,14 +5,17 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import type { LiveRaceResult, RaceWithCandidates } from "@/types/election";
 import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
+import { useMapTextures } from "@/components/elections/results/MapTextures";
 import {
   AWAITING_FILL,
+  AWAITING_SWATCH,
   NO_COUNT_STRIPE,
   NO_COUNT_SWATCH,
   TIED_FILL,
   isTied,
   partyLetter,
   partyTextClass,
+  raceStatusText,
   reportingText,
   resultFill,
 } from "@/lib/results";
@@ -149,7 +152,8 @@ export default function DistrictMap({
    * not "no votes yet". Defaults to any district having a count. */
   feedAnswered?: boolean;
 }) {
-  const hatchId = `no-count-${useId().replace(/:/g, "")}`;
+  const hatchId = `no-count-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const { defs: textureDefs, paint } = useMapTextures();
   const [topo, setTopo] = useState<Topo | null>(null);
   const [failed, setFailed] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -222,7 +226,7 @@ export default function DistrictMap({
               <span
                 aria-hidden="true"
                 className="inline-block h-2 w-3 border border-white/30"
-                style={{ backgroundColor: AWAITING_FILL }}
+                style={{ background: `${AWAITING_SWATCH}, ${AWAITING_FILL}` }}
               />
               no votes yet
             </li>
@@ -260,6 +264,7 @@ export default function DistrictMap({
         style={{ width: "100%", height: "auto" }}
         aria-label={`Congressional districts of ${state}`}
       >
+        {results && textureDefs}
         {results && (
           <defs>
             <pattern
@@ -287,7 +292,8 @@ export default function DistrictMap({
               const counted = results?.get(district);
               const { fill, opacity } = results
                 ? {
-                    fill: !counted && answered ? `url(#${hatchId})` : resultFill(counted, true),
+                    fill:
+                      !counted && answered ? `url(#${hatchId})` : paint(resultFill(counted, true)),
                     opacity: 1,
                   }
                 : // A statewide stand-in says nothing about one district:
@@ -297,7 +303,18 @@ export default function DistrictMap({
                   : leanFill(race?.pvi ?? null);
               const isPicked = district === pickedDistrict;
               const isHovered = district === hovered;
-              const label = district === 0 ? `${state} at-large` : `${state}-${district}`;
+              const name = district === 0 ? `${state} at-large` : `${state}-${district}`;
+              // Shaded by the count, the district's standing is in its
+              // name too: the fill is never the only way to read it.
+              const label = results
+                ? `${name}: ${
+                    counted
+                      ? raceStatusText(counted)
+                      : answered
+                        ? "no count from the state's feed"
+                        : "no votes yet"
+                  }`
+                : name;
               return (
                 <Geography
                   key={geo.rsmKey}

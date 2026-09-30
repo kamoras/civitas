@@ -132,7 +132,7 @@ describe("a seat-flip issue's developing disclosure", () => {
     const count = (slot: "a" | "b"): ActionIssue =>
       ({
         ...issueFor(LATEST, slot),
-        title: `Democrat wins race ${slot} in the official count, taking a seat Republicans held`,
+        title: `Democrat leads race ${slot} in the count the state lists as official, in a seat Republicans hold`,
         status: "developing",
         sourceType: "election_results",
         countOfficial,

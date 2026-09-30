@@ -91,11 +91,14 @@ describe("an issue's facts section", () => {
     expect(section.getAttribute("data-share-section")).toBe("media-coverage");
   });
 
-  it("says, inside the shared section, that the count is not final and when it was read (ET)", async () => {
+  it("says, inside the shared section, that the count is not final — naming no time it doesn't have", async () => {
+    // No countAsOf (an older backend): the render time is not when the
+    // count was read — the issue is written at sync time and served from
+    // caches — so no time is named at all.
     await renderIssue(issue());
     const section = factsSection();
-    expect(section.textContent).toMatch(/NOT FINAL/);
-    expect(section.textContent).toMatch(/the count as of Nov 3, 9:41 PM ET/);
+    expect(section.textContent).toMatch(/NOT FINAL · The state's own results site/);
+    expect(section.textContent).not.toMatch(/count as of|9:41/);
   });
 
   it("says when Civitas read the figures, from the backend's own time", async () => {
@@ -113,7 +116,7 @@ describe("an issue's facts section", () => {
     await renderIssue(
       issue({
         title:
-          "Democrat wins Utah's 1st Congressional District in the official count, taking a seat Republicans held",
+          "Democrat leads Utah's 1st Congressional District in the count the state lists as official, in a seat Republicans hold",
       })
     );
     const section = factsSection();

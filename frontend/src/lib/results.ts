@@ -44,6 +44,24 @@ export const POLLS_OPEN_FILL = "rgba(77, 227, 232, 0.16)";
 export const NO_COUNT_STRIPE = "rgba(205, 199, 188, 0.4)";
 export const NO_COUNT_SWATCH = `repeating-linear-gradient(45deg, ${NO_COUNT_STRIPE} 0 2px, transparent 2px 5px)`;
 
+/*
+ * The fills that say "no count to colour" — polls open, no votes yet, feed
+ * not read — are all dark and within about 1.2:1 of each other and of a
+ * state with no live feed, so on the maps each also carries a texture whose
+ * marks stand at least 3:1 against every one of those fills and the page
+ * (WCAG 1.4.11): polls open is striped cyan one way, a feed not read
+ * striped amber the other, no votes yet dotted. A state with no live feed
+ * is the only plain dark one. The map's legend draws the same textures
+ * (the *_SWATCH values), and every state's accessible name says its status
+ * in words (stateShade), so neither colour nor texture is the only cue.
+ */
+export const POLLS_OPEN_MARK = "rgba(77, 227, 232, 0.8)";
+export const AWAITING_MARK = "rgba(232, 228, 220, 0.6)";
+export const FEED_FAILED_MARK = "rgba(255, 216, 77, 0.8)";
+export const POLLS_OPEN_SWATCH = `repeating-linear-gradient(45deg, ${POLLS_OPEN_MARK} 0 1.5px, transparent 1.5px 5px)`;
+export const FEED_FAILED_SWATCH = `repeating-linear-gradient(-45deg, ${FEED_FAILED_MARK} 0 1.5px, transparent 1.5px 5px)`;
+export const AWAITING_SWATCH = `radial-gradient(circle, ${AWAITING_MARK} 0 0.9px, transparent 1.1px) 0 0 / 4px 4px`;
+
 /** Whether the page should lead with results rather than research: only
  * the two results phases the backend names. A missing or malformed phase
  * (an older backend mid-rollout, a cached error body) is the campaign
@@ -260,7 +278,11 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         tag: "ALL IN",
         tone: "neutral",
         text: sentence(
-          `All ${(d.totalUnits ?? 0).toLocaleString("en-US")} ${d.unitLabel ?? "precincts"} have reported`,
+          // A state that gives no unit count still says every unit is in:
+          // "All 0 precincts" would read as a count with nothing in it.
+          d.totalUnits
+            ? `All ${d.totalUnits.toLocaleString("en-US")} ${d.unitLabel ?? "precincts"} have reported`
+            : "Every reporting unit is in",
           shares,
           "Counting can continue after every unit reports"
         ),
@@ -272,12 +294,16 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         text: sentence("The state lists its count as official", shares),
       };
     case "flip":
+      // Never "wins", even official: the state listing its count as
+      // official is not a result (a Georgia general short of a majority
+      // goes to a runoff), and Civitas never calls a race — the backend's
+      // templates (live_results/bluesky.py) say the same.
       return {
         tag: "FLIP",
         tone: "flip",
         text: d.official
           ? sentence(
-              `${withParty(d.leader)} wins in the official count, taking a seat ${holders} held`,
+              `${withParty(d.leader)} leads in the count the state lists as official, in a seat ${holders} hold`,
               shares
             )
           : sentence(
@@ -359,10 +385,94 @@ export function seatsLed(races: LiveRaceResult[]): Record<string, number> {
   return out;
 }
 
-/** The fill for a state on the national map, by chamber: its Senate race's
- * leader, or — for House — the party leading more of its seats (fainter for
- * a split delegation). */
-export function stateFill(
+const PARTY_NAME: Record<string, string> = {
+  DEM: "Democrat",
+  REP: "Republican",
+  IND: "independent",
+  LIB: "Libertarian",
+  GRE: "Green",
+  CON: "Constitution Party",
+};
+
+/** "Democrat leads", "Democrats lead" — for a map's accessible names. */
+function leadsPhrase(party: string | null | undefined, plural = false): string {
+  if (plural) {
+    const holders = party && HOLDERS[party];
+    return holders ? `${holders} lead` : "another party leads";
+  }
+  const name = party && PARTY_NAME[party];
+  return name ? `${name} leads` : "another party leads";
+}
+
+/** How far one race's count is, in words: "official count", "25% in,
+ * early", "80% in", or "" when the state gives no reporting figure. */
+function progressPhrase(r: LiveRaceResult): string {
+  if (r.official) return "official count";
+  const share = reportingShare(r);
+  if (share == null) return "";
+  const pct = `${Math.round(100 * share)}% in`;
+  return share < 0.5 ? `${pct}, early` : pct;
+}
+
+/** One race's standing in words, as its map fill says it: "no votes yet",
+ * "tied, 40% in", "Republican leads, 80% in, seat changing party". Never
+ * "wins": a race leads until the state lists its count as official. */
+export function raceStatusText(r: LiveRaceResult): string {
+  if (!(r.votesCounted > 0)) return "no votes yet";
+  const progress = progressPhrase(r);
+  const head = isTied(r) ? "tied" : leadsPhrase(r.leaderParty);
+  return [head, progress, r.flip ? "seat changing party" : ""].filter(Boolean).join(", ");
+}
+
+/** The opacity for a set of races led by one party, on resultFill's scale:
+ * solid only when every one is official; faint (0.3) when any has fewer
+ * than half its units in (one with nothing counted has none in); the
+ * middle, unknown-progress value when a race gives no reporting figure;
+ * otherwise by the least-counted race's share. For one race it is exactly
+ * resultFill's. */
+function aggregateOpacity(races: LiveRaceResult[]): number {
+  if (races.every((r) => r.official && r.votesCounted > 0)) return 1;
+  let min = 1;
+  let unknown = false;
+  for (const r of races) {
+    if (r.official) continue;
+    const share = r.votesCounted > 0 ? reportingShare(r) : 0;
+    if (share == null) unknown = true;
+    else min = Math.min(min, share);
+  }
+  if (min < 0.5) return 0.3;
+  if (unknown) return 0.55;
+  return 0.45 + 0.45 * min;
+}
+
+/** The party ahead across a set of races — whichever leads the most of
+ * them, every party compared (a delegation led 3–1 by a third party is
+ * that party's, not the one major party's that leads one seat). Null with
+ * `tied` when two or more parties lead equally many, including a race or
+ * pair of races that are level; null without it when nothing is counted. */
+function pluralityLeader(races: LiveRaceResult[]): { party: string | null; tied: boolean } {
+  const ranked = Object.entries(seatsLed(races)).sort((a, b) => b[1] - a[1]);
+  if (!ranked.length) return { party: null, tied: races.some((r) => r.votesCounted > 0) };
+  if (ranked[1] && ranked[1][1] === ranked[0][1]) return { party: null, tied: true };
+  return { party: ranked[0][0], tied: false };
+}
+
+export interface StateShade {
+  fill: string;
+  /** The state's standing in words — the map's accessible name for it, so
+   * the fill is never the only way to tell. Starts with the state code. */
+  label: string;
+}
+
+/** A state on the national map, by chamber. One race (a Senate seat) is
+ * drawn exactly as resultFill draws it. More than one — a House
+ * delegation, or a state electing both its senators — is the party leading
+ * the most of them, every party compared; tied or split when two or more
+ * lead equally many. Fainter on the same scale as a single race, taken
+ * from the least-counted of them: under half in anywhere is faint, and
+ * solid only once every one is official. */
+export function stateShade(
+  state: string,
   races: LiveRaceResult[],
   chamber: "S" | "H",
   covered: boolean,
@@ -373,26 +483,67 @@ export function stateFill(
   /** The state's polls are still open (pollsStillOpen): drawn as
    * POLLS_OPEN_FILL, which says nothing about the count. */
   pollsOpen = false
-): string {
-  if (!hasRace) return UNCOVERED_FILL;
+): StateShade {
+  const what = chamber === "S" ? "Senate" : "House";
+  if (!hasRace) return { fill: UNCOVERED_FILL, label: `${state}: no Senate race this year` };
   const mine = races.filter((r) => r.office === chamber);
-  if (!mine.length && covered && pollsOpen) return POLLS_OPEN_FILL;
-  if (!mine.length && covered && feedDown) return FEED_FAILED_FILL;
-  if (chamber === "S") return resultFill(mine[0], covered);
-  if (!mine.length) return covered ? AWAITING_FILL : UNCOVERED_FILL;
-  const leads = seatsLed(mine);
-  const d = leads.DEM ?? 0;
-  const r = leads.REP ?? 0;
-  const others = Object.entries(leads).reduce(
-    (n, [p, c]) => (p === "DEM" || p === "REP" ? n : n + c),
-    0
-  );
-  if (!d && !r) {
-    if (others) return `rgba(${OTHER}, 0.6)`;
-    return mine.some((x) => x.votesCounted > 0) ? TIED_FILL : AWAITING_FILL;
+  if (!mine.length) {
+    if (!covered) return { fill: UNCOVERED_FILL, label: `${state}: no live count here` };
+    if (pollsOpen) return { fill: POLLS_OPEN_FILL, label: `${state}: polls open` };
+    if (feedDown) return { fill: FEED_FAILED_FILL, label: `${state}: results feed not read` };
+    return { fill: AWAITING_FILL, label: `${state} ${what}: no votes yet` };
   }
-  if (d === r) return TIED_FILL;
-  const party = d > r ? "DEM" : "REP";
-  const margin = Math.abs(d - r) / (d + r);
-  return `rgba(${rgb(party)}, ${(0.35 + 0.55 * margin).toFixed(2)})`;
+  if (mine.length === 1) {
+    return {
+      fill: resultFill(mine[0], covered),
+      label: `${state} ${what}: ${raceStatusText(mine[0])}`,
+    };
+  }
+  const { party, tied } = pluralityLeader(mine);
+  let fill: string;
+  if (party)
+    fill = `rgba(${rgb(party === "OTHER" ? null : party)}, ${aggregateOpacity(mine).toFixed(2)})`;
+  else fill = tied ? TIED_FILL : AWAITING_FILL;
+  let label: string;
+  if (chamber === "S") {
+    // Two Senate races: each named, so a change of party in either shows.
+    label = `${state} Senate: ${mine
+      .map((r) => `${r.isSpecial ? "special" : "regular"} race ${raceStatusText(r)}`)
+      .join("; ")}`;
+  } else {
+    const led = seatsLed(mine);
+    const counted = mine.filter((r) => r.votesCounted > 0).length;
+    const head = party
+      ? `${leadsPhrase(party === "OTHER" ? null : party, true)} in the most seats`
+      : tied
+        ? "seats split evenly"
+        : "no votes yet";
+    const progress = mine.every((r) => r.official && r.votesCounted > 0)
+      ? "every count official"
+      : aggregateOpacity(mine) === 0.3
+        ? "under half in for some seats"
+        : "";
+    const flips = mine.filter((r) => r.flip).length;
+    label = [
+      `${state} House: ${head}`,
+      counted ? `seats led ${formatLed(led).replace(/ · /g, ", ")}, of ${mine.length} listed` : "",
+      progress,
+      flips ? `${flips} ${flips === 1 ? "seat" : "seats"} changing party` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+  return { fill, label };
+}
+
+/** stateShade's fill alone. */
+export function stateFill(
+  races: LiveRaceResult[],
+  chamber: "S" | "H",
+  covered: boolean,
+  hasRace: boolean,
+  feedDown = false,
+  pollsOpen = false
+): string {
+  return stateShade("", races, chamber, covered, hasRace, feedDown, pollsOpen).fill;
 }

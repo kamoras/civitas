@@ -106,3 +106,32 @@ describe("RaceResultCard", () => {
     expect(screen.queryByText(/no previous holder|held by/)).not.toBeInTheDocument();
   });
 });
+
+describe("the count's own words", () => {
+  it("says no votes are counted yet on a card with none, not 'leading'", () => {
+    render(<RaceResultCard result={race({ office: "S", district: null, votesCounted: 0 })} />);
+    expect(screen.getByText("NO VOTES YET")).toBeInTheDocument();
+    expect(document.body).toHaveTextContent("No votes counted yet.");
+    expect(document.body).not.toHaveTextContent(/Leading, not called/);
+  });
+
+  it("gives a House row its reporting figure on a phone too", () => {
+    render(
+      <ol>
+        <HouseResultRow result={race()} />
+      </ol>
+    );
+    // One copy for phones (sm:hidden), one for wider screens (hidden
+    // sm:block): neither breakpoint drops it.
+    const shown = screen.getAllByText("80 of 100 precincts reporting (80%)");
+    expect(shown.map((el) => el.className)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("sm:hidden"),
+        expect.stringContaining("sm:block"),
+      ])
+    );
+    expect(shown.find((el) => el.className.includes("sm:hidden"))!.className).not.toMatch(
+      /(^|\s)hidden(\s|$)/
+    );
+  });
+});

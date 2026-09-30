@@ -147,7 +147,6 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
   // identically before and after hydration. In the comment-deadline zone,
   // the same day the Action Center and the backend count comment periods in.
   const today = commentPeriodToday();
-  const renderedAt = new Date();
   const shareUrl = absoluteUrl(`/issue/${issue.publicId}`);
   const factsId = factsSectionId(issue);
 
@@ -238,7 +237,6 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
               <Coverage
                 issue={issue}
                 className="mt-10"
-                renderedAt={renderedAt.toISOString()}
                 heading={
                   <div className={SECTION_HEADING}>
                     <h2>{factsHeading(issue)}</h2>

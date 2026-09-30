@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 import { pageMetadata } from "@/lib/site";
 import { AboutPage, Summary, Point, Section, P, More, Cite, A } from "@/components/about/AboutPage";
+import { countWord, fetchLiveStates } from "@/lib/liveStates";
+
+// The live-count state count below is read from the backend
+// (fetchLiveStates), every five minutes (LIVE_STATES_REVALIDATE_S). A
+// literal: Next reads it statically.
+export const revalidate = 300;
 
 export const metadata = pageMetadata({
   title: "Known Limitations of Civitas Scores",
@@ -23,7 +29,9 @@ function Limitation({ title, children }: { title: string; children: ReactNode })
   );
 }
 
-export default function LimitationsChapter() {
+export default async function LimitationsChapter() {
+  const live = await fetchLiveStates();
+  const liveCount = live && live.length > 0 ? countWord(live.length) : null;
   return (
     <AboutPage
       href="/about/limitations"
@@ -169,12 +177,21 @@ export default function LimitationsChapter() {
             See <A href="/about/elections">Elections &amp; ballots</A>.
           </P>
         </Limitation>
-        <Limitation title="Live results cover fifteen states">
+        <Limitation
+          title={
+            liveCount
+              ? `Live results cover ${liveCount} ${live!.length === 1 ? "state" : "states"}`
+              : "Live results cover only some states"
+          }
+        >
           <P>
-            On election night the count is read from each state&apos;s own results site, and only
-            fifteen publish one in a form we can read reliably. Other states&apos; pages say they
-            have no live count and link to the office that publishes it; they are left unshaded on
-            the results map rather than drawn as having no votes. A count is never called: it reads
+            On election night the count is read from each state&apos;s own results site, and only{" "}
+            {liveCount
+              ? `${liveCount} ${live!.length === 1 ? "publishes" : "publish"}`
+              : "some states publish"}{" "}
+            one in a form we can read reliably. Other states&apos; pages say they have no live count
+            and link to the office that publishes it; they are left unshaded on the results map
+            rather than drawn as having no votes. A count is never called: it reads
             &ldquo;leading&rdquo; until the state marks it official. See{" "}
             <A href="/about/elections#election-night">Elections &amp; ballots</A>.
           </P>

@@ -48,11 +48,21 @@ describe("developing issue wording", () => {
   it("takes the backend's own official flag when it sends one", () => {
     expect(countIsOfficial({ title: "Democrat leads …", countOfficial: true })).toBe(true);
     expect(
-      countIsOfficial({ title: "Democrat wins … in the official count, …", countOfficial: false })
+      countIsOfficial({
+        title: "Democrat leads … in the count the state lists as official, …",
+        countOfficial: false,
+      })
     ).toBe(false);
   });
 
   it("reads a count as official only from the backend's official-count title", () => {
+    expect(
+      countIsOfficial({
+        title:
+          "Democrat leads Utah's 1st Congressional District in the count the state lists as official, in a seat Republicans hold",
+      })
+    ).toBe(true);
+    // The title an earlier backend wrote, still read the same way.
     expect(
       countIsOfficial({
         title:
