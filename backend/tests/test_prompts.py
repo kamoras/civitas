@@ -55,3 +55,81 @@ class TestParseExploreDocumentSummary:
         text = "SUMMARY: Text.\nKEY POINTS:\nsome preamble the model added\n- Real point\nIMPACT: X"
         result = parse_explore_document_summary(text)
         assert result["keyPoints"] == ["Real point"]
+
+
+class TestCutOff:
+    """A generation stopped at its token limit ends mid-sentence: the
+    section it was writing is dropped."""
+
+    def test_in_the_impact(self):
+        text = "SUMMARY: Whole.\nKEY POINTS:\n- One\n- Two\nIMPACT: Half a sen"
+        assert parse_explore_document_summary(text, cut_off=True) == {
+            "summary": "Whole.", "keyPoints": ["One", "Two"], "impact": "",
+        }
+
+    def test_in_the_key_points(self):
+        text = "SUMMARY: Whole.\nKEY POINTS:\n- One\n- Tw"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One"]
+
+    def test_in_the_summary_leaves_nothing_usable(self):
+        assert parse_explore_document_summary("SUMMARY: Half a", cut_off=True)["summary"] == ""
+
+    def test_decided_by_the_sections_as_parsed_not_by_marker_order(self):
+        # No KEY POINTS: everything is summary, so the summary was cut.
+        text = "SUMMARY: foo. IMPACT: bar ba"
+        assert parse_explore_document_summary(text, cut_off=True)["summary"] == ""
+        # An IMPACT: inside the summary doesn't make the key points whole.
+        text = "SUMMARY: see IMPACT: x.\nKEY POINTS:\n- One\n- Tw"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One"]
+
+    def test_cut_partway_through_a_marker_keeps_every_whole_section(self):
+        text = "SUMMARY: Complete sentence.\nKEY POI"
+        assert parse_explore_document_summary(text, cut_off=True) == {
+            "summary": "Complete sentence.", "keyPoints": [], "impact": "",
+        }
+        text = "SUMMARY: Whole.\nKEY POINTS:\n- One\n- Two\nIMPA"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One", "Two"]
+
+    def test_cut_just_after_a_key_point_ended_keeps_that_point(self):
+        text = "SUMMARY: s.\nKEY POINTS:\n- a.\n- b.\n"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a.", "b."]
+        # Nothing says an unpunctuated point isn't the first half of two
+        # lines: it goes with the part being written.
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\n- The rule requires employers to\n"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a"]
+        text = "SUMMARY: s.\nKEY POINTS:\n"
+        assert parse_explore_document_summary(text, cut_off=True) == {
+            "summary": "s.", "keyPoints": [], "impact": "",
+        }
+
+    def test_cut_just_after_the_summary_or_impact_line_keeps_it(self):
+        # The format is a line per part: a line break after a finished
+        # sentence ends the summary and the impact as it does a key point.
+        assert parse_explore_document_summary("SUMMARY: The bill does X.\n", cut_off=True)["summary"] == (
+            "The bill does X."
+        )
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\nIMPACT: It matters.\n"
+        assert parse_explore_document_summary(text, cut_off=True) == {
+            "summary": "s.", "keyPoints": ["a"], "impact": "It matters.",
+        }
+
+    def test_a_blank_line_after_a_finished_part_keeps_it(self):
+        assert parse_explore_document_summary("SUMMARY: The bill does X.\n\n", cut_off=True)["summary"] == (
+            "The bill does X."
+        )
+        text = "SUMMARY: s.\nKEY POINTS:\n- a.\n- b.\n\n"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a.", "b."]
+
+    def test_a_sentence_wrapped_onto_the_next_line_is_not_taken_as_finished(self):
+        text = "SUMMARY: The rule sets new limits on\n"
+        assert parse_explore_document_summary(text, cut_off=True)["summary"] == ""
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\nIMPACT: Drivers will pay\n"
+        assert parse_explore_document_summary(text, cut_off=True)["impact"] == ""
+
+    def test_one_letter_after_a_wrapped_line_is_not_taken_for_a_marker(self):
+        text = "SUMMARY: The rule would\nI"
+        assert parse_explore_document_summary(text, cut_off=True)["summary"] == ""
+        # After a finished line, or with two letters of it, it is one.
+        assert parse_explore_document_summary("SUMMARY: Done.\nK", cut_off=True)["summary"] == "Done."
+        text = "SUMMARY: s.\nKEY POINTS:\n- a\n- b\nIM"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["a", "b"]

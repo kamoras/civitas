@@ -526,6 +526,25 @@ async def test_sync_ballot_measures_reads_registered_states_directly(monkeypatch
     assert db_session.query(BallotMeasure).filter(BallotMeasure.state == "CA").count() == 1
 
 
+async def test_a_town_ballot_that_failed_to_load_is_never_stored(monkeypatch, db_session):
+    """A fetch failure is this request's, not the town's: cached (nginx
+    caches whatever the backend marks public) it would tell every reader
+    the ballot couldn't be read until it expired."""
+    from app.api import elections
+
+    monkeypatch.setattr(elections.ballot_pdf, "is_configured", lambda town: False)
+    monkeypatch.setattr(elections, "civic_is_configured", lambda: True)
+    monkeypatch.setattr(elections, "address_for_town", lambda state, town: "1 Main St")
+
+    async def failed(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(elections, "fetch_town_ballot", failed)
+    resp = await elections.town_ballot(None, "MA", "Somerville", db=db_session)
+    assert resp.headers["Cache-Control"] == "public, max-age=30"
+    assert b"ingest_failed" in resp.body
+
+
 def test_upsert_stores_the_named_drafters(db_session):
     # The columns existed and the API served them, but nothing wrote them.
     election_pipeline._upsert_measure(

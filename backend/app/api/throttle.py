@@ -1,0 +1,628 @@
+"""Rate limits and once-per-period rules that hold across every API worker.
+
+These used to be dicts in each module (the write limiter, the public API's
+read limiter, the Explore summary cooldown, the upstream lookup budget),
+which was correct only while the backend ran as one process. With several
+uvicorn workers each would keep its own copy: every per-IP limit would
+stretch to its value times the number of workers, and a once-per-period
+rule would let a second one through on the other worker.
+
+Where it lives. A small SQLite file in RAM (THROTTLE_DB_PATH, /dev/shm by
+default): shared by every worker process in the container, and never on
+disk. That is the same lifetime the dicts had — it resets when the
+container restarts — and the same exposure: what it records about visitors
+(how often a key made from an address asked for something today) can be
+read only from the running container's memory, as the dicts could, never
+from the data volume.
+
+Keys. Per-client keys are an HMAC of the client IP (with a purpose and a
+scope) under a random salt this store makes for each UTC day (client_key).
+The IP itself is never stored, a key can't be joined to SiteVisit's visitor
+hash (a different salt), and once a day's salt is deleted no key made with
+it can be recomputed from an address. A day's salt is kept through the
+next day, not deleted at midnight: a client's limits and claims are
+counted under both its keys, so a rule doesn't restart at 00:00 UTC — a
+rate window straddling midnight must still count both halves, as the
+per-process dicts did. No rule here is longer than a day,
+so that is as long as an old key can matter. derived_salt uses a salt of
+its own that is deleted when its day ends: what it salts (the visit
+counter's fallback) promises no longer.
+
+Tables:
+
+  windows  a request count per fixed window. `hit` estimates a sliding
+           window from the current and previous counts (previous × the
+           share of it still inside the window, plus current), which holds
+           a limit across a window boundary where a plain fixed window
+           would allow twice the limit.
+  claims   when something was last claimed. `claim` succeeds only when the
+           previous claim is at least `period` old, in one conditional
+           upsert, so two workers can't both win it.
+
+Each operation is one `BEGIN IMMEDIATE` transaction, so SQLite's writer
+lock makes the read-modify-write atomic across processes. Every row
+carries the time it stops mattering; expired rows are deleted at most once
+a minute per process.
+
+Cost: plain sqlite3 on a per-thread connection — measured at ~40 µs a `hit`
+and ~15 µs a `client_key` on a development container (SQLAlchemy sessions
+cost ~1.4 ms for the same work). Paid by every request that
+reaches the backend on a limited route: every mutation (WriteRateLimit), the
+public API and Explore search (public.RateLimit), and the two
+live-lookup routes, bills/{id}/record and explore/{id}/comments
+(UpstreamRouteLimit, plus the shared hourly budget on a cache miss).
+
+The limits fail open: a limiter that can't reach its store lets the
+request through and logs it, rather than turning a locked database into an
+outage of every endpoint behind it.
+"""
+
+import hashlib
+import hmac
+import logging
+import math
+import os
+import secrets
+import sqlite3
+import tempfile
+import threading
+from contextlib import contextmanager
+import time
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
+
+logger = logging.getLogger(__name__)
+
+# Where state shared by the processes of one container, and by nothing else,
+# lives: /dev/shm is tmpfs on Linux (and per container); elsewhere, the temp
+# directory — a development machine without /dev/shm runs one process. Also
+# where main.py keeps the pipeline-process lock.
+# CIVITAS_RAM_DIR overrides it (the test suite gives each run its own).
+RAM_DIR = os.environ.get("CIVITAS_RAM_DIR") or (
+    "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
+)
+_path = os.environ.get("THROTTLE_DB_PATH") or os.path.join(RAM_DIR, "civitas_throttle.db")
+
+# On the request path: a client held for long because another worker holds
+# the lock is worse than a limit that lets one request through.
+_BUSY_TIMEOUT_S = 2.0
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS windows (
+    bucket TEXT NOT NULL, key TEXT NOT NULL, window INTEGER NOT NULL,
+    count INTEGER NOT NULL, expires_at REAL NOT NULL,
+    PRIMARY KEY (bucket, key, window)
+);
+CREATE TABLE IF NOT EXISTS claims (
+    bucket TEXT NOT NULL, key TEXT NOT NULL,
+    claimed_at REAL NOT NULL, expires_at REAL NOT NULL,
+    PRIMARY KEY (bucket, key)
+);
+CREATE TABLE IF NOT EXISTS salt_days (
+    kind TEXT NOT NULL, date TEXT NOT NULL, salt BLOB NOT NULL,
+    PRIMARY KEY (kind, date)
+);
+CREATE INDEX IF NOT EXISTS windows_expiry ON windows (expires_at);
+CREATE INDEX IF NOT EXISTS claims_expiry ON claims (expires_at);
+"""
+
+_local = threading.local()
+# Every connection opened, with the lock its thread holds while using it, so
+# use_path can close them all — including those of threads that won't come
+# back to notice the path moved — but never one mid-use: a connection opened
+# with check_same_thread off and closed under another thread's query can
+# crash the interpreter (a CI run segfaulted at a test boundary, where the
+# test fixture calls use_path).
+_conns: list[tuple[sqlite3.Connection, threading.Lock]] = []
+_conns_lock = threading.Lock()
+_generation = 0  # bumped by use_path: every thread reconnects
+
+_PURGE_INTERVAL_S = 60.0
+_purge_lock = threading.Lock()
+_last_purge = 0.0
+
+
+def use_path(path: str) -> None:
+    """Point the store at `path` (tests; the path is otherwise fixed),
+    closing every connection to the previous one."""
+    global _path, _generation, _swept_day
+    with _conns_lock:
+        _path = path
+        _generation += 1
+        _salt_cache.clear()
+        _swept_day = None
+        in_use = []
+        for conn, lock in _conns:
+            # One in use is left to its thread, which closes it when it
+            # next notices the new generation (_conn).
+            if lock.acquire(timeout=_BUSY_TIMEOUT_S):
+                try:
+                    conn.close()
+                finally:
+                    lock.release()
+            else:
+                in_use.append((conn, lock))
+        _conns[:] = in_use
+
+
+def _open(path: str) -> sqlite3.Connection:
+    from app.sqlite_wal import switch_to_wal
+
+    # Two workers creating the store at once race for the switch.
+    if not switch_to_wal(path, _BUSY_TIMEOUT_S):
+        raise sqlite3.OperationalError("throttle store: could not switch to WAL")
+    # check_same_thread off only so use_path can close it; each connection
+    # is otherwise used by the one thread that opened it.
+    conn = sqlite3.connect(path, timeout=_BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False)
+    try:
+        # In RAM already: a sync would buy nothing.
+        conn.execute("PRAGMA synchronous=OFF")
+        # A deleted salt must be gone, not left in a freed page
+        # (_drop_salts also truncates the WAL, the other place it lingers).
+        conn.execute("PRAGMA secure_delete=ON")
+        conn.executescript(_SCHEMA)
+    except sqlite3.Error:
+        # Not kept, so the next call retries — close it, or each failed
+        # setup under contention would leave one open.
+        conn.close()
+        raise
+    return conn
+
+
+def _conn() -> tuple[sqlite3.Connection, threading.Lock]:
+    """This thread's connection for the current store, and its lock. Hold
+    the lock while using it — through _using(), which also checks the
+    connection is still current once the lock is held."""
+    while True:
+        conn = getattr(_local, "conn", None)
+        if conn is not None and _local.generation == _generation:
+            return conn, _local.lock
+        if conn is not None:
+            _discard(conn)  # outdated: use_path left it to us (it was in use)
+        # The path and its generation read together: a use_path between
+        # reading one and the other would tag a connection to the old store
+        # as current.
+        with _conns_lock:
+            path, generation = _path, _generation
+        conn = _open(path)
+        lock = threading.Lock()
+        with _conns_lock:
+            if generation != _generation:  # use_path ran while we opened
+                conn.close()
+                continue
+            _conns.append((conn, lock))
+        _local.conn, _local.lock, _local.generation = conn, lock, generation
+
+
+@contextmanager
+def _using():
+    """This thread's connection, locked for the block. use_path closes only
+    connections it can lock, and bumps the generation before it closes: a
+    connection whose generation is still current once its lock is held
+    cannot have been closed under us."""
+    while True:
+        conn, lock = _conn()
+        lock.acquire()
+        if _local.generation == _generation and getattr(_local, "conn", None) is conn:
+            break
+        lock.release()  # use_path ran between _conn() and the acquire
+    try:
+        yield conn
+    finally:
+        lock.release()
+
+
+def _discard(conn: sqlite3.Connection) -> None:
+    """Close a connection that can't be trusted any more, and forget it, so
+    this thread's next call opens a fresh one."""
+    with _conns_lock:
+        _conns[:] = [(c, lock) for c, lock in _conns if c is not conn]
+    try:
+        conn.close()
+    except sqlite3.Error:
+        pass
+    if getattr(_local, "conn", None) is conn:
+        _local.conn = None
+
+
+class _Txn:
+    """BEGIN IMMEDIATE ... COMMIT, rolled back on any error.
+
+    A COMMIT that fails (busy) leaves the transaction open, holding the
+    store's write lock: it is rolled back, and a connection that still can't
+    leave its transaction is discarded — reused, its next BEGIN would fail
+    and every other worker would wait on the lock it holds."""
+
+    def __enter__(self) -> sqlite3.Connection:
+        self.using = _using()
+        self.conn = self.using.__enter__()
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+        except BaseException:
+            self.using.__exit__(None, None, None)
+            raise
+        return self.conn
+
+    def __exit__(self, exc_type, *_exc) -> None:
+        try:
+            self.conn.execute("ROLLBACK" if exc_type else "COMMIT")
+        except sqlite3.Error:
+            try:
+                if self.conn.in_transaction:
+                    self.conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            if self.conn.in_transaction:
+                self.using.__exit__(None, None, None)
+                self.using = None
+                _discard(self.conn)
+            if exc_type is None:
+                raise
+        finally:
+            if self.using is not None:
+                self.using.__exit__(None, None, None)
+
+
+@dataclass(frozen=True)
+class Decision:
+    allowed: bool
+    remaining: int
+    # Epoch seconds. Allowed: when everything counted so far has aged out
+    # of the sliding window (the limit is whole again). Refused: the
+    # earliest moment the same request would be let through — the end of
+    # the current fixed window is not it, because most of that window
+    # still counts for a while after.
+    reset_at: int
+    # False when the store couldn't count the request (it was let through
+    # uncounted): `remaining` then describes nothing.
+    counted: bool = True
+
+
+def _retry_at(window: int, period: float, current: int, previous: int, limit: int, cost: int) -> int:
+    """When a request of `cost` refused now would next be allowed, given
+    `current` counted in this window and `previous` in the last one."""
+    start = window * period
+    room = limit - current - cost
+    if room >= 0 and previous > 0:
+        # Later in this window, once enough of the previous one has aged.
+        return math.ceil(start + (1 - room / previous) * period)
+    if limit - cost < 0:
+        return int(start + 2 * period)
+    # In the next window, where this one becomes the previous.
+    if current == 0:
+        return int(start + period)
+    fraction = max(0.0, 1 - (limit - cost) / current)
+    return math.ceil(start + (1 + fraction) * period)
+
+
+def _purge_expired(conn: sqlite3.Connection, now: float) -> None:
+    global _last_purge
+    with _purge_lock:
+        if now - _last_purge < _PURGE_INTERVAL_S:
+            return
+        _last_purge = now
+    conn.execute("DELETE FROM windows WHERE expires_at < ?", (now,))
+    conn.execute("DELETE FROM claims WHERE expires_at < ?", (now,))
+
+
+# The store's salts, one table for both kinds, each kept for its own time:
+#   key  client_key's: kept through the day after its own, so a rule can
+#        count a client's previous-day key and nothing restarts at midnight.
+#   day  derived_salt's (the visit counter's fallback): deleted when its day
+#        ends, the promise AGENTS.md §8 makes for visit hashes.
+_KEY_SALT, _DAY_SALT = "key", "day"
+_SALT_KEPT_DAYS_AFTER = {_KEY_SALT: 1, _DAY_SALT: 0}
+
+# kind -> (date, that day's salt, the previous day's or None) as last read
+# from the store, per process. Only a new day costs a write transaction;
+# every other key is made without one.
+_salt_cache: dict[str, tuple[str, bytes, bytes | None]] = {}
+_salt_lock = threading.Lock()
+_last_forget = -_PURGE_INTERVAL_S  # the first call always checks
+
+
+def _days_before(day: str, n: int) -> str:
+    return (date.fromisoformat(day) - timedelta(days=n)).isoformat()
+
+
+def _rotate(conn: sqlite3.Connection, kind: str, today: str) -> tuple[tuple | None, bytes | None, int]:
+    """In a transaction: make `kind`'s salt for `today` unless a later day's
+    exists, and delete the days it no longer keeps — together, so an ended
+    day's salt is gone only once a later day's is there to stop a worker
+    behind midnight from making it again. (today's row, yesterday's salt
+    when this kind keeps it, how many rows were deleted)."""
+    keep = _SALT_KEPT_DAYS_AFTER[kind]
+    conn.execute(
+        "INSERT OR IGNORE INTO salt_days (kind, date, salt) SELECT ?, ?, ? "
+        "WHERE NOT EXISTS (SELECT 1 FROM salt_days WHERE kind = ? AND date > ?)",
+        (kind, today, secrets.token_bytes(32), kind, today),
+    )
+    # Earlier days only, never "any other": a worker behind midnight must
+    # not delete the new day's salt another already made.
+    dropped = conn.execute(
+        "DELETE FROM salt_days WHERE kind = ? AND date < ?", (kind, _days_before(today, keep)),
+    ).rowcount
+    row = conn.execute("SELECT salt FROM salt_days WHERE kind = ? AND date = ?", (kind, today)).fetchone()
+    previous = None
+    if keep:
+        prior = conn.execute(
+            "SELECT salt FROM salt_days WHERE kind = ? AND date = ?", (kind, _days_before(today, 1)),
+        ).fetchone()
+        previous = prior[0] if prior else None
+    return row, previous, dropped
+
+
+def utc_today() -> str:
+    """The current UTC day, as the salts are dated — the one spelling of it,
+    here and in api/visits.py, whose salts can come from this store (tests
+    move this module's clock)."""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def _salts_for(kind: str, today: str) -> tuple[bytes | None, bytes | None]:
+    """`kind`'s salt for `today` (made if missing) and, for a kind kept past
+    its day, yesterday's if the store has it — never made: a key under a
+    salt nobody counted with would only find nothing.
+
+    (None, None) when another worker has already moved past `today`: this
+    one read the clock just before midnight. Making the day's salt again
+    then would bring back a salt that was deleted — so it doesn't, and the
+    caller treats it as the store being unavailable."""
+    with _salt_lock:
+        cached = _salt_cache.get(kind)
+        if cached is not None and cached[0] == today:
+            return cached[1], cached[2]
+    with _Txn() as conn:
+        row, previous, dropped = _rotate(conn, kind, today)
+    if dropped:
+        # Truncating can wait on another worker's read, so it never runs on
+        # a request: the minute tick (forget_stale_salt) does it.
+        global _truncate_pending
+        _truncate_pending = True
+    if row is None:
+        return None, None
+    with _salt_lock:
+        _salt_cache[kind] = (today, row[0], previous)
+    return row[0], previous
+
+
+_truncate_pending = False
+
+
+def _truncate_wal() -> None:
+    """Checkpoint the WAL and truncate it to nothing: its frames still hold
+    the page a deleted salt was on. Another worker's open read blocks it —
+    reported in the result, not raised — in which case the next
+    forget_stale_salt tick tries again."""
+    global _truncate_pending
+    try:
+        with _using() as conn:
+            busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+    except sqlite3.Error:
+        busy = 1
+        logger.warning("Could not truncate the throttle store's WAL", exc_info=True)
+    _truncate_pending = bool(busy)
+    if busy:
+        logger.info("Throttle store WAL still in use — truncating it on the next tick")
+
+
+# The UTC day this process last rotated the store's salts (forget_stale_salt).
+_swept_day: str | None = None
+
+
+def forget_stale_salt() -> None:
+    """Drop the salts nothing needs any more, each kind after its own time —
+    from this process's memory, and from the store — without waiting for a
+    new day's first key: with a salt gone, nothing made with it can be
+    recomputed from an address. The store is touched once per new day (and
+    while a WAL truncation is owed), not on every call; called about once a
+    minute (run_maintenance). Creates nothing where the store doesn't exist
+    yet."""
+    global _last_forget, _swept_day
+    today = utc_today()
+    with _salt_lock:
+        # A cache made yesterday also holds the day before's salt.
+        for kind in [k for k, cached in _salt_cache.items() if cached[0] != today]:
+            del _salt_cache[kind]
+        now = time.monotonic()
+        if now - _last_forget < _PURGE_INTERVAL_S:
+            return
+        _last_forget = now
+        due = _swept_day != today or _truncate_pending
+    if not due or not os.path.exists(_path):
+        return
+    try:
+        dropped = 0
+        if _swept_day != today:
+            with _Txn() as conn:
+                # Rotated, not deleted: see _rotate.
+                for kind in _SALT_KEPT_DAYS_AFTER:
+                    dropped += _rotate(conn, kind, today)[2]
+            _swept_day = today
+        if dropped or _truncate_pending:
+            _truncate_wal()
+    except sqlite3.Error:
+        logger.warning("Could not drop a stale throttle salt", exc_info=True)
+
+
+async def run_maintenance() -> None:
+    """Drop stale salts about once a minute, for the process's lifetime
+    (main.lifespan starts it in every role). Without it, a store with no
+    traffic after midnight would keep a salt past its time: the deletions
+    in _salts_for run only when a new day's first key is made."""
+    import asyncio
+
+    while True:
+        try:
+            await asyncio.to_thread(forget_stale_salt)
+        except Exception:
+            logger.warning("Throttle maintenance failed", exc_info=True)
+        await asyncio.sleep(_PURGE_INTERVAL_S)
+
+
+def derived_salt(purpose: str, date: str) -> bytes | None:
+    """A salt for `date`, the same in every process of this container, in
+    RAM and deleted when that UTC day ends: for a caller whose shared salt
+    is unavailable (visits' fallback). Not derived from the key salts, which
+    outlive their day. None if the store can't give one — or if `date` isn't
+    today: today's salt outlives an earlier day, so a hash under it would
+    stay recomputable after that day's salt is gone."""
+    today = utc_today()
+    if date != today:
+        return None
+    try:
+        salt, _previous = _salts_for(_DAY_SALT, today)
+    except sqlite3.Error:
+        return None
+    if salt is None:
+        return None
+    return hmac.new(salt, f"derived\x00{purpose}".encode(), hashlib.sha256).digest()
+
+
+class ClientKey(str):
+    """A client's key under today's salt, carrying its key under
+    yesterday's (`previous`, None when the store has no salt for
+    yesterday): hit and claim count both, so a rule holds across midnight."""
+
+    previous: str | None = None
+
+
+def _hmac_key(salt: bytes, message: bytes) -> str:
+    return hmac.new(salt, message, hashlib.sha256).hexdigest()[:32]
+
+
+def client_key(ip: str, purpose: str) -> ClientKey | None:
+    """The key a per-client limit counts `ip` under, for `purpose`, with its
+    key under yesterday's salt. A day's salt is deleted once the day after it ends
+    (the first key of the day after that, or the minute tick). Only
+    earlier days are deleted, never "any other": a worker that read the
+    clock just before midnight must not delete the new day's salt another
+    worker already made (and cached).
+
+    None when the store can't be read: hit and claim then let the request
+    through, as they would on their own failure — never one shared key,
+    which would count every affected client as one."""
+    today = utc_today()
+    try:
+        salt, previous = _salts_for(_KEY_SALT, today)
+    except sqlite3.Error:
+        logger.warning("Throttle salt unavailable — not limiting this request", exc_info=True)
+        return None
+    if salt is None:
+        return None
+    message = f"{purpose}\x00{ip}\x00".encode()
+    key = ClientKey(_hmac_key(salt, message))
+    key.previous = _hmac_key(previous, message) if previous is not None else None
+    return key
+
+
+def _previous_key(key: str) -> str | None:
+    return getattr(key, "previous", None)
+
+
+def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 1) -> Decision:
+    """Count `cost` units (one request, by default) against `limit` per
+    `period` seconds for `key` — or, for a None key (client_key failed),
+    let it through uncounted.
+
+    A refused request is not counted, so a client that keeps retrying
+    through a 429 is let back in as its earlier requests age out, as with
+    the per-process limiters this replaced.
+    """
+    now = time.time()
+    window = int(now // period)
+    elapsed = (now - window * period) / period
+    reset_at = int((window + 2) * period)
+    if key is None:
+        return Decision(True, limit, int((window + 1) * period), counted=False)
+    # Counted under today's key; read under yesterday's too (ClientKey).
+    keys = (str(key), _previous_key(key) or str(key))
+    try:
+        with _Txn() as conn:
+            conn.execute(
+                "INSERT INTO windows (bucket, key, window, count, expires_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (bucket, key, window) DO UPDATE SET count = count + excluded.count",
+                (bucket, str(key), window, cost, (window + 2) * period),
+            )
+            current, previous = conn.execute(
+                "SELECT COALESCE(SUM(CASE WHEN window = ? THEN count END), 0), "
+                "COALESCE(SUM(CASE WHEN window = ? THEN count END), 0) "
+                "FROM windows WHERE bucket = ? AND key IN (?, ?) AND window IN (?, ?)",
+                (window, window - 1, bucket, *keys, window, window - 1),
+            ).fetchone()
+            estimate = previous * (1 - elapsed) + current
+            allowed = estimate <= limit
+            if not allowed:
+                reset_at = _retry_at(window, period, current - cost, previous, limit, cost)
+                conn.execute(
+                    "UPDATE windows SET count = count - ? WHERE bucket = ? AND key = ? AND window = ?",
+                    (cost, bucket, str(key), window),
+                )
+            _purge_expired(conn, now)
+    except sqlite3.Error:
+        logger.warning("Throttle %r unavailable — allowing the request", bucket, exc_info=True)
+        return Decision(True, limit, int((window + 1) * period), counted=False)
+    remaining = max(0, math.floor(limit - estimate)) if allowed else 0
+    return Decision(allowed, remaining, reset_at)
+
+
+# The store's calls run on threads of their own: each is microseconds, but
+# on the default executor they would queue behind whatever holds it —
+# searches, PDF parses, model encodes, seconds each — and every limited
+# request would wait on those just to learn whether it may proceed.
+_executor = None
+_executor_lock = threading.Lock()
+
+
+async def run(fn, *args, **kwargs):
+    """fn(*args, **kwargs) off the event loop, on the store's own threads."""
+    import asyncio
+    import functools
+    from concurrent.futures import ThreadPoolExecutor
+
+    global _executor
+    if _executor is None:
+        with _executor_lock:
+            if _executor is None:
+                _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="throttle")
+    return await asyncio.get_running_loop().run_in_executor(_executor, functools.partial(fn, *args, **kwargs))
+
+
+def claim(bucket: str, key: str | None, *, period: float) -> bool:
+    """Claim `key` unless it was claimed less than `period` seconds ago.
+    True when this caller got it, and when the store can't answer (or `key`
+    is None: client_key failed)."""
+    if key is None:
+        return True
+    now = time.time()
+    previous = _previous_key(key)
+    try:
+        with _Txn() as conn:
+            # A claim made under yesterday's key (ClientKey) still holds.
+            held = previous is not None and conn.execute(
+                "SELECT 1 FROM claims WHERE bucket = ? AND key = ? AND claimed_at > ?",
+                (bucket, previous, now - period),
+            ).fetchone() is not None
+            won = not held and conn.execute(
+                "INSERT INTO claims (bucket, key, claimed_at, expires_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT (bucket, key) DO UPDATE SET claimed_at = excluded.claimed_at, "
+                "expires_at = excluded.expires_at WHERE claims.claimed_at <= ? "
+                "RETURNING claimed_at",
+                (bucket, str(key), now, now + period, now - period),
+            ).fetchone() is not None
+            _purge_expired(conn, now)
+    except sqlite3.Error:
+        logger.warning("Throttle %r unavailable — allowing the claim", bucket, exc_info=True)
+        return True
+    return won
+
+
+def clear(*buckets: str) -> None:
+    """Forget everything counted in `buckets` (tests reset limits this way)."""
+    marks = ",".join("?" * len(buckets))
+    try:
+        with _Txn() as conn:
+            conn.execute(f"DELETE FROM windows WHERE bucket IN ({marks})", buckets)
+            conn.execute(f"DELETE FROM claims WHERE bucket IN ({marks})", buckets)
+    except sqlite3.Error:
+        logger.warning("Throttle clear failed", exc_info=True)

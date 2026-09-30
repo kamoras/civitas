@@ -277,7 +277,7 @@ The pipeline is structured around a specific set of constraints that shape every
 
 A 100-senator + 435-representative full refresh requires 4–6 hours cold (warm: 45–90 minutes). Online/streaming processing is not viable at these volumes on the target hardware: two sentence-transformer models occupy ~90 MB each and the LLM ~900 MB (a separate service, used only by the Action Center — the member and justice pipelines make no LLM call). Batching allows us to control memory precisely, while a separate hourly pipeline handles the Action Center's lower-latency requirements.
 
-Each pipeline holds a database-level lock rather than a process-level one: a run row with `status = "running"`, which a partial UNIQUE index lets only one process insert at a time (`run_tracker.acquire_pipeline_lock_why`), so two backend processes overlapping during a Swarm rollout can't both start the same pipeline. Pipelines run as threads of the backend, so a restart kills them without letting them record it; on startup the backend marks every pipeline's leftover `running` row `stale` (`main._invalidate_orphaned_pipelines`), sparing only a Senate run whose lease still holds (it may be live in the other task), and a row older than 12 hours is cleared at the next acquisition. `check-and-deploy.sh` does not deploy while any pipeline is running.
+Each pipeline holds a database-level lock rather than a process-level one: a run row with `status = "running"`, which a partial UNIQUE index lets only one process insert at a time (`run_tracker.acquire_pipeline_lock_why`), so two backend processes overlapping during a Swarm rollout can't both start the same pipeline. Pipelines run as threads of the pipeline process (of the single backend under plain `docker compose up`), so a restart kills them without letting them record it; on startup that process marks every pipeline's leftover `running` row `stale` (`main._invalidate_orphaned_pipelines`), sparing only a Senate run whose lease still holds (it may be live in the other task), and a row older than 12 hours is cleared at the next acquisition. `check-and-deploy.sh` does not deploy while any pipeline is running.
 
 ### Why an Adversarial Data Architecture?
 
@@ -916,7 +916,7 @@ Every post goes through one function, `app/broadcast.publish`, which stores it a
 | `/feed/issues.xml`, `/feed/congress.xml`, `/feed/members.xml`, `/feed/elections.xml` | One topic (`broadcast.FEEDS`) |
 | `/feed/states/<ST>.xml` | One state's race posts, election-night counts and member spotlights |
 
-Anyone can follow a feed with a reader, a Discord or Slack bot, or their own program, and Civitas keeps no list of who does (AGENTS.md §8). The feeds are served by `app/api/feed.py` (50 newest entries, ETag/304) and cached by nginx for 5 minutes. Each entry carries what the Bluesky post's link card shows: the linked page's picture and description, read once from its Open Graph tags (`bluesky_utils.og_card`, the same reading the Bluesky card uses) and kept on the row (`card_image`, `card_image_alt`, `card_description`). The entry's content is HTML (the picture, the post, a "Read on Civitas" link, and the source article when the post restates one), with the description as its summary, the picture as an enclosure and a Media RSS thumbnail for readers and chat bots, and the source as a `related` link. The card is read right after the post is stored, so an unreadable page never holds a post back; the hourly pass (`broadcast.fill_missing_cards`) fills in any it missed from the last week. The feed itself never fetches anything. A post is in the feed whatever Bluesky does with it. A send Bluesky refuses is retried hourly (`broadcast.deliver_pending`), for at most three tries in all, only on the Eastern day it was written, since a post can say "Yesterday: …", and stopping after two refusals in a row, since each try is a login; election-night result posts are never resent (below). A send interrupted by a crash is never retried, so nothing is posted twice. The table survives an admin data reset (`RESET_KEEPS`): it is what the posting modules check (by each post's `subject`, e.g. `race:2026-SEN-GA`) before publishing again, so a reset neither empties the feeds nor re-posts the last few days.
+Anyone can follow a feed with a reader, a Discord or Slack bot, or their own program, and Civitas keeps no list of who does (AGENTS.md §8). The feeds are served by `app/api/feed.py` (50 newest entries, ETag/304) and cached by nginx for 5 minutes. Each entry carries what the Bluesky post's link card shows: the linked page's picture and description, read once from its Open Graph tags (`bluesky_utils.og_card`, the same reading the Bluesky card uses) and kept on the row (`card_image`, `card_image_alt`, `card_description`). The entry's content is HTML (the picture, the post, a "Read on Civitas" link, and the source article when the post restates one), with the description as its summary, the picture as an enclosure and a Media RSS thumbnail for readers and chat bots, and the source as a `related` link. The card is read right after the post is stored, so an unreadable page never holds a post back; the hourly pass (`broadcast.fill_missing_cards`) fills in any it missed from the last week. The feed itself never fetches anything. Each page a post links to draws its own card at `/api/og` (`frontend/src/app/api/og/route.tsx`): an issue, a member, a state's ballot, and a Congress day or week, whose tiles give each chamber's record votes or say why there are none (not in session, no record yet), never a zero for a day with no record. A post is in the feed whatever Bluesky does with it. A send Bluesky refuses is retried hourly (`broadcast.deliver_pending`), for at most three tries in all, only on the Eastern day it was written, since a post can say "Yesterday: …", and stopping after two refusals in a row, since each try is a login; election-night result posts are never resent (below). A send interrupted by a crash is never retried, so nothing is posted twice. The table survives an admin data reset (`RESET_KEEPS`): it is what the posting modules check (by each post's `subject`, e.g. `race:2026-SEN-GA`) before publishing again, so a reset neither empties the feeds nor re-posts the last few days.
 
 The posting modules below decide what to publish and when. The Civitas Bluesky account (`@civitas-research.org`) carries the same posts as the feeds, except any Bluesky still hadn't taken by the end of that day (an election-night result it refused, at once) and a correction of a flip it never showed:
 
@@ -1309,12 +1309,19 @@ blue/green script:
                                       │ proxy_pass (overlay network DNS)
                  ┌────────────────────┴────────────────────┐
                  ▼                                         ▼
-          backend (task) ──────┐                    frontend (task)
-    start-first rolling update │              start-first rolling update
-                                ▼
-                        llama-server (task)
-                     stop-first rolling update
+   backend (task: read-only API)   pipeline (task)      frontend (task)
+    start-first rolling update    stop-first update    start-first update
+                                         │
+                                         ▼
+                                 llama-server (task)
+                              stop-first rolling update
 ```
+
+`backend` and `pipeline` run the same image in two roles
+(`PROCESS_ROLE=api` / `worker`): nginx sends page reads to `backend` and
+`/api/admin/` plus every pipeline-trigger endpoint to `pipeline`, which also
+runs the nightly and hourly schedule. Pipelines therefore never share a
+Python process, or a memory limit, with the requests visitors make.
 
 `docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
 civitas` follows this sequence, all built into Swarm rather than scripted:
@@ -1331,7 +1338,7 @@ civitas` follows this sequence, all built into Swarm rather than scripted:
    reverts to the previous image automatically — no manual intervention
 
 Data is persisted in the `civitas_app_data` Docker named volume, mounted at
-`/data` inside the backend container. The SQLite databases (`civitas.db`,
+`/data` inside the backend and pipeline containers. The SQLite databases (`civitas.db`,
 `vectors.db`) and model-version marker
 live here and survive image rebuilds and stack redeploys — the volume is
 `external: true` in `docker-compose.swarm.yml`, so `docker stack deploy`
@@ -1346,12 +1353,15 @@ Host ports    Swarm service   Purpose
                               published to the host — port-forwarded
                               externally, don't change without updating
                               that forwarding rule)
-—             backend         FastAPI backend (overlay-network only)
+—             backend         FastAPI read-only API, 2 worker processes
+                              (overlay-network only)
+—             pipeline        Same image: scheduler, pipelines, admin API
+                              (overlay-network only)
 —             frontend        Next.js frontend (overlay-network only)
 —             llama-server    llama.cpp inference (overlay-network only)
 ```
 
-Backend, frontend, and llama-server publish **no host port** — Swarm's
+Backend, pipeline, frontend, and llama-server publish **no host port** — Swarm's
 host-mode port publishing can't restrict to `127.0.0.1` the way plain
 `docker run -p 127.0.0.1:PORT:PORT` can (confirmed live: it always binds
 `0.0.0.0`), so rather than accept LAN-wide exposure of ports that were

@@ -114,10 +114,18 @@ def test_every_block_that_adds_a_header_keeps_the_security_headers():
 
 
 def test_server_level_includes_the_security_headers():
+    """Every server a client can reach. The loopback-only "api-misses"
+    server is not one: its responses reach clients only through the public
+    server's /api/ locations, which add the headers — added there too,
+    each would go out twice."""
     servers = [b for b in _walk(_parse(CONF.read_text())) if b.head == "server"]
-    assert servers
-    for server in servers:
+    public = [s for s in servers if not any(d.startswith("listen 127.0.0.1:") for d in s.directives)]
+    assert public and len(public) < len(servers)
+    for server in public:
         assert INCLUDE in server.directives
+    for server in servers:
+        if server not in public:
+            assert INCLUDE not in server.directives
 
 
 def test_redirects_nginx_makes_are_relative():
@@ -145,6 +153,35 @@ def test_security_headers_live_only_in_the_snippet():
             d.startswith(f"add_header {name} ") and d.endswith(" always")
             for d in snippet
         ), name
+
+
+def test_pages_leave_marked_no_transform():
+    """Without it Cloudflare injects its analytics beacon and a script that
+    sets a one-year cookie into every page (see the map's comment). Each
+    location that proxies to the frontend and isn't a static-asset or image
+    route must replace Next's Cache-Control with the no-transform one."""
+    root = _parse(CONF.read_text())
+    maps = [
+        b for b in _walk(root) if b.head.startswith("map $upstream_http_cache_control")
+    ]
+    assert maps and any(
+        '"$upstream_http_cache_control, no-transform"' in d for d in maps[0].directives
+    )
+    page_locations = [
+        b
+        for b in _walk(root)
+        if b.head.startswith("location")
+        and "proxy_pass http://$frontend_upstream" in b.directives
+        and b.head
+        not in ("location /_next/static/", "location /photo/", "location = /api/og")
+    ]
+    assert {b.head for b in page_locations} >= {"location /", "location ^~ /admin"}
+    for b in page_locations:
+        assert "proxy_hide_header Cache-Control" in b.directives, b.head
+        assert (
+            "add_header Cache-Control $cache_control_no_transform always"
+            in b.directives
+        ), b.head
 
 
 def test_the_image_copies_the_snippet_where_the_config_includes_it():

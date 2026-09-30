@@ -326,8 +326,8 @@ def _purge_member_traces(db: Session, member, chamber: str) -> None:
     # that outlives the member's term, and it still reads correctly under
     # politician_name. Only the link is severed, so the explore page stops
     # pointing at a profile that no longer exists. The matching vec_explore
-    # metadata is left as-is: it is only ever read as a search filter, and
-    # nothing can ask for a purged member's id once the profile is gone.
+    # metadata follows on the next Explore run, which writes changed
+    # metadata onto the index in place (vector_store.update_explore_metadata).
     #
     # Nor when the same person serves on in the other chamber under the
     # same id: /politicians/{id} still reaches them, which is where their

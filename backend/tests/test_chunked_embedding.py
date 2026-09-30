@@ -93,10 +93,10 @@ class _FakeModel:
             return text.split()
 
     def encode(self, texts, **_kwargs):
-        out = np.zeros((len(texts), vs.EMBEDDING_DIMENSIONS), dtype=np.float32)
+        out = np.zeros((len(texts), vs.SIMILARITY_DIMENSIONS), dtype=np.float32)
         for i, text in enumerate(texts):
             for word in text.lower().split():
-                out[i, hash(word) % vs.EMBEDDING_DIMENSIONS] += 1.0
+                out[i, hash(word) % vs.SIMILARITY_DIMENSIONS] += 1.0
         norms = np.linalg.norm(out, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         return out / norms
@@ -186,7 +186,7 @@ class TestDeepPassageRetrieval:
         vector_index.embed_explore_documents([
             _doc(1, "One", FILLER), _doc(2, "Two", FILLER),
         ])
-        assert vector_index.get_embedded_explore_ids() == {1, 2}
+        assert set(vector_index.get_embedded_hashes()) == {1, 2}
 
     def test_empty_index_still_reports_not_ready(self, vector_index):
         assert vector_index.search_explore_documents("anything", n_results=5) is None
@@ -217,3 +217,96 @@ class TestIndexIdentity:
         measured = float(vs._get_meta(conn, "explore_chunks_per_doc"))
         actual = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
         assert measured == pytest.approx(actual)
+
+
+class TestSharedAcrossProcesses:
+    """The pipeline process writes this file while the API processes search
+    it (settings.PROCESS_ROLE), so a write must not hold reads off."""
+
+    def test_the_index_is_in_wal_mode(self, vector_index):
+        conn = vector_index.get_vec_conn()
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+    def test_a_search_is_not_held_off_by_another_process_writing(self, vector_index, monkeypatch):
+        import sqlite3
+
+        monkeypatch.setattr(vector_index, "SQLITE_BUSY_TIMEOUT_S", 0.5)
+        vector_index.embed_explore_documents([_doc(1, "Wellfield rule", NEEDLE)])
+        writer = sqlite3.connect(vector_index._VECTOR_DB_PATH, timeout=0.5)
+        try:
+            # The pipeline process mid-write: under the default rollback
+            # journal this lock blocks every reader, and the search below
+            # would fail "database is locked".
+            writer.execute("BEGIN EXCLUSIVE")
+            writer.execute("INSERT INTO vec_meta (key, value) VALUES ('x', 'y')")
+            reader = sqlite3.connect(vector_index._VECTOR_DB_PATH, timeout=0.5)
+            try:
+                assert reader.execute("SELECT COUNT(*) FROM vec_meta").fetchone() is not None
+            finally:
+                reader.close()
+            assert vector_index.search_explore_documents("wellfield contamination", n_results=3)
+        finally:
+            writer.rollback()
+            writer.close()
+
+
+def test_a_busy_file_does_not_hold_the_first_search_up(tmp_path, monkeypatch):
+    # First deploy: the file is still in rollback mode and the pipeline
+    # process is mid-write. Switching needs the file to itself; waiting the
+    # full busy timeout would stall every search behind _vec_lock.
+    import sqlite3
+    import time
+
+    from app.pipeline import vector_store as vs
+
+    path = str(tmp_path / "vectors.db")
+    writer = sqlite3.connect(path, isolation_level=None)
+    writer.execute("CREATE TABLE t (x)")
+    writer.execute("BEGIN EXCLUSIVE")
+    try:
+        monkeypatch.setattr(vs, "_VECTOR_DB_PATH", path)
+        started = time.monotonic()
+        assert not vs._switch_to_wal()  # busy: gives up quickly
+        assert time.monotonic() - started < 5
+    finally:
+        writer.execute("ROLLBACK")
+        writer.close()
+    assert vs._switch_to_wal()  # free now: switches
+    follower = sqlite3.connect(path)
+    assert follower.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    follower.close()
+
+
+def test_a_switch_that_failed_at_open_is_retried_later(tmp_path, monkeypatch):
+    # The open connection is kept for the process's life: one failed try at
+    # open must not leave the file in rollback mode until a restart.
+    import sqlite3
+
+    from app.pipeline import vector_store as vs
+
+    path = str(tmp_path / "vectors.db")
+    monkeypatch.setattr(vs, "_VECTOR_DB_PATH", path)
+    monkeypatch.setattr(vs, "_vec_conn", None)
+    monkeypatch.setattr(vs, "SQLITE_BUSY_TIMEOUT_S", 1)  # keep the test quick
+    writer = sqlite3.connect(path, isolation_level=None)
+    writer.execute("CREATE TABLE t (x)")
+    writer.execute("BEGIN EXCLUSIVE")
+    try:
+        conn = vs.get_vec_conn()
+    except sqlite3.OperationalError:
+        conn = None  # schema setup can't proceed under the exclusive lock either
+    writer.execute("ROLLBACK")
+    writer.close()
+    if conn is None:
+        conn = vs.get_vec_conn()
+    monkeypatch.setattr(vs, "_wal_retry_at", 0.0)  # the minute has passed
+    started = []
+    monkeypatch.setattr(vs.threading, "Thread", lambda target, **_kw: type(
+        "T", (), {"start": lambda self: started.append(target)})())
+    vs.get_vec_conn()
+    assert len(started) == 1  # handed to a thread, off the caller's path
+    started[0]()  # the thread's run
+    assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    assert vs._wal_retry_at is None
+    conn.close()
+    monkeypatch.setattr(vs, "_vec_conn", None)

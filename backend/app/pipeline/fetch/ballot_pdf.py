@@ -56,20 +56,28 @@ needs a real November PDF to build the pattern against, the same "don't
 guess the format" rule this whole module follows — not implemented yet.
 """
 
+import asyncio
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import httpx
 import pdfplumber
 import io
 
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.database import off_loop
+from app.pipeline.cache import api_cache_get, api_cache_set_async
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town
+from app.pipeline.fetch.http_utils import retryable_status
 
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_HOURS = 12
+# How long a failure that would repeat (a 4xx, a PDF that parses to nothing)
+# is remembered: the ballot route's own failure response lasts seconds
+# (response_helpers.FAILURE_RETRY_S), and each retry would otherwise fetch
+# and parse the whole PDF again.
+_FAILED_TTL_HOURS = 1
 
 # A candidate line: NAME (all-caps words, permitting mixed-case runs like
 # "DiZOGLIO"/"McLAUGHLIN"/"DeCRISTOFARO") then a street address (starts
@@ -228,7 +236,7 @@ def _parse_column(text: str) -> list[dict]:
 
 async def fetch_town_ballot_pdf(
     client: httpx.AsyncClient, db, town: str,
-    spend: Callable[[int], None] | None = None,
+    spend: Callable[[int], Awaitable[None]] | None = None,
 ) -> dict | None:
     """Contests parsed from `town`'s real official ballot PDF, or None on
     missing config or a fetch/parse failure. Same None-vs-empty-list
@@ -240,41 +248,72 @@ async def fetch_town_ballot_pdf(
         return None
 
     cache_key = f"ballot-pdf-{source['url']}"
-    cached = api_cache_get(db, "ballot_pdf", cache_key, max_age_hours=CACHE_TTL_HOURS)
+    failed_key = f"ballot-pdf-failed-{source['url']}"
+
+    def cached_reads(session):
+        return (
+            api_cache_get(session, "ballot_pdf", cache_key, max_age_hours=CACHE_TTL_HOURS),
+            api_cache_get(session, "ballot_pdf", failed_key, max_age_hours=_FAILED_TTL_HOURS),
+        )
+
+    # Off the event loop, like every database call on this request path.
+    cached, failed = await off_loop(db, cached_reads)
     if cached is not None:
         contests = cached.get("contests")
         return {"contests": contests, "sourceUrl": source["url"]} if contests is not None else None
+    if failed:
+        # Failed the same way a moment ago and would again: the page says
+        # ingest_failed without downloading and parsing the PDF once more.
+        return None
+
+    async def remember_failure(reason: str) -> None:
+        await api_cache_set_async(
+            db, "ballot_pdf", failed_key, {"failed": reason}, normal_ttl_hours=_FAILED_TTL_HOURS,
+        )
 
     # A public route's upstream budget (api/rate_limit.py), charged only
     # for a fetch the cache can't answer; it raises to refuse one.
     if spend is not None:
-        spend(1)
+        await spend(1)
     try:
         response = await client.get(source["url"], timeout=30.0)
         response.raise_for_status()
         pdf_bytes = response.content
     except httpx.HTTPStatusError as exc:
-        logger.warning("Ballot PDF fetch failed for %s: HTTP %d", town, exc.response.status_code)
+        status = exc.response.status_code
+        logger.warning("Ballot PDF fetch failed for %s: HTTP %d", town, status)
+        if not retryable_status(status):
+            # Not a moment's error (gone, moved, malformed): asking again
+            # soon gets the same answer. A refusal, a rate limit or a 5xx
+            # is not remembered.
+            await remember_failure(f"HTTP {status}")
         return None
     except Exception:
         logger.exception("Ballot PDF fetch failed for %s", town)
         return None
 
     try:
-        contests = _parse_pdf(pdf_bytes, source["column_bounds"])
+        # pdfplumber is CPU-bound: on a thread, so the API worker keeps
+        # serving while it runs.
+        contests = await asyncio.to_thread(_parse_pdf, pdf_bytes, source["column_bounds"])
     except Exception:
         logger.exception("Ballot PDF parse failed for %s", town)
+        await remember_failure("parse error")
         return None
 
     if not contests:
         # A real ballot PDF with zero parseable contests almost certainly
         # means the format shifted (new election, new layout) rather than
         # a genuinely contest-less ballot — never cache a null result as
-        # if it were confirmed-empty.
+        # if it were confirmed-empty. Remembered as a failure instead, for
+        # a while: the same bytes would parse the same way.
         logger.warning("Ballot PDF for %s parsed to zero contests — not caching", town)
+        await remember_failure("no contests parsed")
         return None
 
-    api_cache_set(db, "ballot_pdf", cache_key, {"contests": contests}, normal_ttl_hours=CACHE_TTL_HOURS)
+    await api_cache_set_async(
+        db, "ballot_pdf", cache_key, {"contests": contests}, normal_ttl_hours=CACHE_TTL_HOURS,
+    )
     return {"contests": contests, "sourceUrl": source["url"]}
 
 

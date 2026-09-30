@@ -8,6 +8,15 @@ is registered, and while it is held nothing new registers. Both happen under
 one lock, so there is no gap between the check and the hold. A hand-kept
 list of thread names or per-job flags goes stale the first time someone
 adds a job and forgets it.
+
+It is also where the read-only API process (settings.PROCESS_ROLE == "api")
+refuses background work. Production runs the pipeline in its own process so
+that a run can't hold the interpreter lock or the memory page requests need;
+nginx sends every endpoint that starts one to that process. A trigger that
+reaches the API process anyway (a route nginx wasn't told about) is refused
+here, loudly, rather than quietly running a pipeline beside page requests —
+and outside the pipeline process's registry, where the data reset would not
+see it.
 """
 
 import itertools
@@ -33,7 +42,22 @@ class WritesHeld(RuntimeError):
     """A writer was refused: exclusive() is held."""
 
 
+class WritesElsewhere(RuntimeError):
+    """A writer was refused: this is the read-only API process, and
+    background work runs in the pipeline process (settings.PROCESS_ROLE)."""
+
+
+def writers_allowed() -> bool:
+    """Whether this process may start background writers — every role but
+    the read-only API."""
+    from app.config import settings
+
+    return settings.PROCESS_ROLE != "api"
+
+
 def _register(name: str) -> int:
+    if not writers_allowed():
+        raise WritesElsewhere(f"{name} not started: this process serves reads only; it runs on the pipeline service")
     with _lock:
         if _exclusive:
             raise WritesHeld(f"{name} not started: the database is held for a data reset")

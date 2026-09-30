@@ -173,6 +173,7 @@ import statistics
 from datetime import date
 
 from app.atomic_write import update_json_file
+from app.file_cache import Stamp, new_reload_lock
 from app.config_definitions import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     CONSTITUENT_MIN_VOTES,
@@ -304,21 +305,28 @@ _state_pvi_cache: dict[str, int] | None = None
 _PVI_PERSISTENT_DIR = "/data"
 
 
-def _read_pvi_json(filename: str) -> dict:
+def _read_pvi_json(filename: str, *, report_unreadable: bool = False) -> dict:
     """Read a PVI JSON file, preferring the persistent volume's
     auto-refreshed copy (/data/, written by an automated fetch module) over
     the bundled git-tracked fallback (app/data/, updated only by manually
     running a scripts/fetch_*.py script). Same override pattern as
-    transform/committee_data.py's loader."""
-    import json
+    transform/committee_data.py's loader.
+
+    report_unreadable: a persistent copy that exists but can't be read right
+    now raises file_cache.Uncached with the fallback, so a stamped cache
+    retries instead of keeping the fallback until the file next changes."""
     import pathlib
+
+    from app.file_cache import Uncached, read_json_preferring
+
     bundled_dir = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
-    for directory in (pathlib.Path(_PVI_PERSISTENT_DIR), bundled_dir):
-        try:
-            return json.loads((directory / filename).read_text())
-        except Exception:
-            continue
-    return {}
+    try:
+        data = read_json_preferring(pathlib.Path(_PVI_PERSISTENT_DIR) / filename, bundled_dir / filename, default={})
+    except Uncached as unreadable:
+        if report_unreadable:
+            raise
+        data = unreadable.value
+    return data if isinstance(data, dict) else {}
 
 
 def _state_pvi() -> dict[str, int]:
@@ -334,9 +342,17 @@ def _state_pvi() -> dict[str, int]:
     Missing data is never punitive — the same degrade-gracefully
     convention as every other loader in this file.
     """
+    from app.file_cache import Uncached
+
     global _state_pvi_cache
     if _state_pvi_cache is None:
-        raw = _read_pvi_json("state_pvi.json")
+        try:
+            raw = _read_pvi_json("state_pvi.json", report_unreadable=True)
+        except Uncached as unreadable:
+            # A volume copy that exists but can't be read right now: its
+            # fallback serves this once, not for the life of the process.
+            raw = unreadable.value
+            return {k: int(v) for k, v in (raw.get("states") or {}).items()}
         if raw.get("states"):
             _state_pvi_cache = {k: int(v) for k, v in raw["states"].items()}
         else:
@@ -348,6 +364,8 @@ def _state_pvi() -> dict[str, int]:
     return _state_pvi_cache
 
 _member_ideal_points_cache: dict | None = None
+_member_ideal_points_stamp: Stamp = None
+_member_ideal_points_lock = new_reload_lock()
 
 
 _MEMBER_IDEAL_POINTS_PATH = "/data/member_ideal_points.json"
@@ -383,22 +401,37 @@ def _member_ideal_points(chamber: str) -> dict:
     slowly week to week). Missing data is never punitive — same
     convention as every other loader in this file.
     """
-    global _member_ideal_points_cache
-    if _member_ideal_points_cache is None:
-        import json
-        import pathlib
-        path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
+    import pathlib
+
+    from app.file_cache import Uncached, read_json, reload_if_moved
+
+    global _member_ideal_points_cache, _member_ideal_points_stamp
+    path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
+
+    def read() -> dict:
         try:
-            _member_ideal_points_cache = json.loads(path.read_text())
-        except Exception:
-            logger.warning(
-                "member_ideal_points.json unavailable — position-congruence "
-                "component will be skipped for every member until the first "
-                "successful Voteview ingest (fetch/voteview.py, runs "
-                "automatically each pipeline run)"
-            )
-            _member_ideal_points_cache = {}
-    chamber_data = _member_ideal_points_cache.get(chamber)
+            data = read_json(path)
+        except OSError:
+            logger.warning("member_ideal_points.json unreadable — retrying on next use", exc_info=True)
+            raise Uncached({}) from None
+        if isinstance(data, dict):
+            return data
+        logger.warning(
+            "member_ideal_points.json unavailable — position-congruence "
+            "component will be skipped for every member until the first "
+            "successful Voteview ingest (fetch/voteview.py, runs "
+            "automatically each pipeline run)"
+        )
+        return {}
+
+    # Rewritten each run in the pipeline process; read by the API processes'
+    # score breakdowns (explain_scores), which reload when it moves.
+    with _member_ideal_points_lock:
+        _member_ideal_points_cache, _member_ideal_points_stamp = reload_if_moved(
+            [path], _member_ideal_points_cache, _member_ideal_points_stamp, read,
+        )
+        points = _member_ideal_points_cache
+    chamber_data = points.get(chamber)
     return chamber_data if isinstance(chamber_data, dict) else {}
 
 
@@ -477,6 +510,13 @@ def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
 
 
 _district_pvi_cache: dict[str, int] | None = None
+# The stamp (file_cache.files_stamp) of the live file when _district_pvi_cache
+# was loaded. The Supplementary run rewrites /data/district_pvi.json in the
+# pipeline process, and the elections API reads it in the API processes
+# (settings.PROCESS_ROLE) — the writer's reset of _district_pvi_cache only
+# reaches its own process, so the readers notice the new file by its mtime.
+_district_pvi_stamp: Stamp = None
+_district_pvi_lock = new_reload_lock()
 
 
 def _district_pvi() -> dict[str, int]:
@@ -493,15 +533,29 @@ def _district_pvi() -> dict[str, int]:
     ~20% of the time, when the seat actually elected exactly that
     platform.
     """
-    global _district_pvi_cache
-    if _district_pvi_cache is None:
-        raw = _read_pvi_json("district_pvi.json")
+    import pathlib
+
+    from app.file_cache import Uncached, reload_if_moved
+
+    global _district_pvi_cache, _district_pvi_stamp
+
+    def parse(raw: dict) -> dict[str, int]:
         if raw.get("districts"):
-            _district_pvi_cache = {k: int(v) for k, v in raw["districts"].items()}
-        else:
-            logger.warning("district_pvi.json unavailable — falling back to state PVI")
-            _district_pvi_cache = {}
-    return _district_pvi_cache
+            return {k: int(v) for k, v in raw["districts"].items()}
+        logger.warning("district_pvi.json unavailable — falling back to state PVI")
+        return {}
+
+    def read() -> dict[str, int]:
+        try:
+            return parse(_read_pvi_json("district_pvi.json", report_unreadable=True))
+        except Uncached as unreadable:
+            raise Uncached(parse(unreadable.value)) from None
+
+    with _district_pvi_lock:
+        _district_pvi_cache, _district_pvi_stamp = reload_if_moved(
+            [pathlib.Path(_PVI_PERSISTENT_DIR) / "district_pvi.json"], _district_pvi_cache, _district_pvi_stamp, read,
+        )
+        return _district_pvi_cache
 
 
 def get_state_pvi_map() -> dict[str, int]:

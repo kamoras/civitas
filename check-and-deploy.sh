@@ -45,8 +45,9 @@ if [[ "$LOCAL" == "$REMOTE" ]]; then
   exit 0   # nothing new
 fi
 
-# Deploying restarts the backend service, which kills any pipeline run in
-# progress (observed 2026-07: a deploy landed 11 minutes into a manually-
+# Deploying restarts the pipeline service (docker-compose.swarm.yml; it was
+# the backend service until the API and pipeline were split into two), which
+# kills any pipeline run in progress (observed 2026-07: a deploy landed 11 minutes into a manually-
 # triggered House pipeline run, which then failed with "Cleared by admin
 # (container restart)" — that particular case was an intentional deploy-
 # over, but an *unintended* collision with the nightly scheduled run is
@@ -64,10 +65,10 @@ fi
 # as "no pipeline running" and deploys anyway: exactly the three restarts
 # (18:47, 19:01, 19:16 UTC that day) that killed the House run, each one
 # lining up second-for-second with an ordinary "deploy OK" log entry.
-# civitas_nginx is the only one of these three services still `deploy`-
-# published under Swarm (host port 8081 — see docker-compose.swarm.yml),
-# and it proxies /api/* straight through to backend on the overlay network,
-# so it reaches the same endpoint. Also fail closed now: an unreachable
+# civitas_nginx is the only service still `deploy`-published under Swarm
+# (host port 8081 — see docker-compose.swarm.yml), and it proxies
+# /api/admin/ to the pipeline service on the overlay network — the process
+# whose memory holds the run flags this reads. Also fail closed now: an unreachable
 # admin API is ambiguous, not evidence nothing is running, so a curl error
 # defers the same as a confirmed-running pipeline instead of deploying
 # through it blind.
@@ -78,15 +79,55 @@ fi
 # pipeline run that starts mid-build sails right through. Second call
 # sits immediately before the stack deploy, as close to the actual
 # restart as this script gets.
+# The pipeline's status asked of its own container, bypassing nginx: the
+# admin API on its loopback, with the token the container already has from
+# .env. Fails (non-zero, no output) when no pipeline container is running
+# here or it doesn't answer.
+pipeline_status_directly() {
+  local container
+  container=$(docker ps -q --filter "label=com.docker.swarm.service.name=civitas_pipeline" | head -n1)
+  [[ -n "$container" ]] || return 1
+  docker exec "$container" python -c '
+import os, sys, urllib.request
+req = urllib.request.Request("http://localhost:8000/api/admin/pipeline/status",
+                             headers={"Authorization": "Bearer " + os.environ.get("ADMIN_TOKEN", "")})
+try:
+    sys.stdout.write(urllib.request.urlopen(req, timeout=5).read().decode())
+except Exception:
+    sys.exit(1)
+' 2>/dev/null
+}
+
 _busy_reason=""
 pipeline_is_busy() {
   local admin_token status
   _busy_reason=""
   admin_token=$(grep '^ADMIN_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
   [[ -z "$admin_token" ]] && return 1   # not configured — can't check, don't block
+  # Through nginx first; when that fails, from inside the pipeline's own
+  # container — a broken nginx (the release this deploy would fix) must not
+  # read as a pipeline that can't be seen, or every deploy defers forever.
   if ! status=$(curl -fsS --max-time 5 \
     -H "Authorization: Bearer $admin_token" \
-    "http://localhost:8081/api/admin/pipeline/status" 2>/dev/null); then
+    "http://localhost:8081/api/admin/pipeline/status" 2>/dev/null) \
+    && ! status=$(pipeline_status_directly); then
+    # The status lives in the pipeline service. If that service exists and
+    # has no task running or starting — a starting task may already be
+    # running its startup jobs before its healthcheck passes — nothing can
+    # be running in it, and deferring would block the very deploy that
+    # fixes it, forever. A crash-looping task spends most of its time
+    # "Starting", but its restart_policy (max_attempts: 3,
+    # docker-compose.swarm.yml) ends the loop within minutes, and from
+    # then on this lets the fix through (live-checked on a swarm).
+    # Only a listing that succeeded counts: a `docker service ps` that
+    # failed says nothing about the tasks, and must defer like the curl.
+    local tasks
+    if docker service inspect civitas_pipeline >/dev/null 2>&1 \
+      && tasks=$(docker service ps civitas_pipeline --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null) \
+      && ! grep -qE '^(Running|Starting)' <<<"$tasks"; then
+      log "pipeline status unreachable and civitas_pipeline has no running or starting task — nothing to wait for"
+      return 1
+    fi
     _busy_reason="couldn't reach pipeline status"
     return 0
   fi
@@ -108,6 +149,14 @@ pipeline_is_busy() {
   # their turn — exactly the case this guard exists for. The admin
   # endpoint has always published the field; only this tuple was short.
   #
+  # exploreIndexIsRebuilding: a rebuild of the Explore vector index (at
+  # start, in an Explore run, or an admin re-embed) runs twenty-odd minutes
+  # on the Pi with semantic search off; a restart throws it away and the
+  # next start begins it again.
+  #
+  # exploreIsRunning: an Explore run holding its lease — a triggered or
+  # startup run has no run row, and its top-up can run twenty-odd minutes.
+  #
   # A killed run's row is swept on the next startup
   # (main._invalidate_orphaned_pipelines, every pipeline's table since
   # 2026-09-27); before that only the Senate's was, and a killed election
@@ -120,10 +169,11 @@ except ValueError:
     sys.exit(1)
 sys.exit(0 if any(d.get(k) for k in
     ("isRunning", "houseIsRunning", "stockTradesIsRunning",
-     "supplementaryIsRunning", "electionIsRunning", "dataResetIsRunning")
+     "supplementaryIsRunning", "electionIsRunning", "dataResetIsRunning",
+     "exploreIndexIsRebuilding", "exploreIsRunning")
 ) else 1)
 '; then
-    _busy_reason="a pipeline or data reset is running"
+    _busy_reason="a pipeline, data reset, Explore run or Explore index rebuild is running"
     return 0
   fi
   # The hourly action refresh is waited for too, but only while it is
@@ -176,6 +226,34 @@ if [[ -z "${FORCE_DEPLOY:-}" ]] && command -v gh >/dev/null 2>&1; then
   esac
 fi
 
+# Whether every replica `service` wants is running the service's current
+# image. With a HEALTHCHECK, Swarm holds a task in "starting" until it
+# passes, so "Running" here means healthy. The image comparison is what
+# makes this about the new release: during a start-first update the old
+# task is Running too, and wait_for_rollout's state check alone relies on
+# Swarm having flipped UpdateStatus to "updating" before its first read.
+# The two sides are compared in one form (normalize_image).
+# An image reference in one form: `docker service ps` prints the short one,
+# the spec may hold a digest or the registry-qualified one.
+normalize_image() {
+  local ref="${1%%@*}"
+  ref="${ref#docker.io/}"
+  ref="${ref#library/}"
+  echo "$ref"
+}
+
+service_is_up() {
+  local service="$1" desired image running
+  desired=$(docker service inspect "$service" --format '{{.Spec.Mode.Replicated.Replicas}}' 2>/dev/null) || return 1
+  image=$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null) || return 1
+  image=$(normalize_image "$image")
+  running=$(docker service ps "$service" --filter desired-state=running --format '{{.Image}}|{{.CurrentState}}' 2>/dev/null \
+    | while IFS='|' read -r task_image task_state; do
+        [[ "$(normalize_image "$task_image")" == "$image" && "$task_state" == Running* ]] && echo x
+      done | wc -l)
+  [[ -n "$image" && "$desired" =~ ^[0-9]+$ && "$desired" -gt 0 && "$running" -ge "$desired" ]]
+}
+
 wait_for_rollout() {
   local service="$1" timeout="${2:-180}"
   for i in $(seq 1 "$timeout"); do
@@ -183,11 +261,30 @@ wait_for_rollout() {
     state=$(docker service inspect "$service" --format '{{.UpdateStatus.State}}' 2>/dev/null || echo "")
     case "$state" in
       completed|"")
-        log "$service rollout complete after ${i}s"
-        return 0
+        # Empty is also what a service has on the deploy that creates it
+        # (it was never updated), so an empty state proves nothing on its
+        # own: wait for its replicas to be up and healthy too.
+        if service_is_up "$service"; then
+          log "$service rollout complete after ${i}s"
+          return 0
+        fi
         ;;
-      rollback_started|rollback_completed|paused)
-        log "$service rollout failed (state=$state) — Swarm auto-rolled back"
+      paused|rollback_started|rollback_completed|rollback_paused)
+        # Only this deploy's: a state left from an earlier update can still
+        # be read before Swarm flips to "updating". An update that started
+        # before this deploy did isn't this deploy's — keep waiting.
+        local started
+        started=$(docker service inspect "$service" \
+          --format '{{if .UpdateStatus}}{{if .UpdateStatus.StartedAt}}{{.UpdateStatus.StartedAt.Unix}}{{end}}{{end}}' 2>/dev/null || echo "")
+        if [[ "$started" =~ ^[0-9]+$ && -n "${DEPLOY_STARTED:-}" && "$started" -lt $((DEPLOY_STARTED - 5)) ]]; then
+          sleep 1
+          continue
+        fi
+        if [[ "$state" == paused ]]; then
+          log "$service rollout failed (state=$state) — Swarm paused the update"
+        else
+          log "$service rollout failed (state=$state) — Swarm auto-rolled back"
+        fi
         return 1
         ;;
     esac
@@ -231,14 +328,44 @@ if [[ "$deploy_ok" == "1" ]]; then
     # the ollama removal in #448) keeps running indefinitely as an orphan
     # instead of being torn down on the next deploy — live-verified: the
     # first post-#448 deploy left civitas_ollama at 1/1 with no prune.
+    # When this deploy's updates began: wait_for_rollout tells this
+    # deploy's failure states from ones left by an earlier update by it.
+    DEPLOY_STARTED=$(date +%s)
     docker stack deploy -c "$RESOLVED" civitas --prune --detach=true
   } >> deploy-poll.log 2>&1 || deploy_ok=0
 fi
 
+stack_deployed=0
 if [[ "$deploy_ok" == "1" ]]; then
-  for svc in civitas_backend civitas_frontend civitas_nginx; do
+  stack_deployed=1
+  for svc in civitas_backend civitas_pipeline civitas_frontend civitas_nginx; do
     wait_for_rollout "$svc" 180 || deploy_ok=0
   done
+fi
+
+# nginx caches every public API read (nginx/civitas.conf), and during a
+# rollout the new nginx task can cache the old backend's responses — a
+# response shape the new frontend may not read (and, if a service rolled
+# back, the reverse). Once the rollout has settled, start a new cache epoch:
+# the epoch is part of every cache key, so nothing cached before is matched
+# again, and the old entries age out through nginx's own cache manager. A
+# graceful reload, not a restart: requests in flight finish; checked first
+# (nginx -t), since a reload that fails only logs and exits 0. (Deleting the
+# cache files instead left nginx's index pointing at files that were gone.)
+purge_nginx_cache() {
+  local container epoch
+  epoch=$(date +%s)
+  for container in $(docker ps -q --filter "label=com.docker.swarm.service.name=civitas_nginx"); do
+    docker exec "$container" sh -c \
+      "printf '\"~.\" \"%s\";\n' '$epoch' > /etc/nginx/cache-epoch/epoch.conf && nginx -t -q && nginx -s reload" \
+      || log "couldn't start a new nginx cache epoch in $container — entries expire within their max-age"
+  done
+}
+
+# After any rollout, successful or not: a service that rolled back still
+# ran the new release for a while, and nginx may hold what it served.
+if [[ "$stack_deployed" == "1" ]]; then
+  purge_nginx_cache
 fi
 
 if [[ "$deploy_ok" == "1" ]]; then

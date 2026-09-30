@@ -895,6 +895,18 @@ def test_a_run_whose_lease_was_lost_before_its_row_does_not_start(db_session):
     assert db_session.query(models.PipelineRun).count() == 0
 
 
+async def test_a_reset_tells_the_api_processes_their_bills_are_stale(db_session, monkeypatch):
+    # They hold a collection built from what was just wiped.
+    from app.api.admin import admin_reset_data
+
+    monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
+    warmed = []
+    monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", lambda: warmed.append(1))
+    with patch("app.database.reset_all_data", return_value={"senators": 0}):
+        await admin_reset_data()
+    assert warmed == [1]
+
+
 def test_the_kept_cache_tiers_are_the_congress_post_markers():
     from app.database import RESET_KEEPS_CACHE_TIERS
     from app.pipeline.analyze import congress_bluesky

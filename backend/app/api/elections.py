@@ -13,7 +13,7 @@ from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
 from app.database import get_db
 from app.office_terms import term_years
 from app.election_calendar import (
@@ -1281,9 +1281,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     }, max_age=CACHE_TTL_LIST_S)
 
 
-# The live count moves on a five-minute sync; nginx caches this route for
-# the same 30s (nginx/civitas.conf), so a page polling once a minute sees
-# each sync within about a minute of it landing.
+# The live count moves on a five-minute sync. nginx's catch-all /api/
+# caches this route as its Cache-Control says (cached_json: 30s, then up to
+# 30s more served stale while one request refreshes it), so any number of
+# readers make one backend request per URL per 30s, and a page polling once
+# a minute sees each sync within about a minute and a half of it landing.
 CACHE_TTL_RESULTS_S = 30
 # The live-updates feed shows this many of the newest events.
 RESULT_UPDATES_LIMIT = 50
@@ -1629,7 +1631,7 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
             # ingest failure, not a reason to silently fall through to
             # the approximation below — that would quietly downgrade a
             # known-real source to a guess without saying so.
-            return cached_json(_uncovered_town_ballot("ingest_failed"), max_age=CACHE_TTL_DETAIL_S)
+            return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
 
         if not civic_is_configured() or address_for_town(state, town) is None:
             return cached_json(_uncovered_town_ballot("not_yet_covered"), max_age=CACHE_TTL_DETAIL_S)
@@ -1637,7 +1639,7 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
         result = await fetch_town_ballot(client, db, state, town, spend=spend_upstream)
 
     if result is None:
-        return cached_json(_uncovered_town_ballot("ingest_failed"), max_age=CACHE_TTL_DETAIL_S)
+        return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
     return cached_json({
         "status": "covered",
         "address": result["address"],

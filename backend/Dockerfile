@@ -62,4 +62,10 @@ ENTRY
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Worker processes: uvicorn reads WEB_CONCURRENCY when --workers isn't given.
+# One by default (plain `docker compose up`, which also runs the pipeline in
+# this process — PROCESS_ROLE=all). docker-compose.swarm.yml raises it for
+# the read-only API service, whose per-client limits live in a store every
+# worker shares (app/api/throttle.py), not in any one process.
+ENV WEB_CONCURRENCY=1
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -22,11 +22,11 @@ mid-term) or bad data — election_pipeline._sync_roster uses this to
 label specials instead of trusting any single upstream field.
 """
 
-import json
 import logging
 import pathlib
 from datetime import date
 
+from app.file_cache import Uncached, new_reload_lock, read_json_preferring, reload_if_moved
 
 logger = logging.getLogger(__name__)
 
@@ -35,30 +35,75 @@ _CLASS_FILES = (
     pathlib.Path(__file__).resolve().parent / "data" / "senate_classes.json",
 )
 _senate_classes_cache: dict[int, frozenset[str]] | None = None
+_senate_classes_stamp = None
+_senate_classes_lock = new_reload_lock()
+
+
+def _classes(data) -> dict[int, frozenset[str]] | None:
+    """The class sets a file holds, or None when it doesn't hold them in
+    this shape (a malformed file: the next one, the bundled copy, is used)."""
+    try:
+        classes = {int(k): v for k, v in data["classes"].items()}
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+    # A list of state codes each: a string would pass frozenset() as its
+    # characters.
+    if not all(isinstance(v, list) and all(isinstance(s, str) for s in v) for v in classes.values()):
+        return None
+    # Three classes, none empty: the shape the refresh's gate writes.
+    if set(classes) != {1, 2, 3} or not all(classes.values()):
+        return None
+    return {k: frozenset(v) for k, v in classes.items()}
 
 
 def senate_classes() -> dict[int, frozenset[str]]:
     """{1: states, 2: states, 3: states}: which states hold a seat in each
-    Senate class, from the refreshed file, else the bundled one."""
-    global _senate_classes_cache
-    if _senate_classes_cache is None:
-        for path in _CLASS_FILES:
-            try:
-                raw = json.loads(path.read_text())["classes"]
-                _senate_classes_cache = {int(k): frozenset(v) for k, v in raw.items()}
-                break
-            except Exception:
-                continue
-        else:
+    Senate class, from the refreshed file, else the bundled one. Reloaded
+    when the refreshed file moves: the Election run rewrites it in the
+    pipeline process, and the API processes must see that (AGENTS.md, the
+    file_cache rule) — clearing a cache from the writer clears only its own."""
+    global _senate_classes_cache, _senate_classes_stamp
+
+    empty = {1: frozenset(), 2: frozenset(), 3: frozenset()}
+
+    def load() -> dict[int, frozenset[str]]:
+        try:
+            data = read_json_preferring(*_CLASS_FILES, default=None, accept=lambda d: _classes(d) is not None)
+        except Uncached as unreadable:
+            # Stood in for a file that couldn't be read: used now, read again next time.
+            raise Uncached(empty if unreadable.value is None else _classes(unreadable.value)) from None
+        if data is None:
             logger.error("senate_classes.json unavailable in /data and the bundled fallback")
-            _senate_classes_cache = {1: frozenset(), 2: frozenset(), 3: frozenset()}
-    return _senate_classes_cache
+            return empty
+        return _classes(data)
+
+    with _senate_classes_lock:
+        _senate_classes_cache, _senate_classes_stamp = reload_if_moved(
+            [_CLASS_FILES[0]], _senate_classes_cache, _senate_classes_stamp, load,
+        )
+        return _senate_classes_cache
+
+
+def classes_on_file(runtime_path: pathlib.Path) -> dict[int, frozenset[str]]:
+    """What a refresh merges its fresh read with — the classes at
+    `runtime_path`, else the bundled copy's (missing or malformed: the
+    same fallback the reader takes), else none. Raises OSError when the
+    runtime file is there but can't be read: merged with nothing then, the
+    refresh would drop every state it keeps only while its seat is vacant."""
+    try:
+        data = read_json_preferring(
+            runtime_path, _CLASS_FILES[-1], default=None, accept=lambda d: _classes(d) is not None,
+        )
+    except Uncached:
+        raise OSError(f"{runtime_path} couldn't be read") from None
+    return {} if data is None else _classes(data)
 
 
 def reset_senate_classes() -> None:
-    """Drop the cached sets, after a refresh wrote new ones."""
-    global _senate_classes_cache
-    _senate_classes_cache = None
+    """Drop this process's cached sets, after a refresh wrote new ones (the
+    other processes notice the file move on their next read)."""
+    global _senate_classes_cache, _senate_classes_stamp
+    _senate_classes_cache, _senate_classes_stamp = None, None
 
 
 def federal_states() -> frozenset[str]:

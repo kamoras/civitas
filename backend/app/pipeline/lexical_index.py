@@ -51,7 +51,7 @@ import re
 from sqlalchemy import text
 
 from app.pipeline.explore_ranking import field_weights, text_shape
-from app.background import start_writer
+from app.background import start_writer, writers_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,6 @@ def ensure_lexical_index(engine) -> bool:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name=:n"
             ), {"n": FTS_TABLE}).fetchone()
 
-            needs_backfill = False
             if existing is None:
                 logger.info("Creating explore FTS5 index")
                 # IF NOT EXISTS because two backend processes can start
@@ -159,16 +158,28 @@ def ensure_lexical_index(engine) -> bool:
                 # spawning a thread that has nothing to do, which is the
                 # normal case everywhere except the one deploy that
                 # introduces this index.
-                needs_backfill = bool(conn.execute(text(
-                    "SELECT 1 FROM explore_documents LIMIT 1"
-                )).fetchone())
+                #
+                # Recorded in the meta table, not just acted on, so that the
+                # backfill is still owed after a restart that killed it, and
+                # so that the read-only API process — which may be the one
+                # to create the index, but starts no background writers
+                # (app.background.writers_allowed) — leaves it for the
+                # pipeline process to run on its own startup.
+                if conn.execute(text("SELECT 1 FROM explore_documents LIMIT 1")).fetchone():
+                    conn.execute(text(
+                        "INSERT INTO explore_fts_meta (key, value) VALUES ('backfill_pending', '1') "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+                    ))
 
             conn.execute(text(
                 "INSERT INTO explore_fts_meta (key, value) VALUES ('schema_version', :v) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
             ), {"v": FTS_SCHEMA_VERSION})
+            needs_backfill = conn.execute(text(
+                "SELECT 1 FROM explore_fts_meta WHERE key = 'backfill_pending'"
+            )).fetchone() is not None
 
-        if needs_backfill:
+        if needs_backfill and writers_allowed():
             _backfill_in_background(engine)
         return True
     except Exception:
@@ -202,6 +213,7 @@ def _run_backfill(engine) -> None:
             conn.execute(text(
                 f"INSERT INTO {FTS_TABLE}({FTS_TABLE}) VALUES('rebuild')"
             ))
+            conn.execute(text("DELETE FROM explore_fts_meta WHERE key = 'backfill_pending'"))
         logger.info("Explore keyword index backfill complete")
     except Exception:
         logger.exception("Explore keyword index backfill failed")
@@ -263,6 +275,8 @@ def rebuild_index(db) -> int:
     """
     try:
         db.execute(text(f"INSERT INTO {FTS_TABLE}({FTS_TABLE}) VALUES('rebuild')"))
+        # A startup backfill still owed (killed, or refused) is done now.
+        db.execute(text("DELETE FROM explore_fts_meta WHERE key = 'backfill_pending'"))
         db.commit()
         count = db.execute(text("SELECT COUNT(*) FROM explore_documents")).scalar()
         logger.info("Rebuilt explore keyword index over %d documents", count or 0)

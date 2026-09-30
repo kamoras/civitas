@@ -863,6 +863,12 @@ export interface ExploreDocumentSummary {
   summary: string;
   keyPoints: string[];
   impact: string;
+  /** The generation stopped before its end (the LLM failed or ran out of
+   *  time): the sections it finished, less the one it was writing (a
+   *  summary cut mid-sentence is no summary). */
+  partial?: boolean;
+  /** It reached its length limit: kept, less the section it was writing. */
+  truncated?: boolean;
 }
 
 // Mirrors backend/app/pipeline/analyze/prompts.py's parse_explore_document_summary —
@@ -896,6 +902,45 @@ export async function fetchExploreDocument(id: number): Promise<ExploreDocumentD
   return requestJson(`${API_BASE}/explore/${id}`, "Document not found");
 }
 
+// How long a summary request keeps retrying a refusal: long enough to wait
+// out a generation that runs its full time (4 minutes on the server,
+// backend/app/services/explore_summary.py) and the hold-off after it (2),
+// with a margin.
+const SUMMARY_RETRY_WITHIN_MS = 10 * 60 * 1000;
+
+/** Milliseconds to wait before asking again, from a Retry-After in seconds
+ *  (a short default when there is none), kept within reason. */
+export function summaryRetryDelayMs(retryAfter: string | null): number {
+  const seconds = Number(retryAfter);
+  const ms =
+    Number.isFinite(seconds) && retryAfter !== null && retryAfter.trim() !== ""
+      ? seconds * 1000
+      : 10_000;
+  // Up to three minutes: a document held off after a timeout says two.
+  return Math.min(Math.max(ms, 1_000), 180_000);
+}
+
+export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    // Removed when the wait ends normally: a retry loop waits many times on
+    // one signal, and each wait would otherwise leave its listener behind.
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+// How many requests with no response at all (a reset, a network drop) the
+// summary page asks again after, before reporting it unavailable.
+const SUMMARY_UNANSWERED_RETRIES = 3;
+
 // Reads the SSE stream from POST /explore/:id/summary — one JSON object
 // per `data:` line, either {delta: "<chunk>"} while generating or the
 // terminal {done: true, summary, keyPoints, impact} (cache hits send only
@@ -903,45 +948,165 @@ export async function fetchExploreDocument(id: number): Promise<ExploreDocumentD
 // accumulated SO FAR after every chunk, letting the caller re-derive
 // {summary, keyPoints, impact} from partial text as it streams in —
 // this file only forwards bytes, it doesn't parse the marker format.
+//
+// A reader of a document already being summarised joins that generation's
+// stream. A refusal the server marks as a wait (X-Summary-Wait: 503 when the
+// site's few generations or this reader's one are busy, the LLM said it was
+// busy, or this text ran out of time a moment ago, or the pipeline service
+// is restarting; 429 when this reader asks too often) is retried after its
+// Retry-After.
+// `signal` stops it all — the request, the stream, and any wait between
+// retries — when the reader leaves, so nothing goes on asking for them.
 export async function streamExploreDocumentSummary(
   id: number,
-  onDelta: (fullTextSoFar: string) => void
+  onDelta: (fullTextSoFar: string) => void,
+  signal?: AbortSignal,
+  wait: (ms: number, signal?: AbortSignal) => Promise<void> = abortableSleep,
+  // Told true while waiting to be let in (busy, restarting, held off),
+  // false once a stream starts: the page says it is queued, not stuck.
+  onWaiting?: (waiting: boolean) => void
 ): Promise<ExploreDocumentSummary> {
-  const res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST" });
-  if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
+  // A summary already made is read from the API (and nginx's cache): it
+  // never waits on the pipeline process that makes them. Anything but a 200
+  // — none yet, or the read failing — goes on to ask for one.
+  try {
+    const cached = await fetch(`${API_BASE}/explore/${id}/cached-summary`, { signal });
+    if (cached.status === 200) return toSummary(await cached.json());
+    // Released, as below: a 404 or a refusal's body left unread holds its
+    // connection while the page goes on to ask.
+    await cached.body?.cancel().catch(() => {});
+  } catch (error) {
+    if (signal?.aborted) throw error;
+  }
+  const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
+  let unanswered = 0;
+  const pause = (ms: number) => {
+    onWaiting?.(true);
+    return wait(Math.min(ms, Math.max(0, giveUpAt - Date.now())), signal);
+  };
+  const waitFor = (retryAfter: string | null) => pause(summaryRetryDelayMs(retryAfter));
+  for (;;) {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
+    } catch (error) {
+      // No response at all — the connection reset under a deploy, a
+      // moment's network loss: waited out like a cut stream, a few times.
+      // Not for ten minutes: a request that can never go out (offline, an
+      // extension blocking it) looks the same, and is reported as such.
+      if (signal?.aborted || Date.now() >= giveUpAt || ++unanswered > SUMMARY_UNANSWERED_RETRIES)
+        throw error;
+      await waitFor(null);
+      continue;
+    }
+    unanswered = 0; // a response: the drops before it were a passing reset
+    // Only a refusal marked as a wait (X-Summary-Wait — the backend's, and
+    // nginx's own limits and outages on this route): a 404 or a 500 is not
+    // waited out.
+    if (res.headers.get("X-Summary-Wait") === "1" && Date.now() < giveUpAt) {
+      // Released now, not at garbage collection: an unread body can hold
+      // its connection, and the page has other requests to make meanwhile.
+      await res.body?.cancel().catch(() => {});
+      await waitFor(res.headers.get("Retry-After"));
+      continue;
+    }
+    if (!res.ok || !res.body) {
+      await res.body?.cancel().catch(() => {});
+      throw new Error(`Summary failed: ${res.status}`);
+    }
+    onWaiting?.(false);
+    let result: Awaited<ReturnType<typeof readSummaryStream>>;
+    try {
+      result = await readSummaryStream(res.body, onDelta);
+    } catch (error) {
+      // An event that can't be read would read the same way when asked
+      // again (the same answer, from the cache): not waited out.
+      if (error instanceof MalformedSummaryEvent) throw error;
+      // The stream was cut before its last event — the pipeline service
+      // restarting under a deploy, most often, which stops the generation
+      // too. Asked again once it is back (nginx answers the gap as a wait):
+      // a reader who only lost the connection joins the generation still
+      // running, or reads it from the cache.
+      if (signal?.aborted || Date.now() >= giveUpAt) throw error;
+      onDelta("");
+      await waitFor(null);
+      continue;
+    }
+    // This reader's own generation ran out of time before writing anything
+    // usable: asked again after the brief hold-off, as a waiting reader is.
+    if (result.retryAfter !== undefined && !result.summary && Date.now() < giveUpAt) {
+      onDelta("");
+      // The whole hold-off, not Retry-After's ceiling: asked sooner, the
+      // server would only refuse again.
+      await pause(result.retryAfter * 1000 + 5_000);
+      continue;
+    }
+    return result;
+  }
+}
 
-  const reader = res.body.getReader();
+/** The final event's fields, as the page reads them. */
+function toSummary(
+  parsed: Record<string, unknown>
+): ExploreDocumentSummary & { retryAfter?: number } {
+  return {
+    summary: typeof parsed.summary === "string" ? parsed.summary : "",
+    keyPoints: Array.isArray(parsed.keyPoints) ? (parsed.keyPoints as string[]) : [],
+    impact: typeof parsed.impact === "string" ? parsed.impact : "",
+    partial: parsed.partial === true,
+    truncated: parsed.truncated === true,
+    ...(typeof parsed.retryAfter === "number" ? { retryAfter: parsed.retryAfter } : {}),
+  };
+}
+
+/** A summary event that isn't JSON: not a stream cut short. */
+class MalformedSummaryEvent extends Error {
+  constructor() {
+    super("Summary stream sent an unreadable event");
+  }
+}
+
+async function readSummaryStream(
+  body: ReadableStream<Uint8Array>,
+  onDelta: (fullTextSoFar: string) => void
+): Promise<ExploreDocumentSummary & { retryAfter?: number }> {
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let fullText = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    const events = buffer.split("\n\n");
-    buffer = events.pop() || ""; // last element may be a partial event — keep it for next read
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || ""; // last element may be a partial event — keep it for next read
 
-    for (const event of events) {
-      const line = event.trim();
-      if (!line.startsWith("data:")) continue;
-      const parsed = JSON.parse(line.slice("data:".length).trim());
-      if (parsed.done) {
-        return {
-          summary: parsed.summary ?? "",
-          keyPoints: parsed.keyPoints ?? [],
-          impact: parsed.impact ?? "",
-        };
-      }
-      if (typeof parsed.delta === "string") {
-        fullText += parsed.delta;
-        onDelta(fullText);
+      for (const event of events) {
+        const line = event.trim();
+        if (!line.startsWith("data:")) continue;
+        let parsed;
+        try {
+          parsed = JSON.parse(line.slice("data:".length).trim());
+        } catch {
+          throw new MalformedSummaryEvent();
+        }
+        if (parsed.done) return toSummary(parsed);
+        if (typeof parsed.delta === "string") {
+          fullText += parsed.delta;
+          onDelta(fullText);
+        }
       }
     }
+    throw new Error("Summary stream ended without a final result");
+  } finally {
+    // Released however this ends — the final event, a malformed one, a
+    // stream cut short — not left to the server to close: the caller may
+    // ask again at once, and an open body holds its connection.
+    reader.cancel().catch(() => {});
   }
-
-  throw new Error("Summary stream ended without a final result");
 }
 
 export interface PublicComment {
@@ -1071,8 +1236,13 @@ export interface HostStats {
   diskFreeBytes: number;
   diskUsedPct: number;
   uptimeSeconds: number | null;
-  netRxBytes?: number;
-  netTxBytes?: number;
+  /** This container's cumulative counters (the pipeline's, under Swarm). */
+  netRxBytes?: number | null;
+  netTxBytes?: number | null;
+  /** Bytes/s the API containers recorded over their last interval; null
+   * when there is no recent record (one process runs both roles). */
+  apiNetRxRate?: number | null;
+  apiNetTxRate?: number | null;
   /** Cumulative CPU ticks since boot (/proc/stat); utilisation is the delta. */
   cpuBusyTicks?: number | null;
   cpuTotalTicks?: number | null;
@@ -1108,6 +1278,11 @@ export interface VectorDbStats {
    * 2026-07) — distinct from embeddingModel, which is the
    * classification-side model. Empty until the first reindex completes. */
   indexModelVersion?: string;
+  /** "running" while the search index is rebuilt, "incomplete" when it
+   * holds vectors that aren't a complete build by the current model (a
+   * rebuild failed or was cut off) — semantic search stays off until a
+   * rebuild completes (the next Explore run or pipeline start retries it). */
+  indexRebuild?: "" | "running" | "incomplete";
   learningStore?: LearningStoreStats;
   error?: string;
 }

@@ -12,6 +12,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -26,6 +27,8 @@ from app.schemas import (
     PolicyAreaDetail,
     RelatedIssueSchema,
 )
+from app.shared_state import PolledRow, decode_json_dict
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +45,20 @@ logger = logging.getLogger(__name__)
 # (hourly bill-status refresh, action-center refresh, nightly pipeline)
 # call warm_bill_collection_cache() to swap in fresh data sooner.
 _COLLECT_CACHE_TTL_SECONDS = 120
-_collect_cache: tuple[float, list["_Row"]] | None = None
+# (monotonic time built, wall-clock time the build started, rows)
+_collect_cache: tuple[float, datetime, list["_Row"]] | None = None
 _refresh_state_lock = threading.Lock()
 _refresh_in_progress = False
+
+# Writers run in the pipeline process (settings.PROCESS_ROLE), and the cache
+# they want refreshed lives in each API worker process, so a writer's
+# warm_bill_collection_cache() can't swap data in directly. It records when
+# the data changed instead (an api_cache row), and each API process looks at
+# that at most this often, rebuilding when the change is newer than its copy.
+_CHANGED_TIER = "bill-collection"
+_CHANGED_KEY = "changed-at"
+_CHANGED_CHECK_SECONDS = 10.0
+_changes = PolledRow(_CHANGED_TIER, _CHANGED_KEY, every_s=_CHANGED_CHECK_SECONDS, decode=decode_json_dict)
 
 
 def _bioguide_photo(bioguide_id: str | None) -> str | None:
@@ -171,6 +185,11 @@ def _build_rows(db: Session) -> list[_Row]:
     return rows
 
 
+# A failed background rebuild waits this long before the next attempt.
+_REFRESH_RETRY_AFTER_FAILURE_S = 30.0
+_refresh_failed_at = float("-inf")
+
+
 def _refresh_cache_in_background() -> None:
     """Rebuild the collection on a daemon thread (own DB session) and swap
     it into the cache atomically. At most one rebuild runs at a time; extra
@@ -179,17 +198,25 @@ def _refresh_cache_in_background() -> None:
     with _refresh_state_lock:
         if _refresh_in_progress:
             return
+        # After a failed rebuild, wait before the next: the stale snapshot
+        # stays stale, so every request would otherwise start another full
+        # rebuild the moment the last one failed — against a database that
+        # is failing it (a long pipeline transaction, say).
+        if time.monotonic() - _refresh_failed_at < _REFRESH_RETRY_AFTER_FAILURE_S:
+            return
         _refresh_in_progress = True
 
     def _run() -> None:
-        global _collect_cache, _refresh_in_progress
+        global _collect_cache, _refresh_in_progress, _refresh_failed_at
         try:
             from app.database import session_scope
+            started = utcnow()
             with session_scope() as db:
                 rows = _build_rows(db)
-            _collect_cache = (time.monotonic(), rows)
+            _collect_cache = (time.monotonic(), started, rows)
         except Exception:
             logger.exception("Background bill-collection rebuild failed — serving the previous snapshot")
+            _refresh_failed_at = time.monotonic()
         finally:
             with _refresh_state_lock:
                 _refresh_in_progress = False
@@ -206,27 +233,62 @@ def warm_bill_collection_cache() -> None:
     feed the "hot" sort), and the nightly pipeline. Unlike
     clear_bill_collection_cache this never leaves the cache empty, so no
     request ever pays the cold-rebuild cost because data got fresher.
+
+    In the pipeline process, which serves no reads, it records the change
+    for the API processes to pick up instead (_changed_since).
     """
+    if settings.PROCESS_ROLE == "worker":
+        _record_change()
+        return
     _refresh_cache_in_background()
+
+
+def _record_change() -> None:
+    from app.database import session_scope
+    from app.shared_state import write_row
+
+    try:
+        with session_scope() as db:
+            write_row(db, _CHANGED_TIER, _CHANGED_KEY, {}, at=utcnow())
+            db.commit()
+    except Exception:
+        # The API processes still rebuild on their TTL.
+        logger.warning("Could not record a bill-collection change", exc_info=True)
+
+
+def _changed_since(db: Session, built_at: datetime) -> bool:
+    """Whether a writer in another process changed the data after `built_at`
+    (checked at most every _CHANGED_CHECK_SECONDS; shared_state.PolledRow).
+    No change recorded, or none readable: no change to act on — the TTL
+    still rebuilds. Only the API role reads it: the worker records changes
+    and a single-process one ("all") refreshes on them directly, so there
+    it is a row nothing writes."""
+    if settings.PROCESS_ROLE != "api":
+        return False
+    _changes.get(db)
+    stamp = _changes.stamp
+    return stamp is not None and stamp >= built_at
 
 
 def _collect_bills(db: Session) -> list[_Row]:
     global _collect_cache
     cached = _collect_cache
     if cached is not None:
-        if (time.monotonic() - cached[0]) >= _COLLECT_CACHE_TTL_SECONDS:
+        built, built_at, rows = cached
+        if (time.monotonic() - built) >= _COLLECT_CACHE_TTL_SECONDS or _changed_since(db, built_at):
             # Stale-while-revalidate: answer from the stale snapshot now,
             # rebuild behind the scenes for the next caller.
             _refresh_cache_in_background()
         # A fresh list every call — callers (get_bills_in_flight) sort this
         # in place, and when no filter is active that's the very list we'd
         # be handing back out of the cache on the next call too.
-        return list(cached[1])
+        return list(rows)
 
     # Cold start (first request before the startup warm finishes, or right
     # after clear_bill_collection_cache): nothing to serve, build inline.
+    started = utcnow()
     rows = _build_rows(db)
-    _collect_cache = (time.monotonic(), rows)
+    _collect_cache = (time.monotonic(), started, rows)
     return list(rows)
 
 
@@ -340,6 +402,7 @@ def clear_bill_collection_cache() -> None:
     that should be visible immediately rather than waiting out the TTL)."""
     global _collect_cache
     _collect_cache = None
+    _changes.reset()
 
 
 def get_bills_in_flight(

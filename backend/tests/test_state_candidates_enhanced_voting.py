@@ -64,22 +64,19 @@ RI_SOURCE = {
 }
 
 
-@pytest.fixture(autouse=True)
-def _as_of_capture(monkeypatch):
-    """The settle window is measured against the wall clock. Pinned to the
-    day these fixtures were captured: unpinned, the "unsettled" tests
-    (a 2026-09-09 primary, settle_days 21) started asserting the opposite
-    on 2026-09-30 and would have turned CI red on their own."""
-    import datetime as _dt
+def _index_held_on(date: str) -> dict:
+    """The election index with the RI primary moved to `date`.
 
-    from app.pipeline.fetch import state_candidates_tabular as tabular
-
-    class _Pinned(_dt.datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return _dt.datetime(2026, 9, 17, 12, tzinfo=tz or _dt.UTC)
-
-    monkeypatch.setattr(tabular, "datetime", _Pinned)
+    The settle window is measured from the INDEX entry's date, not the
+    results payload's. Tests that need an unsettled election used to set
+    only the payload's electionDate, so they leaned on the fixture's real
+    2026-09-09 being recent, and all three started failing on 2026-09-30,
+    21 days (settle_days) later."""
+    index = json.loads(json.dumps(INDEX))
+    for entry in index["elections"]:
+        if entry["publicElectionId"] == "RI2026StatewidePrimary":
+            entry["electionDate"] = date
+    return index
 
 
 def _patched(monkeypatch, index=INDEX, results=RESULTS):
@@ -300,8 +297,7 @@ class TestFreshnessGate:
     async def test_uncertified_and_unsettled_confirms_nobody(self, monkeypatch):
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, results=results)
+        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio
@@ -468,8 +464,7 @@ class TestStatewideExecutiveResults:
         any more than it confirms a senator — one gate, not two."""
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, results=results)
+        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio
@@ -550,8 +545,7 @@ class TestStateLegislativeResults:
     async def test_legislative_records_are_withheld_by_the_same_freshness_gate(self, monkeypatch):
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, results=results)
+        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio

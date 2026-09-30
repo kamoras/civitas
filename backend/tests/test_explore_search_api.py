@@ -284,6 +284,19 @@ class TestPublicSearch:
         assert body == {"query": "wildfire", "results": [], "count": 0, "indexEmpty": True}
 
 
+class TestPartialAnswersAreCachedBriefly:
+    async def test_a_keyword_only_answer_is_not_kept_for_a_successs_lifetime(self, db_session, monkeypatch):
+        from app.api import explore
+
+        outcome = {"indexReady": True, "results": [], "count": 0, "semanticUnavailable": True, "channels": {}}
+        monkeypatch.setattr(explore, "hybrid_search", lambda *a, **k: outcome)
+        resp = await _search(db_session)
+        assert resp.headers["cache-control"] == "public, max-age=30"
+        outcome["semanticUnavailable"] = False
+        resp = await _search(db_session)
+        assert resp.headers["cache-control"] == "public, max-age=60, stale-while-revalidate=60"
+
+
 async def test_no_query_with_a_politician_lists_their_documents_newest_first(indexed_db):
     """A profile's "view all documents" link opens /explore?politician_id=
     with no query. That has to list the member's record; it used to show an

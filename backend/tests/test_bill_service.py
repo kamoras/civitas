@@ -503,6 +503,112 @@ class TestMalformedRelatedBillIds:
         assert get_bill_detail(db_session, "S.4967").mention_count == 1
 
 
+class TestChangesFromThePipelineProcess:
+    """Writers run in the pipeline process; the cache lives in each API
+    worker. A writer's warm records the change, and the API processes
+    rebuild once they see it."""
+
+    @pytest.fixture()
+    def shared_db(self, db_session, monkeypatch):
+        from contextlib import contextmanager
+
+        from sqlalchemy.orm import Session
+
+        @contextmanager
+        def _scope():
+            # A session of its own, closed after, like the real one: a
+            # write it doesn't commit is rolled back and lost.
+            session = Session(bind=db_session.get_bind())
+            try:
+                yield session
+            finally:
+                session.close()
+
+        monkeypatch.setattr("app.database.session_scope", _scope)
+        return db_session
+
+    def test_a_change_recorded_by_the_pipeline_process_is_picked_up(self, shared_db, monkeypatch):
+        import threading
+
+        from app.services import bill_service
+
+        senator = _make_senator(shared_db)
+        _make_sponsored_bill(shared_db, senator.id, "S.1", "INTRODUCED")
+        shared_db.commit()
+        assert get_bills_in_flight(shared_db).total == 1
+
+        # The pipeline process writes a bill and warms.
+        _make_sponsored_bill(shared_db, senator.id, "S.2", "INTRODUCED")
+        shared_db.commit()
+        monkeypatch.setattr(settings, "PROCESS_ROLE", "worker")
+        bill_service.warm_bill_collection_cache()
+        monkeypatch.setattr(settings, "PROCESS_ROLE", "api")
+
+        # Back in an API process: the rebuild runs on a thread of its own.
+        rebuilt = []
+        monkeypatch.setattr(threading, "Thread", lambda target, **_kw: type(
+            "T", (), {"start": lambda self: (target(), rebuilt.append(True))})())
+        bill_service._changes.expire()
+        assert get_bills_in_flight(shared_db).total == 1  # served stale, rebuild kicked off
+        assert rebuilt == [True]
+        assert get_bills_in_flight(shared_db).total == 2
+
+    def test_no_rebuild_without_a_change(self, shared_db, monkeypatch):
+        import threading
+
+        from app.services import bill_service
+
+        senator = _make_senator(shared_db)
+        _make_sponsored_bill(shared_db, senator.id, "S.1", "INTRODUCED")
+        shared_db.commit()
+        get_bills_in_flight(shared_db)
+        started = []
+        monkeypatch.setattr(threading, "Thread", lambda **_kw: started.append(True))
+        bill_service._changes.expire()
+        get_bills_in_flight(shared_db)
+        assert started == []
+
+    def test_the_marker_is_checked_at_most_every_few_seconds(self, shared_db, monkeypatch):
+        from app.services import bill_service
+
+        queries = []
+        real = shared_db.query
+        monkeypatch.setattr(shared_db, "query", lambda *a, **k: (queries.append(a), real(*a, **k))[1])
+        monkeypatch.setattr(settings, "PROCESS_ROLE", "api")
+        bill_service._changes.expire()
+        bill_service._changed_since(shared_db, bill_service.utcnow())
+        bill_service._changed_since(shared_db, bill_service.utcnow())
+        assert len(queries) == 1
+
+    @pytest.mark.parametrize("role", ["all", "worker"])
+    def test_only_the_api_role_polls_for_changes(self, shared_db, monkeypatch, role):
+        # Elsewhere nothing writes the marker for it to find.
+        from app.services import bill_service
+
+        queries = []
+        real = shared_db.query
+        monkeypatch.setattr(shared_db, "query", lambda *a, **k: (queries.append(a), real(*a, **k))[1])
+        monkeypatch.setattr(settings, "PROCESS_ROLE", role)
+        bill_service._changes.expire()
+        assert bill_service._changed_since(shared_db, bill_service.utcnow()) is False
+        assert queries == []
+
+
+def test_a_failed_rebuild_is_not_retried_on_every_request(monkeypatch):
+    import threading
+
+    from app.services import bill_service
+
+    starts = []
+    monkeypatch.setattr(bill_service, "_build_rows", lambda db: (starts.append(1), (_ for _ in ()).throw(RuntimeError("locked")))[1])
+    monkeypatch.setattr(threading, "Thread", lambda target, **_kw: type("T", (), {"start": lambda self: target()})())
+    monkeypatch.setattr("app.database.session_scope", __import__("contextlib").nullcontext)
+    monkeypatch.setattr(bill_service, "_refresh_failed_at", float("-inf"))
+    for _ in range(5):
+        bill_service._refresh_cache_in_background()
+    assert starts == [1]
+
+
 def test_short_title_index_keeps_names_news_uses(db_session):
     db_session.add(Senator(id="S1", name="A", state="TX", party="R", is_current=True))
     db_session.add(Representative(id="R1", name="B", state="TX", district=1, party="R", is_current=True))

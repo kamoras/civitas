@@ -67,11 +67,11 @@ def gate(classes: dict[int, set[str]]) -> list[str]:
 
 
 def _stored(path: pathlib.Path) -> dict[int, set[str]]:
-    try:
-        raw = json.loads(path.read_text())["classes"]
-        return {int(k): set(v) for k, v in raw.items()}
-    except Exception:
-        return {}
+    """The classes on file, read and checked as the site reads them
+    (election_calendar.classes_on_file); raises when the file can't be read."""
+    from app import election_calendar
+
+    return {n: set(states) for n, states in election_calendar.classes_on_file(path).items()}
 
 
 def write_classes(classes: dict[int, set[str]], path: pathlib.Path) -> None:

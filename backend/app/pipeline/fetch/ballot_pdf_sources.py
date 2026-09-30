@@ -5,10 +5,11 @@ Same volume/bundled dual-path read as town_directory.py/ballot_lookup.py:
 app/data/ is COPY'd into the Docker image and is NOT writable at runtime.
 """
 
-import json
 import logging
 import os
 from typing import Any
+
+from app.file_cache import load_json_once
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +22,8 @@ _cache: dict[str, Any] | None = None
 
 def _load() -> dict[str, Any]:
     global _cache
-    if _cache is not None:
-        return _cache
-    for path in (_VOLUME_PATH, _BUNDLED_PATH):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                _cache = json.load(fh)
-                return _cache
-        except FileNotFoundError:
-            continue
-        except Exception:
-            logger.exception("Failed to read ballot PDF sources file %s", path)
-    _cache = {}
-    return _cache
+    data, _cache = load_json_once(_cache, _VOLUME_PATH, _BUNDLED_PATH)
+    return data
 
 
 def invalidate_cache() -> None:
