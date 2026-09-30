@@ -13,7 +13,8 @@ import { safeHref } from "@/lib/formatting";
 import type { LiveRaceResult } from "@/types/election";
 
 /** Where the count stands, in the state's own words: official, leading,
- * tied, or no votes yet. Never "won" without the state saying so. */
+ * tied, or no votes yet. Never "won", even once the state lists its count
+ * as official: Civitas never calls a race. */
 export function statusTag(r: LiveRaceResult): { text: string; className: string } {
   if (r.official) return { text: "OFFICIAL", className: "border-phos/60 text-phos" };
   if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
