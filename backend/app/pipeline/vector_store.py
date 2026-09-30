@@ -721,20 +721,23 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
             text = piece if piece.startswith(head[:40]) else f"{head} {piece}".strip()
             units.append((int(doc["id"]), text, doc))
 
-    if textless and not fresh:
+    if textless:
         # No text left to embed: its old chunks go (search would keep
         # showing them), and its hash is recorded, so it isn't planned again
-        # every run.
+        # every run (a rebuild's fresh table has no chunks to delete).
         with _vec_lock:
             try:
                 for doc in textless:
-                    conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (int(doc["id"]),))
+                    if not fresh:
+                        conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (int(doc["id"]),))
                     _record_text_hash(conn, int(doc["id"]), explore_text_hash(doc))
                 conn.commit()
             except BaseException:
                 conn.rollback()
                 raise
     if not units:
+        if textless and not fresh and record_chunks_per_doc:
+            _record_chunks_per_doc(conn)  # chunks went: the ratio moved
         return 0
 
     # In batches of whole documents (about 200 chunks each), each written as
@@ -1061,18 +1064,22 @@ def _record_text_hash(conn: sqlite3.Connection, doc_id: int, digest: str) -> Non
 _STALE_HASH = "stale"
 
 
-def mark_text_stale(doc_ids: set[int]) -> None:
+def mark_text_stale(doc_ids: set[int], unless: dict[int, str] | None = None) -> None:
     """Record that these documents' text changed and their vectors weren't
     rewritten (an Explore run whose embed step was skipped after its
     backfill): without it, a document embedded before hashes were kept
-    would have its new text's hash adopted as what its vectors say."""
+    would have its new text's hash adopted as what its vectors say. Not one
+    whose recorded hash is already `unless[id]` (its current text's): a
+    top-up that failed after rewriting it."""
     if not doc_ids:
         return
     conn = get_vec_conn()
     with _vec_lock:
         try:
+            recorded = dict(conn.execute("SELECT doc_id, text_hash FROM vec_explore_text").fetchall())
             for doc_id in doc_ids:
-                _record_text_hash(conn, doc_id, _STALE_HASH)
+                if unless is None or recorded.get(doc_id) != unless.get(doc_id):
+                    _record_text_hash(conn, doc_id, _STALE_HASH)
             conn.commit()
         except BaseException:
             conn.rollback()

@@ -287,6 +287,14 @@ class TestTextHashes:
         assert conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0] == 0
         assert vector_store.get_embedded_text_hashes() == {1: vector_store.explore_text_hash(emptied)}
 
+    def test_a_document_already_rewritten_is_not_marked_stale(self, vec_env):
+        # A top-up that failed after rewriting it: its hash is its text's.
+        doc = _doc(1, "A title")
+        vector_store.embed_explore_documents([doc])
+        vector_store.mark_text_stale({1, 2}, {1: vector_store.explore_text_hash(doc), 2: "x"})
+        hashes = vector_store.get_embedded_text_hashes()
+        assert hashes[1] == vector_store.explore_text_hash(doc) and hashes[2] == vector_store._STALE_HASH
+
     def test_marked_stale_reads_as_changed_and_adoption_skips_what_is_gone(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         vector_store.mark_text_stale({1})

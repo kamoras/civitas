@@ -364,6 +364,23 @@ class TestOrphanedVectorPurge:
     so nothing swept these before.
     """
 
+    @pytest.fixture(autouse=True)
+    def _no_text_hashes(self, monkeypatch):
+        monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", lambda: {})
+
+    def test_a_text_hash_without_a_row_is_deleted_too(self, db_session, monkeypatch):
+        # A document with no chunks of its own (no text, or marked stale
+        # before it was embedded) has only its hash row to leave behind.
+        db_session.add(_floor_doc(1, "senate-floor-A-2026-05-19-aaaaaaaa", "Kept."))
+        db_session.commit()
+        deleted: list[set] = []
+        monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: {1})
+        monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", lambda: {1: "h", 4: "stale"})
+        monkeypatch.setattr(explore_pipeline, "delete_explore_vectors",
+                            lambda ids: deleted.append(set(ids)) or 0)
+        explore_pipeline._purge_orphaned_vectors(db_session)
+        assert deleted == [{4}]
+
     def test_vectors_without_a_row_are_deleted(self, db_session, monkeypatch):
         db_session.add(_floor_doc(1, "senate-floor-A-2026-05-19-aaaaaaaa", "Kept."))
         db_session.commit()
@@ -591,7 +608,13 @@ def test_a_top_up_takes_documents_missing_or_changed_since_they_were_embedded(db
         docs.append(d)
     db_session.commit()
     current, changed, legacy, missing = docs
+    textless = ExploreDocument(doc_type="Executive Order", source="Federal Register", title="",
+                               summary="", body="", date="2026-07-01")
+    db_session.add(textless)
+    db_session.commit()
     hashes = {
+        # No chunks, but its hash recorded: handled, not re-planned nightly.
+        textless.id: vector_store.explore_text_hash(vector_store.explore_embed_dict(textless)),
         current.id: vector_store.explore_text_hash(vector_store.explore_embed_dict(current)),
         changed.id: "the hash of its old body",
     }
@@ -633,4 +656,26 @@ async def test_a_skipped_step_marks_its_backfill_stale(db_session):
     with patch.object(explore_pipeline, "index_is_whole", side_effect=sqlite3.OperationalError("database is locked")), \
          patch.object(explore_pipeline, "mark_text_stale", mark):
         assert await explore_pipeline._embed_step(db_session, {4}) == 0
-    mark.assert_called_once_with({4})
+    mark.assert_called_once_with({4}, None)
+
+
+@pytest.mark.asyncio
+async def test_a_stale_mark_the_vector_store_refuses_is_kept_in_the_main_database(db_session):
+    # The lock that skipped the step often holds the vector store still;
+    # the next run reads the marks from the main database instead.
+    import sqlite3
+
+    from app.pipeline import explore_pipeline
+
+    with patch.object(explore_pipeline, "index_is_whole", side_effect=sqlite3.OperationalError("database is locked")), \
+         patch.object(explore_pipeline, "mark_text_stale", side_effect=sqlite3.OperationalError("database is locked")):
+        await explore_pipeline._embed_step(db_session, {4})
+    assert explore_pipeline._remembered_stale(db_session) == {4}
+
+    top_up = AsyncMock(return_value=1)
+    with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
+         patch.object(explore_pipeline, "_top_up", top_up), \
+         patch("app.ops_alerts.resolve_ops_alert"):
+        await explore_pipeline._embed_step(db_session, set())
+    assert top_up.call_args.args[1] == {4}  # re-embedded by name
+    assert explore_pipeline._remembered_stale(db_session) == set()

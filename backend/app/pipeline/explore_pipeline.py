@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
-from app.models import ExploreDocument, Justice, Representative, Senator
+from app.models import ApiCache, ExploreDocument, Justice, Representative, Senator
 from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.house_record import fetch_house_floor_remarks
@@ -395,6 +395,13 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
     """
     from app.ops_alerts import resolve_ops_alert
 
+    try:
+        remembered = await asyncio.to_thread(_remembered_stale, db)
+    except Exception:
+        db.rollback()
+        remembered = set()
+        logger.warning("Explore pipeline: couldn't read the stale-mark record", exc_info=True)
+    refreshed_ids = refreshed_ids | remembered
     whole = await _index_is_whole_or_none()
     outcome = "skipped"  # or "failed", "rebuilt", "topped up"
     embedded = 0
@@ -432,12 +439,8 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
             # whole documents per transaction): what wasn't reached is still
             # missing or stale, and the next top-up finds it. A lock skips
             # the step; anything else fails the run as it always has.
-            if refreshed_ids:
-                try:
-                    await asyncio.to_thread(mark_text_stale, refreshed_ids)
-                except Exception:
-                    logger.warning("Explore pipeline: couldn't mark %d backfilled documents stale",
-                                   len(refreshed_ids), exc_info=True)
+            # The backfilled ones it didn't get to rewrite are marked stale.
+            await _mark_stale(db, refreshed_ids, current=getattr(exc, "current_hashes", None))
             if not is_busy_error(exc):
                 raise
             logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", exc)
@@ -447,16 +450,18 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
         # What this run's backfill changed was not re-embedded: marked, so
         # the next run re-embeds it (a document embedded before text hashes
         # were kept would otherwise have its new text adopted as current).
-        try:
-            await asyncio.to_thread(mark_text_stale, refreshed_ids)
-        except Exception:
-            logger.warning("Explore pipeline: couldn't mark %d backfilled documents stale", len(refreshed_ids),
-                           exc_info=True)
+        await _mark_stale(db, refreshed_ids)
     if outcome == "skipped":
         logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
     elif outcome != "failed":
         # Whole now, by this run or a start's: a failed rebuild's alert ends.
         await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
+        if remembered:  # re-embedded now
+            try:
+                await asyncio.to_thread(_forget_stale, db)
+            except Exception:
+                db.rollback()
+                logger.warning("Explore pipeline: couldn't clear the stale-mark record", exc_info=True)
     return embedded
 
 
@@ -489,10 +494,15 @@ def _top_up_plan(db: Session, refreshed_ids: set[int]) -> tuple[list[dict], dict
                 doc = explore_embed_dict(d)
                 current = explore_text_hash(doc)
                 recorded = hashes.get(d.id)
-                if d.id not in already or d.id in refreshed_ids or (recorded is not None and recorded != current):
+                if d.id in refreshed_ids or (recorded is not None and recorded != current):
                     wanted.append(doc)
                 elif recorded is None:
-                    adopt[d.id] = current
+                    if d.id in already:
+                        adopt[d.id] = current
+                    else:
+                        wanted.append(doc)
+                # (recorded == current: handled — embedded, or with no text
+                # to embed, as it now reads)
             after = docs[-1].id
             scan.expunge_all()  # the bodies read, let go of
 
@@ -523,7 +533,56 @@ async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
     # donor_classifier_ai.py and api/explore.py already give their own
     # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
     # start's rebuild waits for it rather than embed beside it.
-    return await asyncio.to_thread(top_up_explore_index, lambda: _still_wanted(plan), adopt)
+    try:
+        return await asyncio.to_thread(top_up_explore_index, lambda: _still_wanted(plan), adopt)
+    except Exception as exc:
+        # For the caller's stale marks: what each planned document's text
+        # hashes to now, so one this top-up did rewrite isn't marked.
+        exc.current_hashes = {d["id"]: explore_text_hash(d) for d in plan}
+        raise
+
+
+# api_cache: backfilled documents whose stale mark couldn't be written to the
+# vector store (the lock that skipped the step held it too), kept in the
+# main database instead until a run re-embeds them.
+_STALE_FALLBACK_KEY = "stale_marks"
+
+
+async def _mark_stale(db: Session, ids: set[int], *, current: dict[int, str] | None = None) -> None:
+    """vector_store.mark_text_stale, falling back to a record in the main
+    database when the vector store can't take it."""
+    if not ids:
+        return
+    try:
+        await asyncio.to_thread(mark_text_stale, ids, current)
+        return
+    except Exception:
+        logger.warning("Explore pipeline: couldn't mark %d backfilled documents stale in the vector store — "
+                       "recorded for the next run instead", len(ids), exc_info=True)
+    try:
+        await asyncio.to_thread(_remember_stale, db, ids)
+    except Exception:
+        db.rollback()
+        logger.exception("Explore pipeline: couldn't record %d backfilled documents as stale", len(ids))
+
+
+def _remember_stale(db: Session, ids: set[int]) -> None:
+    api_cache_set(db, "explore", _STALE_FALLBACK_KEY, sorted(_remembered_stale(db) | ids))
+
+
+def _remembered_stale(db: Session) -> set[int]:
+    row = db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _STALE_FALLBACK_KEY).first()
+    if row is None:
+        return set()
+    try:
+        return {int(i) for i in json.loads(row.data_json) or []}
+    except (ValueError, TypeError):
+        return set()
+
+
+def _forget_stale(db: Session) -> None:
+    db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _STALE_FALLBACK_KEY).delete()
+    db.commit()
 
 
 async def _index_is_whole_or_none() -> bool | None:
@@ -552,7 +611,9 @@ def _purge_orphaned_vectors(db: Session) -> int:
     is about to re-embed, which by definition still exist.
     """
     try:
-        embedded = get_embedded_explore_ids()
+        # Text-hash rows too: a document with none of its own chunks (no
+        # text, or marked stale before it was ever embedded) has only that.
+        embedded = get_embedded_explore_ids() | set(get_embedded_text_hashes())
     except Exception:
         logger.warning("Could not read the vector index — skipping orphan sweep")
         return 0
