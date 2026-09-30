@@ -430,6 +430,26 @@ describe("streamExploreDocumentSummary", () => {
     ).rejects.toThrow("404");
   });
 
+  it("waits out a request that got no response at all", async () => {
+    const post = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(done());
+    stubSummaryFetch(post);
+    const waited: number[] = [];
+    const result = await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async (ms) => {
+        waited.push(ms);
+      }
+    );
+    expect(result.summary).toBeTruthy();
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(waited).toHaveLength(1);
+  });
+
   it("releases each refusal's body before waiting", async () => {
     const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
     const cancel = vi.spyOn(refused.body!, "cancel");

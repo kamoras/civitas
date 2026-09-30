@@ -909,6 +909,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         # run, or an admin re-embed): twenty-odd minutes that a restart
         # would throw away, with semantic search off until the next one.
         "exploreIndexIsRebuilding": is_explore_index_rebuilding(),
+        # An Explore run in any process (its lease): a triggered or startup
+        # run has no run row, and its top-up can take twenty-odd minutes a
+        # restart would throw away mid-batch.
+        "exploreIsRunning": _explore_running(db),
     }
 
     if last_supplementary_run:
@@ -1640,6 +1644,19 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     from app.pipeline.election_pipeline import is_election_pipeline_running
 
     return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running, "Election")
+
+
+def _explore_running(db: Session) -> bool:
+    """Whether an Explore run (or anything else holding its lease) is live.
+    Unreadable counts as running: a deploy waits a poll rather than kill
+    one."""
+    from app.pipeline import lease
+
+    try:
+        return lease.holder(db, lease.EXPLORE) is not None
+    except Exception:
+        logger.warning("Explore lease unreadable — reported as running", exc_info=True)
+        return True
 
 
 def _data_reset_running(db: Session) -> bool:

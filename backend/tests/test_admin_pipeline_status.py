@@ -143,6 +143,17 @@ async def test_status_reports_an_explore_index_rebuild_so_deploys_wait_it_out(db
 
 
 @pytest.mark.asyncio
+async def test_status_reports_an_explore_run_so_deploys_wait_it_out(db_session):
+    # A triggered or startup Explore run has no run row: its lease is it.
+    from app.api.admin import admin_pipeline_status
+    from app.pipeline import lease
+
+    assert (await admin_pipeline_status(db=db_session))["exploreIsRunning"] is False
+    lease.acquire(db_session, lease.EXPLORE)
+    assert (await admin_pipeline_status(db=db_session))["exploreIsRunning"] is True
+
+
+@pytest.mark.asyncio
 async def test_check_and_deploy_waits_on_every_busy_flag_the_status_reports(db_session):
     # electionIsRunning was once published and not read: a deploy killed an
     # election run five minutes in. Every top-level boolean named for work

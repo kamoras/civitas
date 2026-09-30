@@ -975,7 +975,17 @@ export async function streamExploreDocumentSummary(
   const waitFor = (retryAfter: string | null) =>
     wait(Math.min(summaryRetryDelayMs(retryAfter), Math.max(0, giveUpAt - Date.now())), signal);
   for (;;) {
-    const res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
+    } catch (error) {
+      // No response at all — the connection reset under a deploy, a
+      // moment's network loss: waited out like a cut stream, not reported
+      // as the analysis being unavailable.
+      if (signal?.aborted || Date.now() >= giveUpAt) throw error;
+      await waitFor(null);
+      continue;
+    }
     // Only a refusal marked as a wait (X-Summary-Wait — the backend's, and
     // nginx's own limits and outages on this route): a 404 or a 500 is not
     // waited out.
