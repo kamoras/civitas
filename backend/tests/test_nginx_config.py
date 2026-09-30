@@ -175,7 +175,7 @@ def test_pages_leave_marked_no_transform():
         and b.head
         not in ("location /_next/static/", "location /photo/", "location = /api/og")
     ]
-    assert {b.head for b in page_locations} >= {"location /", "location /admin"}
+    assert {b.head for b in page_locations} >= {"location /", "location ^~ /admin"}
     for b in page_locations:
         assert "proxy_hide_header Cache-Control" in b.directives, b.head
         assert (
