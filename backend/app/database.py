@@ -1040,8 +1040,9 @@ RESET_KEEPS = frozenset({
 # ballot. Wiped, every contest in the live count found no race to belong
 # to for the rest of the window, the state pages emptied, and the count's
 # own history (what it had announced, when it last moved — which is what
-# holds the window open) went with it. Outside the window they are
-# ordinary derived data.
+# holds the window open) went with it. The api_cache coverage markers those
+# rows' pages read (state_candidates_common.HELD_BALLOT_MARKER_TIERS) are
+# kept with them. Outside the window they are ordinary derived data.
 RESET_KEEPS_WHILE_RESULTS = frozenset({
     "races", "candidates", "race_coverage_items", "race_results", "election_result_events",
     "live_result_reads", "ballot_measures", "measure_coverage",
@@ -1071,8 +1072,15 @@ def reset_all_data() -> dict:
     db = SessionLocal()
     try:
         keeps = RESET_KEEPS
+        kept_tiers: list[str] = [*RESET_KEEPS_CACHE_TIERS]
         if active_election(db).shows_results:
+            from app.pipeline.fetch.state_candidates_common import HELD_BALLOT_MARKER_TIERS
+
             keeps = RESET_KEEPS | RESET_KEEPS_WHILE_RESULTS
+            # The coverage markers the held ballot's pages read beside those
+            # rows (statewide, judicial, ballot basis): written by the same
+            # syncs, so equally unrebuildable until the window closes.
+            kept_tiers += HELD_BALLOT_MARKER_TIERS
             summary["kept_for_election_results"] = sorted(RESET_KEEPS_WHILE_RESULTS)
             logger.info("Data reset during an election's results window: its ballot and count are kept (%s)",
                         ", ".join(sorted(RESET_KEEPS_WHILE_RESULTS)))
@@ -1092,7 +1100,7 @@ def reset_all_data() -> dict:
                 # any other that may be live.
                 from app.pipeline import lease
 
-                wipe = wipe.where(table.c.tier.notin_([*lease.TIERS, *RESET_KEEPS_CACHE_TIERS]))
+                wipe = wipe.where(table.c.tier.notin_([*lease.TIERS, *kept_tiers]))
             summary[table.name] = db.execute(wipe).rowcount
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the

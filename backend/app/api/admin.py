@@ -1715,7 +1715,8 @@ async def admin_reset_data():
     runs rebuild the rest from scratch with the latest code. While an
     election's results are on show the held election's ballot and count
     are kept too (database.RESET_KEEPS_WHILE_RESULTS; named in the
-    response's details as kept_for_election_results): nothing can rebuild
+    response's details as kept_for_election_results), with the coverage
+    markers its pages read (HELD_BALLOT_MARKER_TIERS): nothing can rebuild
     them until the window closes.
 
     Every writer is held off for the whole wipe (_reset_holding_every_writer);

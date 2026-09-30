@@ -566,6 +566,16 @@ def judicial_marker_key(state: str, cycle: int) -> str:
     return f"judicial-synced-{state}-{cycle}"
 
 
+# The coverage records above describe the ballot rows beside them, and are
+# written by the same syncs — which stand down once election day has passed
+# (election_pipeline's election_is_held). A data reset in the results window
+# keeps those rows (database.RESET_KEEPS_WHILE_RESULTS), so it keeps these
+# too: wiped, a state page would say "not yet covered" (and list the §7
+# omission) above sections whose rows still show, and nothing could write
+# them again until the window closed.
+HELD_BALLOT_MARKER_TIERS = (STATEWIDE_MARKER_TIER, JUDICIAL_MARKER_TIER, BALLOT_BASIS_TIER)
+
+
 STATEWIDE_OFFICE_LABELS = {
     "governor": "Governor",
     "lt_governor": "Lieutenant Governor",

@@ -124,6 +124,63 @@ class TestResetDuringElectionResults:
         assert db_session.query(models.RaceResult).count() == 1
         assert db_session.query(models.Senator).count() == 0  # the rest is reset as ever
 
+    def _seed_markers(self, db):
+        from app.pipeline.cache import api_cache_set
+        from app.pipeline.fetch.state_candidates_common import (
+            BALLOT_BASIS_TIER, JUDICIAL_MARKER_TIER, STATEWIDE_MARKER_TIER,
+            ballot_basis_key, judicial_marker_key, statewide_marker_key,
+        )
+
+        db.add(models.StatewideNominee(state="GA", cycle_year=2026, office="governor",
+                                       display_name="Dana Smith", party="D"))
+        api_cache_set(db, STATEWIDE_MARKER_TIER, statewide_marker_key("GA", 2026),
+                      {"checkedAt": "2026-11-01T00:00:00Z", "sourceName": "GA SOS"})
+        api_cache_set(db, JUDICIAL_MARKER_TIER, judicial_marker_key("GA", 2026),
+                      {"checkedAt": "2026-11-01T00:00:00Z", "sourceName": "GA SOS"})
+        api_cache_set(db, BALLOT_BASIS_TIER, ballot_basis_key("GA", 2026),
+                      {"complete": True, "races": []})
+        db.commit()
+
+    def _state_page(self, db):
+        import json
+        from datetime import date
+
+        from app.api import elections
+
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 10)):
+            page = json.loads(elections.state_ballot("GA", db).body)
+            return page, elections._race_complete(elections._ballot_marker(db, "GA", 2026), "GA", "2026-HOUSE-GA-2")
+
+    def test_the_held_ballots_coverage_markers_survive_it(self, db_session, monkeypatch):
+        """A state page's statewide, judicial and ballot-basis status reads
+        api_cache markers that nothing rewrites after election day: the
+        reset keeps them with the rows they describe, so the page says the
+        same thing after as before."""
+        self._seed(db_session)
+        self._seed_markers(db_session)
+        before, complete_before = self._state_page(db_session)
+        assert before["statewideCoverage"]["status"] == "covered"
+        assert before["judicialCoverage"]["status"] != "not_yet_covered"
+        assert "Governor and other statewide executive contests" not in before["omits"]
+        assert complete_before
+
+        self._reset_on(db_session, monkeypatch, "2026-11-10")
+        db_session.expire_all()
+        after, complete_after = self._state_page(db_session)
+        assert after["statewideCoverage"]["status"] == before["statewideCoverage"]["status"]
+        assert after["judicialCoverage"]["status"] == before["judicialCoverage"]["status"]
+        assert after["omits"] == before["omits"]
+        assert complete_after
+
+    def test_the_markers_are_cleared_outside_it(self, db_session, monkeypatch):
+        from app.pipeline.fetch.state_candidates_common import HELD_BALLOT_MARKER_TIERS
+
+        self._seed(db_session)
+        self._seed_markers(db_session)
+        self._reset_on(db_session, monkeypatch, "2026-12-20")
+        assert db_session.query(models.ApiCache).filter(
+            models.ApiCache.tier.in_(HELD_BALLOT_MARKER_TIERS)).count() == 0
+
     def test_cleared_outside_it(self, db_session, monkeypatch):
         self._seed(db_session)
         summary = self._reset_on(db_session, monkeypatch, "2026-12-20")

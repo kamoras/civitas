@@ -801,8 +801,10 @@ wrong number on election night is worse than none:
   lead itself going back to the seat's party or tying (`lead_is_back`), never
   by the count dipping below the bar with the same challenger ahead.
 - A data reset inside the results window keeps the held election's ballot and
-  count (`database.RESET_KEEPS_WHILE_RESULTS`): after election day nothing
-  rebuilds them — the roster and ballot syncs stand down (`election_is_held`).
+  count (`database.RESET_KEEPS_WHILE_RESULTS`) and the coverage markers its
+  pages read beside them (statewide, judicial and ballot-basis `api_cache`
+  tiers, `HELD_BALLOT_MARKER_TIERS`): after election day nothing rebuilds
+  them — the roster and ballot syncs stand down (`election_is_held`).
 
 After both member pipelines complete, `stock_pipeline.py` runs as a sibling
 phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
