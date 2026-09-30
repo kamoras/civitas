@@ -62,6 +62,13 @@ describe("developing issue wording", () => {
           "Democrat leads Utah's 1st Congressional District in the count the state lists as official, in a seat Republicans hold",
       })
     ).toBe(true);
+    // The title an earlier backend wrote, still read the same way.
+    expect(
+      countIsOfficial({
+        title:
+          "Democrat wins Utah's 1st Congressional District in the official count, taking a seat Republicans held",
+      })
+    ).toBe(true);
     expect(
       countIsOfficial({
         title: "Democrat leads Utah's 1st Congressional District count in a seat Republicans hold",

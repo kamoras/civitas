@@ -1782,11 +1782,19 @@ export async function fetchPviMap(): Promise<PviMap> {
  * is a normal, expected response, not an error; the UI hides the town
  * selector rather than showing one with nothing in it. */
 export async function fetchTownsForState(state: string): Promise<TownEntry[]> {
-  const data = await cachedFetch<{ towns: TownEntry[] }>(
-    `${API_BASE}/elections/states/${encodeURIComponent(state)}/towns`,
-    TTL.LONG
+  const url = `${API_BASE}/elections/states/${encodeURIComponent(state)}/towns`;
+  // Checked, not cast: a malformed answer (no `towns`, a non-list, an entry
+  // without a name) once crashed the whole state page at `towns.length`.
+  // Anything unusable is no towns, and the page hides the town selector.
+  const { towns } = withShape<{ towns: TownEntry[] }>(
+    await cachedFetch(url, TTL.LONG),
+    { lists: ["towns"] },
+    url
   );
-  return data.towns;
+  return towns.filter(
+    (t): t is TownEntry =>
+      !!t && typeof t === "object" && typeof t.name === "string" && t.name.length > 0
+  );
 }
 
 /** One curated town's local ballot content — see TownBallot's docstring

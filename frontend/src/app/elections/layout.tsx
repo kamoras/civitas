@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import type { RaceSummary } from "@/types/election";
+import type { LiveResults, RaceSummary } from "@/types/election";
 import { pageMetadata } from "@/lib/site";
+import { describeElections } from "@/lib/seo";
+import { showsResults } from "@/lib/results";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -19,16 +21,27 @@ async function fetchCycleYear(): Promise<number | null> {
   }
 }
 
+// Whether /elections is in results mode (backend election_phase), read the
+// way the page itself reads it. Revalidated every five minutes, so the
+// description turns within minutes of the phase; an unreachable backend
+// (as under `next build`) is the campaign wording, as the page's own
+// default is.
+async function fetchResultsMode(): Promise<boolean> {
+  try {
+    const res = await fetch(`${BACKEND}/api/elections/results`, { next: { revalidate: 300 } });
+    if (!res.ok) return false;
+    const body = (await res.json()) as Partial<LiveResults>;
+    return showsResults(body?.phase);
+  } catch {
+    return false;
+  }
+}
+
 // Canonical /elections. The state pages beneath set their own; the
 // /elections/[raceId] route only redirects. See lib/site.ts.
 export async function generateMetadata(): Promise<Metadata> {
-  const cycleYear = await fetchCycleYear();
-  const year = cycleYear ? `${cycleYear} ` : "";
-  return pageMetadata({
-    title: `${year}Elections by State: Senate, House & Ballot Measures`,
-    description: `Every ${year}U.S. Senate and House race by state — candidates, FEC fundraising, partisan lean, and statewide ballot measures quoted from official sources.`,
-    path: "/elections",
-  });
+  const [cycleYear, resultsMode] = await Promise.all([fetchCycleYear(), fetchResultsMode()]);
+  return pageMetadata({ ...describeElections(cycleYear, resultsMode), path: "/elections" });
 }
 
 export default function ElectionsLayout({ children }: { children: React.ReactNode }) {

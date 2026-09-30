@@ -447,16 +447,12 @@ export function Coverage({
   className = "mt-8",
   headingLevel = "h3",
   heading,
-  renderedAt,
 }: {
   issue: ActionIssue;
   className?: string;
   headingLevel?: "h2" | "h3" | "h4";
   /** Replaces the plain heading, e.g. to add a share button beside it. */
   heading?: React.ReactNode;
-  /** When a server render read the issue (ISO): the count's time when the
-   *  backend sent none (an older backend). */
-  renderedAt?: string;
 }) {
   const facts = issue.facts ?? [];
   if (facts.length === 0) return null;
@@ -482,19 +478,21 @@ export function Coverage({
           </li>
         ))}
       </ol>
-      <CountAsOf issue={issue} renderedAt={renderedAt} />
+      <CountAsOf issue={issue} />
     </section>
   );
 }
 
-/** A count issue's facts are the count as Civitas read it, and the issue
- *  carries no time of its own (only a date): say when, and whether the
- *  state calls it official — inside the facts section, so a shared image of
- *  it (card or page) says so too. */
-function CountAsOf({ issue, renderedAt }: { issue: ActionIssue; renderedAt?: string }) {
+/** A count issue's facts are the count as Civitas read it: say when —
+ *  the backend's own read time (countAsOf), the only time that describes
+ *  the figures — and whether the state calls it official, inside the facts
+ *  section, so a shared image of it (card or page) says so too. With no
+ *  countAsOf (an older backend) it names no time: the time a page happened
+ *  to be rendered is not when the count was read (the issue is written at
+ *  sync time and served from caches), and would overstate how fresh it is. */
+function CountAsOf({ issue }: { issue: ActionIssue }) {
   if (!factsAreTheCount(issue)) return null;
-  const readAt = issue.countAsOf ?? renderedAt;
-  const when = readAt ? formatEasternTime(readAt) : "";
+  const when = issue.countAsOf ? formatEasternTime(issue.countAsOf) : "";
   return (
     <p className="mt-4 text-xs text-ink-min">
       {countIsOfficial(issue) ? (
@@ -502,10 +500,7 @@ function CountAsOf({ issue, renderedAt }: { issue: ActionIssue; renderedAt?: str
       ) : (
         <span className="text-signal-amber">NOT FINAL</span>
       )}{" "}
-      ·{" "}
-      {when
-        ? `the count as of ${when}, ${issue.countAsOf ? "when Civitas read it" : "when this page read it"}. `
-        : ""}
+      · {when ? `the count as of ${when}, when Civitas read it. ` : ""}
       The state&apos;s own results site has the current count.
     </p>
   );

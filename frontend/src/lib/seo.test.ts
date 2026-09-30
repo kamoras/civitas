@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { serializeJsonLd } from "@/components/seo/JsonLd";
-import { describeBill, describeProfile, personJsonLd } from "./seo";
+import {
+  describeBill,
+  describeElections,
+  describeProfile,
+  describeStateBallot,
+  personJsonLd,
+} from "./seo";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { BillDetail } from "@/types/bill";
 
@@ -104,5 +110,50 @@ describe("JSON-LD", () => {
     expect(personJsonLd("c", profile("senate", { state: "VT", party: "I" }))).not.toHaveProperty(
       "affiliation"
     );
+  });
+});
+
+describe("elections metadata", () => {
+  it("drops the lean map from /elections' description in the results window", () => {
+    const campaign = describeElections(2026, false);
+    expect(campaign.description).toMatch(/partisan lean/);
+    const results = describeElections(2026, true);
+    expect(results.title).toBe("2026 Election Results by State: Senate & House Count");
+    expect(results.description).not.toMatch(/partisan lean/);
+    expect(results.description).toMatch(/Civitas calls none\.$/);
+    expect(results.description).not.toMatch(/\bwins?\b|\bwon\b/);
+    // Short enough that metaDescription never cuts the "calls none".
+    expect(results.description.length).toBeLessThanOrEqual(160);
+  });
+
+  const ballot = {
+    state: "GA",
+    stateName: "Georgia",
+    cycleYear: 2026,
+    electionDate: "2026-11-03",
+    measures: [{}, {}],
+  };
+
+  it("keeps the ballot-research wording for a state page outside the results window", () => {
+    const d = describeStateBallot(ballot, false, null);
+    expect(d.title).toBe("Georgia Ballot 2026: Senate, House Races & Ballot Measures");
+    expect(d.description).toMatch(/2 statewide ballot measures/);
+  });
+
+  it("says a state page leads with the count in the results window — or where it is", () => {
+    const live = describeStateBallot(ballot, true, true);
+    expect(live.title).toBe("Georgia Election Results 2026: Senate & House Count and Ballot");
+    expect(live.description).toMatch(/as its election office publishes it/);
+    expect(live.description).toMatch(/Civitas calls no race/);
+    // A state not read live: no count promised, the office pointed to.
+    const notLive = describeStateBallot(ballot, true, false);
+    expect(notLive.description).toMatch(/Civitas doesn't read it live/);
+    // Couldn't check: promises neither.
+    const unknown = describeStateBallot(ballot, true, null);
+    expect(unknown.description).not.toMatch(/doesn't read|as its election office publishes it/);
+    for (const d of [live, notLive, unknown]) {
+      expect(d.description.length).toBeLessThanOrEqual(160);
+      expect(d.description).not.toMatch(/\bwins?\b|\bwon\b/);
+    }
   });
 });

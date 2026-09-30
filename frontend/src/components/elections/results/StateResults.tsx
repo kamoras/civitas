@@ -16,7 +16,7 @@ import {
   seatsLed,
   showsResults,
 } from "@/lib/results";
-import { describeInterval, RETRY_BACKOFF_MS } from "@/hooks/useLiveResults";
+import { describeInterval, RESULTS_POLL_MS, RETRY_BACKOFF_MS } from "@/hooks/useLiveResults";
 import { useNow } from "@/hooks/useNow";
 import type { LiveRaceResult, LiveResults, StateBallot } from "@/types/election";
 
@@ -34,17 +34,21 @@ export default function StateResults({
   results,
   error = null,
   retryMs = null,
+  failedAt = null,
   arrivalRace = null,
   lookupHref,
   lookupIsStateSpecific,
 }: {
   ballot: StateBallot;
   results: LiveResults | null;
-  /** The last refresh's failure, if any — shown only when there is no
-   * count to show instead. */
+  /** The last refresh's failure, if any: in place of the count when there
+   * is none, and otherwise on the refresh line above the count, which
+   * then says the count shown is an older one. */
   error?: string | null;
   /** The wait before the next retry after a failure (useLiveResults). */
   retryMs?: number | null;
+  /** When the last refresh failed, ms since epoch (useLiveResults). */
+  failedAt?: number | null;
   /** The race a #race- arrival link was handed to the count for, or null
    * (no such link, or it went to research). Decided once by the page. */
   arrivalRace?: string | null;
@@ -96,14 +100,30 @@ export default function StateResults({
   const now = useNow();
   const stillVoting = !!results && pollsStillOpen(results, ballot.state, now);
 
-  // Scroll to the arrival race once. The page decided, when the count
-  // first loaded, that this race has one — so it is on screen by now — and
-  // never re-decides on a later poll.
+  // When the count on screen was read from the state's feed: the backend's
+  // last good read, or — from an older backend with no feed record — the
+  // newest read of any race shown. Never the page's own clock: a refresh
+  // can be answered from a cache, so "now" would overstate how fresh it is.
+  const countReadAt =
+    feed?.lastOkAt ??
+    races.reduce<string | null>(
+      (latest, r) =>
+        !latest || Date.parse(r.fetchedAt) > Date.parse(latest) ? r.fetchedAt : latest,
+      null
+    );
+
+  // Land on the arrival race once — scrolled to, and focused, so a keyboard
+  // or screen-reader user starts there too rather than at the top of the
+  // document. The page decided, when the count first loaded, that this
+  // race has one — so it is on screen by now — and never re-decides on a
+  // later poll.
   const scrolledTo = useRef<string | null>(null);
   useEffect(() => {
     if (!arrivalRace || scrolledTo.current === arrivalRace) return;
     scrolledTo.current = arrivalRace;
-    document.getElementById(`result-${arrivalRace}`)?.scrollIntoView?.({ block: "start" });
+    const target = document.getElementById(`result-${arrivalRace}`);
+    target?.scrollIntoView?.({ block: "start" });
+    target?.focus({ preventScroll: true });
   }, [arrivalRace]);
 
   if (!results && error) {
@@ -177,6 +197,39 @@ export default function StateResults({
 
   return (
     <section aria-label={`${stateName} results`} className="mb-10 space-y-5">
+      {/* How current the count on screen is, and whether this page is
+          still managing to refresh it: a count that stopped refreshing
+          must not pass for a live one. The polite announcement for the
+          live-updates feed below, which is deliberately not live itself. */}
+      <p
+        role="status"
+        className={`font-mono text-xs tracking-[0.08em] ${
+          error ? "text-signal-amber" : "text-ink-min"
+        }`}
+      >
+        {error
+          ? [
+              failedAt != null
+                ? `REFRESH FAILED AT ${formatEasternTime(new Date(failedAt).toISOString()).toUpperCase()}`
+                : "REFRESH FAILED",
+              races.length > 0
+                ? countReadAt
+                  ? `SHOWING THE COUNT READ AT ${formatEasternTime(countReadAt).toUpperCase()}`
+                  : "SHOWING AN OLDER COUNT"
+                : null,
+              `RETRYING ${describeInterval(retryMs ?? RETRY_BACKOFF_MS[0]).toUpperCase()}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : [
+              countReadAt && !failed
+                ? `UPDATED ${formatEasternTime(countReadAt).toUpperCase()}`
+                : null,
+              `REFRESHED ${describeInterval(RESULTS_POLL_MS).toUpperCase()}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+      </p>
       {races.length === 0 &&
         (stillVoting ? (
           <p className="border border-white/[0.09] bg-surface p-4 text-sm text-ink-lo">

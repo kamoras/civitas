@@ -12,6 +12,12 @@ import {
   A,
 } from "@/components/about/AboutPage";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { countWord, fetchLiveStates, stateNameList } from "@/lib/liveStates";
+
+// The live-count state list below is read from the backend (fetchLiveStates),
+// every five minutes (LIVE_STATES_REVALIDATE_S). A literal: Next reads it
+// statically.
+export const revalidate = 300;
 
 export const metadata = pageMetadata({
   title: "How State Ballot Pages Work",
@@ -20,7 +26,8 @@ export const metadata = pageMetadata({
   path: "/about/elections",
 });
 
-export default function ElectionsChapter() {
+export default async function ElectionsChapter() {
+  const live = await fetchLiveStates();
   return (
     <AboutPage
       href="/about/elections"
@@ -220,8 +227,14 @@ export default function ElectionsChapter() {
           From election day, <span className="font-mono text-ink-hi">/elections</span> and each
           state page put results first. The national map is shaded by who is leading each race
           instead of by how the state usually leans — fainter while fewer than half its reporting
-          areas (usually precincts) are in, solid once the state calls its count official. Each
-          state page shows its Senate race, every House district and a district map shaded the same
+          areas (usually precincts) are in, solid once the state calls its count official. Where a
+          state has more than one race on the map — its House seats, or both Senate seats — it takes
+          the colour of the party leading the most of them, grey when two lead equally many, and
+          stays fainter until every one has half in; it turns solid only when every count is
+          official. A state still voting, one with no votes yet and one whose feed couldn&apos;t be
+          read are each marked with a pattern as well as a colour, and each state&apos;s name, read
+          aloud, says where its count stands. Each state page says when its count was last read, and
+          shows its Senate race or races, every House district and a district map shaded the same
           way, above the ballot research, and a live-updates feed tells each change as it happens:
           first returns, a new leader, every reporting area in, a count called official, a seat
           changing party. A district the state&apos;s results feed gives no count for — a contest it
@@ -235,11 +248,22 @@ export default function ElectionsChapter() {
         <Sub title="Where the numbers come from">
           <P>
             Every five minutes, from the state&apos;s own election-night results site — the same
-            systems Civitas already reads for confirmed candidates. Fifteen states publish a count
-            we can read this way: Arkansas, Colorado, Georgia, Idaho, Iowa, Montana, Nebraska, New
-            Mexico, North Dakota, Rhode Island, South Carolina, Utah, Virginia, Washington and West
-            Virginia. Every other state&apos;s page says it has no live count here and links to the
-            office that publishes one; it is never drawn as a state where nothing has happened.
+            systems Civitas already reads for confirmed candidates.{" "}
+            {live && live.length > 0 ? (
+              <>
+                {capitalize(countWord(live.length))}{" "}
+                {live.length === 1 ? "state publishes" : "states publish"} a count we can read this
+                way: {stateNameList(live)}.
+              </>
+            ) : (
+              // The list couldn't be read: name no number rather than a
+              // stale one. The results map shows which states are covered.
+              <>
+                Only some states publish a count we can read this way; the results map marks which.
+              </>
+            )}{" "}
+            Every other state&apos;s page says it has no live count here and links to the office
+            that publishes one; it is never drawn as a state where nothing has happened.
           </P>
         </Sub>
         <Sub title="What we won’t show">
@@ -248,8 +272,10 @@ export default function ElectionsChapter() {
             its last polls close. A feed marked as test or practice data, one answering for the
             wrong election, or one older than what we already show is refused, and the page keeps
             the last count it trusted — and says so, with the time, if a state&apos;s feed
-            couldn&apos;t be read at all rather than implying counting hasn&apos;t started. A count
-            that goes down (a county pulling a bad upload) is shown but announces nothing.
+            couldn&apos;t be read at all rather than implying counting hasn&apos;t started. If the
+            page itself can&apos;t refresh, it says that too, with when the count still on screen
+            was read, so an old count never passes for a live one. A count that goes down (a county
+            pulling a bad upload) is shown but announces nothing.
           </P>
           <P>
             We never call a race. A candidate &ldquo;leads&rdquo; &mdash; &ldquo;not final&rdquo;
@@ -340,4 +366,8 @@ export default function ElectionsChapter() {
       </Section>
     </AboutPage>
   );
+}
+
+function capitalize(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
 }

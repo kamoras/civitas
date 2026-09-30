@@ -1,9 +1,11 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import type { StateBallot } from "@/types/election";
+import type { LiveResults, StateBallot } from "@/types/election";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { stateBallotHref } from "@/lib/elections";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { describeStateBallot } from "@/lib/seo";
+import { showsResults } from "@/lib/results";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import StateBallotClient from "./StateBallotClient";
 
@@ -22,6 +24,22 @@ function fetchStateBallot(state: string): Promise<StateBallot | null> {
     "state",
     "senateRaces"
   );
+}
+
+/** Whether Civitas reads `state`'s count live, from the results endpoint's
+ * own list; null when that couldn't be checked. Asked only in the results
+ * window, when the page leads with the count. */
+async function fetchIsLive(state: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`${BACKEND}/api/elections/results?state=${encodeURIComponent(state)}`, {
+      next: { revalidate: REVALIDATE_S },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as Partial<LiveResults>;
+    return Array.isArray(body?.liveStates) ? body.liveStates.includes(state) : null;
+  } catch {
+    return null;
+  }
 }
 
 // Per-state metadata, not inherited from the elections layout — otherwise
@@ -48,13 +66,16 @@ export async function generateMetadata({
     });
   }
 
-  const name = ballot.stateName ?? code;
-  const n = ballot.measures.length;
-  const title = `${name} Ballot ${ballot.cycleYear}: Senate, House Races & Ballot Measures`;
+  // From election day the page leads with the count (its h1 becomes
+  // "<State> results" once polls close), so the title and description say
+  // so — from the same phase the page renders by.
+  const resultsMode = showsResults(ballot.phase);
+  const live = resultsMode ? await fetchIsLive(code) : null;
+  const { title, description } = describeStateBallot(ballot, resultsMode, live);
   const ogImage = absoluteUrl(`/api/og?state=${code}`);
   return pageMetadata({
     title,
-    description: `What's on the ${ballot.cycleYear} ${name} ballot (${ballot.electionDate}): U.S. Senate and House candidates with FEC fundraising${n > 0 ? `, and ${n} statewide ballot ${n === 1 ? "measure" : "measures"} quoted from official sources` : ""}.`,
+    description,
     path,
     type: "article",
     images: [{ url: ogImage, width: 1200, height: 630, alt: title }],

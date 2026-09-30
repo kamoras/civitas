@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   AWAITING_FILL,
+  AWAITING_MARK,
+  FEED_FAILED_MARK,
+  POLLS_OPEN_MARK,
   feedFailed,
   FEED_FAILED_FILL,
   isTied,
@@ -16,9 +19,11 @@ import {
   formatEasternTime,
   raceLabel,
   reportingText,
+  raceStatusText,
   resultFill,
   showsResults,
   stateFill,
+  stateShade,
   summarizeState,
 } from "./results";
 import type { ElectionPhaseInfo, LiveRaceResult, ResultEvent } from "@/types/election";
@@ -198,9 +203,115 @@ describe("stateFill", () => {
   });
 
   it("shades a House delegation led only by a third party in that party's colour", () => {
+    // One seat: drawn exactly as resultFill draws that race (80% in).
+    const one = race({ office: "H", district: 1, leaderParty: "IND" });
+    expect(stateFill([one], "H", true, true)).toBe(resultFill(one, true));
+    expect(stateFill([one], "H", true, true)).toMatch(/^rgba\(201,149,255, /);
+  });
+
+  it("compares every party, not just the two majors", () => {
+    const h = (district: number, leaderParty: string) =>
+      race({ office: "H", district, leaderParty, flip: false });
+    // D 1, R 0, independents 3: the independents' state, not a blue one.
     expect(
-      stateFill([race({ office: "H", district: 1, leaderParty: "IND" })], "H", true, true)
-    ).toBe("rgba(201,149,255, 0.6)");
+      stateFill([h(1, "DEM"), h(2, "IND"), h(3, "IND"), h(4, "IND")], "H", true, true)
+    ).toMatch(/^rgba\(201,149,255, /);
+    // D 1, R 1, independents 2: the independents lead the most — not "tied".
+    expect(
+      stateFill([h(1, "DEM"), h(2, "REP"), h(3, "IND"), h(4, "IND")], "H", true, true)
+    ).toMatch(/^rgba\(201,149,255, /);
+    // D 2, independents 2: a split at the top is tied/split, whoever they are.
+    expect(stateFill([h(1, "DEM"), h(2, "DEM"), h(3, "IND"), h(4, "IND")], "H", true, true)).toBe(
+      TIED_FILL
+    );
+  });
+
+  it("fades a House delegation by its least-counted seat, and is solid only when all are official", () => {
+    const h = (district: number, extra: Partial<LiveRaceResult> = {}) =>
+      race({ office: "H", district, leaderParty: "REP", flip: false, ...extra });
+    // Two of three seats nearly in, one at 25%: under half in somewhere is faint.
+    expect(
+      stateFill(
+        [h(1, { reportingUnits: 95 }), h(2, { reportingUnits: 95 }), h(3, { reportingUnits: 25 })],
+        "H",
+        true,
+        true
+      )
+    ).toBe("rgba(255,137,137, 0.30)");
+    // Every seat at 90%: the single-race scale at 90%.
+    expect(
+      stateFill([h(1, { reportingUnits: 90 }), h(2, { reportingUnits: 90 })], "H", true, true)
+    ).toBe("rgba(255,137,137, 0.85)");
+    // Official in one seat only: not solid.
+    expect(
+      stateFill([h(1, { official: true }), h(2, { reportingUnits: 90 })], "H", true, true)
+    ).not.toBe("rgba(255,137,137, 1.00)");
+    // Every seat official: solid.
+    expect(stateFill([h(1, { official: true }), h(2, { official: true })], "H", true, true)).toBe(
+      "rgba(255,137,137, 1.00)"
+    );
+    // A seat with nothing counted yet has nothing in: faint.
+    expect(
+      stateFill(
+        [
+          h(1, { reportingUnits: 95 }),
+          h(2, { votesCounted: 0, reportingUnits: 0, candidates: [] }),
+        ],
+        "H",
+        true,
+        true
+      )
+    ).toBe("rgba(255,137,137, 0.30)");
+  });
+
+  it("draws a state electing both its senators from both races", () => {
+    const regular = race({ raceId: "S1", leaderParty: "REP", flip: true });
+    const special = race({
+      raceId: "S2",
+      isSpecial: true,
+      leaderParty: "DEM",
+      flip: false,
+      candidates: [
+        { name: "Dana Smith", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Ray Jones", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+      ],
+    });
+    // Split between the parties: tied/split, not the first race's colour.
+    const split = stateShade("GA", [regular, special], "S", true, true);
+    expect(split.fill).toBe(TIED_FILL);
+    // Each race is named, so the change of party in the regular one shows.
+    expect(split.label).toBe(
+      "GA Senate: regular race Republican leads, 80% in, seat changing party; special race Democrat leads, 80% in"
+    );
+    // The same party ahead in both: that party.
+    expect(
+      stateShade(
+        "GA",
+        [regular, { ...special, leaderParty: "REP", candidates: regular.candidates }],
+        "S",
+        true,
+        true
+      ).fill
+    ).toMatch(/^rgba\(255,137,137, /);
+  });
+
+  it("says each state's status in its accessible name, not in colour alone", () => {
+    expect(stateShade("GA", [], "S", true, true, false, true).label).toBe("GA: polls open");
+    expect(stateShade("GA", [], "S", true, true, true).label).toBe("GA: results feed not read");
+    expect(stateShade("GA", [], "S", true, true).label).toBe("GA Senate: no votes yet");
+    expect(stateShade("GA", [], "S", false, true).label).toBe("GA: no live count here");
+    expect(stateShade("GA", [], "S", true, false).label).toBe("GA: no Senate race this year");
+    expect(stateShade("GA", [race({ reportingUnits: 25 })], "S", true, true).label).toBe(
+      "GA Senate: Republican leads, 25% in, early, seat changing party"
+    );
+    const house = [
+      race({ office: "H", district: 1, leaderParty: "REP", flip: false }),
+      race({ office: "H", district: 2, leaderParty: "REP", flip: true }),
+      race({ office: "H", district: 3, leaderParty: "DEM", flip: false }),
+    ];
+    expect(stateShade("GA", house, "H", true, true).label).toBe(
+      "GA House: Republicans lead in the most seats, seats led D 1, R 2, of 3 listed, 1 seat changing party"
+    );
   });
 
   it("draws a covered state still voting as that, not as no votes yet", () => {
@@ -263,6 +374,7 @@ describe("describeUpdate", () => {
         "Ray Jones (R) leads in a seat Democrats hold. Ray Jones (R) 52.6%, Dana Smith (D) 47.4%. " +
         "2,103 of 2,653 precincts reporting (79%). Not final.",
     });
+    // Never "wins", even official: Civitas never calls a race.
     const official = describeUpdate(event("flip", { official: true })).text;
     expect(official).toMatch(
       /^Ray Jones \(R\) leads in the count the state lists as official, in a seat Democrats hold\./
@@ -317,6 +429,13 @@ describe("describeUpdate", () => {
     expect(describeUpdate(event("all_reporting")).text).toMatch(
       /Counting can continue after every unit reports\.$/
     );
+    expect(describeUpdate(event("all_reporting")).text).toMatch(
+      /^All 2,653 precincts have reported\./
+    );
+    // No unit count from the state: never "All 0 precincts".
+    expect(
+      describeUpdate(event("all_reporting", { totalUnits: null, reportingUnits: null })).text
+    ).toMatch(/^Every reporting unit is in\./);
     expect(describeUpdate(event("official")).tag).toBe("OFFICIAL");
     expect(
       describeUpdate(
@@ -326,6 +445,18 @@ describe("describeUpdate", () => {
       ).text
     ).toMatch(/^Dana Smith \(D\) is ahead again, so the seat no longer shows a change of party\./);
     expect(describeUpdate(event("first_returns")).text).toMatch(/^First returns\./);
+  });
+});
+
+describe("raceStatusText", () => {
+  it("says where a race stands without calling it", () => {
+    expect(raceStatusText(race({ votesCounted: 0 }))).toBe("no votes yet");
+    expect(raceStatusText(race({ official: true, flip: false }))).toBe(
+      "Republican leads, official count"
+    );
+    expect(raceStatusText(race({ totalUnits: null, flip: false, leaderParty: null }))).toBe(
+      "another party leads"
+    );
   });
 });
 
@@ -378,5 +509,49 @@ describe("seatsLed", () => {
     ]);
     expect(led).toEqual({ DEM: 1, IND: 1, OTHER: 1 });
     expect(formatLed(led)).toBe("D 1 · R 0 · I 1 · OTHER 1");
+  });
+});
+
+describe("the count-less fills' textures", () => {
+  // WCAG 2.x contrast of two sRGB colours, each an rgba composited over `bg`.
+  const parse = (c: string) => {
+    if (c.startsWith("#"))
+      return [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)).concat(1) as number[];
+    return c
+      .match(/[\d.]+/g)!
+      .map(Number)
+      .concat(1)
+      .slice(0, 4);
+  };
+  const over = (c: string, bg: number[]) => {
+    const [r, g, b, a] = parse(c);
+    return [r, g, b].map((v, i) => a * v + (1 - a) * bg[i]);
+  };
+  const lum = ([r, g, b]: number[]) => {
+    const ch = (v: number) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+  };
+  const ratio = (a: number[], b: number[]) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const SURFACE = parse("#14110e"); // --surface, the map panel
+
+  it("puts marks at least 3:1 against every dark fill and the page (WCAG 1.4.11)", () => {
+    const fills = [AWAITING_FILL, UNCOVERED_FILL, POLLS_OPEN_FILL, FEED_FAILED_FILL].map((f) =>
+      over(f, SURFACE)
+    );
+    for (const [mark, base] of [
+      [POLLS_OPEN_MARK, POLLS_OPEN_FILL],
+      [FEED_FAILED_MARK, FEED_FAILED_FILL],
+      [AWAITING_MARK, AWAITING_FILL],
+    ]) {
+      // The mark as drawn: over its own fill, over the panel.
+      const drawn = over(mark, over(base, SURFACE));
+      for (const f of [...fills, SURFACE]) expect(ratio(drawn, f)).toBeGreaterThanOrEqual(3);
+    }
   });
 });

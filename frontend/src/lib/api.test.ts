@@ -18,6 +18,7 @@ import {
   fetchSenatorsByState,
   fetchStates,
   fetchTimeline,
+  fetchTownsForState,
   parseExploreSummaryText,
   splitHighlights,
   abortableSleep,
@@ -256,6 +257,26 @@ describe("API shape guarantees", () => {
     // The elections map indexes these by state/district code on every render.
     expect(pvi.states).toEqual({});
     expect(pvi.districts).toEqual({});
+  });
+
+  it("fetchTownsForState is no towns, not a crash, when the answer is malformed", async () => {
+    // A towns response without a list once took down the whole state page
+    // ("Cannot read properties of undefined (reading 'length')").
+    for (const body of [{}, null, { towns: null }, { towns: {} }, []]) {
+      __resetApiCache();
+      vi.stubGlobal("fetch", mockJson(body));
+      expect(await fetchTownsForState("MA")).toEqual([]);
+    }
+    __resetApiCache();
+    vi.stubGlobal(
+      "fetch",
+      mockJson({
+        towns: [{ name: "Cambridge", sourceName: "City of Cambridge" }, null, { name: 3 }],
+      })
+    );
+    expect(await fetchTownsForState("MA")).toEqual([
+      { name: "Cambridge", sourceName: "City of Cambridge" },
+    ]);
   });
 
   it("keeps real data intact — normalizing is not filtering", async () => {

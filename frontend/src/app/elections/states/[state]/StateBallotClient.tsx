@@ -1516,6 +1516,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     data: live,
     error: liveError,
     retryMs: liveRetryMs,
+    failedAt: liveFailedAt,
   } = useLiveResults(ballot.state, askForResults);
   const resultsMode = showsResults(ballot.phase) || (!!live && showsResults(live.phase));
   // From election day the page reads the count — but it only talks about
@@ -1759,6 +1760,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   results={live}
                   error={liveError}
                   retryMs={liveRetryMs}
+                  failedAt={liveFailedAt}
                   arrivalRace={arrival?.toCount ?? null}
                   lookupHref={lookupHref}
                   lookupIsStateSpecific={lookupIsStateSpecific}

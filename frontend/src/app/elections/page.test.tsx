@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { afterEach, beforeEach } from "vitest";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
-import { FEED_FAILED_FILL, POLLS_OPEN_FILL } from "@/lib/results";
 import ElectionsPage from "./page";
 
 const fetchPviMap = vi.hoisted(() => vi.fn());
@@ -79,10 +78,18 @@ const RESULTS = {
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 // RaceMap pulls in react-simple-maps and a topojson payload; the page's own
 // behaviour is what is under test here, not the map's rendering.
-const mapFill = vi.hoisted(() => ({ current: null as null | ((s: string) => string), renders: 0 }));
+const mapFill = vi.hoisted(() => ({
+  current: null as null | ((s: string) => string),
+  label: null as null | ((s: string) => string),
+  renders: 0,
+}));
 vi.mock("@/components/elections/RaceMap", () => ({
-  default: (props: { getFillColor: (s: string) => string }) => {
+  default: (props: {
+    getFillColor: (s: string) => string;
+    getStateLabel?: (s: string) => string;
+  }) => {
     mapFill.current = props.getFillColor;
+    mapFill.label = props.getStateLabel ?? null;
     mapFill.renders += 1;
     return <div data-testid="race-map" />;
   },
@@ -213,7 +220,10 @@ describe("ElectionsPage", () => {
     expect(ga).toHaveTextContent("FEED NOT READ");
     expect(ga).toHaveTextContent("Senate: couldn't read its feed");
     expect(ga).not.toHaveTextContent(/no votes yet|LIVE/);
-    expect(mapFill.current?.("GA")).toBe(FEED_FAILED_FILL);
+    // Drawn with the feed-not-read texture, and said in its name: the dark
+    // count-less fills are not told apart by colour alone.
+    expect(mapFill.current?.("GA")).toMatch(/^url\(#tex-.*-feed\)$/);
+    expect(mapFill.label?.("GA")).toBe("GA: results feed not read");
     expect(screen.getByText(/FEED NOT READ$/, { selector: "li" })).toBeInTheDocument();
   });
 
@@ -283,7 +293,8 @@ describe("ElectionsPage", () => {
     expect(ga).toHaveTextContent("POLLS OPEN");
     expect(ga).toHaveTextContent("Senate: polls still open");
     expect(ga).not.toHaveTextContent(/LIVE|no votes yet/);
-    expect(mapFill.current?.("GA")).toBe(POLLS_OPEN_FILL);
+    expect(mapFill.current?.("GA")).toMatch(/^url\(#tex-.*-polls\)$/);
+    expect(mapFill.label?.("GA")).toBe("GA: polls open");
     expect(screen.getByText(/POLLS OPEN$/, { selector: "li" })).toBeInTheDocument();
   });
 
@@ -358,6 +369,79 @@ describe("ElectionsPage", () => {
     });
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
       "2026 midterm results"
+    );
+  });
+
+  it("keeps one status line through the switch, changing only its words", async () => {
+    // A live region inserted as the mode switches is usually not announced —
+    // and that switch is the moment worth announcing.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValueOnce(CAMPAIGN).mockResolvedValue(RESULTS);
+    render(<ElectionsPage />);
+    await screen.findByText(/R-LEANING/);
+    const status = document.querySelector("header [role=status]");
+    expect(status).not.toBeNull();
+    expect(status).toHaveTextContent("");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await screen.findByText("2026 midterm results");
+    expect(document.querySelectorAll("header [role=status]")).toHaveLength(1);
+    expect(document.querySelector("header [role=status]")).toBe(status);
+    expect(status).toHaveTextContent(/LIVE · LAST CHANGE/);
+  });
+
+  it("doesn't say polls are open all day when no state is read live", async () => {
+    // `every` over an empty list is true: with no live state the masthead
+    // said "polls are open" until the phase ended.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T06:00:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      phase: { ...RESULTS.phase, phase: "election_day", lastResultChange: null },
+      liveStates: [],
+      pollsClose: {},
+      races: [],
+      updates: [],
+    });
+    render(<ElectionsPage />);
+    const h1 = await screen.findByRole("heading", { level: 1 });
+    expect(h1).toHaveTextContent("2026 midterm results");
+    expect(h1).not.toHaveTextContent(/polls are open/);
+  });
+
+  it("lists both Senate races of a state electing two senators, and says early under half in", async () => {
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    const regular = { ...RESULTS.races[0], reportingUnits: 500 };
+    const special = {
+      ...RESULTS.races[0],
+      raceId: "2026-SEN-GA-SPECIAL",
+      isSpecial: true,
+      leaderParty: "DEM",
+      flip: false,
+      candidates: [
+        { name: "Dana Smith", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Ray Jones", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+      ],
+    };
+    fetchLiveResults.mockResolvedValue({ ...RESULTS, races: [regular, special], updates: [] });
+    render(<ElectionsPage />);
+    const ga = within(await screen.findByRole("region", { name: /By state/ })).getByRole("link", {
+      name: /^GA/,
+    });
+    expect(ga).toHaveTextContent("Senate: Ray Jones (R) leads · early · flip");
+    expect(ga).toHaveTextContent("Senate (special): Dana Smith (D) leads");
+    expect(ga).not.toHaveTextContent("Dana Smith (D) leads · early");
+    // Split between the parties: tied/split on the map, both races named.
+    expect(mapFill.label?.("GA")).toMatch(
+      /regular race Republican leads.*special race Democrat leads/
+    );
+    // States, said as states: not "N of M Senate races".
+    expect(screen.getByRole("region", { name: "Totals" })).toHaveTextContent(
+      "Read live in 1 of the 1 state electing a senator"
     );
   });
 

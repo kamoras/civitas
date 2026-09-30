@@ -5,10 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import RaceMap from "@/components/elections/RaceMap";
 import LiveUpdates from "@/components/elections/results/LiveUpdates";
+import { useMapTextures } from "@/components/elections/results/MapTextures";
 import {
   AWAITING_FILL,
+  AWAITING_SWATCH,
   FEED_FAILED_FILL,
+  FEED_FAILED_SWATCH,
   POLLS_OPEN_FILL,
+  POLLS_OPEN_SWATCH,
   TIED_FILL,
   UNCOVERED_FILL,
   feedFailed,
@@ -17,8 +21,9 @@ import {
   isTied,
   partyLetter,
   pollsStillOpen,
+  reportingShare,
   seatsLed,
-  stateFill,
+  stateShade,
   summarizeState,
 } from "@/lib/results";
 import { useNow } from "@/hooks/useNow";
@@ -27,15 +32,30 @@ import type { LiveRaceResult, LiveResults } from "@/types/election";
 const DC_FILL = "rgba(255, 255, 255, 0.06)";
 
 /** A legend key. Every swatch has a faint border, so the near-background
- * fills (UNCOVERED_FILL, AWAITING_FILL) still read as a key and not a gap. */
-function Swatch({ color }: { color: string }) {
+ * fills (UNCOVERED_FILL, AWAITING_FILL) still read as a key and not a gap;
+ * `texture` draws the same marks the map lays over that fill. */
+function Swatch({ color, texture }: { color: string; texture?: string }) {
   return (
     <span
       aria-hidden="true"
       className="inline-block h-3 w-4 border border-white/30"
-      style={{ backgroundColor: color }}
+      style={texture ? { background: `${texture}, ${color}` } : { backgroundColor: color }}
     />
   );
+}
+
+/** "Senate: Jane Roe (D) leads · early" — one Senate race on a directory
+ * row, with "early" under half in, as the map draws it fainter. */
+function senateLine(r: LiveRaceResult, several: boolean): string {
+  const name = several ? `Senate${r.isSpecial ? " (special)" : ""}` : "Senate";
+  if (isTied(r)) return `${name}: tied${r.official ? " · official" : ""}`;
+  const lead = r.candidates[0];
+  if (!lead || !r.votesCounted) return `${name}: no votes yet`;
+  const share = reportingShare(r);
+  const early = !r.official && share != null && share < 0.5;
+  return `${name}: ${lead.name} (${partyLetter(lead.party) || "other"}) ${
+    r.official ? "official" : "leads"
+  }${early ? " · early" : ""}${r.flip ? " · flip" : ""}`;
 }
 
 function LedTally({ led }: { led: Record<string, number> }) {
@@ -81,6 +101,8 @@ export default function ResultsOverview({
   const senate = results.races.filter((r) => r.office === "S");
   const house = results.races.filter((r) => r.office === "H");
   const flips = results.races.filter((r) => r.flip);
+  // States, not races: a state electing both its senators counts once —
+  // the response lists which states elect one, not how many seats each.
   const liveSenate = [...senateStates].filter((s) => live.has(s)).length;
   // A covered state whose latest feed read failed: with no count it is
   // "feed not read", never "no votes yet"; with an older count it is stale.
@@ -101,17 +123,20 @@ export default function ResultsOverview({
   const redrawnSet = new Set(redrawn);
   const redrawnCounted = house.filter((r) => redrawnSet.has(r.state) && r.votesCounted > 0).length;
 
-  const fill = (state: string) =>
-    state === "DC"
-      ? DC_FILL
-      : stateFill(
-          byState.get(state) ?? [],
-          chamber,
-          live.has(state),
-          chamber === "H" || senateStates.has(state),
-          readFailed(state),
-          voting(state)
-        );
+  const { defs, paint } = useMapTextures();
+  const shade = (state: string) =>
+    stateShade(
+      state,
+      byState.get(state) ?? [],
+      chamber,
+      live.has(state),
+      chamber === "H" || senateStates.has(state),
+      readFailed(state),
+      voting(state)
+    );
+  const fill = (state: string) => (state === "DC" ? DC_FILL : paint(shade(state).fill));
+  const label = (state: string) =>
+    state === "DC" ? "DC: no voting member of Congress" : shade(state).label;
 
   // Covered states first (they have something to show), then the rest.
   const directory = [...states].sort(
@@ -166,7 +191,7 @@ export default function ResultsOverview({
                 FAINTER: UNDER HALF IN
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={TIED_FILL} /> {chamber === "S" ? "TIED" : "TIED / SPLIT"}
+                <Swatch color={TIED_FILL} /> TIED / SPLIT
               </li>
               <li className="flex items-center gap-1.5">
                 {/* A Senate race led by an independent (Nebraska's, in 2026)
@@ -174,13 +199,13 @@ export default function ResultsOverview({
                 <Swatch color="rgba(201,149,255,0.6)" /> OTHER PARTY LEADS
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={POLLS_OPEN_FILL} /> POLLS OPEN
+                <Swatch color={POLLS_OPEN_FILL} texture={POLLS_OPEN_SWATCH} /> POLLS OPEN
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={AWAITING_FILL} /> NO VOTES YET
+                <Swatch color={AWAITING_FILL} texture={AWAITING_SWATCH} /> NO VOTES YET
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={FEED_FAILED_FILL} /> FEED NOT READ
+                <Swatch color={FEED_FAILED_FILL} texture={FEED_FAILED_SWATCH} /> FEED NOT READ
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={UNCOVERED_FILL} />{" "}
@@ -196,16 +221,19 @@ export default function ResultsOverview({
               }}
               getFillColor={(state) => fill(state)}
               getHoverFillColor={(state) => (state === "DC" ? DC_FILL : fill(state))}
+              getStateLabel={label}
+              defs={defs}
             />
           </div>
           <p className="border-t border-white/[0.07] px-4 py-3 text-xs text-ink-min">
             Colour is who leads each state&apos;s own count, not a projection. Fainter means fewer
             than half the precincts or counties are in; solid means the state calls its count
-            official.
-            {chamber === "H" &&
-              " For the House, a state is shaded by the party leading more of its districts."}{" "}
-            Amber means Civitas couldn&apos;t read that state&apos;s feed, which says nothing about
-            whether counting has started.
+            official.{" "}
+            {chamber === "H"
+              ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
+              : "A state electing both its senators is shaded by the party leading both, grey when they're split, and fainter while either race has under half in."}{" "}
+            Amber stripes mean Civitas couldn&apos;t read that state&apos;s feed, which says nothing
+            about whether counting has started.
           </p>
         </section>
 
@@ -219,7 +247,8 @@ export default function ResultsOverview({
             <LedTally led={seatsLed(senate)} />
           </div>
           <p className="mt-1 text-sm text-ink-lo">
-            {liveSenate} of {senateStates.size} Senate races read live
+            Read live in {liveSenate} of the {senateStates.size}{" "}
+            {senateStates.size === 1 ? "state" : "states"} electing a senator
           </p>
         </div>
         <div className="border border-white/[0.09] bg-surface p-4">
@@ -277,7 +306,6 @@ export default function ResultsOverview({
             const failed = readFailed(state);
             const hasCount = (byState.get(state) ?? []).length > 0;
             const feed = feeds[state];
-            const s = summary.senate[0];
             const stillVoting = voting(state);
             const badge = !isLive
               ? { text: "NO FEED", className: "border-white/15 text-ink-min" }
@@ -303,23 +331,27 @@ export default function ResultsOverview({
                       {badge.text}
                     </span>
                   </span>
-                  <span className="text-sm text-ink-lo">
-                    {s && isTied(s)
-                      ? `Senate: tied${s.official ? " · official" : ""}`
-                      : s?.candidates[0] && s.votesCounted
-                        ? `Senate: ${s.candidates[0].name} (${partyLetter(s.candidates[0].party) || "other"}) ${
-                            s.official ? "official" : "leads"
-                          }${s.flip ? " · flip" : ""}`
-                        : senateStates.has(state)
-                          ? isLive
-                            ? stillVoting
-                              ? "Senate: polls still open"
-                              : failed && !s
-                                ? "Senate: couldn't read its feed"
-                                : "Senate: no votes yet"
-                            : "Senate race: check the state's count"
-                          : "No Senate race this year"}
-                  </span>
+                  {summary.senate.length > 0 ? (
+                    // Every Senate race the state holds — a regular and a
+                    // special election each get a line.
+                    summary.senate.map((r) => (
+                      <span key={r.raceId} className="text-sm text-ink-lo">
+                        {senateLine(r, summary.senate.length > 1)}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-ink-lo">
+                      {senateStates.has(state)
+                        ? isLive
+                          ? stillVoting
+                            ? "Senate: polls still open"
+                            : failed
+                              ? "Senate: couldn't read its feed"
+                              : "Senate: no votes yet"
+                          : "Senate race: check the state's count"
+                        : "No Senate race this year"}
+                    </span>
+                  )}
                   {summary.house.length > 0 && (
                     <span className="font-mono text-xs text-ink-min">
                       HOUSE {formatLed(summary.houseLeads)} LEADING

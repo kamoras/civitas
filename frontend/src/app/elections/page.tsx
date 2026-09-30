@@ -121,15 +121,43 @@ export default function ElectionsPage() {
     results.phase.phase === "election_day" &&
     results.races.length === 0;
   const now = useNow(beforeAnyCount);
+  // Every state read live still voting — and there has to be one: with
+  // none (a backend that lists no live state, or none configured) `every`
+  // is vacuously true, and the masthead would say polls are open all day.
   const stillVoting =
     beforeAnyCount &&
     !!results &&
+    results.liveStates.length > 0 &&
     results.liveStates.every((st) => pollsStillOpen(results, st, now));
   const firstClose = stillVoting
     ? Object.values(results?.pollsClose ?? {})
         .filter((t) => Date.parse(t) > now)
         .sort((a, b) => Date.parse(a) - Date.parse(b))[0]
     : undefined;
+
+  // The masthead's one status line (see the masthead below).
+  const status: { text: string; tone: "cyan" | "amber" | "muted" } | null =
+    stillVoting && results
+      ? {
+          tone: "cyan",
+          text: resultsError
+            ? `REFRESH FAILED · RETRYING ${retryEvery}`
+            : firstClose
+              ? `POLLS OPEN · FIRST CLOSE ${formatEasternTime(firstClose).toUpperCase()}`
+              : "POLLS OPEN",
+        }
+      : resultsMode && results
+        ? {
+            tone: "amber",
+            text: resultsError
+              ? `REFRESH FAILED · RETRYING ${retryEvery}`
+              : results.phase.lastResultChange
+                ? `LIVE · LAST CHANGE ${formatEasternTime(results.phase.lastResultChange)}`
+                : "LIVE · WAITING FOR FIRST COUNTS",
+          }
+        : campaignMode && resultsError && !results
+          ? { tone: "muted", text: `COULDN'T CHECK FOR LIVE RESULTS · RETRYING ${retryEvery}` }
+          : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -173,84 +201,94 @@ export default function ElectionsPage() {
         className="pt-[var(--header-clearance)] pb-16 px-4 sm:px-6"
       >
         <div className="mx-auto max-w-7xl">
-          {/* ── Masthead ── */}
-          {stillVoting && results ? (
-            <PageMasthead
-              eyebrow={`Elections · election day · ${results.phase.electionDate}`}
-              title={`${results.cycleYear} midterms: polls are open`}
-              aside={
+          {/* ── Masthead ── One header whatever the mode, and one status
+              line in it that exists from the first render and only changes
+              its words: a live region inserted when the mode switches (the
+              page left open as polls close, or as results start) is
+              usually not announced, which is exactly the moment worth
+              announcing. */}
+          <PageMasthead
+            eyebrow={
+              stillVoting && results
+                ? `Elections · election day · ${results.phase.electionDate}`
+                : resultsMode && results
+                  ? `Elections · ${results.phase.phase === "election_day" ? "election day" : "results"} · ${
+                      results.phase.electionDate
+                    }`
+                  : campaignMode
+                    ? "Elections · partisan lean by state"
+                    : "Elections"
+            }
+            title={
+              stillVoting && results
+                ? `${results.cycleYear} midterms: polls are open`
+                : resultsMode && results
+                  ? `${results.cycleYear} midterm results`
+                  : campaignMode
+                    ? pvi?.cycleYear
+                      ? `${pvi.cycleYear} midterm ballot`
+                      : "Midterm ballot"
+                    : // Phase not known yet: say nothing either mode would
+                      // contradict.
+                      pvi?.cycleYear
+                      ? `${pvi.cycleYear} midterm elections`
+                      : "Midterm elections"
+            }
+            aside={
+              <div className="flex flex-col items-end gap-3">
                 <p
                   role="status"
                   aria-live="polite"
-                  className="flex items-center gap-2 border border-signal-cyan/40 px-3 py-1.5 font-mono text-xs tracking-[0.12em] text-signal-cyan"
+                  className={
+                    status
+                      ? `flex items-center gap-2 border px-3 py-1.5 font-mono text-xs tracking-[0.12em] ${
+                          status.tone === "cyan"
+                            ? "border-signal-cyan/40 text-signal-cyan"
+                            : status.tone === "amber"
+                              ? "border-signal-amber/40 text-signal-amber"
+                              : "border-white/15 text-ink-min"
+                        }`
+                      : "sr-only"
+                  }
                 >
-                  <span aria-hidden="true" className="inline-block h-2 w-2 bg-signal-cyan" />
-                  {resultsError
-                    ? `REFRESH FAILED · RETRYING ${retryEvery}`
-                    : firstClose
-                      ? `POLLS OPEN · FIRST CLOSE ${formatEasternTime(firstClose).toUpperCase()}`
-                      : "POLLS OPEN"}
+                  {status && status.tone !== "muted" && (
+                    <span
+                      aria-hidden="true"
+                      className={`inline-block h-2 w-2 ${
+                        status.tone === "cyan" ? "bg-signal-cyan" : "bg-signal-amber"
+                      }`}
+                    />
+                  )}
+                  {status?.text ?? ""}
                 </p>
-              }
-            >
-              Voting is under way. Counts appear here as each state&apos;s polls close, as the
-              state&apos;s own election office publishes them — nothing of a state&apos;s count is
-              shown before its last polls close. Every state&apos;s ballot research is one click
-              away.
-            </PageMasthead>
-          ) : resultsMode && results ? (
-            <PageMasthead
-              eyebrow={`Elections · ${results.phase.phase === "election_day" ? "election day" : "results"} · ${
-                results.phase.electionDate
-              }`}
-              title={`${results.cycleYear} midterm results`}
-              aside={
-                <p
-                  role="status"
-                  aria-live="polite"
-                  className="flex items-center gap-2 border border-signal-amber/40 px-3 py-1.5 font-mono text-xs tracking-[0.12em] text-signal-amber"
-                >
-                  <span aria-hidden="true" className="inline-block h-2 w-2 bg-signal-amber" />
-                  {resultsError
-                    ? `REFRESH FAILED · RETRYING ${retryEvery}`
-                    : results.phase.lastResultChange
-                      ? `LIVE · LAST CHANGE ${formatEasternTime(results.phase.lastResultChange)}`
-                      : "LIVE · WAITING FOR FIRST COUNTS"}
-                </p>
-              }
-            >
-              Counts as each state&apos;s own election office publishes them, refreshed every
-              minute. A race is leading until the state calls its count official; Civitas does not
-              call races.
-            </PageMasthead>
-          ) : campaignMode ? (
-            <PageMasthead
-              eyebrow="Elections · partisan lean by state"
-              title={pvi?.cycleYear ? `${pvi.cycleYear} midterm ballot` : "Midterm ballot"}
-              aside={
-                pvi?.electionDay && asOf !== null ? (
+                {campaignMode && pvi?.electionDay && asOf !== null && (
                   <ElectionCountdown electionDay={pvi.electionDay} asOf={asOf} />
-                ) : undefined
-              }
-            >
-              Pick a state for its candidates, their filings, statewide ballot measures, and the
-              coverage we have ingested. Shading is partisan lean, not a forecast.
-            </PageMasthead>
-          ) : (
-            // Phase not known yet: say nothing either mode would contradict.
-            <PageMasthead
-              eyebrow="Elections"
-              title={pvi?.cycleYear ? `${pvi.cycleYear} midterm elections` : "Midterm elections"}
-            />
-          )}
+                )}
+              </div>
+            }
+          >
+            {stillVoting && results ? (
+              <>
+                Voting is under way. Counts appear here as each state&apos;s polls close, as the
+                state&apos;s own election office publishes them — nothing of a state&apos;s count is
+                shown before its last polls close. Every state&apos;s ballot research is one click
+                away.
+              </>
+            ) : resultsMode && results ? (
+              <>
+                Counts as each state&apos;s own election office publishes them, refreshed every
+                minute. A race is leading until the state calls its count official; Civitas does not
+                call races.
+              </>
+            ) : campaignMode ? (
+              <>
+                Pick a state for its candidates, their filings, statewide ballot measures, and the
+                coverage we have ingested. Shading is partisan lean, not a forecast.
+              </>
+            ) : null}
+          </PageMasthead>
 
           {resultsMode && results && <ResultsOverview results={results} states={STATES} />}
-
-          {campaignMode && resultsError && !results && (
-            <p role="status" className="mt-6 font-mono text-xs tracking-[0.1em] text-ink-min">
-              COULDN&apos;T CHECK FOR LIVE RESULTS · RETRYING {retryEvery}
-            </p>
-          )}
 
           {error && campaignMode && (
             <div

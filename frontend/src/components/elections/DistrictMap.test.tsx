@@ -133,7 +133,11 @@ describe("DistrictMap", () => {
         results={new Map([[2, tie]])}
       />
     );
-    const shape = await screen.findByRole("button", { name: "CT-2" });
+    // Its standing is in its accessible name, not in its colour alone.
+    const shape = await screen.findByRole("button", { name: "CT-2: tied, 90% in" });
+    expect(
+      screen.getByRole("button", { name: "CT-3: no count from the state's feed" })
+    ).toBeTruthy();
     expect(screen.getByText("no votes yet")).toBeInTheDocument();
     // Share is drawn as opacity over a near-black page: less in reads
     // dimmer, not lighter, so the key says "fainter", never "paler".
@@ -179,7 +183,10 @@ describe("DistrictMap", () => {
         results={new Map([[2, ind]])}
       />
     );
-    const other = await screen.findByRole("button", { name: "CT-3" });
+    const other = await screen.findByRole("button", {
+      name: "CT-3: no count from the state's feed",
+    });
+    expect(screen.getByRole("button", { name: "CT-2: independent leads, 90% in" })).toBeTruthy();
     expect(other.getAttribute("style") ?? "").toMatch(/fill: url\("?#no-count-/);
     expect(container.querySelector("pattern[id^='no-count-']")).not.toBeNull();
     expect(screen.getByText("no count from the state's feed")).toBeInTheDocument();

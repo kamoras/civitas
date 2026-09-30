@@ -85,10 +85,14 @@ export function useLiveResults(
   /** The wait before the next retry after a failure; null when the last
    * request succeeded. */
   retryMs: number | null;
+  /** When the latest failed refresh failed (ms since epoch); null when the
+   * last request succeeded. */
+  failedAt: number | null;
 } {
   const [data, setData] = useState<LiveResults | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryMs, setRetryMs] = useState<number | null>(null);
+  const [failedAt, setFailedAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -117,6 +121,7 @@ export function useLiveResults(
           setData(next);
           setError(null);
           setRetryMs(null);
+          setFailedAt(null);
           const polling = showsResults(next.phase) || electionIsNear(next.phase);
           schedule(
             showsResults(next.phase)
@@ -134,6 +139,7 @@ export function useLiveResults(
           failures += 1;
           setError(err.message || "Could not refresh the results");
           setRetryMs(wait);
+          setFailedAt(Date.now());
           schedule(wait);
         });
     };
@@ -175,5 +181,5 @@ export function useLiveResults(
     };
   }, [state, enabled]);
 
-  return { data, error, retryMs };
+  return { data, error, retryMs, failedAt };
 }

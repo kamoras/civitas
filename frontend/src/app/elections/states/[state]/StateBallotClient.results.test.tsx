@@ -401,6 +401,52 @@ describe("the state page in results mode", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
+  it("moves keyboard focus to the race a #race- link lands on, not only the scroll", async () => {
+    arriveAt("#race-2026-HOUSE-OH-1");
+    fetchLiveResults.mockResolvedValue(live());
+    render(<StateBallotClient ballot={ballot()} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    await waitFor(() => expect(document.activeElement?.id).toBe("result-2026-HOUSE-OH-1"));
+  });
+
+  it("focuses a Senate race's card when a #race- link lands on it", async () => {
+    arriveAt("#race-2026-SEN-OH");
+    const senate = {
+      ...live().races[0],
+      raceId: "2026-SEN-OH",
+      office: "S" as const,
+      district: null,
+    };
+    fetchLiveResults.mockResolvedValue(live({ races: [senate] }));
+    render(<StateBallotClient ballot={ballot()} />);
+    await waitFor(() => expect(document.activeElement?.id).toBe("result-2026-SEN-OH"));
+    expect(document.activeElement?.tagName).toBe("ARTICLE");
+    expect(document.activeElement).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("says when the count was read, and that a failed refresh leaves an older one on screen", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:10:00Z"));
+    fetchLiveResults.mockResolvedValueOnce(live()).mockRejectedValue(new Error("502"));
+    render(<StateBallotClient ballot={ballot()} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    const line = screen.getByText(/REFRESHED EVERY MINUTE/);
+    expect(line).toHaveAttribute("role", "status");
+    // The backend's own read time, never the page's clock.
+    expect(line).toHaveTextContent("UPDATED NOV 3, 9:44 PM ET · REFRESHED EVERY MINUTE");
+    // The next refresh fails: the count stays, and the line says it is old.
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() =>
+      expect(line).toHaveTextContent(
+        "REFRESH FAILED AT NOV 3, 10:10 PM ET · SHOWING THE COUNT READ AT NOV 3, 9:44 PM ET · RETRYING EVERY MINUTE"
+      )
+    );
+    expect(line).not.toHaveTextContent(/UPDATED/);
+    expect(screen.getByText("Eric Conroy")).toBeInTheDocument();
+  });
+
   it("scrolls to the count once, not again when the page writes its own hash", async () => {
     arriveAt("#race-2026-HOUSE-OH-1");
     fetchLiveResults.mockResolvedValue(live());
