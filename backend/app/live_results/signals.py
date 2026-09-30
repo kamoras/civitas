@@ -9,28 +9,33 @@ Written from templates, never by the model. early_signal asks the LLM for
 a vote's summary because a bill needs describing; a count does not, and
 the one thing a generated sentence could get wrong here — which way a
 race is going — is the whole story. Every sentence below is a fixed
-frame around the state's own figures, and says "leads" until the state
-itself calls the count official.
+frame around the state's own figures, and says "leads" — even once the
+state lists its count as official. Civitas never calls a race: an
+official count's leader can still face a runoff (Georgia requires a
+majority in the general), a recount or a court, and "wins" is a call.
 
-The issue follows the count. Each sync refreshes its facts while the flip
-holds; if the lead reverts to the holder's party (or ties) the issue is
-retired (is_current=False, never deleted) AND rewritten to say the count no
+The issue follows the count. Each sync refreshes its facts while the
+challenger leads; if the lead reverts to the holder's party (or ties) the
+issue is retired (is_current=False) AND rewritten to say the count no
 longer shows a change of party — a retired row still shows on the
-homepage's record and at its own address. If the seat flips again, that is
-a new issue, drafted fresh; the old one keeps its record of the reversal.
+homepage's record and at its own address. Only the lead going back does
+that (sync.lead_is_back): the count dipping below the bar for RAISING a
+flip, with the same challenger ahead, leaves the issue as it stands. If the
+seat flips again after a reversal, that is a new issue, drafted fresh; the
+old one keeps its record of the reversal.
 """
 
 import json
 import re
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
 from app.models import ActionIssue, ActionIssueStatus, RaceResult
 from app.pipeline.analyze.early_signal import CONFIRMATION_WINDOW_HOURS
-from app.live_results.sync import event_detail, is_flip
+from app.live_results.sync import challenger_leads, event_detail, is_flip, lead_is_back
 from app.state_names import STATE_NAMES
-from app.time_utils import COMMENT_DEADLINE_TZ, utcnow
+from app.time_utils import utcnow
 
 SOURCE_TYPE = "election_results"
 # Who held a seat going in is Civitas's record of the sitting member, not a
@@ -58,8 +63,17 @@ def party_letter(group: str | None) -> str:
 
 
 def holders_word(group: str | None) -> str:
-    """"Democrats" — who hold(s) a seat, for "a seat Democrats hold"."""
-    return _PARTY_WORDS.get(group or "", (group, group))[1] or "another party"
+    """"Democrats" — who hold(s) a seat, for "a seat Democrats hold". A
+    holder is always one of the words (sync._MEMBER_PARTY); a code this
+    has no words for is never printed raw."""
+    return _PARTY_WORDS.get(group or "", (None, None))[1] or "another party's members"
+
+
+def party_noun(group: str | None) -> str:
+    """"Republican" — one candidate's party, as a sentence's subject. A
+    feed's party code this has no words for (United Citizen's "UC", a
+    state's "N" or "OTH") is never printed raw in a title."""
+    return _PARTY_WORDS.get(group or "", (None, None))[0] or "a candidate from another party"
 
 
 def publisher(source_name: str) -> str:
@@ -79,6 +93,18 @@ def race_label(race) -> str:
     return f"{state}'s {_ordinal(race.district)} Congressional District"
 
 
+def reporting_line(d: dict) -> str:
+    """"60 of 100 precincts reporting (60%)", or "" unless the count states
+    both figures: a feed can give its units' total with no reporting
+    figure (Clarity's PR missing for a poll), and formatting that None
+    failed the whole state's sync on every pass."""
+    total, reporting = d.get("totalUnits"), d.get("reportingUnits")
+    if not total or reporting is None:
+        return ""
+    share = round(100 * reporting / total)
+    return f"{reporting:,} of {total:,} {d.get('unitLabel') or 'precincts'} reporting ({share}%)"
+
+
 def _person(p: dict) -> str:
     letter = party_letter(p.get("party"))
     return f"{p['name']} ({letter})" if letter else p["name"]
@@ -87,12 +113,17 @@ def _person(p: dict) -> str:
 def _content(result: RaceResult) -> dict:
     d = event_detail(result)
     leader, runner = d["leader"], d["runnerUp"]
-    noun = _PARTY_WORDS.get(leader["party"], (leader["party"], leader["party"]))[0]
+    noun = party_noun(leader["party"])
     holders = holders_word(result.held_by_party)
     label = race_label(result.race)
     if result.official:
-        title = f"{noun[:1].upper()}{noun[1:]} wins {label} in the official count, taking a seat {holders} held"
-        lede = f"{publisher(result.source_name)} lists its count as official."
+        # Never "wins": an official count's leader has not necessarily won
+        # (a Georgia general needs a majority, or goes to a runoff), and
+        # Civitas never calls a race.
+        title = f"{noun[:1].upper()}{noun[1:]} leads {label} in the count the state lists as official, " \
+                f"in a seat {holders} hold"
+        lede = (f"{publisher(result.source_name)} lists its count as official. "
+                "Civitas does not call races.")
     else:
         title = f"{noun[:1].upper()}{noun[1:]} leads {label} count in a seat {holders} hold"
         lede = ("The count is not final and the lead can change. "
@@ -102,12 +133,14 @@ def _content(result: RaceResult) -> dict:
     facts = [f"{_person(leader)}: {leader['votes']:,} votes, {leader['pct']}%"]
     if runner:
         facts.append(f"{_person(runner)}: {runner['votes']:,} votes, {runner['pct']}%")
-    if d["totalUnits"]:
-        share = round(100 * (d["reportingUnits"] or 0) / d["totalUnits"])
-        facts.append(f"{d['reportingUnits']:,} of {d['totalUnits']:,} {d['unitLabel']} reporting ({share}%)")
-    holder_noun = _PARTY_WORDS.get(result.held_by_party, (result.held_by_party,))[0]
-    article = "an" if holder_noun[:1].lower() in "aeiou" else "a"
-    facts.append(f"The seat is held by {article} {holder_noun} going into this election")
+    if reporting_line(d):
+        facts.append(reporting_line(d))
+    holder_noun = _PARTY_WORDS.get(result.held_by_party or "", (None,))[0]
+    if holder_noun:
+        article = "an" if holder_noun[:1].lower() in "aeiou" else "a"
+        facts.append(f"The seat is held by {article} {holder_noun} going into this election")
+    else:
+        facts.append("The seat is held by another party going into this election")
     race = result.race
     return {
         "title": title[:500],
@@ -142,9 +175,8 @@ def _reverted_content(result: RaceResult) -> dict:
     summary = (f"The count earlier showed a candidate from another party leading in a seat {holders} "
                f"hold. {now} {status}")
     facts = [f"{_person(p)}: {p['votes']:,} votes, {p['pct']}%" for p in (leader, runner) if p]
-    if d["totalUnits"]:
-        share = round(100 * (d["reportingUnits"] or 0) / d["totalUnits"])
-        facts.append(f"{d['reportingUnits']:,} of {d['totalUnits']:,} {d['unitLabel']} reporting ({share}%)")
+    if reporting_line(d):
+        facts.append(reporting_line(d))
     race = result.race
     return {
         "title": f"{label[:1].upper()}{label[1:]}{_REVERTED_TITLE_END}"[:500],
@@ -206,21 +238,6 @@ def _create(db: Session, result: RaceResult) -> ActionIssue:
     return issue
 
 
-def _issues_by_race(db: Session) -> dict[str, ActionIssue]:
-    """Every flip issue, newest per race, keyed by the race its "Follow the
-    count" link names (_content writes it; json.dumps closes the id with a
-    quote, so GA-1 never reads as GA-12). Read once per sync pass, and only
-    when a count row was just created — the one time an issue can be
-    missing its link."""
-    by_race: dict[str, ActionIssue] = {}
-    for issue in db.query(ActionIssue).filter(ActionIssue.source_type == SOURCE_TYPE).order_by(ActionIssue.id):
-        for action in json.loads(issue.actions or "[]"):
-            url = action.get("url") or ""
-            if "#race-" in url:
-                by_race[url.rsplit("#race-", 1)[1]] = issue
-    return by_race
-
-
 # The fixed end of _reverted_content's title (the start is the race's
 # label, whose wording can change between deploys).
 _REVERTED_TITLE_END = " count no longer shows a change of party"
@@ -230,16 +247,10 @@ def _says_reverted(issue: ActionIssue) -> bool:
     return (issue.title or "").endswith(_REVERTED_TITLE_END)
 
 
-def _election_began(election_date: str) -> datetime:
-    """Midnight Eastern on election day, as naive UTC like created_at."""
-    start = datetime.combine(date.fromisoformat(election_date), time.min, tzinfo=COMMENT_DEADLINE_TZ)
-    return start.astimezone(timezone.utc).replace(tzinfo=None)
-
-
 def update_developing_issues(db: Session, applied: list) -> int:
     """Create, refresh or retire each race's flip issue, from the polls
     sync_state stored (`Applied`s; a held poll never reaches here). Returns
-    how many issues were created, retired or brought back.
+    how many issues were created or retired.
 
     A NEW flip — the lead having reverted and then flipped again — opens a
     new issue; the retired one keeps its record. Anything else that retired
@@ -248,47 +259,42 @@ def update_developing_issues(db: Session, applied: list) -> int:
     figures kept current: resurrecting on every poll while the flip merely
     held made the issue vanish and reappear every hour."""
     changed = 0
-    by_race: dict[str, ActionIssue] | None = None
     for outcome in applied:
         result = outcome.result
         if result is None:
             continue
         issue = db.get(ActionIssue, result.developing_issue_id) if result.developing_issue_id else None
-        if issue is None and result.developing_issue_id is None and outcome.created:
-            # A data reset wipes race_results (and this link) but keeps
-            # action_issues: the rebuilt row picks its race's issue back up
-            # — promoted, retired or current — instead of opening a second
-            # one beside it. Only this election's: a runoff re-using the id
-            # starts its own. Judged by created_at — the Action Center moves
-            # a promoted story's date to each later news match.
-            if by_race is None:
-                by_race = _issues_by_race(db)
-            found = by_race.get(result.race_id)
-            if found is not None and found.created_at >= _election_began(result.election_date):
-                issue = found
-                result.developing_issue_id = found.id
         if issue is not None and issue.status != ActionIssueStatus.DEVELOPING:
             continue  # promoted: news coverage owns its content now
-        if issue is not None and (result.held_by_party is None or not (result.votes_counted or 0)):
-            # Nothing to judge a flip or its reversal by: a data reset wipes
-            # the members a holder is read from (sync re-reads it), and a
-            # feed can list zeros for a moment. Retiring the issue then said
-            # "no longer shows a change of party" while the challenger led.
+        if result.held_by_party is None or not (result.votes_counted or 0):
+            # Nothing to judge a flip or its reversal by: no known holder,
+            # or a feed listing zeros for a moment.
             continue
-        if is_flip(result):
-            if issue is None:
+        if issue is None:
+            # A race whose link names a row that no longer exists had an
+            # issue: the Action Center's cleanup deletes day-old unposted
+            # issues after 14 days, and a retired flip's date is frozen. A
+            # slow count (Washington, Utah) outlasts that, and redrafting it
+            # on the next pass told a two-week-old flip as news. Only a flip
+            # this poll announced is a new story then.
+            if is_flip(result) and (result.developing_issue_id is None or outcome.new_flip):
                 _create(db, result)
                 changed += 1
-                continue
-            if not issue.is_current:
-                # A new flip is a new story only if the issue last said the
-                # count had gone back. In a normal night that is always so —
-                # a flip is raised again only after a reversal, which writes
-                # the reverted content, current or not — but after a reset
-                # the rebuilt count raises its flip afresh, a poll or two
-                # later if the holder had to be read again, and an issue the
-                # Action Center retired while the flip held is not news.
-                if outcome.new_flip and _says_reverted(issue):
+            continue
+        if lead_is_back(result):
+            # The lead went back (or is tied): say so, on the row the
+            # homepage and the issue's own address still show.
+            was_current = issue.is_current
+            if was_current:
+                issue.is_current = False
+                changed += 1
+            _fill(issue, result, content=_reverted_content(result), touch_date=was_current)
+            continue
+        if not challenger_leads(result):
+            continue  # a leader of no known party: the issue stays as it stands
+        if not issue.is_current:
+            if _says_reverted(issue):
+                if outcome.new_flip:
                     # A flip after a reversal is a new story, drafted fresh:
                     # the Action Center's refresh retires an unmatched
                     # developing row a day after it was CREATED, so reviving
@@ -297,18 +303,16 @@ def update_developing_issues(db: Session, applied: list) -> int:
                     # change of party — which it didn't, then.
                     _create(db, result)
                     changed += 1
-                    continue
-                # Stays retired, but its own page keeps showing the count
-                # as it stands.
-                _fill(issue, result, touch_date=False)
+                # Not yet announced again (too little of the count in): the
+                # reverted row keeps its word rather than being rewritten
+                # as a flip nobody announced.
                 continue
-            _fill(issue, result)
-        elif issue is not None:
-            # The lead went back (or is tied): say so, on the row the
-            # homepage and the issue's own address still show.
-            was_current = issue.is_current
-            if was_current:
-                issue.is_current = False
-                changed += 1
-            _fill(issue, result, content=_reverted_content(result), touch_date=was_current)
+            # Retired while the flip held: stays retired, but its own page
+            # keeps showing the count as it stands.
+            _fill(issue, result, touch_date=False)
+            continue
+        # Current: refreshed while the challenger leads, whether or not the
+        # count still clears the bar for RAISING a flip (sync.is_flip) —
+        # what it says ("leads", "not final") stays true either way.
+        _fill(issue, result)
     return changed

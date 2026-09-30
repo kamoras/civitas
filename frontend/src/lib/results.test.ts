@@ -263,9 +263,11 @@ describe("describeUpdate", () => {
         "Ray Jones (R) leads in a seat Democrats hold. Ray Jones (R) 52.6%, Dana Smith (D) 47.4%. " +
         "2,103 of 2,653 precincts reporting (79%). Not final.",
     });
-    expect(describeUpdate(event("flip", { official: true })).text).toMatch(
-      /^Ray Jones \(R\) wins in the official count, taking a seat Democrats held\./
+    const official = describeUpdate(event("flip", { official: true })).text;
+    expect(official).toMatch(
+      /^Ray Jones \(R\) leads in the count the state lists as official, in a seat Democrats hold\./
     );
+    expect(official).not.toMatch(/\bwins?\b|\bwon\b/i);
   });
 
   it("says an exact tie is tied and never names the runner-up alone", () => {

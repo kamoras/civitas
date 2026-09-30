@@ -784,8 +784,10 @@ wrong number on election night is worse than none:
   `previewElections`/`electionID`); a feed that goes backwards in time or
   version is refused; an impossible count is dropped; a poll whose total fell
   is stored but announces nothing.
-- Civitas never calls a race. A count is "leading" until the source itself
-  says official, and every sentence about it — the live-updates feed, the
+- Civitas never calls a race. A count is "leading" — "not final" until the
+  source itself says official, and still "leading", never "wins", after (an
+  official count's leader can face a runoff: Georgia's general needs a
+  majority) — and every sentence about it — the live-updates feed, the
   DEVELOPING Action Center issue a seat flip opens (`live_results/signals.py`),
   the election-night posts (`live_results/bluesky.py`, published through
   `broadcast.publish` to the Elections feed and Bluesky) — is
@@ -794,7 +796,13 @@ wrong number on election night is worse than none:
   and towns), which "report" on their first batch, it needs every place in and
   `COUNTY_FLIP_SETTLE` since the first votes instead. Where the units are
   places, or the source gives no reporting figure, the source's official flag
-  also suffices; beside a precinct count that states one, it does not.
+  also suffices; beside a precinct count that states one, it does not. That
+  bar gates only *raising* a flip: once said, a flip is undone only by the
+  lead itself going back to the seat's party or tying (`lead_is_back`), never
+  by the count dipping below the bar with the same challenger ahead.
+- A data reset inside the results window keeps the held election's ballot and
+  count (`database.RESET_KEEPS_WHILE_RESULTS`): after election day nothing
+  rebuilds them — the roster and ballot syncs stand down (`election_is_held`).
 
 After both member pipelines complete, `stock_pipeline.py` runs as a sibling
 phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction

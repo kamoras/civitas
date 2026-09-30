@@ -553,3 +553,35 @@ class TestLiveResults:
         with self._results_window():
             response = elections.live_results(None, db_session)
         assert "max-age=30" in response.headers["Cache-Control"]
+
+
+class TestPhaseCacheLifetime:
+    """Responses carrying the election's phase or date (the state ballot's
+    `phase`, the PVI map's `electionDay`) are cached for the live count's
+    lifetime around election day, so the switch to election-day mode
+    doesn't reach readers ten minutes late."""
+
+    def test_short_from_the_day_before_through_the_results_window(self):
+        from datetime import date
+
+        from app.election_phase import resolve_active_election
+
+        def at(day):
+            election = resolve_active_election(day, lambda _: None)
+            return elections.phase_cache_s(election, day)
+
+        assert at(date(2026, 10, 1)) == elections.CACHE_TTL_LIST_S
+        assert at(date(2026, 11, 1)) == elections.CACHE_TTL_LIST_S
+        assert at(date(2026, 11, 2)) == elections.CACHE_TTL_RESULTS_S  # the day before
+        assert at(date(2026, 11, 3)) == elections.CACHE_TTL_RESULTS_S
+        assert at(date(2026, 11, 17)) == elections.CACHE_TTL_RESULTS_S  # the window's last day
+        assert at(date(2026, 11, 18)) == elections.CACHE_TTL_LIST_S
+
+    def test_the_pvi_map_uses_it(self, db_session):
+        from datetime import date
+        from unittest.mock import patch
+
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 3)), \
+                patch("app.api.elections.election_today", return_value=date(2026, 11, 3)):
+            response = elections.pvi_map(db_session)
+        assert f"max-age={elections.CACHE_TTL_RESULTS_S}," in response.headers["Cache-Control"]

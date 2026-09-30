@@ -252,14 +252,18 @@ export default function ElectionsChapter() {
             that goes down (a county pulling a bad upload) is shown but announces nothing.
           </P>
           <P>
-            We never call a race. A candidate &ldquo;leads&rdquo; until the state itself marks its
-            count official. A seat is only described as changing party once half its reporting areas
-            are in; where a state reports by county or town, each of which &ldquo;reports&rdquo;
-            with its first batch of ballots, it takes every county or town in and six hours since
-            the first votes, or the state&apos;s official count. A House seat in a state whose
-            congressional map was redrawn for this election has no previous holder to compare
-            against — the district with the same number is a different district — so it is never
-            described as changing party.
+            We never call a race. A candidate &ldquo;leads&rdquo; &mdash; &ldquo;not final&rdquo;
+            until the state marks its count official, and still &ldquo;leads&rdquo; after, never
+            &ldquo;wins&rdquo;: an official count&apos;s leader can still face a runoff (Georgia
+            requires a majority), a recount or a court. A seat is only described as changing party
+            once half its reporting areas are in; where a state reports by county or town, each of
+            which &ldquo;reports&rdquo; with its first batch of ballots, it takes every county or
+            town in and six hours since the first votes, or the state&apos;s official count. Once
+            said, it stands until the lead itself goes back to the seat&apos;s party or ties: a
+            count that dips below that bar with the same candidate ahead is not a reversal. A House
+            seat in a state whose congressional map was redrawn for this election has no previous
+            holder to compare against — the district with the same number is a different district —
+            so it is never described as changing party.
           </P>
         </Sub>
         <Sub title="Developing stories and posts">

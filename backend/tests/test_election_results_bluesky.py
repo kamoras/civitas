@@ -81,12 +81,16 @@ class TestCompose:
                         "Dana Smith (D) 47.4%. 60 of 100 precincts reporting (60%). Not final.")
         assert len(text) <= rb.MAX_POST_CHARS
 
-    def test_official_flip_says_wins(self):
+    def test_an_official_flip_says_leads_never_wins(self):
+        """A Georgia general short of a majority goes to a runoff whatever
+        the official flag says; Civitas never calls a race."""
         import json
 
         race = Race(id="2026-HOUSE-GA-2", office="H", state="GA", district=2, cycle_year=2026)
         text = rb.compose(er.FLIP, race, json.loads(_detail(official=True)))
-        assert text.startswith("Georgia's 2nd Congressional District: Ray Jones (R) wins in the official count")
+        assert text.startswith("Georgia's 2nd Congressional District: Ray Jones (R) leads in the count the state "
+                               "lists as official, in a seat Democrats hold")
+        assert "win" not in text.lower()
 
 
 class TestWhatPosts:
@@ -245,6 +249,13 @@ class TestComposeFits:
         text = rb.compose(rb.CORRECTION, self._race(), d)
         assert text.startswith("Update on North Carolina's 13th Congressional District: the count is now tied")
 
+    def test_no_correction_while_the_challenger_still_leads(self):
+        """Only the holder back ahead, or a tie, undoes a flip."""
+        import json
+
+        assert rb.compose(rb.CORRECTION, self._race(), json.loads(_detail(leader_party="REP"))) is None
+        assert rb.compose(rb.CORRECTION, self._race(), json.loads(_detail(leader_party="REP", held=None))) is None
+
 
 def test_without_bluesky_the_post_still_goes_to_the_feed(db_session, monkeypatch):
     monkeypatch.setattr(broadcast.settings, "BSKY_HANDLE", "", raising=False)
@@ -330,7 +341,8 @@ class TestRoundTwo:
         result.votes_counted = 2000
         _event(db_session, "2026-SEN-GA", er.FLIP, _detail(reporting=60))
         [(text, _)] = _run(db_session)
-        assert "wins in the official count" in text and "60.0%" in text and "Not final" not in text
+        assert "leads in the count the state lists as official" in text and "60.0%" in text
+        assert "Not final" not in text and "win" not in text.lower()
 
 
 class TestRoundThree:
@@ -419,12 +431,14 @@ class TestPublishing:
         _event(db_session, "2026-SEN-GA", er.FLIP, _detail(official=True))
         [(text, _)] = _run(db_session)
         [post] = db_session.query(BroadcastPost).all()
-        assert "wins in the official count" in text
-        assert "not final" not in post.title and "official count" in post.title
+        assert "leads in the count the state lists as official" in text
+        assert "not final" not in post.title and "listed as official" in post.title
+        assert "win" not in (text + post.title).lower()
 
-    def test_a_data_reset_does_not_post_the_night_again(self, db_session):
-        """broadcast_posts survives a reset; the events don't. The rebuilt
-        count raises the same flip and official count again."""
+    def test_events_raised_again_are_not_posted_again(self, db_session):
+        """The posts are the record of what was said: a count raising the
+        same flip or official count again (its events wiped by a reset
+        outside the results window, say) is not posted twice."""
         _race(db_session, "2026-SEN-GA")
         _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
         _said(db_session, "2026-SEN-GA", er.OFFICIAL, at=utcnow() - timedelta(minutes=50))
@@ -434,7 +448,7 @@ class TestPublishing:
         assert flip.bsky_posted_at is not None and not flip.bsky_posted
         assert official.bsky_posted_at is not None and not official.bsky_posted
 
-    def test_the_budget_survives_a_data_reset(self, db_session):
+    def test_the_budget_is_read_from_the_posts(self, db_session):
         for i in range(rb.MAX_POSTS_PER_HOUR):
             _said(db_session, f"2026-HOUSE-GA-{i}", er.FLIP, at=utcnow() - timedelta(minutes=30))
         _race(db_session, "2026-HOUSE-GA-9", office="H", district=9)
@@ -448,35 +462,16 @@ class TestPublishing:
         assert rb._history(db_session, DAY, utcnow()).this_election == 0
 
 
-def test_a_flip_that_reverted_during_a_reset_still_gets_its_correction(db_session):
-    """The sync measures against its own events, which a reset wipes: a flip
-    that reverted before the rebuilt count's first read raised only first
-    returns."""
-    _race(db_session, "2026-SEN-GA", flip=False)
-    _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
-    _event(db_session, "2026-SEN-GA", er.FIRST_RETURNS, _detail(leader_party="DEM"),
-           bsky_posted_at=utcnow())  # considered: first returns never post
-    [(text, _)] = _run(db_session)
-    assert "no longer shows a change of party" in text
-    assert _run(db_session) == []  # owed once
-    assert db_session.query(ElectionResultEvent).filter_by(kind=er.FLIP_REVERSED).count() == 1
-
-
-def test_no_correction_for_a_seat_whose_holder_is_not_known_yet(db_session):
-    """A reset also wipes the members a seat's holder is looked up from."""
-    _race(db_session, "2026-SEN-GA", flip=False)
-    _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
-    _event(db_session, "2026-SEN-GA", er.FIRST_RETURNS, _detail(leader_party="REP", held=None),
-           bsky_posted_at=utcnow())
-    assert _run(db_session) == []
-    assert db_session.query(ElectionResultEvent).filter_by(kind=er.FLIP_REVERSED).count() == 0
-
-
-def test_a_standing_flip_owes_nothing(db_session):
+def test_a_correction_waits_for_the_lead_itself_to_go_back(db_session):
+    """A reversal event raised while the challenger still led (the count
+    merely dipping below the bar for raising a flip) is not a correction."""
     _race(db_session, "2026-SEN-GA", flip=True)
     _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
+    db_session.flush()
+    db_session.get(RaceResult, "2026-SEN-GA").reporting_units = None  # no longer qualifies
+    _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="REP"))
     assert _run(db_session) == []
-    assert db_session.query(ElectionResultEvent).count() == 0
+    assert not db_session.query(BroadcastPost).filter(BroadcastPost.subject.contains(rb.CORRECTION)).count()
 
 
 def test_a_held_poll_owes_no_correction(db_session):
@@ -505,42 +500,12 @@ def test_a_held_poll_owes_no_correction(db_session):
     assert er.FLIP_REVERSED not in kinds and kinds.count(er.FLIP) == 1
 
 
-def test_a_reset_then_a_held_poll_does_not_lose_the_correction(db_session):
-    """Raised while a held poll still showed the challenger ahead, the owed
-    reversal's correction was dropped as untrue, and the event then blocked
-    the correction owed once the count recovered."""
-    from tests.test_election_results_sync import _apply, _contest, _setup
-
-    race = _setup(db_session)
-    _apply(db_session, race, _contest(400, 600, 60))
+def test_a_pending_flip_still_posts_when_the_count_dips_below_the_bar(db_session):
+    """The flip is raised once; dropping its post because the count lost
+    its reporting figures for a poll lost the post for good."""
+    _race(db_session, "2026-SEN-GA", flip=True)
+    db_session.flush()
+    db_session.get(RaceResult, "2026-SEN-GA").reporting_units = None
+    _event(db_session, "2026-SEN-GA", er.FLIP)
     [(text, _)] = _run(db_session)
-    assert "leads in a seat" in text
-    # A data reset: the events and the count go; the posts stay.
-    db_session.query(ElectionResultEvent).delete()
-    db_session.query(RaceResult).delete()
-    db_session.flush()
-    t = utcnow() + timedelta(minutes=rb.RACE_COOLDOWN_MINUTES + 1)
-    with patch.object(er, "utcnow", return_value=t):
-        _apply(db_session, race, _contest(700, 500, 70))  # rebuilt: the holder leads
-        held, _ = _apply(db_session, race, _contest(300, 500, 70))  # the total fell: held
-    assert held == []
-    with patch.object(rb, "utcnow", return_value=t + timedelta(minutes=1)):
-        assert _run(db_session) == []  # the stored row still shows the flip: wait
-    with patch.object(er, "utcnow", return_value=t + timedelta(minutes=5)):
-        _apply(db_session, race, _contest(800, 520, 80))
-    with patch.object(rb, "utcnow", return_value=t + timedelta(minutes=6)):
-        [(text, _)] = _run(db_session)
-    assert "no longer shows a change of party" in text
-    assert "Dana Smith (D) is ahead again" in text
-
-
-def test_an_owed_reversal_needs_this_elections_count(db_session):
-    """A stored row from another election (a runoff re-using the race id)
-    is not evidence about this one."""
-    _race(db_session, "2026-SEN-GA", flip=False)
-    db_session.flush()
-    db_session.get(RaceResult, "2026-SEN-GA").election_date = "2026-12-01"
-    _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=1))
-    _event(db_session, "2026-SEN-GA", er.FIRST_RETURNS, _detail(leader_party="DEM"), bsky_posted_at=utcnow())
-    assert _run(db_session) == []
-    assert db_session.query(ElectionResultEvent).filter_by(kind=er.FLIP_REVERSED).count() == 0
+    assert "leads in a seat Democrats hold" in text

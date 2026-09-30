@@ -363,7 +363,11 @@ _general_eids: dict[tuple[str, str, str], str] = {}
 # would spend the whole pass on it. So a miss is remembered for
 # _MISS_TTL_S and the walk is retried after that -- never remembered for
 # good, since the link appearing later that night is the expected case.
-_general_eid_misses: dict[tuple[str, str, str], float] = {}
+# A walk that ended in a refusal (pick_general's UntrustedCount: several
+# same-day elections, none singly the general) is remembered the same way,
+# with its reason, and re-raised from memory until the TTL is up: it once
+# re-walked ~16 EIDs (~32 requests at 1 rps) on every five-minute pass.
+_general_eid_misses: dict[tuple[str, str, str], tuple[float, str | None]] = {}
 _MISS_TTL_S = 20 * 60
 # The most EIDs one walk probes. Newest first (Clarity's EIDs only grow),
 # after the ones whose link text names the year, so the general is
@@ -400,7 +404,9 @@ async def _general_election_id(
         return _general_eids[key]
     if discovery.get("mode") == "landing_page":
         missed = _general_eid_misses.get(key)
-        if missed is not None and time.monotonic() - missed < _MISS_TTL_S:
+        if missed is not None and time.monotonic() - missed[0] < _MISS_TTL_S:
+            if missed[1] is not None:
+                raise UntrustedCount(missed[1])  # the same refusal, not a fresh walk
             return None
         page_url, link_regex = discovery.get("page_url"), discovery.get("link_regex")
         if not page_url or not link_regex:
@@ -430,9 +436,13 @@ async def _general_election_id(
                 "%s Clarity landing page links %d elections; probed the newest %d, none held %s",
                 state, len(order), _MAX_WALK, election_day,
             )
-        found = pick_general(held, state)
+        try:
+            found = pick_general(held, state)
+        except UntrustedCount as refused:
+            _general_eid_misses[key] = (time.monotonic(), str(refused))
+            raise
         if not found:
-            _general_eid_misses[key] = time.monotonic()
+            _general_eid_misses[key] = (time.monotonic(), None)
         return found
     resp = await _get(client, f"{base}/{state}/elections.json", f"{state} Clarity elections")
     if resp is None:
@@ -557,6 +567,8 @@ async def fetch_general_results(
         unit_label=unit_label,
         contests=general_contests(summary),
         source_updated=updated,
-        # current_ver.txt only ever increases as the state republishes.
-        source_version=version,
+        # current_ver.txt only ever increases as the state republishes —
+        # within one EID, which is why it is stored scoped by it
+        # (sync.freshness_problem compares only the same EID's).
+        source_version=f"{eid}:{version}",
     )

@@ -120,7 +120,14 @@ def is_special_contest(name: str) -> bool:
 # "2024 Primary Election - US House 2 Recount" is dated 2024-06-25, the
 # primary's own day, verified 2026-09-28), so a date match alone does not
 # rule one out.
-_NOT_THE_COUNT_RE = re.compile(r"\b(demo|test|preview|recount|runoff)\b", re.IGNORECASE)
+_NOT_THE_COUNT_RE = re.compile(r"\b(demo|test|preview)\b", re.IGNORECASE)
+# A recount or a runoff is not the general either. But a state holding its
+# nonpartisan runoffs on the general's ballot names that one election
+# "General Election and Nonpartisan Runoff": a runoff name that also says
+# "general" is the general when nothing plainer is held that day, and
+# dropping it outright left the state with no count all night.
+_RECOUNT_RE = re.compile(r"\brecount\b", re.IGNORECASE)
+_RUNOFF_RE = re.compile(r"\brunoff\b", re.IGNORECASE)
 
 
 def pick_general(elections: list[tuple[str, dict]], state: str = "") -> dict | None:
@@ -131,13 +138,25 @@ def pick_general(elections: list[tuple[str, dict]], state: str = "") -> dict | N
     remains: the only one; else the only one named "general" that is not
     also a special; else the only one named "general" at all (Georgia
     named its 2022 ballot "November 8, 2022 - General/Special Election").
-    None when nothing is held that day. When SEVERAL remain and no rule
-    singles one out, this raises UntrustedCount rather than returning
-    None: None reads downstream as "not published yet", and a state that
-    silently shows no count all election night because its index grew a
-    second same-day entry is exactly the failure that must page someone."""
-    candidates = [(name or "", entry) for name, entry in elections if not _NOT_THE_COUNT_RE.search(name or "")]
+    None when nothing is held that day (a vendor's test copy of the day,
+    published before the real one, is "not yet"). When SEVERAL remain and
+    no rule singles one out, or the only elections that day are recounts
+    or runoffs, this raises UntrustedCount rather than returning None: None
+    reads downstream as "not published yet", and a state that silently
+    shows no count all election night because its index grew a second
+    same-day entry, or named its general in a way this can't read, is
+    exactly the failure that must page someone."""
+    not_test = [(name or "", entry) for name, entry in elections if not _NOT_THE_COUNT_RE.search(name or "")]
+    counts = [(name, entry) for name, entry in not_test if not _RECOUNT_RE.search(name)]
+    candidates = [(name, entry) for name, entry in counts if not _RUNOFF_RE.search(name)] or [
+        (name, entry) for name, entry in counts if _GENERAL_RE.search(name)
+    ]
     if not candidates:
+        if not_test:
+            raise UntrustedCount(
+                f"{state or 'state'}: the only elections on the general's date are "
+                f"{', '.join(repr(n) for n, _ in not_test)}, none of them the general; refusing to guess",
+            )
         return None
     if len(candidates) == 1:
         return candidates[0][1]

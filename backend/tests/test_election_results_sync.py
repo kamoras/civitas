@@ -158,11 +158,18 @@ class TestFlip:
         _apply(db_session, race, _contest(1800, 1700, 90))
         assert issue.title == "From the press" and issue.is_current is True
 
-    def test_official_count_says_wins(self, db_session):
+    def test_an_official_count_still_says_leads_never_wins(self, db_session):
+        """A Georgia general short of a majority goes to a runoff, whatever
+        the state's official flag says: an official count's leader has not
+        necessarily won, and Civitas never calls a race."""
         race = _setup(db_session)
         _apply(db_session, race, _contest(900, 1000, 100), official=True)
         [issue] = _issues(db_session)
-        assert issue.title.startswith("Republican wins Georgia's 2nd Congressional District in the official count")
+        assert issue.title == ("Republican leads Georgia's 2nd Congressional District in the count the state "
+                               "lists as official, in a seat Democrats hold")
+        text = " ".join([issue.title, issue.summary, *json.loads(issue.facts)]).lower()
+        assert " wins" not in text and " won " not in text and "winner" not in text
+        assert "does not call races" in issue.summary
 
     def test_no_known_holder_is_no_flip(self, db_session):
         race = _setup(db_session)
@@ -623,141 +630,220 @@ def test_a_holder_unknown_when_the_count_began_is_read_again(db_session):
 
 @pytest.fixture
 def _on_election_day():
-    """Issues are dated election_today(); relinking only takes this
-    election's."""
+    """Issues are dated election_today(), and the phase (a reset keeping
+    the count) is read from it."""
     with patch("app.election_phase.election_today", return_value=DAY):
         yield
 
 
-ELECTION_NIGHT = datetime(2026, 11, 4, 2, 0)  # 9pm Eastern, naive UTC
+def _reset(db, monkeypatch):
+    """The real data reset (database.reset_all_data), on this session."""
+    from app.database import reset_all_data
+
+    db.commit()
+    monkeypatch.setattr("app.database.SessionLocal", lambda: db)
+    with patch("app.pipeline.vector_store.reset_vector_db"):
+        return reset_all_data()
 
 
-def _reset(db, members=False):
-    """A data reset: the count and its events go, the issues stay (made on
-    election night — the tests run on another date). With members=True the
-    members a seat's holder is read from go too."""
-    for issue in _issues(db):
-        issue.created_at = ELECTION_NIGHT
-    if members:
-        db.query(Representative).delete()
-    db.query(ElectionResultEvent).delete()
-    db.query(RaceResult).delete()
-    db.flush()
-
-
-def test_a_reset_relinks_the_races_developing_issue(db_session, _on_election_day):
-    """The rebuilt row started unlinked, so a reverted count left the issue
-    current, and a later flip opened a second one."""
+def test_a_reset_during_the_results_window_keeps_the_count(db_session, monkeypatch, _on_election_day):
+    """Nothing rebuilds a held election's races once its day has passed
+    (the roster and ballot syncs stand down), so a reset in the window
+    keeps the ballot and the count — else every contest found no race for
+    the rest of the window. The members go, as ever."""
     race = _setup(db_session)
     _apply(db_session, race, _contest(400, 600, 60))
     [issue] = _issues(db_session)
-    _reset(db_session)
-    _apply(db_session, race, _contest(700, 500, 70))  # rebuilt: the holder leads
+    issue_id = issue.id
+    summary = _reset(db_session, monkeypatch)
+    issue = db_session.get(ActionIssue, issue_id)  # the reset closed the session
+    assert "races" in summary["kept_for_election_results"]
+    assert db_session.query(Representative).count() == 0
+    race = db_session.get(Race, "2026-HOUSE-GA-2")
+    result = db_session.get(RaceResult, race.id)
+    assert result is not None and result.held_by_party == "DEM" and result.developing_issue_id == issue.id
+    kinds, _ = _apply(db_session, race, _contest(410, 650, 70))
+    assert kinds == []  # the flip is not announced a second time
+    assert _issues(db_session) == [issue] and issue.is_current
+    kinds, _ = _apply(db_session, race, _contest(900, 650, 80))  # the lead goes back
+    assert er.FLIP_REVERSED in kinds
     db_session.refresh(issue)
     assert not issue.is_current and "no longer shows a change of party" in issue.title
-    assert db_session.get(RaceResult, race.id).developing_issue_id == issue.id
-    _apply(db_session, race, _contest(700, 900, 80))  # a new flip: a new story
-    assert len(_issues(db_session)) == 2
-    assert sum(i.is_current for i in _issues(db_session)) == 1
 
 
-def test_a_reset_keeps_a_promoted_story_with_the_news(db_session, _on_election_day):
-    race = _setup(db_session)
-    _apply(db_session, race, _contest(400, 600, 60))
-    [issue] = _issues(db_session)
-    issue.status = ActionIssueStatus.CONFIRMED
-    _reset(db_session)
-    _apply(db_session, race, _contest(400, 650, 70))
-    assert _issues(db_session) == [issue]
-
-
-def test_a_reset_does_not_revive_an_issue_retired_while_the_flip_held(db_session, _on_election_day):
-    """The Action Center retires an unmatched developing issue a day on;
-    the rebuilt count's first read raising its flip afresh is not news."""
-    race = _setup(db_session)
-    _apply(db_session, race, _contest(400, 600, 60))
-    [issue] = _issues(db_session)
-    issue.is_current = False
-    _reset(db_session)
-    _apply(db_session, race, _contest(400, 650, 70))
-    assert _issues(db_session) == [issue] and not issue.is_current
-
-
-def test_a_reset_after_a_reversal_then_a_flip_is_a_new_story(db_session, _on_election_day):
-    race = _setup(db_session)
-    _apply(db_session, race, _contest(400, 600, 60))
-    _apply(db_session, race, _contest(700, 600, 65))  # reverted: the issue says so and retires
-    _reset(db_session)
-    _apply(db_session, race, _contest(700, 900, 80))
-    assert len(_issues(db_session)) == 2
-
-
-def test_the_race_link_never_matches_a_longer_id(db_session, _on_election_day):
-    """GA-1 must not read GA-12's issue: json.dumps closes the id with a
-    quote."""
-    race = _setup(db_session)
-    _apply(db_session, race, _contest(400, 600, 60))
-    [issue] = _issues(db_session)
-    issue.actions = issue.actions.replace("#race-2026-HOUSE-GA-2", "#race-2026-HOUSE-GA-12")
-    db_session.flush()
-    by_race = signals._issues_by_race(db_session)
-    assert set(by_race) == {"2026-HOUSE-GA-12"}
-    assert "2026-HOUSE-GA-1" not in by_race
-
-
-def test_a_reset_that_took_the_holder_leaves_the_issue_alone(db_session, _on_election_day):
-    """With no holder the count can't say whether the seat still changes
-    party; retiring then said "no longer shows a change of party" while the
-    challenger led."""
-    race = _setup(db_session)
-    _apply(db_session, race, _contest(400, 600, 60))
-    [issue] = _issues(db_session)
-    _reset(db_session, members=True)
-    _apply(db_session, race, _contest(400, 650, 70))
-    assert issue.is_current and "no longer" not in issue.title
-    db_session.add(Representative(id="S000001", name="Dana Smith", state="GA", district=2, party="D"))
-    db_session.flush()
-    _apply(db_session, race, _contest(400, 700, 75))  # the holder is back: still the same story
-    assert _issues(db_session) == [issue] and issue.is_current
+def test_a_reset_outside_the_results_window_clears_the_election(db_session, monkeypatch):
+    _setup(db_session)
+    with patch("app.election_phase.election_today", return_value=date(2026, 9, 30)):
+        summary = _reset(db_session, monkeypatch)
+    assert "kept_for_election_results" not in summary
+    assert db_session.query(Race).count() == 0
 
 
 def test_a_zero_read_does_not_retire_a_flip(db_session, _on_election_day):
     race = _setup(db_session)
     _apply(db_session, race, _contest(400, 600, 60))
     [issue] = _issues(db_session)
-    _reset(db_session)
-    _apply(db_session, race, _contest(0, 0, 0))
-    assert issue.is_current
+    kinds, _ = _apply(db_session, race, _contest(0, 0, 0))
+    assert kinds == [] and issue.is_current
 
 
-def test_a_runoff_does_not_take_the_generals_promoted_story(db_session, _on_election_day):
-    """A promoted story's date moves with each news match; its created_at
-    doesn't."""
+class TestAnAnnouncedFlipStaysUntilTheLeadGoesBack:
+    """Qualification (flip_qualifies) gates only RAISING a flip. It can
+    lapse with the same challenger ahead; that once raised FLIP_REVERSED —
+    the issue retired as "no longer shows a change of party", a correction
+    posted — and the flip was announced again when the count re-qualified."""
+
+    def _flip_holds(self, db, issue, kinds):
+        assert er.FLIP_REVERSED not in kinds and er.FLIP not in kinds
+        assert _issues(db) == [issue] and issue.is_current
+        assert "no longer" not in issue.title and "leads" in issue.title
+
+    def test_a_county_feeds_zero_read_does_not_restart_the_clock(self, db_session, _on_election_day):
+        race = _setup(db_session)
+        t0 = utcnow()
+        at = lambda hours: patch.object(er, "utcnow", return_value=t0 + timedelta(hours=hours))  # noqa: E731
+        county = {"unit_label": "counties"}
+        with at(0):
+            _, result = _apply(db_session, race, _contest(400, 600, 3, total=3), **county)
+        with at(7):
+            kinds, _ = _apply(db_session, race, _contest(410, 610, 3, total=3), **county)
+        assert er.FLIP in kinds
+        [issue] = _issues(db_session)
+        with at(7.1):
+            held, _ = _apply(db_session, race, _contest(0, 0, 0, total=3), **county)  # a momentary zero
+        assert held == []
+        with at(7.2):
+            kinds, result = _apply(db_session, race, _contest(420, 620, 3, total=3), **county)
+        assert result.first_reported_at == t0  # the first votes ever, not the recovery
+        assert er.flip_qualifies(result, t0 + timedelta(hours=7.2))
+        self._flip_holds(db_session, issue, kinds)
+
+    def test_reporting_figures_vanishing_is_not_a_reversal(self, db_session, _on_election_day):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(400, 600, 60))
+        [issue] = _issues(db_session)
+        kinds, result = _apply(db_session, race, _contest(410, 650, None, total=None))
+        assert not er.flip_qualifies(result)
+        self._flip_holds(db_session, issue, kinds)
+        assert json.loads(issue.facts)[0] == "Ray Jones (R): 650 votes, 61.3%"  # still follows the count
+        kinds, _ = _apply(db_session, race, _contest(420, 700, 70))  # qualifies again: not a new story
+        self._flip_holds(db_session, issue, kinds)
+
+    def test_an_official_flag_switched_off_is_not_a_reversal(self, db_session, _on_election_day):
+        race = _setup(db_session)
+        county = {"unit_label": "counties"}
+        kinds, _ = _apply(db_session, race, _contest(400, 600, 1, total=3), official=True, **county)
+        assert er.FLIP in kinds
+        [issue] = _issues(db_session)
+        kinds, _ = _apply(db_session, race, _contest(410, 610, 1, total=3), official=False, **county)
+        self._flip_holds(db_session, issue, kinds)
+
+    def test_more_units_added_is_not_a_reversal(self, db_session, _on_election_day):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(400, 600, 60))
+        [issue] = _issues(db_session)
+        kinds, _ = _apply(db_session, race, _contest(410, 610, 60, total=200))
+        self._flip_holds(db_session, issue, kinds)
+
+    def test_a_tie_or_the_holder_back_ahead_is_a_reversal(self, db_session, _on_election_day):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(400, 600, 60))
+        [issue] = _issues(db_session)
+        kinds, _ = _apply(db_session, race, _contest(650, 650, 70))
+        assert er.FLIP_REVERSED in kinds and not issue.is_current
+
+    def test_a_reverted_issue_is_not_rewritten_as_a_flip_nobody_announced(self, db_session, _on_election_day):
+        race = _setup(db_session)
+        _apply(db_session, race, _contest(400, 600, 60))
+        _apply(db_session, race, _contest(700, 600, 65))
+        [issue] = _issues(db_session)
+        title = issue.title
+        # The challenger ahead again, but with too little of the count in to
+        # announce it (the units grew): no new story, and the old row keeps
+        # its word.
+        kinds, _ = _apply(db_session, race, _contest(700, 800, 65, total=200))
+        assert er.FLIP not in kinds
+        assert _issues(db_session) == [issue] and issue.title == title
+
+
+def test_a_deleted_retired_issue_is_not_redrafted_as_news(db_session, _on_election_day):
+    """The Action Center deletes unposted issues dated over 14 days ago, and a
+    retired flip's date is frozen; a slow count outlasts that."""
     race = _setup(db_session)
     _apply(db_session, race, _contest(400, 600, 60))
     [issue] = _issues(db_session)
-    issue.status = ActionIssueStatus.CONFIRMED
-    issue.date = "2026-12-05"
-    _reset(db_session)
-    result = RaceResult(race_id=race.id, election_date="2026-12-01", source_name="x", tallies="[]",
-                        held_by_party="D", votes_counted=10)
-    db_session.add(result)
+    db_session.delete(issue)
     db_session.flush()
-    signals.update_developing_issues(db_session, [er.Applied(result, created=True)])
-    assert result.developing_issue_id is None
+    kinds, _ = _apply(db_session, race, _contest(410, 650, 70))
+    assert kinds == [] and _issues(db_session) == []
+    _apply(db_session, race, _contest(900, 650, 80))  # reverts: nothing to retire
+    kinds, _ = _apply(db_session, race, _contest(900, 1000, 90))  # flips again: a new story
+    assert er.FLIP in kinds and len(_issues(db_session)) == 1
 
 
-def test_a_reset_that_took_the_holder_does_not_revive_a_retired_flip(db_session, _on_election_day):
-    """The holder comes back a poll after the rebuild, and the sync raises
-    the flip afresh then — the relink was a poll earlier."""
+def test_a_party_code_without_words_is_not_printed_raw(db_session, _on_election_day):
+    race = _setup(db_session)
+    contest = ContestCount(office="H", district=2, candidates=[("Dana Smith", "D", 400), ("Pat Doe", "U", 600)],
+                           reporting_units=60, total_units=100)
+    _apply(db_session, race, contest)
+    [issue] = _issues(db_session)
+    assert issue.title.startswith("A candidate from another party leads Georgia's 2nd Congressional District")
+    assert "UC" not in issue.title
+
+
+class TestTalliesMatchNominees:
+    def _race(self, db):
+        race = _setup(db)
+        for c in db.query(Candidate):
+            c.confirmed_general = True
+        # A primary loser sharing the nominee's surname.
+        db.add(Candidate(id="H6GA02003", race_id=race.id, name="SMITH, JOHN", party="REP"))
+        db.flush()
+        db.expire(race)
+        return race
+
+    def test_a_primary_loser_never_takes_a_nominees_count(self, db_session):
+        race = self._race(db_session)
+        rows = er._tallies(race, ContestCount(office="H", district=2, candidates=[("John Smith", "R", 10)]))
+        assert rows[0]["candidateId"] is None and rows[0]["party"] == "REP"  # the feed's own party
+
+    def test_a_partyless_row_borrows_no_party_from_a_different_person(self, db_session):
+        """An independent John Smith is not Dana Smith (D) because the feed
+        printed no party: his row must not read as a Democrat."""
+        race = self._race(db_session)
+        rows = er._tallies(race, ContestCount(office="H", district=2, candidates=[("John Smith", None, 10)]))
+        assert rows[0]["candidateId"] is None and rows[0]["party"] is None and rows[0]["name"] == "John Smith"
+
+    def test_a_partyless_row_takes_the_sole_nominee_it_names(self, db_session):
+        race = self._race(db_session)
+        rows = er._tallies(race, ContestCount(office="H", district=2, candidates=[("Dana Smith", None, 10)]))
+        assert rows[0]["candidateId"] == "H6GA02001" and rows[0]["party"] == "DEM"
+
+    def test_a_partyless_row_takes_nothing_where_nominees_share_the_surname(self, db_session):
+        race = self._race(db_session)
+        db_session.get(Candidate, "H6GA02003").confirmed_general = True
+        db_session.flush()
+        db_session.expire(race)
+        rows = er._tallies(race, ContestCount(office="H", district=2, candidates=[("Dana Smith", None, 10)]))
+        assert rows[0]["candidateId"] is None and rows[0]["party"] is None
+
+
+def test_a_version_under_a_new_election_id_is_not_stale(db_session):
+    """Clarity numbers each EID's versions from its own start."""
+    race = _setup(db_session)
+    er.apply_count(db_session, race, _contest(10, 9, 5), _state(source_version="115903:316199"), DAY)
+    db_session.flush()
+    assert er.freshness_problem(db_session, "GA", DAY, _state(source_version="120001:12")) is None
+    assert er.freshness_problem(db_session, "GA", DAY, _state(source_version="115903:316100")) == \
+        "source version went back from 316199 to 316100"
+
+
+def test_a_units_total_without_a_reporting_figure_does_not_break_the_issue(db_session, _on_election_day):
+    """Formatting the missing figure raised, failing the state's whole sync
+    on every pass."""
     race = _setup(db_session)
     _apply(db_session, race, _contest(400, 600, 60))
     [issue] = _issues(db_session)
-    issue.is_current = False  # the Action Center's one-day rule, the flip still holding
-    _reset(db_session, members=True)
-    _apply(db_session, race, _contest(400, 650, 70))
-    db_session.add(Representative(id="S000001", name="Dana Smith", state="GA", district=2, party="D"))
-    db_session.flush()
-    kinds, _ = _apply(db_session, race, _contest(400, 700, 75))
-    assert "flip" in kinds
-    assert _issues(db_session) == [issue] and not issue.is_current
+    _apply(db_session, race, _contest(410, 650, None, total=100))
+    assert json.loads(issue.facts)[0] == "Ray Jones (R): 650 votes, 61.3%"
+    assert not any("reporting" in f for f in json.loads(issue.facts))

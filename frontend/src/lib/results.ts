@@ -275,9 +275,12 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       return {
         tag: "FLIP",
         tone: "flip",
+        // "Leads" even in a count the state lists as official: that is not
+        // a result (a Georgia general short of a majority goes to a
+        // runoff), and nothing on the page calls a race.
         text: d.official
           ? sentence(
-              `${withParty(d.leader)} wins in the official count, taking a seat ${holders} held`,
+              `${withParty(d.leader)} leads in the count the state lists as official, in a seat ${holders} hold`,
               shares
             )
           : sentence(

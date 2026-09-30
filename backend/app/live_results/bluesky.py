@@ -25,7 +25,9 @@ would bury everything else.
 
 Like the developing issue (live_results/signals.py), every post is a fixed
 template around the state's own figures, never model text, and says
-"leads" until the state calls the count official.
+"leads" — "not final" until the state lists its count as official, and
+never "wins" after: Civitas never calls a race, and an official count's
+leader can still face a runoff, a recount or a court.
 """
 
 import json
@@ -39,7 +41,7 @@ from app import broadcast
 from app.models import BroadcastPost, ElectionResultEvent, Race, RaceResult
 from app.live_results import sync as er
 from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, strip_hashtags
-from app.live_results.signals import holders_word, party_letter, race_label
+from app.live_results.signals import holders_word, party_letter, race_label, reporting_line
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -67,7 +69,7 @@ CORRECTION = "correction"
 # The feed entry's title for each kind of post (_title).
 _TITLES = {
     CORRECTION: "no longer shows a change of party",
-    er.FLIP: "the count shows a change of party, not final",
+    er.FLIP: "another party leads in the count, not final",
     er.OFFICIAL: "count listed as official",
     er.LEAD_CHANGE: "lead changes",
     er.ALL_REPORTING: "every unit reporting",
@@ -78,7 +80,7 @@ _PRIORITY = {CORRECTION: 0, er.FLIP: 1, er.OFFICIAL: 2, er.LEAD_CHANGE: 3, er.AL
 def _title(kind: str, race: Race, d: dict) -> str:
     """The feed title, following the same official branch as compose()."""
     if kind == er.FLIP and d.get("official"):
-        return f"{race_label(race)}: the official count shows a change of party"
+        return f"{race_label(race)}: another party leads in the count listed as official"
     return f"{race_label(race)}: {_TITLES[kind]}"
 
 
@@ -88,10 +90,7 @@ def _subject(election_date: str, race_id: str, kind: str) -> str:
 
 
 def _reporting(d: dict) -> str:
-    if not d.get("totalUnits"):
-        return ""
-    share = round(100 * (d.get("reportingUnits") or 0) / d["totalUnits"])
-    return f"{d['reportingUnits']:,} of {d['totalUnits']:,} {d['unitLabel']} reporting ({share}%)"
+    return reporting_line(d)
 
 
 def _who(p: dict | None) -> str:
@@ -133,18 +132,25 @@ def compose(kind: str, race: Race, d: dict, budget: int = MAX_POST_CHARS) -> str
     if kind == CORRECTION:
         # FLIP_REVERSED: the holder's party leads again, or nobody does —
         # an exact tie has no leader to name.
-        if leader and leader.get("party") == d.get("heldBy"):
+        # Only these two undo a flip (sync.lead_is_back). Anything else —
+        # the same challenger ahead on a count that merely dipped below the
+        # bar for raising one — has nothing to correct, and "no longer
+        # shows the seat changing party" said then was false.
+        if leader and d.get("heldBy") and leader.get("party") == d.get("heldBy"):
             head = f"Update on {label}: {_who(leader)} is ahead again, so the seat no longer shows a change of party"
         elif not leader and (d.get("votesCounted") or 0) > 0:
             head = f"Update on {label}: the count is now tied, so the seat no longer shows a change of party"
         else:
-            head = f"Update on {label}: the count no longer shows the seat changing party"
+            return None
         return _fit([head, reporting], [head], budget=budget)
     if not leader:
         return None
     holders = holders_word(d.get("heldBy"))
     if kind == er.FLIP and d.get("official"):
-        head = f"{label}: {_who(leader)} wins in the official count, taking a seat {holders} held"
+        # "Leads", never "wins": the state listing its count as official is
+        # not a result (a Georgia general short of a majority goes to a
+        # runoff), and Civitas never calls a race.
+        head = f"{label}: {_who(leader)} leads in the count the state lists as official, in a seat {holders} hold"
         return _fit([head, shares], [head], budget=budget)
     if kind == er.FLIP:
         head = f"{label}: {_who(leader)} leads in a seat {holders} hold"
@@ -194,14 +200,14 @@ def _postable_kind(event: ElectionResultEvent, race: Race, result: RaceResult, d
 @dataclass
 class _History:
     """What this election's result posts have already said, read from the
-    published posts (broadcast_posts) rather than the events: a data reset
-    keeps the posts and wipes the events, and reading the events let the
-    rebuilt count post its flips again, with the budget back at zero."""
+    published posts (broadcast_posts) — the record of what was actually
+    said — rather than the events, which record what the count did: an
+    event can be held back, skipped or refused a post, and a count's events
+    can be raised again (a data reset outside the results window wipes
+    them; database.reset_all_data keeps them inside it)."""
 
-    # race -> (kind, Bluesky status) of its latest flip-or-correction post,
-    # and when it was published
+    # race -> (kind, Bluesky status) of its latest flip-or-correction post
     last_claim: dict[str, tuple[str, str]] = field(default_factory=dict)
-    claim_at: dict[str, datetime] = field(default_factory=dict)
     said: set[tuple[str, str]] = field(default_factory=set)  # (race, kind)
     recent: set[str] = field(default_factory=set)  # races posted about in the cooldown
     last_hour: int = 0  # posts that spend the budget — corrections never do
@@ -220,7 +226,6 @@ def _history(db: Session, election_date: str, now: datetime) -> _History:
         h.said.add((race_id, kind))
         if kind in (er.FLIP, CORRECTION):
             h.last_claim[race_id] = (kind, bsky_status)
-            h.claim_at[race_id] = published_at
         if published_at >= now - timedelta(minutes=RACE_COOLDOWN_MINUTES):
             h.recent.add(race_id)
         if kind != CORRECTION:
@@ -233,7 +238,7 @@ def _history(db: Session, election_date: str, now: datetime) -> _History:
 def _already_said(kind: str, race_id: str, h: _History) -> bool:
     """An event the account has already put out: a flip while its flip is
     still the standing claim, or a count's one official or all-reporting
-    moment. After a data reset the rebuilt count raises these again."""
+    moment — however many times the count raises them."""
     if kind == er.FLIP:
         return h.last_claim.get(race_id, ("", ""))[0] == er.FLIP
     return kind in (er.OFFICIAL, er.ALL_REPORTING) and (race_id, kind) in h.said
@@ -244,9 +249,15 @@ def _still_true(kind: str, result: RaceResult, d: dict) -> bool:
     the budget can be overtaken before its turn comes — a correction
     included, when the flip it corrects has come back."""
     if kind == er.FLIP:
-        return er.is_flip(result)
+        # The challenger still ahead: the bar for RAISING a flip was met when
+        # the event was, and a count dipping below it since (figures missing
+        # for a poll, units added) doesn't unsay it — dropping the post then
+        # lost it for good, as the flip is never raised twice.
+        return er.challenger_leads(result)
     if kind == CORRECTION:
-        return not er.is_flip(result)
+        # The lead itself back with the holder's party (or tied) — not
+        # merely the count dipping below the bar for raising a flip.
+        return er.lead_is_back(result)
     if kind == er.LEAD_CHANGE:
         now_leading = er._leader(json.loads(result.tallies or "[]"))
         return er._key(now_leading) == er._key(d.get("leader"))
@@ -258,55 +269,6 @@ def _as_of_now(result: RaceResult, d: dict) -> dict:
     to two hours behind the budget, and its event's own figures would be
     that old — keeping only what the event alone knows (who led before)."""
     return er.event_detail(result, **({"previousLeader": d["previousLeader"]} if d.get("previousLeader") else {}))
-
-
-def _owed_reversals(db: Session, election_date: str, h: _History) -> list[ElectionResultEvent]:
-    """A reversal the sync can't raise: a posted flip whose ANNOUNCED count
-    has since gone back to the seat's party (or a tie), with no reversal
-    event since the post. The sync measures new events against its own
-    events, and a data reset wipes those — a flip that reverted before the
-    rebuilt count's first read raised nothing, leaving the flip as the
-    account's last word on the race.
-
-    Owed only when both say so:
-      - the latest event since the post (what the count ANNOUNCED) shows the
-        holder's party ahead or a tie, with the holder known. A held poll (a
-        total that fell) announces nothing; a correction raised from one was
-        followed by the same flip once the count recovered. And a reset also
-        wipes the members a holder is read from — "no longer shows a change
-        of party" about a seat with no known holder was false;
-      - and the stored row (what the post is worded from) is no longer a
-        flip. The event, once stored, is the once-per-flip-post guard; raised
-        while a held row still showed the challenger ahead, its correction
-        was dropped as untrue and the event blocked the one owed later."""
-    raised = []
-    for race_id, (kind, _) in h.last_claim.items():
-        if kind != er.FLIP:
-            continue
-        since = h.claim_at[race_id]
-        latest = (
-            db.query(ElectionResultEvent)
-            .filter(ElectionResultEvent.race_id == race_id, ElectionResultEvent.election_date == election_date,
-                    ElectionResultEvent.created_at >= since)
-            .order_by(ElectionResultEvent.created_at.desc(), ElectionResultEvent.id.desc())
-            .first()
-        )
-        if latest is None or db.query(ElectionResultEvent.id).filter(
-            ElectionResultEvent.race_id == race_id, ElectionResultEvent.election_date == election_date,
-            ElectionResultEvent.kind == er.FLIP_REVERSED, ElectionResultEvent.created_at >= since,
-        ).first() is not None:
-            continue
-        d = json.loads(latest.detail or "{}")
-        held, leader = d.get("heldBy"), d.get("leader")
-        back = (leader and leader.get("party") == held) or (not leader and (d.get("votesCounted") or 0) > 0)
-        result = db.get(RaceResult, race_id)
-        if not held or not back or result is None or result.election_date != election_date \
-                or er.is_flip(result):
-            continue
-        raised.append(er._event(db, result, er.FLIP_REVERSED))
-    if raised:
-        db.flush()
-    return raised
 
 
 def post_result_updates(db: Session, election_date: str) -> int:
@@ -325,7 +287,6 @@ def post_result_updates(db: Session, election_date: str) -> int:
     corrects did; the feed always gets it."""
     now = utcnow()
     h = _history(db, election_date, now)
-    _owed_reversals(db, election_date, h)
     pending = (
         db.query(ElectionResultEvent)
         .filter(ElectionResultEvent.bsky_posted_at.is_(None), ElectionResultEvent.election_date == election_date)

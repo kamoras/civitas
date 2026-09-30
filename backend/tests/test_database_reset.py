@@ -64,7 +64,12 @@ class TestResetAllDataTables:
                                             title="t", text="x", url="u"))
         db_session.commit()
         monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
-        with patch("app.pipeline.vector_store.reset_vector_db"):
+        # A campaign day: inside an election's results window its ballot and
+        # count are kept too (TestResetDuringElectionResults).
+        from datetime import date
+
+        with patch("app.pipeline.vector_store.reset_vector_db"), \
+                patch("app.election_phase.election_today", return_value=date(2026, 9, 1)):
             summary = reset_all_data()
         tables = {t.name for t in Base.metadata.sorted_tables}
         assert RESET_KEEPS <= tables  # a renamed table must not drop out of the keep list unnoticed
@@ -84,6 +89,47 @@ class TestResetAllDataTables:
         for table in Base.metadata.sorted_tables:
             if table.name not in RESET_KEEPS | {"api_cache"}:
                 assert db_session.execute(select(func.count()).select_from(table)).scalar_one() == 0, table.name
+
+
+class TestResetDuringElectionResults:
+    """While an election's results are on show nothing rebuilds its races
+    (the roster and ballot syncs stand down once its day has passed), so a
+    reset keeps the held election's ballot and count."""
+
+    def _seed(self, db):
+        db.add(models.Race(id="2026-HOUSE-GA-2", cycle_year=2026, office="H", state="GA", district=2))
+        db.add(models.Candidate(id="H1", race_id="2026-HOUSE-GA-2", name="SMITH, DANA", party="DEM"))
+        db.add(models.RaceResult(race_id="2026-HOUSE-GA-2", election_date="2026-11-03", source_name="x",
+                                 tallies="[]", votes_counted=0))
+        db.add(models.Senator(id="S1", name="A Senator", state="TX", party="R"))
+        db.commit()
+
+    def _reset_on(self, db, monkeypatch, day):
+        from datetime import date
+
+        monkeypatch.setattr("app.database.SessionLocal", lambda: db)
+        with patch("app.election_phase.election_today", return_value=date.fromisoformat(day)), \
+                patch("app.pipeline.vector_store.reset_vector_db"):
+            return reset_all_data()
+
+    def test_kept_inside_the_window(self, db_session, monkeypatch):
+        from app.database import RESET_KEEPS_WHILE_RESULTS, Base
+
+        assert RESET_KEEPS_WHILE_RESULTS <= {t.name for t in Base.metadata.sorted_tables}
+        self._seed(db_session)
+        summary = self._reset_on(db_session, monkeypatch, "2026-11-10")
+        assert summary["kept_for_election_results"] == sorted(RESET_KEEPS_WHILE_RESULTS)
+        assert db_session.query(models.Race).count() == 1
+        assert db_session.query(models.Candidate).count() == 1
+        assert db_session.query(models.RaceResult).count() == 1
+        assert db_session.query(models.Senator).count() == 0  # the rest is reset as ever
+
+    def test_cleared_outside_it(self, db_session, monkeypatch):
+        self._seed(db_session)
+        summary = self._reset_on(db_session, monkeypatch, "2026-12-20")
+        assert "kept_for_election_results" not in summary
+        assert db_session.query(models.Race).count() == 0
+        assert db_session.query(models.RaceResult).count() == 0
 
 
 class TestResetGuard:

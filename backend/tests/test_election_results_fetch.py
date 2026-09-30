@@ -79,9 +79,22 @@ class TestPickGeneral:
         assert pick([("General Election Recount", "a"), ("General Election", "b")]) == "b"
         assert pick([("General Election Runoff", "a"), ("November General", "b")]) == "b"
         assert pick([("General Election DEMO", "a"), ("General Election", "b")]) == "b"
-        # A lone demo, recount or runoff on the day is still not the count.
-        assert pick([("2024 Primary Election - US House 2 Recount", "a")]) is None
+        # A lone demo on the day is not the count yet ("not published").
         assert pick([("Test General Election", "a")]) is None
+        # A lone recount or runoff is not the count either, and says so
+        # loudly: None would read as "not published yet" all night.
+        for lone in ("2024 Primary Election - US House 2 Recount", "November Runoff"):
+            with pytest.raises(election_results.UntrustedCount):
+                pick([(lone, "a")], "XX")
+
+    def test_a_general_that_carries_a_runoff_is_the_general(self):
+        """A state holding nonpartisan runoffs on the general's ballot names
+        the one election for both."""
+        pick = election_results.pick_general
+        assert pick([("General Election and Nonpartisan Runoff", "a")]) == "a"
+        assert pick([("General Election and Nonpartisan Runoff", "a"), ("Demo General", "b")]) == "a"
+        # A plainer general that day still wins over it.
+        assert pick([("General Election Runoff", "a"), ("November General", "b")]) == "b"
 
     def test_a_general_that_is_also_a_special_is_still_the_general(self):
         # Georgia's real 2022 name, beside a hypothetical local special.
@@ -152,7 +165,7 @@ class TestClarity:
         assert got.unit_label == "counties"
         assert got.official is False
         assert len(got.contests) == 3
-        assert got.source_version == "316199"
+        assert got.source_version == "115903:316199"
         assert got.source_updated.isoformat() == "2022-12-20T17:00:00"
 
     async def test_no_election_on_that_date_is_none(self, monkeypatch):
@@ -740,6 +753,31 @@ class TestClarityLandingPage:
         now[0] += clarity._MISS_TTL_S
         await clarity.fetch_general_results(None, date(2024, 11, 5), "SC", self.SOURCE)
         assert seen.count(self.DISCOVERY["page_url"]) == walks + 1  # retried later
+
+    async def test_a_refused_walk_is_remembered_and_refused_again_without_walking(self, monkeypatch):
+        """Two same-day generals: pick_general refuses. The refusal is kept
+        like a miss — the next pass inside the TTL raises it again from
+        memory (so the second-refusal alert still fires) rather than
+        re-walking the archive."""
+        page = ('<a href="https://www.enr-scvotes.org/SC/200/">2024 General</a>'
+                '<a href="https://www.enr-scvotes.org/SC/201/">2024 General</a>')
+        seen = []
+        self._serve(monkeypatch, page, {"200": ("11/5/2024", "2024 General"), "201": ("11/5/2024", "November General")},
+                    seen=seen)
+        now = [1000.0]
+        monkeypatch.setattr(clarity.time, "monotonic", lambda: now[0])
+        with pytest.raises(election_results.UntrustedCount) as first:
+            await clarity.fetch_general_results(None, date(2024, 11, 5), "SC", self.SOURCE)
+        requests = len(seen)
+        now[0] += 60
+        with pytest.raises(election_results.UntrustedCount) as again:
+            await clarity.fetch_general_results(None, date(2024, 11, 5), "SC", self.SOURCE)
+        assert len(seen) == requests  # nothing fetched
+        assert str(again.value) == str(first.value)
+        now[0] += clarity._MISS_TTL_S
+        with pytest.raises(election_results.UntrustedCount):
+            await clarity.fetch_general_results(None, date(2024, 11, 5), "SC", self.SOURCE)
+        assert len(seen) > requests  # walked again once the TTL is up
 
     async def test_the_walk_is_bounded_and_newest_first(self, monkeypatch):
         links = "".join(f'<a href="https://www.enr-scvotes.org/SC/{eid}/">Old election</a>' for eid in range(1000, 1060))

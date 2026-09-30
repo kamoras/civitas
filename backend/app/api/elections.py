@@ -6,7 +6,7 @@ this namespace is the only elections API."""
 import json
 import logging
 import pathlib
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, not_
@@ -47,7 +47,7 @@ from app.pipeline.analyze.score_calculator import (
 )
 from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.fetch.state_candidates_common import last_name_matches
-from app.election_phase import ActiveElection, active_election
+from app.election_phase import ActiveElection, active_election, election_today
 from app.pipeline.election_pipeline import current_election_cycle
 from app.live_results.sync import is_flip, redrawn_states
 from app.pipeline.fetch import ballot_pdf
@@ -1278,7 +1278,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # page that just looks empty.
             "DC's Delegate to the House (non-voting) is not covered here",
         ] if state == "DC" else []),
-    }, max_age=CACHE_TTL_LIST_S)
+    }, max_age=phase_cache_s(election))
 
 
 # The live count moves on a five-minute sync. nginx's catch-all /api/
@@ -1289,6 +1289,19 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
 CACHE_TTL_RESULTS_S = 30
 # The live-updates feed shows this many of the newest events.
 RESULT_UPDATES_LIMIT = 50
+
+
+def phase_cache_s(election: ActiveElection, today: date | None = None) -> int:
+    """How long a response carrying the election's phase or date may be
+    cached. The long list lifetime (300s, and as long again served stale)
+    let the switch to election-day mode reach readers up to ten minutes
+    late, and the same at each turn of the results window; so from the day
+    before election day until the window closes it is the live count's
+    own lifetime, and the long one the rest of the year."""
+    today = today or election_today()
+    if election.shows_results or today >= election.election_day - timedelta(days=1):
+        return CACHE_TTL_RESULTS_S
+    return CACHE_TTL_LIST_S
 
 
 def _phase_json(election: ActiveElection) -> dict:
@@ -1458,6 +1471,7 @@ def pvi_map(db: Session = Depends(get_db)):
     publicly here with their provenance metadata (source, method, election
     window, as-of date) so the frontend can label what the number is and
     is not (2026-07 review F7)."""
+    election = active_election(db)
     return cached_json(
         {
             "states": get_state_pvi_map(),
@@ -1474,9 +1488,9 @@ def pvi_map(db: Session = Depends(get_db)):
             # results are on show (election_phase), not already the next.
             # A date, not a day count: the response is cached, and the page
             # counts the days against its own clock.
-            "electionDay": active_election(db).election_day.isoformat(),
+            "electionDay": election.election_day.isoformat(),
         },
-        max_age=CACHE_TTL_LIST_S,
+        max_age=phase_cache_s(election),
     )
 
 

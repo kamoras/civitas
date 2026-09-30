@@ -1712,7 +1712,11 @@ async def admin_reset_data():
     Clears senators, votes, donors, the learning store, caches and the
     vector store — every table except database.RESET_KEEPS, the history no
     run can rebuild (the Action Center's, run history). The next pipeline
-    runs rebuild the rest from scratch with the latest code.
+    runs rebuild the rest from scratch with the latest code. While an
+    election's results are on show the held election's ballot and count
+    are kept too (database.RESET_KEEPS_WHILE_RESULTS; named in the
+    response's details as kept_for_election_results): nothing can rebuild
+    them until the window closes.
 
     Every writer is held off for the whole wipe (_reset_holding_every_writer);
     anything already writing refuses the reset (409, naming it).

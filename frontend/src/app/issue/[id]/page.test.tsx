@@ -113,7 +113,7 @@ describe("an issue's facts section", () => {
     await renderIssue(
       issue({
         title:
-          "Democrat wins Utah's 1st Congressional District in the official count, taking a seat Republicans held",
+          "Democrat leads Utah's 1st Congressional District in the count the state lists as official, in a seat Republicans hold",
       })
     );
     const section = factsSection();

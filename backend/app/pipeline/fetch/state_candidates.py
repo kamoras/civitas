@@ -392,6 +392,13 @@ def _contradicts(
     # says nothing either way.
     if not expected or theirs not in _KNOWN_PARTIES or theirs == expected:
         return False
+    return given_name_contradicts(cand, display_name, last_name)
+
+
+def given_name_contradicts(cand: Candidate, display_name: str | None, last_name: str = "") -> bool:
+    """_contradicts' given-name half on its own: the record states a given
+    name that fits none of the candidate's. Asked alone where the record
+    states no party to compare (a live-results feed's independent)."""
     wanted, initial = _record_given(display_name, last_name)
     theirs_initial = _given_initial(cand.name or "")
     if initial and initial == theirs_initial:

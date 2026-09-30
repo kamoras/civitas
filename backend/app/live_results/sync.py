@@ -40,7 +40,7 @@ from app.pipeline.fetch.election_results import (
     live_results_states,
 )
 from app.pipeline.fetch.poll_close import last_poll_close, polls_closed
-from app.pipeline.fetch.state_candidates import _match_candidate, _race_id_for
+from app.pipeline.fetch.state_candidates import _match_candidate, _race_id_for, given_name_contradicts
 from app.pipeline.fetch.state_candidates_common import PARTY_CODE_MAP, fec_party, last_name_matches, surname
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
@@ -151,13 +151,31 @@ def _tallies(race: Race, contest: ContestCount) -> list[dict]:
     """The contest's candidates, most votes first, each matched to one of
     the race's Candidate rows where the shared ballot matcher finds exactly
     one — the same matcher that confirms nominees, so a name that confirmed
-    a nominee is the name that carries their count."""
+    a nominee is the name that carries their count.
+
+    Matched against the confirmed November nominees wherever the race has
+    any: its FEC filers include primary losers, and a loser sharing a
+    nominee's surname could take the nominee's votes. A match is used only
+    where it can be checked — the feed names a party the matcher can test
+    it against (_contradicts), or it is the only nominee with that surname
+    and the feed's given name fits theirs.
+    A feed that names no party (independents, a party the vocabulary
+    doesn't know) otherwise lent the row a same-surname filer's party, and
+    a wrong party can create or hide a seat changing hands. The party shown
+    is the feed's own whenever it states one."""
+    nominees = [c for c in race.candidates if c.confirmed_general]
+    pool = nominees or list(race.candidates)
     rows = []
     for name, party, votes in contest.candidates:
         match: Candidate | None = None
         last = surname(name)
         if last:
-            match = _match_candidate(list(race.candidates), last, party or "", name)
+            match = _match_candidate(pool, last, party or "", name)
+        stated = PARTY_CODE_MAP.get(party or "")
+        if match is not None and not stated and (
+            not _sole_nominee_by_surname(nominees, match) or given_name_contradicts(match, name, last)
+        ):
+            match = None
         rows.append({
             # Who the feed says this is, as it prints them: what a row is
             # compared by between polls (_key), since the display name and
@@ -168,12 +186,21 @@ def _tallies(race: Race, contest: ContestCount) -> list[dict]:
             # where there is one: a results feed can carry an honorific
             # (Arkansas: "Congressman Steve Womack") the ballot doesn't.
             "name": (match.ballot_name if match and match.ballot_name else name),
-            "party": _party_group(match.party) if match else _party_group(party),
+            "party": stated or (_party_group(match.party) if match else _party_group(party)),
             "votes": votes,
             "candidateId": match.id if match else None,
         })
     rows.sort(key=lambda r: r["votes"], reverse=True)
     return rows
+
+
+def _sole_nominee_by_surname(nominees: list[Candidate], match: Candidate) -> bool:
+    """`match` is a confirmed nominee and no other nominee shares their
+    surname — the one case a match needs no party to check it by."""
+    if match not in nominees:
+        return False
+    last = normalized_surname(match.name)
+    return sum(1 for c in nominees if normalized_surname(c.name) == last) == 1
 
 
 def _leader(tallies: list[dict]) -> dict | None:
@@ -230,14 +257,41 @@ def count_is_mostly_in(reporting: int | None, total: int | None, unit_label: str
     return reporting >= FLIP_MIN_REPORTING_SHARE * total
 
 
-def is_flip(result: RaceResult) -> bool:
-    """The leader is from a different party than the seat's holder, with
-    enough of the count in to say so (flip_qualifies)."""
+def challenger_leads(result: RaceResult) -> bool:
+    """The leader is from a known party other than the seat's holder —
+    whether or not enough of the count is in to say so (is_flip)."""
     leader = _leader(json.loads(result.tallies or "[]"))
     return bool(
         leader and result.held_by_party and leader.get("party")
-        and leader["party"] != result.held_by_party and flip_qualifies(result)
+        and leader["party"] != result.held_by_party
     )
+
+
+def is_flip(result: RaceResult) -> bool:
+    """The leader is from a different party than the seat's holder, with
+    enough of the count in to say so (flip_qualifies). What RAISES a flip;
+    never what undoes one (lead_is_back)."""
+    return challenger_leads(result) and flip_qualifies(result)
+
+
+def lead_is_back(result: RaceResult) -> bool:
+    """The count shows the seat's holder ahead again, or the top two tied —
+    the only thing that undoes an announced change of party.
+
+    Not "no longer is_flip": is_flip also asks whether enough of the count
+    is in, and that can lapse with the same challenger still ahead — a
+    county-unit feed's momentary zero read, a poll that drops its
+    reporting figures, an official flag switched back off, more units
+    added. Each of those once retired the flip issue and posted "no longer
+    shows a change of party" while the challenger led, and the flip was
+    announced again when the count re-qualified. Once said, a flip stays
+    said until the lead itself goes back."""
+    held = result.held_by_party
+    tallies = json.loads(result.tallies or "[]")
+    if not held or not tallies or tallies[0]["votes"] <= 0:
+        return False
+    leader = _leader(tallies)
+    return leader is None or leader.get("party") == held  # None here: a tie at the top
 
 
 def event_detail(result: RaceResult, **extra) -> dict:
@@ -303,11 +357,15 @@ def announced_state(db: Session, race_id: str, election_date: str) -> dict:
         .order_by(ElectionResultEvent.created_at, ElectionResultEvent.id)
         .all()
     )
-    state = {"any": bool(rows), "leader": None, "official": False, "all_in": False, "flip": False}
+    state = {"any": bool(rows), "leader": None, "official": False, "all_in": False, "flip": False,
+             "counted": False}
     for kind, detail in rows:
-        leader = (json.loads(detail or "{}") or {}).get("leader")
+        d = json.loads(detail or "{}") or {}
+        leader = d.get("leader")
         if leader:
             state["leader"] = leader
+        if (d.get("votesCounted") or 0) > 0:
+            state["counted"] = True  # votes have been announced for this race
         if kind == OFFICIAL:
             state["official"] = True
         elif kind == ALL_REPORTING:
@@ -328,9 +386,6 @@ class Applied:
     # not an attribute on the row: the session holds clean rows weakly, so
     # anything set on one may not survive to the caller's next db.get.
     held: bool = False
-    # The race's count row was created by this poll: the first read of the
-    # election — or of a count rebuilt after a data reset.
-    created: bool = False
 
     @property
     def new_flip(self) -> bool:
@@ -375,17 +430,22 @@ def apply_count(
         # announced_state.
         before = {"tallies": json.loads(result.tallies or "[]"), "counted": result.votes_counted or 0}
         if result.held_by_party is None:
-            # Looked up again while unknown: a data reset wipes the members
-            # a holder is read from, and a row created before they were
-            # rebuilt kept None all night — no flip announced, and none
-            # corrected. A redrawn map's seat keeps answering None.
+            # Looked up again while unknown: a data reset before election
+            # day wipes the members a holder is read from, and a row created
+            # before they were rebuilt kept None all night — no flip
+            # announced, and none corrected. A redrawn map's seat keeps
+            # answering None.
             result.held_by_party = seat_holder_party(db, race)
 
     old_tallies = before["tallies"] if before else []
     old_counted = before["counted"] if before else 0
-    if counted > 0 and old_counted == 0:
+    said = announced_state(db, race.id, result.election_date)
+    if counted > 0 and old_counted == 0 and not said["counted"]:
         # first_reported_at is when votes were first counted, not when the
         # row was made: a feed read at poll close lists every race at zero.
+        # Only the FIRST votes ever: a count coming back from a momentary
+        # zero read (stored, held) is not new, and restarting the clock
+        # there restarted COUNTY_FLIP_SETTLE mid-night.
         result.first_reported_at = now
     if before is None or [(_key(t), t["votes"]) for t in tallies] != [(_key(t), t["votes"]) for t in old_tallies] \
             or counted != old_counted:
@@ -407,7 +467,6 @@ def apply_count(
                        race.id, old_counted, counted)
         return Applied(result, held=True)
 
-    said = announced_state(db, race.id, result.election_date)
     kinds: list[tuple[str, dict]] = []
     old_leader, new_leader = said["leader"], _leader(tallies)
     if not said["any"] and counted > 0:
@@ -420,10 +479,11 @@ def apply_count(
         kinds.append((ALL_REPORTING, {}))
     if result.official and not said["official"]:
         kinds.append((OFFICIAL, {}))
-    flipped = is_flip(result)
-    if flipped and not said["flip"]:
+    # Qualification (flip_qualifies) gates only RAISING a flip. A raised
+    # flip is undone only by the lead itself going back (lead_is_back).
+    if not said["flip"] and is_flip(result):
         kinds.append((FLIP, {}))
-    elif said["flip"] and not flipped:
+    elif said["flip"] and lead_is_back(result):
         kinds.append((FLIP_REVERSED, {}))
     # One poll, one story per race: a flip already says who leads, and a
     # race whose first returns arrive complete is simply "all in" — without
@@ -434,7 +494,7 @@ def apply_count(
     if ALL_REPORTING in present or FLIP in present:
         kinds = [(k, x) for k, x in kinds if k != FIRST_RETURNS]
     events = [_event(db, result, kind, **extra) for kind, extra in kinds]
-    return Applied(result, events, created=before is None)
+    return Applied(result, events)
 
 
 def _contest_race(db: Session, cycle: int, state: str, contest: ContestCount) -> Race | None:
@@ -464,12 +524,26 @@ def _stored(db: Session, state: str, election_day: date):
     )
 
 
+def _scoped_version(version: str | None) -> tuple[str, int] | None:
+    """("<election id>", n) from a reader's "<election id>:<n>", ("", n)
+    from a bare number; None when there is no number to compare."""
+    scope, _, number = (version or "").rpartition(":")
+    return (scope, int(number)) if number.isdigit() else None
+
+
 def freshness_problem(db: Session, state: str, election_day: date, count: StateCount) -> str | None:
     """Why this read must not replace what is stored: a source that has
     gone BACKWARDS (an older copy from a cache, CDN or mirror), or one
     dated in the future. None when it is fine to store. The stamp and the
     version are each checked on their own, so a source that gives only one
-    of them is still protected by it."""
+    of them is still protected by it.
+
+    A version is compared only with versions of the same election: it
+    counts one election's republications (Clarity and Tally number each
+    election id's from its own start), so a count moved to a new id, or a
+    restart that discovers a different one, was refused as "gone back" all
+    night. Readers scope theirs as "<election id>:<version>"
+    (_scoped_version)."""
     now = utcnow()
     if count.source_updated and count.source_updated > now + _FUTURE_SKEW:
         return f"source is stamped {count.source_updated.isoformat()}, in the future"
@@ -477,9 +551,11 @@ def freshness_problem(db: Session, state: str, election_day: date, count: StateC
     stamps = [u for u, _ in stored if u is not None]
     if count.source_updated is not None and stamps and count.source_updated < max(stamps):
         return f"source went back from {max(stamps).isoformat()} to {count.source_updated.isoformat()}"
-    versions = [int(v) for _, v in stored if (v or "").isdigit()]
-    if (count.source_version or "").isdigit() and versions and int(count.source_version) < max(versions):
-        return f"source version went back from {max(versions)} to {count.source_version}"
+    new = _scoped_version(count.source_version)
+    if new is not None:
+        versions = [v[1] for v in (_scoped_version(v) for _, v in stored) if v is not None and v[0] == new[0]]
+        if versions and new[1] < max(versions):
+            return f"source version went back from {max(versions)} to {new[1]}"
     return None
 
 

@@ -337,16 +337,23 @@ links to its election office, never as a state where nothing has happened.
   nothing: Enhanced Voting `isProduction` and `_Demo` elections, Clarity
   `istestmode`, Tally `previewElections`/`electionID` and a `versionID` that
   changes mid-read. The election is found by its statutory date; a demo,
-  recount or runoff is never taken for the general, and two candidates for
-  the same day are refused rather than guessed between.
-- A feed that goes backwards in time or version, or is stamped in the
-  future, is refused. An impossible count (more units reporting than exist)
+  recount or runoff is never taken for the general (a runoff name that also
+  says "general" — "General Election and Nonpartisan Runoff" — is, when
+  nothing plainer is held that day), two candidates for the same day are
+  refused rather than guessed between, and so is a day holding only
+  recounts or runoffs.
+- A feed that goes backwards in time or version (a version compared only
+  with the same election id's), or is stamped in the future, is refused. An impossible count (more units reporting than exist)
   is dropped. A poll whose vote total fell is stored but announces nothing.
-- Civitas never calls a race. A count is "leading" until the source itself
-  says official. A flip needs half the reporting units in; where the units
-  are places (counties, a state's cities and towns), which "report" on their
-  first batch, it needs every place in and `COUNTY_FLIP_SETTLE` (6 h) since
-  the first votes, or the source's official flag.
+- Civitas never calls a race. A count is "leading" — "not final" until the
+  source itself says official, and still "leading", never "wins", after. A
+  flip needs half the reporting units in; where the units are places
+  (counties, a state's cities and towns), which "report" on their first
+  batch, it needs every place in and `COUNTY_FLIP_SETTLE` (6 h) since the
+  first votes ever (a momentary zero read doesn't restart it), or the
+  source's official flag. That bar gates only raising a flip: once said, it
+  is undone only by the lead going back to the holder's party or a tie
+  (`lead_is_back`).
 - A House seat in a state whose congressional map was redrawn for the cycle
   (`app/data/redrawn_congressional_maps.json`: AL, CA, FL, LA, NC, OH, TN,
   TX, UT for 2026) has no known holder going in (`seat_holder_party` returns
@@ -399,7 +406,8 @@ current interval.
 
 **The DEVELOPING issue** (`signals.py`) opens when a seat's leader is from
 another party than its holder (fixed at the first read), is refreshed while
-the flip holds; a flip after a reversal opens a new issue. When the lead reverts (or
+the challenger leads; a flip after a reversal opens a new issue, and an
+issue the Action Center's cleanup has deleted is not redrafted. When the lead reverts (or
 ties) it is retired AND rewritten to say the count no longer shows a change
 of party, since the homepage record and its own address still show retired
 rows; a retired issue keeps its figures current without moving up the
@@ -420,7 +428,8 @@ is in the feed whatever Bluesky does; a send Bluesky refuses is never resent
 (`broadcast.NO_RETRY_KINDS`), since an hour on it could describe a count that
 has moved or reverted. A correction goes to Bluesky only if the flip it
 corrects did. The budget, cooldown and what has been said are read from the
-stored posts, which a data reset keeps.
+stored posts. A data reset inside the results window keeps the held
+election's ballot and count (`RESET_KEEPS_WHILE_RESULTS`).
 A correction (a posted flip that reverted) is outside every cap and owed for
 up to a day. Posts are composed to fit — figures are dropped before the
 "Not final." qualifier, never the reverse — and the routine race-coverage
