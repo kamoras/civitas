@@ -286,9 +286,11 @@ export default async function ElectionsChapter() {
             from the time on the page&apos;s latest answer, not by your device&apos;s, which may be
             off; while the page can&apos;t refresh, that clock stops where it stood, and it never
             runs backwards. A count that goes down (a county pulling a bad upload) is shown but
-            announces nothing: a seat already described as changing party stays so described &mdash;
-            on the map, in the live updates and in the Action Center alike &mdash; until the next
-            count says otherwise.
+            announces nothing: a change of party already announced stays announced &mdash; on the
+            map, in the live updates and in the Action Center alike &mdash; until the next count
+            says otherwise. If that lower count shows the holder&apos;s party ahead again, the
+            results pages say both: that the change was announced, and that the latest count shows
+            the holder&apos;s party ahead.
           </P>
           <P>
             We never call a race. A candidate &ldquo;leads&rdquo; &mdash; &ldquo;not final&rdquo;

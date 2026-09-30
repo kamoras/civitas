@@ -35,6 +35,8 @@ import {
   stateFill,
   stateShade,
   summarizeState,
+  flipShown,
+  flipNotShownText,
 } from "./results";
 import type { ElectionPhaseInfo, LiveRaceResult, ResultEvent } from "@/types/election";
 
@@ -324,6 +326,15 @@ describe("stateFill", () => {
     expect(stateShade("GA", house, "H", true, true).label).toBe(
       "GA House: Republicans lead in the most seats, seats led D 1, R 2, of 3 listed, 1 seat changing party"
     );
+    // A held flip (announced; the latest count has the holder ahead) is
+    // named as that, and not counted as a seat changing party.
+    const held = [...house, heldFlip({ raceId: "2026-HOUSE-GA-4", office: "H", district: 4 })];
+    expect(stateShade("GA", held, "H", true, true).label).toBe(
+      "GA House: seats split evenly, seats led D 2, R 2, of 4 listed, 1 seat changing party, 1 change of party announced earlier that the latest count doesn't show"
+    );
+    expect(stateShade("GA", [heldFlip()], "S", true, true).label).toBe(
+      "GA Senate: Democrat leads, 80% in, change of party announced earlier, holder's party ahead in the latest count"
+    );
   });
 
   it("draws a covered state still voting as that, not as no votes yet", () => {
@@ -481,6 +492,48 @@ describe("raceStatusText", () => {
       "another party leads"
     );
   });
+
+  it("never says 'changing party' for a flip the count no longer shows", () => {
+    // A held poll: the flip stands (announced), the figures show the holder ahead.
+    expect(raceStatusText(heldFlip())).toBe(
+      "Democrat leads, 80% in, change of party announced earlier, holder's party ahead in the latest count"
+    );
+    expect(raceStatusText(race())).toBe("Republican leads, 80% in, seat changing party");
+  });
+});
+
+/** A flip announced earlier whose latest (held) poll shows the holder ahead. */
+function heldFlip(overrides: Partial<LiveRaceResult> = {}): LiveRaceResult {
+  return race({
+    flip: true,
+    leaderParty: "DEM",
+    candidates: [
+      { name: "Dana Smith", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+      { name: "Ray Jones", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+    ],
+    ...overrides,
+  });
+}
+
+describe("flipShown / flipNotShownText", () => {
+  it("says a seat is changing party only while the figures show it", () => {
+    expect(flipShown(race())).toBe(true);
+    expect(flipNotShownText(race())).toBeNull();
+    expect(flipShown(heldFlip())).toBe(false);
+    expect(flipNotShownText(heldFlip())).toBe("holder's party ahead in the latest count");
+    const tied = heldFlip({
+      leaderParty: null,
+      candidates: [
+        { name: "Dana Smith", party: "DEM", votes: 950, pct: 50, candidateId: null },
+        { name: "Ray Jones", party: "REP", votes: 950, pct: 50, candidateId: null },
+      ],
+    });
+    expect(flipShown(tied)).toBe(false);
+    expect(flipNotShownText(tied)).toBe("tied in the latest count");
+    // No flip announced: neither.
+    expect(flipShown(race({ flip: false }))).toBe(false);
+    expect(flipNotShownText(race({ flip: false }))).toBeNull();
+  });
 });
 
 describe("summarizeState", () => {
@@ -492,6 +545,13 @@ describe("summarizeState", () => {
     ]);
     expect(s.houseLeads).toEqual({ DEM: 2 });
     expect(s.flips).toBe(1);
+    expect(s.flipsNotShown).toBe(0);
+  });
+
+  it("does not count a held flip as a seat changing party", () => {
+    const s = summarizeState([race(), heldFlip({ raceId: "2026-SEN-GA-S", isSpecial: true })]);
+    expect(s.flips).toBe(1);
+    expect(s.flipsNotShown).toBe(1);
   });
 });
 

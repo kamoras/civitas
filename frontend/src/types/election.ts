@@ -573,7 +573,12 @@ export interface LiveRaceResult {
   lastChangeAt: string;
   /** Null before any votes and on an exact tie. */
   leaderParty: string | null;
-  /** Leader's party differs from the holder's, with enough in to say so. */
+  /** A change of party has been announced (and not reversed): the leader's
+   * party differed from the holder's, with enough in to say so, when the
+   * backend last announced anything. A poll whose total fell announces
+   * nothing, so this can stay true while `leaderParty` is the holder's or
+   * the count is tied. Say "changing party" through flipShown
+   * (lib/results.ts), never from this alone. */
   flip: boolean;
   candidates: LiveCandidateResult[];
 }

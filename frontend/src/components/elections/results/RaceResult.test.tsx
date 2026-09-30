@@ -120,8 +120,50 @@ describe("RaceResultCard", () => {
       ],
     });
     render(<RaceResultCard result={held} />);
-    expect(screen.getByText("FLIP · LEADING")).toBeInTheDocument();
-    expect(document.body).not.toHaveTextContent(/another party/);
+    // Both things that are true: announced, and the holder ahead here.
+    expect(screen.getByText("FLIP ANNOUNCED · HOLDER'S PARTY LEADS")).toBeInTheDocument();
+    expect(screen.queryByText("FLIP · LEADING")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/another party|changing party/);
+    expect(document.body).toHaveTextContent(
+      "The seat was held by a Democrat; a change of party was announced earlier (holder's party ahead in the latest count)."
+    );
+  });
+
+  it("tags a held flip by what its count shows: a tie, or an official count", () => {
+    const tiedCands = [
+      { name: "Dana Smith", party: "DEM", votes: 950, pct: 50, candidateId: null },
+      { name: "Ray Jones", party: "REP", votes: 950, pct: 50, candidateId: null },
+    ];
+    expect(statusTag(race({ flip: true, leaderParty: null, candidates: tiedCands })).text).toBe(
+      "FLIP ANNOUNCED · TIED"
+    );
+    const heldCands = [
+      { name: "Dana Smith", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+      { name: "Ray Jones", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+    ];
+    expect(
+      statusTag(race({ flip: true, official: true, leaderParty: "DEM", candidates: heldCands }))
+        .text
+    ).toBe("FLIP ANNOUNCED · HOLDER'S PARTY LEADS · OFFICIAL COUNT");
+    // A flip the count still bears out keeps its FLIP.
+    expect(statusTag(race({ flip: true })).text).toBe("FLIP · LEADING");
+  });
+
+  it("tags a held flip on a House row by its standing, never FLIP · LEADING", () => {
+    render(
+      <HouseResultRow
+        result={race({
+          flip: true,
+          leaderParty: "DEM",
+          candidates: [
+            { name: "Dana Smith", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+            { name: "Ray Jones", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+          ],
+        })}
+      />
+    );
+    expect(document.body).toHaveTextContent("FLIP ANNOUNCED · HOLDER'S PARTY LEADS");
+    expect(document.body).not.toHaveTextContent(/another party|FLIP · LEADING/);
   });
 
   it("says a House seat on new district lines has no previous holder", () => {

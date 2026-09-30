@@ -1,8 +1,9 @@
 import {
+  flipNotShownText,
+  flipShown,
   formatEasternTime,
   heldByPhrase,
   isTied,
-  leaderIsChallenger,
   partyBarColor,
   partyLetter,
   partyTextClass,
@@ -19,15 +20,31 @@ import type { LiveRaceResult } from "@/types/election";
  * as a result: an official count's leader still only leads (a Georgia
  * general short of a majority goes to a runoff), and Civitas never calls a
  * race. A seat changing party keeps its FLIP whatever the count's
- * standing. */
+ * standing — but only while the figures show it (flipShown): a change of
+ * party announced earlier that this count no longer shows (a poll whose
+ * total fell announces nothing, so the flip stands on the issue and in the
+ * feed) says exactly that, never FLIP · LEADING beside the holder's lead. */
 export function statusTag(r: LiveRaceResult): { text: string; className: string } {
   if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
+  if (flipNotShownText(r))
+    return {
+      // Short, as a tag must be; the card's sentence and the maps' names
+      // say it in full ("holder's party ahead in the latest count").
+      text: `FLIP ANNOUNCED · ${
+        isTied(r)
+          ? "TIED"
+          : r.leaderParty === r.heldBy
+            ? "HOLDER'S PARTY LEADS"
+            : "NOT IN THIS COUNT"
+      }${r.official ? " · OFFICIAL COUNT" : ""}`,
+      className: "border-signal-amber/40 text-ink-hi",
+    };
   if (isTied(r))
     return {
       text: r.official ? "TIED · OFFICIAL COUNT" : "TIED",
       className: "border-white/40 text-ink-hi",
     };
-  if (r.flip)
+  if (flipShown(r))
     return {
       text: r.official ? "FLIP · OFFICIAL COUNT" : "FLIP · LEADING",
       className: "border-signal-amber/60 text-signal-amber",
@@ -137,8 +154,13 @@ export function RaceResultCard({
                 : "Leading, not called. The count is not final.",
           // Who held the seat, whether or not the count is official: an
           // official count's change of party is still one.
-          result.votesCounted && result.flip && leaderIsChallenger(result)
+          result.votesCounted && flipShown(result)
             ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party.`
+            : null,
+          // Announced earlier (and still standing on the issue and in the
+          // feed), but not what these figures show: say both.
+          result.votesCounted && flipNotShownText(result)
+            ? `The seat was held by ${heldByPhrase(result.heldBy)}; a change of party was announced earlier (${flipNotShownText(result)}).`
             : null,
         ]
           .filter(Boolean)
@@ -226,7 +248,9 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
         {reportingText(result) || "—"}
       </span>
       <span
-        className={`justify-self-end border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] ${tag.className}`}
+        // Capped on a phone so a long tag wraps instead of squeezing the
+        // names column (its grid track is `auto`).
+        className={`max-w-[7.5rem] justify-self-end border px-2 py-0.5 text-right font-mono text-[11px] tracking-[0.08em] sm:max-w-none ${tag.className}`}
       >
         {tag.text}
       </span>

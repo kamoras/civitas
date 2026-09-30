@@ -143,6 +143,57 @@ describe("the seats-changing-party card", () => {
   });
 });
 
+describe("a flip announced earlier that the latest count doesn't show", () => {
+  // A poll whose total fell announces nothing, so the backend keeps the flip
+  // (as the issue and feed do) while its figures show the holder ahead.
+  const held = race({
+    raceId: "2026-HOUSE-GA-3",
+    district: 3,
+    leaderParty: "DEM",
+    candidates: [
+      { name: "Dana Smith", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+      { name: "Ray Jones", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+    ],
+  });
+  const heldSenate = {
+    ...held,
+    raceId: "2026-SEN-GA",
+    office: "S" as const,
+    district: null,
+  };
+
+  it("is not a seat changing party in the counter, and the card names it separately", () => {
+    render(
+      <ResultsOverview now={NOW} results={results({ races: [race(), held] })} states={["GA"]} />
+    );
+    const card = within(flipsCard());
+    expect(card.getByText("1")).toBeInTheDocument();
+    expect(
+      card.getByText(
+        "Not counted: 1 change of party announced earlier that the latest count doesn't show; each race's card says what its count shows"
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("never says 'changing party' or '· flip' beside the holder's lead", () => {
+    render(
+      <ResultsOverview
+        now={NOW}
+        results={results({ senateStates: ["GA"], races: [heldSenate] })}
+        states={["GA"]}
+      />
+    );
+    expect(within(flipsCard()).getByText("0")).toBeInTheDocument();
+    expect(
+      screen.getByText("Senate: Dana Smith (D) leads · flip announced, not in latest count")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/· flip$/)).not.toBeInTheDocument();
+    const label = mapProps.current!.getStateLabel("GA");
+    expect(label).toContain("change of party announced earlier, holder's party ahead");
+    expect(label).not.toContain("seat changing party");
+  });
+});
+
 describe("the national results map's key", () => {
   it("calls a count under half in fainter, not paler: the fill is opacity over a dark map", () => {
     render(<ResultsOverview now={NOW} results={results()} states={["GA"]} />);

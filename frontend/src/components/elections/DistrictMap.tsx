@@ -13,9 +13,10 @@ import {
   NO_COUNT_SWATCH,
   STALE_SWATCH,
   TIED_FILL,
+  flipNotShownText,
+  flipShown,
   heldByPhrase,
   isTied,
-  leaderIsChallenger,
   partyLetter,
   partyTextClass,
   raceStatusText,
@@ -485,9 +486,11 @@ function DistrictResultPreview({
               tied ? "tied" : result.official ? "leads" : "leading",
               result.official ? "official count" : null,
               "not called",
-              result.flip && leaderIsChallenger(result)
+              flipShown(result)
                 ? `held by ${heldByPhrase(result.heldBy)}, leader from another party`
-                : null,
+                : flipNotShownText(result)
+                  ? `change of party announced earlier, ${flipNotShownText(result)}`
+                  : null,
               stale ? "not live" : null,
             ]
               .filter(Boolean)

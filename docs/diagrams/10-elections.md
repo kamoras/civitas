@@ -364,8 +364,15 @@ links to its election office, never as a state where nothing has happened.
   (`lead_is_back`). The results page marks exactly what has been announced
   (`RaceResult.flip_announced`), as the DEVELOPING issue and the Live
   updates feed do: a held poll whose figures show the holder ahead changes
-  none of the three (the page keeps the flip tag, without saying the leader
-  is from another party), and the next poll reverts all three together.
+  none of the three, and the next poll reverts all three together. Until
+  then the page says what both are: the flip was announced, and the latest
+  count shows the holder's party ahead (or a tie) — "FLIP ANNOUNCED ·
+  HOLDER'S PARTY LEADS" on the race, "change of party announced earlier,
+  holder's party ahead in the latest count" in the maps' names, never
+  "FLIP · LEADING" or "seat
+  changing party" beside the holder's lead, and not among the national
+  "seats changing party" count, which names such races separately
+  (`flipShown` / `flipNotShownText` in `frontend/src/lib/results.ts`).
 - A House seat in a state whose congressional map was redrawn for the cycle
   (`app/data/redrawn_congressional_maps.json`: AL, CA, FL, LA, NC, OH, TN,
   TX, UT for 2026) has no known holder going in (`seat_holder_party` returns
@@ -466,10 +473,17 @@ is a fixed template around the source's figures, never model text. The
 Action Center lists it beside the newest day's confirmed issues whatever its
 own date. News promotes it only by naming its race — state and seat in one
 phrase (`_results_race_named`): "Georgia's 2nd District", "Washington
-state's 3rd District", "Virginia's second district", "Virginia's 2nd" closing
-a clause, "GA-02" (never inside a link), "the U.S. Senate race in Georgia";
+state's 3rd District", "Virginia's second district" (a spelled-out ordinal
+only before a district, seat or race word), "Virginia's 2nd" closing a
+clause, "In California's 45th," "Alaska's lone House seat", "GA-02" (never
+inside a link, bare domain or not), "the U.S. Senate race in Georgia";
 never a state legislature's seat or district, hyphenated or not, nor "the
-Senate race for Georgia's governor". "Special" is read wherever it stands
+Senate race for Georgia's governor". "[State] Senate" is also the
+legislature's upper chamber, elected the same night, so a seat number,
+district or place in the state after it ("Ohio Senate seat 5", "Florida
+Senate seat in Tampa") names no U.S. Senate race, and "seat" / "election"
+count only with "U.S.", "special" or a possessive; bare "Ohio Senate race"
+still does. "Regular" names the regular race. "Special" is read wherever it stands
 ("the special U.S. Senate election", "Georgia's special election for U.S.
 Senate"), but regular and special are told apart only where the state holds
 both this cycle (its `Race` rows, `state_candidates.senate_race_ids`, as

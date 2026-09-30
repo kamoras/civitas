@@ -316,6 +316,41 @@ export function leaderIsChallenger(r: {
   return !!r.leaderParty && !!r.heldBy && r.leaderParty !== r.heldBy && !isTied(r);
 }
 
+/** Whether to say a seat is changing party: announced (`flip`) AND borne
+ * out by the figures on screen (leaderIsChallenger). Every "changing
+ * party" / FLIP wording reads this, never `flip` alone: during a poll whose
+ * total fell the backend keeps an announced flip standing (it announces
+ * nothing, including a reversal), so `flip` can be true while the count
+ * shows the holder's party ahead or a tie. */
+export function flipShown(r: {
+  flip: boolean;
+  leaderParty: string | null;
+  heldBy: string | null;
+  votesCounted: number;
+  candidates: { votes: number }[];
+}): boolean {
+  return r.flip && leaderIsChallenger(r);
+}
+
+/** For a change of party that was announced (and still stands on the
+ * Action Center issue and in the feed) but that the figures on screen no
+ * longer show: what they do show, in words — "tied in the latest count",
+ * "holder's party ahead in the latest count". Null for every other race,
+ * including a flip the count still bears out (flipShown). */
+export function flipNotShownText(r: {
+  flip: boolean;
+  leaderParty: string | null;
+  heldBy: string | null;
+  votesCounted: number;
+  candidates: { votes: number }[];
+}): string | null {
+  if (!r.flip || leaderIsChallenger(r)) return null;
+  if (isTied(r)) return "tied in the latest count";
+  if (r.leaderParty && r.leaderParty === r.heldBy)
+    return "holder's party ahead in the latest count";
+  return "latest count doesn't show the change";
+}
+
 /** Share of reporting units in, 0..1, or null when the state gives none. */
 export function reportingShare(r: {
   reportingUnits: number | null;
@@ -559,13 +594,23 @@ export interface StateResultSummary {
   house: LiveRaceResult[];
   /** House seats led, by party. */
   houseLeads: Record<string, number>;
+  /** Seats the count shows changing party (flipShown). */
   flips: number;
+  /** Changes of party announced earlier that the latest count no longer
+   * shows (flipNotShownText) — not among `flips`. */
+  flipsNotShown: number;
 }
 
 export function summarizeState(races: LiveRaceResult[]): StateResultSummary {
   const senate = races.filter((r) => r.office === "S");
   const house = races.filter((r) => r.office === "H");
-  return { senate, house, houseLeads: seatsLed(house), flips: races.filter((r) => r.flip).length };
+  return {
+    senate,
+    house,
+    houseLeads: seatsLed(house),
+    flips: races.filter(flipShown).length,
+    flipsNotShown: races.filter((r) => flipNotShownText(r) != null).length,
+  };
 }
 
 /** "D 3 · R 2 · I 1" — seats led by party, the two majors always named and
@@ -621,12 +666,21 @@ function progressPhrase(r: LiveRaceResult): string {
 
 /** One race's standing in words, as its map fill says it: "no votes yet",
  * "tied, 40% in", "Republican leads, 80% in, seat changing party". Never
- * "wins": a race "leads" even once the state lists its count as official. */
+ * "wins": a race "leads" even once the state lists its count as official.
+ * A change of party announced earlier that this count no longer shows is
+ * named as that ("…, change of party announced earlier, holder's party
+ * ahead in the latest count"), never as a seat changing party. */
 export function raceStatusText(r: LiveRaceResult): string {
   if (!(r.votesCounted > 0)) return "no votes yet";
   const progress = progressPhrase(r);
   const head = isTied(r) ? "tied" : leadsPhrase(r.leaderParty);
-  return [head, progress, r.flip ? "seat changing party" : ""].filter(Boolean).join(", ");
+  const notShown = flipNotShownText(r);
+  const flip = flipShown(r)
+    ? "seat changing party"
+    : notShown
+      ? `change of party announced earlier, ${notShown}`
+      : "";
+  return [head, progress, flip].filter(Boolean).join(", ");
 }
 
 /** The opacity for a set of races led by one party, on resultFill's scale:
@@ -737,12 +791,16 @@ export function stateShade(
       : aggregateOpacity(mine) === 0.3
         ? "under half in for some seats"
         : "";
-    const flips = mine.filter((r) => r.flip).length;
+    const flips = mine.filter(flipShown).length;
+    const notShown = mine.filter((r) => flipNotShownText(r) != null).length;
     label = [
       `${state} House: ${head}`,
       counted ? `seats led ${formatLed(led).replace(/ · /g, ", ")}, of ${mine.length} listed` : "",
       progress,
       flips ? `${flips} ${flips === 1 ? "seat" : "seats"} changing party` : "",
+      notShown
+        ? `${notShown} ${notShown === 1 ? "change" : "changes"} of party announced earlier that the latest count doesn't show`
+        : "",
     ]
       .filter(Boolean)
       .join(", ");

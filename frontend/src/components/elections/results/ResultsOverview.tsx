@@ -18,6 +18,8 @@ import {
   UNCOVERED_FILL,
   countReadAt,
   feedFailed,
+  flipNotShownText,
+  flipShown,
   formatEasternTime,
   formatLed,
   isTied,
@@ -49,7 +51,9 @@ function Swatch({ color, texture }: { color: string; texture?: string }) {
 /** "Senate: Jane Roe (D) leads · early" — one Senate race on a directory
  * row, with "early" under half in, as the map draws it fainter. A count
  * the state lists as official still "leads · official count": never a
- * bare "official" beside a name, which reads as a result. */
+ * bare "official" beside a name, which reads as a result. "· flip" only
+ * while the figures show it (flipShown); a change of party announced
+ * earlier that this count doesn't show says so instead. */
 function senateLine(r: LiveRaceResult, several: boolean): string {
   const name = several ? `Senate${r.isSpecial ? " (special)" : ""}` : "Senate";
   if (isTied(r)) return `${name}: tied${r.official ? " · official count" : ""}`;
@@ -59,7 +63,9 @@ function senateLine(r: LiveRaceResult, several: boolean): string {
   const early = !r.official && share != null && share < 0.5;
   return `${name}: ${lead.name} (${partyLetter(lead.party) || "other"}) ${
     r.official ? "leads · official count" : "leads"
-  }${early ? " · early" : ""}${r.flip ? " · flip" : ""}`;
+  }${early ? " · early" : ""}${
+    flipShown(r) ? " · flip" : flipNotShownText(r) ? " · flip announced, not in latest count" : ""
+  }`;
 }
 
 function LedTally({ led }: { led: Record<string, number> }) {
@@ -116,7 +122,12 @@ export default function ResultsOverview({
 
   const senate = results.races.filter((r) => r.office === "S");
   const house = results.races.filter((r) => r.office === "H");
-  const flips = results.races.filter((r) => r.flip);
+  // Seats the count on screen shows changing party. A change announced
+  // earlier that the latest count no longer shows (a poll whose total fell
+  // announces nothing, so it stands on the issue and in the feed) is not
+  // one of them; the counter's card names those separately.
+  const flips = results.races.filter(flipShown);
+  const flipsNotShown = results.races.filter((r) => flipNotShownText(r) != null);
   // States, not races: a state electing both its senators counts once —
   // the response lists which states elect one, not how many seats each.
   const liveSenate = [...senateStates].filter((s) => live.has(s)).length;
@@ -365,6 +376,13 @@ export default function ResultsOverview({
             </Link>
             )
           </p>
+          {flipsNotShown.length > 0 && (
+            <p className="mt-2 text-xs text-ink-min">
+              Not counted: {flipsNotShown.length}{" "}
+              {flipsNotShown.length === 1 ? "change" : "changes"} of party announced earlier that
+              the latest count doesn&apos;t show; each race&apos;s card says what its count shows
+            </p>
+          )}
           {redrawn.length > 0 && (
             <p className="mt-2 text-xs text-ink-min">
               Not counted: House seats in the{" "}

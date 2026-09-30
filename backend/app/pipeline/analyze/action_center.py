@@ -3792,10 +3792,16 @@ _HOUSE_PHRASES = (
     # "Georgia's 2nd District", "Georgia's 2nd and 6th congressional districts"
     rf"{_OWNER}\s+(?P<ords>{_ORD}(?:(?:\s*,\s*|\s+and\s+|\s*,\s*and\s+){_ORD})*)"
     r"(?:\s+congressional)?\s+districts?\b",
-    # "Georgia's District 2", "Georgia congressional district 2"
-    rf"{_OWNER}\s+(?:congressional\s+)?district\s+(?P<num>\d+)\b(?!\s+state[-\s]+(?:senate|house|assembly)\b)",
+    # "Georgia's District 2", "Georgia congressional district 2". Bare
+    # "Georgia District 2" is also how a commission or school board names
+    # its seats ("Georgia District 2 commissioner race"), so without the
+    # possessive it needs "congressional".
+    rf"(?:{_OURS}(?:\s+state)?['’]s?\s+(?:congressional\s+)?|{_OURS}\s+congressional\s+)"
+    r"district\s+(?P<num>\d+)\b(?!\s+state[-\s]+(?:senate|house|assembly)\b)",
     # "the 2nd congressional district of Georgia", "2nd District in Georgia"
-    rf"\b(?P<ord>{_ORD})\s+(?:congressional\s+)?district\s+(?:of|in)\s+{_OURS}{_NOT_LEGISLATURE}",
+    # — never "… in Georgia's" something ("the second district in
+    # Georgia's school board").
+    rf"\b(?P<ord>{_ORD})\s+(?:congressional\s+)?district\s+(?:of|in)\s+{_OURS}(?!['’]){_NOT_LEGISLATURE}",
     # "Virginia's 2nd seat", "Virginia's 2nd House race", and "Virginia's
     # 2nd" closing a clause ("…leads in Virginia's 2nd."). A bare ordinal
     # followed by any other word is not read as a district: "Virginia's
@@ -3803,10 +3809,23 @@ _HOUSE_PHRASES = (
     # ("Virginia's 2nd flips") can't be told apart without a word list, so
     # that headline form is left to the story's other text.
     rf"{_OURS}['’]s?\s+(?P<bare>{_ORD})(?:\s+(?:congressional\s+|house\s+)?(?:seat|race|contest)\b|\s*(?:[.;:!?)]|$))",
+    # "In California's 45th, Tran pulls ahead": a comma closes the phrase
+    # too, but only after "in" — "Georgia's 3rd, and final, win" is not a
+    # place. Spelled-out ordinals never reach these two bare forms (they
+    # are rewritten only before a district/seat word, below), so "It was
+    # Georgia's first." names no district.
+    rf"\bin\s+{_OURS}['’]s?\s+(?P<bare>{_ORD})\s*,",
 )
 _AT_LARGE_PHRASES = (
     rf"{_OWNER}\s+at[- ]large\b",
     r"\bat[- ]large\s+(?:congressional\s+)?(?:district|seat|race|contest)\s+(?:of|in)\s+" + _OURS,
+    # "Alaska's lone House seat", "Alaska's only congressional seat": a
+    # state with one seat has only its at-large one. "House" right after
+    # the adjective, never "state House" (a legislature has many seats).
+    rf"{_OWNER}\s+(?:lone|only|sole|single)\s+(?:u\.?s\.?\s+)?(?:congressional|house)\s+"
+    r"(?:seat|district|race|contest)\b",
+    r"\b(?:lone|only|sole|single)\s+(?:u\.?s\.?\s+)?(?:congressional|house)\s+(?:seat|district|race|contest)"
+    r"\s+(?:of|in)\s+" + _OURS,
 )
 # A legislature's district read as a House seat: "the state-senate race in
 # Georgia's 14th district" is a state senate district, not GA-14.
@@ -3826,14 +3845,56 @@ _RACE_WORD = r"(?:race|seat|contest|election|runoff)"
 _NOT_STATE_SENATE = r"(?<!state\s)(?<!state-)"
 _SPECIAL_FOR = r"special\s+(?:election|race|contest)\s+for\s+(?:the\s+|a\s+)?(?:u\.?s\.?\s+)?senate(?:\s+seat)?"
 _SENATE_PHRASES = (
-    rf"{_OWNER}\s+(?:special\s+)?(?:u\.?s\.?\s+)?senate\s+(?:special\s+)?{_RACE_WORD}\b",
+    rf"{_OWNER}\s+(?:(?:special|regular)\s+)?(?:u\.?s\.?\s+)?senate\s+(?:special\s+)?{_RACE_WORD}\b",
     rf"{_OWNER}\s+(?:special\s+)?u\.?s\.?\s+senate\b",
     rf"{_OWNER}\s+{_SPECIAL_FOR}\b",
-    rf"(?:\bspecial\s+)?(?:\bu\.?s\.?\s+)?{_NOT_STATE_SENATE}\bsenate\s+(?:special\s+)?{_RACE_WORD}\s+"
+    rf"(?:\b(?:special|regular)\s+)?(?:\bu\.?s\.?\s+)?{_NOT_STATE_SENATE}\bsenate\s+(?:special\s+)?{_RACE_WORD}\s+"
     rf"(?:in|for|from)\s+{_OURS}(?!['’])",
     rf"(?:\bspecial\s+)?\bu\.?s\.?\s+senate\s+(?:in|for|from)\s+{_OURS}(?!['’])",
     rf"\b{_SPECIAL_FOR}\s+(?:race\s+)?(?:in|for|from)\s+{_OURS}(?!['’])",
 )
+_SENATE_OWNER_PHRASES = 3  # the first three start with the state as owner
+# "[State] Senate" is also the name of the state legislature's upper
+# chamber, which elects its members the same night ("Democrat flips Ohio
+# Senate seat in Dayton-area district", "Ohio Senate election results: GOP
+# holds 24 seats"). Two rules keep that from naming the U.S. Senate race:
+#
+# - "seat" and "election" (words a legislature's own contests share) count
+#   only with "U.S.", "special" or a possessive owner ("Ohio's Senate
+#   seat"); bare "Ohio Senate race" still names the race.
+# - Without "U.S.", a phrase followed by a seat number or a place inside
+#   the state is a legislative district: "Ohio Senate seat 5", "Georgia
+#   Senate race for District 14", "… seat in Tampa", "… race for Georgia's
+#   governor". Only the state itself, a year or a month may follow "in" /
+#   "for" / "from" (months are the calendar's own names, not a word list
+#   classifying anything).
+_SENATE_LEGISLATURE_WORDS = re.compile(r"\b(?:seat|election)$")
+_US = re.compile(r"\bu\.?s\.?\s")
+_MONTHS = ("january|february|march|april|may|june|july|august|september|october|november|december")
+_SENATE_QUALIFIED_AWAY = re.compile(
+    r"^(?:\s*(?:#|no\.\s*)?\d(?!\d{3}\b)|\s+district\b|\s+(?:in|for|from)\s+(?:the\s+)?"
+    rf"(?!{_OURS}(?!['’])|\d{{4}}\b|(?:{_MONTHS})\b))"
+)
+_SPECIAL_WORD = re.compile(r"\bspecial\b")
+
+
+def _senate_phrase_is_legislature(phrase: str, after: str, lead: str, owner_form: bool) -> bool:
+    """Whether a matched Senate phrase may be the state legislature's upper
+    chamber rather than the U.S. Senate (see the rules above). `after` is
+    the text right after the phrase, `lead` the text right before it."""
+    if _US.search(phrase + " "):
+        return False
+    if owner_form and _SENATE_QUALIFIED_AWAY.search(after):
+        return True
+    if owner_form and _SENATE_LEGISLATURE_WORDS.search(phrase):
+        possessive = re.search(rf"{_OURS}(?:\s+state)?['’]", phrase) is not None
+        special = _SPECIAL_WORD.search(phrase) is not None or _SPECIAL_LEAD.search(lead) is not None
+        return not (possessive or special)
+    if not owner_form and re.search(r"\bsenate\s+(?:special\s+)?(?:seat|election)\b", phrase):
+        return not (_SPECIAL_WORD.search(phrase) or _SPECIAL_LEAD.search(lead))
+    return False
+
+
 # "special" belongs to the race phrase itself, or to the words just before
 # it ("the special election for Georgia's Senate seat").
 _SPECIAL_LEAD = re.compile(
@@ -3841,11 +3902,23 @@ _SPECIAL_LEAD = re.compile(
 )
 # A postal code inside a link ("x.com/GA-2") is part of an address, not a
 # story naming a race; links are dropped before anything is read.
-_URL_RE = re.compile(r"(?:\b[a-z][a-z0-9+.-]*://|\bwww\.)\S+", re.IGNORECASE)
+# A bare domain with a path ("x.com/GA-2") is a link too: its last label is
+# letters only, so "U.S./" is not one. Labels are bounded (63 characters,
+# DNS's own limit; up to six of them), as is a scheme, so a long run of
+# dotted text is read in linear time.
+_URL_RE = re.compile(
+    r"(?:\b[a-z][a-z0-9+.-]{0,31}://|\bwww\.)\S+|\b[\w-]{1,63}(?:\.[\w-]{1,63}){0,5}\.[a-z]{2,63}/\S*",
+    re.IGNORECASE,
+)
 
 # Spelled-out ordinals ("Virginia's second district", "the Twenty-First
 # District of Texas"), rewritten as figures before the phrases run. Up to
-# the fifty-ninth: California's 52 seats are the largest delegation.
+# the fifty-ninth: California's 52 seats are the largest delegation. Only
+# an ordinal that a district, seat or race word follows (directly, or at
+# the end of a list of ordinals: "second and sixth districts") is
+# rewritten: a word ordinal on its own is ordinary English — "It was
+# Georgia's first.", "Georgia's third straight win" — and the bare,
+# clause-closing House forms are left to figures ("Virginia's 2nd.").
 _ORDINAL_UNITS = ("first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth")
 _ORDINAL_TEENS = ("tenth", "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth",
                   "seventeenth", "eighteenth", "nineteenth")
@@ -3868,8 +3941,11 @@ def _ordinal_words() -> dict[str, int]:
 
 
 _ORDINAL_WORDS = _ordinal_words()
+_ORDINAL_WORD_ALT = "|".join(re.escape(w) for w in sorted(_ORDINAL_WORDS, key=len, reverse=True))
 _ORDINAL_WORD_RE = re.compile(
-    r"\b(?:" + "|".join(re.escape(w) for w in sorted(_ORDINAL_WORDS, key=len, reverse=True)) + r")\b"
+    rf"\b(?:{_ORDINAL_WORD_ALT})\b"
+    rf"(?=(?:(?:\s*,\s*|\s+and\s+|\s*,\s*and\s+)(?:{_ORDINAL_WORD_ALT}|{_ORD})\b){{0,8}}"
+    r"\s+(?:congressional\s+|house\s+)?(?:districts?|seat|race|contest)\b)"
 )
 
 
@@ -3930,13 +4006,18 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
                 db = object_session(issue)
             except Exception:  # not a mapped instance (a test double)
                 db = None
-        tell_apart = _senate_needs_telling_apart(db, int(cycle), state)
-        for phrase in _SENATE_PHRASES:
+        tell_apart = None  # asked of the database only once a phrase matches
+        for i, phrase in enumerate(_SENATE_PHRASES):
             for m in re.finditer(phrase, marked):
+                lead = marked[max(0, m.start() - 60):m.start()]
+                if _senate_phrase_is_legislature(m.group(0), marked[m.end():m.end() + 60], lead,
+                                                 owner_form=i < _SENATE_OWNER_PHRASES):
+                    continue
+                if tell_apart is None:
+                    tell_apart = _senate_needs_telling_apart(db, int(cycle), state)
                 if not tell_apart:
                     return True
-                special = (re.search(r"\bspecial\b", m.group(0)) is not None
-                           or _SPECIAL_LEAD.search(marked[max(0, m.start() - 60):m.start()]) is not None)
+                special = _SPECIAL_WORD.search(m.group(0)) is not None or _SPECIAL_LEAD.search(lead) is not None
                 if special == (part == "SPECIAL"):
                     return True
         return False
