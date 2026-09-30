@@ -67,10 +67,14 @@ SIMILARITY_DIMENSIONS = 384
 
 # Layout of vec_explore, tracked separately from the model because the two
 # change for different reasons and either one invalidates the index. Bumped
-# when the table became chunk-level. `ensure_explore_index` compares the
+# when the table became chunk-level, and again when each document's text
+# hash began to be kept with its vectors (vec_explore_text): an index built
+# before then may hold documents a killed embed left partial (before each
+# document's write was one transaction), which no hash can vouch for, so it
+# is rebuilt once rather than trusted. `ensure_explore_index` compares the
 # pair, so a deployed index rebuilds itself on either change without anyone
 # remembering to clear it.
-INDEX_SCHEMA_VERSION = "2-chunked"
+INDEX_SCHEMA_VERSION = "3-text-hashes"
 
 
 def index_identity() -> str:
@@ -386,9 +390,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 # What each document's vectors were built from (explore_text_hash), written
 # with them: a document whose text has changed since — a body backfilled, a
-# re-ingest — reads as stale to the next top-up whatever changed it. A
-# document embedded before this table existed has no row, and is taken as
-# current rather than re-encoded wholesale on the first run after it.
+# re-ingest — reads as stale to the next top-up whatever changed it, and one
+# with no row was never embedded. (Every index is built with it: its
+# arrival bumped INDEX_SCHEMA_VERSION.)
 _TEXT_HASH_DDL = """CREATE TABLE {if_not_exists}vec_explore_text (
     doc_id INTEGER PRIMARY KEY,
     text_hash TEXT NOT NULL
@@ -1059,36 +1063,9 @@ def _record_text_hash(conn: sqlite3.Connection, doc_id: int, digest: str) -> Non
     )
 
 
-# A text hash nothing hashes to: marks a document's vectors as older than its
-# text, so the next top-up re-embeds it (mark_text_stale).
-_STALE_HASH = "stale"
-
-
-def mark_text_stale(doc_ids: set[int], unless: dict[int, str] | None = None) -> None:
-    """Record that these documents' text changed and their vectors weren't
-    rewritten (an Explore run whose embed step was skipped after its
-    backfill): without it, a document embedded before hashes were kept
-    would have its new text's hash adopted as what its vectors say. Not one
-    whose recorded hash is already `unless[id]` (its current text's): a
-    top-up that failed after rewriting it."""
-    if not doc_ids:
-        return
-    conn = get_vec_conn()
-    with _vec_lock:
-        try:
-            recorded = dict(conn.execute("SELECT doc_id, text_hash FROM vec_explore_text").fetchall())
-            for doc_id in doc_ids:
-                if unless is None or recorded.get(doc_id) != unless.get(doc_id):
-                    _record_text_hash(conn, doc_id, _STALE_HASH)
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
-
-
 def get_embedded_text_hashes() -> dict[int, str]:
     """Each embedded document's explore_text_hash, as recorded when its
-    vectors were written (none for one embedded before hashes were kept)."""
+    vectors were written."""
     return dict(get_vec_conn().execute("SELECT doc_id, text_hash FROM vec_explore_text").fetchall())
 
 
@@ -1260,32 +1237,16 @@ _BUSY_CHECKS = 10
 _BUSY_CHECK_EVERY_S = 30.0
 
 
-def top_up_explore_index(docs_to_embed, adopt_hashes: dict[int, str] | None = None) -> int:
+def top_up_explore_index(docs_to_embed) -> int:
     """An Explore run's incremental step, under the rebuild lock: a start's
     rebuild waits for it (and then looks again) rather than embed the same
     documents beside it. `docs_to_embed()` is asked under the lock, so what
     it finds missing is what the index lacks then, not before a rebuild
-    this waited out. `adopt_hashes` records text hashes for documents
-    embedded before hashes were kept, taken as current (their vectors are
-    what their text is). A failure leaves each document as it was or as it now
+    this waited out. A failure leaves each document as it was or as it now
     is (embed_explore_documents writes a batch of whole documents per
     transaction, and a failed batch rolls all of its documents back)."""
     with _rebuild_lock:
-        embedded = embed_explore_documents(docs_to_embed())
-        if adopt_hashes:
-            conn = get_vec_conn()
-            # Only for documents still in the index (one deleted meanwhile
-            # would leave a hash for vectors that aren't there) — read once,
-            # not a vec0 scan per document — and still without one (a
-            # rebuild this waited out, or this embed, recorded the real thing).
-            present = get_embedded_explore_ids()
-            with _vec_lock:
-                conn.executemany(
-                    "INSERT INTO vec_explore_text (doc_id, text_hash) VALUES (?, ?) ON CONFLICT(doc_id) DO NOTHING",
-                    [(doc_id, digest) for doc_id, digest in adopt_hashes.items() if doc_id in present],
-                )
-                conn.commit()
-        return embedded
+        return embed_explore_documents(docs_to_embed())
 
 
 def wait_for_rebuild() -> None:

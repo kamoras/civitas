@@ -594,9 +594,25 @@ def test_a_beating_pipeline_service_resolves_its_silent_alert(monkeypatch):
     monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **k: None)
     monkeypatch.setattr("app.scheduler.read_heartbeat", lambda: (utcnow(), {}))
     monkeypatch.setattr(ops_alerts, "_silent_alert_may_be_open", True)  # a new process
+    monkeypatch.setattr(ops_alerts, "_unreadable_alert_may_be_open", False)
     ops_alerts.check_pipeline_service_alive()
     ops_alerts.check_pipeline_service_alive()
     assert resolved == ["pipeline-service-silent"] * 2
     # Not again every healthy tick: that reads the whole alert history.
     ops_alerts.check_pipeline_service_alive()
     assert resolved == ["pipeline-service-silent"] * 2
+
+
+def test_a_readable_heartbeat_resolves_its_unreadable_alert_until_that_writes(monkeypatch):
+    from app import ops_alerts
+    from app.time_utils import utcnow
+
+    resolved, outcome = [], [-1]
+    monkeypatch.setattr(ops_alerts, "resolve_ops_alert",
+                        lambda c: (resolved.append(c), outcome.pop(0) if outcome else 1)[1])
+    monkeypatch.setattr("app.scheduler.read_heartbeat", lambda: (utcnow(), {}))
+    monkeypatch.setattr(ops_alerts, "_silent_alert_may_be_open", False)
+    monkeypatch.setattr(ops_alerts, "_unreadable_alert_may_be_open", True)  # a new process
+    for _ in range(3):
+        ops_alerts.check_pipeline_service_alive()
+    assert resolved == ["pipeline-heartbeat-unreadable"] * 2  # failed once, then written, then left

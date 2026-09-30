@@ -287,23 +287,6 @@ class TestTextHashes:
         assert conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0] == 0
         assert vector_store.get_embedded_text_hashes() == {1: vector_store.explore_text_hash(emptied)}
 
-    def test_a_document_already_rewritten_is_not_marked_stale(self, vec_env):
-        # A top-up that failed after rewriting it: its hash is its text's.
-        doc = _doc(1, "A title")
-        vector_store.embed_explore_documents([doc])
-        vector_store.mark_text_stale({1, 2}, {1: vector_store.explore_text_hash(doc), 2: "x"})
-        hashes = vector_store.get_embedded_text_hashes()
-        assert hashes[1] == vector_store.explore_text_hash(doc) and hashes[2] == vector_store._STALE_HASH
-
-    def test_marked_stale_reads_as_changed_and_adoption_skips_what_is_gone(self, vec_env):
-        vector_store.embed_explore_documents([_doc(1, "A title")])
-        vector_store.mark_text_stale({1})
-        assert vector_store.get_embedded_text_hashes()[1] != vector_store.explore_text_hash(_doc(1, "A title"))
-        vector_store.get_vec_conn().execute("DELETE FROM vec_explore_text")
-        vector_store.top_up_explore_index(lambda: [], {1: "h1", 2: "h2"})  # 2 isn't in the index
-        assert vector_store.get_embedded_text_hashes() == {1: "h1"}
-
-
 class TestEnsureExploreIndex:
     def test_noop_when_index_current(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "Anything")])

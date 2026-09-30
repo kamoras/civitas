@@ -534,7 +534,7 @@ async def test_a_rebuild_that_raises_alerts_only_on_a_real_failure(
          patch.object(explore_pipeline, "top_up_explore_index") as top_up, \
          patch("app.ops_alerts.send_ops_alert", alert), \
          patch("app.ops_alerts.resolve_ops_alert", resolve):
-        assert await explore_pipeline._embed_step(db_session, set()) == 0
+        assert await explore_pipeline._embed_step(db_session) == 0
     assert alert.called is alerted
     resolve.assert_not_called()
     top_up.assert_not_called()
@@ -549,7 +549,7 @@ async def test_a_rebuild_that_completes_resolves_the_alert(db_session):
          patch.object(explore_pipeline, "rebuild_explore_index", return_value=0), \
          patch("app.ops_alerts.resolve_ops_alert", resolve):
         # Even an empty corpus: the rebuild completed, whatever it held.
-        assert await explore_pipeline._embed_step(db_session, set()) == 0
+        assert await explore_pipeline._embed_step(db_session) == 0
     resolve.assert_called_once_with("explore-index-rebuild")
 
 
@@ -563,14 +563,14 @@ async def test_a_top_up_whose_read_of_the_index_fails_embeds_nothing(db_session,
     from app.pipeline import explore_pipeline
 
     with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
-         patch.object(explore_pipeline, "get_embedded_explore_ids", side_effect=sqlite3.OperationalError(error)), \
+         patch.object(explore_pipeline, "get_embedded_text_hashes", side_effect=sqlite3.OperationalError(error)), \
          patch.object(explore_pipeline, "embed_explore_documents", create=True) as embed, \
          patch("app.pipeline.vector_store.embed_explore_documents") as real_embed:
         if raised:
             with pytest.raises(sqlite3.OperationalError):
-                await explore_pipeline._embed_step(db_session, set())
+                await explore_pipeline._embed_step(db_session)
         else:
-            assert await explore_pipeline._embed_step(db_session, set()) == 0
+            assert await explore_pipeline._embed_step(db_session) == 0
     embed.assert_not_called()
     real_embed.assert_not_called()
 
@@ -590,44 +590,33 @@ async def test_a_lock_after_the_rebuilds_swap_is_a_failure_not_a_skip(db_session
     with patch.object(explore_pipeline, "index_is_whole", return_value=False), \
          patch.object(explore_pipeline, "rebuild_explore_index", failing), \
          patch.object(explore_pipeline, "alert_rebuild_failed", alert):
-        assert await explore_pipeline._embed_step(db_session, set()) == 0
+        assert await explore_pipeline._embed_step(db_session) == 0
     alert.assert_called_once()
 
 
 def test_a_top_up_takes_documents_missing_or_changed_since_they_were_embedded(db_session):
     # By each document's text hash, not by who changed it: a body backfilled
-    # or re-ingested in place is stale whichever path wrote it — while one
-    # embedded before hashes were kept is taken as current.
+    # or re-ingested in place is stale whichever path wrote it; one with no
+    # text, its hash recorded, is handled.
     from app.pipeline import explore_pipeline, vector_store
 
     docs = []
-    for title in ("Current", "Changed", "Legacy", "Missing"):
+    for title, body in (("Current", "b"), ("Changed", "b"), ("Missing", "b"), ("", "")):
         d = ExploreDocument(doc_type="Executive Order", source="Federal Register", title=title,
-                            summary="s", body="b", date="2026-07-01")
+                            summary="" if not title else "s", body=body, date="2026-07-01")
         db_session.add(d)
         docs.append(d)
     db_session.commit()
-    current, changed, legacy, missing = docs
-    textless = ExploreDocument(doc_type="Executive Order", source="Federal Register", title="",
-                               summary="", body="", date="2026-07-01")
-    db_session.add(textless)
-    db_session.commit()
-    hashes = {
-        # No chunks, but its hash recorded: handled, not re-planned nightly.
-        textless.id: vector_store.explore_text_hash(vector_store.explore_embed_dict(textless)),
-        current.id: vector_store.explore_text_hash(vector_store.explore_embed_dict(current)),
-        changed.id: "the hash of its old body",
-    }
-    with patch.object(explore_pipeline, "get_embedded_explore_ids",
-                      return_value={current.id, changed.id, legacy.id}), \
-         patch.object(explore_pipeline, "get_embedded_text_hashes", return_value=hashes):
-        plan, adopt = explore_pipeline._top_up_plan(db_session, set())
-        assert [d["title"] for d in plan] == ["Changed", "Missing"]
-        # The legacy document's current text is adopted as what it was
-        # embedded from — unless this run's backfill just changed it.
-        assert set(adopt) == {legacy.id}
-        plan, adopt = explore_pipeline._top_up_plan(db_session, {legacy.id})
-        assert [d["title"] for d in plan] == ["Changed", "Legacy", "Missing"] and adopt == {}
+    current, changed, missing, textless = docs
+
+    def hashed(d):
+        return vector_store.explore_text_hash(vector_store.explore_embed_dict(d))
+
+    hashes = {current.id: hashed(current), changed.id: "its old body's", textless.id: hashed(textless)}
+    with patch.object(explore_pipeline, "get_embedded_text_hashes", return_value=hashes):
+        plan = explore_pipeline._top_up_plan(db_session)
+    assert [(doc["title"], digest) for doc, digest in plan] == [
+        ("Changed", hashed(changed)), ("Missing", hashed(missing))]
 
 
 def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):
@@ -637,45 +626,11 @@ def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):
     doc = vector_store.explore_embed_dict(SimpleNamespace(
         id=5, title="t", summary="s", body="b", doc_type="Rule", source="FR", date="",
         politician_name="", politician_id="", chamber=""))
+    plan = [(doc, vector_store.explore_text_hash(doc))]
     with patch.object(explore_pipeline, "get_embedded_text_hashes",
                       return_value={5: vector_store.explore_text_hash(doc)}):
-        assert explore_pipeline._still_wanted([doc]) == []
+        assert explore_pipeline._still_wanted(plan) == []
     with patch.object(explore_pipeline, "get_embedded_text_hashes", return_value={}):
-        assert explore_pipeline._still_wanted([doc]) == [doc]
+        assert explore_pipeline._still_wanted(plan) == [doc]
 
 
-@pytest.mark.asyncio
-async def test_a_skipped_step_marks_its_backfill_stale(db_session):
-    # A document embedded before hashes were kept would otherwise have its
-    # new text's hash adopted next run, over vectors of the old text.
-    import sqlite3
-
-    from app.pipeline import explore_pipeline
-
-    mark = MagicMock()
-    with patch.object(explore_pipeline, "index_is_whole", side_effect=sqlite3.OperationalError("database is locked")), \
-         patch.object(explore_pipeline, "mark_text_stale", mark):
-        assert await explore_pipeline._embed_step(db_session, {4}) == 0
-    mark.assert_called_once_with({4}, None)
-
-
-@pytest.mark.asyncio
-async def test_a_stale_mark_the_vector_store_refuses_is_kept_in_the_main_database(db_session):
-    # The lock that skipped the step often holds the vector store still;
-    # the next run reads the marks from the main database instead.
-    import sqlite3
-
-    from app.pipeline import explore_pipeline
-
-    with patch.object(explore_pipeline, "index_is_whole", side_effect=sqlite3.OperationalError("database is locked")), \
-         patch.object(explore_pipeline, "mark_text_stale", side_effect=sqlite3.OperationalError("database is locked")):
-        await explore_pipeline._embed_step(db_session, {4})
-    assert explore_pipeline._remembered_stale(db_session) == {4}
-
-    top_up = AsyncMock(return_value=1)
-    with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
-         patch.object(explore_pipeline, "_top_up", top_up), \
-         patch("app.ops_alerts.resolve_ops_alert"):
-        await explore_pipeline._embed_step(db_session, set())
-    assert top_up.call_args.args[1] == {4}  # re-embedded by name
-    assert explore_pipeline._remembered_stale(db_session) == set()

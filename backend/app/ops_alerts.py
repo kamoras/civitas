@@ -561,9 +561,11 @@ def _forget_heartbeat_missing() -> None:
         pass
 
 
-# Whether a "pipeline service silent" alert may be open: true at start (one
-# may be from before this process), then after this process sends one.
+# Whether a "pipeline service silent" / "heartbeat unreadable" alert may be
+# open: true at start (one may be from before this process), then after this
+# process sends one, until a resolve of it writes.
 _silent_alert_may_be_open = True
+_unreadable_alert_may_be_open = True
 
 
 def check_pipeline_service_alive() -> None:
@@ -579,7 +581,7 @@ def check_pipeline_service_alive() -> None:
     from app.scheduler import read_heartbeat
     from app.shared_state import UNREADABLE
 
-    global _heartbeat_unreadable_since, _silent_alert_may_be_open
+    global _heartbeat_unreadable_since, _silent_alert_may_be_open, _unreadable_alert_may_be_open
     row = read_heartbeat()
     if row is UNREADABLE:
         # One unreadable round is a moment's I/O error, not evidence of
@@ -605,10 +607,13 @@ def check_pipeline_service_alive() -> None:
                 dedupe_key=f"pipeline-heartbeat-unreadable-{now:%Y-%m-%d}",
                 condition="pipeline-heartbeat-unreadable",
             )
+            _unreadable_alert_may_be_open = True
         return
-    if _heartbeat_unreadable_since is not None:
-        resolve_ops_alert("pipeline-heartbeat-unreadable")
     _heartbeat_unreadable_since = None
+    if _unreadable_alert_may_be_open:
+        # As for the silent alert below: once on the way back (and once per
+        # process, for one opened before it), kept owed until it writes.
+        _unreadable_alert_may_be_open = resolve_ops_alert("pipeline-heartbeat-unreadable") < 0
     last = row[0] if isinstance(row, tuple) else None
     if last is not None:
         _forget_heartbeat_missing()

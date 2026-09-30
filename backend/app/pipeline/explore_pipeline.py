@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
-from app.models import ApiCache, ExploreDocument, Justice, Representative, Senator
+from app.models import ExploreDocument, Justice, Representative, Senator
 from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.house_record import fetch_house_floor_remarks
@@ -55,7 +55,6 @@ from app.pipeline.vector_store import (
     alert_rebuild_failed,
     explore_text_hash,
     get_embedded_text_hashes,
-    mark_text_stale,
     rebuild_explore_index,
     top_up_explore_index,
     wait_for_rebuild,
@@ -181,8 +180,8 @@ async def _backfill_presidential_bodies(
 ) -> list[int]:
     """Fetch body text for presidential documents that have empty body/summary.
 
-    Returns the ids of documents whose body changed, so the caller can
-    re-embed exactly those."""
+    Returns the ids of documents whose body changed (the embed step finds
+    them by their text hash, not by this list)."""
     docs = (
         db.query(ExploreDocument)
         .filter(
@@ -375,33 +374,27 @@ def _purge_duplicate_floor_speeches(db: Session) -> list[int]:
     return doomed
 
 
-async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
+async def _embed_step(db: Session) -> int:
     """Step 7: bring the vector index up to the corpus; returns how many
     documents were embedded.
 
     An index that isn't a complete build by this model (a rebuild that
-    failed or was cut off, a model change) is rebuilt whole, here and under
-    this run's lease, rather than topped up: an incremental pass can't make
-    it whole, and calibration measures it. Otherwise only documents missing
-    from it, or whose text has changed since their vectors were written (a
-    body backfilled, a re-ingest — vector_store.explore_text_hash), are
-    encoded: re-encoding the whole corpus every night is what made the old
-    72h skip gate look necessary.
+    failed or was cut off, a model or layout change) is rebuilt whole, here
+    and under this run's lease, rather than topped up: an incremental pass
+    can't make it whole, and calibration measures it. Otherwise only
+    documents missing from it, or whose text has changed since their vectors
+    were written (a body backfilled, a re-ingest — explore_text_hash, which
+    every embed records with the vectors), are encoded: re-encoding the
+    whole corpus every night is what made the old 72h skip gate look
+    necessary.
 
     A look or a rebuild that only meets a lock skips the step: the index may
     well be whole (no reason to drop it) and may not be (a top-up beside a
     rebuild would insert chunks twice). Nothing is lost by skipping: what
-    is missing or stale stays so until the next run finds it.
+    is missing or changed still reads so to the next run.
     """
     from app.ops_alerts import resolve_ops_alert
 
-    try:
-        remembered = await asyncio.to_thread(_remembered_stale, db)
-    except Exception:
-        db.rollback()
-        remembered = set()
-        logger.warning("Explore pipeline: couldn't read the stale-mark record", exc_info=True)
-    refreshed_ids = refreshed_ids | remembered
     whole = await _index_is_whole_or_none()
     outcome = "skipped"  # or "failed", "rebuilt", "topped up"
     embedded = 0
@@ -432,55 +425,37 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
                 whole = True
     if whole is True:
         try:
-            embedded = await _top_up(db, refreshed_ids)
+            embedded = await _top_up(db)
             outcome = "topped up"
         except Exception as exc:
             # Each document is left as it was or as it now is (a batch of
-            # whole documents per transaction): what wasn't reached is still
-            # missing or stale, and the next top-up finds it. A lock skips
-            # the step; anything else fails the run as it always has.
-            # The backfilled ones it didn't get to rewrite are marked stale.
-            await _mark_stale(db, refreshed_ids, current=getattr(exc, "current_hashes", None))
+            # whole documents per transaction): what wasn't reached still
+            # reads as missing or changed. A lock skips the step; anything
+            # else fails the run as it always has.
             if not is_busy_error(exc):
                 raise
             logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", exc)
             return 0
 
-    if outcome in ("skipped", "failed") and refreshed_ids:
-        # What this run's backfill changed was not re-embedded: marked, so
-        # the next run re-embeds it (a document embedded before text hashes
-        # were kept would otherwise have its new text adopted as current).
-        await _mark_stale(db, refreshed_ids)
     if outcome == "skipped":
         logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
     elif outcome != "failed":
         # Whole now, by this run or a start's: a failed rebuild's alert ends.
         await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
-        if remembered:  # re-embedded now
-            try:
-                await asyncio.to_thread(_forget_stale, db)
-            except Exception:
-                db.rollback()
-                logger.warning("Explore pipeline: couldn't clear the stale-mark record", exc_info=True)
     return embedded
 
 
-def _top_up_plan(db: Session, refreshed_ids: set[int]) -> tuple[list[dict], dict[int, str]]:
-    """(the documents to embed, the text hashes to adopt), read outside the
-    rebuild lock: the documents the index lacks, the ones whose text changed
-    since their vectors were written, and the ones this run's backfill
-    changed. A document embedded before hashes were kept has none to
-    compare: its current text's hash is adopted, without re-encoding it —
-    unless the backfill just changed it, when its vectors are the old text's.
-    An unreadable index raises (a lock is a skip): read as empty, it would
-    re-encode the whole corpus. Its own session, a batch of rows at a time:
-    bodies are long, and the run's session is left as it was."""
+def _top_up_plan(db: Session) -> list[tuple[dict, str]]:
+    """The documents to embed, each with its text hash: the ones the index
+    has no record of, and the ones whose text changed since their vectors
+    were written. Read outside the rebuild lock, on a session of its own
+    (the run's is left as it was), a batch of rows at a time: bodies are
+    long, and most documents are current. An unreadable index raises (a
+    lock is a skip): read as empty, it would re-encode the whole corpus."""
     from app.database import own_session
 
-    already = get_embedded_explore_ids()
     hashes = get_embedded_text_hashes()
-    wanted: list[dict] = []
-    adopt: dict[int, str] = {}
+    wanted: list[tuple[dict, str]] = []
     with own_session(db) as scan:
         after = 0
         while True:
@@ -489,35 +464,31 @@ def _top_up_plan(db: Session, refreshed_ids: set[int]) -> tuple[list[dict], dict
                 .order_by(ExploreDocument.id).limit(500).all()
             )
             if not docs:
-                return wanted, adopt
+                return wanted
             for d in docs:
                 doc = explore_embed_dict(d)
                 current = explore_text_hash(doc)
-                recorded = hashes.get(d.id)
-                if d.id in refreshed_ids or (recorded is not None and recorded != current):
-                    wanted.append(doc)
-                elif recorded is None:
-                    if d.id in already:
-                        adopt[d.id] = current
-                    else:
-                        wanted.append(doc)
-                # (recorded == current: handled — embedded, or with no text
-                # to embed, as it now reads)
+                # Every embed records its document's hash with its vectors
+                # (a document with no text too), so none recorded means
+                # never embedded, and a different one means changed since.
+                if hashes.get(d.id) != current:
+                    wanted.append((doc, current))
             after = docs[-1].id
             scan.expunge_all()  # the bodies read, let go of
 
 
-def _still_wanted(plan: list[dict]) -> list[dict]:
+def _still_wanted(plan: list[tuple[dict, str]]) -> list[dict]:
     """The plan re-checked under the rebuild lock, against the index alone
-    (no bodies read): a rebuild this waited out wrote documents with their
-    current text's hash, and they aren't embedded twice."""
+    (no bodies read or hashed again): a rebuild this waited out wrote
+    documents with their current text's hash, and they aren't embedded
+    twice."""
     hashes = get_embedded_text_hashes()
-    return [doc for doc in plan if hashes.get(doc["id"]) != explore_text_hash(doc)]
+    return [doc for doc, current in plan if hashes.get(doc["id"]) != current]
 
 
-async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
+async def _top_up(db: Session) -> int:
     logger.info("Explore pipeline: embedding documents into vector store...")
-    plan, adopt = await asyncio.to_thread(_top_up_plan, db, refreshed_ids)
+    plan = await asyncio.to_thread(_top_up_plan, db)
     # Off the event loop: encoding is pure CPU inside sentence-transformers
     # and ran for 23 MINUTES in one call against the real corpus (1,557
     # documents / 11,022 chunks, measured on the Pi 2026-09-20). Awaiting it
@@ -533,56 +504,7 @@ async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
     # donor_classifier_ai.py and api/explore.py already give their own
     # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
     # start's rebuild waits for it rather than embed beside it.
-    try:
-        return await asyncio.to_thread(top_up_explore_index, lambda: _still_wanted(plan), adopt)
-    except Exception as exc:
-        # For the caller's stale marks: what each planned document's text
-        # hashes to now, so one this top-up did rewrite isn't marked.
-        exc.current_hashes = {d["id"]: explore_text_hash(d) for d in plan}
-        raise
-
-
-# api_cache: backfilled documents whose stale mark couldn't be written to the
-# vector store (the lock that skipped the step held it too), kept in the
-# main database instead until a run re-embeds them.
-_STALE_FALLBACK_KEY = "stale_marks"
-
-
-async def _mark_stale(db: Session, ids: set[int], *, current: dict[int, str] | None = None) -> None:
-    """vector_store.mark_text_stale, falling back to a record in the main
-    database when the vector store can't take it."""
-    if not ids:
-        return
-    try:
-        await asyncio.to_thread(mark_text_stale, ids, current)
-        return
-    except Exception:
-        logger.warning("Explore pipeline: couldn't mark %d backfilled documents stale in the vector store — "
-                       "recorded for the next run instead", len(ids), exc_info=True)
-    try:
-        await asyncio.to_thread(_remember_stale, db, ids)
-    except Exception:
-        db.rollback()
-        logger.exception("Explore pipeline: couldn't record %d backfilled documents as stale", len(ids))
-
-
-def _remember_stale(db: Session, ids: set[int]) -> None:
-    api_cache_set(db, "explore", _STALE_FALLBACK_KEY, sorted(_remembered_stale(db) | ids))
-
-
-def _remembered_stale(db: Session) -> set[int]:
-    row = db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _STALE_FALLBACK_KEY).first()
-    if row is None:
-        return set()
-    try:
-        return {int(i) for i in json.loads(row.data_json) or []}
-    except (ValueError, TypeError):
-        return set()
-
-
-def _forget_stale(db: Session) -> None:
-    db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _STALE_FALLBACK_KEY).delete()
-    db.commit()
+    return await asyncio.to_thread(top_up_explore_index, lambda: _still_wanted(plan))
 
 
 async def _index_is_whole_or_none() -> bool | None:
@@ -843,11 +765,10 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                 db.rollback()
 
         # --- 6. Backfill docs missing body content ---
-        # Their vectors are re-embedded in step 7: named explicitly (a
-        # document embedded before text hashes were kept has none to show
-        # the change), and by text hash otherwise.
-        refreshed_ids = set(await _backfill_presidential_bodies(db, client))
-        refreshed_ids |= set(await _backfill_rulemaking_bodies(db))
+        # Their vectors are re-embedded in step 7, whose text hashes show
+        # the change.
+        await _backfill_presidential_bodies(db, client)
+        await _backfill_rulemaking_bodies(db)
 
         # --- 7. Embed new/refreshed documents into ChromaDB ---
         # Before embedding, not after: a duplicate removed now is one
@@ -859,7 +780,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # check-and-deploy polls: it scans every chunk's document id.
         await asyncio.to_thread(_purge_orphaned_vectors, db)
 
-        embedded = await _embed_step(db, refreshed_ids)
+        embedded = await _embed_step(db)
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill
