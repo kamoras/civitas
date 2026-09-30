@@ -91,9 +91,6 @@ class LLMCallStats:
 
 
 _stats = LLMCallStats()
-# Monotonic time the LLM last answered a call_llm in this process: a sign
-# it was up, which explore_summary reads to tell one outage from the next.
-last_answered_at = 0.0
 
 
 def _make_input_hash(prompt_version: str, input_data: Any, model: str = "") -> str:
@@ -417,7 +414,6 @@ def call_llm(
     posts) since the check never reflected what was actually being
     verified.
     """
-    global last_answered_at
     use_model = model or settings.OLLAMA_MODEL
     use_backend = settings.LLM_BACKEND
 
@@ -463,7 +459,6 @@ def call_llm(
                 )
 
             _stats.record_call()
-            last_answered_at = time.monotonic()
 
             parsed = extract_json(text)
             if parsed is None:

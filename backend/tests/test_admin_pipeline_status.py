@@ -154,10 +154,10 @@ async def test_status_reports_an_explore_run_so_deploys_wait_it_out(db_session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error,running", [("database is locked", True), ("no such table: api_cache", False)])
-async def test_an_unreadable_explore_lease_holds_deploys_only_while_locked(db_session, monkeypatch, error, running):
-    # Any other failure, held as running, would hold every deploy off —
-    # the one that fixes it included.
+@pytest.mark.parametrize("error", ["database is locked", "disk I/O error"])
+async def test_an_unreadable_explore_lease_holds_deploys_off(db_session, monkeypatch, error):
+    # Killing a live run mid-top-up is silent; a deferred poll is logged,
+    # and FORCE_DEPLOY overrides it.
     import sqlite3
 
     from sqlalchemy.exc import OperationalError
@@ -173,7 +173,7 @@ async def test_an_unreadable_explore_lease_holds_deploys_only_while_locked(db_se
         raise OperationalError("SELECT", {}, sqlite3.OperationalError(error))
 
     monkeypatch.setattr(lease, "holder", unreadable)
-    assert (await admin_pipeline_status(db=db_session))["exploreIsRunning"] is running
+    assert (await admin_pipeline_status(db=db_session))["exploreIsRunning"] is True
 
 
 @pytest.mark.asyncio

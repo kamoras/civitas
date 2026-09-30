@@ -1058,32 +1058,33 @@ async function readSummaryStream(
   let buffer = "";
   let fullText = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    const events = buffer.split("\n\n");
-    buffer = events.pop() || ""; // last element may be a partial event — keep it for next read
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || ""; // last element may be a partial event — keep it for next read
 
-    for (const event of events) {
-      const line = event.trim();
-      if (!line.startsWith("data:")) continue;
-      const parsed = JSON.parse(line.slice("data:".length).trim());
-      if (parsed.done) {
-        // Released, not left to the server to close: the rest is nothing
-        // this reader needs, and an open body can hold its connection.
-        reader.cancel().catch(() => {});
-        return toSummary(parsed);
-      }
-      if (typeof parsed.delta === "string") {
-        fullText += parsed.delta;
-        onDelta(fullText);
+      for (const event of events) {
+        const line = event.trim();
+        if (!line.startsWith("data:")) continue;
+        const parsed = JSON.parse(line.slice("data:".length).trim());
+        if (parsed.done) return toSummary(parsed);
+        if (typeof parsed.delta === "string") {
+          fullText += parsed.delta;
+          onDelta(fullText);
+        }
       }
     }
+    throw new Error("Summary stream ended without a final result");
+  } finally {
+    // Released however this ends — the final event, a malformed one, a
+    // stream cut short — not left to the server to close: the caller may
+    // ask again at once, and an open body holds its connection.
+    reader.cancel().catch(() => {});
   }
-
-  throw new Error("Summary stream ended without a final result");
 }
 
 export interface PublicComment {

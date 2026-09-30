@@ -1648,18 +1648,16 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
 
 def _explore_running(db: Session) -> bool:
     """Whether an Explore run (or anything else holding its lease) is live.
-    Locked counts as running (a deploy waits a poll rather than kill one);
-    any other failure to read it doesn't, or a persistent one would hold
-    every deploy off, the fix's included."""
+    Unreadable counts as running: a deploy waits a poll rather than kill
+    one mid-top-up, which is silent. A read that fails every time is not —
+    each deferred poll logs why — and FORCE_DEPLOY=1 overrides it."""
     from app.pipeline import lease
-    from app.pipeline.vector_store import is_busy_error
 
     try:
         return lease.holder(db, lease.EXPLORE) is not None
-    except Exception as error:
-        busy = is_busy_error(getattr(error, "orig", None) or error)  # SQLAlchemy wraps sqlite3's
-        logger.warning("Explore lease unreadable — reported as %s", "running" if busy else "idle", exc_info=True)
-        return busy
+    except Exception:
+        logger.warning("Explore lease unreadable — reported as running", exc_info=True)
+        return True
 
 
 def _data_reset_running(db: Session) -> bool:

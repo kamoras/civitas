@@ -491,6 +491,24 @@ describe("streamExploreDocumentSummary", () => {
     cancel.mockRestore();
   });
 
+  it("releases a stream whose event it can't read", async () => {
+    const cancel = vi.spyOn(ReadableStreamDefaultReader.prototype, "cancel");
+    stubSummaryFetch(
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response("data: {not json\n\n"))
+        .mockResolvedValueOnce(done())
+    );
+    await streamExploreDocumentSummary(
+      1,
+      () => {},
+      undefined,
+      async () => {}
+    );
+    expect(cancel).toHaveBeenCalledTimes(2);
+    cancel.mockRestore();
+  });
+
   it("releases each refusal's body before waiting", async () => {
     const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
     const cancel = vi.spyOn(refused.body!, "cancel");

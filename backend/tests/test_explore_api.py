@@ -161,14 +161,10 @@ class TestStreaming:
             assert await _events(doc, db_session) == [_NONE]  # not held off
         assert written == {}
 
-    @pytest.mark.parametrize("error", [
-        httpx.ConnectError("refused"), httpx.ConnectTimeout("no route"),
-        httpx.RemoteProtocolError("Server disconnected without sending a response."),
-        httpx.ReadError("connection reset"),
-    ])
+    @pytest.mark.parametrize("error", [httpx.ConnectError("refused"), httpx.ConnectTimeout("no route")])
     async def test_an_unreachable_llm_is_a_wait_not_a_failure(self, db_session, error):
-        # Restarting, redeployed or killed before any text: the page waits,
-        # as it does for the pipeline service being down.
+        # Restarting or redeployed: the page waits, as it does for the
+        # pipeline service being down.
         doc = _make_doc(db_session)
 
         async def _unreachable(*_args, **_kwargs):
@@ -180,72 +176,24 @@ class TestStreaming:
             assert await _events(doc, db_session) == [{**_NONE, "retryAfter": explore_summary.BUSY_RETRY_AFTER_S}]
         assert written == {}
 
-    async def test_an_llm_unreachable_past_a_restarts_length_pages_the_operator(self, db_session, monkeypatch):
-        # A crash loop or a wrong URL: readers still wait (a restart looks
-        # the same from here); the operator hears about it.
+    @pytest.mark.parametrize("error", [
+        httpx.RemoteProtocolError("Server disconnected without sending a response."),
+        httpx.ReadError("connection reset"),
+    ])
+    async def test_a_connection_dropped_before_any_text_is_held_off_for_that_text(self, db_session, error):
+        # A prompt that kills the LLM would do so for every reader who
+        # retried it: a strike, then unusable, as for a timeout.
         doc = _make_doc(db_session)
-        alerts, resolved = [], []
-        monkeypatch.setattr("app.ops_alerts.send_ops_alert", lambda subject, body, **kw: alerts.append(kw["condition"]))
-        monkeypatch.setattr("app.ops_alerts.resolve_ops_alert", lambda condition: resolved.append(condition))
 
-        async def _unreachable(*_args, **_kwargs):
-            raise httpx.ConnectError("refused")
+        async def _dropped(*_args, **_kwargs):
+            raise error
             yield  # pragma: no cover
 
-        patches, _ = _llm(_unreachable)
+        patches, _ = _llm(_dropped)
         with patches[0], patches[1], patches[2]:
-            await _events(doc, db_session)  # the outage begins
-            assert alerts == []
-            monkeypatch.setattr(explore_summary, "_unreachable_since",
-                                explore_summary.time.monotonic() - explore_summary.UNREACHABLE_ALERT_AFTER_S - 1)
-            explore_summary._llm_busy_until = 0.0
-            assert "retryAfter" in (await _events(doc, db_session))[-1]
-        assert alerts == ["llm-unreachable"]
-
-        explore_summary._llm_busy_until = 0.0
-        patches, _ = _llm(_fake_stream)
-        with patches[0], patches[1], patches[2]:
-            await _events(doc, db_session)
-        assert resolved == ["llm-unreachable"] and explore_summary._unreachable_since is None
-
-    async def test_the_llm_answering_other_calls_starts_a_new_outage(self, db_session, monkeypatch):
-        # Up in between (the pipeline's own calls): a refusal now is a new
-        # restart, not the old outage run long.
-        from app.pipeline.analyze import ollama_client
-
-        doc = _make_doc(db_session)
-        alerts = []
-        monkeypatch.setattr("app.ops_alerts.send_ops_alert", lambda subject, body, **kw: alerts.append(1))
-
-        async def _unreachable(*_args, **_kwargs):
-            raise httpx.ConnectError("refused")
-            yield  # pragma: no cover
-
-        now = explore_summary.time.monotonic()
-        monkeypatch.setattr(explore_summary, "_unreachable_since", now - explore_summary.UNREACHABLE_ALERT_AFTER_S - 1)
-        monkeypatch.setattr(ollama_client, "last_answered_at", now - 5)
-        patches, _ = _llm(_unreachable)
-        with patches[0], patches[1], patches[2]:
-            await _events(doc, db_session)
-        assert alerts == [] and explore_summary._unreachable_since >= now
-
-    async def test_a_refusal_or_error_does_not_end_an_outage(self, db_session, monkeypatch):
-        # A crash loop answers 503 "loading model" on every start, and a 500
-        # between refusals isn't the LLM back.
-        doc = _make_doc(db_session)
-        began = explore_summary.time.monotonic() - 60
-        for status in (503, 500):
-            async def _fails(*_args, _status=status, **_kwargs):
-                raise httpx.HTTPStatusError("x", request=httpx.Request("POST", "http://llm"),
-                                            response=httpx.Response(_status))
-                yield  # pragma: no cover
-
-            monkeypatch.setattr(explore_summary, "_unreachable_since", began)
-            explore_summary._llm_busy_until = 0.0
-            patches, _ = _llm(_fails)
-            with patches[0], patches[1], patches[2]:
-                await _events(doc, db_session)
-            assert explore_summary._unreachable_since == began
+            assert await _events(doc, db_session) == [{**_NONE, "retryAfter": int(explore_summary.SLOW_FOR_S)}]
+            refused = await _refused(doc, db_session, _reader("198.51.100.4"))
+            assert refused.status_code == 503
 
     async def test_a_stream_waiting_on_the_llm_keeps_the_connection_alive(self, db_session, monkeypatch):
         # nginx drops a response silent for its read timeout.

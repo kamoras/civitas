@@ -43,11 +43,6 @@ GENERATION_LIMIT_S = 240.0
 UNUSABLE_FOR_S = 30 * 60.0
 SLOW_FOR_S = 2 * 60.0
 BUSY_RETRY_AFTER_S = 30
-# How long the LLM can stay unreachable — every summary attempt refused or
-# dropped before any text — before the operator is paged: longer than a
-# restart or a redeploy, short enough that a crash loop or a wrong
-# LLAMA_SERVER_URL is heard about the same hour.
-UNREACHABLE_ALERT_AFTER_S = 5 * 60.0
 # How often a stream waiting on the LLM sends an SSE comment: nginx drops a
 # proxied response that sends nothing for its read timeout, which a busy
 # LLM's prompt processing can exceed before the first token.
@@ -189,9 +184,6 @@ _holds: dict[str, tuple[str, float]] = {}
 # before then makes it unusable.
 _strikes: dict[str, float] = {}
 _llm_busy_until = 0.0
-# Monotonic time the LLM was first found unreachable, until it next answers
-# (here, or any call_llm in this process: ollama_client.last_answered_at).
-_unreachable_since: float | None = None
 # Text key -> (monotonic time it's forgotten, its final event): a run just
 # over, kept briefly — a reader whose cache read raced its cache write (and
 # missed it) gets this rather than generating the same text again.
@@ -290,43 +282,6 @@ async def once(event: dict) -> AsyncIterator[str]:
     yield sse(event)
 
 
-async def _unreachable() -> None:
-    """An attempt that couldn't reach the LLM. To readers it is a wait
-    (busy), however long it lasts: a restart and a crash loop look alike
-    from here, and the page gives up on its own after ten minutes. Past
-    UNREACHABLE_ALERT_AFTER_S the operator is paged instead."""
-    global _unreachable_since
-    from app.pipeline.analyze import ollama_client
-
-    now = time.monotonic()
-    if _unreachable_since is None or ollama_client.last_answered_at > _unreachable_since:
-        _unreachable_since = now  # a new outage: it answered since the last
-        return
-    if now - _unreachable_since >= UNREACHABLE_ALERT_AFTER_S:
-        from app.ops_alerts import send_ops_alert
-        from app.time_utils import utcnow
-
-        await asyncio.to_thread(
-            send_ops_alert,
-            "LLM unreachable",
-            f"Explore summaries have not reached the LLM for over {int(UNREACHABLE_ALERT_AFTER_S // 60)} minutes "
-            "(connection refused or dropped). Check the llama-server service and LLAMA_SERVER_URL / LLM_BACKEND.",
-            dedupe_key=f"llm-unreachable-{utcnow():%Y-%m-%d}",
-            condition="llm-unreachable",
-        )
-
-
-async def _reached() -> None:
-    """The LLM answered: an outage, if one was open, is over."""
-    global _unreachable_since
-    if _unreachable_since is None:
-        return
-    _unreachable_since = None
-    from app.ops_alerts import resolve_ops_alert
-
-    await asyncio.to_thread(resolve_ops_alert, "llm-unreachable")
-
-
 async def _generate(run: _Run) -> None:
     from app.pipeline.analyze import ollama_client
 
@@ -349,30 +304,30 @@ async def _generate(run: _Run) -> None:
         at_limit = True
     except Exception as error:
         # Busy: the LLM said so (429/503, before any text — the stream checks
-        # the status first), or couldn't be reached, or dropped the
-        # connection before any text (restarting, redeployed, killed): a
-        # fact about it, not this text, and a wait for the page, as the
-        # pipeline service being down is. Out of time: the deadline
-        # expired, or the LLM, once connected, stopped answering within its
-        # read timeout. Anything else (a bad response) is a failure.
+        # the status first), or couldn't be connected to (restarting,
+        # redeployed): a fact about it, not this text, and a wait for the
+        # page, as the pipeline service being down is. Out of time: the
+        # deadline expired, or the LLM, once connected, stopped answering
+        # within its read timeout — or dropped the connection before any
+        # text, which a prompt that kills it would do every time: held off
+        # per text like a timeout, so every reader doesn't retry it. Anything
+        # else (a bad response) is a failure.
         if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (429, 503):
             logger.warning("Explore doc summary for doc_id=%s: the LLM is busy", run.doc_id)
             llm_busy = True
-        elif isinstance(error, (httpx.NetworkError, httpx.RemoteProtocolError, httpx.ConnectTimeout)) and not text:
+        elif isinstance(error, (httpx.ConnectError, httpx.ConnectTimeout)) and not text:
             logger.warning("Explore doc summary for doc_id=%s: the LLM is unreachable (%s)", run.doc_id, error)
             llm_busy = True
-            await _unreachable()
+        elif isinstance(error, (httpx.NetworkError, httpx.RemoteProtocolError)) and not text:
+            logger.warning("Explore doc summary for doc_id=%s: the LLM dropped the connection before any "
+                           "text (%s)", run.doc_id, error)
+            timed_out = True
         elif deadline.expired() or isinstance(error, httpx.ReadTimeout):
             logger.warning("Explore doc summary for doc_id=%s ran out of time", run.doc_id)
             timed_out = True
         else:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", run.doc_id)
 
-    if text or finished:
-        # It answered: the outage is over. Not merely a refusal or an error
-        # from it — a crash loop answers 503 "loading model" on every start,
-        # and a 500 between refusals isn't an LLM that is back either.
-        await _reached()
     try:
         await _finish(run, text, finished=finished, at_limit=at_limit, timed_out=timed_out, llm_busy=llm_busy)
     except Exception:
@@ -446,11 +401,10 @@ async def stop() -> None:
 
 def reset() -> None:
     """Forget everything (tests)."""
-    global _llm_busy_until, _unreachable_since
+    global _llm_busy_until
     _runs.clear()
     _by_client.clear()
     _holds.clear()
     _strikes.clear()
     _finished.clear()
     _llm_busy_until = 0.0
-    _unreachable_since = None
