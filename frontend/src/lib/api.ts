@@ -1004,11 +1004,17 @@ export async function streamExploreDocumentSummary(
       await waitFor(res.headers.get("Retry-After"));
       continue;
     }
-    if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
+    if (!res.ok || !res.body) {
+      await res.body?.cancel().catch(() => {});
+      throw new Error(`Summary failed: ${res.status}`);
+    }
     let result: Awaited<ReturnType<typeof readSummaryStream>>;
     try {
       result = await readSummaryStream(res.body, onDelta);
     } catch (error) {
+      // An event that can't be read would read the same way when asked
+      // again (the same answer, from the cache): not waited out.
+      if (error instanceof MalformedSummaryEvent) throw error;
       // The stream was cut before its last event — the pipeline service
       // restarting under a deploy, most often, which stops the generation
       // too. Asked again once it is back (nginx answers the gap as a wait):
@@ -1049,6 +1055,13 @@ function toSummary(
   };
 }
 
+/** A summary event that isn't JSON: not a stream cut short. */
+class MalformedSummaryEvent extends Error {
+  constructor() {
+    super("Summary stream sent an unreadable event");
+  }
+}
+
 async function readSummaryStream(
   body: ReadableStream<Uint8Array>,
   onDelta: (fullTextSoFar: string) => void
@@ -1070,7 +1083,12 @@ async function readSummaryStream(
       for (const event of events) {
         const line = event.trim();
         if (!line.startsWith("data:")) continue;
-        const parsed = JSON.parse(line.slice("data:".length).trim());
+        let parsed;
+        try {
+          parsed = JSON.parse(line.slice("data:".length).trim());
+        } catch {
+          throw new MalformedSummaryEvent();
+        }
         if (parsed.done) return toSummary(parsed);
         if (typeof parsed.delta === "string") {
           fullText += parsed.delta;

@@ -491,22 +491,30 @@ describe("streamExploreDocumentSummary", () => {
     cancel.mockRestore();
   });
 
-  it("releases a stream whose event it can't read", async () => {
+  it("reports a stream whose event it can't read, and releases it", async () => {
+    // The same answer comes back when asked again: not waited out.
     const cancel = vi.spyOn(ReadableStreamDefaultReader.prototype, "cancel");
-    stubSummaryFetch(
-      vi
-        .fn()
-        .mockResolvedValueOnce(new Response("data: {not json\n\n"))
-        .mockResolvedValueOnce(done())
-    );
-    await streamExploreDocumentSummary(
-      1,
-      () => {},
-      undefined,
-      async () => {}
-    );
-    expect(cancel).toHaveBeenCalledTimes(2);
+    const post = vi.fn().mockResolvedValue(new Response("data: {not json\n\n"));
+    stubSummaryFetch(post);
+    await expect(
+      streamExploreDocumentSummary(
+        1,
+        () => {},
+        undefined,
+        async () => {}
+      )
+    ).rejects.toThrow("unreadable event");
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalled();
     cancel.mockRestore();
+  });
+
+  it("releases an error response's body", async () => {
+    const failed = new Response("oops", { status: 500 });
+    const cancel = vi.spyOn(failed.body!, "cancel");
+    stubSummaryFetch(vi.fn().mockResolvedValue(failed));
+    await expect(streamExploreDocumentSummary(1, () => {})).rejects.toThrow("500");
+    expect(cancel).toHaveBeenCalled();
   });
 
   it("releases each refusal's body before waiting", async () => {
