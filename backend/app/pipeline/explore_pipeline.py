@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
-from app.models import ExploreDocument, Justice, Representative, Senator
+from app.models import ApiCache, ExploreDocument, Justice, Representative, Senator
 from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.house_record import fetch_house_floor_remarks
@@ -374,7 +374,7 @@ def _purge_duplicate_floor_speeches(db: Session) -> list[int]:
     return doomed
 
 
-async def _embed_step(db: Session) -> int:
+async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
     """Step 7: bring the vector index up to the corpus; returns how many
     documents were embedded.
 
@@ -394,6 +394,7 @@ async def _embed_step(db: Session) -> int:
     """
     from app.ops_alerts import resolve_ops_alert
 
+    refreshed_ids = refreshed_ids | await asyncio.to_thread(_legacy_owed, db)
     whole = await _index_is_whole_or_none()
     outcome = "skipped"  # or "failed", "rebuilt", "topped up"
     embedded = 0
@@ -424,7 +425,7 @@ async def _embed_step(db: Session) -> int:
                 whole = True
     if whole is True:
         try:
-            embedded = await _top_up(db)
+            embedded = await _top_up(db, refreshed_ids)
             outcome = "topped up"
         except Exception as exc:
             # Each document is left as it was or as it now is (a batch of
@@ -441,36 +442,62 @@ async def _embed_step(db: Session) -> int:
     elif outcome != "failed":
         # Whole now, by this run or a start's: a failed rebuild's alert ends.
         await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
+        try:
+            await asyncio.to_thread(_forget_legacy_owed, db)  # paid
+        except Exception:
+            db.rollback()
+            logger.warning("Explore pipeline: couldn't clear the old owed-re-embed record", exc_info=True)
     return embedded
 
 
-def _to_embed(db: Session) -> list[dict]:
-    """The documents the index lacks, and the ones whose text changed since
-    their vectors were written. An unreadable index raises (a lock is a
-    skip): read as empty, it would re-encode the whole corpus. Read a batch
-    at a time — bodies are long, and most documents are current."""
+def _top_up_plan(db: Session, refreshed_ids: set[int]) -> tuple[list[dict], dict[int, str]]:
+    """(the documents to embed, the text hashes to adopt), read outside the
+    rebuild lock: the documents the index lacks, the ones whose text changed
+    since their vectors were written, and the ones this run's backfill
+    changed. A document embedded before hashes were kept has none to
+    compare: its current text's hash is adopted, without re-encoding it —
+    unless the backfill just changed it, when its vectors are the old text's.
+    An unreadable index raises (a lock is a skip): read as empty, it would
+    re-encode the whole corpus. Its own session, a batch of rows at a time:
+    bodies are long, and the run's session is left as it was."""
+    from app.database import own_session
+
     already = get_embedded_explore_ids()
     hashes = get_embedded_text_hashes()
     wanted: list[dict] = []
-    after = 0
-    while True:
-        docs = (
-            db.query(ExploreDocument).filter(ExploreDocument.id > after)
-            .order_by(ExploreDocument.id).limit(500).all()
-        )
-        if not docs:
-            return wanted
-        for d in docs:
-            doc = explore_embed_dict(d)
-            recorded = hashes.get(d.id)
-            if d.id not in already or (recorded is not None and recorded != explore_text_hash(doc)):
-                wanted.append(doc)
-        after = docs[-1].id
-        db.expunge_all()  # the bodies read, let go of
+    adopt: dict[int, str] = {}
+    with own_session(db) as scan:
+        after = 0
+        while True:
+            docs = (
+                scan.query(ExploreDocument).filter(ExploreDocument.id > after)
+                .order_by(ExploreDocument.id).limit(500).all()
+            )
+            if not docs:
+                return wanted, adopt
+            for d in docs:
+                doc = explore_embed_dict(d)
+                current = explore_text_hash(doc)
+                recorded = hashes.get(d.id)
+                if d.id not in already or d.id in refreshed_ids or (recorded is not None and recorded != current):
+                    wanted.append(doc)
+                elif recorded is None:
+                    adopt[d.id] = current
+            after = docs[-1].id
+            scan.expunge_all()  # the bodies read, let go of
 
 
-async def _top_up(db: Session) -> int:
+def _still_wanted(plan: list[dict]) -> list[dict]:
+    """The plan re-checked under the rebuild lock, against the index alone
+    (no bodies read): a rebuild this waited out wrote documents with their
+    current text's hash, and they aren't embedded twice."""
+    hashes = get_embedded_text_hashes()
+    return [doc for doc in plan if hashes.get(doc["id"]) != explore_text_hash(doc)]
+
+
+async def _top_up(db: Session, refreshed_ids: set[int]) -> int:
     logger.info("Explore pipeline: embedding documents into vector store...")
+    plan, adopt = await asyncio.to_thread(_top_up_plan, db, refreshed_ids)
     # Off the event loop: encoding is pure CPU inside sentence-transformers
     # and ran for 23 MINUTES in one call against the real corpus (1,557
     # documents / 11,022 chunks, measured on the Pi 2026-09-20). Awaiting it
@@ -486,7 +513,28 @@ async def _top_up(db: Session) -> int:
     # donor_classifier_ai.py and api/explore.py already give their own
     # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
     # start's rebuild waits for it rather than embed beside it.
-    return await asyncio.to_thread(top_up_explore_index, lambda: _to_embed(db))
+    return await asyncio.to_thread(top_up_explore_index, lambda: _still_wanted(plan), adopt)
+
+
+# The owed-re-embed record an earlier release kept in api_cache (documents
+# whose body was backfilled while the embed step was skipped): paid once by
+# the next run, then gone — text hashes find such documents now.
+_LEGACY_OWED_KEY = "reembed_owed"
+
+
+def _legacy_owed(db: Session) -> set[int]:
+    row = db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _LEGACY_OWED_KEY).first()
+    if row is None:
+        return set()
+    try:
+        return {int(i) for i in json.loads(row.data_json) or []}
+    except (ValueError, TypeError):
+        return set()
+
+
+def _forget_legacy_owed(db: Session) -> None:
+    db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _LEGACY_OWED_KEY).delete()
+    db.commit()
 
 
 async def _index_is_whole_or_none() -> bool | None:
@@ -745,10 +793,11 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                 db.rollback()
 
         # --- 6. Backfill docs missing body content ---
-        # (Their vectors are re-embedded because their text changed —
-        # _to_embed compares each document's text hash — not by id.)
-        await _backfill_presidential_bodies(db, client)
-        await _backfill_rulemaking_bodies(db)
+        # Their vectors are re-embedded in step 7: named explicitly (a
+        # document embedded before text hashes were kept has none to show
+        # the change), and by text hash otherwise.
+        refreshed_ids = set(await _backfill_presidential_bodies(db, client))
+        refreshed_ids |= set(await _backfill_rulemaking_bodies(db))
 
         # --- 7. Embed new/refreshed documents into ChromaDB ---
         # Before embedding, not after: a duplicate removed now is one
@@ -760,7 +809,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # check-and-deploy polls: it scans every chunk's document id.
         await asyncio.to_thread(_purge_orphaned_vectors, db)
 
-        embedded = await _embed_step(db)
+        embedded = await _embed_step(db, refreshed_ids)
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill

@@ -589,12 +589,14 @@ def test_a_beating_pipeline_service_resolves_its_silent_alert(monkeypatch):
     from app.time_utils import utcnow
 
     resolved = []
-    monkeypatch.setattr(ops_alerts, "resolve_ops_alert", resolved.append)
+    outcome = [-1]  # the first resolve can't write; the next tick tries again
+    monkeypatch.setattr(ops_alerts, "resolve_ops_alert", lambda c: (resolved.append(c), outcome.pop(0) if outcome else 1)[1])
     monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **k: None)
     monkeypatch.setattr("app.scheduler.read_heartbeat", lambda: (utcnow(), {}))
     monkeypatch.setattr(ops_alerts, "_silent_alert_may_be_open", True)  # a new process
     ops_alerts.check_pipeline_service_alive()
-    assert resolved == ["pipeline-service-silent"]
+    ops_alerts.check_pipeline_service_alive()
+    assert resolved == ["pipeline-service-silent"] * 2
     # Not again every healthy tick: that reads the whole alert history.
     ops_alerts.check_pipeline_service_alive()
-    assert resolved == ["pipeline-service-silent"]
+    assert resolved == ["pipeline-service-silent"] * 2

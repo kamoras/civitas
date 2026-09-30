@@ -1208,16 +1208,33 @@ _BUSY_CHECKS = 10
 _BUSY_CHECK_EVERY_S = 30.0
 
 
-def top_up_explore_index(docs_to_embed) -> int:
+def top_up_explore_index(docs_to_embed, adopt_hashes: dict[int, str] | None = None) -> int:
     """An Explore run's incremental step, under the rebuild lock: a start's
     rebuild waits for it (and then looks again) rather than embed the same
     documents beside it. `docs_to_embed()` is asked under the lock, so what
     it finds missing is what the index lacks then, not before a rebuild
-    this waited out. A failure leaves each document as it was or as it now
+    this waited out. `adopt_hashes` records text hashes for documents
+    embedded before hashes were kept, taken as current (their vectors are
+    what their text is). A failure leaves each document as it was or as it now
     is (embed_explore_documents writes a batch of whole documents per
     transaction, and a failed batch rolls all of its documents back)."""
     with _rebuild_lock:
-        return embed_explore_documents(docs_to_embed())
+        embedded = embed_explore_documents(docs_to_embed())
+        if adopt_hashes:
+            conn = get_vec_conn()
+            with _vec_lock:
+                # Only for documents still without one: a rebuild this waited
+                # out, or this embed, recorded the real thing.
+                # And only for documents still in the index: one deleted
+                # meanwhile would leave a hash for vectors that aren't there.
+                conn.executemany(
+                    "INSERT INTO vec_explore_text (doc_id, text_hash) SELECT ?, ? "
+                    "WHERE EXISTS (SELECT 1 FROM vec_explore WHERE doc_id = ?) "
+                    "ON CONFLICT(doc_id) DO NOTHING",
+                    [(doc_id, digest, doc_id) for doc_id, digest in adopt_hashes.items()],
+                )
+                conn.commit()
+        return embedded
 
 
 def wait_for_rebuild() -> None:

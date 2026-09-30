@@ -9,6 +9,7 @@ audit: 1,758 exact-duplicate rows, 31% of the table).
 """
 
 import asyncio
+from types import SimpleNamespace
 import os
 import subprocess
 import sys
@@ -201,7 +202,7 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
 
         embed_started = asyncio.Event()
 
-        def blocking_embed(_docs):
+        def blocking_embed(*_args):
             loop.call_soon_threadsafe(embed_started.set)
             time.sleep(0.4)  # stands in for the real 23-minute encode
             return 0
@@ -516,7 +517,7 @@ async def test_a_rebuild_that_raises_alerts_only_on_a_real_failure(
          patch.object(explore_pipeline, "top_up_explore_index") as top_up, \
          patch("app.ops_alerts.send_ops_alert", alert), \
          patch("app.ops_alerts.resolve_ops_alert", resolve):
-        assert await explore_pipeline._embed_step(db_session) == 0
+        assert await explore_pipeline._embed_step(db_session, set()) == 0
     assert alert.called is alerted
     resolve.assert_not_called()
     top_up.assert_not_called()
@@ -531,7 +532,7 @@ async def test_a_rebuild_that_completes_resolves_the_alert(db_session):
          patch.object(explore_pipeline, "rebuild_explore_index", return_value=0), \
          patch("app.ops_alerts.resolve_ops_alert", resolve):
         # Even an empty corpus: the rebuild completed, whatever it held.
-        assert await explore_pipeline._embed_step(db_session) == 0
+        assert await explore_pipeline._embed_step(db_session, set()) == 0
     resolve.assert_called_once_with("explore-index-rebuild")
 
 
@@ -550,9 +551,9 @@ async def test_a_top_up_whose_read_of_the_index_fails_embeds_nothing(db_session,
          patch("app.pipeline.vector_store.embed_explore_documents") as real_embed:
         if raised:
             with pytest.raises(sqlite3.OperationalError):
-                await explore_pipeline._embed_step(db_session)
+                await explore_pipeline._embed_step(db_session, set())
         else:
-            assert await explore_pipeline._embed_step(db_session) == 0
+            assert await explore_pipeline._embed_step(db_session, set()) == 0
     embed.assert_not_called()
     real_embed.assert_not_called()
 
@@ -572,7 +573,7 @@ async def test_a_lock_after_the_rebuilds_swap_is_a_failure_not_a_skip(db_session
     with patch.object(explore_pipeline, "index_is_whole", return_value=False), \
          patch.object(explore_pipeline, "rebuild_explore_index", failing), \
          patch.object(explore_pipeline, "alert_rebuild_failed", alert):
-        assert await explore_pipeline._embed_step(db_session) == 0
+        assert await explore_pipeline._embed_step(db_session, set()) == 0
     alert.assert_called_once()
 
 
@@ -597,5 +598,39 @@ def test_a_top_up_takes_documents_missing_or_changed_since_they_were_embedded(db
     with patch.object(explore_pipeline, "get_embedded_explore_ids",
                       return_value={current.id, changed.id, legacy.id}), \
          patch.object(explore_pipeline, "get_embedded_text_hashes", return_value=hashes):
-        wanted = [d["title"] for d in explore_pipeline._to_embed(db_session)]
-    assert wanted == ["Changed", "Missing"]
+        plan, adopt = explore_pipeline._top_up_plan(db_session, set())
+        assert [d["title"] for d in plan] == ["Changed", "Missing"]
+        # The legacy document's current text is adopted as what it was
+        # embedded from — unless this run's backfill just changed it.
+        assert set(adopt) == {legacy.id}
+        plan, adopt = explore_pipeline._top_up_plan(db_session, {legacy.id})
+        assert [d["title"] for d in plan] == ["Changed", "Legacy", "Missing"] and adopt == {}
+
+
+def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):
+    # A rebuild waited out wrote them with their current text: not twice.
+    from app.pipeline import explore_pipeline, vector_store
+
+    doc = vector_store.explore_embed_dict(SimpleNamespace(
+        id=5, title="t", summary="s", body="b", doc_type="Rule", source="FR", date="",
+        politician_name="", politician_id="", chamber=""))
+    with patch.object(explore_pipeline, "get_embedded_text_hashes",
+                      return_value={5: vector_store.explore_text_hash(doc)}):
+        assert explore_pipeline._still_wanted([doc]) == []
+    with patch.object(explore_pipeline, "get_embedded_text_hashes", return_value={}):
+        assert explore_pipeline._still_wanted([doc]) == [doc]
+
+
+@pytest.mark.asyncio
+async def test_the_old_owed_record_is_paid_once_then_gone(db_session):
+    from app.pipeline import explore_pipeline
+    from app.pipeline.cache import api_cache_get, api_cache_set
+
+    api_cache_set(db_session, "explore", "reembed_owed", [9])
+    top_up = AsyncMock(return_value=1)
+    with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
+         patch.object(explore_pipeline, "_top_up", top_up), \
+         patch("app.ops_alerts.resolve_ops_alert"):
+        await explore_pipeline._embed_step(db_session, {3})
+    assert top_up.call_args.args[1] == {3, 9}
+    assert api_cache_get(db_session, "explore", "reembed_owed", max_age_hours=24) is None

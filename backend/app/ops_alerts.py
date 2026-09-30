@@ -170,7 +170,9 @@ def _forget_unrecorded(condition: str) -> None:
 def resolve_ops_alert(condition: str) -> int:
     """Close every open alert for ``condition``: the code that detects it
     found it gone. Frees their dedupe keys, so the condition alerts again
-    if it comes back. Never raises. Returns how many were closed."""
+    if it comes back. Never raises. Returns how many were closed, or -1
+    when the history couldn't be written (a caller that resolves only on a
+    transition tries again)."""
     _forget_unrecorded(condition)
     db = None
     try:
@@ -182,7 +184,7 @@ def resolve_ops_alert(condition: str) -> int:
         return closed
     except Exception:
         logger.exception("Failed to resolve ops alert %s", condition)
-        return 0
+        return -1
     finally:
         if db is not None:
             db.close()
@@ -613,9 +615,9 @@ def check_pipeline_service_alive() -> None:
         if last >= utcnow() - PIPELINE_SERVICE_SILENT_AFTER:
             if _silent_alert_may_be_open:
                 # Only on the way back: resolving reads the whole alert
-                # history, every tick, in every worker, otherwise.
-                resolve_ops_alert("pipeline-service-silent")
-                _silent_alert_may_be_open = False
+                # history, every tick, in every worker, otherwise. Kept
+                # owed when the resolve couldn't write: the next tick tries.
+                _silent_alert_may_be_open = resolve_ops_alert("pipeline-service-silent") < 0
             return
     elif not _heartbeat_missing_long_enough():
         # No heartbeat file at all: the pipeline service may only be
