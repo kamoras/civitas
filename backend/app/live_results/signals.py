@@ -157,6 +157,17 @@ def _content(result: RaceResult) -> dict:
     }
 
 
+def _first_row(result: RaceResult) -> dict | None:
+    """The count's top row, as event_detail words a person — for a tie,
+    where event_detail names no leader."""
+    tallies = json.loads(result.tallies or "[]")
+    if not tallies:
+        return None
+    row, counted = tallies[0], result.votes_counted or 0
+    return {"name": row["name"], "party": row.get("party"), "votes": row["votes"],
+            "pct": round(100 * row["votes"] / counted, 1) if counted else None}
+
+
 def _reverted_content(result: RaceResult) -> dict:
     """What the issue says once the count no longer shows the seat changing
     party. A retired row still shows on the homepage's record and at its
@@ -174,7 +185,10 @@ def _reverted_content(result: RaceResult) -> dict:
               else "The count is not final.")
     summary = (f"The count earlier showed a candidate from another party leading in a seat {holders} "
                f"hold. {now} {status}")
-    facts = [f"{_person(p)}: {p['votes']:,} votes, {p['pct']}%" for p in (leader, runner) if p]
+    # On a tie there is no leader, but the summary says "the top two tied":
+    # list both of them, not only the runner-up.
+    top = leader or _first_row(result)
+    facts = [f"{_person(p)}: {p['votes']:,} votes, {p['pct']}%" for p in (top, runner) if p]
     if reporting_line(d):
         facts.append(reporting_line(d))
     race = result.race

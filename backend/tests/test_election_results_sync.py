@@ -768,6 +768,10 @@ class TestAnAnnouncedFlipStaysUntilTheLeadGoesBack:
         kinds, result = _apply(db_session, race, _contest(650, 650, 70))
         assert er.FLIP_REVERSED in kinds and not issue.is_current
         assert result.flip_announced is False
+        # "shows the top two tied" — and lists both of them, not only one.
+        assert "the top two tied" in issue.summary
+        facts = json.loads(issue.facts)
+        assert sorted(facts[:2]) == ["Dana Smith (D): 650 votes, 50.0%", "Ray Jones (R): 650 votes, 50.0%"]
 
     def test_a_reverted_issue_is_not_rewritten_as_a_flip_nobody_announced(self, db_session, _on_election_day):
         race = _setup(db_session)
