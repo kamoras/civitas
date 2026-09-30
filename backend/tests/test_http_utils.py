@@ -349,6 +349,31 @@ async def test_a_moved_page_is_followed_not_read_as_an_empty_success():
     assert resp is not None and resp.text == "the list"
 
 
+
+# Directories the whole-repo sweep never reads: dependencies, build output,
+# caches, and the tests themselves (this one names the old address).
+_SWEEP_SKIP = {".git", "node_modules", ".next", ".venv", "__pycache__", "tests", ".pytest_cache", ".ruff_cache"}
+_SWEEP_SUFFIXES = {
+    ".py", ".md", ".json", ".ts", ".tsx", ".js", ".mjs", ".yml", ".yaml", ".toml",
+    ".txt", ".conf", ".sh", ".html", ".example", ".cfg", ".ini",
+}
+
+
+def _repo_text_files(backend):
+    """Every text file in the checkout around the backend (docs, nginx,
+    workflows, .env.example, the frontend), for the stale-address sweep."""
+    import os
+    from pathlib import Path
+
+    out = []
+    for root, dirs, files in os.walk(backend.parent):
+        dirs[:] = [d for d in dirs if d not in _SWEEP_SKIP]
+        for name in files:
+            path = Path(root) / name
+            if path.suffix in _SWEEP_SUFFIXES or name.startswith((".env", "Dockerfile")):
+                out.append(path)
+    return out
+
 def test_every_user_agent_names_the_real_contact_address():
     """Sources are told how to reach us; the address has to be one that is
     read. contact@civitas-research.org never existed, and SEC's fair-access
@@ -374,7 +399,7 @@ def test_every_user_agent_names_the_real_contact_address():
         *backend.glob("scripts/*.py"),
     ]
     assert code
-    around = [*backend.parent.glob("*.md"), *backend.parent.glob("frontend/src/**/*.ts*")]
+    around = _repo_text_files(backend) if (backend.parent / "frontend").is_dir() else []
     stale = [
         str(p) for p in code + around
         if "contact@civitas-research.org" in p.read_text(errors="ignore")

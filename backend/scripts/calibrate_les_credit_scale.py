@@ -24,11 +24,11 @@ import json
 import pathlib
 import urllib.request
 
+from app.contact import CONTACT_EMAIL
 from app.pipeline.analyze.score_calculator import (
     compute_les_reference,
     derive_chamber_majority,
 )
-from app.contact import CONTACT_EMAIL
 
 API_BASE = "https://civitas-research.org/api"
 UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (LES calibration; contact: {CONTACT_EMAIL})"}
