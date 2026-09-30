@@ -574,10 +574,24 @@ class TestChangesFromThePipelineProcess:
         queries = []
         real = shared_db.query
         monkeypatch.setattr(shared_db, "query", lambda *a, **k: (queries.append(a), real(*a, **k))[1])
+        monkeypatch.setattr(settings, "PROCESS_ROLE", "api")
         bill_service._changes.expire()
         bill_service._changed_since(shared_db, bill_service.utcnow())
         bill_service._changed_since(shared_db, bill_service.utcnow())
         assert len(queries) == 1
+
+    @pytest.mark.parametrize("role", ["all", "worker"])
+    def test_only_the_api_role_polls_for_changes(self, shared_db, monkeypatch, role):
+        # Elsewhere nothing writes the marker for it to find.
+        from app.services import bill_service
+
+        queries = []
+        real = shared_db.query
+        monkeypatch.setattr(shared_db, "query", lambda *a, **k: (queries.append(a), real(*a, **k))[1])
+        monkeypatch.setattr(settings, "PROCESS_ROLE", role)
+        bill_service._changes.expire()
+        assert bill_service._changed_since(shared_db, bill_service.utcnow()) is False
+        assert queries == []
 
 
 def test_a_failed_rebuild_is_not_retried_on_every_request(monkeypatch):

@@ -161,6 +161,21 @@ class TestStreaming:
             assert await _events(doc, db_session) == [_NONE]  # not held off
         assert written == {}
 
+    @pytest.mark.parametrize("error", [httpx.ConnectError("refused"), httpx.ConnectTimeout("no route")])
+    async def test_an_unreachable_llm_is_a_wait_not_a_failure(self, db_session, error):
+        # Restarting or redeployed: the page waits, as it does for the
+        # pipeline service being down, rather than show "unavailable".
+        doc = _make_doc(db_session)
+
+        async def _unreachable(*_args, **_kwargs):
+            raise error
+            yield  # pragma: no cover
+
+        patches, written = _llm(_unreachable)
+        with patches[0], patches[1], patches[2]:
+            assert await _events(doc, db_session) == [{**_NONE, "retryAfter": explore_summary.BUSY_RETRY_AFTER_S}]
+        assert written == {}
+
     async def test_a_stream_waiting_on_the_llm_keeps_the_connection_alive(self, db_session, monkeypatch):
         # nginx drops a response silent for its read timeout.
         doc = _make_doc(db_session)

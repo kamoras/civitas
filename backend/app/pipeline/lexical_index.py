@@ -275,6 +275,8 @@ def rebuild_index(db) -> int:
     """
     try:
         db.execute(text(f"INSERT INTO {FTS_TABLE}({FTS_TABLE}) VALUES('rebuild')"))
+        # A startup backfill still owed (killed, or refused) is done now.
+        db.execute(text("DELETE FROM explore_fts_meta WHERE key = 'backfill_pending'"))
         db.commit()
         count = db.execute(text("SELECT COUNT(*) FROM explore_documents")).scalar()
         logger.info("Rebuilt explore keyword index over %d documents", count or 0)

@@ -304,12 +304,17 @@ async def _generate(run: _Run) -> None:
         at_limit = True
     except Exception as error:
         # Busy: the LLM said so (429/503, before any text — the stream checks
-        # the status first): a fact about it, not this text. Out of time: the
+        # the status first), or couldn't be reached at all (restarting,
+        # redeployed): a fact about it, not this text, and a wait for the
+        # page, as the pipeline service being down is. Out of time: the
         # deadline expired, or the LLM, once connected, stopped answering
-        # within its read timeout. Anything else (unreachable, a bad
-        # response) is a failure, which may be retried at once.
+        # within its read timeout. Anything else (a bad response) is a
+        # failure.
         if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (429, 503):
             logger.warning("Explore doc summary for doc_id=%s: the LLM is busy", run.doc_id)
+            llm_busy = True
+        elif isinstance(error, (httpx.ConnectError, httpx.ConnectTimeout)) and not text:
+            logger.warning("Explore doc summary for doc_id=%s: the LLM is unreachable (%s)", run.doc_id, error)
             llm_busy = True
         elif deadline.expired() or isinstance(error, httpx.ReadTimeout):
             logger.warning("Explore doc summary for doc_id=%s ran out of time", run.doc_id)

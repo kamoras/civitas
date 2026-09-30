@@ -279,6 +279,18 @@ class TestKeywordBackfill:
         assert started == [True, True] and self._pending(engine)
 
 
+    def test_an_explore_runs_full_rebuild_settles_an_owed_backfill(self, db_session, monkeypatch):
+        # Its rebuild re-tokenises the whole corpus: the next start owes
+        # nothing more.
+        from app.pipeline import lexical_index as module
+
+        engine = db_session.get_bind()
+        self._add_doc(db_session)
+        monkeypatch.setattr(module, "_backfill_in_background", lambda bound: None)  # "killed"
+        assert module.ensure_lexical_index(engine) and self._pending(engine)
+        assert module.rebuild_index(db_session) == 1
+        assert not self._pending(engine)
+
 class TestOnePipelineProcess:
     """The pipeline side takes a per-container lock; a second process
     (a second uvicorn worker, however it was launched) refuses to start."""

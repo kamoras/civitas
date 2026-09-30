@@ -260,7 +260,11 @@ def _changed_since(db: Session, built_at: datetime) -> bool:
     """Whether a writer in another process changed the data after `built_at`
     (checked at most every _CHANGED_CHECK_SECONDS; shared_state.PolledRow).
     No change recorded, or none readable: no change to act on — the TTL
-    still rebuilds."""
+    still rebuilds. Only the API role reads it: the worker records changes
+    and a single-process one ("all") refreshes on them directly, so there
+    it is a row nothing writes."""
+    if settings.PROCESS_ROLE != "api":
+        return False
     _changes.get(db)
     stamp = _changes.stamp
     return stamp is not None and stamp >= built_at
