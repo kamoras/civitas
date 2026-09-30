@@ -7,7 +7,7 @@ voter in a state with 17 amendments that there is nothing to research.
 """
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -191,7 +191,8 @@ def test_state_ballot_distinguishes_confirmed_none(db_session):
     assert data["measureCoverage"]["sourceName"] == "Earlier Source"
 
 
-def test_state_ballot_returns_measures_and_races(db_session):
+def test_state_ballot_returns_measures_and_races(db_session, freeze_utcnow):
+    freeze_utcnow(datetime(2026, 9, 30, 12, 0))  # a 2026-cycle fixture
     db_session.add(Race(
         id="2026-SEN-GA", cycle_year=election_pipeline.current_election_cycle(),
         office="S", state="GA", district=None,
@@ -334,8 +335,9 @@ def test_state_ballot_lookup_falls_back_when_no_verified_link(db_session):
     assert data["officialLookup"]["url"].startswith("https://")
 
 
-def test_removed_measures_are_still_returned(db_session):
+def test_removed_measures_are_still_returned(db_session, freeze_utcnow):
     """Rendered as removed, never silently dropped."""
+    freeze_utcnow(datetime(2026, 9, 30, 12, 0))  # a 2026-cycle fixture
     _measure(db_session, "old-1", status="removed")
     db_session.commit()
     data = _body(elections.state_ballot("GA", db=db_session))
@@ -444,10 +446,11 @@ async def test_sync_pdf_measures_upserts_directly_from_one_pdf_pass(monkeypatch,
 
 
 @pytest.mark.asyncio
-async def test_sync_pdf_measures_records_not_yet_published_without_failing(monkeypatch, db_session):
+async def test_sync_pdf_measures_records_not_yet_published_without_failing(monkeypatch, db_session, freeze_utcnow):
     """Maine's guide appears weeks before November. Until then the state
     is not yet covered — not ingest_failed (nothing is broken, so nothing
     should page anyone) and never confirmed_none."""
+    freeze_utcnow(datetime(2026, 9, 30, 12, 0))  # a 2026-cycle fixture
     from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
     from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 

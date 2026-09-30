@@ -21,6 +21,7 @@ McKinney unseated Shri Thanedar in the 13th; William Lawrence won the
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -128,12 +129,14 @@ def _grid():
 _US_HOUSE_1 = "1st District Representative in Congress 2 Year Term (1) Position"
 
 
-def test_a_list_still_holding_primary_filers_is_not_the_ballot_yet(monkeypatch):
+def test_a_list_still_holding_primary_filers_is_not_the_ballot_yet(monkeypatch, freeze_utcnow):
     """The report exists all cycle and lists every filer from filing day,
     so before the August primary is canvassed a party can hold two
     candidates for one seat. That list is not the November ballot: it is
     answered [] (not yet) -- until the ballot must be final, when a list
     still holding primary filers is broken (None, fetch_failed)."""
+    # Inside 2026's ballot window, which closes on election day.
+    freeze_utcnow(datetime(2026, 10, 1))
     rows = _grid()
     loser = {"Party / Incumbent": "Democratic Party", "Candidate Name": "Doe, Jane",   # an extra D filer
              "Filed On": "04/21/2026", "Filing Method": "Petitions", "heading": _US_HOUSE_1}

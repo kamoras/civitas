@@ -38,6 +38,7 @@ of State contest, to prove that fallback actually excludes it.
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -46,6 +47,14 @@ import pytest
 from app.pipeline.fetch import http_utils, state_candidates_tally_enr as tenr
 
 FIXTURES = Path(__file__).parent
+
+
+# The fixtures are 2026 elections, and "not settled yet" is modelled as a
+# stage dated 2026-12-31: pin today inside 2026 (conftest.freeze_utcnow), or
+# that stage settles on the real clock in 2027 and these tests change meaning.
+@pytest.fixture(autouse=True)
+def _in_2026(freeze_utcnow):
+    freeze_utcnow(datetime(2026, 9, 30, 12, 0))
 
 
 def _resp(body):
