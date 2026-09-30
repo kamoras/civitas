@@ -12,7 +12,7 @@ from app.main import app
 from app.models import RollCall
 from app.pipeline import congress_activity as ca
 from app.services import congress_service as cs
-from tests.test_congress_activity import _digest_responses, _fake_get
+from tests.congress_activity_helpers import _digest_responses, _fake_get
 
 
 @pytest.fixture

@@ -47,22 +47,30 @@ async def test_clear_stuck_house_no_op_when_nothing_stuck(db_session):
     assert result == {"cleared": 0, "message": "No stuck runs found"}
 
 
-# Each endpoint hands _clear_stuck_runs its own pipeline's running flag; only
-# that flag raised must refuse, so wiring an endpoint to another pipeline's
-# flag (or none) fails here.
-@pytest.mark.parametrize("endpoint, flag", [
-    ("admin_clear_stuck_house", "app.pipeline.house_pipeline.is_house_pipeline_running"),
-    ("admin_clear_stuck_stock_trades", "app.pipeline.stock_pipeline.is_stock_pipeline_running"),
-    ("admin_clear_stuck_supplementary",
-     "app.pipeline.supplementary_pipeline.is_supplementary_pipeline_running"),
-    ("admin_clear_stuck_election", "app.pipeline.election_pipeline.is_election_pipeline_running"),
-])
+_RUNNING_FLAGS = {
+    "admin_clear_stuck_house": "app.pipeline.house_pipeline.is_house_pipeline_running",
+    "admin_clear_stuck_stock_trades": "app.pipeline.stock_pipeline.is_stock_pipeline_running",
+    "admin_clear_stuck_supplementary":
+        "app.pipeline.supplementary_pipeline.is_supplementary_pipeline_running",
+    "admin_clear_stuck_election": "app.pipeline.election_pipeline.is_election_pipeline_running",
+}
+
+
+# Each endpoint hands _clear_stuck_runs its own pipeline's running flag, and
+# only that flag raised must refuse: every OTHER pipeline running leaves it
+# free to clear, and its own raises the 409. Wiring an endpoint to another
+# pipeline's flag, to none, or to "any pipeline running" fails here.
+@pytest.mark.parametrize("endpoint", list(_RUNNING_FLAGS))
 @pytest.mark.asyncio
-async def test_clear_stuck_refuses_while_its_own_pipeline_is_running(db_session, monkeypatch, endpoint, flag):
+async def test_clear_stuck_refuses_only_while_its_own_pipeline_is_running(db_session, monkeypatch, endpoint):
     from app.api import admin
 
-    monkeypatch.setattr(flag, lambda: True)
+    for other, flag in _RUNNING_FLAGS.items():
+        if other != endpoint:
+            monkeypatch.setattr(flag, lambda: True)
+    assert (await getattr(admin, endpoint)(db=db_session))["cleared"] == 0
 
+    monkeypatch.setattr(_RUNNING_FLAGS[endpoint], lambda: True)
     with pytest.raises(HTTPException) as exc_info:
         await getattr(admin, endpoint)(db=db_session)
 

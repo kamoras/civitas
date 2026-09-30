@@ -19,7 +19,7 @@ from app.api import visits
 from app.api.visits import _daily_salt, _load_or_create_salt, _visitor_hash, track_visit
 from app.models import SiteVisit, VisitSalt, VisitsMigration
 
-from tests.test_visits import _drain_queue_and_write, _make_request
+from tests.visits_helpers import _drain_queue_and_write, _make_request
 
 
 def _use(db):

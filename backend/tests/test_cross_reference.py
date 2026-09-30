@@ -219,7 +219,6 @@ class TestDetectLobbyingMatches:
         ]
         assert detect_lobbying_matches(donors, self._healthcare_votes(), industry_breakdown) == []
 
-
     def test_the_match_cap_keeps_the_largest_donations(self, monkeypatch):
         """max_matches trims the list AFTER sorting by donation, so the cap
         drops the smaller industries, never the largest. It can't bind at
@@ -238,6 +237,7 @@ class TestDetectLobbyingMatches:
 
         capped = detect_donor_vote_connections([], votes, industry_breakdown, max_matches=1)
         assert [m["industry"] for m in capped] == ["PHARMA"]
+
     def test_lobbyists_industry_never_matches(self):
         """LOBBYISTS is a service profession, not a policy domain — a
         lobbying firm's PAC represents undisclosed clients across every
