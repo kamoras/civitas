@@ -139,9 +139,8 @@ async def _sync_ballots(db: Session, client: httpx.AsyncClient, cycle: int) -> t
 async def run_ballot_sync(cycle: int | None = None) -> dict:
     """The nightly run's ballot step, alone. Scheduled every few hours in
     election season (scheduler.py) so a withdrawal or replacement reaches
-    the page the same day, and so a failure earlier in the nightly chain —
-    this pipeline runs last, after Senate, House and stock trades — can
-    never hold ballots back in the weeks voters are using them. Reads only
+    the page the same day: the nightly run reaches this pipeline last,
+    after Senate, House and stock trades, hours into the night. Reads only
     state election offices' published lists, a handful of requests each at
     one per second; the roster and financial refresh stay nightly."""
     db = SessionLocal()

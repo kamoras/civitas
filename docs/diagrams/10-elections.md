@@ -20,13 +20,15 @@ flowchart LR
     FIVE(["Every 5 min, election day through the results window<br/>(hourly once no count has moved for a day)"]) --> RES["Live count<br/>(_election_results_sync → sync_live_results)"]
 ```
 
-The election pipeline is last in the nightly chain, so an earlier pipeline
-that aborts the chain also skips it — check `election_pipeline_runs` after
-any nightly interruption. In election season (`is_election_season`: the 60
+The election pipeline is last in the nightly chain, hours into the night.
+An earlier link that is skipped or fails no longer holds it back
+(`pipeline_chain.run_chain`: each link runs whatever the one before did, and
+is alerted on its own); only a data reset or a killed process ends the
+chain, so check `election_pipeline_runs` after one. In election season (`is_election_season`: the 60
 days before an election, and on through its results window) the ballot
 step (certified lists / primary results, then filing lists) is also
-scheduled on its own every 6 hours, so an upstream abort can't hold ballots
-back; it and the nightly ballot phase each step aside while the other is
+scheduled on its own every 6 hours, so ballots don't wait most of a day
+for the nightly run; it and the nightly ballot phase each step aside while the other is
 running. It reads ballots up to and including election day. From the day
 after (`election_is_held`) each 6-hour tick still fires through the results
 window but returns `skipped` without reading anything, and neither the

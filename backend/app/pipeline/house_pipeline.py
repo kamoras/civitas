@@ -152,6 +152,9 @@ async def run_house_pipeline() -> dict:
 
     try:
         logger.info("=== HOUSE PIPELINE START ===")
+        from app.pipeline.senate_pipeline import invalidate_stale_analysis
+
+        invalidate_stale_analysis(db)
 
         async with make_async_client() as client:
             # FEC committee master, loaded on first use (see the FEC step).
