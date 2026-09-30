@@ -290,7 +290,8 @@ class TestTextHashes:
             assert vector_store.update_explore_metadata([corrected]) == 1
         assert vector_store.search_explore_documents("Same title", chamber="Senate")
         assert not vector_store.search_explore_documents("Same title", chamber="House")
-        assert vector_store.get_embedded_meta_hashes() == {1: vector_store.explore_meta_hash(corrected)}
+        assert vector_store.get_embedded_hashes() == {
+            1: (vector_store.explore_text_hash(corrected), vector_store.explore_meta_hash(corrected))}
 
     def test_the_relabel_reaches_every_chunk_and_only_its_document(self, vec_env):
         long_body = " ".join(f"word{i}." for i in range(40))
@@ -317,15 +318,32 @@ class TestTextHashes:
         conn.commit()
         conn.close()
         # Every old row reads as never labelled, so the next run relabels it.
-        assert vector_store.get_embedded_meta_hashes() == {1: ""}
+        assert vector_store.get_embedded_hashes() == {1: ("abc", "")}
 
-    def test_a_failed_relabel_raises_and_keeps_the_embed(self, vec_env):
-        # Raised, so the run reports it rather than resolve its alert; the
-        # embed before it is committed.
+    def test_a_failed_relabel_is_reported_and_keeps_the_embed(self, vec_env):
+        # Not the run's failure (its vectors are written), but reported:
+        # search filters on the columns it didn't write.
         with patch.object(vector_store, "update_explore_metadata", side_effect=RuntimeError("boom")), \
-             pytest.raises(RuntimeError):
-            vector_store.top_up_explore_index(lambda: [_doc(1, "A title")], lambda: [_doc(2, "B")])
+             patch("app.ops_alerts.send_ops_alert") as alert, \
+             patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            assert vector_store.top_up_explore_index(lambda: [_doc(1, "A title")], lambda: [_doc(2, "B")]) == 1
         assert set(vector_store.get_embedded_text_hashes()) == {1}
+        assert alert.call_args.kwargs["condition"] == "explore-index-relabel"
+        resolve.assert_not_called()
+
+    def test_a_locked_relabel_is_left_to_the_next_run(self, vec_env):
+        with patch.object(vector_store, "update_explore_metadata",
+                          side_effect=sqlite3.OperationalError("database is locked")), \
+             patch("app.ops_alerts.send_ops_alert") as alert, \
+             patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            vector_store.top_up_explore_index(lambda: [], lambda: [_doc(2, "B")])
+        alert.assert_not_called()
+        resolve.assert_not_called()
+
+    def test_a_relabel_that_succeeds_ends_the_alert(self, vec_env):
+        with patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            vector_store.top_up_explore_index(lambda: [], lambda: [])
+        resolve.assert_called_once_with("explore-index-relabel")
 
     def test_another_process_adding_meta_hash_first_is_not_an_error(self, vec_env):
         conn = sqlite3.connect(vector_store._VECTOR_DB_PATH)

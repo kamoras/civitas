@@ -51,6 +51,9 @@ def _classes(data) -> dict[int, frozenset[str]] | None:
     # characters.
     if not all(isinstance(v, list) and all(isinstance(s, str) for s in v) for v in classes.values()):
         return None
+    # Three classes, none empty: the shape the refresh's gate writes.
+    if set(classes) != {1, 2, 3} or not all(classes.values()):
+        return None
     return {k: frozenset(v) for k, v in classes.items()}
 
 
@@ -80,6 +83,21 @@ def senate_classes() -> dict[int, frozenset[str]]:
             [_CLASS_FILES[0]], _senate_classes_cache, _senate_classes_stamp, load,
         )
         return _senate_classes_cache
+
+
+def classes_on_file(runtime_path: pathlib.Path) -> dict[int, frozenset[str]]:
+    """What a refresh merges its fresh read with — the classes at
+    `runtime_path`, else the bundled copy's (missing or malformed: the
+    same fallback the reader takes), else none. Raises OSError when the
+    runtime file is there but can't be read: merged with nothing then, the
+    refresh would drop every state it keeps only while its seat is vacant."""
+    try:
+        data = read_json_preferring(
+            runtime_path, _CLASS_FILES[-1], default=None, accept=lambda d: _classes(d) is not None,
+        )
+    except Uncached:
+        raise OSError(f"{runtime_path} couldn't be read") from None
+    return {} if data is None else _classes(data)
 
 
 def reset_senate_classes() -> None:

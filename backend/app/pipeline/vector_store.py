@@ -1095,9 +1095,11 @@ def get_embedded_explore_ids() -> set[int]:
     return {r[0] for r in conn.execute("SELECT DISTINCT doc_id FROM vec_explore").fetchall()}
 
 
-def get_embedded_meta_hashes() -> dict[int, str]:
-    """Each embedded document's explore_meta_hash, as its chunks carry it."""
-    return dict(get_vec_conn().execute("SELECT doc_id, meta_hash FROM vec_explore_text").fetchall())
+def get_embedded_hashes() -> dict[int, tuple[str, str]]:
+    """Each embedded document's (explore_text_hash, explore_meta_hash), as
+    its vectors were written — both from one read of the table."""
+    rows = get_vec_conn().execute("SELECT doc_id, text_hash, meta_hash FROM vec_explore_text").fetchall()
+    return {doc_id: (text, meta) for doc_id, text, meta in rows}
 
 
 def update_explore_metadata(docs: list[dict]) -> int:
@@ -1313,18 +1315,43 @@ def top_up_explore_index(docs_to_embed, docs_to_relabel=None) -> int:
     documents beside it. `docs_to_embed()` is asked under the lock, so what
     it finds missing is what the index lacks then, not before a rebuild
     this waited out. `docs_to_relabel()`, the same way, names documents
-    whose metadata alone changed (update_explore_metadata). A failure
-    leaves each document as it was or as it now
-    is (embed_explore_documents writes a batch of whole documents per
-    transaction, and a failed batch rolls all of its documents back)."""
+    whose metadata alone changed (update_explore_metadata; its failure is
+    reported apart, _relabel). An embed failure leaves each document as it
+    was or as it now is (embed_explore_documents writes a batch of whole
+    documents per transaction, and a failed batch rolls all of its
+    documents back)."""
     with _rebuild_lock:
         embedded = embed_explore_documents(docs_to_embed())
         if docs_to_relabel is not None:
-            # A failure raises like the embed's (the run fails, or skips on
-            # a lock): the embed is committed already, and the relabel's
-            # hashes are unchanged, so the next run relabels them.
-            update_explore_metadata(docs_to_relabel())
+            _relabel(docs_to_relabel)
         return embedded
+
+
+def _relabel(docs_to_relabel) -> None:
+    """The top-up's metadata step, after its embed has committed: a failure
+    is not the run's (its vectors are written) but is reported — search
+    filters on these columns — and the hashes it would have written are
+    unchanged, so the next run relabels the same documents."""
+    from app.ops_alerts import resolve_ops_alert, send_ops_alert
+    from app.time_utils import utcnow
+
+    try:
+        update_explore_metadata(docs_to_relabel())
+    except Exception as exc:
+        if is_busy_error(exc):
+            logger.warning("Explore index metadata update busy — left to the next run (%s)", exc)
+            return
+        logger.exception("Explore index metadata update failed")
+        send_ops_alert(
+            "Explore vector index metadata update failed",
+            f"Writing changed metadata onto the search vector index raised ({type(exc).__name__}: {exc}). "
+            "Semantic search filters (chamber, member) read the old values until it succeeds; the next "
+            "Explore run tries again.",
+            dedupe_key=f"explore-index-relabel-{utcnow():%Y-%m-%d}",
+            condition="explore-index-relabel",
+        )
+        return
+    resolve_ops_alert("explore-index-relabel")
 
 
 def wait_for_rebuild() -> None:

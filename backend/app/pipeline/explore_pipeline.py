@@ -55,7 +55,7 @@ from app.pipeline.vector_store import (
     explore_meta_hash,
     explore_text_hash,
     get_embedded_explore_ids,
-    get_embedded_meta_hashes,
+    get_embedded_hashes,
     get_embedded_text_hashes,
     index_is_whole,
     is_busy_error,
@@ -448,22 +448,21 @@ async def _embed_step(db: Session) -> int:
     return embedded
 
 
-def _top_up_plan(db: Session) -> tuple[list[tuple[dict, str]], list[tuple[dict, str]]]:
+def _top_up_plan(db: Session) -> tuple[list[tuple[dict, str, str | None]], list[tuple[dict, str, str]]]:
     """(the documents to embed, the documents to relabel), each with the
-    hash it is checked by: to embed, those the index has no record of and
-    those whose text changed since their vectors were written; to relabel,
-    those whose metadata alone changed (search filters on it: written in
-    place, not re-encoded). Read outside the rebuild lock, on a session of
-    its own (the run's is left as it was), a batch of rows at a time:
-    bodies are long, and most documents are current. An unreadable index
-    raises (a lock is a skip): read as empty, it would re-encode the whole
-    corpus."""
+    hash it is written with and the one the index held when this read it:
+    to embed, those the index has no record of and those whose text changed
+    since their vectors were written; to relabel, those whose metadata
+    alone changed (search filters on it: written in place, not
+    re-encoded). Read outside the rebuild lock, on a session of its own
+    (the run's is left as it was), a batch of rows at a time: bodies are
+    long, and most documents are current. An unreadable index raises (a
+    lock is a skip): read as empty, it would re-encode the whole corpus."""
     from app.database import own_session
 
-    texts = get_embedded_text_hashes()
-    metas = get_embedded_meta_hashes()
-    embed: list[tuple[dict, str]] = []
-    relabel: list[tuple[dict, str]] = []
+    held = get_embedded_hashes()
+    embed: list[tuple[dict, str, str | None]] = []
+    relabel: list[tuple[dict, str, str]] = []
     with own_session(db) as scan:
         after = 0
         while True:
@@ -476,32 +475,39 @@ def _top_up_plan(db: Session) -> tuple[list[tuple[dict, str]], list[tuple[dict, 
             for d in docs:
                 doc = explore_embed_dict(d)
                 text = explore_text_hash(doc)
+                was_text, was_meta = held.get(d.id, (None, None))
                 # Every embed records its document's hashes with its vectors
                 # (a document with no text too), so none recorded means
                 # never embedded, and a different one means changed since.
-                if texts.get(d.id) != text:
-                    embed.append((doc, text))
-                elif metas.get(d.id) != (meta := explore_meta_hash(doc)):
+                if was_text != text:
+                    embed.append((doc, text, was_text))
+                elif was_meta != (meta := explore_meta_hash(doc)):
                     # Its id and metadata only: the body isn't written, and
                     # is let go of with the batch.
-                    relabel.append(({f: doc[f] for f in ("id", *_META_FIELDS)}, meta))
+                    relabel.append(({f: doc[f] for f in ("id", *_META_FIELDS)}, meta, was_meta))
             after = docs[-1].id
             scan.expunge_all()  # the bodies read, let go of
 
 
-def _still_wanted(plan: list[tuple[dict, str]]) -> list[dict]:
+def _still_wanted(plan: list[tuple[dict, str, str | None]]) -> list[dict]:
     """The embed plan re-checked under the rebuild lock, against the index
-    alone (no bodies read or hashed again): a rebuild this waited out wrote
-    documents with their current text's hash, and they aren't embedded
-    twice."""
-    hashes = get_embedded_text_hashes()
-    return [{**doc, "_text_hash": current} for doc, current in plan if hashes.get(doc["id"]) != current]
+    alone (no bodies read or hashed again): only documents the index holds
+    as this plan found them. One written since — by a rebuild this waited
+    out — was written from the database at least as late as this plan
+    read it: not embedded twice, nor put back to the plan's older text."""
+    held = get_embedded_hashes()
+    return [
+        {**doc, "_text_hash": current}
+        for doc, current, was in plan
+        if held.get(doc["id"], (None, None))[0] == was
+    ]
 
 
-def _still_to_relabel(plan: list[tuple[dict, str]]) -> list[dict]:
-    """The relabel plan re-checked the same way."""
-    hashes = get_embedded_meta_hashes()
-    return [doc for doc, meta in plan if doc["id"] in hashes and hashes[doc["id"]] != meta]
+def _still_to_relabel(plan: list[tuple[dict, str, str]]) -> list[dict]:
+    """The relabel plan re-checked the same way: documents whose recorded
+    metadata is still what this plan found."""
+    held = get_embedded_hashes()
+    return [doc for doc, _meta, was in plan if held.get(doc["id"], (None, None))[1] == was]
 
 
 async def _top_up(db: Session) -> int:

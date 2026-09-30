@@ -39,7 +39,7 @@ def _no_real_vector_store(monkeypatch):
     A test that needs other answers patches over these."""
     monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: set())
     monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", lambda: {})
-    monkeypatch.setattr(explore_pipeline, "get_embedded_meta_hashes", lambda: {})
+    monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", lambda: {})
 
 class TestStableHash:
     def test_same_input_same_output(self):
@@ -557,7 +557,7 @@ async def test_a_top_up_whose_read_of_the_index_fails_embeds_nothing(db_session,
     from app.pipeline import explore_pipeline
 
     with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
-         patch.object(explore_pipeline, "get_embedded_text_hashes", side_effect=sqlite3.OperationalError(error)), \
+         patch.object(explore_pipeline, "get_embedded_hashes", side_effect=sqlite3.OperationalError(error)), \
          patch.object(explore_pipeline, "embed_explore_documents", create=True) as embed, \
          patch("app.pipeline.vector_store.embed_explore_documents") as real_embed:
         if raised:
@@ -609,31 +609,49 @@ def test_a_top_up_takes_documents_missing_or_changed_since_they_were_embedded(db
     def meta(d):
         return vector_store.explore_meta_hash(vector_store.explore_embed_dict(d))
 
-    hashes = {current.id: hashed(current), changed.id: "its old body's", textless.id: hashed(textless)}
-    metas = {current.id: "a chamber since corrected", changed.id: meta(changed), textless.id: meta(textless)}
-    with patch.object(explore_pipeline, "get_embedded_text_hashes", return_value=hashes), \
-         patch.object(explore_pipeline, "get_embedded_meta_hashes", return_value=metas):
+    held = {
+        current.id: (hashed(current), "a chamber since corrected"),
+        changed.id: ("its old body's", meta(changed)),
+        textless.id: (hashed(textless), meta(textless)),
+    }
+    with patch.object(explore_pipeline, "get_embedded_hashes", return_value=held):
         embed, relabel = explore_pipeline._top_up_plan(db_session)
-    assert [(doc["title"], digest) for doc, digest in embed] == [
-        ("Changed", hashed(changed)), ("Missing", hashed(missing))]
+    # Each with the hash it is written with and the one the index held.
+    assert [(doc["title"], digest, was) for doc, digest, was in embed] == [
+        ("Changed", hashed(changed), "its old body's"), ("Missing", hashed(missing), None)]
     # Metadata alone changed: written in place, not re-encoded.
     # The plan keeps only what the relabel writes, not the text it skips.
-    assert [(doc["id"], digest) for doc, digest in relabel] == [(current.id, meta(current))]
+    assert [(doc["id"], digest, was) for doc, digest, was in relabel] == [
+        (current.id, meta(current), "a chamber since corrected")]
     assert set(relabel[0][0]) == {"id", *vector_store._META_FIELDS}
 
 
 def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):
-    # A rebuild waited out wrote them with their current text: not twice.
+    # Only documents the index still holds as the plan found them: one a
+    # rebuild waited out wrote since was read from the database later than
+    # the plan — not embedded twice, nor put back to the plan's older text.
     from app.pipeline import explore_pipeline, vector_store
 
     doc = vector_store.explore_embed_dict(SimpleNamespace(
         id=5, title="t", summary="s", body="b", doc_type="Rule", source="FR", date="",
         politician_name="", politician_id="", chamber=""))
-    plan = [(doc, vector_store.explore_text_hash(doc))]
-    with patch.object(explore_pipeline, "get_embedded_text_hashes",
-                      return_value={5: vector_store.explore_text_hash(doc)}):
-        assert explore_pipeline._still_wanted(plan) == []
-    with patch.object(explore_pipeline, "get_embedded_text_hashes", return_value={}):
-        assert explore_pipeline._still_wanted(plan) == [{**doc, "_text_hash": plan[0][1]}]
+    current = vector_store.explore_text_hash(doc)
+    plan = [(doc, current, "old")]
+    for held, wanted in (
+        ({5: ("old", "m")}, [{**doc, "_text_hash": current}]),
+        ({5: (current, "m")}, []),
+        ({5: ("newer than the plan", "m")}, []),
+        ({}, []),
+    ):
+        with patch.object(explore_pipeline, "get_embedded_hashes", return_value=held):
+            assert explore_pipeline._still_wanted(plan) == wanted
+    never_embedded = [(doc, current, None)]
+    with patch.object(explore_pipeline, "get_embedded_hashes", return_value={}):
+        assert explore_pipeline._still_wanted(never_embedded) == [{**doc, "_text_hash": current}]
+    relabel = [({"id": 5}, "new meta", "old meta")]
+    for held, wanted in (({5: (current, "old meta")}, [{"id": 5}]),
+                         ({5: (current, "rebuilt meta")}, []), ({}, [])):
+        with patch.object(explore_pipeline, "get_embedded_hashes", return_value=held):
+            assert explore_pipeline._still_to_relabel(relabel) == wanted
 
 
