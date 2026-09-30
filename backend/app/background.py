@@ -80,7 +80,8 @@ def _unregister(token: int) -> None:
 @contextmanager
 def writing(name: str) -> Iterator[None]:
     """Registers the enclosed work as a database writer while it runs,
-    inside app.config.scoring_congress (one Congress for the work). Raises WritesHeld, before the work starts, while exclusive() is held."""
+    inside app.config.scoring_congress (one Congress for the work).
+    Raises WritesHeld, before the work starts, while exclusive() is held."""
     from app.config import scoring_congress
 
     token = _register(name)
