@@ -6,22 +6,7 @@ for assembled senator records before they're persisted.
 
 import pytest
 
-from app.pipeline.assemble.validator import validate_senator, clamp
-
-
-class TestClamp:
-    """validator.clamp is its own function, not score_calculator.clamp
-    (test_score_calculator.py covers that one)."""
-
-    @pytest.mark.parametrize("args, expected", [
-        pytest.param((50.3,), 50, id="within_range"),
-        pytest.param((-10.0,), 0, id="below_min"),
-        pytest.param((150.0,), 100, id="above_max"),
-        pytest.param((200.0, 0, 1000), 200, id="custom_range_within"),
-        pytest.param((-5.0, 0, 1000), 0, id="custom_range_below"),
-    ])
-    def test_clamp(self, args, expected):
-        assert clamp(*args) == expected
+from app.pipeline.assemble.validator import validate_senator
 
 
 def _make_senator(**overrides):

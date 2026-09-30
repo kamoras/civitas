@@ -7,6 +7,7 @@ import pytest
 
 from app.models import Senator
 from app.pipeline.analyze import score_calculator
+from app.pipeline.analyze.score_bounds import clamp
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
     _calc_constituent_alignment,
@@ -22,22 +23,37 @@ from app.pipeline.analyze.score_calculator import (
     _les_stage_counts,
     _les_significance_weight,
     calculate_scores,
-    clamp,
     compute_les_reference,
     compute_overall_score,
 )
 
 
 class TestClamp:
-    @pytest.mark.parametrize("value, expected", [
-        pytest.param(50.3, 50, id="within_range_rounds"),
-        pytest.param(-10.0, 0, id="below_min"),
-        pytest.param(150.0, 100, id="above_max"),
-        pytest.param(0.0, 0, id="exact_lower_boundary"),
-        pytest.param(100.0, 100, id="exact_upper_boundary"),
+    """The one clamp, shared by scoring, the validator and the president
+    scorer (each used to carry its own copy)."""
+
+    def test_is_shared(self):
+        from app.pipeline.analyze import president_scorer
+        from app.pipeline.assemble import validator
+
+        assert score_calculator.clamp is clamp
+        assert validator.clamp is clamp
+        assert president_scorer.clamp is clamp
+
+    @pytest.mark.parametrize("args, expected", [
+        pytest.param((50.3,), 50, id="within_range_rounds"),
+        pytest.param((-10.0,), 0, id="below_min"),
+        pytest.param((150.0,), 100, id="above_max"),
+        pytest.param((0.0,), 0, id="exact_lower_boundary"),
+        pytest.param((100.0,), 100, id="exact_upper_boundary"),
+        # Python's round(), not round-half-up.
+        pytest.param((50.5,), 50, id="rounds_half_to_even_down"),
+        pytest.param((51.5,), 52, id="rounds_half_to_even_up"),
+        pytest.param((200.0, 0, 1000), 200, id="custom_range_within"),
+        pytest.param((-5.0, 0, 1000), 0, id="custom_range_below"),
     ])
-    def test_clamp(self, value, expected):
-        assert clamp(value) == expected
+    def test_clamp(self, args, expected):
+        assert clamp(*args) == expected
 
 
 class TestFundingIndependence:
