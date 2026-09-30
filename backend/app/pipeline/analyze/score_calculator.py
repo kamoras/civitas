@@ -181,6 +181,7 @@ from app.config_definitions import (
     SATURATION_QUANTILE,
 )
 from app.models import PromiseAlignment
+from app.pipeline.analyze.score_bounds import clamp
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
     FUNDING_REFERENCE,
@@ -502,11 +503,6 @@ def _state_population() -> dict[str, float]:
             logger.warning("state_population.json unavailable — small-donor baseline will use the national mean for every state")
             _state_population_cache = {}
     return _state_population_cache
-
-
-def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
-    """Clamp a value to [min_val, max_val] and round to int."""
-    return max(min_val, min(max_val, round(value)))
 
 
 _district_pvi_cache: dict[str, int] | None = None

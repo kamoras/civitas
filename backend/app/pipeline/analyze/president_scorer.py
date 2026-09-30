@@ -46,7 +46,7 @@ import math
 import statistics
 
 from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
-from app.pipeline.analyze.score_calculator import clamp
+from app.pipeline.analyze.score_bounds import clamp
 
 logger = logging.getLogger(__name__)
 

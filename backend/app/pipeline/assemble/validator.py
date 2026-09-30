@@ -1,13 +1,13 @@
 """
 Validator — validates and fixes a senator record to match the Senator type.
-Ports all validation rules and valid sets. ``clamp`` is the scoring
-engine's own (score_calculator), so validation and scoring bound identically.
+Ports all validation rules and valid sets. ``clamp`` is the one the
+scoring engine uses (score_bounds), so validation and scoring bound identically.
 """
 
 import logging
 
 from app.config_definitions import VALID_INDUSTRIES
-from app.pipeline.analyze.score_calculator import clamp
+from app.pipeline.analyze.score_bounds import clamp
 
 logger = logging.getLogger(__name__)
 
