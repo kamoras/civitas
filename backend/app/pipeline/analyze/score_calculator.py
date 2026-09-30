@@ -181,12 +181,12 @@ from app.config_definitions import (
     SATURATION_QUANTILE,
 )
 from app.models import PromiseAlignment
-from app.pipeline.analyze.score_bounds import clamp
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
     FUNDING_REFERENCE,
     LES_REFERENCE,
 )
+from app.pipeline.analyze.score_bounds import clamp
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
