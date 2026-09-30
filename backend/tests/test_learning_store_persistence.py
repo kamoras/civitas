@@ -143,6 +143,25 @@ class TestNormalizedSource:
         }
         assert importers == {"pipeline/fetch/lda.py"}
 
+    def test_the_explore_summary_prompt_is_read_by_no_pipeline_code(self):
+        """Exempt because only the Explore summary service reads it: a
+        pipeline import would make its edits changes the hash misses."""
+        import ast
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        assert "pipeline/analyze/prompts.py" in senate_pipeline._NOT_ANALYSIS_PATHS
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        for py in [*(app_dir / "pipeline").rglob("*.py"), app_dir / "config_definitions.py"]:
+            for node in ast.walk(ast.parse(py.read_text())):
+                if isinstance(node, ast.ImportFrom):
+                    assert node.module != "app.pipeline.analyze.prompts", py
+                    if node.module == "app.pipeline.analyze":
+                        assert all(a.name != "prompts" for a in node.names), py
+                elif isinstance(node, ast.Import):
+                    assert all(a.name != "app.pipeline.analyze.prompts" for a in node.names), py
+
     def test_exempt_coordination_modules_import_no_analysis_code(self):
         """Exempt because they classify and score nothing: an import of
         analysis code (or config_definitions, its constants) would mean an

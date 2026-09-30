@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { pageMetadata } from "@/lib/site";
+import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { ISO_DATE, fetchDay } from "@/lib/congressServer";
 import { longDate } from "@/lib/congress";
 import DayReportView from "@/components/congress/DayReportView";
@@ -19,11 +19,15 @@ export async function generateMetadata({
       noindex: true,
     });
   const report = await fetchDay(date);
+  const title = `Congress on ${longDate(date)}`;
   return pageMetadata({
-    title: `Congress on ${longDate(date)}`,
+    title,
     description: report?.sentence ?? `What the Senate and the House did on ${longDate(date)}.`,
     path: `/congress/${date}`,
     type: "article",
+    images: [
+      { url: absoluteUrl(`/api/og?congress=${date}`), width: 1200, height: 630, alt: title },
+    ],
   });
 }
 

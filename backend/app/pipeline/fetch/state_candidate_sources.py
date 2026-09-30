@@ -17,14 +17,16 @@ nobody has written up yet, so an automatic find can add a state but can
 never quietly override a checked one.
 """
 
-import json
 import logging
 import os
 from typing import Any
 
 from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
+from app.file_cache import Stamp, load_json_once, read_json_preferring, reload_if_moved, new_reload_lock
 
 logger = logging.getLogger(__name__)
+
+_discovered_reload_lock = new_reload_lock()
 
 _BUNDLED_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "data", "state_candidate_sources.json")
@@ -42,50 +44,40 @@ _FILINGS_KEYS = ("filings",)
 
 _cache: dict[str, Any] | None = None
 _discovered_cache: dict[str, Any] | None = None
+_discovered_stamp: Stamp = None
 
 
 def _load() -> dict[str, Any]:
     global _cache
-    if _cache is not None:
-        return _cache
-    for path in (_VOLUME_PATH, _BUNDLED_PATH):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                _cache = json.load(fh)
-                return _cache
-        except FileNotFoundError:
-            continue
-        except Exception:
-            logger.exception("Failed to read state candidate sources file %s", path)
-    _cache = {}
-    return _cache
+    # file_cache.load_json_once: a volume copy unreadable for a moment is
+    # served from the bundled one this once, not kept for the process's life.
+    data, _cache = load_json_once(_cache, _VOLUME_PATH, _BUNDLED_PATH)
+    return data
 
 
 def _discovered_path() -> str:
     return _DISCOVERED_PATH or runtime_data_path(_DISCOVERED_FILE)
 
 
+def _read_discovered(path: str) -> dict[str, Any]:
+    # file_cache.read_json_preferring: unreadable is not empty — returned
+    # this once and retried, never kept. (Writes re-read the file under
+    # their lock, so it can never be written back as the whole file.)
+    data = read_json_preferring(path, default={})
+    return data if isinstance(data, dict) else {}
+
+
 def _load_discovered() -> dict[str, Any]:
-    global _discovered_cache
-    if _discovered_cache is not None:
-        return _discovered_cache
+    global _discovered_cache, _discovered_stamp
     path = _discovered_path()
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except FileNotFoundError:
-        data = {}
-    except ValueError:
-        logger.exception("Discovered sources file %s is not valid JSON", path)
-        data = {}
-    except OSError:
-        # Not cached: unreadable is not empty, and the next read retries.
-        # (Writes re-read the file under their lock, so this can never be
-        # written back as the whole file.)
-        logger.exception("Failed to read discovered sources file %s", path)
-        return {}
-    _discovered_cache = data if isinstance(data, dict) else {}
-    return _discovered_cache
+    # The election pipeline (the pipeline process) writes the file; the API
+    # processes read it here and reload when its mtime moves
+    # (file_cache.reload_if_moved) — invalidate_cache() reaches only its caller.
+    with _discovered_reload_lock:
+        _discovered_cache, _discovered_stamp = reload_if_moved(
+            [path], _discovered_cache, _discovered_stamp, lambda: _read_discovered(path),
+        )
+        return _discovered_cache
 
 
 def _update_discovered(change) -> None:
@@ -95,7 +87,11 @@ def _update_discovered(change) -> None:
     global _discovered_cache
     path = _discovered_path()
     try:
-        _discovered_cache = update_json_file(path, change, indent=2, sort_keys=True)
+        update_json_file(path, change, indent=2, sort_keys=True)
+        # Re-read on next use rather than stamp what was written: a stat
+        # taken after the write could already describe a later writer's
+        # file, and would pin this older copy until the next change.
+        _discovered_cache = None
     except (OSError, LockTimeout) as error:
         raise NotSaved(f"discovered sources not saved to {path}: {error}") from error
 

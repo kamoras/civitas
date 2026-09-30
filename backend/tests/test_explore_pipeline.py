@@ -9,12 +9,13 @@ audit: 1,758 exact-duplicate rows, 31% of the table).
 """
 
 import asyncio
+from types import SimpleNamespace
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -29,6 +30,15 @@ from app.pipeline.explore_pipeline import (
 
 _BACKEND_ROOT = str(Path(__file__).resolve().parent.parent)
 
+
+
+@pytest.fixture(autouse=True)
+def _no_real_vector_store(monkeypatch):
+    """What the run reads from the vector store, stubbed empty: tests that
+    drive the real run_explore_pipeline mustn't depend on a store on disk.
+    A test that needs other answers patches over these."""
+    monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: set())
+    monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", lambda: {})
 
 class TestStableHash:
     def test_same_input_same_output(self):
@@ -201,7 +211,7 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
 
         embed_started = asyncio.Event()
 
-        def blocking_embed(_docs):
+        def blocking_embed(*_args):
             loop.call_soon_threadsafe(embed_started.set)
             time.sleep(0.4)  # stands in for the real 23-minute encode
             return 0
@@ -219,7 +229,9 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
                    new_callable=AsyncMock, return_value=[]), \
              patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking",
                    new_callable=AsyncMock, return_value=[]), \
-             patch("app.pipeline.explore_pipeline.embed_explore_documents", blocking_embed), \
+             patch("app.pipeline.explore_pipeline.top_up_explore_index", blocking_embed), \
+             patch("app.pipeline.explore_pipeline._top_up_plan", return_value=([], [])), \
+             patch("app.pipeline.explore_pipeline.index_is_whole", return_value=True), \
              patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
              patch("app.pipeline.explore_pipeline.update_document_authority",
                    return_value={"documents": 0, "cited": 0}), \
@@ -238,6 +250,34 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
             "embed step ran — it is blocking the loop, which is what got the "
             "container healthcheck-killed (exit 137) in production"
         )
+
+
+@pytest.mark.asyncio
+async def test_an_incomplete_index_is_rebuilt_whole_in_the_run_not_topped_up(db_session):
+    # Topped up, it would still not be a complete build — and a background
+    # rebuild started after would throw the top-up away and leave the
+    # calibration below measuring an empty semantic channel.
+    empty = AsyncMock(return_value={})
+    rebuild = MagicMock(return_value=3)
+    embed = MagicMock(return_value=0)
+    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
+         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
+               new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.index_is_whole", return_value=False), \
+         patch("app.pipeline.explore_pipeline.rebuild_explore_index", rebuild), \
+         patch("app.pipeline.explore_pipeline.top_up_explore_index", embed), \
+         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
+         patch("app.pipeline.explore_pipeline.update_document_authority",
+               return_value={"documents": 0, "cited": 0}), \
+         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
+         patch("app.pipeline.explore_pipeline.api_cache_set"):
+        await run_explore_pipeline(days_back=1)
+    rebuild.assert_called_once()
+    embed.assert_not_called()
 
 
 def _floor_doc(doc_id: int, ext_id: str, body: str) -> ExploreDocument:
@@ -382,3 +422,273 @@ class TestOrphanedVectorPurge:
 
         assert explore_pipeline._purge_orphaned_vectors(db_session) == 0
         assert called == [], "must not delete anything when the index is unreadable"
+
+
+    @pytest.mark.parametrize("error,raised", [("database is locked", False), ("disk I/O error", True)])
+    def test_a_locked_delete_is_left_to_the_next_run(self, db_session, monkeypatch, error, raised):
+        import sqlite3
+
+        monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: {9})
+        monkeypatch.setattr(
+            explore_pipeline, "delete_explore_vectors",
+            MagicMock(side_effect=sqlite3.OperationalError(error)))
+        if raised:
+            with pytest.raises(sqlite3.OperationalError):
+                explore_pipeline._purge_orphaned_vectors(db_session)
+        else:
+            assert explore_pipeline._purge_orphaned_vectors(db_session) == 0
+
+@pytest.mark.asyncio
+async def test_a_run_that_waited_out_a_rebuild_purges_again_and_resolves_the_alert(db_session):
+    # The start's rebuild reads by id without this run's lease: a document
+    # the run deleted may have been embedded after the first purge. And the
+    # index it leaves whole ends a failed rebuild's alert.
+    empty = AsyncMock(return_value={})
+    purge = MagicMock(return_value=0)
+    resolve = MagicMock()
+    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
+         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
+               new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.index_is_whole", side_effect=[False, True]), \
+         patch("app.pipeline.explore_pipeline.rebuild_explore_index", return_value=None), \
+         patch("app.pipeline.explore_pipeline.top_up_explore_index", return_value=0), \
+         patch("app.pipeline.explore_pipeline._purge_orphaned_vectors", purge), \
+         patch("app.ops_alerts.resolve_ops_alert", resolve), \
+         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
+         patch("app.pipeline.explore_pipeline.update_document_authority",
+               return_value={"documents": 0, "cited": 0}), \
+         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
+         patch("app.pipeline.explore_pipeline.api_cache_set"):
+        await run_explore_pipeline(days_back=1)
+    assert purge.call_count == 2
+    resolve.assert_called_once_with("explore-index-rebuild")
+
+
+@pytest.mark.asyncio
+async def test_a_run_facing_a_locked_index_neither_rebuilds_nor_tops_it_up(db_session):
+    # It may well be whole (no reason to drop it), and it may not be (a
+    # top-up beside a rebuild inserts chunks twice); nor does a look that
+    # never answered resolve a failed rebuild's alert.
+    import sqlite3
+
+    empty = AsyncMock(return_value={})
+    rebuild, embed, resolve = MagicMock(), MagicMock(return_value=0), MagicMock()
+    with patch("app.pipeline.explore_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.explore_pipeline.fetch_floor_remarks", empty), \
+         patch("app.pipeline.explore_pipeline.fetch_house_floor_remarks", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_recent_presidential_actions",
+               new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_scotus_cases", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking", new_callable=AsyncMock, return_value=[]), \
+         patch("app.pipeline.explore_pipeline.index_is_whole",
+               side_effect=sqlite3.OperationalError("database is locked")), \
+         patch("app.pipeline.explore_pipeline.rebuild_explore_index", rebuild), \
+         patch("app.pipeline.explore_pipeline.top_up_explore_index", embed), \
+         patch("app.pipeline.explore_pipeline._purge_orphaned_vectors", return_value=0), \
+         patch("app.ops_alerts.resolve_ops_alert", resolve), \
+         patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
+         patch("app.pipeline.explore_pipeline.update_document_authority",
+               return_value={"documents": 0, "cited": 0}), \
+         patch("app.pipeline.explore_pipeline.calibrate_and_store", return_value={}), \
+         patch("app.pipeline.explore_pipeline.api_cache_set"):
+        await run_explore_pipeline(days_back=1)
+    rebuild.assert_not_called()
+    embed.assert_not_called()
+    resolve.assert_not_called()
+
+
+def test_ranking_calibration_is_kept_while_the_vector_index_is_not_whole(db_session):
+    # Measured against a semantic channel answering nothing, the priors come
+    # out as if the channels agreed perfectly.
+    from app.pipeline import explore_ranking
+
+    with patch("app.pipeline.vector_store.index_is_whole", return_value=False), \
+         patch("app.pipeline.calibrate_ranking.compute_calibration", side_effect=AssertionError("measured")):
+        assert explore_ranking.calibrate_and_store(db_session) is None
+
+
+def test_a_busy_vector_index_keeps_the_calibration_without_calling_it_a_failure(db_session, caplog):
+    import sqlite3
+
+    from app.pipeline import explore_ranking
+
+    with patch("app.pipeline.vector_store.index_is_whole",
+               side_effect=sqlite3.OperationalError("database is locked")), \
+         patch("app.pipeline.calibrate_ranking.compute_calibration", side_effect=AssertionError("measured")):
+        assert explore_ranking.calibrate_and_store(db_session) is None
+    assert "calibration failed" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error,alerted", [
+    ("database is locked", False),  # a lock: the next run tries, no page
+    ("no such module: vec0", True),  # a real failure
+])
+async def test_a_rebuild_that_raises_alerts_only_on_a_real_failure(
+    db_session, error, alerted,
+):
+    import sqlite3
+
+    from app.pipeline import explore_pipeline
+
+    alert, resolve = MagicMock(), MagicMock()
+    with patch.object(explore_pipeline, "index_is_whole", return_value=False), \
+         patch.object(explore_pipeline, "rebuild_explore_index", side_effect=sqlite3.OperationalError(error)), \
+         patch.object(explore_pipeline, "top_up_explore_index") as top_up, \
+         patch("app.ops_alerts.send_ops_alert", alert), \
+         patch("app.ops_alerts.resolve_ops_alert", resolve):
+        assert await explore_pipeline._embed_step(db_session) == 0
+    assert alert.called is alerted
+    resolve.assert_not_called()
+    top_up.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_rebuild_that_completes_resolves_the_alert(db_session):
+    from app.pipeline import explore_pipeline
+
+    resolve = MagicMock()
+    with patch.object(explore_pipeline, "index_is_whole", return_value=False), \
+         patch.object(explore_pipeline, "rebuild_explore_index", return_value=0), \
+         patch("app.ops_alerts.resolve_ops_alert", resolve):
+        # Even an empty corpus: the rebuild completed, whatever it held.
+        assert await explore_pipeline._embed_step(db_session) == 0
+    resolve.assert_called_once_with("explore-index-rebuild")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error,raised", [("database is locked", False), ("disk I/O error", True)])
+async def test_a_top_up_whose_read_of_the_index_fails_embeds_nothing(db_session, error, raised):
+    # Its reading of what is embedded too: unreadable must not read as
+    # empty and re-encode the whole corpus.
+    import sqlite3
+
+    from app.pipeline import explore_pipeline
+
+    with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
+         patch.object(explore_pipeline, "get_embedded_hashes", side_effect=sqlite3.OperationalError(error)), \
+         patch.object(explore_pipeline, "embed_explore_documents", create=True) as embed, \
+         patch("app.pipeline.vector_store.embed_explore_documents") as real_embed:
+        if raised:
+            with pytest.raises(sqlite3.OperationalError):
+                await explore_pipeline._embed_step(db_session)
+        else:
+            assert await explore_pipeline._embed_step(db_session) == 0
+    embed.assert_not_called()
+    real_embed.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_lock_after_the_rebuilds_swap_is_a_failure_not_a_skip(db_session):
+    # The index is gone by then: no alert, and a log saying "busy", would
+    # leave a partial index unreported until the next run.
+    import sqlite3
+
+    from app.pipeline import explore_pipeline, vector_store
+
+    def failing(*_a, **_k):
+        raise vector_store.RebuildFailed("after the swap") from sqlite3.OperationalError("database is locked")
+
+    alert = MagicMock()
+    with patch.object(explore_pipeline, "index_is_whole", return_value=False), \
+         patch.object(explore_pipeline, "rebuild_explore_index", failing), \
+         patch.object(explore_pipeline, "alert_rebuild_failed", alert):
+        assert await explore_pipeline._embed_step(db_session) == 0
+    alert.assert_called_once()
+
+
+def test_a_top_up_takes_documents_missing_or_changed_since_they_were_embedded(db_session):
+    # By each document's text hash, not by who changed it: a body backfilled
+    # or re-ingested in place is stale whichever path wrote it; one with no
+    # text, its hash recorded, is handled.
+    from app.pipeline import explore_pipeline, vector_store
+
+    docs = []
+    for title, body in (("Current", "b"), ("Changed", "b"), ("Missing", "b"), ("", "")):
+        d = ExploreDocument(doc_type="Executive Order", source="Federal Register", title=title,
+                            summary="" if not title else "s", body=body, date="2026-07-01")
+        db_session.add(d)
+        docs.append(d)
+    db_session.commit()
+    current, changed, missing, textless = docs
+
+    def hashed(d):
+        return vector_store.explore_text_hash(vector_store.explore_embed_dict(d))
+
+    def meta(d):
+        return vector_store.explore_meta_hash(vector_store.explore_embed_dict(d))
+
+    held = {
+        current.id: (hashed(current), "a chamber since corrected"),
+        changed.id: ("its old body's", meta(changed)),
+        textless.id: (hashed(textless), meta(textless)),
+    }
+    with patch.object(explore_pipeline, "get_embedded_hashes", return_value=held):
+        embed, relabel = explore_pipeline._top_up_plan(db_session)
+    # Each with the hash it is written with and the one the index held.
+    assert [(doc["title"], digest, was) for doc, digest, was in embed] == [
+        ("Changed", hashed(changed), "its old body's"), ("Missing", hashed(missing), None)]
+    # Metadata alone changed: written in place, not re-encoded.
+    # The plan keeps only what the relabel writes, not the text it skips.
+    assert [(doc["id"], digest, was) for doc, digest, was in relabel] == [
+        (current.id, meta(current), "a chamber since corrected")]
+    assert set(relabel[0][0]) == {"id", *vector_store._META_FIELDS}
+
+
+def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):
+    # Only documents the index still holds as the plan found them: one a
+    # rebuild waited out wrote since was read from the database later than
+    # the plan — not embedded twice, nor put back to the plan's older text.
+    from app.pipeline import explore_pipeline, vector_store
+
+    doc = vector_store.explore_embed_dict(SimpleNamespace(
+        id=5, title="t", summary="s", body="b", doc_type="Rule", source="FR", date="",
+        politician_name="", politician_id="", chamber=""))
+    current = vector_store.explore_text_hash(doc)
+    plan = [(doc, current, "old")]
+    for held, wanted in (
+        ({5: ("old", "m")}, [{**doc, "_text_hash": current}]),
+        ({5: (current, "m")}, []),
+        ({5: ("newer than the plan", "m")}, []),
+        ({}, []),
+    ):
+        assert explore_pipeline._still_wanted(plan, held) == wanted
+    assert explore_pipeline._still_wanted([(doc, current, None)], {}) == [{**doc, "_text_hash": current}]
+    relabel = [({"id": 5}, "new meta", "old meta")]
+    for held, wanted in (({5: (current, "old meta")}, [{"id": 5}]),
+                         ({5: (current, "rebuilt meta")}, []), ({}, [])):
+        assert explore_pipeline._still_to_relabel(relabel, held) == wanted
+
+
+@pytest.mark.asyncio
+async def test_both_rechecks_share_one_read_under_the_lock(db_session):
+    from app.pipeline import explore_pipeline
+
+    reads = MagicMock(return_value={})
+    with patch.object(explore_pipeline, "_top_up_plan", return_value=([], [])), \
+         patch.object(explore_pipeline, "get_embedded_hashes", reads), \
+         patch.object(explore_pipeline, "top_up_explore_index",
+                      lambda embed, relabel: (embed(), relabel(), 0)[-1]):
+        await explore_pipeline._top_up(db_session)
+    reads.assert_called_once()
+
+
+
+
+@pytest.mark.asyncio
+async def test_a_locked_top_up_on_a_whole_index_still_ends_the_rebuild_alert(db_session):
+    # Whole all the same (read so, or a start's rebuild waited out): the
+    # rebuild-failed alert describes an index that no longer exists.
+    import sqlite3
+
+    from app.pipeline import explore_pipeline
+
+    with patch.object(explore_pipeline, "index_is_whole", return_value=True), \
+         patch.object(explore_pipeline, "_top_up", side_effect=sqlite3.OperationalError("database is locked")), \
+         patch("app.ops_alerts.resolve_ops_alert") as resolve:
+        assert await explore_pipeline._embed_step(db_session) == 0
+    resolve.assert_called_once_with("explore-index-rebuild")

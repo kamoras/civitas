@@ -51,13 +51,10 @@ def _answers(fail: set[str] = frozenset(), missing: bool = False):
 
 
 @pytest.fixture(autouse=True)
-def _fresh_limits():
-    """The route's per-IP window and upstream budget are process-wide."""
-    from app.api import rate_limit
-
-    rate_limit.reset_upstream_budget()
+def _fresh_limits(throttle_store):
+    """The route's per-IP window and upstream budget live in the throttle
+    store every API worker shares; a store per test starts them fresh."""
     yield
-    rate_limit.reset_upstream_budget()
 
 
 @pytest.fixture
@@ -155,11 +152,11 @@ def test_only_cache_misses_are_charged_before_anything_is_fetched(senate, monkey
     fake, calls = _answers()
     monkeypatch.setattr(br, "_congress_get", fake)
     charged = []
-    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=charged.append))
-    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=charged.append))
-    assert charged == [5, 0]
+    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=_charging(charged)))
+    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=_charging(charged)))
+    assert charged == [1, 4]  # the bill, then the rest; the cached call charges nothing
 
-    def refuse(n):
+    async def refuse(n):
         raise RuntimeError("budget spent")
     monkeypatch.setattr(br, "_congress_get", fake)
     n = len(calls)
@@ -216,6 +213,10 @@ class TestRoutes:
     def test_not_a_bill_id(self, client):
         assert client.get("/api/bills/PN.12/record").status_code == 404
 
+    def test_a_complete_record_is_cacheable(self, client):
+        r = client.get("/api/bills/S.4668/record?congress=119")
+        assert r.headers["Cache-Control"].startswith("public, max-age=")
+
     def test_a_congress_that_has_not_convened_is_refused(self, client):
         assert client.get("/api/bills/S.1/record?congress=200").status_code == 404
 
@@ -246,3 +247,67 @@ class TestRoutes:
 ])
 def test_display_name(person, name):
     assert br.display_name(person) == name
+
+
+async def test_parts_fetched_before_a_cancellation_are_still_cached(db_session, monkeypatch):
+    """The budget was spent on them: a reader who leaves mid-fetch mustn't
+    make the next one pay again."""
+    import asyncio
+
+    from app.services import bill_record
+
+    calls = []
+
+    async def congress_get(client, url):
+        calls.append(url)
+        if len(calls) == 2:
+            await asyncio.sleep(10)  # the reader leaves here
+        return {"bill": {"number": "1"}, "summaries": [], "actions": [], "cosponsors": [], "textVersions": []}
+
+    monkeypatch.setattr(bill_record, "_congress_get", congress_get)
+    written = []
+
+    async def write_many(db, tier, items, **kw):
+        written.append(dict(items))
+
+    monkeypatch.setattr(bill_record, "api_cache_set_many_async", write_many)
+    task = asyncio.create_task(bill_record.fetch_bill_record(None, db_session, 119, "S.4668"))
+    for _ in range(300):
+        if len(calls) >= 2 or task.done():
+            break
+        await asyncio.sleep(0.01)
+    assert len(calls) == 2
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    assert written and len(written[0]) == 1  # the first part, fetched before the cancel
+
+
+def test_a_wrong_id_is_charged_only_for_the_one_request_it_makes(senate, monkeypatch):
+    fake, calls = _answers(missing=True)
+    monkeypatch.setattr(br, "_congress_get", fake)
+    charged = []
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.99999", spend=_charging(charged)))
+    assert raw["not_found"] is True
+    assert charged == [1]
+
+
+def _charging(charged: list):
+    """An async spend callback (as rate_limit.spend_upstream is) recording
+    what it was charged."""
+    async def spend(n):
+        charged.append(n)
+    return spend
+
+
+def test_a_failed_bill_request_stops_there(senate, monkeypatch):
+    """An outage: the other four requests would fail the same way, and the
+    budget must not be charged for them."""
+    fake, calls = _answers(fail={"bill"})
+    monkeypatch.setattr(br, "_congress_get", fake)
+    charged = []
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=_charging(charged)))
+    assert len(calls) == 1 and charged == [1]
+    assert set(raw["unavailable"]) == {"bill", "summaries", "actions", "cosponsors", "text"}

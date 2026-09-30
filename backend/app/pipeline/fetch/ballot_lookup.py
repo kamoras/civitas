@@ -34,9 +34,12 @@ from typing import Any
 import httpx
 
 from app.atomic_write import write_text_atomic
+from app.file_cache import Stamp, read_json_preferring, reload_if_moved, new_reload_lock
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
+
+_reload_lock = new_reload_lock()
 
 _BUNDLED_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "data", "state_ballot_lookup.json")
@@ -46,27 +49,27 @@ _VOLUME_PATH = "/data/state_ballot_lookup.json"
 # writes — an accessor cached for the process lifetime without that
 # invalidation would serve the pre-verification copy until the container
 # restarted (the bug district_pvi.py's explicit cache reset exists to
-# avoid).
+# avoid). That clear only reaches the writer's own process; the API
+# processes, which serve lookup_for_state, reload when the volume copy's
+# mtime changes (file_cache.files_stamp).
 _cache: dict[str, Any] | None = None
+_cache_stamp: Stamp = None
 
 _LINK_CHECK_TIMEOUT_S = 10.0
 
 
+def _read() -> dict[str, Any]:
+    """The volume copy, else the bundled one (file_cache.read_json_preferring:
+    a volume copy that exists but can't be read right now falls back without
+    being kept)."""
+    return read_json_preferring(_VOLUME_PATH, _BUNDLED_PATH, default={})
+
+
 def _load() -> dict[str, Any]:
-    global _cache
-    if _cache is not None:
+    global _cache, _cache_stamp
+    with _reload_lock:
+        _cache, _cache_stamp = reload_if_moved([_VOLUME_PATH], _cache, _cache_stamp, _read)
         return _cache
-    for path in (_VOLUME_PATH, _BUNDLED_PATH):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                _cache = json.load(fh)
-                return _cache
-        except FileNotFoundError:
-            continue
-        except Exception:
-            logger.exception("Failed to read ballot lookup file %s", path)
-    _cache = {}
-    return _cache
 
 
 def invalidate_cache() -> None:

@@ -15,6 +15,8 @@ generated action-center summary for 26+ hours.
 import json
 from unittest.mock import patch
 
+import pytest
+
 from app.models import AnalysisCache
 from app.pipeline.analyze import ollama_client
 
@@ -262,6 +264,29 @@ class TestStreamLlamaServer:
         assert deltas == ["ok"]
 
 
+    async def test_a_generation_stopped_at_its_token_limit_says_it_was_cut_off(self):
+        lines = [
+            'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}',
+            'data: {"choices":[{"delta":{},"finish_reason":"length"}]}',
+            "data: [DONE]",
+        ]
+        deltas = []
+        with _patched_httpx(lines), pytest.raises(ollama_client.StreamCutOff):
+            async for d in ollama_client._stream_llama_server("sys", "prompt", 512, 4096, 120):
+                deltas.append(d)
+        assert deltas == ["partial"]
+
+    async def test_a_finished_generation_is_not_cut_off(self):
+        lines = [
+            'data: {"choices":[{"delta":{"content":"done"},"finish_reason":null}]}',
+            'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+            "data: [DONE]",
+        ]
+        with _patched_httpx(lines):
+            deltas = [d async for d in ollama_client._stream_llama_server("sys", "prompt", 512, 4096, 120)]
+        assert deltas == ["done"]
+
+
 class TestStreamOllama:
     async def test_yields_deltas_and_stops_at_done_true(self):
         lines = [
@@ -284,12 +309,12 @@ class TestStreamOllama:
             ]
         assert deltas == ["x"]
 
-    async def test_truncation_logs_warning_but_still_yields_partial_output(self, caplog):
+    async def test_truncation_yields_the_partial_output_then_says_it_was_cut_off(self, caplog):
         lines = ['{"response":"partial","done":true,"done_reason":"length"}']
-        with _patched_httpx(lines):
-            deltas = [
-                d async for d in ollama_client._stream_ollama("sys", "prompt", "some-model", 512, 4096, 120)
-            ]
+        deltas = []
+        with _patched_httpx(lines), pytest.raises(ollama_client.StreamCutOff):
+            async for d in ollama_client._stream_ollama("sys", "prompt", "some-model", 512, 4096, 120):
+                deltas.append(d)
         assert deltas == ["partial"]
         assert "truncated" in caplog.text
 
@@ -416,3 +441,4 @@ class TestHttpErrorLogsResponseBody:
 
         assert result is None
         assert any("could not read response body" in r.message for r in caplog.records)
+

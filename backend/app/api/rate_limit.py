@@ -1,21 +1,24 @@
-"""Shared per-IP rate limiting for mutation endpoints (POST/DELETE).
+"""Shared per-IP rate limiting for mutation endpoints (POST/DELETE), and
+for the public routes that spend the shared api.data.gov key.
 
 Separate from public.py's read-only limiter so write endpoints can use a
-tighter limit without coupling to the read-path code.
+tighter limit without coupling to the read-path code. Every limit here is
+counted in the throttle store every API worker process shares
+(api/throttle.py), so it holds per client — not per client per worker —
+and the hourly upstream budget holds for the whole backend.
 """
 
 import ipaddress
-import threading
-from collections import deque
-from time import time
+import math
+import time
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 
+from app.api import throttle
+
 _WRITE_LIMIT = 20        # requests
 _WRITE_PERIOD = 60.0     # per 60 seconds
-
-_EVICT_EVERY = 2000
 
 
 def _is_trusted_proxy_peer(peer: str | None) -> bool:
@@ -50,12 +53,10 @@ def client_ip(request: Request) -> str:
     sending a different fake value per request; taking the LAST hop (set
     by nginx from its own view of the peer) is the unspoofable choice.
 
-    Caveat: nginx has no `real_ip` module, so its $remote_addr — hence the
-    last XFF hop — is whatever connects to nginx. With an IP-preserving
-    external port-forward (DNAT) that is the true client; behind a
-    userspace/NAT forwarder it is that forwarder's address. Either way this
-    is strictly better than bucketing every request under nginx's overlay
-    IP, and never worse from a spoofing standpoint.
+    nginx sets that last hop from its $remote_addr, which its realip
+    configuration (nginx/civitas.conf: set_real_ip_from the host-level
+    nginx, real_ip_header X-Real-IP) resolves to the visitor; the internal
+    cache-miss hop passes the header on unchanged rather than adding itself.
     """
     peer = request.client.host if request.client else None
     if _is_trusted_proxy_peer(peer):
@@ -65,44 +66,41 @@ def client_ip(request: Request) -> str:
     return peer or "unknown"
 
 
-class _PerIpWindow:
-    """A sliding window of request times per client IP."""
-
-    def __init__(self, limit: int, period: float, what: str):
-        self.limit, self.period, self.what = limit, period, what
-        self.lock = threading.Lock()
-        self.window: dict[str, deque] = {}
-        self._count = 0
-
-    def check(self, request: Request) -> None:
-        ip = client_ip(request)
-        now = time()
-        cutoff = now - self.period
-        with self.lock:
-            dq = self.window.setdefault(ip, deque())
-            while dq and dq[0] < cutoff:
-                dq.popleft()
-            if len(dq) >= self.limit:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Rate limit exceeded — {self.limit} {self.what} per minute per IP.",
-                    headers={"Retry-After": str(int(self.period))},
-                )
-            dq.append(now)
-            self._count += 1
-            if self._count >= _EVICT_EVERY:
-                self._count = 0
-                for k in [k for k, v in self.window.items() if not v or v[-1] < cutoff]:
-                    del self.window[k]
+def retry_after(reset_at: int) -> str:
+    """Retry-After, in whole seconds, for a refusal that lifts at `reset_at`."""
+    return str(max(1, math.ceil(reset_at - time.time())))
 
 
-_write_limiter = _PerIpWindow(_WRITE_LIMIT, _WRITE_PERIOD, "requests")
-_window = _write_limiter.window  # the write limiter's state (tests clear it)
+def limit_client(ip: str, bucket: str, *, limit: int, period: float) -> throttle.Decision:
+    """Key `ip` for `bucket` and count it, in one call — so a limited
+    request costs one thread hop, not one for the key and one for the count."""
+    return throttle.hit(bucket, throttle.client_key(ip, bucket), limit=limit, period=period)
 
 
-def write_rate_limit(request: Request) -> None:
+class _PerClientLimit:
+    """At most `limit` requests per `period` seconds per client."""
+
+    def __init__(self, bucket: str, limit: int, period: float, what: str):
+        self.bucket, self.limit, self.period, self.what = bucket, limit, period, what
+
+    async def check(self, request: Request) -> None:
+        decision = await throttle.run(
+            limit_client, client_ip(request), self.bucket, limit=self.limit, period=self.period,
+        )
+        if not decision.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded — {self.limit} {self.what} per minute per IP.",
+                headers={"Retry-After": retry_after(decision.reset_at)},
+            )
+
+
+_write_limiter = _PerClientLimit("write", _WRITE_LIMIT, _WRITE_PERIOD, "requests")
+
+
+async def write_rate_limit(request: Request) -> None:
     """FastAPI dependency: 20 mutation requests/minute per IP."""
-    _write_limiter.check(request)
+    await _write_limiter.check(request)
 
 
 WriteRateLimit = Annotated[None, Depends(write_rate_limit)]
@@ -121,40 +119,40 @@ WriteRateLimit = Annotated[None, Depends(write_rate_limit)]
 # they answer 503 with Retry-After while cached answers keep serving.
 _UPSTREAM_ROUTE_LIMIT = 10          # requests per minute per IP
 _UPSTREAM_CALLS_PER_HOUR = 200      # upstream calls, all public routes together
-_upstream_route_limiter = _PerIpWindow(_UPSTREAM_ROUTE_LIMIT, 60.0, "lookups")
-_upstream_lock = threading.Lock()
-_upstream_calls: deque = deque()
+_UPSTREAM_BUCKET = "upstream-budget"
+_upstream_route_limiter = _PerClientLimit("upstream-lookups", _UPSTREAM_ROUTE_LIMIT, 60.0, "lookups")
 
 
-def upstream_route_limit(request: Request) -> None:
+async def upstream_route_limit(request: Request) -> None:
     """FastAPI dependency for routes that may fetch upstream."""
-    _upstream_route_limiter.check(request)
+    await _upstream_route_limiter.check(request)
 
 
 UpstreamRouteLimit = Annotated[None, Depends(upstream_route_limit)]
 
 
-def spend_upstream(calls: int) -> None:
+async def spend_upstream(calls: int) -> None:
     """Charge `calls` upstream requests to this hour's public budget, or
-    raise 503 when they don't fit. Call only for cache misses."""
+    raise 503 when they don't fit. Call only for cache misses.
+
+    One budget for the whole backend, in the shared throttle store: kept per
+    process, each API worker would spend its own full hour of the key. Async,
+    with the store's own threads inside (throttle.run): a charge is a write
+    to the store, and a caller handed a plain function could block the event
+    loop on it."""
     if calls <= 0:
         return
-    now = time()
-    with _upstream_lock:
-        while _upstream_calls and _upstream_calls[0] < now - 3600:
-            _upstream_calls.popleft()
-        if len(_upstream_calls) + calls > _UPSTREAM_CALLS_PER_HOUR:
-            raise HTTPException(
-                status_code=503,
-                detail="Live lookups are paused for a few minutes; try again shortly.",
-                headers={"Retry-After": "600"},
-            )
-        _upstream_calls.extend([now] * calls)
+    decision = await throttle.run(
+        throttle.hit, _UPSTREAM_BUCKET, "all", limit=_UPSTREAM_CALLS_PER_HOUR, period=3600.0, cost=calls,
+    )
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=503,
+            detail="Live lookups are paused for a few minutes; try again shortly.",
+            headers={"Retry-After": retry_after(decision.reset_at)},
+        )
 
 
 def reset_upstream_budget() -> None:
-    """For tests."""
-    with _upstream_lock:
-        _upstream_calls.clear()
-    with _upstream_route_limiter.lock:
-        _upstream_route_limiter.window.clear()
+    """For tests: clear the budget and the lookups limit."""
+    throttle.clear(_UPSTREAM_BUCKET, _upstream_route_limiter.bucket)

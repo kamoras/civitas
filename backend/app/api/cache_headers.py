@@ -59,9 +59,13 @@ CACHEABLE_PREFIXES = (
 # controls how often it happens.
 MAX_AGE_S = 300
 
-# A CDN may keep serving the old body this much longer while it fetches a
-# fresh one in the background.
-STALE_WHILE_REVALIDATE_S = 3600
+# A cache may keep serving the old body this much longer while it fetches a
+# fresh one in the background. nginx serves stale while refreshing only
+# within this (nginx/civitas.conf's /api/), so it is also how long a URL
+# that stopped being cacheable — a record deleted, a partial answer — can
+# keep its old copy there: no longer than the max-age, as cached_json's
+# routes set it.
+STALE_WHILE_REVALIDATE_S = MAX_AGE_S
 
 
 def _etag_for(body: bytes) -> str:
@@ -70,6 +74,10 @@ def _etag_for(body: bytes) -> str:
     # inside GZipMiddleware), so it claims equivalence of the
     # representation, not byte equality across encodings.
     return f'W/"{digest}"'
+
+
+# Headers that describe a body, which a 304 has none of.
+_BODY_HEADERS = {b"content-length", b"content-type", b"content-encoding", b"transfer-encoding"}
 
 
 def _is_cacheable_path(path: str) -> bool:
@@ -106,10 +114,19 @@ class ETagCacheMiddleware(BaseHTTPMiddleware):
             vary = f"{vary}, Accept-Encoding"
 
         if _if_none_match_matches(request.headers.get("if-none-match"), etag):
-            return Response(
-                status_code=304,
-                headers={"ETag": etag, "Cache-Control": cache_control, "Vary": vary},
-            )
+            # Everything the 200 would have carried but the body's own
+            # description: a client updates its stored copy's headers from
+            # a 304, so dropping CORS or the public API's X-RateLimit
+            # headers here would leave it holding stale ones.
+            not_modified = Response(status_code=304)
+            not_modified.raw_headers = [
+                (name, value) for name, value in response.raw_headers
+                if name.lower() not in _BODY_HEADERS
+            ]
+            not_modified.headers["ETag"] = etag
+            not_modified.headers["Cache-Control"] = cache_control
+            not_modified.headers["Vary"] = vary
+            return not_modified
 
         fresh = Response(content=body, status_code=200)
         fresh.raw_headers = list(response.raw_headers)

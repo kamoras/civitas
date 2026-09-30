@@ -150,10 +150,10 @@ def extract_json(text: str) -> Any | None:
     return None
 
 
-def _cache_get_with_own_session(version: str, input_hash: str) -> Any | None:
+def _cache_get_with_own_session(version: str, input_hash: str, *, raise_errors: bool = False) -> Any | None:
     db = SessionLocal()
     try:
-        return analysis_cache_get(db, version, input_hash)
+        return analysis_cache_get(db, version, input_hash, raise_db_errors=raise_errors)
     finally:
         db.close()
 
@@ -226,6 +226,12 @@ def _call_ollama(
     return data.get("response", "")
 
 
+class StreamCutOff(Exception):
+    """Raised by stream_llm after the last delta when the generation stopped
+    at its token limit rather than finishing: the text so far ends
+    mid-sentence."""
+
+
 async def _stream_llama_server(
     system_prompt: str,
     user_prompt: str,
@@ -261,9 +267,12 @@ async def _stream_llama_server(
                 if payload == "[DONE]":
                     break
                 chunk = json.loads(payload)
-                delta = chunk["choices"][0].get("delta", {}).get("content")
+                choice = chunk["choices"][0]
+                delta = choice.get("delta", {}).get("content")
                 if delta:
                     yield delta
+                if choice.get("finish_reason") == "length":
+                    raise StreamCutOff()
 
 
 async def _stream_ollama(
@@ -302,21 +311,29 @@ async def _stream_ollama(
                 if chunk.get("done"):
                     if chunk.get("done_reason") == "length":
                         logger.warning("Ollama output truncated (done_reason=length) for model %s", model)
+                        raise StreamCutOff()
                     break
 
 
-def get_cached_llm_result(prompt_version: str, cache_key: Any, model: str | None = None) -> Any | None:
+def get_cached_llm_result(
+    prompt_version: str, cache_key: Any, model: str | None = None, *, raise_errors: bool = False,
+) -> Any | None:
     """Public read side of call_llm's cache, for callers (stream_llm's
     users) that need to check/write the same cache rows without going
     through call_llm's own retry/JSON-extraction loop — streaming callers
     parse their own output and handle retries differently, since a retry
     after partial output is already visible to the user isn't a silent
-    do-over the way it is for a one-shot JSON call."""
+    do-over the way it is for a one-shot JSON call.
+
+    A read that fails is None ("not cached") unless `raise_errors`: for a
+    caller that would otherwise make again what may well be stored."""
     use_model = model or settings.OLLAMA_MODEL
     input_hash = _make_input_hash(prompt_version, cache_key, use_model)
     try:
-        return _cache_get_with_own_session(prompt_version, input_hash)
+        return _cache_get_with_own_session(prompt_version, input_hash, raise_errors=raise_errors)
     except Exception:
+        if raise_errors:
+            raise
         logger.debug("LLM cache lookup failed", exc_info=True)
         return None
 
@@ -347,6 +364,9 @@ async def stream_llm(
     partial response may already be visible to the user. call_llm above
     remains the right choice for every other caller — one-shot JSON
     output, cached, retried transparently.
+
+    Raises StreamCutOff after the last delta when the output stopped at
+    `max_tokens`.
     """
     use_model = model or settings.OLLAMA_MODEL
     http_timeout = min(

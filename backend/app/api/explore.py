@@ -1,19 +1,20 @@
 """Explore API — semantic search over government activity documents."""
 
-import asyncio
-import json
 import logging
-import time
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
-from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
-from app.database import get_db
+from app.api import throttle
+from app.api.rate_limit import (
+    UpstreamRouteLimit, WriteRateLimit, client_ip, limit_client, retry_after, spend_upstream,
+)
+from app.api.response_helpers import RETRY_SOON_CACHE_CONTROL, retry_soon_json
+from app.database import get_db, off_loop
 from app.models import ExploreDocument
 from app.services.explore_search import browse_documents, hybrid_search
 from app.time_utils import comment_period_today
@@ -90,19 +91,20 @@ async def search_explore(
         # not a search of it.
         if not politician_id:
             raise HTTPException(status_code=422, detail="q is required without politician_id")
-        outcome = await asyncio.to_thread(
-            browse_documents, db, politician_id, limit=limit, doc_type=doc_type,
+        outcome = await off_loop(db, lambda session: browse_documents(
+            session, politician_id, limit=limit, doc_type=doc_type,
             chamber=canonical_chamber, commentable=commentable,
-        )
+        ))
         return JSONResponse(
             content={"query": "", "results": outcome["results"], "count": outcome["count"],
                      "semanticUnavailable": False, "channels": outcome["channels"]},
             headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
         )
 
-    outcome = await asyncio.to_thread(
-        hybrid_search,
-        db,
+    # Off the loop on a session of its own (database.off_loop): the request's
+    # is closed under a thread still using it if the request is cancelled.
+    outcome = await off_loop(db, lambda session: hybrid_search(
+        session,
         q,
         limit=limit,
         doc_type=doc_type,
@@ -110,7 +112,7 @@ async def search_explore(
         politician_id=politician_id,
         commentable=commentable,
         sort=sort,
-    )
+    ))
 
     # indexReady is False only when neither channel could answer: the
     # semantic index is missing or mid-rebuild AND the keyword index
@@ -136,50 +138,52 @@ async def search_explore(
             "semanticUnavailable": outcome["semanticUnavailable"],
             "channels": outcome["channels"],
         },
-        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
+        # A partial answer (keyword channel only) is kept only as long as a
+        # failed fetch is (response_helpers.FAILURE_RETRY_S): the index is
+        # back within a rebuild, and a whole answer shouldn't wait out a
+        # success's lifetime behind it.
+        headers={"Cache-Control": (
+            RETRY_SOON_CACHE_CONTROL if outcome["semanticUnavailable"]
+            else "public, max-age=60, stale-while-revalidate=60"
+        )},
     )
+
+
+def _explore_counts(db: Session) -> tuple[int, dict[str, int], dict[str, int], int]:
+    """(total, by type, by chamber, open for comment), in one pass over the
+    table — on a worker thread (explore_stats' off_loop)."""
+    from sqlalchemy import case, func
+
+    open_now = case(
+        (
+            (ExploreDocument.comment_url.isnot(None))
+            & (ExploreDocument.comment_url != "")
+            & (ExploreDocument.comments_close_on >= comment_period_today()),
+            1,
+        ),
+        else_=0,
+    )
+    rows = (
+        db.query(ExploreDocument.doc_type, ExploreDocument.chamber, func.count(), func.sum(open_now))
+        .group_by(ExploreDocument.doc_type, ExploreDocument.chamber)
+        .all()
+    )
+    total = open_for_comment = 0
+    type_counts: dict[str, int] = {}
+    chamber_counts: dict[str, int] = {}
+    for doc_type, chamber, count, open_count in rows:
+        total += count
+        open_for_comment += open_count or 0
+        type_counts[doc_type] = type_counts.get(doc_type, 0) + count
+        if chamber:
+            chamber_counts[chamber] = chamber_counts.get(chamber, 0) + count
+    return total, type_counts, chamber_counts, open_for_comment
 
 
 @router.get("/stats")
 async def explore_stats(db: Session = Depends(get_db)):
     """Return counts of explore documents by type and chamber."""
-    total = db.query(ExploreDocument).count()
-
-    type_counts: dict[str, int] = {}
-    chamber_counts: dict[str, int] = {}
-
-    if total > 0:
-        from sqlalchemy import func
-        type_rows = (
-            db.query(ExploreDocument.doc_type, func.count())
-            .group_by(ExploreDocument.doc_type)
-            .all()
-        )
-        for doc_type, count in type_rows:
-            type_counts[doc_type] = count
-
-        chamber_rows = (
-            db.query(ExploreDocument.chamber, func.count())
-            .group_by(ExploreDocument.chamber)
-            .all()
-        )
-        for chamber, count in chamber_rows:
-            if chamber:
-                chamber_counts[chamber] = count
-
-    open_for_comment = 0
-    if total > 0:
-        today_str = comment_period_today()
-        open_for_comment = (
-            db.query(ExploreDocument)
-            .filter(
-                ExploreDocument.comment_url.isnot(None),
-                ExploreDocument.comment_url != "",
-                ExploreDocument.comments_close_on >= today_str,
-            )
-            .count()
-        )
-
+    total, type_counts, chamber_counts, open_for_comment = await off_loop(db, _explore_counts)
     return JSONResponse(
         content={
             "totalDocuments": total,
@@ -191,10 +195,22 @@ async def explore_stats(db: Session = Depends(get_db)):
     )
 
 
+async def _load_document(db: Session, doc_id: int) -> ExploreDocument | None:
+    """The document, read off the event loop on a session of its own
+    (off_loop) and detached from it, its columns loaded."""
+    def read(session):
+        doc = session.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+        if doc is not None:
+            session.expunge(doc)
+        return doc
+
+    return await off_loop(db, read)
+
+
 @router.get("/{doc_id}")
 async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
     """Return full details for a single explore document."""
-    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    doc = await _load_document(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -228,7 +244,7 @@ async def get_document_comments(
     db: Session = Depends(get_db),
 ):
     """Fetch public comments for a regulatory document from regulations.gov."""
-    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    doc = await _load_document(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -247,6 +263,14 @@ async def get_document_comments(
         db=db,
         spend=spend_upstream,
     )
+    # Fetched live: a retryable error (a rate limit, a timeout) is this
+    # moment's, not the document's, and no cache may keep it. A permanent
+    # one (no such document, a refused id) is the same answer next time,
+    # cached like a good one so a repeat spends nothing. Answered 200 either way — the page
+    # shows the message in place of the list.
+    if result.get("retryable"):
+        return retry_soon_json(result)
+    # Cached for the middleware's default lifetime (api/cache_headers.py).
     return JSONResponse(content=result)
 
 
@@ -279,7 +303,7 @@ async def post_document_comment(
     organization = submission.organization
     dry_run = submission.dry_run
 
-    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    doc = await _load_document(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -320,27 +344,61 @@ async def post_document_comment(
     return JSONResponse(content=result, status_code=status_code)
 
 
-_summary_timestamps: dict[int, float] = {}
-_SUMMARY_COOLDOWN = 30.0
-_SUMMARY_CACHE_KEY_VERSION = 4  # bump alongside explore_document_summary_prompt's promptVersion
+# Every summary request not served from the cache: a page waiting out a
+# generation asks every 10-60s, well inside this; a client looping on the
+# endpoint is held to one a second.
+_SUMMARY_REQUESTS_BUCKET = "explore-summary-requests"
+_SUMMARY_REQUESTS_PER_MINUTE = 60
+
+# A stream is read as it is written: nginx buffers proxied responses by
+# default, which would hold every delta until the generation ended.
+# X-Accel-Buffering is nginx's per-response off switch; no-cache keeps any
+# cache out of it.
+_STREAM_HEADERS = {"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
 
 
-def _sse(data: dict) -> str:
-    return f"data: {json.dumps(data)}\n\n"
+@router.get("/{doc_id}/cached-summary")
+async def get_cached_explore_summary(doc_id: int, db: Session = Depends(get_db)):
+    """A summary already made, served by the API (and nginx's cache) — a
+    read, so it never waits on the pipeline process that makes them: 200
+    with it, 204 when none has been made (the page then asks
+    `POST .../summary`, which the pipeline process streams), 404 for no such
+    document."""
+    from fastapi import Response
+
+    from app.services import explore_summary
+
+    doc = await _load_document(db, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        _prompt, _key, cached = await explore_summary.lookup(doc_id, doc)
+    except explore_summary.Refusal as refusal:
+        # Unreadable, not absent: never kept (an error has no Cache-Control
+        # nginx would store); the page goes on to ask the pipeline.
+        raise refusal.error() from None
+    if cached is None:
+        # Not made yet — and may be made any moment: never kept.
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+    # Kept briefly, and never served stale while refreshing (no
+    # stale-while-revalidate): this URL names the document, not the text
+    # summarised, so a document changed in place (a body backfilled, a data
+    # reset reusing its id) must stop being answered with the old text's
+    # summary soon.
+    return JSONResponse(content={"done": True, **cached}, headers={"Cache-Control": "public, max-age=30"})
 
 
 @router.post("/{doc_id}/summary")
 async def get_explore_document_summary(
     doc_id: int,
-    _rl: WriteRateLimit,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Stream an AI summary of a government document as it generates.
 
-    The per-doc cooldown below only stops repeated requests for the SAME
-    document — it doesn't stop a caller from fanning out across many
-    doc_ids to trigger unlimited LLM inference (2026-07 audit). The
-    per-IP WriteRateLimit dependency closes that gap.
+    Served by the pipeline process (nginx routes it there): the generation
+    is background work that outlives its request, and every reader of a
+    text shares one (services/explore_summary.py).
 
     Streams Server-Sent Events, each `data:` line a JSON object:
     {"delta": "<text chunk>"} while generating, then a final
@@ -348,65 +406,48 @@ async def get_explore_document_summary(
     once the full text is parsed (also what a cache hit returns
     immediately, as a single event, with no intermediate deltas).
     """
-    from app.pipeline.analyze.ollama_client import get_cached_llm_result, set_cached_llm_result, stream_llm
-    from app.pipeline.analyze.prompts import explore_document_summary_prompt, parse_explore_document_summary
+    from app.background import writers_allowed
+    from app.services import explore_summary
 
-    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
-    if not doc:
+    if not writers_allowed():
+        # nginx sends this route to the pipeline service; one that reached
+        # the read-only API anyway is refused rather than generated here —
+        # as a wait, like the pipeline being down, not a failure.
+        raise HTTPException(
+            status_code=503,
+            detail="Summaries are served by the pipeline service; please try again shortly.",
+            headers={"Retry-After": str(explore_summary.BUSY_RETRY_AFTER_S), **explore_summary.WAIT_OUT},
+        )
+
+    doc = await _load_document(db, doc_id)
+    if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        prompt, key, made = await explore_summary.lookup(doc_id, doc)
+    except explore_summary.Refusal as refusal:
+        raise refusal.error() from None
+    if made is not None:  # a summary already made is never limited
+        return StreamingResponse(explore_summary.once({"done": True, **made}), media_type="text/event-stream",
+                                 headers=_STREAM_HEADERS)
 
-    doc_dict = {
-        "title": doc.title,
-        "body": doc.body,
-        "doc_type": doc.doc_type,
-        "chamber": doc.chamber or "",
-        "politician_name": doc.politician_name or "",
-        "date": doc.date,
-    }
-    prompt = explore_document_summary_prompt(doc_dict)
-    cache_key = {"doc_id": doc_id, "v": _SUMMARY_CACHE_KEY_VERSION}
+    ip = client_ip(request)
 
-    # A stored summary is served before the cooldown is consulted: the
-    # cooldown bounds generation, and a reader who opened the document
-    # within 30 seconds of someone else (or reloaded it) used to get a 429,
-    # shown as "Analysis unavailable", with the summary already cached.
-    cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], cache_key)
-    if cached is not None:
-        return StreamingResponse(iter([_sse({"done": True, **cached})]), media_type="text/event-stream")
+    async def limit():
+        # A refused request isn't counted, so it is a wait too.
+        counted = await throttle.run(limit_client, ip, _SUMMARY_REQUESTS_BUCKET,
+                                     limit=_SUMMARY_REQUESTS_PER_MINUTE, period=60.0)
+        if not counted.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many summary requests; please try again shortly.",
+                headers={"Retry-After": retry_after(counted.reset_at), **explore_summary.WAIT_OUT},
+            )
 
-    now = time.monotonic()
-    last = _summary_timestamps.get(doc_id, 0)
-    if now - last < _SUMMARY_COOLDOWN:
-        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
-    _summary_timestamps[doc_id] = now
-
-    if len(_summary_timestamps) > 500:
-        cutoff = now - _SUMMARY_COOLDOWN * 2
-        for k in [k for k, ts in _summary_timestamps.items() if ts < cutoff]:
-            del _summary_timestamps[k]
-
-    async def event_stream():
-        full_text = ""
-        try:
-            async for delta in stream_llm(
-                system_prompt=prompt["systemPrompt"],
-                user_prompt=prompt["userPrompt"],
-                max_tokens=512,
-            ):
-                full_text += delta
-                yield _sse({"delta": delta})
-        except Exception:
-            logger.exception("Explore doc summary streaming failed for doc_id=%s", doc_id)
-            if not full_text:
-                yield _sse({"done": True, "summary": "", "keyPoints": [], "impact": ""})
-                return
-
-        parsed = parse_explore_document_summary(full_text)
-        if parsed["summary"]:
-            await asyncio.to_thread(set_cached_llm_result, prompt["promptVersion"], cache_key, parsed)
-        yield _sse({"done": True, **parsed})
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    try:
+        stream = await explore_summary.request(doc_id, prompt, key, ip, limit=limit)
+    except explore_summary.Refusal as refusal:
+        raise refusal.error() from None
+    return StreamingResponse(stream, media_type="text/event-stream", headers=_STREAM_HEADERS)
 
 
 @router.post("/pipeline/trigger")

@@ -52,10 +52,31 @@ describe("Explore document analysis", () => {
     expect(await screen.findByText("Analysis unavailable. Try again later.")).toBeInTheDocument();
   });
 
-  it("says another reader's analysis is being written on a 429", async () => {
+  it("says the analysis is unavailable when the request fails", async () => {
+    // A wait (another reader's generation, a busy model) is retried inside
+    // streamExploreDocumentSummary; what reaches the page is a failure.
     withDocument();
-    api.streamExploreDocumentSummary.mockRejectedValue(new Error("Summary failed: 429"));
+    api.streamExploreDocumentSummary.mockRejectedValue(new Error("Summary failed: 500"));
     render(<ExploreDetailPage />);
-    expect(await screen.findByText(/is being written/)).toBeInTheDocument();
+    expect(await screen.findByText("Analysis unavailable. Try again later.")).toBeInTheDocument();
+  });
+
+  it("says it is queued while waiting to be let in", async () => {
+    // A pulse alone for minutes behind other readers' analyses looked stuck.
+    withDocument();
+    api.streamExploreDocumentSummary.mockImplementation(
+      (
+        _id: number,
+        _onDelta: unknown,
+        _signal: unknown,
+        _wait: unknown,
+        onWaiting: (w: boolean) => void
+      ) => {
+        onWaiting(true);
+        return new Promise(() => {});
+      }
+    );
+    render(<ExploreDetailPage />);
+    expect(await screen.findByText(/this one is queued/)).toBeInTheDocument();
   });
 });

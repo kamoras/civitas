@@ -56,12 +56,13 @@ later should cost us a field, not the whole lookup.
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import httpx
 
 from app.config import settings
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.database import off_loop
+from app.pipeline.cache import api_cache_get, api_cache_set_async
 from app.pipeline.fetch.town_directory import address_for_town
 
 logger = logging.getLogger(__name__)
@@ -166,7 +167,7 @@ def _parse_contests(payload: dict) -> list[dict]:
 
 async def fetch_town_ballot(
     client: httpx.AsyncClient, db, state: str, town: str,
-    spend: Callable[[int], None] | None = None,
+    spend: Callable[[int], Awaitable[None]] | None = None,
 ) -> dict | None:
     """Contests and measures at `town`'s representative address, or None
     on missing config, an unknown town, or a fetch/parse failure.
@@ -187,12 +188,12 @@ async def fetch_town_ballot(
         return None
 
     cache_key = f"civic-town-{state.upper()}-{town.casefold()}"
-    cached = api_cache_get(db, "google_civic", cache_key, max_age_hours=TOWN_CACHE_TTL_HOURS)
+    cached = await off_loop(db, lambda session: api_cache_get(session, "google_civic", cache_key, max_age_hours=TOWN_CACHE_TTL_HOURS))
     if cached is not None:
         return _to_result(cached, address)
 
     if spend is not None:
-        spend(1)
+        await spend(1)
     try:
         response = await client.get(
             f"{CIVIC_BASE}/voterinfo",
@@ -216,7 +217,7 @@ async def fetch_town_ballot(
         logger.exception("Civic Info lookup failed for %s, %s", town, state)
         return None
 
-    api_cache_set(db, "google_civic", cache_key, payload, normal_ttl_hours=TOWN_CACHE_TTL_HOURS)
+    await api_cache_set_async(db, "google_civic", cache_key, payload, normal_ttl_hours=TOWN_CACHE_TTL_HOURS)
     return _to_result(payload, address)
 
 

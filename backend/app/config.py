@@ -1,4 +1,5 @@
 import datetime
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -86,6 +87,17 @@ class Settings(BaseSettings):
     PIPELINE_CACHE_TTL_HOURS: int = 72
     PIPELINE_LOG_LEVEL: str = "info"
     PIPELINE_CRON_SCHEDULE: str = "0 3 * * *"
+    # Which half of the backend this process runs (app.background's
+    # writers_allowed, main.lifespan):
+    #   all    — both, in one process: local dev, plain `docker compose up`
+    #   api    — public reads only; no scheduler, no startup jobs, and any
+    #            attempt to start a background writer is refused (503)
+    #   worker — the scheduler, startup jobs and every triggered run; nginx
+    #            sends it /api/admin/ and the pipeline-trigger endpoints
+    # Production (docker-compose.swarm.yml) runs one of each, so a pipeline
+    # can't hold the Python interpreter lock, or the container's memory,
+    # that page requests need.
+    PROCESS_ROLE: Literal["all", "api", "worker"] = "all"
     PIPELINE_TRIGGER_TOKEN: str = ""
     ADMIN_TOKEN: str = ""
     CORS_ORIGINS: str = ""

@@ -85,7 +85,7 @@ def test_cacheable_endpoint_gets_etag_and_cache_control(client):
     assert resp.status_code == 200
     assert resp.headers["ETag"].startswith('W/"')
     assert "max-age=300" in resp.headers["Cache-Control"]
-    assert "stale-while-revalidate=3600" in resp.headers["Cache-Control"]
+    assert "stale-while-revalidate=300" in resp.headers["Cache-Control"]
     assert "Accept-Encoding" in resp.headers["Vary"]
 
 
@@ -98,6 +98,8 @@ def test_middleware_does_not_override_a_route_own_cache_control(client):
     # the route's 30s value never reached the actual HTTP response.
     resp = client.get("/api/senators/short-cache")
     assert resp.status_code == 200
+    # Exactly as the route set it: without a stale-while-revalidate, which
+    # browsers read too.
     assert resp.headers["Cache-Control"] == "public, max-age=30"
     # The ETag/revalidation benefit still applies regardless — a route's
     # own freshness policy and the shared conditional-GET machinery are
@@ -123,6 +125,30 @@ def test_matching_conditional_request_gets_304_with_no_body(client):
     assert resp.status_code == 304
     assert resp.content == b""
     assert resp.headers["ETag"] == etag
+
+
+def test_a_304_keeps_the_headers_the_200_carried(client):
+    """A client refreshes its stored copy's headers from a 304: CORS and
+    the public API's X-RateLimit counts must come through, and nothing
+    describing a body may."""
+    app = client.app
+
+    @app.get("/api/public/thing")
+    def thing():
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"ok": True}, headers={
+            "Access-Control-Allow-Origin": "*", "X-RateLimit-Remaining": "7",
+            "Cache-Control": "private, max-age=60",
+        })
+
+    etag = client.get("/api/public/thing").headers["ETag"]
+    r = client.get("/api/public/thing", headers={"If-None-Match": etag})
+    assert r.status_code == 304 and r.content == b""
+    assert r.headers["Access-Control-Allow-Origin"] == "*"
+    assert r.headers["X-RateLimit-Remaining"] == "7"
+    assert r.headers["Cache-Control"] == "private, max-age=60"
+    assert "content-type" not in r.headers and r.headers.get("content-length") in (None, "0")
 
 
 def test_stale_conditional_request_gets_a_fresh_body(client):
@@ -333,3 +359,4 @@ def test_real_app_action_issues_revalidate_after_an_hourly_write(db_session, mon
         assert "New story" in resp.text
     finally:
         app.dependency_overrides.clear()
+

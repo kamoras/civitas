@@ -6,27 +6,25 @@ Rate limit: 60 requests / minute per IP (headers: X-RateLimit-*).
 Docs: /docs
 """
 
-import asyncio
-import threading
-from collections import defaultdict, deque
-from time import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from app.api.rate_limit import client_ip
+from app.api import throttle
+from app.api.rate_limit import client_ip, limit_client, retry_after
 from app.api.response_helpers import (
     CACHE_TTL_CONFIG_S,
     CACHE_TTL_DETAIL_S,
     CACHE_TTL_LIST_S,
     CACHE_TTL_REFERENCE_S,
     CACHE_TTL_SEARCH_S,
+    FAILURE_RETRY_S,
     PARTY_QUERY_PATTERN,
 )
 from app.config_definitions import SCORE_WEIGHTS
-from app.database import get_db
+from app.database import get_db, off_loop
 from app.models import ScoreSnapshot
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from fastapi import Request
@@ -34,60 +32,30 @@ from fastapi import Request
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
-# Rate limiting — simple per-IP sliding window, no external dependencies
+# Rate limiting — per client, counted in the throttle store every API worker
+# process shares (api/throttle.py)
 # ---------------------------------------------------------------------------
 
 _RATE_LIMIT = 60
 _RATE_PERIOD = 60.0
 
-_rl_lock = threading.Lock()
-_rl_window: dict[str, deque] = defaultdict(deque)
 
-
-# Evict fully-idle IPs every N requests so the per-IP map can't grow
-# unboundedly on an unauthenticated endpoint (same pattern as
-# rate_limit.py's limiter, which already does this).
-_RL_EVICT_EVERY = 2000
-_rl_request_count = 0
-
-
-def _check_rate_limit(ip: str) -> tuple[bool, int, int]:
-    """Return (allowed, remaining, reset_epoch)."""
-    global _rl_request_count
-    now = time()
-    cutoff = now - _RATE_PERIOD
-    reset_at = int(now + _RATE_PERIOD)
-    with _rl_lock:
-        _rl_request_count += 1
-        if _rl_request_count % _RL_EVICT_EVERY == 0:
-            stale = [
-                k for k, q in _rl_window.items() if not q or q[-1] < cutoff
-            ]
-            for k in stale:
-                del _rl_window[k]
-        dq = _rl_window[ip]
-        while dq and dq[0] < cutoff:
-            dq.popleft()
-        if len(dq) >= _RATE_LIMIT:
-            return False, 0, reset_at
-        dq.append(now)
-        return True, _RATE_LIMIT - len(dq), reset_at
-
-
-def _rate_limit_dep(request: Request) -> None:
-    ip = client_ip(request)
-    allowed, remaining, reset_at = _check_rate_limit(ip)
-    request.state.rl_remaining = remaining
-    request.state.rl_reset = reset_at
-    if not allowed:
+async def _rate_limit_dep(request: Request) -> None:
+    decision = await throttle.run(
+        limit_client, client_ip(request), "public-api", limit=_RATE_LIMIT, period=_RATE_PERIOD,
+    )
+    request.state.rl_remaining = decision.remaining
+    request.state.rl_reset = decision.reset_at
+    request.state.rl_counted = decision.counted
+    if not decision.allowed:
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded — {_RATE_LIMIT} requests per minute per IP.",
             headers={
                 "X-RateLimit-Limit": str(_RATE_LIMIT),
                 "X-RateLimit-Remaining": "0",
-                "X-RateLimit-Reset": str(reset_at),
-                "Retry-After": "60",
+                "X-RateLimit-Reset": str(decision.reset_at),
+                "Retry-After": retry_after(decision.reset_at),
                 "Access-Control-Allow-Origin": "*",
             },
         )
@@ -103,18 +71,23 @@ _CORS_HEADERS = {
 
 
 def _rl_headers(request: Request) -> dict:
-    return {
-        "X-RateLimit-Limit": str(_RATE_LIMIT),
-        "X-RateLimit-Remaining": str(getattr(request.state, "rl_remaining", 0)),
-        "X-RateLimit-Reset": str(getattr(request.state, "rl_reset", 0)),
-    }
+    headers = {"X-RateLimit-Limit": str(_RATE_LIMIT)}
+    # Uncounted (the limiter's store couldn't answer): no count to report,
+    # rather than a full quota that describes nothing.
+    if getattr(request.state, "rl_counted", True):
+        headers["X-RateLimit-Remaining"] = str(getattr(request.state, "rl_remaining", 0))
+        headers["X-RateLimit-Reset"] = str(getattr(request.state, "rl_reset", 0))
+    return headers
 
 
 def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
+    # private: the caller's browser may reuse it, a shared cache (nginx, a
+    # CDN) may not — the X-RateLimit headers are this caller's own counts,
+    # and a cached copy would hand them to everyone else.
     return JSONResponse(
         content=data,
         headers={
-            "Cache-Control": f"public, max-age={max_age}",
+            "Cache-Control": f"private, max-age={max_age}",
             **_CORS_HEADERS,
             **_rl_headers(request),
         },
@@ -451,15 +424,15 @@ async def search(
     # Normalize chamber to the stored casing so a lowercase filter matches.
     canonical_chamber = _CHAMBER_CANONICAL.get(chamber.lower()) if chamber else None
 
-    outcome = await asyncio.to_thread(
-        hybrid_search,
-        db,
+    # Off the loop on a session of its own (database.off_loop).
+    outcome = await off_loop(db, lambda session: hybrid_search(
+        session,
         q,
         limit=limit,
         doc_type=doc_type,
         chamber=canonical_chamber,
         politician_id=politician_id,
-    )
+    ))
     if not outcome["indexReady"]:
         return _pub_json(
             {"query": q, "results": [], "count": 0, "indexEmpty": True},
@@ -471,4 +444,12 @@ async def search(
         # The keyword channel marks matched terms with control characters
         # for the site's renderer; a public client gets plain text.
         result["snippet"] = (result.get("snippet") or "").replace(HIGHLIGHT_START, "").replace(HIGHLIGHT_END, "")
-    return _pub_json({"query": q, "results": results, "count": len(results)}, request, max_age=CACHE_TTL_SEARCH_S)
+    # Keyword channel only (the vector index missing or mid-rebuild): a
+    # partial answer, kept no longer than a failed fetch is.
+    max_age = FAILURE_RETRY_S if outcome["semanticUnavailable"] else CACHE_TTL_SEARCH_S
+    return _pub_json({
+        "query": q, "results": results, "count": len(results),
+        # True when the keyword channel alone answered: a partial ranking,
+        # said so rather than presented as the whole one.
+        "semanticUnavailable": bool(outcome["semanticUnavailable"]),
+    }, request, max_age=max_age)

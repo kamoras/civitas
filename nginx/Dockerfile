@@ -5,8 +5,8 @@
 FROM nginx:1.31.3-alpine
 
 RUN rm -f /etc/nginx/conf.d/default.conf \
-    && mkdir -p /var/cache/nginx/civitas \
-    && chown -R nginx:nginx /var/cache/nginx/civitas
+    && mkdir -p /var/cache/nginx/civitas /var/cache/nginx/civitas-action /etc/nginx/cache-epoch \
+    && chown -R nginx:nginx /var/cache/nginx/civitas /var/cache/nginx/civitas-action
 
 COPY civitas.conf /etc/nginx/conf.d/civitas.conf
 # Included by civitas.conf at server level and in every location that sets
