@@ -108,8 +108,8 @@ def test_expected_current_congress_waits_for_noon_et_on_jan_3():
 
 
 class TestCongressStalenessMessage:
-    """The fix depends on why it's stale: a default computed at process
-    start needs a restart; an environment pin needs editing."""
+    """Only an environment pin can go stale (it needs editing); an unpinned
+    value advances at the start of each pipeline job."""
 
     def _alert_text(self, settings_obj):
         expected = settings_obj.CURRENT_CONGRESS + 1
@@ -121,30 +121,43 @@ class TestCongressStalenessMessage:
             check_current_congress_staleness()
         return mock_alert.call_args.args[1]
 
-    def test_unpinned_default_says_restart(self):
+    def test_unpinned_advances_instead_of_alerting(self):
+        """Unpinned, a process still running when a new Congress convenes
+        advances (app.config.advance_current_congress) — no restart, and
+        nothing to alert about."""
+        from app import config
         from app.config import Settings
 
-        s = Settings()  # computed at "process start", before the next Congress
-        assert not s.current_congress_pinned
-        text = self._alert_text(s)
-        assert "not pinned" in text and "Restart the backend" in text
-        assert "District PVI lines do not depend on this setting" in text
+        s = Settings()
+        s.CURRENT_CONGRESS -= 1  # computed before the next Congress convened
+        expected = s.CURRENT_CONGRESS + 1
+        with patch.object(config, "settings", s), patch("app.ops_alerts.settings", s), patch(
+            "app.time_utils.utcnow", return_value=datetime(2027, 1, 4, 3),
+        ), patch(
+            "app.pipeline.fetch.congress.expected_current_congress", return_value=expected,
+        ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
+            from app.ops_alerts import check_current_congress_staleness
+
+            check_current_congress_staleness()
+        mock_alert.assert_not_called()
 
     def test_environment_pin_says_edit_the_pin(self):
+        from app import config
         from app.config import Settings
 
-        text = self._alert_text(Settings(CURRENT_CONGRESS=119))
-        assert "pinned in the environment" in text and "remove the pin" in text
-        # sitting_congress() returns the pin, so the district lines are
-        # frozen with it — the alert must not leave that out.
-        assert "freezes House members' district lines" in text
-        assert "the 119th Congress's lines" in text and "120th Congress's members" in text
+        s = Settings(CURRENT_CONGRESS=119)
+        with patch.object(config, "settings", s):
+            text = self._alert_text(s)
+        assert "pinned in the environment" in text and "Remove the pin" in text
+        # The pin holds the windows and the district lines alike.
+        assert "district lines" in text and "scored windows" in text
+        assert "on the 119th Congress" in text and "120th Congress's members" in text
 
 
 def test_env_example_does_not_pin_current_congress():
     """docker compose passes .env to the backend, and any CURRENT_CONGRESS
     there is an operator pin (Settings.current_congress_pinned): it freezes
-    the scored windows AND the district lines (sitting_congress) past the
+    the scored windows AND the district lines (one value) past the
     next Jan 3. The template must leave it unset — a commented-out example
     only."""
     import pathlib

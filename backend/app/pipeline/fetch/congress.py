@@ -119,15 +119,22 @@ def congress_of_date(date_str: str) -> int | None:
 
 
 def expected_current_congress(now=None) -> int:
-    """The Congress that should be current given the wall clock.
+    """The Congress in office given the wall clock — noon ET on Jan 3 of an
+    odd year starts the next one (app.time_utils.congress_in_session), not
+    Jan 1 or midnight.
 
-    Used only to detect when the CURRENT_CONGRESS config constant has gone
-    stale (see ops_alerts.check_current_congress_staleness) — the scored
-    windows still key off the config value so an archived DB re-run stays
-    reproducible when the operator pins CURRENT_CONGRESS. Switches at noon
-    ET on Jan 3 of an odd year (app.time_utils.congress_in_session), not on
-    Jan 1 — a calendar-year rule alerted "stale" for the two days the
-    outgoing Congress is still in office.
+    Readers: ops_alerts.check_current_congress_staleness (whether a pinned
+    CURRENT_CONGRESS has fallen behind), and three surfaces that want the
+    Congress in office rather than the scored one — api/bills.py's bill
+    record route (refusing a Congress that hasn't convened),
+    api/action.py's related-bill links (the Congress a bill with none
+    recorded is linked under) and congress_activity.py's Congress-record
+    sync. Their switch moved from a calendar-year rule to
+    noon ET on Jan 3 with the rest; that is benign: for the hours between
+    midnight and noon on Jan 3 they treat the outgoing Congress as current,
+    which it is. The scored windows read settings.CURRENT_CONGRESS instead
+    (app.config.scoring_congress), so an archived-DB re-run stays
+    reproducible when the operator pins it.
     """
     from app.time_utils import congress_in_session
 

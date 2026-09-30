@@ -351,17 +351,21 @@ The correct pattern, established by `_district_pvi()` /
    pin and raises an ops alert on a difference (once per distinct
    difference); it never ingests it.
 
-   "Sitting" is read from the clock on every call
-   (`app.config.sitting_congress`: noon ET on Jan 3 of an odd year, the
-   20th Amendment's hand-over), not from `settings.CURRENT_CONGRESS`,
-   whose default is the Congress in session on the date the process
-   starts, fixed from then on (it scopes roll-call sessions and bill
-   windows; computed at startup it can be a few hours early on Jan 3 but
-   never behind — only a process running across Jan 3, or an environment
-   pin, falls behind, and `check_current_congress_staleness` says which).
-   An environment pin is the one thing that stops the switch:
-   `sitting_congress()` returns it, so it freezes the district lines as
-   well as the windows. It exists only for re-running an archived
+   "Sitting" is `settings.CURRENT_CONGRESS` — the same value the scored
+   windows read (roll-call sessions, bills, Voteview ideal points), so a
+   House run can never score one Congress's votes on another's lines. It
+   starts as the Congress in office when the process starts (noon ET on
+   Jan 3 of an odd year, the 20th Amendment's hand-over — not midnight,
+   which gave a process started that morning the new windows on the old
+   lines), and `app.config.scoring_congress` advances it to the Congress
+   in office at the start of every pipeline job (every scheduled job via
+   `scheduler._start_job`, every trigger via `run_pipeline_in_thread`) and
+   holds it for that job, in a ContextVar every read of the setting in the
+   job's context answers — so a process running across Jan 3 moves at its
+   next job with no restart, and a job running across noon stays on one
+   Congress. An environment pin is the one thing that stops the switch: it
+   freezes the district lines as well as the windows, and
+   `check_current_congress_staleness` alerts once it falls behind. It exists only for re-running an archived
    database; **the production `.env` must not set `CURRENT_CONGRESS`**
    (`.env.example` leaves it commented out, and a test keeps it that
    way). Every House run — the nightly
@@ -386,9 +390,10 @@ The correct pattern, established by `_district_pvi()` /
    rewrites both before its scoring loop, so for a member it hasn't
    rescored yet (mid-run, after a failed run, or departed) the breakdown
    can still differ from the stored score. That drift predates the
-   per-Congress lines and is not fixed by them. So the first House run after
-   that noon (with the default 03:00 UTC schedule, the Jan 4 nightly)
-   switches member scoring to the new Congress's table from what is
+   per-Congress lines and is not fixed by them. So the first House run in a
+   job that starts after that noon (with the default 03:00 UTC schedule,
+   the nightly chain that starts that evening; a trigger before it would
+   be first) switches member scoring to the new Congress's table from what is
    already on disk — no fetch, no restart — *if* the sources file has an
    entry for it, and a pin advanced or a Congress added in the sources
    file (a correction, a court ruling) is fetched by the next House run,

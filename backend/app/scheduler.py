@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.config import settings
+from app.config import scoring_congress, settings
 from app.database import SessionLocal
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
@@ -54,8 +54,16 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
     lease.tracked_job) while it runs, so a reset in another process sees it,
     and it sees the reset — taken inside the job, past its own checks, so a
     tick that bails holds nothing another entry point would skip over."""
+    def held_target() -> None:
+        # One Congress for the whole job — the nightly chain's Senate,
+        # Supplementary and House runs included: its scored windows and
+        # House members' district lines move together, at the first job to
+        # start after noon ET on Jan 3 (app.config.scoring_congress).
+        with scoring_congress():
+            target()
+
     try:
-        start_writer(target, name=name)
+        start_writer(held_target, name=name)
     except WritesHeld as held:
         logger.warning("%s", held)
         if alert:
@@ -89,7 +97,7 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
-    from app.pipeline.fetch.district_pvi import REFRESH_WHO as DISTRICT_PVI_REFRESH
+    from app.pipeline.fetch.district_pvi import WAITED_FOR as DISTRICT_LINES_WAITED_FOR
     from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
 
     _CHAIN = ["Senate", "Supplementary", "House", "Stock trades", "Election"]
@@ -169,19 +177,22 @@ def _nightly_pipeline() -> None:
             logger.info("Supplementary pipeline done — starting House pipeline")
             # The House run settles the sitting Congress's district lines
             # first, under a lease it holds until its scoring is done
-            # (fetch/district_pvi.run_house_on_sitting_lines): the sitting
-            # Congress is read from the clock, not CURRENT_CONGRESS, so the
-            # first House run after noon ET on Jan 3 of an odd year (with
-            # the default 03:00 UTC schedule, the Jan 4 nightly) switches
-            # to the new Congress's pinned table from disk — no fetch, no
-            # restart — and a pin advanced in district_pvi_sources.json is
-            # fetched the next run. Triggered House runs go through it too.
+            # (fetch/district_pvi.run_house_on_sitting_lines). The sitting
+            # Congress is the one this whole job holds
+            # (app.config.scoring_congress, via _start_job) — the same
+            # value every scored window reads — so the first job to start
+            # after noon ET on Jan 3 of an odd year (with the default 03:00
+            # UTC schedule, the chain that starts that evening) switches
+            # windows and lines together, to the new Congress's pinned table
+            # from disk — no fetch, no restart — and a pin advanced in
+            # district_pvi_sources.json is fetched the next run. Triggered
+            # House runs go through it too.
             house_result = loop.run_until_complete(run_house_on_sitting_lines(run_house_pipeline))
             logger.info("House pipeline: %s", house_result)
-            # A District PVI refresh is waited for; one that outlasts the
-            # wait (stuck) costs tonight's House scores but not Stock
+            # A District PVI refresh (or the startup rescore) is waited for;
+            # one that outlasts the wait (stuck) costs tonight's House scores but not Stock
             # trades or Election, which don't read them.
-            held_by_refresh = house_result.get("holder") == DISTRICT_PVI_REFRESH
+            held_by_refresh = house_result.get("holder") in DISTRICT_LINES_WAITED_FOR
             if _alert_if_skipped("House", house_result, chain_continues=held_by_refresh) and not held_by_refresh:
                 return
 

@@ -1,9 +1,9 @@
 """Regenerate the bundled app/data/district_pvi.json.
 
 The primary data path is app/pipeline/fetch/district_pvi.py, which the
-Supplementary pipeline runs weekly (and scheduler.py's pre-checks run
-whenever the persistent file lacks the sitting Congress's table), writing
-/data/district_pvi.json. The bundled copy this script writes is only the
+Supplementary pipeline runs weekly (and district_pvi.run_house_on_sitting_lines
+runs before every House run, whenever the persistent file lacks the sitting
+Congress's table or its pins moved), writing /data/district_pvi.json. The bundled copy this script writes is only the
 fallback served before a fresh deployment's first ingest completes.
 
 It runs the exact same fetch and gates, from the same pinned sources
@@ -28,7 +28,7 @@ the fallback's top level is only read before a deployment's first ingest,
 every House run re-selects the sitting Congress's table from "congresses"
 (fetch/district_pvi._reselect), and the tests check the file against the
 Congress it names. Give it the Congress in office when you regenerate
-(app.config.sitting_congress). Exits 1 if any gate fails, writing nothing.
+(app.time_utils.congress_in_session). Exits 1 if any gate fails, writing nothing.
 """
 
 import argparse

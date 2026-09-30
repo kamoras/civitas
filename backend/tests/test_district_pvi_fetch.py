@@ -11,6 +11,7 @@ shapes match the real article's table ({{ushr|State|N|X}} then
 {{Shading PVI|R|7}} / {{Shading PVI|D|value=2}} / {{Shading PVI|EVEN}}).
 """
 
+import asyncio
 import json
 from collections import Counter
 from datetime import datetime
@@ -454,8 +455,15 @@ class TestRefresh:
         assert set(written["congresses"]) == {"119", "120"}
 
     async def test_a_sitting_congress_older_than_every_pin_writes_nothing(self, monkeypatch, tmp_path):
+        """No table describes the 118th's lines, so nothing is written —
+        but the pinned tables are still fetched and gated and the live-drift
+        check still runs, so a pin that needs advancing isn't hidden for as
+        long as an environment pin stands."""
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=118)
-        assert await dp.refresh_district_pvi() is False
+        with patch.object(dp, "_check_live_drift", new_callable=AsyncMock) as drift:
+            assert await dp.refresh_district_pvi() is False
+        drift.assert_awaited_once()
+        assert set(drift.await_args.args[1]["congresses"]) == {"119", "120"}
         assert not out.exists()
 
     async def test_any_gate_failure_keeps_previous_data(self, monkeypatch, tmp_path):
@@ -544,28 +552,37 @@ class TestEnsureSittingLines:
         assert out.read_text() == before
 
     async def test_new_congress_switches_locally_at_noon_et_on_jan_3(self, monkeypatch, tmp_path):
-        """Driven by the clock, not a patched Congress number and not
-        settings.CURRENT_CONGRESS (computed once at process start): the
-        same process switches at noon Eastern on Jan 3, 2027, no restart,
-        no fetch."""
+        """Driven by the clock, not a patched Congress number: a process
+        started in December switches at the first job after noon Eastern on
+        Jan 3, 2027 (app.config.scoring_congress advances the Congress the
+        job holds), no restart, no fetch."""
+        from app import config
+
         clock = {"now": datetime(2026, 12, 31, 12)}
         monkeypatch.setattr("app.time_utils.utcnow", lambda: clock["now"])
+        monkeypatch.setattr(config, "settings", config.Settings())
         out, base, new = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
-        assert await dp.refresh_district_pvi() is True
+
+        def job(fn):
+            with config.scoring_congress():
+                return fn()
+
+        assert await _in_thread(lambda: job(lambda: asyncio.run(dp.refresh_district_pvi()))) is True
         assert json.loads(out.read_text())["congress"] == 119
         with patch.object(dp, "_refresh", new_callable=AsyncMock) as refresh:
             clock["now"] = datetime(2027, 1, 1, 8)  # Jan 1: still the 119th
-            assert await _in_thread(dp._ensure_sitting_lines) == "current"
+            assert await _in_thread(lambda: job(dp._ensure_sitting_lines)) == "current"
             clock["now"] = datetime(2027, 1, 3, 16, 59)  # 11:59 ET
-            assert await _in_thread(dp._ensure_sitting_lines) == "current"
+            assert await _in_thread(lambda: job(dp._ensure_sitting_lines)) == "current"
             assert score_calculator._district_pvi()["TN-9"] == base["TN-9"]
             clock["now"] = datetime(2027, 1, 3, 17, 0)  # noon ET
-            assert await _in_thread(dp._ensure_sitting_lines) == "reselected"
-            assert await _in_thread(dp._ensure_sitting_lines) == "current"
+            assert await _in_thread(lambda: job(dp._ensure_sitting_lines)) == "reselected"
+            assert await _in_thread(lambda: job(dp._ensure_sitting_lines)) == "current"
         refresh.assert_not_called()
         written = json.loads(out.read_text())
         assert written["congress"] == 120 and written["districts"] == new
         assert score_calculator._district_pvi()["TN-9"] == new["TN-9"] != base["TN-9"]
+        assert config.settings.CURRENT_CONGRESS == 120
 
     async def test_a_pinned_current_congress_holds_the_lines(self, monkeypatch, tmp_path):
         """An operator's env pin (archived-DB re-run) wins over the clock."""
@@ -699,7 +716,7 @@ class TestEnsureSittingLines:
 
         out, _, _ = await self._written(monkeypatch, tmp_path)
         monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118))
-        monkeypatch.setattr(dp, "_sitting_congress", config.sitting_congress)
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: config.settings.CURRENT_CONGRESS)
         before = out.read_text()
         with patch("app.ops_alerts.send_ops_alert") as alert:
             assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
@@ -708,6 +725,27 @@ class TestEnsureSittingLines:
         assert "the earliest is the 119th" in text
         assert "which are NOT the 118th's" in text and "latest pinned" not in text
         assert out.read_text() == before
+
+    async def test_an_older_pin_with_no_file_names_the_bundled_table_it_serves(self, monkeypatch, tmp_path):
+        """No file on the volume: scoring falls back to the bundled copy's
+        top-level table (the 119th's), and the alert says so rather than
+        "no pinned table"; it also says the weekly refresh writes nothing
+        while the pin stands."""
+        from app import config
+
+        out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=118)
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118))
+        bundled = json.loads(dp.BUNDLED_PATH.read_text())
+        with patch.object(dp, "_check_live_drift", new_callable=AsyncMock), patch(
+            "app.ops_alerts.send_ops_alert",
+        ) as alert:
+            assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
+        assert not out.exists()
+        text = alert.call_args.args[1]
+        assert f"the {bundled['congress']}th Congress's lines (the bundled copy's top-level table" in text
+        assert "which are NOT the 118th's" in text and "scoring is on no pinned table" not in text
+        assert "every weekly District PVI refresh" in text and "live-drift check still runs" in text
+        assert dp.lines_congress() == bundled["congress"]
 
 
 async def _in_thread(fn):
@@ -1186,6 +1224,93 @@ class TestStoredScoresKeepTheirLines:
         assert db_session.get(Representative, "H000").district_lines_congress == 121
         assert db_session.get(Representative, "H001").district_lines_congress == 120
 
+    def test_the_startup_rescore_leaves_the_house_to_a_run_holding_the_lines(
+        self, monkeypatch, tmp_path, db_session,
+    ):
+        """A triggered House run holds DISTRICT_LINES while it switches the
+        lines and upserts, before it has a HousePipelineRun row the
+        rescore's run_in_progress check could see. The rescore must not
+        commit scores on the old lines, recorded as the old lines, over the
+        run's rows: it takes the lease, and leaves the House alone when it
+        can't."""
+        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.models import Representative
+        from app.pipeline import lease
+        from tests.test_constituent_rescore import _factory
+
+        self._file(monkeypatch, tmp_path, 119)
+        self._stale_house_on_119(db_session, monkeypatch, tmp_path)
+        token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO)
+        assert token is not None
+        # The run has switched the lines and stored a member on them.
+        self_file = json.loads((tmp_path / "district_pvi.json").read_text())
+        (tmp_path / "district_pvi.json").write_text(json.dumps(dp._reselect(self_file, 120)))
+        db_session.get(Representative, "H000").district_lines_congress = 120
+        db_session.get(Representative, "H000").score_constituent_alignment = 77
+        db_session.commit()
+        try:
+            assert "house" not in rescore_constituent_alignment_on_current_lines(_factory(db_session))
+        finally:
+            lease.release(db_session, lease.DISTRICT_LINES, token)
+        db_session.expire_all()
+        row = db_session.get(Representative, "H000")
+        assert (row.district_lines_congress, row.score_constituent_alignment) == (120, 77)
+        # With the lines free, the rescore does the House on the lines it holds.
+        assert rescore_constituent_alignment_on_current_lines(_factory(db_session)) == ["house"]
+        db_session.expire_all()
+        assert db_session.get(Representative, "H000").district_lines_congress == 120
+
+    async def test_a_house_run_waits_for_the_startup_rescore(self, monkeypatch, db_session):
+        import asyncio
+
+        from app.pipeline import lease
+
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+        token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.RESCORE_WHO)
+        assert token is not None
+
+        async def finish_rescore():
+            await asyncio.sleep(0.05)
+            lease.release(db_session, lease.DISTRICT_LINES, token)
+
+        async def house():
+            return {"status": "completed"}
+
+        releaser = asyncio.create_task(finish_rescore())
+        result = await dp.run_house_on_sitting_lines(house, refresh_wait_s=5, poll_s=0.01)
+        await releaser
+        assert result == {"status": "completed"}
+
+    def test_every_read_of_the_table_honours_a_block(self, monkeypatch, tmp_path):
+        """get_district_pvi_map, dict(), len(), iteration and bool() read
+        the block's table like .get does."""
+        _, base, new = self._file(monkeypatch, tmp_path, 120)
+        lines = score_calculator._district_pvi()
+        with dp.lines_of(119):
+            assert score_calculator.get_district_pvi_map() == base
+            assert dict(lines) == base == dict(lines.items()) == {k: lines[k] for k in lines}
+            assert len(lines) == len(base) and sorted(lines.values()) == sorted(base.values())
+            assert lines.copy() == base and bool(lines)
+            assert lines.own_table() == new
+        assert score_calculator.get_district_pvi_map() == new
+
+    def test_nested_blocks_inherit_the_enclosing_table(self, monkeypatch, tmp_path):
+        """lines_of inside current_lines (or another lines_of): the current
+        lines are the enclosing block's, not a fresh read of the file."""
+        out, base, new = self._file(monkeypatch, tmp_path, 119)
+        with dp.current_lines() as outer:
+            out.write_text(json.dumps(dp._reselect(json.loads(out.read_text()), 120)))
+            dp._reset_caches()
+            for asked in (None, 119, 117):
+                with dp.lines_of(asked) as used:
+                    assert used == outer == 119
+                    assert score_calculator._seat_pvi("TN", 9) == base["TN-9"]
+                    assert dp.lines_congress() == 119
+            with dp.lines_of(120) as used:
+                assert used == 120 and score_calculator._seat_pvi("TN", 9) == new["TN-9"]
+                with dp.current_lines() as inner:
+                    assert inner == 120 and score_calculator._seat_pvi("TN", 9) == new["TN-9"]
+
     def test_a_reset_during_lines_of_keeps_the_override(self, monkeypatch, tmp_path):
         """A House run starting (or a refresh writing the file) resets the
         caches while the API's breakdown is inside lines_of: the breakdown
@@ -1274,6 +1399,159 @@ class TestStoredScoresKeepTheirLines:
 
         await dp.run_house_on_sitting_lines(house)
         assert seen == {"congress": 120, "tn9": new["TN-9"]}
+
+
+class TestJan3Boundary:
+    """One Congress for a House run's scored windows and its district lines
+    (app.config.scoring_congress). The windows used to come from
+    settings.CURRENT_CONGRESS, fixed at process start, while the lines
+    followed the clock: a process started before Jan 3 2027 and still
+    running scored the 119th's votes on the 120th's lines."""
+
+    async def _house_run_at(self, monkeypatch, tmp_path, started, run_at):
+        import asyncio
+
+        from app import config
+
+        clock = {"now": started}
+        monkeypatch.setattr("app.time_utils.utcnow", lambda: clock["now"])
+        monkeypatch.setattr(config, "settings", config.Settings())
+        out, base, new = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: config.settings.CURRENT_CONGRESS)
+        assert await dp.refresh_district_pvi() is True
+        clock["now"] = run_at
+        seen = {}
+
+        async def house():
+            # What the House pipeline reads: windows off the setting (also
+            # from a worker thread), lines off the table.
+            seen["windows"] = config.settings.CURRENT_CONGRESS
+            seen["windows_in_thread"] = await asyncio.to_thread(lambda: config.settings.CURRENT_CONGRESS)
+            seen["lines"] = dp.lines_congress()
+            seen["tn9"] = score_calculator._seat_pvi("TN", 9)
+            return {"status": "completed"}
+
+        assert await dp.run_house_on_sitting_lines(house) == {"status": "completed"}
+        return seen, base, new
+
+    async def test_a_process_started_before_jan_3_moves_windows_and_lines_together(self, monkeypatch, tmp_path):
+        # Started Dec 20 (the 119th); the House run at 2027-01-04T03:00Z.
+        seen, _, new = await self._house_run_at(
+            monkeypatch, tmp_path, datetime(2026, 12, 20), datetime(2027, 1, 4, 3),
+        )
+        assert seen == {"windows": 120, "windows_in_thread": 120, "lines": 120, "tn9": new["TN-9"]}
+
+    async def test_between_midnight_and_noon_on_jan_3_both_stay_on_the_outgoing_congress(
+        self, monkeypatch, tmp_path,
+    ):
+        # Started 01:00 ET Jan 3 (a date rule said 120), run at 08:00 ET.
+        seen, base, _ = await self._house_run_at(
+            monkeypatch, tmp_path, datetime(2027, 1, 3, 6), datetime(2027, 1, 3, 13),
+        )
+        assert seen == {"windows": 119, "windows_in_thread": 119, "lines": 119, "tn9": base["TN-9"]}
+
+    async def test_a_run_in_the_gap_by_a_process_started_before(self, monkeypatch, tmp_path):
+        seen, base, _ = await self._house_run_at(
+            monkeypatch, tmp_path, datetime(2026, 12, 20), datetime(2027, 1, 3, 13),
+        )
+        assert seen == {"windows": 119, "windows_in_thread": 119, "lines": 119, "tn9": base["TN-9"]}
+
+    async def test_a_job_holds_its_congress_through_noon(self, monkeypatch, tmp_path):
+        """A job that started before noon (the nightly chain, a trigger)
+        keeps the outgoing Congress for its House run even if that run
+        starts after noon: windows and lines still agree."""
+        from app import config
+
+        clock = {"now": datetime(2027, 1, 3, 16)}
+        monkeypatch.setattr("app.time_utils.utcnow", lambda: clock["now"])
+        monkeypatch.setattr(config, "settings", config.Settings())
+        _, base, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: config.settings.CURRENT_CONGRESS)
+        seen = {}
+
+        async def house():
+            seen["windows"], seen["lines"] = config.settings.CURRENT_CONGRESS, dp.lines_congress()
+            return {"status": "completed"}
+
+        with config.scoring_congress():
+            assert await dp.refresh_district_pvi() is True
+            clock["now"] = datetime(2027, 1, 3, 18)  # 13:00 ET
+            await dp.run_house_on_sitting_lines(house)
+        assert seen == {"windows": 119, "lines": 119}
+
+    def test_scheduled_jobs_and_triggers_hold_one_congress(self, monkeypatch):
+        """Every scheduled job (the nightly chain included) and every
+        triggered run starts inside scoring_congress."""
+        from app import config, scheduler
+        from app.api import pipeline_runner
+
+        seen = []
+
+        def start_writer(target, *, name):
+            target()
+
+        monkeypatch.setattr(scheduler, "start_writer", start_writer)
+        monkeypatch.setattr(pipeline_runner, "start_writer", start_writer)
+        scheduler._start_job(lambda: seen.append(config._RUN_CONGRESS.get()), name="t")
+
+        async def run():
+            seen.append(config._RUN_CONGRESS.get())
+
+        pipeline_runner.run_pipeline_in_thread(run, name="t")
+        assert seen == [config.settings.CURRENT_CONGRESS] * 2
+
+
+class TestReadPathCaches:
+    """The elections GET path: no parsing or table building per request."""
+
+    def test_sources_are_parsed_once_per_version(self, tmp_path):
+        import os
+
+        path = tmp_path / "sources.json"
+        path.write_text(json.dumps({"page": "P", "congresses": {"119": {}}}))
+        first = dp.load_sources(path)
+        assert dp.load_sources(path) is first
+        path.write_text(json.dumps({"page": "P", "congresses": {"120": {}}}))
+        os.utime(path, ns=(2_000_000_000_000_000_000, 2_000_000_000_000_000_000))
+        assert set(dp.load_sources(path)["congresses"]) == {"120"}
+
+    async def test_district_pvi_for_congress_is_built_once_per_file(self, monkeypatch, tmp_path):
+        out, base, new = _two_congress_setup(monkeypatch, tmp_path)
+        assert await dp.refresh_district_pvi() is True
+        calls = []
+        real = dp._district_pvi_for_congress
+        monkeypatch.setattr(dp, "_district_pvi_for_congress", lambda *a: calls.append(a[0]) or real(*a))
+        first = dp.district_pvi_for_congress(120)
+        assert dp.district_pvi_for_congress(120) is first and calls == [120]
+        assert first[0] == new
+        # Another process switches the file: rebuilt from the new read.
+        import os
+
+        data = json.loads(out.read_text())
+        del data["congresses"]["120"]
+        out.write_text(json.dumps(dp._reselect(data, 120, exact=False)))
+        os.utime(out, ns=(2_000_000_000_000_000_000, 2_000_000_000_000_000_000))
+        assert dp.district_pvi_for_congress(120)[1]["congress"] == 119
+        assert calls == [120, 120]
+
+    def test_pvi_meta_is_read_once_per_version(self, monkeypatch, tmp_path):
+        import os
+
+        monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path))
+        monkeypatch.setattr(score_calculator, "_pvi_meta_cache", None)
+        path = tmp_path / "district_pvi.json"
+        path.write_text(json.dumps({"_source": "one", "districts": {"TN-9": 1}}))
+        reads = []
+        real = score_calculator._read_pvi_json
+        monkeypatch.setattr(score_calculator, "_read_pvi_json", lambda *a, **k: reads.append(a[0]) or real(*a, **k))
+        meta = score_calculator.get_pvi_meta()
+        assert meta["districts"]["source"] == "one"
+        meta["districts"] = None  # a caller replacing an entry
+        again = score_calculator.get_pvi_meta()
+        assert again["districts"]["source"] == "one" and len(reads) == 2
+        path.write_text(json.dumps({"_source": "two", "districts": {"TN-9": 1}}))
+        os.utime(path, ns=(2_000_000_000_000_000_000, 2_000_000_000_000_000_000))
+        assert score_calculator.get_pvi_meta()["districts"]["source"] == "two"
 
 
 class TestAnotherProcessRewritesTheLines:

@@ -317,60 +317,40 @@ def _send_ntfy(subject: str, body: str) -> None:
 def check_current_congress_staleness() -> None:
     """Alert if CURRENT_CONGRESS has fallen behind the Congress in office.
 
-    CURRENT_CONGRESS defaults to the Congress in session on the date the
-    backend process starts (see app.config._default_current_congress) —
-    computed once. It is compared here with the Congress actually in
+    Unpinned, it can't: the pipeline process advances it to the Congress in
     office (noon ET on Jan 3 of an odd year, the 20th Amendment's
-    hand-over). The date rule can run a few hours AHEAD of that (a
-    process started on the morning of Jan 3), which is not staleness; it
-    falls BEHIND in two ways, and the alert says which:
-
-    - not pinned: the process has been running since before Jan 3 of the
-      new Congress's first year. A restart (any redeploy) recomputes it.
-      District PVI lines do not wait for that — fetch/district_pvi.py
-      reads app.config.sitting_congress(), which follows the clock.
-    - pinned: an operator set CURRENT_CONGRESS in the environment (an
-      archived-DB re-run's reproducibility) and left the pin in place past
-      the next Congress — or copied an old .env.example that set it. Only
-      editing the environment fixes that. A pin freezes the district lines
-      too (sitting_congress() returns it), and the alert says so.
+    hand-over) at the start of every job (app.config.scoring_congress), and
+    this check advances it first too, so a process that was already running
+    when a new Congress convened scores the new one from its next job, with
+    no restart. What can go stale is an operator's pin: CURRENT_CONGRESS
+    set in the environment (an archived-DB re-run's reproducibility) and
+    left in place past the next Congress — or copied from an old
+    .env.example that set it. Only editing the environment fixes that. The
+    pin holds both chambers' scored windows and House members' district
+    lines (fetch/district_pvi reads the same value), and the alert says so.
 
     The round-4 audit's original "silent time bomb" finding was that the
     default was a hardcoded literal nobody would remember to bump.
     """
+    from app.config import advance_current_congress
     from app.ordinals import ordinal
     from app.pipeline.fetch.congress import expected_current_congress
 
-    configured = settings.CURRENT_CONGRESS
+    configured = advance_current_congress()
     expected = expected_current_congress()
     if expected <= configured:
         resolve_ops_alert("stale-congress")
         return
-    pinned = settings.current_congress_pinned
-    fix = (
-        f"It is pinned in the environment (.env or the container's environment): "
-        f"remove the pin so it follows the clock — production should never set it; "
-        f"a pin is only for re-running an archived database — and restart the backend. "
-        f"The pin also freezes House members' district lines: member scoring stays on "
-        f"the {ordinal(configured)} Congress's lines (fetch/district_pvi.py reads "
-        f"app.config.sitting_congress(), which returns the pin), so the "
-        f"{ordinal(expected)} Congress's members are scored on districts they were "
-        f"not elected in until it is removed."
-        if pinned else
-        f"It is not pinned — it was computed from the date the backend "
-        f"process started, before the {ordinal(expected)} Congress convened. "
-        f"Restart the backend (a redeploy does it) to pick up {expected}. "
-        f"(District PVI lines do not depend on this setting: they "
-        f"follow the clock, switched before each House run — "
-        f"fetch/district_pvi.run_house_on_sitting_lines.)"
-    )
     send_ops_alert(
         "CURRENT_CONGRESS is stale",
-        f"CURRENT_CONGRESS is {configured}, but the {ordinal(expected)} "
-        f"Congress is now in session. The Senate pipeline pins its "
-        f"roll-call window to CURRENT_CONGRESS while the House derives "
-        f"its window from the calendar year, so they are now scoring "
-        f"different Congresses and the Senate is scoring a dead one. {fix}",
+        f"CURRENT_CONGRESS is pinned in the environment (.env or the container's environment) "
+        f"to {configured}, but the {ordinal(expected)} Congress is now in session. Both chambers' "
+        f"scored windows (roll-call sessions, bills, Voteview ideal points) and House members' "
+        f"district lines stay on the {ordinal(configured)} Congress while the pin is in place "
+        f"(fetch/district_pvi reads the same setting), so the {ordinal(expected)} Congress's "
+        f"members are scored on a dead Congress's record and on districts they were not elected "
+        f"in. Remove the pin so it follows the clock — production should never set it; a pin is "
+        f"only for re-running an archived database — and restart the backend.",
         dedupe_key=f"stale-congress-{expected}",
         condition="stale-congress",
     )

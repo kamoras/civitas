@@ -1516,8 +1516,9 @@ async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
 
     409 when a House run is already going (or holds the district-lines
     lease every House run takes), like /pipeline/trigger's Senate check,
-    naming what holds it. A District PVI refresh holding that lease is not
-    a refusal: the run waits for it (run_house_on_sitting_lines), and the
+    naming what holds it. A District PVI refresh or the startup rescore
+    holding that lease (district_pvi.WAITED_FOR) is not a refusal: the run
+    waits for it (run_house_on_sitting_lines), and the
     answer says so. Neither check is the lock — the run's own lease and run
     lock are (fetch/district_pvi.run_house_on_sitting_lines,
     run_house_pipeline), and a trigger that slips past both checks is
@@ -1526,14 +1527,14 @@ async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     """
     from app.models import HousePipelineRun
     from app.pipeline import lease
-    from app.pipeline.fetch.district_pvi import REFRESH_WHO, run_house_on_sitting_lines
+    from app.pipeline.fetch.district_pvi import WAITED_FOR, run_house_on_sitting_lines
     from app.pipeline.house_pipeline import run_house_pipeline
     from app.pipeline.run_tracker import run_in_progress
 
     if run_in_progress(db, HousePipelineRun):
         raise HTTPException(status_code=409, detail="House pipeline is already running")
     holder = lease.holder(db, lease.DISTRICT_LINES)
-    if holder is not None and holder != REFRESH_WHO:
+    if holder is not None and holder not in WAITED_FOR:
         raise HTTPException(
             status_code=409, detail=f"{lease.refusal_text(lease.REFUSED_HELD, who=holder)}; it holds the district lines",
         )
@@ -1544,8 +1545,8 @@ async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     run_pipeline_in_thread(
         _run, name="house-pipeline-run", error_label="House pipeline run failed",
     )
-    if holder == REFRESH_WHO:
-        return {"message": f"House pipeline triggered — it starts when the {REFRESH_WHO} holding the district lines finishes"}
+    if holder in WAITED_FOR:
+        return {"message": f"House pipeline triggered — it starts when the {holder} holding the district lines finishes"}
     return {"message": "House pipeline triggered"}
 
 

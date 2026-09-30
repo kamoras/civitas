@@ -1,4 +1,8 @@
 import datetime
+import functools
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Literal
 
 from pydantic import Field, PrivateAttr, model_validator
@@ -7,42 +11,79 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.time_utils import congress_in_session
 
 
-def _default_current_congress(today: datetime.date | None = None) -> int:
-    """The Congress in session given the wall clock, computed rather than
+def _default_current_congress(now: datetime.datetime | None = None) -> int:
+    """The Congress in office when the process starts, computed rather than
     hardcoded so this never needs a manual bump after Jan 3 of an odd year
     (previously a hardcoded literal that could only be caught by a separate
     staleness alert an unattended operator might never see — see
-    ops_alerts.check_current_congress_staleness, kept as a defensive check
-    for the rare case an operator pins this via env for archived-DB
-    reproducibility and that pin itself goes stale).
+    ops_alerts.check_current_congress_staleness, kept for the case an
+    operator pins this via env for archived-DB reproducibility and that pin
+    itself goes stale).
 
-    Mirrors app.pipeline.fetch.congress.congress_of_date inline to avoid
-    importing pipeline code at settings-module load time. January 1-2 of an
-    odd year still belong to the outgoing Congress: the new one convenes on
-    the 3rd (20th Amendment), and a day early every scored window would
-    point at a Congress with no bills yet.
-
-    Date-granular (midnight, server-local), fixed for the life of the
-    process: it scopes the roll-call sessions, bill windows and Voteview
-    ideal points. Code that needs the Congress actually in office at this
-    moment (the district lines members were elected on, which change hands
-    at noon ET on Jan 3) reads sitting_congress(), which follows the clock.
+    Noon ET on Jan 3 of an odd year (the 20th Amendment's hand-over,
+    app.time_utils.congress_in_session), the same rule the district lines
+    follow: a process started between midnight and noon that day must not
+    score the new Congress's windows on the outgoing Congress's lines. It
+    is only the starting value — the pipeline process moves it forward at
+    the start of each run (scoring_congress), so a process that was already
+    running when a new Congress convened is not stuck on the old one.
     """
-    today = today or datetime.date.today()
-    year = today.year - 1 if today.year % 2 == 1 and (today.month, today.day) < (1, 3) else today.year
-    return 1 + (year - 1789) // 2
+    return congress_in_session(now)
 
 
-def sitting_congress() -> int:
-    """The Congress in office NOW: CURRENT_CONGRESS when an operator pinned
-    it in the environment (an archived-DB re-run), otherwise the clock —
-    re-read on every call, so it moves at noon ET on Jan 3 of an odd year
-    (app.time_utils.congress_in_session) with no restart. Not
-    settings.CURRENT_CONGRESS's default, which is computed once, as of
-    process start (see _default_current_congress)."""
-    if settings.current_congress_pinned:
-        return settings.CURRENT_CONGRESS
-    return congress_in_session()
+# The Congress one pipeline run holds (scoring_congress): while set, every
+# read of settings.CURRENT_CONGRESS in that run's context (its tasks, and
+# threads started through asyncio.to_thread) answers it, whatever another
+# run in the same process advances meanwhile.
+_RUN_CONGRESS: ContextVar[int | None] = ContextVar("scoring_congress", default=None)
+
+
+def advance_current_congress() -> int:
+    """Bring settings.CURRENT_CONGRESS up to the Congress in office (noon ET
+    on Jan 3 of an odd year), unless an operator pinned it in the
+    environment. Never moves it back. Returns the value in effect in this
+    context. Called by the pipeline process at the start of each run (via
+    scoring_congress) and by the API process periodically — never in the
+    middle of a run's computation, which holds its own Congress."""
+    if not settings.current_congress_pinned:
+        now = congress_in_session()
+        if now > settings.CURRENT_CONGRESS:
+            settings.CURRENT_CONGRESS = now
+    return settings.CURRENT_CONGRESS
+
+
+@contextmanager
+def scoring_congress() -> Iterator[int]:
+    """Hold ONE Congress for a pipeline run: the scored windows (roll-call
+    sessions, bills, Voteview ideal points — every read of
+    settings.CURRENT_CONGRESS) and House members' district lines
+    (fetch/district_pvi reads the same value) come from it for the whole
+    run. On entry the process's value is advanced to the Congress in office
+    (advance_current_congress), so the first run after noon ET on Jan 3
+    moves windows and lines together, with no restart. Inside an enclosing
+    hold, keeps that one. Yields the Congress held."""
+    held = _RUN_CONGRESS.get()
+    if held is not None:
+        yield held
+        return
+    congress = advance_current_congress()
+    token = _RUN_CONGRESS.set(congress)
+    try:
+        yield congress
+    finally:
+        _RUN_CONGRESS.reset(token)
+
+
+def holds_scoring_congress(fn):
+    """Decorator for a pipeline run's async entry point: runs it inside
+    scoring_congress()."""
+
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        with scoring_congress():
+            return await fn(*args, **kwargs)
+
+    return wrapper
 
 
 # Settings removed from the code that a deployed .env may still set. The
@@ -163,6 +204,15 @@ class Settings(BaseSettings):
     @property
     def current_congress_pinned(self) -> bool:
         return self._current_congress_pinned
+
+    def __getattribute__(self, name):
+        # A pipeline run's held Congress (scoring_congress) answers for
+        # CURRENT_CONGRESS in that run's context.
+        if name == "CURRENT_CONGRESS":
+            held = _RUN_CONGRESS.get()
+            if held is not None:
+                return held
+        return super().__getattribute__(name)
 
     @model_validator(mode="before")
     @classmethod

@@ -37,14 +37,15 @@ Congress's table under "congresses", and the sitting Congress's table
 copied to the top-level "districts" that score_calculator._district_pvi()
 and fetch/voteview.py read ("congress" names whose table it is).
 
-The sitting Congress is read from the clock on every call
-(app.config.sitting_congress: noon ET on Jan 3 of an odd year starts the
-next one, per the 20th Amendment), not from settings.CURRENT_CONGRESS,
-which is fixed when the process starts. Every House run, nightly or
+The sitting Congress is settings.CURRENT_CONGRESS — the same value the
+scored windows read — held for the whole of a pipeline job and advanced to
+the Congress in office (noon ET on Jan 3 of an odd year starts the next
+one, per the 20th Amendment) at the start of each job, unless an operator
+pinned it (app.config.scoring_congress). Every House run, nightly or
 triggered, goes through run_house_on_sitting_lines: under the
 DISTRICT_LINES lease (app.pipeline.lease), held until the run's scoring is
 done, it settles the lines first (_ensure_sitting_lines) — so the first
-House run after that noon copies the new Congress's table up from the
+House run in a job started after that noon copies the new Congress's table up from the
 tables already on disk (no restart, no fetch) once that Congress has an
 entry in the sources file, and a pin advanced or a Congress added there is
 fetched by the next House run rather than the next weekly refresh. If the
@@ -451,8 +452,23 @@ def check_table(source: dict, revision: dict | None, page: str,
 
 # ── Sources and fetch ──────────────────────────────────────────────────
 
+# The sources file ships in the image and nothing rewrites it at runtime,
+# but it is read on the elections GET path (district_pvi_for_congress), so
+# it is parsed once per version of the file — keyed by path and stamp (one
+# stat), which also keeps an edited checkout honest under a dev server.
+_sources_cache: dict[pathlib.Path, tuple] = {}
+_sources_lock = new_reload_lock()
+
+
 def load_sources(path: pathlib.Path | None = None) -> dict:
-    return json.loads((path or SOURCES_PATH).read_text())
+    """The parsed sources file. Shared: callers read it, never change it.
+    Raises when it can't be read or parsed (not cached)."""
+    path = path or SOURCES_PATH
+    with _sources_lock:
+        cached, stamp = _sources_cache.get(path, (None, None))
+        cached, stamp = reload_if_moved([path], cached, stamp, lambda: json.loads(path.read_text()))
+        _sources_cache[path] = (cached, stamp)
+        return cached
 
 
 def congress_for_election(year: int) -> int:
@@ -707,6 +723,38 @@ class SeatLines(dict):
         other = self._table()
         return key in other if other is not None else super().__contains__(key)
 
+    # Every other read of the table answers the same way, so no reader —
+    # dict(lines), len(), iteration, get_district_pvi_map — can bypass a
+    # block's table. (dict(x) of a dict subclass copies its storage
+    # directly unless the subclass has its own __iter__; with this one it
+    # goes through keys() and __getitem__.)
+    def __iter__(self):
+        other = self._table()
+        return iter(other) if other is not None else super().__iter__()
+
+    def __len__(self) -> int:
+        other = self._table()
+        return len(other) if other is not None else super().__len__()
+
+    def keys(self):
+        other = self._table()
+        return other.keys() if other is not None else super().keys()
+
+    def values(self):
+        other = self._table()
+        return other.values() if other is not None else super().values()
+
+    def items(self):
+        other = self._table()
+        return other.items() if other is not None else super().items()
+
+    def copy(self) -> dict:
+        return dict(self.items())
+
+    def own_table(self) -> dict[str, int]:
+        """This read's own (top-level) table, whatever block is open."""
+        return dict(dict.items(self))
+
 
 def seat_lines(raw: dict) -> SeatLines:
     """One read of the file (its parsed JSON), as the SeatLines member
@@ -754,10 +802,14 @@ def lines_of(congress: int | None) -> Iterator[int | None]:
     Congress (stored before it was recorded), or one whose table is no
     longer on file, is read on the current lines, as it always was — the
     table as the block opened, like current_lines, so a rewrite of the file
-    meanwhile can't change lines under the computation."""
+    meanwhile can't change lines under the computation. Inside another
+    such block, the current lines are that block's table: a request for
+    its Congress (or for none, or for one not on file) keeps it."""
+    enclosing = _OTHER_LINES.get()
     lines = _scoring_lines()
+    current = enclosing or (lines.own_table(), lines.congress)
     pinned = None
-    if congress is not None and lines.congress is not None and congress != lines.congress:
+    if congress is not None and current[1] is not None and congress != current[1]:
         block = (lines.tables or {}).get(str(congress))
         if block and block.get("districts"):
             pinned = ({k: int(v) for k, v in block["districts"].items()}, congress)
@@ -767,7 +819,7 @@ def lines_of(congress: int | None) -> Iterator[int | None]:
                 "reading the current lines", ordinal(congress),
             )
     if pinned is None:
-        pinned = (dict(lines), lines.congress)
+        pinned = current
     token = _OTHER_LINES.set(pinned)
     try:
         yield pinned[1]
@@ -789,7 +841,7 @@ def current_lines() -> Iterator[int | None]:
     pinned = _OTHER_LINES.get()
     if pinned is None:
         lines = _scoring_lines()
-        pinned = (dict(lines), lines.congress)
+        pinned = (lines.own_table(), lines.congress)
     token = _OTHER_LINES.set(pinned)
     try:
         yield pinned[1]
@@ -798,13 +850,14 @@ def current_lines() -> Iterator[int | None]:
 
 
 def _sitting_congress() -> int:
-    """The Congress in office now, read from the clock on every call (noon
-    ET on Jan 3 of an odd year starts the next one) unless CURRENT_CONGRESS
-    is pinned in the environment — see app.config.sitting_congress. NOT
-    settings.CURRENT_CONGRESS's default, which is fixed at process start
-    and would hold the old Congress's lines until a restart."""
-    from app.config import sitting_congress
-    return sitting_congress()
+    """The Congress member scoring is on: settings.CURRENT_CONGRESS, the
+    same value the scored windows (roll-call sessions, bills, Voteview
+    ideal points) read — the run's held Congress inside a pipeline run
+    (app.config.scoring_congress), advanced to the Congress in office at
+    the start of each run unless an operator pinned it. One value, so a
+    House run can never score one Congress's votes on another's lines."""
+    from app.config import settings
+    return settings.CURRENT_CONGRESS
 
 
 def _diff_digest(changed: list[str], pinned: dict[str, int], live: dict[str, int]) -> str:
@@ -854,10 +907,16 @@ async def _check_live_drift(sources: dict, payload: dict) -> list[str]:
 
 
 # What each DISTRICT_LINES holder calls itself on the lease row
-# (lease.holder): skip messages name it, and a House run tells a refresh
-# (worth waiting for) from another House run (not).
+# (lease.holder): skip messages name it, and a House run tells a refresh or
+# the startup rescore (short, worth waiting for) from another House run
+# (not).
 REFRESH_WHO = "District PVI refresh"
 HOUSE_RUN_WHO = "House run"
+# main's startup Constituent Alignment rescore holds the lines while it
+# rewrites House scores and records their lines, so a House run can't
+# switch the lines and upsert members between its read and its commit.
+RESCORE_WHO = "startup Constituent Alignment rescore"
+WAITED_FOR = (REFRESH_WHO, RESCORE_WHO)
 
 # How long a House run waits for a District PVI refresh that holds the
 # lines. A refresh is a handful of requests (one per pinned Congress, plus
@@ -903,6 +962,9 @@ async def _refresh() -> bool:
     try:
         sources = load_sources()
         sitting = _sitting_congress()
+        configured = sorted(int(c) for c in sources["congresses"])
+        if configured and sitting < configured[0]:
+            return await _check_without_writing(sources, sitting, configured[0])
         payload, failures = await build_payload(sources, sitting)
         if failures:
             for f in failures:
@@ -932,6 +994,28 @@ async def _refresh() -> bool:
         return False
 
 
+async def _check_without_writing(sources: dict, sitting: int, earliest: int) -> bool:
+    """A refresh while the sitting Congress is older than every configured
+    one (only an environment pin puts it there): no table describes its
+    lines, so nothing is written — but the pinned tables are still fetched
+    and gated, and the live-drift check still runs on them, so a pin that
+    needs advancing isn't hidden for as long as the pin stands. Returns
+    False (nothing written); _ensure_sitting_lines's alert says why."""
+    payload, failures = await build_payload(sources, earliest)
+    for f in failures:
+        logger.warning("district-pvi ingestion gate failed: %s", f)
+    logger.warning(
+        "district-pvi: the sitting %s Congress is older than every pinned table — refresh wrote "
+        "nothing (the tables %s)", ordinal(sitting), "failed their gates" if failures else "passed their gates",
+    )
+    if payload is not None:
+        try:
+            await _check_live_drift(sources, payload)
+        except Exception:
+            logger.warning("district-pvi live drift check failed", exc_info=True)
+    return False
+
+
 def _pins_current(data: dict, sources: dict | None) -> bool:
     """Whether the file's tables are exactly the sources file's pins: every
     configured Congress present at its pinned revision, and none that the
@@ -953,9 +1037,10 @@ def _ensure_sitting_lines() -> str:
     top-level table is the sitting Congress's, from the pins the sources
     file names now. Returns what it did. The caller holds DISTRICT_LINES.
 
-    The sitting Congress comes from the clock (_sitting_congress), so the
-    first House run after noon ET on Jan 3 of an odd year switches the
-    lines with no restart and no fetch.
+    The sitting Congress is the run's held Congress (_sitting_congress,
+    app.config.scoring_congress), so the first run to start after noon ET
+    on Jan 3 of an odd year switches the lines and the scored windows
+    together, with no restart and no fetch.
 
     - "current": already the sitting Congress's table, and every table on
       file is at the revision the sources file pins now (_pins_current).
@@ -1043,7 +1128,8 @@ async def run_house_on_sitting_lines(
     trigger's check), and a second House trigger is refused at once
     instead of waiting out a first one's network refresh.
 
-    A District PVI refresh holding the lease is waited for (up to
+    A District PVI refresh (or main's startup rescore, WAITED_FOR) holding
+    the lease is waited for (up to
     `refresh_wait_s`, re-trying every `poll_s`): it is minutes of work, and
     skipping would cost a night of House scores — and, in the nightly
     chain, used to end the chain before Stock trades and Election. So is
@@ -1078,20 +1164,29 @@ async def run_house_on_sitting_lines(
             # the House run — and with it the rest of the nightly chain.
             await asyncio.sleep(min(poll_s, BUSY_RETRY_S))
             continue
-        if granted.holder != REFRESH_WHO:
+        if granted.holder not in WAITED_FOR:
             break
-        logger.info("House run waiting for the %s that holds the district lines", REFRESH_WHO)
+        logger.info("House run waiting for the %s that holds the district lines", granted.holder)
         await asyncio.sleep(poll_s)
-    if granted.holder == REFRESH_WHO:
+    if granted.holder in WAITED_FOR:
         logger.warning(
             "House pipeline not started: the %s has held the district lines for over %d minutes",
-            REFRESH_WHO, refresh_wait_s // 60,
+            granted.holder, refresh_wait_s // 60,
         )
     return {"status": "skipped", "reason": granted.code, "holder": granted.holder}
 
 
 async def _house_run_holding_the_lines(run_house) -> dict:
-    """run_house_on_sitting_lines's work, under the DISTRICT_LINES lease."""
+    """run_house_on_sitting_lines's work, under the DISTRICT_LINES lease,
+    on one Congress (app.config.scoring_congress — the enclosing job's
+    when there is one): the lines it settles and the windows it scores."""
+    from app.config import scoring_congress
+
+    with scoring_congress():
+        return await _house_run_on_held_congress(run_house)
+
+
+async def _house_run_on_held_congress(run_house) -> dict:
     import asyncio
 
     from app.database import SessionLocal
@@ -1128,6 +1223,20 @@ async def _house_run_holding_the_lines(run_house) -> dict:
         return await run_house()
 
 
+def _served_lines(path: pathlib.Path) -> str:
+    """What member scoring reads now, in words — read back from the table
+    it is served (after a fresh read), not inferred from what was written:
+    with no file at `path`, scoring falls back to the bundled copy."""
+    _reset_caches()
+    lines = _scoring_lines()
+    where = "the file's top-level table" if path.exists() else "the bundled copy's top-level table, as no file is on the volume"
+    if lines.congress is not None:
+        return f"the {ordinal(lines.congress)} Congress's lines ({where})"
+    if lines:
+        return f"a pre-pinning table of unknown lines ({where})"
+    return "no district table — every House seat falls back to its state's lean"
+
+
 def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources: dict) -> str:
     import asyncio
 
@@ -1155,13 +1264,12 @@ def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources:
                 lines = bundled["congress"]
     configured = sorted(int(c) for c in sources["congresses"])
     older_than_every_pin = bool(configured) and sitting < configured[0]
+    served = _served_lines(path)
     if older_than_every_pin:
         # Only an environment pin can put the sitting Congress before
         # every configured one (the clock only moves forward past them).
-        held = data.get("congress") if data.get("congresses") else None
-        on = (
-            f"the file's existing top-level table (the {ordinal(held)} Congress's lines, "
-            f"which are NOT the {ordinal(sitting)}'s)" if held else "no pinned table"
+        on = served + (
+            f", which are NOT the {ordinal(sitting)}'s" if _scoring_lines().congress is not None else ""
         )
         why = (
             f"CURRENT_CONGRESS is pinned in the environment to {sitting}"
@@ -1169,13 +1277,18 @@ def _no_source_configured(sitting: int, data: dict, path: pathlib.Path, sources:
         )
         text = (
             f"{why}, older than every Congress in app/data/district_pvi_sources.json (the earliest "
-            f"is the {ordinal(configured[0])}), so no pinned table describes its district lines and "
-            f"none is used in its place. Member scoring is on {on}. For an archived-DB re-run of "
-            f"the {ordinal(sitting)} Congress, add an entry for it (see the file's _contract); "
-            f"otherwise remove or correct the CURRENT_CONGRESS pin."
+            f"is the {ordinal(configured[0])}), so no pinned table describes its district lines. "
+            f"Member scoring is on {on}. Until this is fixed, every weekly District PVI refresh "
+            f"fetches and checks the pinned tables but writes none of them (none describes the "
+            f"{ordinal(sitting)}'s lines); its live-drift check still runs. For an archived-DB "
+            f"re-run of the {ordinal(sitting)} Congress, add an entry for it (see the file's "
+            f"_contract); otherwise remove or correct the CURRENT_CONGRESS pin."
         )
     else:
-        on = f"the {ordinal(lines)} Congress's lines, the latest pinned" if lines else "no pinned table"
+        on = (
+            f"{served}, the latest pinned" if lines is not None and _scoring_lines().congress == lines
+            else served
+        )
         text = (
             f"The {ordinal(sitting)} Congress is in office, and app/data/district_pvi_sources.json "
             f"has no entry for it. Member scoring is on {on}. That is right only if no state "
@@ -1213,7 +1326,34 @@ def _pvi_file() -> dict:
         return _file_cache
 
 
+# district_pvi_for_congress's answers, per Congress, for the file and the
+# sources as they were read: rebuilt when either is re-read (a new object
+# from _pvi_file / load_sources — their stamps moved), so the elections GET
+# path does no parsing or table building per request.
+_for_congress_cache: dict[int, tuple] = {}
+_for_congress_lock = new_reload_lock()
+
+
 def district_pvi_for_congress(congress: int) -> tuple[dict[str, int], dict | None]:
+    """See _district_pvi_for_congress; cached per version of the file and
+    the sources file. The table and provenance are shared — read them,
+    don't change them."""
+    data = _pvi_file()
+    try:
+        sources = load_sources()
+    except Exception:
+        logger.warning("district-pvi: sources file unreadable", exc_info=True)
+        return _district_pvi_for_congress(congress, data, {})
+    with _for_congress_lock:
+        hit = _for_congress_cache.get(congress)
+        if hit is not None and hit[0] is data and hit[1] is sources:
+            return hit[2]
+        answer = _district_pvi_for_congress(congress, data, sources.get("congresses") or {})
+        _for_congress_cache[congress] = (data, sources, answer)
+        return answer
+
+
+def _district_pvi_for_congress(congress: int, data: dict, sources: dict) -> tuple[dict[str, int], dict | None]:
     """(table, provenance) for the district lines a given Congress is
     elected on — what an election page should show for that cycle's House
     races (congress_for_election). Member scoring does not use this; it
@@ -1232,12 +1372,7 @@ def district_pvi_for_congress(congress: int) -> tuple[dict[str, int], dict | Non
     elections API labels as such. Provenance says which Congress's table
     it is ("congress") and for which Congress it was asked ("forCongress").
     """
-    data = _pvi_file()
     blocks = data.get("congresses") or {}
-    try:
-        sources = load_sources()["congresses"]
-    except Exception:
-        sources = {}
     if blocks:
         key = _lines_congress(blocks, congress)
         if key is None:

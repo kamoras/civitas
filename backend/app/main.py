@@ -119,22 +119,46 @@ def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]
     be rewritten meanwhile (another backend, mid-rollout); the Congress
     recorded must be the lines the score used, so the breakdown — and the
     overlap check the rescore re-measures from it — recompute on the same
-    ones. Never raises (the rescore's own contract)."""
-    from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
-    from app.pipeline.fetch.district_pvi import current_lines
+    ones. Never raises (the rescore's own contract).
 
-    with current_lines() as lines:
-        return rescore_stale_constituent_alignment(session_factory, house_lines=lines)
+    The House part holds the DISTRICT_LINES lease (who=RESCORE_WHO) across
+    the read and the commit: a House run (or a refresh) takes it before it
+    switches the lines, and a triggered House run has no HousePipelineRun
+    row yet while it does — the rescore's run_in_progress check can't see
+    it, and would commit the old lines' scores over the run's fresh ones.
+    A House run that finds the rescore holding it waits (WAITED_FOR). When
+    the lease is held elsewhere, only the Senate is rescored; the House
+    run holding it scores the House itself."""
+    from app.pipeline import lease
+    from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
+    from app.pipeline.fetch.district_pvi import RESCORE_WHO, current_lines
+
+    try:
+        with lease.job(lease.DISTRICT_LINES, who=RESCORE_WHO) as granted:
+            if granted:
+                with current_lines() as lines:
+                    return rescore_stale_constituent_alignment(session_factory, house_lines=lines)
+    except Exception:
+        logging.getLogger("app.main").exception("Startup rescore: taking the district lines failed")
+    return rescore_stale_constituent_alignment(session_factory, house_lines=None, house=False)
 
 
 async def _watch_pipeline_service() -> None:
-    """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive)."""
+    """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive),
+    and keep this process's CURRENT_CONGRESS up with the Congress in office
+    (app.config.advance_current_congress): nothing here runs pipeline jobs,
+    whose start advances it where they run."""
+    from app.config import advance_current_congress
     from app.ops_alerts import check_pipeline_service_alive
 
     # Every API worker runs this; the alert's dedupe (send_ops_alert) is
     # what makes a stale heartbeat page once, not once per worker.
     await asyncio.sleep(_LIVENESS_GRACE_S)
     while True:
+        try:
+            advance_current_congress()
+        except Exception:
+            logging.getLogger("app.main").warning("Advancing CURRENT_CONGRESS failed", exc_info=True)
         try:
             await asyncio.to_thread(check_pipeline_service_alive)
         except Exception:
@@ -181,8 +205,13 @@ def _start_pipeline_side_startup_jobs() -> None:
                         "Startup rescore skipped: %s", lease.refusal(db, lease.STARTUP_RESCORE),
                     )
                     return
-                rescore_stale_legislative_effectiveness(_rescore_session)
-                rescore_constituent_alignment_on_current_lines(_rescore_session)
+                # One Congress for both, like any pipeline job
+                # (app.config.scoring_congress).
+                from app.config import scoring_congress
+
+                with scoring_congress():
+                    rescore_stale_legislative_effectiveness(_rescore_session)
+                    rescore_constituent_alignment_on_current_lines(_rescore_session)
         except Exception:
             # Each rescore logs its own failures; this is the lease's.
             logging.getLogger("app.main").exception("Startup rescore failed")

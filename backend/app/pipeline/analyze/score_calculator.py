@@ -530,11 +530,12 @@ def _district_pvi() -> dict[str, int]:
     not whatever map the next election uses. Ingested from a pinned
     per-Congress source (app/data/district_pvi_sources.json) by
     app/pipeline/fetch/district_pvi.py to /data/district_pvi.json, which
-    puts the sitting Congress's table in "districts" (app.config.
-    sitting_congress: the clock's Congress, from noon ET on Jan 3 of an
-    odd year, or CURRENT_CONGRESS only when an operator pins it in the
-    environment; with no pinned table for it, the newest one before it —
-    switched before each House run scores); the bundled
+    puts the sitting Congress's table in "districts" (settings.
+    CURRENT_CONGRESS, the Congress the scored windows read too — advanced to
+    the one in office, from noon ET on Jan 3 of an odd year, at the start of
+    each pipeline job unless an operator pins it (app.config.
+    scoring_congress); with no pinned table for it, the newest one before
+    it — switched before each House run scores); the bundled
     app/data/district_pvi.json is only the pre-first-ingest fallback (all
     435 seats incl. vacancies; ingestion gates documented in the fetch
     module). State PVI is the wrong seat expectation for House
@@ -588,6 +589,14 @@ def get_district_pvi_map() -> dict[str, int]:
     return dict(_district_pvi())
 
 
+_pvi_meta_cache: dict | None = None
+# The persistent copies' stamp when _pvi_meta_cache was built: the elections
+# API serves it on every /pvi request, and the pipeline process rewrites
+# /data/district_pvi.json (see _district_pvi_stamp).
+_pvi_meta_stamp: Stamp = None
+_pvi_meta_lock = new_reload_lock()
+
+
 def get_pvi_meta() -> dict:
     """Provenance metadata from the two PVI data files (their _source/
     _method/_window/_as_of keys), for public labeling (2026-07 review F7:
@@ -595,10 +604,33 @@ def get_pvi_meta() -> dict:
     lean-is-not-a-forecast caveat over-claims what PVI measures — the
     files carry this metadata precisely so an exposure surface can show
     it). Values are None when a file lacks a key or is unavailable; the
-    API/frontend degrade to generic wording rather than invent provenance."""
+    API/frontend degrade to generic wording rather than invent provenance.
+
+    Built once per version of the two files (file_cache.reload_if_moved);
+    each call gets its own top-level dict, since callers replace entries."""
+    import pathlib
+
+    from app.file_cache import reload_if_moved
+
+    global _pvi_meta_cache, _pvi_meta_stamp
+    with _pvi_meta_lock:
+        _pvi_meta_cache, _pvi_meta_stamp = reload_if_moved(
+            [pathlib.Path(_PVI_PERSISTENT_DIR) / name for name in ("state_pvi.json", "district_pvi.json")],
+            _pvi_meta_cache, _pvi_meta_stamp, _load_pvi_meta,
+        )
+        return dict(_pvi_meta_cache)
+
+
+def _load_pvi_meta() -> dict:
+    from app.file_cache import Uncached
+
     meta: dict = {}
+    unreadable = False
     for key, fname in (("states", "state_pvi.json"), ("districts", "district_pvi.json")):
-        raw = _read_pvi_json(fname)
+        try:
+            raw = _read_pvi_json(fname, report_unreadable=True)
+        except Uncached as fallback:
+            raw, unreadable = fallback.value, True
         meta[key] = {
             "source": raw.get("_source"),
             "method": raw.get("_method"),
@@ -611,6 +643,8 @@ def get_pvi_meta() -> dict:
         "specific race — incumbency, candidate quality, and open seats are "
         "not part of this number."
     )
+    if unreadable:
+        raise Uncached(meta)
     return meta
 
 
