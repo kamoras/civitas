@@ -56,7 +56,6 @@ from app.pipeline.vector_store import (
     explore_text_hash,
     get_embedded_explore_ids,
     get_embedded_hashes,
-    get_embedded_text_hashes,
     index_is_whole,
     is_busy_error,
     rebuild_explore_index,
@@ -561,7 +560,7 @@ def _purge_orphaned_vectors(db: Session) -> int:
     try:
         # Chunks and text-hash rows both: a document with no text has only
         # its hash row, and chunks some other writer left have no hash row.
-        embedded = get_embedded_explore_ids() | set(get_embedded_text_hashes())
+        embedded = get_embedded_explore_ids() | set(get_embedded_hashes())
     except Exception:
         logger.warning("Could not read the vector index — skipping orphan sweep")
         return 0
@@ -569,7 +568,15 @@ def _purge_orphaned_vectors(db: Session) -> int:
     orphans = embedded - live
     if not orphans:
         return 0
-    removed = delete_explore_vectors(orphans)
+    try:
+        removed = delete_explore_vectors(orphans)
+    except Exception as exc:
+        # A lock is a skip, as it is for the rest of the embed step: the
+        # delete rolled back, and the orphans read the same next run.
+        if not is_busy_error(exc):
+            raise
+        logger.warning("Vector index busy — orphan sweep left to the next run (%s)", exc)
+        return 0
     logger.info(
         "Purged %d orphaned vector chunks for %d deleted documents",
         removed, len(orphans),

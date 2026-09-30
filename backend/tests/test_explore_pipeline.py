@@ -38,7 +38,6 @@ def _no_real_vector_store(monkeypatch):
     drive the real run_explore_pipeline mustn't depend on a store on disk.
     A test that needs other answers patches over these."""
     monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: set())
-    monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", lambda: {})
     monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", lambda: {})
 
 class TestStableHash:
@@ -381,7 +380,7 @@ class TestOrphanedVectorPurge:
 
         deleted: list[set] = []
         monkeypatch.setattr(
-            explore_pipeline, "get_embedded_text_hashes", lambda: dict.fromkeys({1, 2, 3}, "h"))
+            explore_pipeline, "get_embedded_hashes", lambda: dict.fromkeys({1, 2, 3}, ("h", "m")))
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: deleted.append(set(ids)) or len(ids))
@@ -397,7 +396,7 @@ class TestOrphanedVectorPurge:
 
         called = []
         monkeypatch.setattr(
-            explore_pipeline, "get_embedded_text_hashes", lambda: dict.fromkeys({1}, "h"))
+            explore_pipeline, "get_embedded_hashes", lambda: dict.fromkeys({1}, ("h", "m")))
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: called.append(ids))
@@ -416,7 +415,7 @@ class TestOrphanedVectorPurge:
         def boom():
             raise RuntimeError("index mid-rebuild")
 
-        monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", boom)
+        monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", boom)
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: called.append(ids))
@@ -424,6 +423,20 @@ class TestOrphanedVectorPurge:
         assert explore_pipeline._purge_orphaned_vectors(db_session) == 0
         assert called == [], "must not delete anything when the index is unreadable"
 
+
+    @pytest.mark.parametrize("error,raised", [("database is locked", False), ("disk I/O error", True)])
+    def test_a_locked_delete_is_left_to_the_next_run(self, db_session, monkeypatch, error, raised):
+        import sqlite3
+
+        monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", lambda: {9: ("h", "m")})
+        monkeypatch.setattr(
+            explore_pipeline, "delete_explore_vectors",
+            MagicMock(side_effect=sqlite3.OperationalError(error)))
+        if raised:
+            with pytest.raises(sqlite3.OperationalError):
+                explore_pipeline._purge_orphaned_vectors(db_session)
+        else:
+            assert explore_pipeline._purge_orphaned_vectors(db_session) == 0
 
 @pytest.mark.asyncio
 async def test_a_run_that_waited_out_a_rebuild_purges_again_and_resolves_the_alert(db_session):

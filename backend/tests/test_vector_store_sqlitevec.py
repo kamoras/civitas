@@ -269,9 +269,9 @@ class TestTextHashes:
     def test_embedding_records_what_it_embedded_and_deleting_forgets_it(self, vec_env):
         doc = _doc(1, "A title")
         vector_store.embed_explore_documents([doc])
-        assert vector_store.get_embedded_text_hashes() == {1: vector_store.explore_text_hash(doc)}
+        assert vector_store.get_embedded_hashes() == {1: (vector_store.explore_text_hash(doc), vector_store.explore_meta_hash(doc))}
         vector_store.delete_explore_vectors({1})
-        assert vector_store.get_embedded_text_hashes() == {}
+        assert vector_store.get_embedded_hashes() == {}
 
     def test_the_hash_changes_with_the_text_and_only_the_text(self):
         doc = _doc(1, "A title")
@@ -327,7 +327,7 @@ class TestTextHashes:
              patch("app.ops_alerts.send_ops_alert") as alert, \
              patch("app.ops_alerts.resolve_ops_alert") as resolve:
             assert vector_store.top_up_explore_index(lambda: [_doc(1, "A title")], lambda: [_doc(2, "B")]) == 1
-        assert set(vector_store.get_embedded_text_hashes()) == {1}
+        assert set(vector_store.get_embedded_hashes()) == {1}
         assert alert.call_args.kwargs["condition"] == "explore-index-relabel"
         resolve.assert_not_called()
 
@@ -374,13 +374,39 @@ class TestTextHashes:
         for field in vector_store._META_FIELDS:
             assert vector_store.explore_meta_hash(doc) != vector_store.explore_meta_hash({**doc, field: "changed"})
 
+    def test_a_delete_that_fails_part_way_leaves_nothing_half_deleted(self, vec_env):
+        # The shared connection's next commit mustn't write half a sweep.
+        vector_store.embed_explore_documents([_doc(i, f"Doc {i}") for i in range(1, 4)])
+        conn = vector_store.get_vec_conn()
+        real = vector_store.get_vec_conn
+
+        class Failing:
+            def __init__(self):
+                self.statements = 0
+
+            def execute(self, sql, *args):
+                self.statements += 1
+                if self.statements == 2:
+                    raise sqlite3.OperationalError("disk I/O error")
+                return conn.execute(sql, *args)
+
+            def __getattr__(self, name):
+                return getattr(conn, name)
+
+        with patch.object(vector_store, "get_vec_conn", return_value=Failing()), \
+             pytest.raises(sqlite3.OperationalError):
+            vector_store.delete_explore_vectors({1, 2})
+        conn.commit()  # an unrelated writer's
+        assert set(real().execute("SELECT DISTINCT doc_id FROM vec_explore").fetchall()) == {(1,), (2,), (3,)}
+        assert set(vector_store.get_embedded_hashes()) == {1, 2, 3}
+
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         emptied = _doc(1, "")
         vector_store.embed_explore_documents([emptied])
         conn = vector_store.get_vec_conn()
         assert conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0] == 0
-        assert vector_store.get_embedded_text_hashes() == {1: vector_store.explore_text_hash(emptied)}
+        assert vector_store.get_embedded_hashes()[1][0] == vector_store.explore_text_hash(emptied)
 
 class TestEnsureExploreIndex:
     def test_noop_when_index_current(self, vec_env):

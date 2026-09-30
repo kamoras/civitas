@@ -1067,16 +1067,22 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
     with _vec_lock:
         # Chunked: SQLite caps host parameters per statement, and this is
         # called with whole-corpus-sized id sets during a cleanup sweep.
-        for i in range(0, len(ids), 500):
-            chunk = ids[i:i + 500]
-            placeholders = ",".join("?" * len(chunk))
-            cur = conn.execute(
-                f"DELETE FROM vec_explore WHERE doc_id IN ({placeholders})",
-                chunk,
-            )
-            removed += cur.rowcount or 0
-            conn.execute(f"DELETE FROM vec_explore_text WHERE doc_id IN ({placeholders})", chunk)
-        conn.commit()
+        # One transaction: a failure part-way leaves nothing half-deleted
+        # on the shared connection for its next commit to write.
+        try:
+            for i in range(0, len(ids), 500):
+                chunk = ids[i:i + 500]
+                placeholders = ",".join("?" * len(chunk))
+                cur = conn.execute(
+                    f"DELETE FROM vec_explore WHERE doc_id IN ({placeholders})",
+                    chunk,
+                )
+                removed += cur.rowcount or 0
+                conn.execute(f"DELETE FROM vec_explore_text WHERE doc_id IN ({placeholders})", chunk)
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
     return removed
 
 
@@ -1133,12 +1139,6 @@ def update_explore_metadata(docs: list[dict]) -> int:
             conn.rollback()
             raise
     return len(rows)
-
-
-def get_embedded_text_hashes() -> dict[int, str]:
-    """Each embedded document's explore_text_hash, as recorded when its
-    vectors were written."""
-    return dict(get_vec_conn().execute("SELECT doc_id, text_hash FROM vec_explore_text").fetchall())
 
 
 def reset_vector_db() -> None:
