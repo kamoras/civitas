@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+import pytest
+
 from app import config
 from app.config import _default_current_congress, advance_current_congress, scoring_congress
 from app.pipeline.fetch.congress import congress_for_year, congress_of_date
@@ -28,15 +30,11 @@ class TestDefaultCurrentCongress:
         assert _default_current_congress(datetime(2027, 1, 2, 12)) == 119
         assert _default_current_congress(datetime(2026, 1, 1)) == 119
 
-    def test_matches_pipeline_formula_across_years(self):
-        for year in (2025, 2026, 2027, 2028, 2033):
-            assert congress_for_year(year) == 1 + (year - 1789) // 2
-
-    def test_returns_119_for_2026(self):
-        assert congress_for_year(2026) == 119
-
-    def test_returns_120_for_2027(self):
-        assert congress_for_year(2027) == 120
+    @pytest.mark.parametrize("year, congress", [
+        (2025, 119), (2026, 119), (2027, 120), (2028, 120), (2033, 123),
+    ])
+    def test_pipeline_formula_across_years(self, year, congress):
+        assert congress_for_year(year) == congress
 
     def test_the_staleness_check_agrees_with_the_default(self):
         from app.pipeline.fetch.congress import expected_current_congress

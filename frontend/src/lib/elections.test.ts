@@ -350,10 +350,8 @@ describe("majorPartyOf", () => {
 });
 
 describe("districtAreaLabel county suffix", () => {
-  it("drops the suffix for a U.S. House row, where every entry is a county", () => {
-    expect(districtAreaLabel(["Rockdale County", "Newton County"])).toBe("Rockdale, Newton");
-  });
-
+  // The default (a U.S. House row, where every entry is a county) drops it —
+  // see "drops the generic County suffix" above.
   it("keeps it for a state legislative row, where a county is the exception", () => {
     // Georgia has both a Forsyth County and a Forsyth city, and a
     // district covering unincorporated county land is labelled with the

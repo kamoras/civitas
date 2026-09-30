@@ -8,6 +8,8 @@ current congress only. See AGENTS.md "current term" and fetch/congress.py.
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+import pytest
+
 from app.pipeline.fetch.congress import (
     _recent_congresses_only,
     congress_first_year,
@@ -16,32 +18,23 @@ from app.pipeline.fetch.congress import (
 )
 
 
-def test_congress_first_year_119th_is_2025():
-    assert congress_first_year(119) == 2025
-
-
 def test_congress_first_year_matches_known_anchors():
     # 1st Congress convened 1789; 116th (2019-2021) is a well-known anchor.
     assert congress_first_year(1) == 1789
     assert congress_first_year(116) == 2019
+    assert congress_first_year(119) == 2025
 
 
-def test_recent_congresses_only_excludes_previous_congress():
+def test_recent_congresses_only_keeps_only_the_current_congress():
     with patch("app.pipeline.fetch.congress.settings.CURRENT_CONGRESS", 119):
         bills = [
             {"congress": 119, "number": "1"},
             {"congress": 118, "number": "2"},
             {"congress": 117, "number": "3"},
+            {"congress": 119, "number": "4"},
         ]
         result = _recent_congresses_only(bills)
-        assert [b["number"] for b in result] == ["1"]
-
-
-def test_recent_congresses_only_keeps_current_congress_bills():
-    with patch("app.pipeline.fetch.congress.settings.CURRENT_CONGRESS", 119):
-        bills = [{"congress": 119, "number": "a"}, {"congress": 119, "number": "b"}]
-        result = _recent_congresses_only(bills)
-        assert len(result) == 2
+        assert [b["number"] for b in result] == ["1", "4"]
 
 
 def test_congress_for_year_is_inverse_of_first_year():
@@ -61,64 +54,59 @@ def test_expected_current_congress_tracks_the_clock():
         assert expected_current_congress() == 120
 
 
-class TestCongressStalenessGuard:
-    def test_alerts_when_a_pin_is_behind_the_calendar(self):
-        # An environment pin still says 119 while the clock is in the 120th.
-        from app.config import Settings
+@pytest.mark.parametrize("configured", [
+    pytest.param(120, id="silent_when_config_matches"),
+    # An operator who bumped early (or a mid-term convening edge) must
+    # not trigger a spurious "stale" alert.
+    pytest.param(121, id="silent_when_config_is_ahead"),
+])
+def test_congress_staleness_guard(configured):
+    from app.ops_alerts import check_current_congress_staleness
 
-        with patch("app.config.settings", Settings(CURRENT_CONGRESS=119)), patch(
-            "app.pipeline.fetch.congress.expected_current_congress",
-            return_value=120,
-        ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
-            from app.ops_alerts import check_current_congress_staleness
+    with patch("app.config.settings.CURRENT_CONGRESS", configured), patch(
+        "app.pipeline.fetch.congress.expected_current_congress",
+        return_value=120,
+    ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
+        check_current_congress_staleness()
+    assert not mock_alert.called
 
-            check_current_congress_staleness()
-            assert mock_alert.called
-            # The alert names the Congress in session and the pin.
-            text = mock_alert.call_args.args[1]
-            assert "120th" in text and "pinned in the environment" in text and "to 119," in text
 
-    def test_unpinned_never_alerts_even_across_the_hand_over(self):
-        """Unpinned, the check advances the value first; it can read behind
-        only if noon passes between its two reads — not staleness, and no
-        "pinned" alert."""
-        from app.config import Settings
+def test_congress_staleness_guard_alerts_when_a_pin_is_behind_the_calendar():
+    # An environment pin still says 119 while the clock is in the 120th.
+    # (Unpinned, a value behind the clock advances instead — see the
+    # next test — so only a pin can alert.)
+    from app.config import Settings
+    from app.ops_alerts import check_current_congress_staleness
 
-        s = Settings()
-        assert not s.current_congress_pinned
-        with patch("app.config.settings", s), patch(
-            "app.pipeline.fetch.congress.expected_current_congress",
-            return_value=s.CURRENT_CONGRESS + 1,
-        ), patch("app.ops_alerts.send_ops_alert") as mock_alert, patch(
-            "app.ops_alerts.resolve_ops_alert",
-        ) as resolved:
-            from app.ops_alerts import check_current_congress_staleness
+    with patch("app.config.settings", Settings(CURRENT_CONGRESS=119)), patch(
+        "app.pipeline.fetch.congress.expected_current_congress",
+        return_value=120,
+    ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
+        check_current_congress_staleness()
+    assert mock_alert.called
+    # The alert names the Congress in session and the pin.
+    text = mock_alert.call_args.args[1]
+    assert "120th" in text and "pinned in the environment" in text and "to 119," in text
 
-            check_current_congress_staleness()
-        mock_alert.assert_not_called()
-        resolved.assert_called_once_with("stale-congress")
 
-    def test_silent_when_config_matches(self):
-        with patch("app.config.settings.CURRENT_CONGRESS", 120), patch(
-            "app.pipeline.fetch.congress.expected_current_congress",
-            return_value=120,
-        ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
-            from app.ops_alerts import check_current_congress_staleness
+def test_congress_staleness_guard_unpinned_never_alerts_even_across_the_hand_over():
+    """Unpinned, the check advances the value first; it can read behind
+    only if noon passes between its two reads — not staleness, and no
+    "pinned" alert."""
+    from app.config import Settings
+    from app.ops_alerts import check_current_congress_staleness
 
-            check_current_congress_staleness()
-            assert not mock_alert.called
-
-    def test_silent_when_config_is_ahead(self):
-        # An operator who bumped early (or a mid-term convening edge) must
-        # not trigger a spurious "stale" alert.
-        with patch("app.config.settings.CURRENT_CONGRESS", 121), patch(
-            "app.pipeline.fetch.congress.expected_current_congress",
-            return_value=120,
-        ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
-            from app.ops_alerts import check_current_congress_staleness
-
-            check_current_congress_staleness()
-            assert not mock_alert.called
+    s = Settings()
+    assert not s.current_congress_pinned
+    with patch("app.config.settings", s), patch(
+        "app.pipeline.fetch.congress.expected_current_congress",
+        return_value=s.CURRENT_CONGRESS + 1,
+    ), patch("app.ops_alerts.send_ops_alert") as mock_alert, patch(
+        "app.ops_alerts.resolve_ops_alert",
+    ) as resolved:
+        check_current_congress_staleness()
+    mock_alert.assert_not_called()
+    resolved.assert_called_once_with("stale-congress")
 
 
 def test_expected_current_congress_waits_for_noon_et_on_jan_3():

@@ -45,12 +45,6 @@ class TestParseExploreDocumentSummary:
         assert result["keyPoints"] == []
         assert result["impact"] == ""
 
-    def test_no_markers_at_all_treated_as_pure_summary(self):
-        result = parse_explore_document_summary("SUMMARY: Just a short summary.")
-        assert result["summary"] == "Just a short summary."
-        assert result["keyPoints"] == []
-        assert result["impact"] == ""
-
     def test_key_points_lines_not_starting_with_dash_are_ignored(self):
         text = "SUMMARY: Text.\nKEY POINTS:\nsome preamble the model added\n- Real point\nIMPACT: X"
         result = parse_explore_document_summary(text)

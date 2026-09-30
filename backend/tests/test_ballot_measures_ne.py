@@ -11,6 +11,8 @@ bill page, and extract_text() of the LR19CA Slip Law, fetched live
 import json
 from pathlib import Path
 
+import pytest
+
 from app.pipeline.fetch import ballot_measures_ne as ne
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures_ne_ballot_measures.json").read_text())
@@ -76,23 +78,18 @@ async def test_pamphlet_short_of_the_page_range_refuses(monkeypatch):
     assert await ne.fetch_measures(None, 2026) is None
 
 
-def test_an_unreadable_initiative_heading_refuses_rather_than_publishing_the_amendment_alone():
-    """The regression: the two kinds were found by independent matches,
-    so an initiative heading whose range didn't parse left the LR
-    amendment to be published alone — as the whole ballot."""
-    page = FIXTURE["elections_page"].replace("Initiative Nos. 440-442", "Initiatives 440 through 442")
+@pytest.mark.parametrize("old, new", [
+    # The regression: the two kinds were found by independent matches, so
+    # an initiative heading whose range didn't parse left the LR amendment
+    # to be published alone — as the whole ballot.
+    pytest.param("Initiative Nos. 440-442", "Initiatives 440 through 442",
+                 id="unreadable_initiative_heading_never_publishes_the_amendment_alone"),
+    pytest.param(">LR19CA</a>", ">Legislative Resolution 19CA</a>",
+                 id="amendment_heading_without_its_lr_link_never_publishes_initiatives_alone"),
+    pytest.param("</body>", "<p><strong>Referendum petition certified for the 2026 General Election</strong></p></body>",
+                 id="unrecognised_measure_paragraph_for_the_year"),
+])
+def test_a_measure_listing_it_cannot_read_whole_refuses(old, new):
+    page = FIXTURE["elections_page"].replace(old, new)
     assert page != FIXTURE["elections_page"]
-    assert ne.read_elections_page(page, 2026) is None
-
-
-def test_an_amendment_heading_without_its_lr_link_refuses_rather_than_publishing_initiatives_alone():
-    page = FIXTURE["elections_page"].replace(">LR19CA</a>", ">Legislative Resolution 19CA</a>")
-    assert page != FIXTURE["elections_page"]
-    assert ne.read_elections_page(page, 2026) is None
-
-
-def test_an_unrecognised_measure_paragraph_for_the_year_refuses():
-    page = FIXTURE["elections_page"].replace(
-        "</body>", "<p><strong>Referendum petition certified for the 2026 General Election</strong></p></body>",
-    )
     assert ne.read_elections_page(page, 2026) is None

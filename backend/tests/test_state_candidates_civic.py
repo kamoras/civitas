@@ -19,7 +19,6 @@ import httpx
 import pytest
 
 from app.pipeline.fetch import state_candidates_civic as civic
-from app.pipeline.fetch.state_candidates_common import surname
 
 _ELECTIONS_INDEX = {
     "elections": [
@@ -116,41 +115,6 @@ class TestElectionMatching:
         assert civic._matches_november(_ELECTIONS_INDEX["elections"][0], 2026) is False
 
 
-class TestParseContests:
-    def test_senate_contest_resolves_with_all_candidates_including_independent(self):
-        """The independent candidate's party doesn't normalize -- kept
-        anyway with party=None, deliberately unlike every vote-counting
-        strategy elsewhere in this system (see module docstring)."""
-        results: list[dict] = []
-        for contest in civic._parse_contests(_VOTERINFO_SENATE_AND_HOUSE):
-            if contest.get("kind") != "contest":
-                continue
-            office_district = civic.parse_office(contest.get("office") or "")
-            if office_district != ("S", None):
-                continue
-            for cand in contest.get("candidates") or []:
-                results.append({
-                    "party": civic.normalize_party(cand.get("party") or ""),
-                    "last_name": surname(cand.get("name") or ""),
-                })
-        assert {"party": "D", "last_name": "El-Sayed"} in results
-        assert {"party": "R", "last_name": "Rogers"} in results
-        assert {"party": None, "last_name": "Else"} in results
-        assert len(results) == 3
-
-    def test_house_contest_at_the_senate_address_is_out_of_scope(self):
-        """A House contest that happens to also appear when querying the
-        statewide Senate address is real (Civic returns every contest
-        for that precinct, not just Senate) but out of scope for THIS
-        query -- fetch_confirmed_candidates only asks house_addresses
-        entries about House races, never the Senate address, regardless
-        of whether the contest itself carries a real, schema-valid
-        district id (see TestHouseAddresses for that path)."""
-        house_contest = _VOTERINFO_SENATE_AND_HOUSE["contests"][1]
-        office_district = civic.parse_office(house_contest.get("office") or "")
-        assert office_district != ("S", None)
-
-
 class TestFetchConfirmedCandidates:
     def _patch(self, monkeypatch, elections=None, voterinfo=None):
         async def fake_get_json(client, url, params, label, expected_statuses=()):
@@ -212,6 +176,16 @@ class TestFetchConfirmedCandidates:
 
     @pytest.mark.asyncio
     async def test_confirms_the_real_senate_candidates_and_excludes_the_house_one(self, monkeypatch):
+        """The independent candidate's party doesn't normalize -- kept
+        anyway with party=None, deliberately unlike every vote-counting
+        strategy elsewhere in this system (see module docstring).
+
+        The House contest that also appears at the statewide Senate address
+        is real (Civic returns every contest for that precinct, not just
+        Senate) but out of scope for THIS query -- only house_addresses
+        entries are asked about House races, never the Senate address,
+        whether or not the contest carries a schema-valid district id (see
+        TestHouseAddresses for that path)."""
         self._patch(monkeypatch, elections=_ELECTIONS_INDEX, voterinfo=_VOTERINFO_SENATE_AND_HOUSE)
         result = await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "x"})
         assert result is not None

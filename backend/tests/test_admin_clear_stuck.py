@@ -1,6 +1,6 @@
-"""Coverage for the shared _clear_stuck_runs helper behind the House and
-Stock Trades "clear stuck run" admin endpoints (consolidated from two
-near-identical copies — see admin.py's _clear_stuck_runs).
+"""Coverage for the shared _clear_stuck_runs helper behind the House,
+Stock Trades, Supplementary and Election "clear stuck run" admin endpoints
+(consolidated from near-identical copies — see admin.py's _clear_stuck_runs).
 """
 
 from datetime import timedelta
@@ -9,43 +9,34 @@ from app.time_utils import utcnow
 import pytest
 from fastapi import HTTPException
 
-from app.models import HousePipelineRun, StockTradesPipelineRun
+from app.models import (
+    ElectionPipelineRun,
+    HousePipelineRun,
+    StockTradesPipelineRun,
+    SupplementaryPipelineRun,
+)
 
 
+@pytest.mark.parametrize("endpoint, model, hours", [
+    ("admin_clear_stuck_house", HousePipelineRun, 9),
+    ("admin_clear_stuck_stock_trades", StockTradesPipelineRun, 3),
+    ("admin_clear_stuck_supplementary", SupplementaryPipelineRun, 5),
+    ("admin_clear_stuck_election", ElectionPipelineRun, 13),
+])
 @pytest.mark.asyncio
-async def test_clear_stuck_house_marks_running_rows_failed(db_session):
-    from app.api.admin import admin_clear_stuck_house
+async def test_clear_stuck_marks_running_rows_failed(db_session, endpoint, model, hours):
+    from app.api import admin
 
-    db_session.add(HousePipelineRun(
-        status="running",
-        started_at=utcnow() - timedelta(hours=9),
-    ))
+    db_session.add(model(status="running", started_at=utcnow() - timedelta(hours=hours)))
     db_session.commit()
 
-    result = await admin_clear_stuck_house(db=db_session)
+    result = await getattr(admin, endpoint)(db=db_session)
 
     assert result["cleared"] == 1
-    row = db_session.query(HousePipelineRun).first()
+    row = db_session.query(model).first()
     assert row.status == "failed"
     assert row.completed_at is not None
     assert row.error_message == "Cleared by admin (container restart)"
-
-
-@pytest.mark.asyncio
-async def test_clear_stuck_stock_trades_marks_running_rows_failed(db_session):
-    from app.api.admin import admin_clear_stuck_stock_trades
-
-    db_session.add(StockTradesPipelineRun(
-        status="running",
-        started_at=utcnow() - timedelta(hours=3),
-    ))
-    db_session.commit()
-
-    result = await admin_clear_stuck_stock_trades(db=db_session)
-
-    assert result["cleared"] == 1
-    row = db_session.query(StockTradesPipelineRun).first()
-    assert row.status == "failed"
 
 
 @pytest.mark.asyncio
@@ -56,48 +47,32 @@ async def test_clear_stuck_house_no_op_when_nothing_stuck(db_session):
     assert result == {"cleared": 0, "message": "No stuck runs found"}
 
 
+_RUNNING_FLAGS = {
+    "admin_clear_stuck_house": "app.pipeline.house_pipeline.is_house_pipeline_running",
+    "admin_clear_stuck_stock_trades": "app.pipeline.stock_pipeline.is_stock_pipeline_running",
+    "admin_clear_stuck_supplementary":
+        "app.pipeline.supplementary_pipeline.is_supplementary_pipeline_running",
+    "admin_clear_stuck_election": "app.pipeline.election_pipeline.is_election_pipeline_running",
+}
+
+
+# Each endpoint hands _clear_stuck_runs its own pipeline's running flag, and
+# only that flag raised must refuse: every OTHER pipeline running leaves it
+# free to clear, and its own raises the 409. Wiring an endpoint to another
+# pipeline's flag, to none, or to "any pipeline running" fails here.
+@pytest.mark.parametrize("endpoint", list(_RUNNING_FLAGS))
 @pytest.mark.asyncio
-async def test_clear_stuck_house_refuses_while_actively_running(db_session, monkeypatch):
-    import app.api.admin as admin_module
+async def test_clear_stuck_refuses_only_while_its_own_pipeline_is_running(db_session, monkeypatch, endpoint):
+    from app.api import admin
 
-    monkeypatch.setattr(
-        "app.pipeline.house_pipeline.is_house_pipeline_running", lambda: True
-    )
+    for other, flag in _RUNNING_FLAGS.items():
+        if other != endpoint:
+            monkeypatch.setattr(flag, lambda: True)
+    assert (await getattr(admin, endpoint)(db=db_session))["cleared"] == 0
 
+    monkeypatch.setattr(_RUNNING_FLAGS[endpoint], lambda: True)
     with pytest.raises(HTTPException) as exc_info:
-        await admin_module.admin_clear_stuck_house(db=db_session)
-
-    assert exc_info.value.status_code == 409
-
-
-@pytest.mark.asyncio
-async def test_clear_stuck_election_marks_running_rows_failed(db_session):
-    from app.models import ElectionPipelineRun
-    from app.api.admin import admin_clear_stuck_election
-
-    db_session.add(ElectionPipelineRun(
-        status="running",
-        started_at=utcnow() - timedelta(hours=13),
-    ))
-    db_session.commit()
-
-    result = await admin_clear_stuck_election(db=db_session)
-
-    assert result["cleared"] == 1
-    row = db_session.query(ElectionPipelineRun).first()
-    assert row.status == "failed"
-
-
-@pytest.mark.asyncio
-async def test_clear_stuck_election_refuses_while_actively_running(db_session, monkeypatch):
-    import app.api.admin as admin_module
-
-    monkeypatch.setattr(
-        "app.pipeline.election_pipeline.is_election_pipeline_running", lambda: True
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        await admin_module.admin_clear_stuck_election(db=db_session)
+        await getattr(admin, endpoint)(db=db_session)
 
     assert exc_info.value.status_code == 409
 

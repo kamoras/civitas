@@ -53,27 +53,16 @@ class TestParseRecapPdf:
             ("H", 1, "D", "Johnson"),
             ("H", 2, "D", "Thompson"),
             ("H", 3, "D", "Chiaradio"),
+            # Jeffrey Hulum III's late-qualified block carries no "US House
+            # Of Rep 04-4th Congressional District" header of its own; he
+            # still resolves to CD4, not to whatever contest was open when
+            # his block started -- which would be a bug if `current` were
+            # reset per page rather than persisted across the document.
             ("H", 4, "D", "Hulum"),
+            # The real Democratic Senate primary had 3 candidates (Colom,
+            # Littell, Till); only Colom's real majority survives.
             ("S", None, "D", "Colom"),
         ]
-
-    def test_a_late_qualified_candidate_inherits_the_last_seen_contest(self):
-        # Jeffrey Hulum III's block carries no "US House Of Rep 04-4th
-        # Congressional District" header of its own — this pins that he
-        # still resolves to CD4, not to whatever contest happened to be
-        # open when his SPECIFIC block started, which would be a bug if
-        # `current` weren't a single value persisted across the whole
-        # document rather than reset per page.
-        results = ms._parse_recap_pdf(_DEM_PDF, _THRESHOLD)
-        hulum = next(r for r in results if r["last_name"] == "Hulum")
-        assert (hulum["office"], hulum["district"]) == ("H", 4)
-
-    def test_a_losing_candidate_in_a_real_crowded_field_is_excluded(self):
-        # The real Democratic Senate primary had 3 candidates (Colom,
-        # Littell, Till); only Colom's real majority survives.
-        results = ms._parse_recap_pdf(_DEM_PDF, _THRESHOLD)
-        senate = [r for r in results if r["office"] == "S"]
-        assert senate == [{"office": "S", "district": None, "party": "D", "last_name": "Colom", "display_name": "Scott Colom"}]
 
 
 class TestProcessRows:

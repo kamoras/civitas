@@ -14,25 +14,15 @@ from app.pipeline.fetch.fec import fetch_committee_meta
 
 
 @pytest.mark.asyncio
-async def test_returns_type_and_designation(db_session):
+async def test_returns_type_and_designation_and_caches_across_calls(db_session):
     with patch(
         "app.pipeline.fetch.fec._fetch_with_retry",
         new=AsyncMock(return_value={"results": [{"committee_type": "Q", "designation": "D"}]}),
     ) as mocked:
-        meta = await fetch_committee_meta(client=None, db=db_session, committee_id="C00429613")
-    assert meta == {"type": "Q", "designation": "D", "connectedOrg": None}
-    assert mocked.call_count == 1
-
-
-@pytest.mark.asyncio
-async def test_caches_across_calls(db_session):
-    with patch(
-        "app.pipeline.fetch.fec._fetch_with_retry",
-        new=AsyncMock(return_value={"results": [{"committee_type": "N", "designation": "U"}]}),
-    ) as mocked:
-        first = await fetch_committee_meta(client=None, db=db_session, committee_id="C00500587")
-        second = await fetch_committee_meta(client=None, db=db_session, committee_id="C00500587")
-    assert first == second
+        first = await fetch_committee_meta(client=None, db=db_session, committee_id="C00429613")
+        second = await fetch_committee_meta(client=None, db=db_session, committee_id="C00429613")
+    assert first == {"type": "Q", "designation": "D", "connectedOrg": None}
+    assert second == first
     assert mocked.call_count == 1
 
 

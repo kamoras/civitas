@@ -194,31 +194,20 @@ class TestResolveAppointment:
             P(id="new-48", name="A. New President", party="X", term_start="2029-01-20", term_end=None),
         ]
 
-    def test_oyez_names_the_president(self):
-        from app.pipeline.justice_pipeline import resolve_appointment
-
-        assert resolve_appointment("Barack Obama", "2010-08-07", self._presidents()) == ("Barack Obama", "D")
-        assert resolve_appointment("George H. W. Bush", "1991-10-23", self._presidents()) == ("George H. W. Bush", "R")
-
-    def test_no_name_resolves_by_who_was_in_office(self):
+    @pytest.mark.parametrize("name, confirmed, expected", [
+        pytest.param("Barack Obama", "2010-08-07", ("Barack Obama", "D"), id="oyez_names_the_president"),
+        pytest.param("George H. W. Bush", "1991-10-23", ("George H. W. Bush", "R"), id="oyez_names_the_elder_bush"),
         # Oyez leaves Ketanji Brown Jackson's appointing president empty;
         # the old table then gave no party, and the Action Center filled "R".
-        from app.pipeline.justice_pipeline import resolve_appointment
-
-        assert resolve_appointment("", "2022-06-30", self._presidents()) == ("Joseph R. Biden", "D")
-
-    def test_a_president_the_code_never_heard_of_is_known_from_the_table(self):
-        from app.pipeline.justice_pipeline import resolve_appointment
-
-        assert resolve_appointment("", "2030-03-01", self._presidents()) == ("A. New President", "X")
-
-    def test_a_close_but_ambiguous_name_falls_back_to_the_dates(self):
+        pytest.param("", "2022-06-30", ("Joseph R. Biden", "D"), id="no_name_resolves_by_who_was_in_office"),
+        pytest.param("", "2030-03-01", ("A. New President", "X"),
+                     id="a_president_the_code_never_heard_of_is_known_from_the_table"),
         # "George Bush" is as near one Bush as the other: the date decides.
+        pytest.param("George Bush", "2006-01-31", ("George W. Bush", "R"),
+                     id="a_close_but_ambiguous_name_falls_back_to_the_dates"),
+        pytest.param("", "1700-01-01", ("", ""), id="unresolvable_gives_no_party"),
+    ])
+    def test_resolve_appointment(self, name, confirmed, expected):
         from app.pipeline.justice_pipeline import resolve_appointment
 
-        assert resolve_appointment("George Bush", "2006-01-31", self._presidents()) == ("George W. Bush", "R")
-
-    def test_unresolvable_gives_no_party(self):
-        from app.pipeline.justice_pipeline import resolve_appointment
-
-        assert resolve_appointment("", "1700-01-01", self._presidents()) == ("", "")
+        assert resolve_appointment(name, confirmed, self._presidents()) == expected

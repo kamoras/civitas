@@ -8,6 +8,8 @@ uses to label special elections, so the structural invariants below
 
 from datetime import date
 
+import pytest
+
 from app.election_calendar import (
     federal_states,
     next_election_day,
@@ -29,18 +31,14 @@ ALL_STATES = frozenset({
 })
 
 
-class TestSeatsUpForYear:
-    def test_2026_is_class_ii(self):
-        assert seats_up_for_year(2026) == CLASS_II_STATES
-
-    def test_2028_is_class_iii(self):
-        assert seats_up_for_year(2028) == CLASS_III_STATES
-
-    def test_2030_is_class_i(self):
-        assert seats_up_for_year(2030) == CLASS_I_STATES
-
-    def test_odd_year_has_no_regular_seats(self):
-        assert seats_up_for_year(2027) == frozenset()
+@pytest.mark.parametrize("year, expected", [
+    pytest.param(2026, CLASS_II_STATES, id="2026_is_class_ii"),
+    pytest.param(2028, CLASS_III_STATES, id="2028_is_class_iii"),
+    pytest.param(2030, CLASS_I_STATES, id="2030_is_class_i"),
+    pytest.param(2027, frozenset(), id="odd_year_has_no_regular_seats"),
+])
+def test_seats_up_for_year(year, expected):
+    assert seats_up_for_year(year) == expected
 
 
 class TestClassRosters:
@@ -97,21 +95,17 @@ class TestNextSenateElectionYear:
             assert next_senate_election_year(st, 2026) is not None, st
 
 
-class TestNextElectionDay:
-    def test_2026_election_day_is_november_3rd(self):
-        assert next_election_day(date(2026, 1, 1)) == date(2026, 11, 3)
-
-    def test_day_before_election_day_still_returns_same_year(self):
-        # Regression: a `year = after.year + 1` short-circuit for any
-        # November date used to skip past the current year's own election
-        # day whenever `after` landed a day or two before it.
-        assert next_election_day(date(2026, 11, 2)) == date(2026, 11, 3)
-
-    def test_election_day_itself_rolls_to_next_cycle(self):
-        assert next_election_day(date(2026, 11, 3)) == date(2028, 11, 7)
-
-    def test_day_after_election_day_rolls_to_next_cycle(self):
-        assert next_election_day(date(2026, 11, 4)) == date(2028, 11, 7)
+@pytest.mark.parametrize("after, expected", [
+    pytest.param(date(2026, 1, 1), date(2026, 11, 3), id="2026_election_day_is_november_3rd"),
+    # Regression: a `year = after.year + 1` short-circuit for any November
+    # date used to skip past the current year's own election day whenever
+    # `after` landed a day or two before it.
+    pytest.param(date(2026, 11, 2), date(2026, 11, 3), id="day_before_election_day_still_returns_same_year"),
+    pytest.param(date(2026, 11, 3), date(2028, 11, 7), id="election_day_itself_rolls_to_next_cycle"),
+    pytest.param(date(2026, 11, 4), date(2028, 11, 7), id="day_after_election_day_rolls_to_next_cycle"),
+])
+def test_next_election_day(after, expected):
+    assert next_election_day(after) == expected
 
 
 class TestSenateClassesFromTheSenatesList:

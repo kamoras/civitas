@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from app.pipeline.fetch import state_candidates_tabular as tb
+from tests.xlsx_helpers import _workbook
 
 _FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures_nc_results_export.tsv")
 _FORMAT = {
@@ -27,6 +28,22 @@ _FORMAT = {
 def _fixture_bytes() -> bytes:
     with open(_FIXTURE, "rb") as fh:
         return fh.read()
+
+
+_ONE_PRIMARY = {"url": "https://example.gov/results", "runoff": False}
+
+
+def _serve(monkeypatch, content, stage=_ONE_PRIMARY):
+    """Discovery yields the one `stage`, and its download serves `content`
+    (None: the download fails)."""
+    async def fake_discover(client, state, year, discovery):
+        return [stage]
+
+    async def fake_get(client, url, label):
+        return None if content is None else _Resp(content=content)
+
+    monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+    monkeypatch.setattr(tb, "_get", fake_get)
 
 
 class TestVotes:
@@ -77,47 +94,6 @@ class TestTally:
             tb._votes(r["Total Votes"]) for r in rows if r["Choice"] == name
         )
         assert foxx[name] > single_row
-
-
-def _col_letter(i: int) -> str:
-    """0-based column index -> spreadsheet column letters (0 -> "A", 26 -> "AA")."""
-    letters = ""
-    i += 1
-    while i:
-        i, rem = divmod(i - 1, 26)
-        letters = chr(ord("A") + rem) + letters
-    return letters
-
-
-def _workbook(rows: list[list[str | None]]) -> bytes:
-    """Minimal real .xlsx: a zip of the two XML parts _xlsx_rows reads,
-    with every cell a shared-string reference (t="s") and a real column
-    reference (r="A1", "B1", ...) — both how the California workbook
-    actually encodes its text. A `None` entry OMITS that cell from the
-    row entirely, the real shape a spreadsheet writer produces for a
-    wholly blank interior cell (Maine's real per-town exports do this —
-    e.g. a UOCAVA summary row with no county name) — exactly the case
-    _xlsx_rows' own r=-based column placement exists to survive."""
-    table = []
-    for row in rows:
-        for cell in row:
-            if cell is not None and cell not in table:
-                table.append(cell)
-    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
-    shared = f"<sst {ns}>" + "".join(f"<si><t>{v}</t></si>" for v in table) + "</sst>"
-    body = "".join(
-        "<row>" + "".join(
-            f'<c r="{_col_letter(i)}{rownum}" t="s"><v>{table.index(cell)}</v></c>'
-            for i, cell in enumerate(row) if cell is not None
-        ) + "</row>"
-        for rownum, row in enumerate(rows, start=1)
-    )
-    sheet = f"<worksheet {ns}><sheetData>{body}</sheetData></worksheet>"
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("xl/sharedStrings.xml", shared)
-        zf.writestr("xl/worksheets/sheet1.xml", sheet)
-    return buf.getvalue()
 
 
 class TestXlsxRows:
@@ -196,14 +172,7 @@ class TestTopTwo:
     ).encode()
 
     async def _run(self, monkeypatch, advance_count):
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/sov.tsv", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._TSV)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._TSV)
         return await tb.fetch_confirmed_candidates(
             None, 2026, "CA",
             {"advance_count": advance_count, "format": self._FMT},
@@ -379,14 +348,7 @@ class TestRunoffOverride:
             "Lieutenant Governor - Rep\tA Third\tREP\t250\n"
         ).encode()
 
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/p", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=primary)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, primary)
         source = {"runoff_threshold_pct": 50.0, "format": self._FMT, "statewide_offices": True,
                   "discovery": {"runoff_name_regex": "General Primary Runoff"}}
         result = await tb.fetch_confirmed_candidates(None, 2026, "GA", source)
@@ -409,14 +371,7 @@ class TestRunoffOverride:
             f"Justice of the Supreme Court - Bethel\tA Challenger\t\t{justice_votes[1]}\n"
         ).encode()
 
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/p", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=rows)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, rows)
         return await tb.fetch_confirmed_candidates(None, 2026, "GA", {
             "runoff_threshold_pct": 50.0, "format": self._FMT, "statewide_offices": True,
             "judicial_offices": True, "judicial_resolution": "decided_before_general",
@@ -456,7 +411,8 @@ class TestRunoffOverride:
 class TestHouseFromColumns:
     """Virginia's export names its federal races "Member, House of
     Representatives (2nd District)" — no "U.S." prefix, and an ordinal
-    parse_office doesn't read. Its own DistrictType column is the
+    parse_office doesn't read (pinned in test_state_candidates_common's
+    TestOfficeFromColumns). Its own DistrictType column is the
     discriminator the label lacks. Rows are the real 2026-08-04 shape.
     """
 
@@ -499,14 +455,7 @@ class TestHouseFromColumns:
 
     @pytest.mark.asyncio
     async def test_yields_the_federal_nominees_only(self, monkeypatch):
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/va.csv", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._CSV)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._CSV)
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "VA", {"format": self._FMT},
         )
@@ -520,13 +469,6 @@ class TestHouseFromColumns:
             {"office": "S", "district": None, "party": "R", "last_name": "Mizusawa",
              "display_name": "Bert Mizusawa"},
         ]
-
-    def test_without_the_column_the_house_label_is_refused(self):
-        """Pins why the config exists — and that parse_office still won't
-        guess a federal seat out of an unprefixed "House of
-        Representatives", which is a state chamber's name in many states."""
-        assert tb.parse_office("Member, House of Representatives (2nd District)") is None
-
 
 class TestColumnJoining:
     """Florida splits across columns what other states keep in one label:
@@ -563,14 +505,7 @@ class TestColumnJoining:
 
     @pytest.mark.asyncio
     async def test_yields_one_nominee_per_party(self, monkeypatch):
-        async def fake_discover(client, state, year, discovery):
-            return [tb._stage("https://example.gov/fl.txt")]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._TSV)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._TSV, tb._stage("https://example.gov/fl.txt"))
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "FL", {"format": self._FMT},
         )
@@ -609,14 +544,7 @@ class TestHeaderlessColumns:
     async def test_votes_sum_across_counties_and_dfl_is_democratic(self, monkeypatch):
         """Minnesota's Democrats are the DFL, and every candidate appears
         once per county."""
-        async def fake_discover(client, state, year, discovery):
-            return [tb._stage("https://example.gov/mn.txt")]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._TXT)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._TXT, tb._stage("https://example.gov/mn.txt"))
         records = await tb.fetch_confirmed_candidates(None, 2026, "MN", {"format": self._FMT})
         assert sorted((r["party"], r["last_name"]) for r in records) == [
             ("D", "Munter"), ("R", "Stauber"),
@@ -720,14 +648,7 @@ class TestHtmlTableReader:
         """The party heading is part of the contest key: without it, both
         parties' candidates for a district tally as ONE race and the
         weaker party's nominee is dropped."""
-        async def fake_discover(client, state, year, discovery):
-            return [tb._stage("https://example.gov/md.html")]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._PAGE)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._PAGE, tb._stage("https://example.gov/md.html"))
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "MD", {"format": self._FMT},
         )
@@ -813,13 +734,11 @@ class TestWithheld:
     def test_a_certified_stage_passes(self):
         assert tb._withheld(tb._stage("u", official=True), self._GATED) is False
 
-    def test_an_uncertified_recent_stage_is_withheld(self):
-        assert tb._withheld(tb._stage("u", held="2999-01-01"), self._GATED) is True
-
     def test_a_vendor_with_no_flag_at_all_passes_on_the_deadline(self):
         """Florida publishes no certification flag anywhere — the window
         is the only gate it has."""
         assert tb._withheld(tb._stage("u", held="2000-01-01"), self._GATED) is False
+        # ... and an uncertified stage still inside the window is withheld.
         assert tb._withheld(tb._stage("u", held="2999-01-01"), self._GATED) is True
 
     def test_a_state_that_does_not_ask_for_the_gate_is_never_withheld(self):
@@ -1072,14 +991,7 @@ class TestFetchConfirmedCandidates:
     async def test_returns_federal_nominees_and_excludes_the_state_house_control(
         self, monkeypatch,
     ):
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/results.zip", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=_fixture_bytes())
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, _fixture_bytes())
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "NC", {"runoff_threshold_pct": 30.0, "format": _FORMAT},
         )
@@ -1101,28 +1013,14 @@ class TestFetchConfirmedCandidates:
 
     @pytest.mark.asyncio
     async def test_download_failure_returns_none(self, monkeypatch):
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/results.zip", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return None
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, None)
         assert await tb.fetch_confirmed_candidates(None, 2026, "NC", {}) is None
 
     @pytest.mark.asyncio
     async def test_oversized_download_is_refused(self, monkeypatch):
         """A URL that has silently started serving something enormous is a
         config failure, not something to parse."""
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/results.zip", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=b"x" * (tb.MAX_DOWNLOAD_BYTES + 1))
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, b"x" * (tb.MAX_DOWNLOAD_BYTES + 1))
         assert await tb.fetch_confirmed_candidates(None, 2026, "NC", {}) is None
 
 
@@ -1171,17 +1069,9 @@ class TestNewMexico:
 
     @pytest.mark.asyncio
     async def test_confirms_every_real_2026_federal_nominee(self, monkeypatch):
-        async def fake_discover(client, state, year, discovery):
-            return [tb._stage(
-                "https://electionresults.sos.nm.gov/resultsCSV.aspx",
-                held="2026-06-02",
-            )]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._CSV)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._CSV, tb._stage(
+            "https://electionresults.sos.nm.gov/resultsCSV.aspx", held="2026-06-02",
+        ))
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "NM", {"format": self._FMT},
         )
@@ -1275,19 +1165,10 @@ class TestIdaho:
 
     @pytest.mark.asyncio
     async def test_confirms_every_real_2026_federal_nominee(self, monkeypatch):
-        async def fake_discover(client, state, year, discovery):
-            return [tb._stage(
-                "https://results.voteidaho.gov/cdn/results/x/Results.xlsx",
-                held="2026-05-19", official=True,
-            )]
-
-        payload = _workbook(self._rows())
-
-        async def fake_get(client, url, label):
-            return _Resp(content=payload)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, _workbook(self._rows()), tb._stage(
+            "https://results.voteidaho.gov/cdn/results/x/Results.xlsx",
+            held="2026-05-19", official=True,
+        ))
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "ID", {"format": self._FMT, "discovery": {"require_official": True}},
         )
@@ -1351,14 +1232,7 @@ class TestStateOffices:
     ).encode()
 
     async def _run(self, monkeypatch, state_offices):
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/all.tsv", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._TSV)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._TSV)
         source = {"format": self._FMT}
         if state_offices:
             source["statewide_offices"] = True
@@ -1455,14 +1329,7 @@ class TestMultiMemberContest:
     ).encode()
 
     async def _run(self, monkeypatch, advance_count=1):
-        async def fake_discover(client, state, year, discovery):
-            return [{"url": "https://example.gov/all.tsv", "runoff": False}]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._TSV)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._TSV)
         return await tb.fetch_confirmed_candidates(
             None, 2026, "MD",
             {"format": self._FMT, "statewide_offices": True, "advance_count": advance_count},
@@ -1470,15 +1337,11 @@ class TestMultiMemberContest:
 
     @pytest.mark.asyncio
     async def test_three_seats_send_three_nominees(self, monkeypatch):
+        """Three seats, four candidates — the label is what says where
+        the line falls, so "Fourth" is not a nominee."""
         records = await self._run(monkeypatch)
         lower = sorted(r["last_name"] for r in records if r["office"] == "lower")
         assert lower == ["First", "Second", "Third"]
-
-    @pytest.mark.asyncio
-    async def test_the_fourth_place_finisher_is_not_a_nominee(self, monkeypatch):
-        """Three seats, four candidates — the label is what says where
-        the line falls."""
-        records = await self._run(monkeypatch)
         assert "Fourth" not in {r["last_name"] for r in records}
 
     @pytest.mark.asyncio
@@ -1632,14 +1495,9 @@ class TestDelaware:
 
     @pytest.mark.asyncio
     async def test_confirms_both_parties_senate_nominees_and_skips_county(self, monkeypatch):
-        async def fake_discover(client, state, year, discovery):
-            return [tb._stage("https://data.delaware.gov/resource/yg7x-kgjc.csv", held="2026-09-15")]
-
-        async def fake_get(client, url, label):
-            return _Resp(content=self._CSV)
-
-        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
-        monkeypatch.setattr(tb, "_get", fake_get)
+        _serve(monkeypatch, self._CSV, tb._stage(
+            "https://data.delaware.gov/resource/yg7x-kgjc.csv", held="2026-09-15",
+        ))
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "DE", {"format": self._FMT, "advance_count": 1, "statewide_offices": True},
         )

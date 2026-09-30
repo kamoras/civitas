@@ -80,20 +80,16 @@ class TestExtractClaims:
 
 class TestFactsAndLede:
     def test_facts_and_sources_stay_aligned(self):
+        # Facts stay a list of plain STRINGS: previous_facts /
+        # bsky_posted_facts / newFacts all compare them, so changing the
+        # shape would ripple through all of them.
         claims = [_claim("A did X.", "AP"), _claim("B did Y.", "Roll Call")]
         facts, sources = build_facts(claims)
         assert facts == ["A did X.", "B did Y."]
         assert sources == ["AP", "Roll Call"]
 
-    def test_facts_keep_the_list_of_strings_shape(self):
-        """previous_facts / bsky_posted_facts / newFacts all compare fact
-        STRINGS — changing the shape would ripple through all of them."""
-        facts, _ = build_facts([_claim("A did X.")])
-        assert all(isinstance(f, str) for f in facts)
-
-    def test_the_lede_is_a_verbatim_claim_not_a_synthesis(self):
-        claims = [_claim("The Senate passed the bill 60-40."), _claim("B did Y.")]
-        assert build_lede(claims) == "The Senate passed the bill 60-40."
+    # The lede being a verbatim claim, not a synthesis, is asserted by
+    # TestTheLedeIsNotRepeatedAsAFact below.
 
     def test_no_claims_means_no_lede(self):
         assert build_lede([]) == ""

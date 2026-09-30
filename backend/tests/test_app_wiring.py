@@ -10,6 +10,9 @@ path that no longer existed, and CI passed anyway.
 
 
 def test_app_imports_and_has_routes():
+    # app.main imports app.scheduler at module level, and with it every
+    # pipeline entry point the scheduler wires up (only ever invoked by
+    # cron / the admin panel) — so this import covers that chain too.
     from app.main import app
 
     paths = set(app.openapi()["paths"].keys())
@@ -18,9 +21,3 @@ def test_app_imports_and_has_routes():
     assert any(p.startswith("/api/senators") for p in paths)
     assert any(p.startswith("/api/admin") for p in paths)
 
-
-def test_scheduler_imports():
-    # scheduler.py and the pipeline entry points it wires up are never
-    # imported by any other test (they're only invoked by cron / the
-    # admin panel), so nothing else in the suite exercises this path.
-    from app.scheduler import run_senate_pipeline, start_scheduler  # noqa: F401

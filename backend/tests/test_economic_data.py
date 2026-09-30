@@ -11,6 +11,8 @@ in the same ranking.
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.pipeline.fetch.economic_data import calculate_jobs_created, fetch_employment_data
 
 
@@ -70,7 +72,11 @@ class TestFetchEmploymentDataYearCap:
     timezone-dependent call, so the cap can't drift by a year depending
     on the container's timezone right at a year boundary."""
 
-    async def test_end_year_beyond_current_year_is_capped(self):
+    @pytest.mark.parametrize("end_year, sent", [
+        pytest.param(2030, "2026", id="beyond_current_year_is_capped"),
+        pytest.param(2023, "2023", id="within_current_year_is_unchanged"),
+    ])
+    async def test_end_year(self, end_year, sent):
         mock_client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
@@ -82,24 +88,7 @@ class TestFetchEmploymentDataYearCap:
 
         with patch("app.pipeline.fetch.economic_data.utcnow") as mock_utcnow:
             mock_utcnow.return_value.year = 2026
-            await fetch_employment_data(mock_client, start_year=2020, end_year=2030)
+            await fetch_employment_data(mock_client, start_year=2020, end_year=end_year)
 
         sent_payload = mock_client.post.call_args.kwargs["json"]
-        assert sent_payload["endyear"] == "2026"
-
-    async def test_end_year_within_current_year_is_unchanged(self):
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {
-            "status": "REQUEST_SUCCEEDED",
-            "Results": {"series": [{"data": []}]},
-        }
-        mock_client.post = AsyncMock(return_value=mock_resp)
-
-        with patch("app.pipeline.fetch.economic_data.utcnow") as mock_utcnow:
-            mock_utcnow.return_value.year = 2026
-            await fetch_employment_data(mock_client, start_year=2020, end_year=2023)
-
-        sent_payload = mock_client.post.call_args.kwargs["json"]
-        assert sent_payload["endyear"] == "2023"
+        assert sent_payload["endyear"] == sent

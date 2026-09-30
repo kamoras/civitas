@@ -147,6 +147,25 @@ class _FakePage:
         self._response_cb(response)
 
 
+def _search_page(payloads, extra=None):
+    """A page with no terms gate and no page-length dropdown whose "Search
+    Reports" click fires the next of `payloads` as a search response;
+    `extra` adds or overrides locators. Returns the page and that click
+    effect, for a test's own "Next" button."""
+    remaining = iter(payloads)
+    page = _FakePage({
+        ("locator", "#agree_statement"): _FakeLocator(count=0),
+        ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+        **(extra or {}),
+    })
+
+    def fire():
+        page.fire_response(_FakeSearchResponse(next(remaining)))
+
+    page._locators[("role", "button", "Search Reports")] = _FakeLocator(on_click=fire)
+    return page, fire
+
+
 class TestScrapeViaPage:
     """_scrape_via_page's control flow: terms gate, form fill, the
     pagination loop's termination conditions. The one thing a real
@@ -156,13 +175,7 @@ class TestScrapeViaPage:
 
     @pytest.mark.asyncio
     async def test_single_page_no_terms_gate_no_length_dropdown(self):
-        payload = {"recordsTotal": 1, "data": [_search_row("Jane", "Doe", path="/search/view/ptr/r1/")]}
-        page = _FakePage({
-            ("locator", "#agree_statement"): _FakeLocator(count=0),
-            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
-        })
-        search_btn = _FakeLocator(on_click=lambda: page.fire_response(_FakeSearchResponse(payload)))
-        page._locators[("role", "button", "Search Reports")] = search_btn
+        page, _ = _search_page([{"recordsTotal": 1, "data": [_search_row("Jane", "Doe", path="/search/view/ptr/r1/")]}])
 
         filings = await senate_ptr._scrape_via_page(page, "2026-01-01")
 
@@ -174,16 +187,10 @@ class TestScrapeViaPage:
         """The annual-report search ticks "Annual" and, exactly, "Senator" —
         a substring match would also tick "Former Senator"."""
         clicks = []
-        payload = {"recordsTotal": 0, "data": []}
-        page = _FakePage({
-            ("locator", "#agree_statement"): _FakeLocator(count=0),
-            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+        page, _ = _search_page([{"recordsTotal": 0, "data": []}], {
             ("role", "checkbox", "Annual"): _FakeLocator(on_click=lambda: clicks.append("Annual")),
             ("role", "checkbox", "Senator", True): _FakeLocator(on_click=lambda: clicks.append("Senator")),
         })
-        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
-            on_click=lambda: page.fire_response(_FakeSearchResponse(payload)),
-        )
 
         await senate_ptr._scrape_via_page(page, "", senate_ptr.ANNUAL_REPORT_TYPE, senate_ptr.SENATOR_FILER_TYPE)
 
@@ -192,14 +199,9 @@ class TestScrapeViaPage:
     @pytest.mark.asyncio
     async def test_terms_gate_accepted_when_present(self):
         agree_clicks = []
-        payload = {"recordsTotal": 0, "data": []}
-        page = _FakePage({
+        page, _ = _search_page([{"recordsTotal": 0, "data": []}], {
             ("locator", "#agree_statement"): _FakeLocator(count=1, on_click=lambda: agree_clicks.append(1)),
-            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
         })
-        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
-            on_click=lambda: page.fire_response(_FakeSearchResponse(payload)),
-        )
 
         await senate_ptr._scrape_via_page(page, "")
 
@@ -226,19 +228,8 @@ class TestScrapeViaPage:
     async def test_pagination_stops_when_next_disabled(self):
         page1 = {"recordsTotal": 3, "data": [_search_row("A", "One", path="/search/view/ptr/r2/"), _search_row("B", "Two", path="/search/view/ptr/r3/")]}
         page2 = {"recordsTotal": 3, "data": [_search_row("C", "Three", path="/search/view/ptr/r4/")]}
-        responses = iter([_FakeSearchResponse(page1), _FakeSearchResponse(page2)])
-
-        page = _FakePage({
-            ("locator", "#agree_statement"): _FakeLocator(count=0),
-            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
-        })
-        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
-            on_click=lambda: page.fire_response(next(responses)),
-        )
-        page._locators[("text", "Next")] = _FakeLocator(
-            on_click=lambda: page.fire_response(next(responses)),
-            attr="paginate_button next disabled",
-        )
+        page, fire = _search_page([page1, page2])
+        page._locators[("text", "Next")] = _FakeLocator(on_click=fire, attr="paginate_button next disabled")
 
         filings = await senate_ptr._scrape_via_page(page, "")
 
@@ -251,24 +242,29 @@ class TestScrapeViaPage:
     async def test_pagination_continues_across_pages(self):
         page1 = {"recordsTotal": 3, "data": [_search_row("A", "One", path="/search/view/ptr/r5/"), _search_row("B", "Two", path="/search/view/ptr/r6/")]}
         page2 = {"recordsTotal": 3, "data": [_search_row("C", "Three", path="/search/view/ptr/r7/")]}
-        responses = iter([_FakeSearchResponse(page1), _FakeSearchResponse(page2)])
-
-        page = _FakePage({
-            ("locator", "#agree_statement"): _FakeLocator(count=0),
-            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
-        })
-        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
-            on_click=lambda: page.fire_response(next(responses)),
-        )
-        page._locators[("text", "Next")] = _FakeLocator(
-            on_click=lambda: page.fire_response(next(responses)),
-            attr="paginate_button next",  # not disabled
-        )
+        page, fire = _search_page([page1, page2])
+        page._locators[("text", "Next")] = _FakeLocator(on_click=fire, attr="paginate_button next")  # not disabled
 
         filings = await senate_ptr._scrape_via_page(page, "")
 
         assert len(filings) == 3
         assert [f["first"] for f in filings] == ["A", "B", "C"]
+
+
+def _serve_report(monkeypatch, html):
+    """fetch_and_parse_ptr against one report page, nothing cached; returns
+    what it writes to the cache."""
+    async def fake_request(client, method, url, **kwargs):
+        return _FakeResponse(text=html)
+
+    stored = {}
+    monkeypatch.setattr(senate_ptr, "_request_with_retry", fake_request)
+    monkeypatch.setattr(senate_ptr, "api_cache_get", lambda *a, **k: None)
+    monkeypatch.setattr(
+        senate_ptr, "api_cache_set",
+        lambda db, tier, key, value, **kwargs: stored.update({key: value}),
+    )
+    return stored
 
 
 class TestFiledDateBecomesDisclosureDate:
@@ -286,17 +282,7 @@ class TestFiledDateBecomesDisclosureDate:
               <td>Stock</td><td>Purchase</td><td>$1,001 - $15,000</td></tr>
         </table></body></html>
         """
-
-        async def fake_request(client, method, url, **kwargs):
-            return _FakeResponse(text=html)
-
-        monkeypatch.setattr(senate_ptr, "_request_with_retry", fake_request)
-        monkeypatch.setattr(senate_ptr, "api_cache_get", lambda *a, **k: None)
-        stored = {}
-        monkeypatch.setattr(
-            senate_ptr, "api_cache_set",
-            lambda db, tier, key, value, **kwargs: stored.update({key: value}),
-        )
+        stored = _serve_report(monkeypatch, html)
 
         filing = {
             "last": "Doe", "first": "Jane",
@@ -325,13 +311,7 @@ class TestFiledDateBecomesDisclosureDate:
               <td>Stock</td><td>Purchase</td><td>$1,001 - $15,000</td></tr>
         </table></body></html>
         """
-
-        async def fake_request(client, method, url, **kwargs):
-            return _FakeResponse(text=html)
-
-        monkeypatch.setattr(senate_ptr, "_request_with_retry", fake_request)
-        monkeypatch.setattr(senate_ptr, "api_cache_get", lambda *a, **k: None)
-        monkeypatch.setattr(senate_ptr, "api_cache_set", lambda *a, **k: None)
+        _serve_report(monkeypatch, html)
 
         rows = await senate_ptr.fetch_and_parse_ptr(
             None, None, {"report_url": "https://efdsearch.senate.gov/search/view/ptr/abc123/", "is_paper": False},
@@ -348,13 +328,7 @@ class TestFiledDateBecomesDisclosureDate:
               <td>Stock</td><td>Purchase</td><td>$1,001 - $15,000</td></tr>
         </table></body></html>
         """
-
-        async def fake_request(client, method, url, **kwargs):
-            return _FakeResponse(text=html)
-
-        monkeypatch.setattr(senate_ptr, "_request_with_retry", fake_request)
-        monkeypatch.setattr(senate_ptr, "api_cache_get", lambda *a, **k: None)
-        monkeypatch.setattr(senate_ptr, "api_cache_set", lambda *a, **k: None)
+        _serve_report(monkeypatch, html)
 
         rows = await senate_ptr.fetch_and_parse_ptr(None, None, {
             "report_url": "https://efdsearch.senate.gov/search/view/ptr/abc123/", "is_paper": False,
@@ -399,17 +373,8 @@ class TestRepeatedRowsAcrossPages:
             {"recordsTotal": 3, "data": [_search_row("B", "Two", path="/search/view/ptr/b/")]},
             {"recordsTotal": 3, "data": [_search_row("C", "Three", path="/search/view/ptr/c/")]},
         ]
-        responses = iter([_FakeSearchResponse(p) for p in pages])
-        page = _FakePage({
-            ("locator", "#agree_statement"): _FakeLocator(count=0),
-            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
-        })
-        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
-            on_click=lambda: page.fire_response(next(responses)),
-        )
-        page._locators[("text", "Next")] = _FakeLocator(
-            on_click=lambda: page.fire_response(next(responses)), attr="paginate_button next",
-        )
+        page, fire = _search_page(pages)
+        page._locators[("text", "Next")] = _FakeLocator(on_click=fire, attr="paginate_button next")
 
         filings = await senate_ptr._scrape_via_page(page, "")
 
@@ -424,18 +389,11 @@ class TestRepeatedRowsAcrossPages:
             {"recordsTotal": 2, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]},
             {"recordsTotal": 2, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]},
         ]
-        responses = iter([_FakeSearchResponse(p) for p in pages])
-        page = _FakePage({
-            ("locator", "#agree_statement"): _FakeLocator(count=0),
-            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
-        })
-        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
-            on_click=lambda: page.fire_response(next(responses)),
-        )
+        page, fire = _search_page(pages)
         next_button = _FakeLocator(attr="paginate_button next")
 
         def last_page():
-            page.fire_response(next(responses))
+            fire()
             next_button._attr += " disabled"
 
         next_button._on_click = last_page

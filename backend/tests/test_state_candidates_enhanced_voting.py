@@ -194,11 +194,19 @@ class TestFederalResults:
     async def test_resolves_exactly_the_six_real_federal_nominees(self, monkeypatch):
         _patched(monkeypatch)
         assert _by_seat(await _fetch()) == {
+            # "John F. Reed*" must confirm as "Reed" -- "Reed*" matches no
+            # FEC row at all, so keeping the endorsement asterisk would look
+            # like a missing nominee. Senate D is also the only contested
+            # federal field with more than two names (Reed 98,473 /
+            # Burbridge 17,192 / Muñoz 12,529): the top vote-getter wins.
             ("S", None, "D"): "Reed",
             ("S", None, "R"): "McKay",
             ("H", 1, "D"): "Amo",
             ("H", 1, "R"): "Keenan",
             ("H", 2, "D"): "Magaziner",
+            # CD2's real Republican primary: unendorsed Victor Mellor
+            # (8,837) beat party-endorsed "Stephen T. Skoly*" (6,380).
+            # Reading the asterisk as a winner flag would return Skoly.
             ("H", 2, "R"): "Mellor",
         }
 
@@ -220,29 +228,6 @@ class TestFederalResults:
         # that would collide with real federal districts if they leaked.
         assert ("H", 13, "R") not in _by_seat(records)
         assert ("S", None, "D") in _by_seat(records)  # ... the real one still resolves
-
-    @pytest.mark.asyncio
-    async def test_the_endorsement_asterisk_is_not_part_of_the_name(self, monkeypatch):
-        """"John F. Reed*" must confirm as "Reed" — "Reed*" matches no FEC
-        row at all, so this failing looks like a missing nominee."""
-        _patched(monkeypatch)
-        assert _by_seat(await _fetch())[("S", None, "D")] == "Reed"
-
-    @pytest.mark.asyncio
-    async def test_the_endorsed_candidate_losing_is_reported_honestly(self, monkeypatch):
-        """CD2's real Republican primary: unendorsed Victor Mellor (8,837)
-        beat party-endorsed "Stephen T. Skoly*" (6,380). Reading the
-        asterisk as a winner flag would return Skoly here."""
-        _patched(monkeypatch)
-        assert _by_seat(await _fetch())[("H", 2, "R")] == "Mellor"
-
-    @pytest.mark.asyncio
-    async def test_a_multi_candidate_field_resolves_to_the_top_vote_getter(self, monkeypatch):
-        """Senate D is the only real contested federal field with more
-        than two names: Reed 98,473 / Burbridge 17,192 / Muñoz 12,529."""
-        _patched(monkeypatch)
-        assert _by_seat(await _fetch())[("S", None, "D")] == "Reed"
-
 
 class TestCandidates:
     def _contest(self, label):
@@ -295,10 +280,24 @@ class TestFreshnessGate:
 
     @pytest.mark.asyncio
     async def test_uncertified_and_unsettled_confirms_nobody(self, monkeypatch):
+        """One gate for every record the ballot yields -- federal,
+        statewide executive and legislative alike: an uncertified,
+        unsettled result must not confirm a governor or a state senator
+        any more than it confirms a U.S. senator.
+
+        The indexed date stays inside this cycle (discovery only matches a
+        2026 entry, so an out-of-year date would return [] before the gate
+        is ever reached), and a century-long settle_days keeps it unsettled
+        until 2126. The results payload is re-stamped 1900-01-01, which that
+        same window has already cleared, so the two dates disagree: this
+        proves the window is measured from the INDEX entry's date, which is
+        what dates the cycle -- not from the payload, which a vendor could
+        re-stamp on every amendment."""
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
-        assert await _fetch() == []
+        results["election"]["electionDate"] = "1900-01-01"
+        _patched(monkeypatch, index=_index_held_on("2026-12-31"), results=results)
+        assert await _fetch({**RI_SOURCE, "settle_days": 36500}) == []
 
     @pytest.mark.asyncio
     async def test_uncertified_but_long_settled_still_confirms(self, monkeypatch):
@@ -311,24 +310,10 @@ class TestFreshnessGate:
         leaning on the fixture's own 2026-09-09: that is only days old at
         the time of writing, so this would assert nothing today and start
         asserting something different later."""
-        index = json.loads(json.dumps(INDEX))
-        for entry in index["elections"]:
-            if entry["publicElectionId"] == "RI2026StatewidePrimary":
-                entry["electionDate"] = "2026-01-06"
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        _patched(monkeypatch, index=index, results=results)
+        _patched(monkeypatch, index=_index_held_on("2026-01-06"), results=results)
         assert len(_federal(await _fetch())) == 6
-
-    @pytest.mark.asyncio
-    async def test_the_settle_window_is_measured_from_the_indexed_election_date(self, monkeypatch):
-        """The date comes from the election INDEX entry, which is what
-        dates the cycle — not from the results payload, which a vendor
-        could re-stamp on every amendment."""
-        results = json.loads(json.dumps(RESULTS))
-        results["election"]["isOfficialResults"] = False
-        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
-        assert await _fetch(year=2026) == []
 
 
 class TestDiscoveryAndFailures:
@@ -408,60 +393,28 @@ class TestStatewideExecutiveResults:
 
     @pytest.mark.asyncio
     async def test_resolves_the_real_statewide_nominees(self, monkeypatch):
+        """Exactly these offices: no municipal contest is ever read as
+        statewide -- a mayor is not a governor, and "Cranston:"/
+        "Providence:" are how this vendor says a contest is one town's."""
         _patched(monkeypatch)
-        assert _statewide(await _fetch()) == {
+        records = await _fetch()
+        assert _statewide(records) == {
+            # Kept whole, not reduced to "Foulkes": a statewide nominee has
+            # no FEC row to match, so the surname reduction the federal
+            # path needs would only destroy what the ballot says.
             ("governor", "D"): "Helena Buonanno Foulkes",
+            # The raw feed prints "Aaron C. Guckian*" (party-endorsed);
+            # rendered verbatim that reads as a footnote marker.
             ("governor", "R"): "Aaron C. Guckian",
+            # The real five-candidate field: the top vote-getter wins.
             ("lt_governor", "D"): "Sabina Matos",
             ("secretary_of_state", "D"): "Gregg M. Amore",
             ("attorney_general", "D"): "Kimberly Ahern",
             ("treasurer", "D"): "James A. Diossa",
             ("treasurer", "R"): "Micholas A. Credle",
         }
-
-    @pytest.mark.asyncio
-    async def test_a_statewide_name_is_kept_whole_not_reduced_to_a_surname(self, monkeypatch):
-        """A statewide nominee has no FEC row to match, so the surname
-        reduction the federal path needs would just destroy information —
-        "Foulkes" is not what the ballot says and not what a reader
-        recognises."""
-        _patched(monkeypatch)
-        assert _statewide(await _fetch())[("governor", "D")] == "Helena Buonanno Foulkes"
         # ... while the federal path still reduces, on the same fetch.
-        assert _by_seat(await _fetch())[("S", None, "D")] == "Reed"
-
-    @pytest.mark.asyncio
-    async def test_the_endorsement_asterisk_is_stripped_from_a_statewide_name(self, monkeypatch):
-        """Rhode Island prints "Aaron C. Guckian*" for its party-endorsed
-        candidate. Rendered verbatim that reads as a footnote marker
-        pointing at a footnote the page doesn't have."""
-        _patched(monkeypatch)
-        assert _statewide(await _fetch())[("governor", "R")] == "Aaron C. Guckian"
-
-    @pytest.mark.asyncio
-    async def test_no_municipal_office_is_ever_read_as_statewide(self, monkeypatch):
-        """The mirror of the General Assembly risk. A mayor is not a
-        governor, and "Cranston:"/"Providence:" are how this vendor says
-        the contest is one town's."""
-        _patched(monkeypatch)
-        offices = {office for office, _ in _statewide(await _fetch())}
-        assert offices == {"governor", "lt_governor", "secretary_of_state",
-                           "attorney_general", "treasurer"}
-
-    @pytest.mark.asyncio
-    async def test_a_contested_statewide_field_resolves_to_the_top_vote_getter(self, monkeypatch):
-        """Lieutenant Governor D is the real five-candidate field."""
-        _patched(monkeypatch)
-        assert _statewide(await _fetch())[("lt_governor", "D")] == "Sabina Matos"
-
-    @pytest.mark.asyncio
-    async def test_statewide_records_are_withheld_by_the_same_freshness_gate(self, monkeypatch):
-        """An uncertified, unsettled result must not confirm a governor
-        any more than it confirms a senator — one gate, not two."""
-        results = json.loads(json.dumps(RESULTS))
-        results["election"]["isOfficialResults"] = False
-        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
-        assert await _fetch() == []
+        assert _by_seat(records)[("S", None, "D")] == "Reed"
 
     @pytest.mark.asyncio
     async def test_a_statewide_office_never_carries_a_district(self, monkeypatch):
@@ -491,65 +444,25 @@ class TestStateLegislativeResults:
 
     @pytest.mark.asyncio
     async def test_resolves_both_chambers_from_the_same_ballot(self, monkeypatch):
+        """Exactly these two seats. "Senatorial District Committee District
+        13" and "Representative District Committee District 5" are in the
+        fixture too, carrying the SAME numbers as the two real seats -- so
+        a committee leak would be invisible in a count; only "Committee"
+        tells them apart, and the exact keys (chamber, district, party)
+        catch it. The district is a string key ("10A" exists), never None,
+        which would collapse a chamber's seats onto one row."""
         _patched(monkeypatch)
         # Real, certified: Samuel Bell took the District 5 Democratic
         # primary 3,926 to 760 and 734 in a genuine three-way field;
         # Derick Reels was unopposed for District 13's Republican
         # nomination. Both carry Rhode Island's party-endorsement
-        # asterisk in the raw feed.
+        # asterisk in the raw feed ("Derick A. Reels*"), which comes off;
+        # the names are otherwise kept whole -- no FEC row exists for a
+        # state seat, so a surname reduction would only destroy them.
+        # (That neither seat leaks into a federal race -- "Representative
+        # in General Assembly District 13" becoming RI-13 -- is
+        # TestFederalResults.test_no_state_general_assembly_seat_is_ever_confirmed_as_federal.)
         assert _state_leg(await _fetch()) == {
             ("upper", "5", "D"): "Samuel W. Bell",
             ("lower", "13", "R"): "Derick A. Reels",
         }
-
-    @pytest.mark.asyncio
-    async def test_a_party_committee_race_is_never_a_legislative_seat(self, monkeypatch):
-        """"Senatorial District Committee District 13" and
-        "Representative District Committee District 5" are both in the
-        fixture, and both name a district. Only "Committee" tells them
-        apart from a real seat."""
-        _patched(monkeypatch)
-        records = await _fetch()
-        # The committee races carry districts 13 and 5 -- the same
-        # numbers as the two real seats -- so a leak would be invisible
-        # in a count and has to be checked by party/chamber.
-        assert ("upper", "13", "D") not in _state_leg(records)
-        assert ("lower", "5", "D") not in _state_leg(records)
-        assert len(_state_leg(records)) == 2
-
-    @pytest.mark.asyncio
-    async def test_a_legislative_seat_never_leaks_into_a_federal_race(self, monkeypatch):
-        """The mirror of the federal-only test: "Senator in General
-        Assembly District 5" must not become Senate, and "Representative
-        in General Assembly District 13" must not become RI-13 (a
-        congressional district Rhode Island does not have)."""
-        _patched(monkeypatch)
-        seats = _by_seat(await _fetch())
-        assert ("H", 13, "R") not in seats
-        assert len(_federal(await _fetch())) == 6
-
-    @pytest.mark.asyncio
-    async def test_legislative_names_are_kept_whole(self, monkeypatch):
-        """No FEC row exists for a state house seat, so there is nothing
-        a surname could be matched against — reducing one would only
-        destroy what the ballot actually said. The endorsement asterisk
-        ("Derick A. Reels*") still comes off, as everywhere else."""
-        _patched(monkeypatch)
-        assert _state_leg(await _fetch())[("lower", "13", "R")] == "Derick A. Reels"
-
-    @pytest.mark.asyncio
-    async def test_legislative_records_are_withheld_by_the_same_freshness_gate(self, monkeypatch):
-        results = json.loads(json.dumps(RESULTS))
-        results["election"]["isOfficialResults"] = False
-        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
-        assert await _fetch() == []
-
-    @pytest.mark.asyncio
-    async def test_every_legislative_record_carries_a_real_district(self, monkeypatch):
-        """district is the key a seat is stored and rendered under. A
-        None would collapse every seat in a chamber onto one row."""
-        _patched(monkeypatch)
-        for (_chamber, district, _party) in _state_leg(await _fetch()):
-            # A string, because Minnesota's house districts are "10A" and
-            # "10B" — but never empty, and never a bare letter.
-            assert isinstance(district, str) and district[:1].isdigit()

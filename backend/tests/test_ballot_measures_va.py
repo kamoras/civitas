@@ -91,30 +91,40 @@ class TestEnglishPdfUrl:
         assert va._english_pdf_url(html, "https://example.com") is None
 
 
+def _serve(monkeypatch, index_html=_INDEX_HTML, unreachable_question=None):
+    """The index page, each question's page and its English PDF, with the
+    page of `unreachable_question` failing to fetch."""
+    served = [n for n in ("1", "2", "3") if n != unreachable_question]
+
+    async def fake_get_text(client, rl, url, label, **kw):
+        if url == va._INDEX_URL:
+            return index_html
+        if unreachable_question and f"question-{unreachable_question}/" in url:
+            return None
+        for n in served:
+            if f"question-{n}/" in url:
+                return _QUESTION_PAGE_HTML.format(n=n)
+        raise AssertionError(f"unexpected URL {url}")
+
+    async def fake_get_bytes(client, rl, url, label, **kw):
+        for n in served:
+            if f"Q{n}-Topic.pdf" in url:
+                return f"FIXTURE:{n}".encode()
+        raise AssertionError(f"unexpected URL {url}")
+
+    monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
+    monkeypatch.setattr(va, "fetch_bytes_with_retry", fake_get_bytes)
+    # _extract_text normally opens a real PDF; here it just decodes the
+    # marker fetch_bytes returned, so these tests exercise discovery
+    # (index -> per-question page -> English PDF) without needing a
+    # real PDF round-trip — that part is covered by TestParseDocument.
+    monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
+
+
 @pytest.mark.asyncio
 class TestFetchMeasures:
     async def test_real_shaped_flow_returns_all_three_questions(self, monkeypatch):
-        async def fake_get_text(client, rl, url, label, **kw):
-            if url == va._INDEX_URL:
-                return _INDEX_HTML
-            for n in ("1", "2", "3"):
-                if f"question-{n}/" in url:
-                    return _QUESTION_PAGE_HTML.format(n=n)
-            raise AssertionError(f"unexpected URL {url}")
-
-        async def fake_get_bytes(client, rl, url, label, **kw):
-            for n in ("1", "2", "3"):
-                if f"Q{n}-Topic.pdf" in url:
-                    return f"FIXTURE:{n}".encode()
-            raise AssertionError(f"unexpected URL {url}")
-
-        monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
-        monkeypatch.setattr(va, "fetch_bytes_with_retry", fake_get_bytes)
-        # _extract_text normally opens a real PDF; here it just decodes the
-        # marker fetch_bytes returned, so this test exercises discovery
-        # (index -> per-question page -> English PDF) without needing a
-        # real PDF round-trip — that part is covered by TestParseDocument.
-        monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
+        _serve(monkeypatch)
 
         results = await va.fetch_measures(None, 2026)
 
@@ -143,25 +153,7 @@ class TestFetchMeasures:
         # must NOT silently produce a shorter, still-"successful" list —
         # that would get cached as if it were the complete ballot for 72h
         # with no signal anything was missing (see module docstring).
-        async def fake_get_text(client, rl, url, label, **kw):
-            if url == va._INDEX_URL:
-                return _INDEX_HTML
-            if "question-2/" in url:
-                return None  # question 2's own page fails to fetch
-            for n in ("1", "3"):
-                if f"question-{n}/" in url:
-                    return _QUESTION_PAGE_HTML.format(n=n)
-            raise AssertionError(f"unexpected URL {url}")
-
-        async def fake_get_bytes(client, rl, url, label, **kw):
-            for n in ("1", "3"):
-                if f"Q{n}-Topic.pdf" in url:
-                    return f"FIXTURE:{n}".encode()
-            raise AssertionError(f"unexpected URL {url}")
-
-        monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
-        monkeypatch.setattr(va, "fetch_bytes_with_retry", fake_get_bytes)
-        monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
+        _serve(monkeypatch, unreachable_question="2")  # question 2's own page fails to fetch
 
         assert await va.fetch_measures(None, 2026) is None
 
@@ -170,24 +162,7 @@ class TestFetchMeasures:
             '\n<a href="/election-law/proposed-constitutional-amendment-question-1/">'
             "Question 1 (again, different URL)</a>"
         )
-
-        async def fake_get_text(client, rl, url, label, **kw):
-            if url == va._INDEX_URL:
-                return duplicate_index_html
-            for n in ("1", "2", "3"):
-                if f"question-{n}/" in url:
-                    return _QUESTION_PAGE_HTML.format(n=n)
-            raise AssertionError(f"unexpected URL {url}")
-
-        async def fake_get_bytes(client, rl, url, label, **kw):
-            for n in ("1", "2", "3"):
-                if f"Q{n}-Topic.pdf" in url:
-                    return f"FIXTURE:{n}".encode()
-            raise AssertionError(f"unexpected URL {url}")
-
-        monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
-        monkeypatch.setattr(va, "fetch_bytes_with_retry", fake_get_bytes)
-        monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
+        _serve(monkeypatch, index_html=duplicate_index_html)
 
         results = await va.fetch_measures(None, 2026)
 

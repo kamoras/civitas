@@ -3,6 +3,8 @@ links depend on. Uniqueness has to hold by construction, not by luck, so
 these pin the round trip and the no-collision property directly rather than
 trusting a probabilistic token generator."""
 
+import pytest
+
 from app.issue_ids import from_public_id, to_public_id
 
 
@@ -25,14 +27,13 @@ class TestToPublicId:
 
 
 class TestFromPublicId:
-    def test_rejects_a_bare_number(self):
-        assert from_public_id("42") is None
-
-    def test_rejects_non_hex_suffix(self):
-        assert from_public_id("iNoSuchIssue") is None
-
-    def test_rejects_wrong_length(self):
-        assert from_public_id("iabc") is None
+    @pytest.mark.parametrize("public_id", [
+        pytest.param("42", id="bare_number"),
+        pytest.param("iNoSuchIssue", id="non_hex_suffix"),
+        pytest.param("iabc", id="wrong_length"),
+    ])
+    def test_rejects(self, public_id):
+        assert from_public_id(public_id) is None
 
     def test_upper_cased_id_still_resolves(self):
         # The UI displays this upper-cased (matching "ISSUE-"); a reader

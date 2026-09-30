@@ -56,21 +56,15 @@ class TestComputePartySplit:
             members.append({"party": "D", "voteCast": "Nay"})
         return {"members": members}
 
-    def test_republican_bill(self):
-        data = self._make_members(r_yea=40, r_nay=5, d_yea=3, d_nay=42)
-        assert compute_party_split(data) == "R"
-
-    def test_democratic_bill(self):
-        data = self._make_members(r_yea=2, r_nay=43, d_yea=40, d_nay=5)
-        assert compute_party_split(data) == "D"
-
-    def test_bipartisan_bill(self):
-        data = self._make_members(r_yea=30, r_nay=15, d_yea=35, d_nay=10)
-        assert compute_party_split(data) == "bipartisan"
-
-    def test_insufficient_data_returns_none(self):
-        data = self._make_members(r_yea=2, r_nay=0, d_yea=1, d_nay=0)
-        assert compute_party_split(data) is None
+    @pytest.mark.parametrize("r_yea, r_nay, d_yea, d_nay, expected", [
+        pytest.param(40, 5, 3, 42, "R", id="republican_bill"),
+        pytest.param(2, 43, 40, 5, "D", id="democratic_bill"),
+        pytest.param(30, 15, 35, 10, "bipartisan", id="bipartisan_bill"),
+        pytest.param(2, 0, 1, 0, None, id="insufficient_data_returns_none"),
+    ])
+    def test_party_split(self, r_yea, r_nay, d_yea, d_nay, expected):
+        data = self._make_members(r_yea=r_yea, r_nay=r_nay, d_yea=d_yea, d_nay=d_nay)
+        assert compute_party_split(data) == expected
 
 
 class TestExtractSenatorVote:
@@ -292,14 +286,17 @@ class TestInferCaucusPartyCombined:
         return bills
 
     def test_votes_only_backward_compat(self):
-        """Without cosponsorship data, behaves like the old function."""
+        """Without cosponsorship data (omitted or None), behaves like the old
+        function."""
         bills = self._make_party_bills(7, 3)
         votes = {f"d{i}": "Yea" for i in range(7)}
         votes.update({f"r{i}": "Nay" for i in range(3)})
         assert _infer_caucus_party(bills, votes) == "D"
+        assert _infer_caucus_party(bills, votes, None) == "D"
 
     def test_cosponsorship_reinforces_votes(self):
-        """When both signals agree, result is the agreed party."""
+        """When both signals agree, result is the agreed party (the Sanders
+        pattern: an Independent who caucuses with Democrats)."""
         bills = self._make_party_bills(7, 3)
         votes = {f"d{i}": "Yea" for i in range(7)}
         votes.update({f"r{i}": "Nay" for i in range(3)})
@@ -338,21 +335,6 @@ class TestInferCaucusPartyCombined:
         result = _infer_caucus_party(bills, votes, cosponsor)
         assert result is None
 
-    def test_no_cosponsorship_data(self):
-        """None cosponsorship profile falls back to votes only."""
-        bills = self._make_party_bills(7, 3)
-        votes = {f"d{i}": "Yea" for i in range(7)}
-        votes.update({f"r{i}": "Nay" for i in range(3)})
-        assert _infer_caucus_party(bills, votes, None) == "D"
-
-    def test_sanders_like_pattern(self):
-        """Simulates an Independent who caucuses with Democrats."""
-        bills = self._make_party_bills(8, 5)
-        votes = {f"d{i}": "Yea" for i in range(8)}
-        votes.update({f"r{i}": "Nay" for i in range(5)})
-        cosponsor = {"d_cosponsored": 18, "r_cosponsored": 1}
-        assert _infer_caucus_party(bills, votes, cosponsor) == "D"
-
 
 class TestMajorityLeaderReconsiderSwitch:
     """The majority leader switches to Nay on a motion about to fail so they
@@ -385,61 +367,42 @@ class TestMajorityLeaderReconsiderSwitch:
             reconsider_switch=is_reconsider_switch(bill, spans),
         )
 
-    def test_majority_leader_nay_on_rejected_motion_is_not_a_break(self):
-        assert self._alignment(self._rc(), "Nay") is None
-
-    def test_majority_leader_nay_on_passed_motion_stays_a_break(self):
-        assert self._alignment(self._rc(rejected=False), "Nay") is False
-
-    def test_unknown_result_is_not_exempted(self):
-        assert self._alignment(self._rc(rejected=None), "Nay") is False
-
-    def test_majority_leader_yea_with_party_still_counts_with_party(self):
-        assert self._alignment(self._rc(), "Yea") is True
-
-    def test_nay_on_other_partys_rejected_motion_still_counts_with_party(self):
-        assert self._alignment(self._rc(leaning="D"), "Nay") is True
-
-    def test_majority_leader_yea_on_motion_carried_over_own_party_is_not_a_break(self):
+    @pytest.mark.parametrize("rc_kwargs, vote, expected", [
+        pytest.param({}, "Nay", None, id="nay_on_rejected_motion_is_not_a_break"),
+        pytest.param({"rejected": False}, "Nay", False, id="nay_on_passed_motion_stays_a_break"),
+        pytest.param({"rejected": None}, "Nay", False, id="unknown_result_is_not_exempted"),
+        pytest.param({}, "Yea", True, id="yea_with_party_still_counts_with_party"),
+        pytest.param({"leaning": "D"}, "Nay", True, id="nay_on_other_partys_rejected_motion_counts_with_party"),
         # The mirror case: the other party's motion carried against the
         # leader's own party, and the leader switched to Yea — the
         # prevailing side — to be able to move to reconsider.
-        assert self._alignment(self._rc(leaning="D", rejected=False), "Yea") is None
-
-    def test_majority_leader_yea_on_carried_motion_own_party_backed_counts_with_party(self):
-        assert self._alignment(self._rc(rejected=False), "Yea") is True
-
-    def test_mirror_case_needs_the_majority_leader(self):
-        bill = self._rc(leaning="R", rejected=False, date="March 14, 2025,  01:30 PM")
-        assert self._alignment(
-            bill, "Yea", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
-        ) is False
-
-    def test_minority_leader_is_never_exempted(self):
-        # Schumer's March 2025 CR cloture: a real break, and it stays one.
-        bill = self._rc(leaning="D", rejected=True, date="March 14, 2025,  01:30 PM")
-        assert self._alignment(
-            bill, "Nay", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
-        ) is False
-
-    def test_vote_outside_majority_leader_tenure_is_a_break(self):
+        pytest.param({"leaning": "D", "rejected": False}, "Yea", None,
+                     id="yea_on_motion_carried_over_own_party_is_not_a_break"),
+        pytest.param({"rejected": False}, "Yea", True, id="yea_on_carried_motion_own_party_backed_counts_with_party"),
         # Thune was minority whip in 2024, not majority leader.
-        bill = self._rc(date="June 4, 2024,  11:00 AM")
-        assert self._alignment(bill, "Nay") is False
+        pytest.param({"date": "June 4, 2024,  11:00 AM"}, "Nay", False, id="vote_outside_tenure_is_a_break"),
+    ])
+    def test_majority_leader(self, rc_kwargs, vote, expected):
+        assert self._alignment(self._rc(**rc_kwargs), vote) is expected
 
-    def test_vote_inside_a_past_majority_leader_tenure_is_exempted(self):
+    @pytest.mark.parametrize("rc_kwargs, vote, expected", [
+        pytest.param({"leaning": "R", "rejected": False, "date": "March 14, 2025,  01:30 PM"}, "Yea", False,
+                     id="mirror_case_needs_the_majority_leader"),
+        # Schumer's March 2025 CR cloture: a real break, and it stays one.
+        pytest.param({"leaning": "D", "rejected": True, "date": "March 14, 2025,  01:30 PM"}, "Nay", False,
+                     id="minority_leader_is_never_exempted"),
         # Schumer led the majority in 2023-24; his current title is minority
         # leader, but the tenure dates decide.
-        bill = self._rc(leaning="D", date="2024-02-07")
+        pytest.param({"leaning": "D", "date": "2024-02-07"}, "Nay", None,
+                     id="vote_inside_a_past_majority_leader_tenure_is_exempted"),
+        pytest.param({"leaning": "D", "date": "2025-01-03"}, "Nay", False,
+                     id="handover_day_belongs_to_the_new_role"),
+    ])
+    def test_former_majority_leader_now_minority_leader(self, rc_kwargs, vote, expected):
+        bill = self._rc(**rc_kwargs)
         assert self._alignment(
-            bill, "Nay", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
-        ) is None
-
-    def test_handover_day_belongs_to_the_new_role(self):
-        bill = self._rc(leaning="D", date="2025-01-03")
-        assert self._alignment(
-            bill, "Nay", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
-        ) is False
+            bill, vote, party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
+        ) is expected
 
     def test_speaker_is_not_exempted(self):
         bill = self._rc(date="2026-06-30")

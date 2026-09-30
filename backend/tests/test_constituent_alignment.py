@@ -57,6 +57,12 @@ def score(rec, state="SW", party="D", **kw):
     return _calc_constituent_alignment(rec, [], {}, state=state, party=party, **kw)
 
 
+def _typical_ref():
+    """A measured Senate reference whose D members typically score 85."""
+    return {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": 50, "expected": {
+        "D": {"a": 0.10, "b": 0.0, "scale": 0.3, "typical": 85.0}}}}
+
+
 class TestSeatRelativeVotes:
     def test_no_votes_is_neutral(self):
         assert score({"keyVotes": [], "recentVotes": []}) == 50
@@ -271,15 +277,11 @@ class TestSeatRelativeVotes:
                                              reference=ref)["components"][0]["detail"]
         assert "break on 0.0% (read as 5.0%, half a vote of this record)" in detail
 
-    def _typical_ref(self):
-        return {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": 50, "expected": {
-            "D": {"a": 0.10, "b": 0.0, "scale": 0.3, "typical": 85.0}}}}
-
     def test_thin_records_are_pulled_toward_the_partys_typical_score(self):
         # v6.16: matching the norm scores 100, so 50 sits below nearly every
         # member; a thin record is pulled toward what a typical member of the
         # party scores instead (here 85). 10 votes keep half the distance.
-        ref = self._typical_ref()
+        ref = _typical_ref()
         assert score(record(1, total=10), reference=ref) == 92  # 85 + (100 - 85) / 2
         assert score(record(7, total=10), reference=ref) == 42  # 85 + (0 - 85) / 2
         detail = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D",
@@ -288,7 +290,7 @@ class TestSeatRelativeVotes:
 
     def test_no_readable_record_scores_the_partys_typical(self):
         core = _constituent_alignment_core(record(1, total=2), [], {}, state="SW", party="D",
-                                           reference=self._typical_ref())
+                                           reference=_typical_ref())
         assert core["score"] == 85 and "typical score for a D member of this chamber, 85" in core["components"][0]["detail"]
 
     def test_breakdown_names_the_comparison(self):
@@ -593,8 +595,7 @@ class TestVotePartStatus:
     def test_few_votes(self):
         # A measured typical score: that. None (conftest's pinned reference
         # carries none, as the bundled prior doesn't): neutral 50.
-        ref = {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": 50, "expected": {
-            "D": {"a": 0.10, "b": 0.0, "scale": 0.3, "typical": 85.0}}}}
+        ref = _typical_ref()
         assert self.status(record(1, total=2), constituentReference=ref) == "typical:few-votes"
         assert self.status(record(1, total=2)) == "neutral:few-votes"
         assert self.status(record(1, total=2), party="I") == "neutral:few-votes"
@@ -613,8 +614,7 @@ class TestVotePartStatus:
         assert self.status(record(1, total=10), party="I") == "neutral:no-expectation"
 
     def test_shrunk_share(self):
-        ref = {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": 50, "expected": {
-            "D": {"a": 0.10, "b": 0.0, "scale": 0.3, "typical": 85.0}}}}
+        ref = _typical_ref()
         assert self.status(record(1, total=12), constituentReference=ref) == "shrunk:0.60"
         # No measured typical (conftest's pinned reference): pulled toward 50.
         assert self.status(record(1, total=12)) == "shrunk-neutral:0.60"

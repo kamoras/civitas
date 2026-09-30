@@ -31,6 +31,8 @@ def test_the_one_real_proposition_parses():
     assert "FOR" not in m["fiscal_impact"].split()
     assert m["origin"] == "Wyoming voters (initiative petition)"
     assert m["yes_means"] is None and m["no_means"] is None
+    # The heading is a label, not an official title.
+    assert m.get("official_title") is None
 
 
 def test_heading_without_for_against_close_fails():
@@ -47,11 +49,6 @@ def test_document_with_no_proposition_heading_is_a_failure_never_none():
         wy.parse_document(_pages(["2026 GENERAL ELECTION STATEWIDE BALLOT PROPOSITIONS"]))
     with pytest.raises(ValueError):
         wy.parse_document(_pages(["", ""]))
-
-
-def test_the_heading_is_a_label_not_an_official_title():
-    [m] = wy.parse_document(_pages(PAGES))
-    assert "official_title" not in m or m["official_title"] is None
 
 
 def test_a_question_under_an_unrecognised_heading_fails():

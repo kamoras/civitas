@@ -165,29 +165,6 @@ class TestReloadIfMoved:
         assert value == "read"
 
 
-def test_ballot_lookup_does_not_keep_the_bundled_copy_after_a_transient_read_error(tmp_path, monkeypatch):
-    import json
-
-    from app.pipeline.fetch import ballot_lookup
-
-    live = tmp_path / "ballot_lookup.json"
-    live.write_text(json.dumps({"live": True}))
-    monkeypatch.setattr(ballot_lookup, "_VOLUME_PATH", str(live))
-    monkeypatch.setattr(ballot_lookup, "_cache", None)
-    real_open = open
-    failing = [True]
-
-    def flaky_open(path, *a, **k):
-        if str(path) == str(live) and failing[0]:
-            raise PermissionError("busy")
-        return real_open(path, *a, **k)
-
-    monkeypatch.setattr("builtins.open", flaky_open)
-    assert "live" not in ballot_lookup._load()  # the bundled copy, this once
-    failing[0] = False
-    assert ballot_lookup._load() == {"live": True}  # not pinned
-
-
 class TestReadJson:
     def test_absent_and_invalid_are_none_unreadable_raises(self, tmp_path):
         from app.file_cache import read_json
@@ -210,7 +187,9 @@ class TestReadJson:
         assert fell_back.value.value == {"b": 1}
 
 
-@pytest.mark.parametrize("module", ["town_directory", "ballot_pdf_sources", "ballot_measure_pdf_sources", "state_candidate_sources"])
+@pytest.mark.parametrize("module", [
+    "ballot_lookup", "town_directory", "ballot_pdf_sources", "ballot_measure_pdf_sources", "state_candidate_sources",
+])
 def test_an_operator_override_unreadable_for_a_moment_is_not_kept(module, tmp_path, monkeypatch):
     # Kept, the bundled fallback (or nothing) would stand for the life of
     # the process after one transient read error.

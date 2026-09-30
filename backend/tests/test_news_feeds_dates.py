@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
+import pytest
+
 from app.pipeline.fetch.news_feeds import (
     MAX_ARTICLE_AGE_HOURS,
     MAX_FULL_TEXT_CHARS,
@@ -15,7 +17,6 @@ from app.pipeline.fetch.news_feeds import (
     _is_multi_topic_digest,
     _parse_pub_date,
     _parse_rss_feed,
-    _rights_cleared_image,
     _strip_html,
     fetch_news_articles,
 )
@@ -67,58 +68,61 @@ class TestStripHtml:
     200 characters — for an image-led item, entirely markup), the LLM prompt
     for issue generation, and the digest detector's entity extraction."""
 
-    def test_tags_are_removed(self):
-        assert _strip_html("<p>The House passed the bill.</p>") == "The House passed the bill."
-
-    def test_image_filename_is_not_left_behind_as_an_entity(self):
-        """An <img> lead is the common WordPress shape, and "Trump-Rally.jpg"
-        reads as a named entity that appears in no other sentence — which is
-        exactly what the digest detector's disjointness test keys on."""
-        raw = (
-            '<img src="https://thehill.com/wp-content/Trump-Rally.jpg"/>'
-            "<p>The Senate voted on Tuesday.</p>"
-        )
-        assert _strip_html(raw) == "The Senate voted on Tuesday."
-
-    def test_block_boundaries_survive_as_punctuation(self):
-        """</p> and <li> are where one thought ends. Dropping them silently
-        welds two sentences into one run-on with no item boundary left for
-        the digest detector to split on."""
-        raw = "<ul><li>Ukraine aid clears</li><li>Powell signals a pause</li></ul>"
-        assert _strip_html(raw) == "Ukraine aid clears; Powell signals a pause"
-
-    def test_entities_are_decoded(self):
-        assert _strip_html("Ways &amp; Means marks up the bill") == "Ways & Means marks up the bill"
-
-    def test_double_escaped_markup_is_still_stripped(self):
-        """The XML parser decodes one layer, so a feed that escaped its
-        markup twice still holds "&lt;p&gt;" by the time this runs. Strip
-        before unescape and that tag text lands in the summary verbatim."""
-        assert _strip_html("&lt;p&gt;The Senate voted.&lt;/p&gt;") == "The Senate voted."
-
-    def test_comparison_operators_in_prose_are_not_treated_as_tags(self):
-        """A bare "<" is not markup. Matching "<[^>]*>" swallowed the middle
-        of any sentence that used both comparison signs."""
-        text = "Turnout ran < 6 > the 2024 figure, analysts said."
-        assert _strip_html(text) == text
+    @pytest.mark.parametrize("raw, expected", [
+        pytest.param("<p>The House passed the bill.</p>", "The House passed the bill.", id="tags_are_removed"),
+        # An <img> lead is the common WordPress shape, and "Trump-Rally.jpg"
+        # reads as a named entity that appears in no other sentence — which is
+        # exactly what the digest detector's disjointness test keys on.
+        pytest.param(
+            '<img src="https://thehill.com/wp-content/Trump-Rally.jpg"/><p>The Senate voted on Tuesday.</p>',
+            "The Senate voted on Tuesday.",
+            id="image_filename_is_not_left_behind_as_an_entity",
+        ),
+        # </p> and <li> are where one thought ends. Dropping them silently
+        # welds two sentences into one run-on with no item boundary left for
+        # the digest detector to split on.
+        pytest.param(
+            "<ul><li>Ukraine aid clears</li><li>Powell signals a pause</li></ul>",
+            "Ukraine aid clears; Powell signals a pause",
+            id="block_boundaries_survive_as_punctuation",
+        ),
+        pytest.param(
+            "Ways &amp; Means marks up the bill", "Ways & Means marks up the bill", id="entities_are_decoded",
+        ),
+        # The XML parser decodes one layer, so a feed that escaped its markup
+        # twice still holds "&lt;p&gt;" by the time this runs. Strip before
+        # unescape and that tag text lands in the summary verbatim.
+        pytest.param(
+            "&lt;p&gt;The Senate voted.&lt;/p&gt;", "The Senate voted.", id="double_escaped_markup_is_still_stripped",
+        ),
+        # A bare "<" is not markup. Matching "<[^>]*>" swallowed the middle of
+        # any sentence that used both comparison signs.
+        pytest.param(
+            "Turnout ran < 6 > the 2024 figure, analysts said.",
+            "Turnout ran < 6 > the 2024 figure, analysts said.",
+            id="comparison_operators_in_prose_are_not_tags",
+        ),
+        # Live ingestion strips before truncating to MAX_SUMMARY_CHARS, so this
+        # can't happen going forward — but rows stored before this function
+        # existed truncated the raw HTML first, freezing a dangling "</s"
+        # (missing its ">") into the summary forever. _HTML_TAG_RE requires a
+        # closing ">" and misses this; a bare trailing "<" that isn't a tag
+        # (the next case) must still survive.
+        pytest.param(
+            "(AP Photo/Chuck Burton)</s", "(AP Photo/Chuck Burton)",
+            id="a_tag_truncated_before_its_closing_bracket_is_still_removed",
+        ),
+        pytest.param(
+            "The gap narrowed to <", "The gap narrowed to <",
+            id="comparison_operator_at_the_very_end_of_the_string_survives",
+        ),
+    ])
+    def test_strip_html(self, raw, expected):
+        assert _strip_html(raw) == expected
 
     def test_plain_text_is_returned_unchanged(self):
         text = "The House passed the bill. It now goes to the Senate."
         assert _strip_html(text) is text
-
-    def test_a_tag_truncated_before_its_closing_bracket_is_still_removed(self):
-        """Live ingestion strips before truncating to MAX_SUMMARY_CHARS, so
-        this can't happen going forward — but rows stored before this
-        function existed truncated the raw HTML first, freezing a dangling
-        "</s" (missing its ">") into the summary forever. _HTML_TAG_RE
-        requires a closing ">" and misses this; a bare trailing "<" that
-        isn't a tag (the comparison-operator case above) must still survive."""
-        raw = "(AP Photo/Chuck Burton)</s"
-        assert _strip_html(raw) == "(AP Photo/Chuck Burton)"
-
-    def test_comparison_operator_at_the_very_end_of_the_string_still_survives(self):
-        text = "The gap narrowed to <"
-        assert _strip_html(text) == text
 
     def test_atom_entries_are_stripped_too(self):
         """The Atom branch builds its NewsArticle separately from the RSS
@@ -299,17 +303,14 @@ class TestRightsClearedImageUrl:
             "</item></channel></rss>"
         )
 
-    def test_rights_granted_image_is_used(self):
-        articles = _parse_rss_feed(self._item("1").encode(), "Roll Call")
-        assert articles[0].image_url == "https://rollcall.com/img.jpg"
-
-    def test_rights_denied_image_is_dropped(self):
-        articles = _parse_rss_feed(self._item("0").encode(), "Roll Call")
-        assert articles[0].image_url is None
-
-    def test_missing_rights_field_is_dropped(self):
-        articles = _parse_rss_feed(self._item(None).encode(), "Roll Call")
-        assert articles[0].image_url is None
+    @pytest.mark.parametrize("rights, expected_url", [
+        pytest.param("1", "https://rollcall.com/img.jpg", id="rights_granted_image_is_used"),
+        pytest.param("0", None, id="rights_denied_image_is_dropped"),
+        pytest.param(None, None, id="missing_rights_field_is_dropped"),
+    ])
+    def test_image_is_used_only_with_syndication_rights(self, rights, expected_url):
+        articles = _parse_rss_feed(self._item(rights).encode(), "Roll Call")
+        assert articles[0].image_url == expected_url
 
     def test_no_media_content_at_all_is_none(self):
         articles = _parse_rss_feed(
@@ -332,14 +333,6 @@ class TestRightsClearedImageUrl:
         articles = _parse_rss_feed(self._item("1").encode(), "Roll Call")
         assert articles[0].image_alt == ""
         assert articles[0].image_credit == ""
-
-    def test_rights_cleared_image_direct(self):
-        root = ElementTree.fromstring(self._item("1", text="A caption.", credit="A Credit"))
-        item = root.find(".//item")
-        image = _rights_cleared_image(item)
-        assert image.url == "https://rollcall.com/img.jpg"
-        assert image.alt == "A caption."
-        assert image.credit == "A Credit"
 
     def test_comment_text_is_not_treated_as_content(self):
         """This parser drops comments, but the extractor should not depend
@@ -497,20 +490,6 @@ class TestFullTextPreferredOverTeaser:
             "The committee voted 12-8 Thursday to advance the nomination "
             "to the full chamber."
         )
-
-    def test_atom_entry_with_no_content_behaves_as_before(self):
-        entry = _parse_rss_feed(
-            """<?xml version="1.0"?>
-            <feed xmlns="http://www.w3.org/2005/Atom">
-              <entry>
-                <title>Committee advances the nomination</title>
-                <link href="https://example.com/e"/>
-                <summary>The committee will vote Thursday.</summary>
-              </entry>
-            </feed>""".encode(),
-            "Test",
-        )[0]
-        assert entry.summary == "The committee will vote Thursday."
 
     def test_rss_falls_back_to_description_when_content_encoded_is_markup_only(self):
         """A source can populate content:encoded with only an image or embed

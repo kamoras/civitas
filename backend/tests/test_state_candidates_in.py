@@ -109,23 +109,17 @@ class TestFetchConfirmedCandidates:
     async def test_real_districts_resolve_to_real_winners(self, monkeypatch):
         self._patched(monkeypatch)
         result = await ind.fetch_confirmed_candidates(None, 2026, "IN", {})
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "Mrvan", "display_name": "Mrvan, Frank Frank"} in result
-        assert {"office": "H", "district": 1, "party": "R", "last_name": "Regnitz", "display_name": "Regnitz, Barb Barbara"} in result
-        assert {"office": "H", "district": 4, "party": "R", "last_name": "Baird", "display_name": "Baird, Jim Jim"} in result
-        assert {"office": "H", "district": 4, "party": "D", "last_name": "Cox", "display_name": "Cox, Drew Drew"} in result
-
-    async def test_losing_candidates_in_a_crowded_field_are_excluded(self, monkeypatch):
-        # District 4's real field has 11 candidates; only 2 (one per
-        # party) actually won their party's primary.
-        self._patched(monkeypatch)
-        result = await ind.fetch_confirmed_candidates(None, 2026, "IN", {})
-        district4 = [r for r in result if r["district"] == 4]
-        assert len(district4) == 2
-
-    async def test_non_ascii_name_is_handled(self, monkeypatch):
-        self._patched(monkeypatch)
-        result = await ind.fetch_confirmed_candidates(None, 2026, "IN", {})
-        assert {"office": "H", "district": 7, "party": "D", "last_name": "Carson", "display_name": "Carson, André André"} in result
+        assert result == [
+            {"office": "H", "district": 1, "party": "D", "last_name": "Mrvan", "display_name": "Mrvan, Frank Frank"},
+            {"office": "H", "district": 1, "party": "R", "last_name": "Regnitz", "display_name": "Regnitz, Barb Barbara"},
+            # District 4's real field has 11 candidates; only these 2 (one
+            # per party) actually won their party's primary.
+            {"office": "H", "district": 4, "party": "R", "last_name": "Baird", "display_name": "Baird, Jim Jim"},
+            {"office": "H", "district": 4, "party": "D", "last_name": "Cox", "display_name": "Cox, Drew Drew"},
+            # A real non-ASCII name, carried through intact.
+            {"office": "H", "district": 7, "party": "D", "last_name": "Carson", "display_name": "Carson, André André"},
+            {"office": "H", "district": 7, "party": "R", "last_name": "McAuley", "display_name": "McAuley, Patrick Patrick"},
+        ]
 
     async def test_settings_fetch_failure_returns_none(self, monkeypatch):
         async def fake(*a, **kw):

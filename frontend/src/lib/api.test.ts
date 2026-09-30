@@ -239,15 +239,12 @@ describe("API shape guarantees", () => {
     expect(await fetchMonitors()).toEqual({ monitors: [] });
   });
 
-  it("fetchBillsInFlight returns an empty bills list rather than undefined", async () => {
+  it("fetchBillsInFlight returns an empty bills list and a reducible stageCounts map", async () => {
     vi.stubGlobal("fetch", mockJson({ total: 0 }));
-    expect((await fetchBillsInFlight()).bills).toEqual([]);
-  });
-
-  it("fetchBillsInFlight returns a reducible stageCounts map", async () => {
-    vi.stubGlobal("fetch", mockJson({ total: 0 }));
+    const result = await fetchBillsInFlight();
+    expect(result.bills).toEqual([]);
     // The bills page reduces over this during render to headline a bill count.
-    expect((await fetchBillsInFlight()).stageCounts).toEqual({});
+    expect(result.stageCounts).toEqual({});
   });
 
   it("fetchPviMap returns indexable maps even with nothing in them", async () => {

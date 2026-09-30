@@ -111,40 +111,23 @@ async def test_zero_and_absent_counters_are_omitted_from_totals(db_session):
     assert totals["intake"]["articles_fetched"] == 5
 
 
-@pytest.mark.asyncio
-async def test_malformed_row_does_not_blank_the_report(db_session):
-    from app.api.admin import admin_action_metrics
-
-    db_session.add(ApiCache(
-        tier="action-metrics", cache_key="run-bad", data_json="not json",
-        cached_at=utcnow(),
-    ))
-    db_session.commit()
-    _metrics_row(db_session, "run-good", {"articles_fetched": 7}, minutes_ago=30)
-
-    result = await admin_action_metrics(limit=48, db=db_session)
-
-    assert result["runsReturned"] == 1
-    assert result["totals"]["intake"]["articles_fetched"] == 7
-
-
-@pytest.mark.parametrize("payload", [
-    {"counts": None},          # valid JSON, unusable shape
-    {"counts": ["a", "b"]},    # counts as a list
-    {"counts": "12"},          # counts as a string
-    ["not", "an", "object"],   # payload itself not an object
-    {},                        # no counts key at all
+@pytest.mark.parametrize("data_json", [
+    pytest.param("not json", id="invalid_json"),
+    # Valid JSON of the wrong shape raised AttributeError.
+    pytest.param(json.dumps({"counts": None}), id="counts_none"),
+    pytest.param(json.dumps({"counts": ["a", "b"]}), id="counts_as_a_list"),
+    pytest.param(json.dumps({"counts": "12"}), id="counts_as_a_string"),
+    pytest.param(json.dumps(["not", "an", "object"]), id="payload_not_an_object"),
+    pytest.param(json.dumps({}), id="no_counts_key"),
 ])
 @pytest.mark.asyncio
-async def test_unusable_count_shapes_are_skipped_not_fatal(db_session, payload):
+async def test_an_unusable_row_is_skipped_not_fatal(db_session, data_json):
     # A diagnostic endpoint that 500s on one bad row fails exactly when
-    # someone is reaching for it. Invalid JSON was already handled; valid
-    # JSON of the wrong shape raised AttributeError.
+    # someone is reaching for it.
     from app.api.admin import admin_action_metrics
 
     db_session.add(ApiCache(
-        tier="action-metrics", cache_key="run-odd",
-        data_json=json.dumps(payload), cached_at=utcnow(),
+        tier="action-metrics", cache_key="run-odd", data_json=data_json, cached_at=utcnow(),
     ))
     db_session.commit()
     _metrics_row(db_session, "run-ok", {"articles_fetched": 3}, minutes_ago=10)

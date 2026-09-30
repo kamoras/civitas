@@ -10,98 +10,67 @@ import asyncio
 import pathlib
 from unittest.mock import MagicMock
 
+import pytest
 from sqlalchemy.exc import OperationalError
 
 from app.api.admin import admin_top_pages
 from app.api.visits import (
-    _extract_issue_public_id, _VisitEvent, _normalize_path, _visit_queue, _write_visit_batch, track_visit,
+    _extract_issue_public_id, _VisitEvent, _normalize_path, _write_visit_batch, track_visit,
 )
 from app.issue_ids import to_public_id
 from app.models import IssueView, PageView
-
-
-def _make_request(peer_ip: str = "203.0.113.5", user_agent: str = "Mozilla/5.0") -> MagicMock:
-    req = MagicMock()
-    req.client.host = peer_ip
-    req.headers = {"User-Agent": user_agent}
-    return req
-
-
-def _drain_queue_and_write(db) -> int:
-    """Test stand-in for run_visit_consumer's drain loop: synchronously
-    pulls everything currently queued and writes it via the same
-    _write_visit_batch the real background consumer uses. Returns how
-    many events were written."""
-    batch = []
-    while not _visit_queue.empty():
-        batch.append(_visit_queue.get_nowait())
-    if batch:
-        _write_visit_batch(batch, db)
-    return len(batch)
+from tests.visits_helpers import _drain_queue_and_write, _make_request
 
 
 class TestNormalizePath:
-    def test_known_static_paths_pass_through(self):
-        assert _normalize_path("/leaderboard") == "/leaderboard"
-        assert _normalize_path("/") == "/"
-
-    def test_politician_id_collapses_to_template(self):
-        assert _normalize_path("/politicians/chuck-grassley") == "/politicians/[id]"
-        assert _normalize_path("/politicians/jane-doe") == "/politicians/[id]"
-
-    def test_issue_and_explore_ids_collapse_to_template(self):
-        assert _normalize_path("/issue/312") == "/issue/[id]"
-        assert _normalize_path("/explore/987") == "/explore/[id]"
-
-    def test_bare_dynamic_prefix_without_id_is_static_path(self):
+    @pytest.mark.parametrize("path, expected", [
+        pytest.param("/leaderboard", "/leaderboard", id="known_static_path_passes_through"),
+        pytest.param("/", "/", id="root_passes_through"),
+        pytest.param("/politicians/chuck-grassley", "/politicians/[id]", id="politician_id_collapses"),
+        pytest.param("/politicians/jane-doe", "/politicians/[id]", id="another_politician_id_collapses"),
+        pytest.param("/issue/312", "/issue/[id]", id="issue_id_collapses"),
+        pytest.param("/explore/987", "/explore/[id]", id="explore_id_collapses"),
         # "/politicians" itself (no id segment) is the directory page, not
         # a per-id route — must not collapse into "/politicians/[id]".
-        assert _normalize_path("/politicians") == "/politicians"
-
-    def test_trailing_slash_and_query_string_ignored(self):
-        assert _normalize_path("/leaderboard/") == "/leaderboard"
-        assert _normalize_path("/leaderboard?tab=house") == "/leaderboard"
-
-    def test_unknown_path_buckets_to_other(self):
-        assert _normalize_path("/some/random/junk") == "/other"
-        assert _normalize_path("") == "/"
-
-    def test_recently_added_pages_are_tracked(self):
+        pytest.param("/politicians", "/politicians", id="bare_dynamic_prefix_without_id_is_static_path"),
+        pytest.param("/leaderboard/", "/leaderboard", id="trailing_slash_ignored"),
+        pytest.param("/leaderboard?tab=house", "/leaderboard", id="query_string_ignored"),
+        pytest.param("/some/random/junk", "/other", id="unknown_path_buckets_to_other"),
+        pytest.param("", "/", id="empty_path_is_root"),
         # /bills shipped without a matching visits.py entry and silently
         # drained into "/other" until this was noticed (2026-07) — pin the
         # fix so a future page addition can't repeat it unnoticed.
-        assert _normalize_path("/bills") == "/bills"
-        assert _normalize_path("/feedback") == "/feedback"
-
-    def test_congress_pages(self):
+        pytest.param("/bills", "/bills", id="recently_added_pages_are_tracked-bills"),
+        pytest.param("/feedback", "/feedback", id="recently_added_pages_are_tracked-feedback"),
         # A bill page and a day report are different routes under one
         # prefix: the longer prefix must win.
-        assert _normalize_path("/congress") == "/congress"
-        assert _normalize_path("/congress/bills") == "/congress/bills"
-        assert _normalize_path("/congress/bills/S.4668") == "/congress/bills/[id]"
-        assert _normalize_path("/congress/2026-09-24") == "/congress/[id]"
+        pytest.param("/congress", "/congress", id="congress_index"),
+        pytest.param("/congress/bills", "/congress/bills", id="congress_bills_index"),
+        pytest.param("/congress/bills/S.4668", "/congress/bills/[id]", id="congress_bill_page"),
+        pytest.param("/congress/2026-09-24", "/congress/[id]", id="congress_day_report"),
+    ])
+    def test_normalize_path(self, path, expected):
+        assert _normalize_path(path) == expected
+
+
+_PID = to_public_id(42)
 
 
 class TestExtractIssuePublicId:
-    def test_well_formed_issue_path_extracts_the_id(self):
-        pid = to_public_id(42)
-        assert _extract_issue_public_id(f"/issue/{pid}") == pid
-
-    def test_trailing_slash_and_query_string_ignored(self):
-        pid = to_public_id(42)
-        assert _extract_issue_public_id(f"/issue/{pid}/") == pid
-        assert _extract_issue_public_id(f"/issue/{pid}?ref=bsky") == pid
-
-    def test_malformed_id_is_rejected(self):
+    @pytest.mark.parametrize("path, expected", [
+        pytest.param(f"/issue/{_PID}", _PID, id="well_formed_issue_path_extracts_the_id"),
+        pytest.param(f"/issue/{_PID}/", _PID, id="trailing_slash_ignored"),
+        pytest.param(f"/issue/{_PID}?ref=bsky", _PID, id="query_string_ignored"),
         # Not from_public_id's own letter-prefixed hex format — a made-up
         # string here must not grow IssueView with junk (see
         # _extract_issue_public_id's docstring).
-        assert _extract_issue_public_id("/issue/not-a-real-id") is None
-
-    def test_non_issue_paths_return_none(self):
-        assert _extract_issue_public_id("/politicians/chuck-grassley") is None
-        assert _extract_issue_public_id("/issue") is None
-        assert _extract_issue_public_id("/") is None
+        pytest.param("/issue/not-a-real-id", None, id="malformed_id_is_rejected"),
+        pytest.param("/politicians/chuck-grassley", None, id="non_issue_path"),
+        pytest.param("/issue", None, id="bare_issue_prefix"),
+        pytest.param("/", None, id="root"),
+    ])
+    def test_extract_issue_public_id(self, path, expected):
+        assert _extract_issue_public_id(path) == expected
 
 
 class TestKnownRoutesStayInSync:
@@ -109,7 +78,7 @@ class TestKnownRoutesStayInSync:
         """Every real top-level page.tsx route must resolve to something
         other than "/other" — otherwise a new page silently drains into
         the catch-all bucket exactly like /bills did (see
-        test_recently_added_pages_are_tracked). /admin is exempt: the
+        TestNormalizePath's recently_added_pages_are_tracked). /admin is exempt: the
         frontend middleware explicitly excludes it from tracking (see
         frontend/src/middleware.ts's matcher)."""
         app_dir = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "app"

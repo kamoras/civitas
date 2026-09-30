@@ -19,9 +19,6 @@ from app.election_calendar import (
 
 
 class TestDaysUntilNextElection:
-    def test_positive_before_election_day(self):
-        assert days_until_next_election(date(2026, 1, 1)) > 0
-
     def test_counts_down_correctly(self):
         election_day = next_election_day(date(2026, 1, 1))
         ten_days_before = election_day - timedelta(days=10)
@@ -38,6 +35,3 @@ class TestIsElectionSeason:
         election_day = next_election_day(date(2026, 1, 1))
         just_outside = election_day - timedelta(days=ELECTION_SEASON_WINDOW_DAYS + 1)
         assert is_election_season(just_outside) is False
-
-    def test_false_well_outside_window(self):
-        assert is_election_season(date(2026, 1, 1)) is False

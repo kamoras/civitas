@@ -13,25 +13,23 @@ describe("getScoreLabel", () => {
     }
   });
 
-  it("completes the ladder in one vocabulary", () => {
+  it("completes the ladder in one vocabulary, on unmoved band boundaries", () => {
+    // Both sides of every cutoff: renaming the bottom band must not have
+    // moved any boundary.
     expect(getScoreLabel(0)).toBe("NOT REPRESENTATIVE");
     expect(getScoreLabel(20)).toBe("NOT REPRESENTATIVE");
     expect(getScoreLabel(21)).toBe("WEAKLY REPRESENTATIVE");
+    expect(getScoreLabel(40)).toBe("WEAKLY REPRESENTATIVE");
     expect(getScoreLabel(41)).toBe("MIXED REPRESENTATION");
+    expect(getScoreLabel(60)).toBe("MIXED REPRESENTATION");
     expect(getScoreLabel(61)).toBe("REPRESENTATIVE");
+    expect(getScoreLabel(80)).toBe("REPRESENTATIVE");
     expect(getScoreLabel(81)).toBe("STRONGLY REPRESENTATIVE");
   });
 
   it("keeps the top band reachable — a scale that cannot say 'good' is a hit piece", () => {
     expect(getScoreLabel(100)).toBe("STRONGLY REPRESENTATIVE");
     expect(getScoreColor(100)).toBe("text-phos");
-  });
-
-  it("did not move any band boundary while renaming the bottom one", () => {
-    expect(getScoreLabel(20)).not.toBe(getScoreLabel(21));
-    expect(getScoreLabel(40)).not.toBe(getScoreLabel(41));
-    expect(getScoreLabel(60)).not.toBe(getScoreLabel(61));
-    expect(getScoreLabel(80)).not.toBe(getScoreLabel(81));
   });
 });
 

@@ -1,5 +1,7 @@
 """Tests for Congressional Record parsing."""
 
+import pytest
+
 from app.pipeline.fetch.congressional_record import parse_speaking_turns
 
 
@@ -33,21 +35,20 @@ class TestParseSpeakingTurns:
         speakers = [t["speaker"] for t in turns]
         assert "PRESIDENT" not in speakers
 
-    def test_text_not_empty(self):
-        turns = parse_speaking_turns(self.SAMPLE_TEXT)
-        for turn in turns:
-            assert len(turn["text"]) > 40
-
     def test_text_truncated(self):
-        turns = parse_speaking_turns(self.SAMPLE_TEXT)
-        for turn in turns:
-            assert len(turn["text"]) <= 400
+        # The sample's turns are all under 400 characters; a long one must
+        # be cut to the first 400.
+        text = "Mr. CRUZ. " + "I rise today to speak about border security. " * 30
+        turns = parse_speaking_turns(text)
+        assert len(turns) == 1
+        assert len(turns[0]["text"]) == 400
 
-    def test_empty_text(self):
-        assert parse_speaking_turns("") == []
-
-    def test_no_speakers(self):
-        assert parse_speaking_turns("The Senate adjourned at 5:00 p.m.") == []
+    @pytest.mark.parametrize("text", [
+        pytest.param("", id="empty_text"),
+        pytest.param("The Senate adjourned at 5:00 p.m.", id="no_speakers"),
+    ])
+    def test_no_speaker_markers_is_empty(self, text):
+        assert parse_speaking_turns(text) == []
 
     def test_hyphenated_name(self):
         text = (

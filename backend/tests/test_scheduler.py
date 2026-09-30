@@ -85,21 +85,15 @@ def _run_hourly_refresh(
 
 
 class TestIsStale:
-    def test_none_age_is_never_stale(self):
+    @pytest.mark.parametrize("age, threshold, expected", [
+        pytest.param(None, timedelta(hours=1), False, id="none_age_is_never_stale"),
+        pytest.param(timedelta(hours=1), timedelta(hours=2), False, id="under_threshold"),
+        pytest.param(timedelta(hours=3), timedelta(hours=2), True, id="over_threshold"),
+        pytest.param(timedelta(hours=2), timedelta(hours=2), False, id="exactly_at_threshold"),
+    ])
+    def test_is_stale(self, age, threshold, expected):
         from app.scheduler import _is_stale
-        assert _is_stale(None, timedelta(hours=1)) is False
-
-    def test_age_under_threshold_is_not_stale(self):
-        from app.scheduler import _is_stale
-        assert _is_stale(timedelta(hours=1), timedelta(hours=2)) is False
-
-    def test_age_over_threshold_is_stale(self):
-        from app.scheduler import _is_stale
-        assert _is_stale(timedelta(hours=3), timedelta(hours=2)) is True
-
-    def test_age_exactly_at_threshold_is_not_stale(self):
-        from app.scheduler import _is_stale
-        assert _is_stale(timedelta(hours=2), timedelta(hours=2)) is False
+        assert _is_stale(age, threshold) is expected
 
 
 class TestActionRefreshOverlapGuard:
@@ -109,6 +103,8 @@ class TestActionRefreshOverlapGuard:
         mock_refresh.assert_not_called()
 
     def test_proceeds_when_no_refresh_is_running(self):
+        # Every guard idle (no refresh, House, stock trades or supplementary
+        # run going): the one "proceeds when not running" case they all share.
         state = {"is_running": False, "started_at": None}
         mock_refresh = _run_hourly_refresh(state)
         mock_refresh.assert_called_once()
@@ -150,11 +146,6 @@ class TestStockTradesOverlapGuard:
         mock_refresh = _run_hourly_refresh(state, stock_running=True, stock_age=timedelta(hours=3))
         mock_refresh.assert_called_once()
 
-    def test_proceeds_when_stock_pipeline_is_not_running(self):
-        state = {"is_running": False, "started_at": None}
-        mock_refresh = _run_hourly_refresh(state, stock_running=False)
-        mock_refresh.assert_called_once()
-
 
 class TestSupplementaryOverlapGuard:
     """Explore docs/SCOTUS/presidents now run as their own pipeline
@@ -178,11 +169,6 @@ class TestSupplementaryOverlapGuard:
         mock_refresh = _run_hourly_refresh(
             state, supplementary_running=True, supplementary_age=timedelta(hours=9),
         )
-        mock_refresh.assert_called_once()
-
-    def test_proceeds_when_supplementary_pipeline_is_not_running(self):
-        state = {"is_running": False, "started_at": None}
-        mock_refresh = _run_hourly_refresh(state, supplementary_running=False)
         mock_refresh.assert_called_once()
 
 
@@ -363,6 +349,14 @@ class TestNightlyPipelineIndependentLinks:
         _mocks, _alert, _resolve, warm = self._run_chain(house={"status": "skipped", "reason": "busy"})
         warm.assert_not_called()
 
+    @pytest.mark.parametrize("reason, cause", [
+        ("data_reset", "data reset"),
+        ("busy", "locked by another writer"),
+    ])
+    def test_a_skipped_link_alert_names_what_held_it_off(self, reason, cause):
+        _mocks, alert, _resolve, _warm = self._run_chain(senate={"status": "skipped", "reason": reason})
+        assert cause in alert.call_args.args[1]
+
     def test_a_link_that_ran_resolves_its_skip_and_crash_alerts(self):
         _mocks, _alert, resolve, _warm = self._run_chain()
         resolved = {c.args[0] for c in resolve.call_args_list}
@@ -401,48 +395,26 @@ class TestElectionCoverageRefresh:
 
         return mock_ingest, mock_post
 
-    def test_noop_outside_election_season(self):
-        ingest, post = self._run(in_season=False)
-        ingest.assert_not_called()
-        post.assert_not_called()
-
-    def test_runs_coverage_and_posting_in_season(self):
-        ingest, post = self._run(in_season=True)
-        ingest.assert_called_once()
-        post.assert_called_once()
-
-    def test_skips_when_election_pipeline_is_running_and_recent(self):
-        ingest, post = self._run(
-            in_season=True, pipeline_running=True, pipeline_age=timedelta(minutes=20),
-        )
-        ingest.assert_not_called()
-        post.assert_not_called()
-
-    def test_proceeds_when_election_pipeline_running_flag_is_stale_beyond_2_hours(self):
-        ingest, post = self._run(
-            in_season=True, pipeline_running=True, pipeline_age=timedelta(hours=3),
-        )
-        ingest.assert_called_once()
-        post.assert_called_once()
-
-    def test_skips_when_previous_coverage_refresh_still_running(self):
-        """Self-overlap guard (2026-07 review B3): the PREVIOUS 15-minute
-        refresh still mid-flight means overlapping passes would
-        double-ingest and double-post — skip while its tracker is fresh."""
-        ingest, post = self._run(
-            in_season=True, coverage_running=True, coverage_age=timedelta(minutes=20),
-        )
-        ingest.assert_not_called()
-        post.assert_not_called()
-
-    def test_proceeds_when_coverage_refresh_flag_is_stale_beyond_2_hours(self):
+    @pytest.mark.parametrize("kwargs, runs", [
+        pytest.param({"in_season": False}, False, id="noop_outside_election_season"),
+        pytest.param({"in_season": True}, True, id="runs_coverage_and_posting_in_season"),
+        pytest.param({"in_season": True, "pipeline_running": True, "pipeline_age": timedelta(minutes=20)}, False,
+                     id="skips_when_election_pipeline_is_running_and_recent"),
+        pytest.param({"in_season": True, "pipeline_running": True, "pipeline_age": timedelta(hours=3)}, True,
+                     id="proceeds_when_election_pipeline_running_flag_is_stale_beyond_2_hours"),
+        # Self-overlap guard (2026-07 review B3): the PREVIOUS 15-minute
+        # refresh still mid-flight means overlapping passes would
+        # double-ingest and double-post — skip while its tracker is fresh.
+        pytest.param({"in_season": True, "coverage_running": True, "coverage_age": timedelta(minutes=20)}, False,
+                     id="skips_when_previous_coverage_refresh_still_running"),
         # A crashed refresh can leave the in-process flag set forever —
         # the 2h stale override keeps one wedge from stopping all coverage.
-        ingest, post = self._run(
-            in_season=True, coverage_running=True, coverage_age=timedelta(hours=3),
-        )
-        ingest.assert_called_once()
-        post.assert_called_once()
+        pytest.param({"in_season": True, "coverage_running": True, "coverage_age": timedelta(hours=3)}, True,
+                     id="proceeds_when_coverage_refresh_flag_is_stale_beyond_2_hours"),
+    ])
+    def test_guards(self, kwargs, runs):
+        ingest, post = self._run(**kwargs)
+        assert (ingest.call_count, post.call_count) == ((1, 1) if runs else (0, 0))
 
 
 class TestElectionCoverageRefreshExceptionHandling:
@@ -488,25 +460,18 @@ class TestElectionBallotSync:
             scheduler_module._election_ballot_sync()
         return sync, mock_logger
 
-    def test_noop_outside_election_season(self):
-        sync, _ = self._run(in_season=False)
-        sync.assert_not_called()
-
-    def test_runs_in_season(self):
-        sync, _ = self._run()
-        sync.assert_called_once()
-
-    def test_steps_aside_for_the_nightly_election_run(self):
-        sync, _ = self._run(pipeline_running=True, pipeline_age=timedelta(minutes=30))
-        sync.assert_not_called()
-
-    def test_proceeds_past_a_hung_nightly_run(self):
-        sync, _ = self._run(pipeline_running=True, pipeline_age=timedelta(hours=7))
-        sync.assert_called_once()
-
-    def test_never_overlaps_itself(self):
-        sync, _ = self._run(sync_running=True, sync_age=timedelta(minutes=10))
-        sync.assert_not_called()
+    @pytest.mark.parametrize("kwargs, runs", [
+        pytest.param({"in_season": False}, False, id="noop_outside_election_season"),
+        pytest.param({}, True, id="runs_in_season"),
+        pytest.param({"pipeline_running": True, "pipeline_age": timedelta(minutes=30)}, False,
+                     id="steps_aside_for_the_nightly_election_run"),
+        pytest.param({"pipeline_running": True, "pipeline_age": timedelta(hours=7)}, True,
+                     id="proceeds_past_a_hung_nightly_run"),
+        pytest.param({"sync_running": True, "sync_age": timedelta(minutes=10)}, False, id="never_overlaps_itself"),
+    ])
+    def test_guards(self, kwargs, runs):
+        sync, _ = self._run(**kwargs)
+        assert sync.call_count == (1 if runs else 0)
 
     def test_a_failure_is_logged_not_raised(self):
         _, mock_logger = self._run(error=RuntimeError("boom"))
@@ -613,33 +578,6 @@ class TestLeasedJobs:
             scheduler._election_coverage_refresh()
             scheduler._election_ballot_sync()
         assert taken == []
-
-
-@pytest.mark.parametrize("reason, cause", [
-    ("data_reset", "data reset"),
-    ("busy", "locked by another writer"),
-])
-def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
-    from app import scheduler
-
-    completed = AsyncMock(return_value={"status": "completed"})
-    with patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock,
-               return_value={"status": "skipped", "reason": reason}), \
-         patch("app.scheduler.run_supplementary_pipeline", completed), \
-         patch("app.scheduler.run_house_pipeline", completed), \
-         patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", _passthrough), \
-         patch("app.scheduler.run_stock_trades_pipeline", completed), \
-         patch("app.scheduler.run_election_pipeline", completed), \
-         patch("app.services.bill_service.warm_bill_collection_cache"), \
-         patch("app.scheduler.pipelines_running", return_value=False), \
-         patch("app.ops_alerts.resolve_ops_alert"), \
-         patch("app.background.threading.Thread", _SyncThread), \
-         patch("app.ops_alerts.send_ops_alert") as alert, \
-         patch("app.ops_alerts.check_current_congress_staleness"), \
-         patch("app.ops_alerts.check_feedback_token_expiration"), \
-         patch("app.ops_alerts.check_state_pvi_staleness"):
-        scheduler._nightly_pipeline()
-    assert cause in alert.call_args.args[1]
 
 
 def test_a_hung_bill_refresh_is_cut_off_inside_its_lease(monkeypatch):

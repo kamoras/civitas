@@ -62,6 +62,10 @@ def _mock_downstream_pipeline_phases():
     every downstream phase's real I/O.
     """
     with (
+        # Runs at the start of roster sync, before the phases below; left
+        # unmocked it reads senate.gov live (its own tests are in
+        # test_election_calendar.py).
+        patch("app.pipeline.fetch.senate_classes.refresh_senate_classes", return_value=False),
         patch("app.pipeline.election_pipeline._refresh_financials", return_value=0),
         patch("app.pipeline.election_pipeline._sync_ballot_measures", return_value={"skipped": True}),
         # Imported at election_pipeline's module scope, so its own
@@ -133,6 +137,7 @@ class TestElectionPipelineLock:
                 "app.pipeline.election_pipeline.fetch_all_candidates",
                 side_effect=RuntimeError("network mocked off"),
             ),
+            patch("app.pipeline.fetch.senate_classes.refresh_senate_classes", return_value=False),
             patch("app.pipeline.election_pipeline._refresh_financials", return_value=0),
             patch("app.pipeline.election_pipeline._sync_ballot_measures", return_value={"skipped": True}),
             patch(
@@ -190,15 +195,13 @@ class TestCurrentElectionCycle:
         assert seen_cycles == [2028, 2028]  # once for House, once for Senate
 
 
-class TestRaceId:
-    def test_senate_race_id(self):
-        assert election_pipeline._race_id(2026, "S", "GA", None) == "2026-SEN-GA"
-
-    def test_house_race_id(self):
-        assert election_pipeline._race_id(2026, "H", "CA", 12) == "2026-HOUSE-CA-12"
-
-    def test_house_at_large_defaults_to_zero(self):
-        assert election_pipeline._race_id(2026, "H", "WY", None) == "2026-HOUSE-WY-0"
+@pytest.mark.parametrize("office, state, district, expected", [
+    pytest.param("S", "GA", None, "2026-SEN-GA", id="senate"),
+    pytest.param("H", "CA", 12, "2026-HOUSE-CA-12", id="house"),
+    pytest.param("H", "WY", None, "2026-HOUSE-WY-0", id="house_at_large_defaults_to_zero"),
+])
+def test_race_id(office, state, district, expected):
+    assert election_pipeline._race_id(2026, office, state, district) == expected
 
 
 class TestSyncRoster:
@@ -220,6 +223,8 @@ class TestSyncRoster:
         assert synced == 1
         race = db_session.query(Race).filter(Race.id == "2026-SEN-GA").one()
         assert race.office == "S"
+        # GA's Class II seat IS up in 2026 — a plain race, not a special.
+        assert race.is_special is False
         cand = db_session.query(Candidate).filter(Candidate.id == "S6GA001").one()
         assert cand.name == "OSSOFF, JON"
         assert cand.race_id == "2026-SEN-GA"
@@ -313,12 +318,6 @@ class TestSyncRoster:
         monkeypatch.setattr(dates, "_cache", {})
         synced = election_pipeline._sync_roster(db_session, 2026, [self._raw(candidate_id="S6FL001", state="FL")])
         assert synced == 1
-
-    def test_senate_candidate_in_class_state_gets_regular_race(self, db_session):
-        # GA's Class II seat IS up in 2026 — a plain race, not a special.
-        election_pipeline._sync_roster(db_session, 2026, [self._raw()])
-        race = db_session.query(Race).filter(Race.id == "2026-SEN-GA").one()
-        assert race.is_special is False
 
     def test_candidate_status_stored(self, db_session):
         election_pipeline._sync_roster(

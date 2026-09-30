@@ -69,7 +69,8 @@ class TestCommentTransport:
 
     def test_a_comment_in_the_query_string_is_not_accepted(self, client, db_session, monkeypatch):
         """The query transport put names and comment text in the access
-        logs; it was kept one release for rolling frontends, then removed."""
+        logs; it was kept one release for rolling frontends, then removed.
+        No body at all, whatever the query string holds, is a 422."""
         _freeze(monkeypatch, datetime(2026, 8, 10, 15, tzinfo=timezone.utc))
         doc_id = _doc(db_session, "2026-08-18")
         resp = client.post(
@@ -82,12 +83,6 @@ class TestCommentTransport:
         _freeze(monkeypatch, datetime(2026, 8, 10, 15, tzinfo=timezone.utc))
         doc_id = _doc(db_session, "2026-08-18")
         resp = client.post(f"/api/explore/{doc_id}/comments", json={"comment": "short"})
-        assert resp.status_code == 422
-
-    def test_no_comment_at_all_is_rejected(self, client, db_session, monkeypatch):
-        _freeze(monkeypatch, datetime(2026, 8, 10, 15, tzinfo=timezone.utc))
-        doc_id = _doc(db_session, "2026-08-18")
-        resp = client.post(f"/api/explore/{doc_id}/comments")
         assert resp.status_code == 422
 
 

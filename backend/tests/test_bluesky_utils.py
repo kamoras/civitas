@@ -28,14 +28,11 @@ def _post(text: str, url: str = "https://civitas-research.org/issue/i9e3779b1") 
 class TestLinkSeparator:
     # Confirmed live against NPR's own Bluesky posts (public.api.bsky.app
     # getAuthorFeed): a single space before the trailing link, not a
-    # blank line — e.g. "...at age 53. n.pr/4h4XVR4".
+    # blank line — e.g. "...at age 53. n.pr/4h4XVR4". The exact match
+    # below also rules out a "\n\n" separator.
     def test_a_short_post_separates_text_and_url_with_a_single_space(self):
         posted = _post("A short post.")
         assert posted == "A short post. https://civitas-research.org/issue/i9e3779b1"
-
-    def test_no_blank_line_before_the_url(self):
-        posted = _post("A short post.")
-        assert "\n\n" not in posted
 
 
 class TestTruncation:

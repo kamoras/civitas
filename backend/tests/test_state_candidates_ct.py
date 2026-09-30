@@ -49,17 +49,13 @@ async def _party_nominees(election_id, year):
 
 class TestFindPrimary:
     def test_matches_the_real_2026_statewide_primaries_by_year_and_august(self):
+        # The real fixture also carries "09/01/2026 -- September 1st
+        # Democratic Primary" (id 113) -- same year, ends with "Democratic
+        # Primary" too, but is not the regular August primary.
         dem = ct._find_primary(ELECTIONS, 2026, "Democratic Primary")
         rep = ct._find_primary(ELECTIONS, 2026, "Republican Primary")
         assert dem == {"id": "111", "date": "2026-08-11"}
         assert rep == {"id": "112", "date": "2026-08-11"}
-
-    def test_a_same_year_different_month_named_primary_is_not_matched(self):
-        # The real fixture also carries "09/01/2026 -- September 1st
-        # Democratic Primary" -- same year, ends with "Democratic
-        # Primary" too, but is not the regular August primary.
-        dem = ct._find_primary(ELECTIONS, 2026, "Democratic Primary")
-        assert dem["id"] != "113"
 
     def test_the_wording_around_the_party_name_is_not_stable_year_to_year(self):
         # 2024's real entries say "-- August 2024 Democratic Primary" --
@@ -111,28 +107,23 @@ class TestPartyNominees:
             (4, "Goldstein"), (5, "Shea"),
         ]
 
-    async def test_version_fetch_failure_returns_none(self, monkeypatch):
+    @pytest.mark.parametrize("failing", [
+        pytest.param("Version.json", id="version"),
+        pytest.param("Lookupdata.json", id="lookup"),
+        pytest.param("stateVotes_Electiondata.json", id="votes"),
+    ])
+    async def test_a_fetch_failure_at_any_step_returns_none(self, monkeypatch, failing):
+        # Every step before the failing one is served; the failing one
+        # (and anything after it) returns None, as fetch_with_retry does.
+        served = {"Version.json": {"Version": 1}, "Lookupdata.json": DEM_LOOKUP,
+                  "stateVotes_Electiondata.json": DEM_VOTES}
+        steps = list(served)
+        served = {k: served[k] for k in steps[:steps.index(failing)]}
+
         async def fake(client, rl, method, url, **kw):
-            return None
-
-        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-        assert await _party_nominees(DEM_ID, 2026) is None
-
-    async def test_lookup_fetch_failure_returns_none(self, monkeypatch):
-        async def fake(client, rl, method, url, **kw):
-            if url.endswith("Version.json"):
-                return _resp({"Version": 1})
-            return None
-
-        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-        assert await _party_nominees(DEM_ID, 2026) is None
-
-    async def test_votes_fetch_failure_returns_none(self, monkeypatch):
-        async def fake(client, rl, method, url, **kw):
-            if url.endswith("Version.json"):
-                return _resp({"Version": 1})
-            if url.endswith("Lookupdata.json"):
-                return _resp(DEM_LOOKUP)
+            for suffix, body in served.items():
+                if url.endswith(suffix):
+                    return _resp(body)
             return None
 
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
@@ -176,30 +167,42 @@ class TestPartyNominees:
         ]
 
 
+def _patch_real_2026(monkeypatch, *, endorsement_pages=True):
+    """Serve the real 2026 portal (both primaries) and the real
+    endorsement certificates; any other URL fails the test."""
+    async def fake(client, rl, method, url, **kw):
+        if url.endswith("Elections.json"):
+            return _resp(ELECTIONS)
+        if f"/election/{DEM_ID}/Version.json" in url:
+            return _resp({"Version": 10138})
+        if f"/election/{DEM_ID}/10138/Lookupdata.json" in url:
+            return _resp(DEM_LOOKUP)
+        if f"/election/{DEM_ID}/10138/stateVotes_Electiondata.json" in url:
+            return _resp(DEM_VOTES)
+        if f"/election/{REP_ID}/Version.json" in url:
+            return _resp({"Version": 10237})
+        if f"/election/{REP_ID}/10237/Lookupdata.json" in url:
+            return _resp(REP_LOOKUP)
+        if f"/election/{REP_ID}/10237/stateVotes_Electiondata.json" in url:
+            return _resp(REP_VOTES)
+        if url == ENDORSEMENTS["index_url"]:
+            return _text_resp(INDEX_HTML) if endorsement_pages else None
+        if url.endswith("2026-certificate-of-endorsements"):
+            return _text_resp(YEAR_HTML)
+        if "democratic-statewide-combined-ada.pdf" in url:
+            return _text_resp(DEM_ENDORSEMENTS)
+        if "statewide-republicans-combined.pdf" in url:
+            return _text_resp(REP_ENDORSEMENTS)
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+    monkeypatch.setattr(ct, "fetch_with_retry", fake)
+
+
 @pytest.mark.asyncio
 class TestFetchConfirmedCandidates:
-    def _patched(self, monkeypatch):
-        async def fake(client, rl, method, url, **kw):
-            if url.endswith("Elections.json"):
-                return _resp(ELECTIONS)
-            if f"/election/{DEM_ID}/Version.json" in url:
-                return _resp({"Version": 10138})
-            if f"/election/{DEM_ID}/10138/Lookupdata.json" in url:
-                return _resp(DEM_LOOKUP)
-            if f"/election/{DEM_ID}/10138/stateVotes_Electiondata.json" in url:
-                return _resp(DEM_VOTES)
-            if f"/election/{REP_ID}/Version.json" in url:
-                return _resp({"Version": 10237})
-            if f"/election/{REP_ID}/10237/Lookupdata.json" in url:
-                return _resp(REP_LOOKUP)
-            if f"/election/{REP_ID}/10237/stateVotes_Electiondata.json" in url:
-                return _resp(REP_VOTES)
-            raise AssertionError(f"unexpected URL: {url}")
-
-        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-
     async def test_real_primaries_resolve_to_the_real_certified_winners(self, monkeypatch):
-        self._patched(monkeypatch)
+        _patch_real_2026(monkeypatch)
         result = await ct.fetch_confirmed_candidates(None, 2026, "CT", {"settle_days": 21})
         assert sorted((r["office"], r["district"], r["party"], r["last_name"]) for r in result) == [
             ("H", 1, "D", "Bronin"),
@@ -396,41 +399,12 @@ class TestMergeStatewide:
 
 @pytest.mark.asyncio
 class TestStatewideFetch:
-    def _patched(self, monkeypatch, *, endorsement_pages=True):
-        async def fake(client, rl, method, url, **kw):
-            if url.endswith("Elections.json"):
-                return _resp(ELECTIONS)
-            if f"/election/{DEM_ID}/Version.json" in url:
-                return _resp({"Version": 10138})
-            if f"/election/{DEM_ID}/10138/Lookupdata.json" in url:
-                return _resp(DEM_LOOKUP)
-            if f"/election/{DEM_ID}/10138/stateVotes_Electiondata.json" in url:
-                return _resp(DEM_VOTES)
-            if f"/election/{REP_ID}/Version.json" in url:
-                return _resp({"Version": 10237})
-            if f"/election/{REP_ID}/10237/Lookupdata.json" in url:
-                return _resp(REP_LOOKUP)
-            if f"/election/{REP_ID}/10237/stateVotes_Electiondata.json" in url:
-                return _resp(REP_VOTES)
-            if url == ENDORSEMENTS["index_url"]:
-                return _text_resp(INDEX_HTML) if endorsement_pages else None
-            if url.endswith("2026-certificate-of-endorsements"):
-                return _text_resp(YEAR_HTML)
-            if "democratic-statewide-combined-ada.pdf" in url:
-                return _text_resp(DEM_ENDORSEMENTS)
-            if "statewide-republicans-combined.pdf" in url:
-                return _text_resp(REP_ENDORSEMENTS)
-            raise AssertionError(f"unexpected URL: {url}")
-
-        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
-
     async def test_real_2026_statewide_ballot(self, monkeypatch):
         # Governor was the only statewide office either party primaried
         # (the real Democratic primary; Lamont 67.83%), so it comes from
         # the primary and Lamont's endorsement is not read twice. The rest
         # come from the endorsements. The House nominees are unchanged.
-        self._patched(monkeypatch)
+        _patch_real_2026(monkeypatch)
         source = {"settle_days": 21, "statewide_offices": True, "endorsements": ENDORSEMENTS}
         result = await ct.fetch_confirmed_candidates(None, 2026, "CT", source)
         assert sorted((r["office"], r["party"], r["last_name"]) for r in result) == [
@@ -440,13 +414,13 @@ class TestStatewideFetch:
         ]
 
     async def test_without_the_opt_in_no_statewide_office_is_read(self, monkeypatch):
-        self._patched(monkeypatch)
+        _patch_real_2026(monkeypatch)
         result = await ct.fetch_confirmed_candidates(None, 2026, "CT", {"settle_days": 21, "endorsements": ENDORSEMENTS})
         assert {r["office"] for r in result} == {"H"}
 
     async def test_unreadable_endorsements_fail_the_run_rather_than_list_only_primaries(self, monkeypatch):
         # Publishing Governor alone would tell a reader Connecticut elects
         # no Treasurer this year.
-        self._patched(monkeypatch, endorsement_pages=False)
+        _patch_real_2026(monkeypatch, endorsement_pages=False)
         source = {"settle_days": 21, "statewide_offices": True, "endorsements": ENDORSEMENTS}
         assert await ct.fetch_confirmed_candidates(None, 2026, "CT", source) is None
