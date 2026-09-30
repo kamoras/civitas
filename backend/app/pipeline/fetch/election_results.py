@@ -74,8 +74,10 @@ class StateCount:
     # When the source says it last updated (naive UTC), and its own version
     # id where it keeps one — what the sync compares to refuse a feed that
     # has gone BACKWARDS (a cache or a mirror serving an older copy). A
-    # version is compared only when it is a plain number (Clarity's);
-    # Tally's "v1-1" form has no order, so only its time guards it.
+    # version is compared only when it ends in a plain number, and only
+    # with versions of the same election: Clarity's is stored as
+    # "<election id>:<version>" (sync._scoped_version). Tally's "v1-1" form
+    # has no order and is never compared, so only its time guards it.
     source_updated: datetime | None = None
     source_version: str | None = None
 
@@ -134,8 +136,10 @@ def pick_general(elections: list[tuple[str, dict]], state: str = "") -> dict | N
     """The one election, among those held on the general's date, that is
     the general itself. `elections` is [(name, entry)].
 
-    Demo/test/preview copies, recounts and runoffs are never it. Of what
-    remains: the only one; else the only one named "general" that is not
+    Demo/test/preview copies and recounts are never it, and a runoff only
+    when it is also named "general" ("General Election and Nonpartisan
+    Runoff") and no other election that day is. Of what remains: the only
+    one; else the only one named "general" that is not
     also a special; else the only one named "general" at all (Georgia
     named its 2022 ballot "November 8, 2022 - General/Special Election").
     None when nothing is held that day (a vendor's test copy of the day,
@@ -148,9 +152,14 @@ def pick_general(elections: list[tuple[str, dict]], state: str = "") -> dict | N
     exactly the failure that must page someone."""
     not_test = [(name or "", entry) for name, entry in elections if not _NOT_THE_COUNT_RE.search(name or "")]
     counts = [(name, entry) for name, entry in not_test if not _RECOUNT_RE.search(name)]
-    candidates = [(name, entry) for name, entry in counts if not _RUNOFF_RE.search(name)] or [
-        (name, entry) for name, entry in counts if _GENERAL_RE.search(name)
-    ]
+    candidates = [(name, entry) for name, entry in counts if not _RUNOFF_RE.search(name)]
+    if not any(_GENERAL_RE.search(name) for name, _ in candidates):
+        # No plainer election named "general" that day: a runoff named
+        # "general" is a candidate too, before narrowing — not only when
+        # nothing else is held. Otherwise a same-day special beside a
+        # "General Election and Nonpartisan Runoff" was the only candidate
+        # left, and was returned as the general.
+        candidates += [(name, entry) for name, entry in counts if _RUNOFF_RE.search(name) and _GENERAL_RE.search(name)]
     if not candidates:
         if not_test:
             raise UntrustedCount(

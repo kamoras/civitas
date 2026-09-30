@@ -97,6 +97,17 @@ class TestPickGeneral:
         # A plainer general that day still wins over it.
         assert pick([("General Election Runoff", "a"), ("November General", "b")]) == "b"
 
+    def test_a_same_day_special_is_not_taken_for_a_general_that_carries_a_runoff(self):
+        """The special was the only non-runoff entry, so it was returned as
+        the general while the real one was set aside as a runoff."""
+        pick = election_results.pick_general
+        assert pick([("General Election and Nonpartisan Runoff", "a"),
+                     ("Special Election - State Senate District 4", "b")]) == "a"
+        assert pick([("Special Election - State Senate District 4", "b"),
+                     ("General Election and Nonpartisan Runoff", "a")]) == "a"
+        # A plain runoff (not named general) is still never a candidate.
+        assert pick([("Nonpartisan Runoff", "a"), ("Special Election", "b")]) == "b"
+
     def test_a_general_that_is_also_a_special_is_still_the_general(self):
         # Georgia's real 2022 name, beside a hypothetical local special.
         assert election_results.pick_general([

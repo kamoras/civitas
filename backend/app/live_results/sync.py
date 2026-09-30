@@ -546,12 +546,13 @@ def freshness_problem(db: Session, state: str, election_day: date, count: StateC
     version are each checked on their own, so a source that gives only one
     of them is still protected by it.
 
-    A version is compared only with versions of the same election: it
-    counts one election's republications (Clarity and Tally number each
-    election id's from its own start), so a count moved to a new id, or a
+    A version is compared only when it ends in a plain number, and only
+    with versions of the same election: Clarity's counts one election id's
+    republications from its own start, so a count moved to a new id, or a
     restart that discovers a different one, was refused as "gone back" all
-    night. Readers scope theirs as "<election id>:<version>"
-    (_scoped_version)."""
+    night; the Clarity reader stores it as "<election id>:<version>"
+    (_scoped_version). Tally's "v1-1" has no order and is never compared —
+    its time stamp alone guards it."""
     now = utcnow()
     if count.source_updated and count.source_updated > now + _FUTURE_SKEW:
         return f"source is stamped {count.source_updated.isoformat()}, in the future"
