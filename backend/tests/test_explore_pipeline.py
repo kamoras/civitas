@@ -31,6 +31,16 @@ from app.pipeline.explore_pipeline import (
 _BACKEND_ROOT = str(Path(__file__).resolve().parent.parent)
 
 
+
+@pytest.fixture(autouse=True)
+def _no_real_vector_store(monkeypatch):
+    """What the run reads from the vector store, stubbed empty: tests that
+    drive the real run_explore_pipeline mustn't depend on a store on disk.
+    A test that needs other answers patches over these."""
+    monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: set())
+    monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", lambda: {})
+    monkeypatch.setattr(explore_pipeline, "get_embedded_meta_hashes", lambda: {})
+
 class TestStableHash:
     def test_same_input_same_output(self):
         text = "Mr. Speaker, I rise today to commend the bipartisan effort..."
@@ -221,6 +231,7 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
              patch("app.pipeline.explore_pipeline.fetch_fr_rulemaking",
                    new_callable=AsyncMock, return_value=[]), \
              patch("app.pipeline.explore_pipeline.top_up_explore_index", blocking_embed), \
+             patch("app.pipeline.explore_pipeline._top_up_plan", return_value=([], [])), \
              patch("app.pipeline.explore_pipeline.index_is_whole", return_value=True), \
              patch("app.pipeline.explore_pipeline.rebuild_index", return_value=0), \
              patch("app.pipeline.explore_pipeline.update_document_authority",
@@ -595,11 +606,18 @@ def test_a_top_up_takes_documents_missing_or_changed_since_they_were_embedded(db
     def hashed(d):
         return vector_store.explore_text_hash(vector_store.explore_embed_dict(d))
 
+    def meta(d):
+        return vector_store.explore_meta_hash(vector_store.explore_embed_dict(d))
+
     hashes = {current.id: hashed(current), changed.id: "its old body's", textless.id: hashed(textless)}
-    with patch.object(explore_pipeline, "get_embedded_text_hashes", return_value=hashes):
-        plan = explore_pipeline._top_up_plan(db_session)
-    assert [(doc["title"], digest) for doc, digest in plan] == [
+    metas = {current.id: "a chamber since corrected", changed.id: meta(changed), textless.id: meta(textless)}
+    with patch.object(explore_pipeline, "get_embedded_text_hashes", return_value=hashes), \
+         patch.object(explore_pipeline, "get_embedded_meta_hashes", return_value=metas):
+        embed, relabel = explore_pipeline._top_up_plan(db_session)
+    assert [(doc["title"], digest) for doc, digest in embed] == [
         ("Changed", hashed(changed)), ("Missing", hashed(missing))]
+    # Metadata alone changed: written in place, not re-encoded.
+    assert [(doc["title"], digest) for doc, digest in relabel] == [("Current", meta(current))]
 
 
 def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):

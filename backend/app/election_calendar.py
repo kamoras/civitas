@@ -26,6 +26,7 @@ import logging
 import pathlib
 from datetime import date
 
+from app.file_cache import Uncached, new_reload_lock, read_json_preferring, reload_if_moved
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,16 @@ _CLASS_FILES = (
 )
 _senate_classes_cache: dict[int, frozenset[str]] | None = None
 _senate_classes_stamp = None
-_senate_classes_lock = None
+_senate_classes_lock = new_reload_lock()
+
+
+def _classes(data) -> dict[int, frozenset[str]] | None:
+    """The class sets a file holds, or None when it doesn't hold them in
+    this shape (a malformed file: the next one, the bundled copy, is used)."""
+    try:
+        return {int(k): frozenset(v) for k, v in data["classes"].items()}
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
 
 
 def senate_classes() -> dict[int, frozenset[str]]:
@@ -45,27 +55,20 @@ def senate_classes() -> dict[int, frozenset[str]]:
     when the refreshed file moves: the Election run rewrites it in the
     pipeline process, and the API processes must see that (AGENTS.md, the
     file_cache rule) — clearing a cache from the writer clears only its own."""
-    global _senate_classes_cache, _senate_classes_stamp, _senate_classes_lock
-    from app.file_cache import Uncached, new_reload_lock, read_json_preferring, reload_if_moved
+    global _senate_classes_cache, _senate_classes_stamp
 
-    if _senate_classes_lock is None:
-        _senate_classes_lock = new_reload_lock()
+    empty = {1: frozenset(), 2: frozenset(), 3: frozenset()}
 
     def load() -> dict[int, frozenset[str]]:
-        empty = {1: frozenset(), 2: frozenset(), 3: frozenset()}
         try:
-            data = read_json_preferring(*_CLASS_FILES, default=None,
-                                        accept=lambda d: isinstance(d, dict) and "classes" in d)
+            data = read_json_preferring(*_CLASS_FILES, default=None, accept=lambda d: _classes(d) is not None)
         except Uncached as unreadable:
             # Stood in for a file that couldn't be read: used now, read again next time.
-            fallback = unreadable.value
-            raise Uncached(
-                empty if fallback is None else {int(k): frozenset(v) for k, v in fallback["classes"].items()}
-            ) from None
+            raise Uncached(empty if unreadable.value is None else _classes(unreadable.value)) from None
         if data is None:
             logger.error("senate_classes.json unavailable in /data and the bundled fallback")
             return empty
-        return {int(k): frozenset(v) for k, v in data["classes"].items()}
+        return _classes(data)
 
     with _senate_classes_lock:
         _senate_classes_cache, _senate_classes_stamp = reload_if_moved(

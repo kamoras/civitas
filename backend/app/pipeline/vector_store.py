@@ -395,8 +395,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 # arrival bumped INDEX_SCHEMA_VERSION.)
 _TEXT_HASH_DDL = """CREATE TABLE {if_not_exists}vec_explore_text (
     doc_id INTEGER PRIMARY KEY,
-    text_hash TEXT NOT NULL
+    text_hash TEXT NOT NULL,
+    meta_hash TEXT NOT NULL DEFAULT ''
 )"""
+
+# The vec0 metadata columns written from a document besides its text: what
+# search filters and displays on (doc_type, chamber, politician_id...). A
+# change to them alone is written in place (update_explore_metadata), not
+# re-encoded: explore_meta_hash tells it apart from a change of text.
+_META_FIELDS = ("doc_type", "chamber", "politician_id", "date", "source", "politician_name")
 
 
 def explore_text_hash(doc: dict) -> str:
@@ -409,6 +416,16 @@ def explore_text_hash(doc: dict) -> str:
     fields = ("title", "summary", "body")
     return hashlib.sha256(
         json.dumps([doc.get(f) or "" for f in fields], ensure_ascii=False).encode()
+    ).hexdigest()[:32]
+
+
+def explore_meta_hash(doc: dict) -> str:
+    """A hash of the vec0 metadata columns a document's chunks carry
+    besides their text (_META_FIELDS)."""
+    import hashlib
+
+    return hashlib.sha256(
+        json.dumps([doc.get(f) or "" for f in _META_FIELDS], ensure_ascii=False).encode()
     ).hexdigest()[:32]
 
 
@@ -729,12 +746,17 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
         # No text left to embed: its old chunks go (search would keep
         # showing them), and its hash is recorded, so it isn't planned again
         # every run (a rebuild's fresh table has no chunks to delete).
+        # Hashed before the lock, or taken from the plan that hashed them.
+        textless_hashes = [
+            (int(doc["id"]), doc.get("_text_hash") or explore_text_hash(doc), explore_meta_hash(doc))
+            for doc in textless
+        ]
         with _vec_lock:
             try:
-                for doc in textless:
+                for doc_id, digest, meta in textless_hashes:
                     if not fresh:
-                        conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (int(doc["id"]),))
-                    _record_text_hash(conn, int(doc["id"]), explore_text_hash(doc))
+                        conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
+                    _record_text_hash(conn, doc_id, digest, meta)
                 conn.commit()
             except BaseException:
                 conn.rollback()
@@ -762,7 +784,7 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
         embs = model.encode([t for _, t, _ in batch], show_progress_bar=False, normalize_embeddings=True)
         # Hashed before the write lock (or taken from the plan that already
         # hashed it: "_text_hash"), not over long bodies inside it.
-        digests = {d: doc.get("_text_hash") or explore_text_hash(doc) for d, _, doc in batch}
+        digests = {d: (doc.get("_text_hash") or explore_text_hash(doc), explore_meta_hash(doc)) for d, _, doc in batch}
         with _vec_lock:
             try:
                 if not fresh:
@@ -785,8 +807,8 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
                             text[:300],
                         ),
                     )
-                for doc_id, digest in digests.items():
-                    _record_text_hash(conn, doc_id, digest)
+                for doc_id, (digest, meta) in digests.items():
+                    _record_text_hash(conn, doc_id, digest, meta)
                 conn.commit()
             except BaseException:
                 conn.rollback()
@@ -1047,12 +1069,49 @@ def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
     return removed
 
 
-def _record_text_hash(conn: sqlite3.Connection, doc_id: int, digest: str) -> None:
+def _record_text_hash(conn: sqlite3.Connection, doc_id: int, digest: str, meta: str) -> None:
     conn.execute(
-        "INSERT INTO vec_explore_text (doc_id, text_hash) VALUES (?, ?) "
-        "ON CONFLICT(doc_id) DO UPDATE SET text_hash = excluded.text_hash",
-        (doc_id, digest),
+        "INSERT INTO vec_explore_text (doc_id, text_hash, meta_hash) VALUES (?, ?, ?) "
+        "ON CONFLICT(doc_id) DO UPDATE SET text_hash = excluded.text_hash, meta_hash = excluded.meta_hash",
+        (doc_id, digest, meta),
     )
+
+
+def get_embedded_explore_ids() -> set[int]:
+    """Ids of explore documents with chunks in the index. Distinct `doc_id`,
+    not rowid: rows are chunks, and several of them belong to one document."""
+    conn = get_vec_conn()
+    return {r[0] for r in conn.execute("SELECT DISTINCT doc_id FROM vec_explore").fetchall()}
+
+
+def get_embedded_meta_hashes() -> dict[int, str]:
+    """Each embedded document's explore_meta_hash, as its chunks carry it."""
+    return dict(get_vec_conn().execute("SELECT doc_id, meta_hash FROM vec_explore_text").fetchall())
+
+
+def update_explore_metadata(docs: list[dict]) -> int:
+    """Write documents' metadata columns onto their existing chunks, in
+    place — for a change of metadata alone (a chamber corrected, a departed
+    member's speeches losing politician_id): search filters on these
+    columns, and re-encoding the text for them would be wasted work. One
+    transaction; returns how many documents were updated."""
+    if not docs:
+        return 0
+    conn = get_vec_conn()
+    rows = [(doc, explore_meta_hash(doc)) for doc in docs]
+    with _vec_lock:
+        try:
+            for doc, meta in rows:
+                conn.execute(
+                    "UPDATE vec_explore SET " + ", ".join(f"{f} = ?" for f in _META_FIELDS) + " WHERE doc_id = ?",
+                    (*[doc.get(f) or "" for f in _META_FIELDS], int(doc["id"])),
+                )
+                conn.execute("UPDATE vec_explore_text SET meta_hash = ? WHERE doc_id = ?", (meta, int(doc["id"])))
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    return len(rows)
 
 
 def get_embedded_text_hashes() -> dict[int, str]:
@@ -1229,16 +1288,21 @@ _BUSY_CHECKS = 10
 _BUSY_CHECK_EVERY_S = 30.0
 
 
-def top_up_explore_index(docs_to_embed) -> int:
+def top_up_explore_index(docs_to_embed, docs_to_relabel=None) -> int:
     """An Explore run's incremental step, under the rebuild lock: a start's
     rebuild waits for it (and then looks again) rather than embed the same
     documents beside it. `docs_to_embed()` is asked under the lock, so what
     it finds missing is what the index lacks then, not before a rebuild
-    this waited out. A failure leaves each document as it was or as it now
+    this waited out. `docs_to_relabel()`, the same way, names documents
+    whose metadata alone changed (update_explore_metadata). A failure
+    leaves each document as it was or as it now
     is (embed_explore_documents writes a batch of whole documents per
     transaction, and a failed batch rolls all of its documents back)."""
     with _rebuild_lock:
-        return embed_explore_documents(docs_to_embed())
+        embedded = embed_explore_documents(docs_to_embed())
+        if docs_to_relabel is not None:
+            update_explore_metadata(docs_to_relabel())
+        return embedded
 
 
 def wait_for_rebuild() -> None:

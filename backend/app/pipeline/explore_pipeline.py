@@ -48,13 +48,16 @@ from app.pipeline.analyze.document_authority import update_document_authority
 from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
 from app.pipeline.vector_store import (
+    alert_rebuild_failed,
     delete_explore_vectors,
     explore_embed_dict,
+    explore_meta_hash,
+    explore_text_hash,
+    get_embedded_explore_ids,
+    get_embedded_meta_hashes,
+    get_embedded_text_hashes,
     index_is_whole,
     is_busy_error,
-    alert_rebuild_failed,
-    explore_text_hash,
-    get_embedded_text_hashes,
     rebuild_explore_index,
     top_up_explore_index,
     wait_for_rebuild,
@@ -444,17 +447,22 @@ async def _embed_step(db: Session) -> int:
     return embedded
 
 
-def _top_up_plan(db: Session) -> list[tuple[dict, str]]:
-    """The documents to embed, each with its text hash: the ones the index
-    has no record of, and the ones whose text changed since their vectors
-    were written. Read outside the rebuild lock, on a session of its own
-    (the run's is left as it was), a batch of rows at a time: bodies are
-    long, and most documents are current. An unreadable index raises (a
-    lock is a skip): read as empty, it would re-encode the whole corpus."""
+def _top_up_plan(db: Session) -> tuple[list[tuple[dict, str]], list[tuple[dict, str]]]:
+    """(the documents to embed, the documents to relabel), each with the
+    hash it is checked by: to embed, those the index has no record of and
+    those whose text changed since their vectors were written; to relabel,
+    those whose metadata alone changed (search filters on it: written in
+    place, not re-encoded). Read outside the rebuild lock, on a session of
+    its own (the run's is left as it was), a batch of rows at a time:
+    bodies are long, and most documents are current. An unreadable index
+    raises (a lock is a skip): read as empty, it would re-encode the whole
+    corpus."""
     from app.database import own_session
 
-    hashes = get_embedded_text_hashes()
-    wanted: list[tuple[dict, str]] = []
+    texts = get_embedded_text_hashes()
+    metas = get_embedded_meta_hashes()
+    embed: list[tuple[dict, str]] = []
+    relabel: list[tuple[dict, str]] = []
     with own_session(db) as scan:
         after = 0
         while True:
@@ -463,31 +471,39 @@ def _top_up_plan(db: Session) -> list[tuple[dict, str]]:
                 .order_by(ExploreDocument.id).limit(500).all()
             )
             if not docs:
-                return wanted
+                return embed, relabel
             for d in docs:
                 doc = explore_embed_dict(d)
-                current = explore_text_hash(doc)
-                # Every embed records its document's hash with its vectors
+                text = explore_text_hash(doc)
+                # Every embed records its document's hashes with its vectors
                 # (a document with no text too), so none recorded means
                 # never embedded, and a different one means changed since.
-                if hashes.get(d.id) != current:
-                    wanted.append((doc, current))
+                if texts.get(d.id) != text:
+                    embed.append((doc, text))
+                elif metas.get(d.id) != (meta := explore_meta_hash(doc)):
+                    relabel.append((doc, meta))
             after = docs[-1].id
             scan.expunge_all()  # the bodies read, let go of
 
 
 def _still_wanted(plan: list[tuple[dict, str]]) -> list[dict]:
-    """The plan re-checked under the rebuild lock, against the index alone
-    (no bodies read or hashed again): a rebuild this waited out wrote
+    """The embed plan re-checked under the rebuild lock, against the index
+    alone (no bodies read or hashed again): a rebuild this waited out wrote
     documents with their current text's hash, and they aren't embedded
     twice."""
     hashes = get_embedded_text_hashes()
     return [{**doc, "_text_hash": current} for doc, current in plan if hashes.get(doc["id"]) != current]
 
 
+def _still_to_relabel(plan: list[tuple[dict, str]]) -> list[dict]:
+    """The relabel plan re-checked the same way."""
+    hashes = get_embedded_meta_hashes()
+    return [doc for doc, meta in plan if doc["id"] in hashes and hashes[doc["id"]] != meta]
+
+
 async def _top_up(db: Session) -> int:
     logger.info("Explore pipeline: embedding documents into vector store...")
-    plan = await asyncio.to_thread(_top_up_plan, db)
+    plan, relabel = await asyncio.to_thread(_top_up_plan, db)
     # Off the event loop: encoding is pure CPU inside sentence-transformers
     # and ran for 23 MINUTES in one call against the real corpus (1,557
     # documents / 11,022 chunks, measured on the Pi 2026-09-20). Awaiting it
@@ -503,7 +519,9 @@ async def _top_up(db: Session) -> int:
     # donor_classifier_ai.py and api/explore.py already give their own
     # CPU-bound calls. Under the rebuild lock (top_up_explore_index): a
     # start's rebuild waits for it rather than embed beside it.
-    return await asyncio.to_thread(top_up_explore_index, lambda: _still_wanted(plan))
+    return await asyncio.to_thread(
+        top_up_explore_index, lambda: _still_wanted(plan), lambda: _still_to_relabel(relabel),
+    )
 
 
 async def _index_is_whole_or_none() -> bool | None:
@@ -532,9 +550,9 @@ def _purge_orphaned_vectors(db: Session) -> int:
     is about to re-embed, which by definition still exist.
     """
     try:
-        # By text-hash row: every embedded document has one, written with
-        # its chunks, and one with no text has only that.
-        embedded = set(get_embedded_text_hashes())
+        # Chunks and text-hash rows both: a document with no text has only
+        # its hash row, and chunks some other writer left have no hash row.
+        embedded = get_embedded_explore_ids() | set(get_embedded_text_hashes())
     except Exception:
         logger.warning("Could not read the vector index — skipping orphan sweep")
         return 0

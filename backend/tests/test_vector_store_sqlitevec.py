@@ -279,6 +279,18 @@ class TestTextHashes:
         # re-encode.
         assert vector_store.explore_text_hash(doc) == vector_store.explore_text_hash({**doc, "politician_id": ""})
 
+    def test_metadata_alone_is_written_in_place_and_filtered_on(self, vec_env, monkeypatch):
+        # A chamber corrected: search filters on the vec0 column, so it must
+        # move — without re-encoding the text.
+        vector_store.embed_explore_documents([_doc(1, "Same title", chamber="House")])
+        corrected = _doc(1, "Same title", chamber="Senate")
+        with patch.object(vector_store.get_similarity_model(), "encode",
+                          side_effect=AssertionError("re-encoded")):
+            assert vector_store.update_explore_metadata([corrected]) == 1
+        assert vector_store.search_explore_documents("Same title", chamber="Senate")
+        assert not vector_store.search_explore_documents("Same title", chamber="House")
+        assert vector_store.get_embedded_meta_hashes() == {1: vector_store.explore_meta_hash(corrected)}
+
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         emptied = _doc(1, "")
