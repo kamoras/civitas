@@ -107,10 +107,10 @@ async def test_trigger_election_pipeline_spawns_background_thread():
     from unittest.mock import patch
     from app.api.admin import admin_trigger_election_pipeline
 
-    with patch("app.background.start_waiting_writer") as mock_run:
+    with patch("app.api.admin.run_pipeline_in_thread") as mock_run:
         result = await admin_trigger_election_pipeline()
 
-    assert result == {"message": "Election pipeline triggered", "queued": False}
+    assert result == {"message": "Election pipeline triggered"}
     mock_run.assert_called_once()
     assert mock_run.call_args.kwargs["name"] == "election-pipeline-run"
 

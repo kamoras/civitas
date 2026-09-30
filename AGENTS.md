@@ -651,33 +651,24 @@ be triggered manually via `POST /api/admin/pipeline/trigger`.
 
 `scheduler.py`'s `_nightly_pipeline()` runs FIVE pipelines as a chain, in
 order: **Senate → Supplementary → House → Stock trades → Election.** They
-run one at a time (the Pi's memory), but **none waits on the one before it
-succeeding** (`app/pipeline_chain.py`, 2026-09): each reads whatever the
+run one after another (the Pi's memory), but **none waits on the one before
+it succeeding** (`app/pipeline_chain.py`, 2026-09): each reads whatever the
 database holds, so a link that is skipped, fails or crashes is alerted
 (`nightly-skipped-*`; `nightly-crashed-*` for a crash or a `failed` /
 `no_data` run) and the next runs anyway. Until then any of those ended the
 chain, and Stock trades and Election once went 19 nights without running
 behind a Supplementary failure. The one skip that ends a chain is a data
-reset holding the database, which every later link would hit too. Chains
-run one at a time in the order they started: a trigger sent during the
-nightly run is queued behind it (its response says so) and vice versa. The
-chain holding the turn that runs one link past `STALE_PIPELINE_TIMEOUT` is
-hung and loses the turn; a waiting chain is never taken for hung. A chain
-registers as a database writer only while a link runs, so a data reset
-doesn't wait on a queue. A killed process still ends its chain; the
-staleness watch below is the backstop for that.
-`POST /api/admin/pipeline/trigger` runs the same five-link chain, reported
-the same way (a single senator or a fetch-only run is that Senate run
-alone, labelled apart so it doesn't clear the full run's alerts). A trigger
-is refused (409) when it would repeat what a live chain is due to do — a
-full run during a full run, or a pipeline another chain has yet to start —
-and the nightly job doesn't start while a triggered full run is in progress
-(that run is the night's). The single-pipeline triggers are chains of one
-in the same queue.
-`ops_alerts.check_pipeline_staleness` still watches for a pipeline with no
-successful completion in `PIPELINE_STALE_ALERT_DAYS`; `check_pipeline_
-overrun` watches the opposite case of a run that started and is taking too
-long.
+reset holding the database, which every later link would hit too. A killed
+process still ends its chain; the staleness watch below is the backstop for
+that. `POST /api/admin/pipeline/trigger` (and the token-authenticated
+`/api/pipeline/trigger`) runs the same five-link chain, reported the same
+way, so a manual run can recover any of them (a single senator or a
+fetch-only run is the Senate pipeline alone). `pipelineChainIsRunning` in
+the admin status keeps `check-and-deploy.sh` from restarting between two
+links. `ops_alerts.check_pipeline_staleness` still watches for a pipeline
+with no successful completion in `PIPELINE_STALE_ALERT_DAYS`;
+`check_pipeline_overrun` watches the opposite case of a run that started
+and is taking too long.
 
 Each member pipeline executes in 4 phases per chamber, defined in
 `senate_pipeline.py`/`house_pipeline.py`:

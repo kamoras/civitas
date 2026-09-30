@@ -105,18 +105,6 @@ def start_writer(target: Callable[..., object], *, name: str, args: tuple = ()) 
     return thread
 
 
-def start_waiting_writer(target: Callable[..., object], *, name: str) -> threading.Thread:
-    """Start a daemon thread that registers its own writes (writing()) as
-    it makes them — a pipeline chain, which can wait hours for its turn
-    and isn't writing meanwhile, so a data reset needn't wait for it.
-    Refused like start_writer (WritesHeld, WritesElsewhere) when started."""
-    with writing(name):
-        pass
-    thread = threading.Thread(target=target, daemon=True, name=name)
-    thread.start()
-    return thread
-
-
 @contextmanager
 def exclusive(holder: str) -> Iterator[None]:
     """Hold every writer in this process off for the enclosed work. Raises

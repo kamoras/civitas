@@ -24,7 +24,7 @@ from app.pipeline.analyze.action_center import get_action_refresh_state, refresh
 from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_congress_sync_running, run_congress_sync
 from app.pipeline.analyze.congress_bluesky import post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
-from app.background import WritesHeld, start_waiting_writer, start_writer
+from app.background import WritesHeld, start_writer
 from app.pipeline import lease
 
 if TYPE_CHECKING:
@@ -48,7 +48,7 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     return age is not None and age > threshold
 
 
-def _start_job(target, *, name: str, alert: bool = False, waiting: bool = False) -> None:
+def _start_job(target, *, name: str, alert: bool = False) -> None:
     """Start a scheduled job's thread. While the admin data reset holds the
     database the job doesn't run this time: logged, and for the nightly
     chain — whose skip leaves the wiped database unbuilt for a day — an ops
@@ -59,9 +59,7 @@ def _start_job(target, *, name: str, alert: bool = False, waiting: bool = False)
     and it sees the reset — taken inside the job, past its own checks, so a
     tick that bails holds nothing another entry point would skip over."""
     try:
-        # A chain registers its own writes, link by link (waiting=True):
-        # its wait for its turn holds no data reset off.
-        (start_waiting_writer if waiting else start_writer)(target, name=name)
+        start_writer(target, name=name)
     except WritesHeld as held:
         logger.warning("%s", held)
         if alert:
@@ -87,7 +85,7 @@ def warm_bills() -> None:
 
 def nightly_links() -> "list[Link]":
     """The nightly run's pipelines, in order (app.pipeline_chain). A full
-    trigger runs the same list (api.pipeline.start_triggered_chain)."""
+    trigger runs the same list (triggered_chain)."""
     from app.pipeline_chain import Link
 
     # Called through the module's names at run time: tests patch them.
@@ -153,24 +151,14 @@ def reporter(run_name: str):
     return report
 
 
-def filtered_senate_link(senator: str | None, fetch_only: bool) -> "Link":
-    """A single-senator or fetch-only Senate run: not the Senate pipeline's
-    whole run, so labelled apart — its outcome neither clears nor raises
-    the full run's alerts, and it doesn't stand in for the full run in a
-    chain queued meanwhile."""
-    from app.pipeline_chain import Link
-
-    what = f"single senator {senator}" if senator is not None else "fetch only"
-    return Link(f"Senate ({what})", lambda: run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only))
-
-
-def chain_of(links: "list[Link]", run_name: str, *, kind: str = "", reserved: int | None = None):
-    """A chain of `links` (app.pipeline_chain) reported under `run_name`,
-    as a coroutine function for a thread to run."""
+def triggered_chain():
+    """What a full pipeline trigger runs: the nightly chain's five
+    pipelines, each whatever the one before it did (so a trigger recovers
+    any of them, not only the first), reported like the nightly run."""
     from app.pipeline_chain import run_chain
 
     async def chain() -> None:
-        await run_chain(links, reporter(run_name), kind=kind, reserved=reserved)
+        await run_chain(nightly_links(), reporter("Triggered"))
 
     return chain
 
@@ -181,8 +169,7 @@ def _nightly_pipeline() -> None:
     independent pipelines run one after another, not one combined
     pipeline. One at a time for the Pi's memory, but none waits on the
     one before it succeeding: a skip, failure or crash is alerted and the
-    next still runs (app.pipeline_chain). Not started while a triggered
-    full run is in progress: that run is tonight's.
+    next still runs (app.pipeline_chain).
 
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.
@@ -194,7 +181,7 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
-    from app.pipeline_chain import FULL, leave, reserve, run_chain
+    from app.pipeline_chain import run_chain
 
     def _run():
         # Loud, deduped alerts before another night's scoring. Each is a
@@ -217,14 +204,9 @@ def _nightly_pipeline() -> None:
                 check()
             except Exception:
                 logger.exception("Pre-pipeline check %s failed", check.__name__)
-        links = nightly_links()
-        reserved, why = reserve(FULL, [link.label for link in links])
-        if reserved is None:
-            logger.info("Nightly pipeline not started — %s (a trigger's, which is tonight's run)", why)
-            return
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(run_chain(links, reporter("Nightly"), kind=FULL, reserved=reserved))
+            loop.run_until_complete(run_chain(nightly_links(), reporter("Nightly")))
             # The whole chain's alert, from before each link had its own.
             resolve_ops_alert("nightly-crashed")
         except BaseException as e:
@@ -238,10 +220,9 @@ def _nightly_pipeline() -> None:
                 condition="nightly-crashed",
             )
         finally:
-            leave(reserved)
             loop.close()
 
-    _start_job(_run, name="nightly-pipeline", alert=True, waiting=True)
+    _start_job(_run, name="nightly-pipeline", alert=True)
 
 
 def _hourly_action_refresh() -> None:

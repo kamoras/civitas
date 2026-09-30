@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
+from app.api.pipeline_runner import run_pipeline_in_thread
 from app.database import get_db
 from app.models import PipelineRun
 from app.schemas import PipelineRunSchema, PipelineStatusSchema
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 def _is_pipeline_running(db: Session) -> bool:
-    """Check the shared database for a currently running Senate pipeline.
+    """Check the shared database for a currently running pipeline.
 
     A leftover row a dead run left is ignored (run_tracker.live_run), so it
     can't wedge the "is a pipeline already running?" guard.
@@ -21,57 +22,6 @@ def _is_pipeline_running(db: Session) -> bool:
     from app.pipeline.run_tracker import run_in_progress
 
     return run_in_progress(db, PipelineRun)
-
-
-def queue_chain(links, *, kind: str, name: str, error_label: str) -> bool:
-    """Start a chain of pipelines (app.pipeline_chain) in a thread of its
-    own, reported under "Triggered"; True when it waits behind a chain in
-    progress (the response says it is queued, not started). A 409 when it
-    would repeat what a live chain will do — a full run during a full run,
-    a pipeline another chain has yet to start — rather than run it twice."""
-    import asyncio
-
-    from app.background import start_waiting_writer
-    from app.pipeline_chain import chain_running, leave, reserve
-    from app.scheduler import chain_of
-
-    queued = chain_running()
-    reserved, why = reserve(kind, [link.label for link in links])
-    if reserved is None:
-        raise HTTPException(status_code=409, detail=f"Not started: {why}")
-    chain = chain_of(links, "Triggered", kind=kind, reserved=reserved)
-
-    def _run() -> None:
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(chain())
-        except BaseException:
-            logger.exception(error_label)
-        finally:
-            leave(reserved)
-            loop.close()
-
-    try:
-        start_waiting_writer(_run, name=name)
-    except BaseException:
-        leave(reserved)  # never started
-        raise
-    return queued
-
-
-def start_triggered_chain(senator: str | None, fetch_only: bool, error_label: str) -> bool:
-    """What both pipeline triggers run: the nightly chain's five pipelines,
-    each whatever the one before it did — so a trigger recovers any of
-    them, not only the first — refused while another full run is in
-    progress. A single senator or a fetch-only run is that Senate run
-    alone. True when it is queued behind a chain in progress."""
-    from app.pipeline_chain import FULL
-    from app.scheduler import filtered_senate_link, nightly_links
-
-    if senator is not None or fetch_only:
-        return queue_chain([filtered_senate_link(senator, fetch_only)], kind="", name="pipeline-run",
-                           error_label=error_label)
-    return queue_chain(nightly_links(), kind=FULL, name="pipeline-run", error_label=error_label)
 
 
 @router.get("/pipeline/status", response_model=PipelineStatusSchema)
@@ -124,8 +74,11 @@ async def trigger_pipeline(
 ) -> dict:
     """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
     check_pipeline_token(authorization)
-    queued = start_triggered_chain(senator, fetch_only, "Pipeline run failed")
-    return {
-        "message": "Pipeline run queued behind the one in progress" if queued else "Pipeline run triggered",
-        "queued": queued, "senator_filter": senator, "fetch_only": fetch_only,
-    }
+
+    if _is_pipeline_running(db):
+        raise HTTPException(status_code=409, detail="Pipeline is already running")
+
+    from app.api.admin import _trigger_target
+
+    run_pipeline_in_thread(_trigger_target(senator, fetch_only), name="pipeline-run", error_label="Pipeline run failed")
+    return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}

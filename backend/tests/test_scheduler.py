@@ -23,11 +23,11 @@ from app.pipeline.election_pipeline import ballot_tracker
 
 @pytest.fixture(autouse=True)
 def _fresh_chains(monkeypatch):
-    """Each test's chains start with an empty queue (app.pipeline_chain
-    keeps it in the process)."""
+    """No pipeline chain recorded as running from another test
+    (app.pipeline_chain keeps that in the process)."""
     from app import pipeline_chain
 
-    monkeypatch.setattr(pipeline_chain, "_queue", pipeline_chain._Queue())
+    monkeypatch.setattr(pipeline_chain, "_chains", {})
 
 
 @pytest.fixture(autouse=True)

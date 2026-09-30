@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
 from app.database import get_db, get_visits_db, off_loop
 from app.http_client import make_async_client
@@ -913,8 +914,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         # run has no run row, and its top-up can take twenty-odd minutes a
         # restart would throw away mid-batch.
         "exploreIsRunning": _explore_running(db),
-        # A chain of pipelines in progress (nightly or triggered), between
-        # its links too — waiting on the one before or on another chain's:
+        # A chain of pipelines (nightly or triggered) between its links:
         # a restart then would drop the links it has yet to run.
         "pipelineChainIsRunning": chain_running(),
     }
@@ -1354,6 +1354,22 @@ async def admin_pipeline_timings(
     }
 
 
+def _trigger_target(senator: str | None, fetch_only: bool):
+    """What a pipeline trigger runs: a single senator or a fetch-only run is
+    the Senate pipeline alone; otherwise the nightly chain's five pipelines,
+    each whatever the one before it did (scheduler.triggered_chain) — so a
+    trigger recovers any of them, not only the first."""
+    from app.pipeline.senate_pipeline import run_senate_pipeline
+    from app.scheduler import triggered_chain
+
+    if senator is not None or fetch_only:
+        async def senate_only() -> None:
+            await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
+
+        return senate_only
+    return triggered_chain()
+
+
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
 async def admin_trigger_pipeline(
     senator: str | None = Query(default=None),
@@ -1361,12 +1377,16 @@ async def admin_trigger_pipeline(
     db: Session = Depends(get_db),
 ):
     """Trigger a pipeline run from the admin panel."""
-    from app.api.pipeline import start_triggered_chain
+    from app.api.pipeline import _is_pipeline_running
 
-    queued = start_triggered_chain(senator, fetch_only, "Admin-triggered pipeline run failed")
+    if _is_pipeline_running(db):
+        raise HTTPException(status_code=409, detail="Pipeline is already running")
+
+    run_pipeline_in_thread(
+        _trigger_target(senator, fetch_only), name="pipeline-run", error_label="Admin-triggered pipeline run failed",
+    )
     return {
-        "message": "Pipeline queued behind the run in progress" if queued else "Pipeline triggered",
-        "queued": queued,
+        "message": "Pipeline triggered",
         "senatorFilter": senator,
         "fetchOnly": fetch_only,
     }
@@ -1502,21 +1522,15 @@ _reembed_slot = threading.Lock()
 async def admin_trigger_house_pipeline():
     """Trigger a House representative pipeline run.
 
-    No pre-check here (unlike /pipeline/trigger's senate check) — it takes
-    its turn behind any pipeline running (app.pipeline_chain), and
-    run_house_pipeline acquires its own DB lock and safely no-ops if
-    already running.
+    No pre-check here (unlike /pipeline/trigger's senate check) — run_house_pipeline
+    acquires its own DB lock and safely no-ops if already running.
     """
     from app.pipeline.house_pipeline import run_house_pipeline
-    from app.api.pipeline import queue_chain
-    from app.pipeline_chain import Link
-    from app.scheduler import warm_bills
 
-    queued = queue_chain([Link("House", run_house_pipeline, after=warm_bills)], kind="", name="house-pipeline-run", error_label="House pipeline run failed")
-    return {
-        "message": "House pipeline queued behind the run in progress" if queued else "House pipeline triggered",
-        "queued": queued,
-    }
+    run_pipeline_in_thread(
+        run_house_pipeline, name="house-pipeline-run", error_label="House pipeline run failed",
+    )
+    return {"message": "House pipeline triggered"}
 
 
 @router.post("/pipeline/clear-stuck-senate", dependencies=[Depends(require_admin)])
@@ -1589,14 +1603,13 @@ async def admin_trigger_supplementary_pipeline():
     Same self-guarding lock as the house trigger above — no pre-check needed.
     """
     from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
-    from app.api.pipeline import queue_chain
-    from app.pipeline_chain import Link
 
-    queued = queue_chain([Link("Supplementary", run_supplementary_pipeline)], kind="", name="supplementary-pipeline-run", error_label="Supplementary pipeline run failed")
-    return {
-        "message": "Supplementary pipeline queued behind the run in progress" if queued else "Supplementary pipeline triggered",
-        "queued": queued,
-    }
+    run_pipeline_in_thread(
+        run_supplementary_pipeline,
+        name="supplementary-pipeline-run",
+        error_label="Supplementary pipeline run failed",
+    )
+    return {"message": "Supplementary pipeline triggered"}
 
 
 @router.post("/pipeline/clear-stuck-supplementary", dependencies=[Depends(require_admin)])
@@ -1620,14 +1633,13 @@ async def admin_trigger_election_pipeline():
     Same self-guarding lock as the house trigger above — no pre-check needed.
     """
     from app.pipeline.election_pipeline import run_election_pipeline
-    from app.api.pipeline import queue_chain
-    from app.pipeline_chain import Link
 
-    queued = queue_chain([Link("Election", run_election_pipeline)], kind="", name="election-pipeline-run", error_label="Election pipeline run failed")
-    return {
-        "message": "Election pipeline queued behind the run in progress" if queued else "Election pipeline triggered",
-        "queued": queued,
-    }
+    run_pipeline_in_thread(
+        run_election_pipeline,
+        name="election-pipeline-run",
+        error_label="Election pipeline run failed",
+    )
+    return {"message": "Election pipeline triggered"}
 
 
 @router.post("/pipeline/clear-stuck-election", dependencies=[Depends(require_admin)])
