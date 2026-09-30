@@ -86,39 +86,98 @@ def warm_bills() -> None:
 def nightly_links() -> "list[Link]":
     """The nightly run's pipelines, in order (app.pipeline_chain). A full
     trigger runs the same list (triggered_chain)."""
-    from app.models import (
-        ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
-    )
     from app.pipeline_chain import Link
 
     # Called through the module's names at run time: tests patch them.
     return [
-        Link("Senate", lambda: run_senate_pipeline(), PipelineRun),
-        Link("Supplementary", lambda: run_supplementary_pipeline(), SupplementaryPipelineRun),
-        Link("House", lambda: run_house_pipeline(), HousePipelineRun, after=warm_bills),
-        Link("Stock trades", lambda: run_stock_trades_pipeline(), StockTradesPipelineRun),
-        Link("Election", lambda: run_election_pipeline(), ElectionPipelineRun),
+        Link("Senate", lambda: run_senate_pipeline()),
+        Link("Supplementary", lambda: run_supplementary_pipeline()),
+        Link("House", lambda: run_house_pipeline(), after=warm_bills),
+        Link("Stock trades", lambda: run_stock_trades_pipeline()),
+        Link("Election", lambda: run_election_pipeline()),
     ]
+
+
+def reporter(run_name: str):
+    """Each link's outcome in a chain of runs `run_name` ("Nightly",
+    "Triggered"): alerted when it didn't run, failed or crashed — never
+    silent, since its data otherwise goes a day stale with no signal — and
+    its alerts resolved when it ran. One set of conditions per pipeline,
+    whichever run reports: a trigger that runs it cleanly clears the
+    nightly one's alert."""
+    from app.ops_alerts import resolve_ops_alert, send_ops_alert
+    from app.pipeline.run_tracker import skip_reason_text
+    from app.pipeline_chain import CRASHED, FAILED
+
+    def report(link, outcome) -> None:
+        slug = link.label.lower().replace(" ", "-")
+        skipped, crashed = f"nightly-skipped-{slug}", f"nightly-crashed-{slug}"
+        tag = f"{run_name.lower()}-{slug}-{utcnow():%Y-%m-%d}"
+        if outcome.status == "skipped":
+            reason = (outcome.result or {}).get("reason")
+            logger.info("%s pipeline skipped — %s", link.label, reason or "unknown reason")
+            send_ops_alert(
+                f"{run_name} {link.label} run skipped",
+                f"The {link.label} pipeline did not start because {skip_reason_text(reason)}. "
+                f"{link.label} data will be a day stale unless triggered again. The rest of its chain "
+                "still runs.",
+                dedupe_key=f"skipped-{tag}",
+                condition=skipped,
+            )
+            return
+        resolve_ops_alert(skipped)
+        # A link reached: a reset no longer holds the nightly run off.
+        resolve_ops_alert("nightly-skipped-reset")
+        if outcome.status in FAILED:
+            # Raised, or caught its own error and said so (House,
+            # Supplementary and Election return "failed"; House "no_data"
+            # for an empty roster).
+            if outcome.status == CRASHED:
+                why = f"{type(outcome.error).__name__}: {outcome.error}"
+            else:
+                detail = (outcome.result or {}).get("error") or (outcome.result or {}).get("reason")
+                why = f"it ended {outcome.status} ({detail or 'see its run row'})"
+            send_ops_alert(
+                f"{run_name} {link.label} run {'crashed' if outcome.status == CRASHED else 'failed'}",
+                f"{why}. {link.label} data will be a day stale unless triggered again. The rest of its "
+                "chain still runs.",
+                dedupe_key=f"crashed-{tag}",
+                condition=crashed,
+            )
+        else:
+            resolve_ops_alert(crashed)
+
+    return report
 
 
 def triggered_chain(senator: str | None, fetch_only: bool, reserved: int | None = None):
     """What a pipeline trigger runs: the nightly chain's five pipelines,
     each whatever the one before it did — so a trigger recovers any of
-    them, not only the first. `reserved`: its full-chain registration,
+    them, not only the first. `reserved`: its place in the chain queue,
     taken when the trigger was accepted (pipeline_chain.reserve). A single
-    senator or a fetch-only run is the Senate pipeline alone, and not a
-    whole run another chain can skip."""
-    from app.models import PipelineRun
-    from app.pipeline_chain import FULL, Link, one_link, run_chain
+    senator or a fetch-only run is the Senate pipeline alone."""
+    from app.pipeline_chain import FULL, Link, run_chain
 
     if senator is not None or fetch_only:
-        return one_link(Link(
-            "Senate", lambda: run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only), PipelineRun,
-            whole=False,
-        ))
+        links = [Link("Senate", lambda: run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only))]
+        kind = ""
+    else:
+        links, kind = nightly_links(), FULL
 
     async def chain() -> None:
-        await run_chain(nightly_links(), kind=FULL, reserved=reserved)
+        await run_chain(links, reporter("Triggered"), kind=kind, reserved=reserved)
+
+    return chain
+
+
+def single_pipeline_chain(link: "Link"):
+    """A single pipeline's trigger (House, Supplementary, Election): a chain
+    of one, waiting its turn behind any chain running, and reported like
+    one."""
+    from app.pipeline_chain import run_chain
+
+    async def chain() -> None:
+        await run_chain([link], reporter("Triggered"))
 
     return chain
 
@@ -129,7 +188,8 @@ def _nightly_pipeline() -> None:
     independent pipelines run one after another, not one combined
     pipeline. One at a time for the Pi's memory, but none waits on the
     one before it succeeding: a skip, failure or crash is alerted and the
-    next still runs (app.pipeline_chain).
+    next still runs (app.pipeline_chain). Not started while a triggered
+    full run is in progress: that run is tonight's.
 
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.
@@ -141,56 +201,13 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
-    from app.pipeline_chain import CRASHED, FULL, RAN_ELSEWHERE, run_chain
-
-    def _skip_cause(reason: str | None) -> str:
-        """What held the run off: the skip's own reason (every pipeline's
-        lock refusal carries one — run_tracker.acquire_pipeline_lock_why)."""
-        from app.pipeline.run_tracker import skip_reason_text
-
-        return skip_reason_text(reason)
-
-    def _report(link, outcome) -> None:
-        """Each link's outcome, alerted when it didn't run or crashed —
-        never silent, since its data otherwise goes a day stale with no
-        signal — and resolved when it ran."""
-        slug = link.label.lower().replace(" ", "-")
-        skipped, crashed = f"nightly-skipped-{slug}", f"nightly-crashed-{slug}"
-        if outcome.status == RAN_ELSEWHERE:
-            # Another run of it did tonight's work (a trigger's, completed):
-            # this link neither alerts nor clears an alert on its behalf.
-            return
-        if outcome.status == "skipped":
-            reason = (outcome.result or {}).get("reason")
-            logger.info("%s pipeline skipped — %s", link.label, reason or "unknown reason")
-            send_ops_alert(
-                f"Nightly {link.label} run skipped",
-                f"The scheduled {link.label} pipeline did not start because {_skip_cause(reason)}. "
-                f"{link.label} data will be a day stale unless triggered manually. The other pipelines "
-                "in tonight's chain still run.",
-                dedupe_key=f"skipped-{link.label.lower()}-{utcnow():%Y-%m-%d}",
-                condition=skipped,
-            )
-            return
-        resolve_ops_alert(skipped)  # it ran tonight (or another run of it did)
-        # A link reached: a reset no longer holds the chain off.
-        resolve_ops_alert("nightly-skipped-reset")
-        if outcome.status in (CRASHED, "failed"):
-            # Raised, or caught its own error and said so (the House,
-            # Supplementary and Election pipelines return "failed").
-            why = (f"{type(outcome.error).__name__}: {outcome.error}" if outcome.status == CRASHED
-                   else f"it ended failed ({(outcome.result or {}).get('error') or 'see its run row'})")
-            send_ops_alert(
-                f"Nightly {link.label} run {'crashed' if outcome.status == CRASHED else 'failed'}",
-                f"{why}. {link.label} data will be a day stale unless triggered manually. The other "
-                "pipelines in tonight's chain still run.",
-                dedupe_key=f"crashed-{slug}-{utcnow():%Y-%m-%d}",
-                condition=crashed,
-            )
-        else:
-            resolve_ops_alert(crashed)
+    from app.pipeline_chain import FULL, leave, reserve, run_chain
 
     def _run():
+        reserved = reserve(FULL)
+        if reserved is None:
+            logger.info("Nightly pipeline not started — a triggered full run is in progress, and is tonight's")
+            return
         # Loud, deduped alerts before another night's scoring. Each is a
         # warning about the chain, never a reason to skip it: one that
         # raises is logged and the pipelines still run.
@@ -206,14 +223,15 @@ def _nightly_pipeline() -> None:
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
         )
-        for check in pre_checks:
-            try:
-                check()
-            except Exception:
-                logger.exception("Pre-pipeline check %s failed", check.__name__)
-        loop = asyncio.new_event_loop()
+        loop = None
         try:
-            loop.run_until_complete(run_chain(nightly_links(), _report, kind=FULL))
+            for check in pre_checks:
+                try:
+                    check()
+                except Exception:
+                    logger.exception("Pre-pipeline check %s failed", check.__name__)
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(run_chain(nightly_links(), reporter("Nightly"), kind=FULL, reserved=reserved))
             # The whole chain's alert, from before each link had its own.
             resolve_ops_alert("nightly-crashed")
         except BaseException as e:
@@ -227,7 +245,9 @@ def _nightly_pipeline() -> None:
                 condition="nightly-crashed",
             )
         finally:
-            loop.close()
+            leave(reserved)
+            if loop is not None:
+                loop.close()
 
     _start_job(_run, name="nightly-pipeline", alert=True)
 

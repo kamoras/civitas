@@ -654,22 +654,20 @@ order: **Senate → Supplementary → House → Stock trades → Election.** The
 run one at a time (the Pi's memory), but **none waits on the one before it
 succeeding** (`app/pipeline_chain.py`, 2026-09): each reads whatever the
 database holds, so a link that is skipped, fails or crashes is alerted
-(`nightly-skipped-*`; `nightly-crashed-*` for a crash or a `failed` run)
-and the next runs anyway. Until
-then any of those ended the chain, and Stock trades and Election once went
-19 nights without running behind a Supplementary failure. Every chain in the
-pipeline process takes turns on one queue, a link at a time in arrival
-order, so a manual run and the nightly one interleave rather than run two
-pipelines at once. A link another chain completed (not skipped, failed or
-crashed) since this chain started is not repeated, and a run of it outside
-any chain is waited out. A turn held past `STALE_PIPELINE_TIMEOUT` counts
-as hung and the next link takes it over, so a hung run can't stall the
-rest. A killed process still ends that night's chain; the staleness watch
-below is the backstop for that. `POST /api/admin/pipeline/trigger` runs the
-same five-link chain and is refused while another full chain (the nightly
-one, or another trigger's) is in progress; a single senator or a
-fetch-only run is Senate alone. The single-pipeline triggers are one-link
-chains on the same queue.
+(`nightly-skipped-*`; `nightly-crashed-*` for a crash or a `failed` /
+`no_data` run) and the next runs anyway. Until then any of those ended the
+chain, and Stock trades and Election once went 19 nights without running
+behind a Supplementary failure. The one skip that ends a chain is a data
+reset holding the database, which every later link would hit too. Chains
+run one at a time in the order they started: a trigger sent during the
+nightly run waits for it and vice versa, and a chain with no progress for
+`STALE_PIPELINE_TIMEOUT` is hung and loses its turn. A killed process still
+ends its chain; the staleness watch below is the backstop for that.
+`POST /api/admin/pipeline/trigger` runs the same five-link chain, reported
+the same way (a single senator or a fetch-only run is Senate alone); it is
+refused while another full chain runs, and the nightly job doesn't start
+while a triggered full run is in progress (that run is the night's). The
+single-pipeline triggers are chains of one in the same queue.
 `ops_alerts.check_pipeline_staleness` still watches for a pipeline with no
 successful completion in `PIPELINE_STALE_ALERT_DAYS`; `check_pipeline_
 overrun` watches the opposite case of a run that started and is taking too

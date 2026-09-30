@@ -31,7 +31,7 @@ def start_triggered_chain(db: Session, senator: str | None, fetch_only: bool, er
     and redo; else start it (scheduler.triggered_chain). The full-chain
     check and its registration are one step, so two requests can't both
     start one."""
-    from app.pipeline_chain import FULL, forget, reserve
+    from app.pipeline_chain import FULL, leave, reserve
     from app.scheduler import triggered_chain
 
     if _is_pipeline_running(db):
@@ -47,7 +47,7 @@ def start_triggered_chain(db: Session, senator: str | None, fetch_only: bool, er
         )
     except BaseException:
         if reserved is not None:
-            forget(reserved)  # never started
+            leave(reserved)  # never started
         raise
 
 

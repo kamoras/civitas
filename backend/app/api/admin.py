@@ -1507,13 +1507,12 @@ async def admin_trigger_house_pipeline():
     run_house_pipeline acquires its own DB lock and safely no-ops if
     already running.
     """
-    from app.models import HousePipelineRun
     from app.pipeline.house_pipeline import run_house_pipeline
-    from app.pipeline_chain import Link, one_link
-    from app.scheduler import warm_bills
+    from app.pipeline_chain import Link
+    from app.scheduler import single_pipeline_chain, warm_bills
 
     run_pipeline_in_thread(
-        one_link(Link("House", run_house_pipeline, HousePipelineRun, after=warm_bills)),
+        single_pipeline_chain(Link("House", run_house_pipeline, after=warm_bills)),
         name="house-pipeline-run", error_label="House pipeline run failed",
     )
     return {"message": "House pipeline triggered"}
@@ -1588,12 +1587,12 @@ async def admin_trigger_supplementary_pipeline():
 
     Same self-guarding lock as the house trigger above — no pre-check needed.
     """
-    from app.models import SupplementaryPipelineRun
     from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
-    from app.pipeline_chain import Link, one_link
+    from app.pipeline_chain import Link
+    from app.scheduler import single_pipeline_chain
 
     run_pipeline_in_thread(
-        one_link(Link("Supplementary", run_supplementary_pipeline, SupplementaryPipelineRun)),
+        single_pipeline_chain(Link("Supplementary", run_supplementary_pipeline)),
         name="supplementary-pipeline-run",
         error_label="Supplementary pipeline run failed",
     )
@@ -1620,12 +1619,12 @@ async def admin_trigger_election_pipeline():
 
     Same self-guarding lock as the house trigger above — no pre-check needed.
     """
-    from app.models import ElectionPipelineRun
     from app.pipeline.election_pipeline import run_election_pipeline
-    from app.pipeline_chain import Link, one_link
+    from app.pipeline_chain import Link
+    from app.scheduler import single_pipeline_chain
 
     run_pipeline_in_thread(
-        one_link(Link("Election", run_election_pipeline, ElectionPipelineRun)),
+        single_pipeline_chain(Link("Election", run_election_pipeline)),
         name="election-pipeline-run",
         error_label="Election pipeline run failed",
     )

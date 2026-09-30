@@ -23,12 +23,11 @@ from app.pipeline.election_pipeline import ballot_tracker
 
 @pytest.fixture(autouse=True)
 def _fresh_chains(monkeypatch):
-    """Each test's chains start with nothing recorded as completed by
-    another chain (app.pipeline_chain keeps that in the process)."""
+    """Each test's chains start with an empty queue (app.pipeline_chain
+    keeps it in the process)."""
     from app import pipeline_chain
 
-    monkeypatch.setattr(pipeline_chain, "_completed", {})
-    monkeypatch.setattr(pipeline_chain, "_chains", {})
+    monkeypatch.setattr(pipeline_chain, "_queue", pipeline_chain._Queue())
 
 
 @pytest.fixture(autouse=True)
@@ -210,7 +209,6 @@ class TestNightlyPipelineIndependentLinks:
 
         mocks = {}
         with patch("app.background.threading.Thread", _SyncThread), \
-             patch("app.pipeline_chain._is_running_elsewhere", AsyncMock(return_value=False)), \
              patch("app.ops_alerts.send_ops_alert") as mock_alert, \
              patch("app.ops_alerts.resolve_ops_alert") as mock_resolve, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
@@ -543,7 +541,6 @@ def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
          patch("app.scheduler.run_stock_trades_pipeline", completed), \
          patch("app.scheduler.run_election_pipeline", completed), \
          patch("app.services.bill_service.warm_bill_collection_cache"), \
-         patch("app.pipeline_chain._is_running_elsewhere", AsyncMock(return_value=False)), \
          patch("app.ops_alerts.resolve_ops_alert"), \
          patch("app.background.threading.Thread", _SyncThread), \
          patch("app.ops_alerts.send_ops_alert") as alert, \
