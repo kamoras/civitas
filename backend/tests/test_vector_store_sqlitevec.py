@@ -388,7 +388,7 @@ class TestTextHashes:
 
             def execute(self, sql, *args):
                 self.statements += 1
-                if self.statements == 2:
+                if self.statements == 3:  # BEGIN, the first DELETE, then this
                     raise sqlite3.OperationalError("disk I/O error")
                 return conn.execute(sql, *args)
 
@@ -471,6 +471,9 @@ class TestTextHashes:
         # not ready, and no DDL from this process.
         assert vector_store.search_explore_documents("anything") is None
         assert vector_store._vec_conn is None
+        import os
+
+        assert not os.path.exists(vector_store._VECTOR_DB_PATH)  # not created here, empty
 
     def test_the_embedded_ids_include_documents_with_only_a_hash(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title"), _doc(2, "")])
@@ -945,3 +948,32 @@ def test_each_tables_width_is_its_models_own():
     # and every insert into it fails.
     assert vector_store.get_similarity_model().get_sentence_embedding_dimension() == vector_store.SIMILARITY_DIMENSIONS
     assert vector_store.get_embedding_model().get_sentence_embedding_dimension() == vector_store.EMBEDDING_DIMENSIONS
+
+
+async def test_the_re_embed_waits_out_a_start_rebuild_before_taking_the_lease(monkeypatch, db_session):
+    # A start's rebuild takes no lease: held through that wait, the lease
+    # would refuse the nightly Explore run its ingest for nothing.
+    import threading as _t
+
+    from app.api.admin import admin_reembed_explore
+    from app.pipeline import lease
+
+    events: list[str] = []
+
+    class _Recorded(_Granted):
+        def __enter__(self):
+            events.append("lease")
+            return True
+
+    monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda _f, **_k: events.append("rebuild") or 0)
+    monkeypatch.setattr("app.pipeline.lexical_index.rebuild_index", lambda db: 0)
+    monkeypatch.setattr("app.pipeline.analyze.document_authority.update_document_authority", lambda db: {})
+    monkeypatch.setattr(lease, "job", _Recorded)
+    with vector_store._rebuild_lock:  # a start's rebuild, running
+        assert await admin_reembed_explore(db=db_session) == {"started": True}
+        _t.Event().wait(0.3)
+        assert events == []
+    for t in _t.enumerate():
+        if t.name == "explore-reembed":
+            t.join(timeout=10)
+    assert events == ["lease", "rebuild"]

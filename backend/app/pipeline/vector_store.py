@@ -285,10 +285,21 @@ _REBUILD_BATCH = 500
 _EMBED_BATCH = 200
 
 
-def _open_vec_conn(timeout: float, *, check_same_thread: bool = True, extension: bool = True) -> sqlite3.Connection:
+def _open_vec_conn(
+    timeout: float, *, check_same_thread: bool = True, extension: bool = True, read_only: bool = False,
+) -> sqlite3.Connection:
     """A new connection to the vector store, with sqlite-vec loaded unless
-    `extension` is False (get_vec_conn loads it after its WAL switch)."""
-    conn = sqlite3.connect(_VECTOR_DB_PATH, check_same_thread=check_same_thread, timeout=timeout)
+    `extension` is False (get_vec_conn loads it after its WAL switch).
+    `read_only` opens an existing file only, never creating one."""
+    if read_only:
+        from urllib.parse import quote
+
+        conn = sqlite3.connect(
+            f"file:{quote(os.path.abspath(_VECTOR_DB_PATH))}?mode=ro", uri=True,
+            check_same_thread=check_same_thread, timeout=timeout,
+        )
+    else:
+        conn = sqlite3.connect(_VECTOR_DB_PATH, check_same_thread=check_same_thread, timeout=timeout)
     if extension:
         try:
             _load_vec(conn)
@@ -400,14 +411,17 @@ def _read_conn() -> sqlite3.Connection:
     opened first, so they exist."""
     from app.config import settings
 
-    if settings.PROCESS_ROLE != "api":
+    api = settings.PROCESS_ROLE == "api"
+    if not api:
         get_vec_conn()
     cached = getattr(_read_local, "conn", None)
     if cached is not None and cached[0] == _VECTOR_DB_PATH:
         return cached[1]
     if cached is not None:
         cached[1].close()
-    conn = _open_vec_conn(_busy_timeout_s())
+    # In the API process, read-only: a file the pipeline hasn't made yet
+    # raises (not ready) rather than being created here, empty.
+    conn = _open_vec_conn(_busy_timeout_s(), read_only=api)
     try:
         conn.execute("PRAGMA query_only = ON")
     except BaseException:
@@ -548,6 +562,12 @@ def _writing(conn: sqlite3.Connection):
                 yield conn
                 return
             try:
+                # Begun here, not at the first write: in sqlite3's legacy
+                # isolation a SELECT runs outside any transaction, and a
+                # writer's reads (a count it records) must see the state
+                # it writes against.
+                if not conn.in_transaction:
+                    conn.execute("BEGIN IMMEDIATE")
                 yield conn
                 conn.commit()
             except BaseException:
@@ -979,11 +999,18 @@ def search_explore_documents(
     so a member-scoped search returns that member's real matches instead
     of the global top-k intersected down to near-empty.
     """
-    # Checked before the query is encoded (not ready: no encode), and again
-    # with the search, in one snapshot: a rebuild's swap landing during the
+    # Checked before the query is encoded (not ready: no encode — the
+    # recorded identity alone, cheap), and wholly with the search, in one
+    # snapshot: a rebuild's swap landing during the
     # encode would otherwise hand an empty or partial table's answer on as
     # a whole one.
-    if _ready_count(_read_conn()) is None:
+    try:
+        if _get_meta(_read_conn(), _INDEX_MODEL) != index_identity():
+            logger.warning("explore index not a complete build by this model — not ready")
+            return None
+    except sqlite3.OperationalError:
+        # Not there yet (the API process never creates it), or mid-swap.
+        logger.warning("explore index unreadable — not ready")
         return None
 
     model = get_similarity_model()
