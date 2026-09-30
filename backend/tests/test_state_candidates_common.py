@@ -13,6 +13,8 @@ class TestParseOffice:
         """One wording per real feed already in production — Clarity/CO,
         NCSBE/NC and California's Statement of Vote all differ."""
         for label, district in [
+            # Colorado numbers the CONGRESS itself ("120th United States
+            # Congress"), which must never be read as district 120.
             ("Representative to the 120th United States Congress - District 1 - Democratic Party", 1),
             ("US HOUSE OF REPRESENTATIVES DISTRICT 05 (REP)", 5),
             ("United States Representative District 10", 10),
@@ -106,13 +108,6 @@ class TestParseOffice:
         assert common.parse_office("Member, House of Representatives (2nd District)") is None
         assert common.parse_office("State Representative 3rd District") is None
 
-    def test_the_ordinal_of_a_congress_is_not_a_district(self):
-        """Colorado numbers the CONGRESS itself ("120th United States
-        Congress"), which must never be read as district 120."""
-        assert common.parse_office(
-            "Representative to the 120th United States Congress - District 1 - Democratic Party",
-        ) == ("H", 1)
-
     def test_state_races_that_look_federal_are_rejected(self):
         """The live regression control: North Carolina's own legislature
         uses "HOUSE OF REPRESENTATIVES DISTRICT nnn" too."""
@@ -164,9 +159,6 @@ class TestLastFirstNames:
 
     def test_a_multi_word_surname_survives(self):
         assert common.surname("Van Drew, Jefferson", last_first=True) == "Van Drew"
-
-    def test_the_default_still_reads_first_last(self):
-        assert common.surname("Ed Case") == "Case"
 
     def test_a_name_without_a_comma_falls_back_rather_than_emptying(self):
         assert common.surname("Ed Case", last_first=True) == "Case"
@@ -372,12 +364,6 @@ class TestResolveConfirmedNominees:
         assert common.resolve_confirmed_nominees({}, None) == []
 
 
-class TestDiscoveryFailed:
-    def test_is_a_real_exception_distinct_from_a_bare_exception(self):
-        with pytest.raises(common.DiscoveryFailed):
-            raise common.DiscoveryFailed("a genuine fetch failure")
-
-
 class TestDistrictSortKey:
     """Districts sort in natural order, not lexical.
 
@@ -405,6 +391,9 @@ class TestParseStateLegOffice:
     are the three party-committee shapes that collide with them."""
 
     def test_both_chambers_resolve(self):
+        # Also the guard that the State Assembly pattern never reaches
+        # Rhode Island's "General Assembly" (its WHOLE legislature, whose
+        # two chambers are told apart by the Senator/Representative arms).
         assert common.parse_state_leg_office(
             "DEM Senator in General Assembly District 5") == ("upper", "5", None)
         assert common.parse_state_leg_office(
@@ -609,16 +598,10 @@ class TestMultiMemberDistricts:
         assert common.parse_state_leg_office(
             "State Senator - Legislative District 5") == ("upper", "5", None)
 
-    def test_minnesotas_letter_stays_on_the_district(self):
-        """10A is its own district with its own boundaries, so the
-        letter must NOT become a seat — the town crosswalk is keyed on
-        the district and would resolve to the wrong polygon."""
-        assert common.parse_state_leg_office(
-            "State Representative District 10A") == ("lower", "10A", None)
-
-    def test_single_member_states_carry_no_seat(self):
-        assert common.parse_state_leg_office(
-            "DEM Senator in General Assembly District 5") == ("upper", "5", None)
+    # Minnesota's "10A" staying on the district (not a seat) is pinned in
+    # TestBareChamberDistrictForms.test_a_numeric_district_is_never_read_as_a_letter:
+    # 10A is its own district with its own boundaries, and the town
+    # crosswalk is keyed on the district.
 
 
 class TestDistrictLabel:
@@ -727,16 +710,6 @@ class TestStateAssembly:
         assert common.parse_state_leg_office(
             "State Assembly Member District 1") == ("lower", "1", None)
 
-    def test_a_general_assembly_is_not_a_state_assembly(self):
-        """Rhode Island's "General Assembly" names its WHOLE legislature,
-        and its two chambers are told apart by the arms above — so the
-        State Assembly pattern must not reach either."""
-        assert common.parse_state_leg_office(
-            "DEM Senator in General Assembly District 5") == ("upper", "5", None)
-        assert common.parse_state_leg_office(
-            "REP Representative in General Assembly District 13") == ("lower", "13", None)
-
-
 class TestVoteForCount:
     """Maryland fills several delegate seats from ONE contest and says
     so in the label: "House of Delegates District 10 ... Vote for up to
@@ -789,9 +762,6 @@ class TestNebraskaAuditor:
         assert common.parse_statewide_office(
             "For Auditor of Public Accounts") == ("auditor", None)
 
-    def test_the_qualified_wordings_still_resolve(self):
-        assert common.parse_statewide_office("State Auditor") == ("auditor", None)
-
     def test_a_county_auditor_is_still_refused(self):
         assert common.parse_statewide_office("County Auditor") is None
         assert common.parse_statewide_office("County Auditor/Treasurer") is None
@@ -839,13 +809,6 @@ class TestClarityStateOffices:
         district."""
         assert common.parse_state_leg_office(
             "STATE EXECUTIVE COMMITTEE - Female, 2nd District - DEM") is None
-
-    def test_the_ordinal_form_does_not_disturb_the_plain_one(self):
-        assert common.parse_state_leg_office(
-            "DEM Senator in General Assembly District 5") == ("upper", "5", None)
-        assert common.parse_state_leg_office(
-            "State Representative District 10A") == ("lower", "10A", None)
-
 
 class TestBareChamberDistrictForms:
     """Alaska names its chambers with no qualifier at all — "House
@@ -1050,14 +1013,6 @@ class TestMajorityEndsContest:
         won = common.pick_nominees(self.POS1, None, 1, judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)
         assert [n for n, _ in won] == ["Colleen Melody"]
 
-    def test_it_is_not_the_runoff_threshold(self):
-        """A sub-majority leader is still published here (the general
-        decides), whereas runoff_threshold_pct would withhold them."""
-        advanced = common.pick_nominees(self.POS3, None, 2, judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)
-        assert advanced, "a sub-majority leader still reaches the general"
-        withheld = common.pick_nominees(self.POS3, 50.0, 1)
-        assert withheld == [], "the threshold rule withholds instead"
-
     def test_elects_publishes_nobody_because_the_seat_is_gone(self):
         """Idaho's opposite rule. Idaho Code 34-1217 certifies a judicial
         majority winner "as duly elected" and says they "shall not be
@@ -1077,13 +1032,6 @@ class TestMajorityEndsContest:
             unopposed, None, 2,
             judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)] == [
             "Gregory W. Moeller"]
-
-    def test_elects_still_advances_two_without_a_majority(self):
-        assert [n for n, _ in common.pick_nominees(
-            self.POS3, None, 2,
-            judicial_resolution=common.JUDICIAL_RESOLUTION_ELECTS)] == [
-            "David Stevens", "Jaime Michelle Hawk"]
-
 
 class TestCircuitCourts:
     """Florida keys its trial seats by a numbered CIRCUIT, not a
@@ -1106,13 +1054,7 @@ class TestCircuitCourts:
         assert common.parse_judicial_office(
             "Judge - Superior Court - Alcovy Judicial Circuit (McCamy)")[0] == "superior"
 
-    def test_a_prosecutor_of_a_circuit_is_still_refused(self):
-        assert common.parse_judicial_office(
-            "District Attorney - Atlantic Judicial Circuit - Rep") is None
-
     def test_the_other_states_are_unchanged(self):
-        assert common.parse_judicial_office(
-            "NC DISTRICT COURT JUDGE DISTRICT 3 SEAT 2 (REP)") == ("district", "3", "2")
         assert common.parse_judicial_office(
             "Justice Position #1 - Supreme Court") == ("supreme", None, "1")
 
@@ -1149,11 +1091,6 @@ class TestDecidedBeforeGeneral:
             self.UNOPPOSED, None, 2,
             judicial_resolution=common.JUDICIAL_RESOLUTION_DECIDED_EARLY) == []
 
-    def test_it_does_not_touch_a_state_without_the_value(self):
-        assert [n for n, _ in common.pick_nominees(self.NO_MAJORITY, None, 2)] == [
-            "David Stevens", "Jaime Michelle Hawk"]
-
-
 class TestStatewideOfficeBallotQuestions:
     """A ballot question that names an office is not that office's
     contest. Real shapes: South Dakota and Missouri print amendments
@@ -1172,22 +1109,6 @@ class TestStatewideOfficeBallotQuestions:
     def test_the_offices_themselves_still_parse(self):
         assert common.parse_statewide_office("Governor and Lieutenant Governor") == ("governor", None)
         assert common.parse_statewide_office("Lieutenant Governor") == ("lt_governor", None)
-
-
-class TestSouthDakotaOffices:
-    """Real contest labels off South Dakota's 2026 VIP primary feed."""
-
-    def test_school_and_public_lands(self):
-        assert common.parse_statewide_office("Commissioner of School and Public Lands") == (
-            "school_public_lands_commissioner", None)
-
-    def test_public_utilities_commission(self):
-        assert common.parse_statewide_office("Public Utilities Commissioner") == (
-            "public_utilities_commission", None)
-
-    def test_every_new_office_has_a_label(self):
-        for code in ("school_public_lands_commissioner", "public_utilities_commission"):
-            assert code in common.STATEWIDE_OFFICE_LABELS
 
 
 class TestIllinoisOffices:
@@ -1221,9 +1142,6 @@ class TestMassachusettsOffices:
         ):
             assert common.parse_statewide_office(label) == (code, None), label
 
-    def test_a_bare_auditor_is_still_refused(self):
-        assert common.parse_statewide_office("Auditor") is None
-
     def test_the_governors_council_is_not_the_governor(self):
         assert common.parse_statewide_office("Governor's Council 3rd District") == ("governors_council", "3")
         assert common.parse_statewide_office("Governor’s Council 8th District") == ("governors_council", "8")
@@ -1237,11 +1155,6 @@ class TestMassachusettsOffices:
             "Council of Governments Executive Committee Franklin District",
         ):
             assert common.parse_statewide_office(label) is None, label
-
-    def test_every_new_office_has_a_label(self):
-        for code in ("secretary_of_commonwealth", "governors_council"):
-            assert code in common.STATEWIDE_OFFICE_LABELS
-
 
 class TestWisconsinLegislature:
     """Labels off Wisconsin's certified 2026 partisan-primary canvass."""

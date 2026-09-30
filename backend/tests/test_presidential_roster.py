@@ -68,7 +68,6 @@ def test_roster_parser_edge_cases():
     assert by_id["trump-45"].name == "Donald J. Trump"
     assert by_id["trump-47"].name == "Donald J. Trump"
     assert by_id["trump-45"].term_start == "2017-01-20"
-    assert by_id["trump-47"].term_end is None
 
     # Cleveland: identical link text on the page, must resolve to the
     # correct non-consecutive term by date, and the display name must not

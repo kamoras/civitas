@@ -47,11 +47,6 @@ class TestBuildAndGates:
         assert "M000002" not in roles  # expired role
         assert 10 <= len(roles) <= 80
 
-    def test_expired_leadership_role_excluded(self):
-        _, _, legislators_raw = _synthetic_source()
-        roles = cl.build_leadership_roles(legislators_raw)
-        assert "M000002" not in roles  # end date in the past
-
     def test_tenures_keep_every_role_with_its_dates(self):
         """The current-title map drops dates and past roles; the tenure map
         keeps both, so a vote can be checked against the title held on its
@@ -92,6 +87,15 @@ class TestBuildAndGates:
         assert any("leadership-role count" in f for f in failures)
 
 
+async def _fetch_synthetic(filename, client):
+    membership_raw, committees_raw, legislators_raw = _synthetic_source()
+    return {
+        "committee-membership-current.yaml": membership_raw,
+        "committees-current.yaml": committees_raw,
+        "legislators-current.yaml": legislators_raw,
+    }[filename]
+
+
 class TestRefresh:
     def _patch_paths(self, monkeypatch, tmp_path):
         membership_path = tmp_path / "committee_membership.json"
@@ -105,15 +109,7 @@ class TestRefresh:
     async def test_successful_refresh_writes_both_files(self, monkeypatch, tmp_path):
         membership_path, leadership_path = self._patch_paths(monkeypatch, tmp_path)
 
-        async def fake_fetch(filename, client):
-            membership_raw, committees_raw, legislators_raw = _synthetic_source()
-            return {
-                "committee-membership-current.yaml": membership_raw,
-                "committees-current.yaml": committees_raw,
-                "legislators-current.yaml": legislators_raw,
-            }[filename]
-
-        monkeypatch.setattr(cl, "_fetch_yaml", fake_fetch)
+        monkeypatch.setattr(cl, "_fetch_yaml", _fetch_synthetic)
         assert await cl.refresh_committee_leadership_data() is True
         assert json.loads(leadership_path.read_text())["roles"]["M000001"] == "Senate Majority Leader"
         assert len(json.loads(membership_path.read_text())["membership"]) == 410
@@ -167,16 +163,9 @@ class TestRefresh:
         membership_path, leadership_path = self._patch_paths(monkeypatch, tmp_path)
         monkeypatch.setattr(committee_data, "_PERSISTENT_DATA_DIR", tmp_path)
         monkeypatch.setattr(committee_data, "_DATA_DIR", tmp_path / "no-bundled-fallback")
+        assert committee_data.load_leadership_roles() == {}  # loaded (and cached) before the refresh
 
-        async def fake_fetch(filename, client):
-            membership_raw, committees_raw, legislators_raw = _synthetic_source()
-            return {
-                "committee-membership-current.yaml": membership_raw,
-                "committees-current.yaml": committees_raw,
-                "legislators-current.yaml": legislators_raw,
-            }[filename]
-
-        monkeypatch.setattr(cl, "_fetch_yaml", fake_fetch)
+        monkeypatch.setattr(cl, "_fetch_yaml", _fetch_synthetic)
         assert await cl.refresh_committee_leadership_data() is True
         assert committee_data.load_leadership_roles()["M000001"] == "Senate Majority Leader"
         assert committee_data.load_leadership_tenures()["M000001"][0]["start"] == "2025-01-03"

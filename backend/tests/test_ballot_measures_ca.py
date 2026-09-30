@@ -161,17 +161,23 @@ def _one_prop_index(numbers):
     return html
 
 
+def _guide_pages(listed, qrg_listed, served):
+    """The 2026 guide: its propositions index listing `listed`, its Quick
+    Reference Guide index listing `qrg_listed`, and both pages of each
+    proposition in `served`."""
+    pages = {
+        CURRENT + "propositions/": _one_prop_index(listed),
+        CURRENT + "quick-reference-guide/": _one_qrg_index(qrg_listed),
+    }
+    for n in served:
+        pages[CURRENT + f"propositions/{n}/"] = FX[f"current_{n}_quick"]
+        pages[CURRENT + f"propositions/{n}/title-summary.htm"] = FX[f"current_{n}_title_summary"]
+    return pages
+
+
 class TestFetch:
     async def test_every_listed_proposition_is_read(self, monkeypatch):
-        index = _one_prop_index({"1", "3", "45"})
-        pages = {
-            CURRENT + "propositions/": index,
-            CURRENT + "quick-reference-guide/": _one_qrg_index({"1", "3", "45"}),
-        }
-        for n in ("1", "3", "45"):
-            pages[CURRENT + f"propositions/{n}/"] = FX[f"current_{n}_quick"]
-            pages[CURRENT + f"propositions/{n}/title-summary.htm"] = FX[f"current_{n}_title_summary"]
-        _serve(monkeypatch, pages)
+        _serve(monkeypatch, _guide_pages({"1", "3", "45"}, {"1", "3", "45"}, ("1", "3", "45")))
         results = await ca.fetch_measures(None, 2026)
         assert [p["number"] for p, _ in results] == ["1", "3", "45"]
         assert results[0][1] == CURRENT + "propositions/1/title-summary.htm"
@@ -179,15 +185,7 @@ class TestFetch:
     async def test_one_proposition_unreadable_refuses_the_state(self, monkeypatch):
         """Fail-closed completeness: the guide's index lists it, so a
         guide read without it is not the ballot."""
-        index = _one_prop_index({"1", "3", "45"})
-        pages = {
-            CURRENT + "propositions/": index,
-            CURRENT + "quick-reference-guide/": _one_qrg_index({"1", "3", "45"}),
-        }
-        for n in ("1", "3"):
-            pages[CURRENT + f"propositions/{n}/"] = FX[f"current_{n}_quick"]
-            pages[CURRENT + f"propositions/{n}/title-summary.htm"] = FX[f"current_{n}_title_summary"]
-        _serve(monkeypatch, pages)
+        _serve(monkeypatch, _guide_pages({"1", "3", "45"}, {"1", "3", "45"}, ("1", "3")))
         assert await ca.fetch_measures(None, 2026) is None
 
     async def test_a_proposition_missing_from_one_of_the_two_indexes_refuses(self, monkeypatch):
@@ -195,13 +193,7 @@ class TestFetch:
         propositions index with itself and could never fail — a
         proposition missing from that one index went unnoticed. The Quick
         Reference Guide's own index is the independent second count."""
-        pages = {
-            CURRENT + "propositions/": _one_prop_index({"1", "3"}),
-            CURRENT + "quick-reference-guide/": _one_qrg_index({"1", "3", "45"}),
-        }
-        for n in ("1", "3", "45"):
-            pages[CURRENT + f"propositions/{n}/"] = FX[f"current_{n}_quick"]
-            pages[CURRENT + f"propositions/{n}/title-summary.htm"] = FX[f"current_{n}_title_summary"]
+        pages = _guide_pages({"1", "3"}, {"1", "3", "45"}, ("1", "3", "45"))
         _serve(monkeypatch, pages)
         assert await ca.fetch_measures(None, 2026) is None
         # ... and an unreachable second index is a failure too.

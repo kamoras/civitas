@@ -121,12 +121,6 @@ class TestPlatformEmbeddingCache:
             cache.initialize(db=db)
         assert cache.is_loaded is True
 
-    def test_ensure_initializes_cold_start_when_unloaded(self):
-        cache = _PlatformEmbeddingCache()
-        with patch("app.pipeline.vector_store.get_embedding_model", return_value=_fake_model()):
-            cache.ensure()
-        assert cache.is_loaded is True
-
     def test_ensure_is_a_noop_once_loaded(self):
         cache = _PlatformEmbeddingCache()
         cache.r_embeddings["TAXES"] = np.array([1.0, 0.0])

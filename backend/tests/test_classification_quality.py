@@ -209,8 +209,8 @@ def _compute_metrics(
     }
 
 
-def _print_metrics(metrics: dict, title: str) -> None:
-    """Pretty-print classification metrics."""
+def _print_metrics(metrics: dict, title: str, failures: list[str]) -> None:
+    """Pretty-print classification metrics, then any misclassifications."""
     print(f"\n{'=' * 60}")
     print(f"  {title}")
     print(f"  Accuracy: {metrics['accuracy']:.1%} ({metrics['correct']}/{metrics['total']})")
@@ -220,6 +220,11 @@ def _print_metrics(metrics: dict, title: str) -> None:
     for cls, m in sorted(metrics["per_class"].items()):
         print(f"  {cls:<22} {m['precision']:>6.3f} {m['recall']:>6.3f} {m['f1']:>6.3f}")
     print()
+    if failures:
+        print("  Misclassifications:")
+        for f in failures:
+            print(f)
+        print()
 
 
 # ── Tests ───────────────────────────────────────────────────────
@@ -244,13 +249,7 @@ class TestIndustryClassificationQuality:
                 failures.append(f"  {org_name}: predicted={result}, expected={expected}")
 
         metrics = _compute_metrics(predictions, labels)
-        _print_metrics(metrics, "Industry Classification Quality")
-
-        if failures:
-            print("  Misclassifications:")
-            for f in failures:
-                print(f)
-            print()
+        _print_metrics(metrics, "Industry Classification Quality", failures)
 
         assert metrics["accuracy"] >= 0.80, (
             f"Industry accuracy {metrics['accuracy']:.1%} below 80% threshold. "
@@ -300,13 +299,7 @@ class TestDonorTypeClassificationQuality:
                 )
 
         metrics = _compute_metrics(predictions, labels)
-        _print_metrics(metrics, "Donor Type Classification Quality")
-
-        if failures:
-            print("  Misclassifications:")
-            for f in failures:
-                print(f)
-            print()
+        _print_metrics(metrics, "Donor Type Classification Quality", failures)
 
         assert metrics["accuracy"] >= 0.75, (
             f"Donor type accuracy {metrics['accuracy']:.1%} below 75% threshold. "
@@ -335,13 +328,7 @@ class TestBillStanceQuality:
                 )
 
         metrics = _compute_metrics(predictions, labels)
-        _print_metrics(metrics, "Bill Stance Direction Quality")
-
-        if failures:
-            print("  Misclassifications:")
-            for f in failures:
-                print(f)
-            print()
+        _print_metrics(metrics, "Bill Stance Direction Quality", failures)
 
         assert metrics["accuracy"] >= 0.85, (
             f"Stance accuracy {metrics['accuracy']:.1%} below 85% threshold. "
@@ -446,13 +433,7 @@ class TestPolicyAreaClassificationQuality:
                 failures.append(f"  {bill_text[:50]}: predicted={result}, expected={expected}")
 
         metrics = _compute_metrics(predictions, labels)
-        _print_metrics(metrics, "Policy Area Classification Quality")
-
-        if failures:
-            print("  Misclassifications:")
-            for f in failures:
-                print(f)
-            print()
+        _print_metrics(metrics, "Policy Area Classification Quality", failures)
 
         assert metrics["accuracy"] >= 0.80, (
             f"Policy area accuracy {metrics['accuracy']:.1%} below 80% threshold. "

@@ -68,24 +68,18 @@ class TestStartup:
             await main_module.asyncio.sleep(0)
         return set(started)
 
-    async def test_api_starts_only_the_read_side(self, started, role):
-        role("api")
-        assert await self._run(started) == {
-            "init-db", "bill-cache", "_preload_models", "visit-consumer",
-        }
-
-    async def test_worker_starts_only_the_pipeline_side(self, started, role):
-        role("worker")
-        assert await self._run(started) == {
-            "init-db", "sweep", "scheduler", "explore-bootstrap", "startup-jobs", "visit-consumer",
-        }
-
-    async def test_all_starts_both(self, started, role):
-        role("all")
-        assert await self._run(started) == {
-            "init-db", "sweep", "scheduler", "bill-cache", "_preload_models",
-            "explore-bootstrap", "startup-jobs", "visit-consumer",
-        }
+    @pytest.mark.parametrize("value, expected", [
+        pytest.param("api", {"init-db", "bill-cache", "_preload_models", "visit-consumer"},
+                     id="api_starts_only_the_read_side"),
+        pytest.param("worker", {"init-db", "sweep", "scheduler", "explore-bootstrap", "startup-jobs", "visit-consumer"},
+                     id="worker_starts_only_the_pipeline_side"),
+        pytest.param("all", {"init-db", "sweep", "scheduler", "bill-cache", "_preload_models",
+                             "explore-bootstrap", "startup-jobs", "visit-consumer"},
+                     id="all_starts_both"),
+    ])
+    async def test_each_role_starts_its_own_half(self, started, role, value, expected):
+        role(value)
+        assert await self._run(started) == expected
 
 
 def test_the_search_model_is_preloaded_and_nothing_else():

@@ -48,6 +48,8 @@ distinct from a fetch failure or a wrong-cycle miss.
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from app.pipeline.fetch import state_candidates_totalvote as tv
 
 FIXTURES = Path(__file__).parent
@@ -88,17 +90,14 @@ def _patched_by_type(monkeypatch, by_type):
 
 
 class TestPageElection:
-    def test_reads_the_real_montana_title(self):
-        assert tv._page_election(MT_HTML) == (2026, "2026-06-02")
-
-    def test_reads_the_real_nebraska_title_with_no_hyphen(self):
-        assert tv._page_election(NE_SW_HTML) == (2026, "2026-05-12")
-
-    def test_reads_the_real_south_dakota_title(self):
-        assert tv._page_election(SD_HTML) == (2026, "2026-07-28")
-
-    def test_a_page_with_no_matching_title_returns_none(self):
-        assert tv._page_election("<html><body>nothing here</body></html>") is None
+    @pytest.mark.parametrize("html, expected", [
+        pytest.param(MT_HTML, (2026, "2026-06-02"), id="real_montana_title"),
+        pytest.param(NE_SW_HTML, (2026, "2026-05-12"), id="real_nebraska_title_with_no_hyphen"),
+        pytest.param(SD_HTML, (2026, "2026-07-28"), id="real_south_dakota_title"),
+        pytest.param("<html><body>nothing here</body></html>", None, id="no_matching_title_returns_none"),
+    ])
+    def test_reads_the_page_title(self, html, expected):
+        assert tv._page_election(html) == expected
 
 
 class TestContests:
@@ -126,7 +125,8 @@ class TestContests:
     def test_nebraskas_non_federal_statewide_offices_are_dropped(self):
         # The real SW page mixes Senate in with Governor, Secretary of
         # State, Treasurer, Attorney General and Auditor -- only the
-        # federal one should survive parse_office.
+        # federal one should survive parse_office unless the state opts
+        # in to state offices (TestStateOffices).
         offices = {c[0] for c in tv._contests(NE_SW_HTML)}
         assert offices == {"S"}
 
@@ -188,6 +188,9 @@ class TestContests:
 
 class TestFetchConfirmedCandidatesMontana:
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
+        # Includes the unopposed Troy Downing (CD2 R) and Nick Sheedy
+        # (CD1 L) -- pick_nominee must still confirm a single real choice,
+        # not treat "nobody to rank against" as nothing to confirm.
         _patched_single(monkeypatch, MT_HTML)
         result = await tv.fetch_confirmed_candidates(None, 2026, "MT", MT_SOURCE)
         assert {"office": "S", "district": None, "party": "R", "last_name": "ALME", "display_name": "KURT ALME"} in result
@@ -200,16 +203,6 @@ class TestFetchConfirmedCandidatesMontana:
         assert {"office": "H", "district": 2, "party": "D", "last_name": "MILLER", "display_name": "BRIAN J MILLER"} in result
         assert {"office": "H", "district": 2, "party": "L", "last_name": "MCCRACKEN", "display_name": "PATRICK MCCRACKEN"} in result
         assert len(result) == 9
-
-    async def test_unopposed_candidates_still_confirm(self, monkeypatch):
-        # Troy Downing (CD2 R) and Nick Sheedy (CD1 L) both ran unopposed
-        # in their party's primary -- pick_nominee must still confirm a
-        # single real choice, not treat "nobody to rank against" as
-        # nothing to confirm.
-        _patched_single(monkeypatch, MT_HTML)
-        result = await tv.fetch_confirmed_candidates(None, 2026, "MT", MT_SOURCE)
-        assert {"office": "H", "district": 2, "party": "R", "last_name": "DOWNING", "display_name": "TROY DOWNING"} in result
-        assert {"office": "H", "district": 1, "party": "L", "last_name": "SHEEDY", "display_name": "NICK SHEEDY"} in result
 
     async def test_a_page_still_on_the_prior_cycle_confirms_nothing_yet(self, monkeypatch):
         # Real risk this guards against: the site not having rolled over
@@ -273,7 +266,11 @@ class TestFetchConfirmedCandidatesNebraska:
         # Unlike Montana's single query, Nebraska splits federal offices
         # across two (SW for Senate, CG for House) that must be fetched
         # and merged -- this proves both actually get requested and
-        # combined, not just whichever query happens first.
+        # combined, not just whichever query happens first. CD2's real
+        # Democratic field was a genuinely close 7-way race (Powell 22,516
+        # vs runner-up Cavanaugh 21,115) -- a fragile "biggest number in
+        # the block" implementation could be right by accident on
+        # Montana's more lopsided fields but wrong here.
         _patched_by_type(monkeypatch, {"SW": NE_SW_HTML, "CG": NE_CG_HTML})
         result = await tv.fetch_confirmed_candidates(None, 2026, "NE", NE_SOURCE)
         assert {"office": "S", "district": None, "party": "R", "last_name": "Ricketts", "display_name": "Pete Ricketts"} in result
@@ -287,15 +284,6 @@ class TestFetchConfirmedCandidatesNebraska:
         assert {"office": "H", "district": 3, "party": "R", "last_name": "Smith", "display_name": "Adrian Smith"} in result
         assert {"office": "H", "district": 3, "party": "D", "last_name": "Stille", "display_name": "Becky Kelly Stille"} in result
         assert len(result) == 10
-
-    async def test_a_close_real_field_still_resolves_to_the_true_plurality_winner(self, monkeypatch):
-        # CD2's real Democratic field was a genuinely close 7-way race
-        # (Powell 22,516 vs runner-up Cavanaugh 21,115) -- a fragile
-        # "biggest number in the block" implementation could be right by
-        # accident on Montana's more lopsided fields but wrong here.
-        _patched_by_type(monkeypatch, {"SW": NE_SW_HTML, "CG": NE_CG_HTML})
-        result = await tv.fetch_confirmed_candidates(None, 2026, "NE", NE_SOURCE)
-        assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell", "display_name": "Denise Powell"} in result
 
     async def test_one_query_failing_fails_the_whole_fetch(self, monkeypatch):
         # If either half of Nebraska's two-query fetch fails, the result
@@ -360,11 +348,6 @@ class TestFetchConfirmedCandidatesSouthDakota:
 class TestStateOffices:
     """This vendor mixes state offices into the same pages as the federal
     races — Nebraska's "SW" query carries Governor and the rest."""
-
-    def test_state_offices_are_ignored_unless_the_state_opts_in(self):
-        """Default behaviour is unchanged: only federal contests."""
-        offices = {c[0] for c in tv._contests(NE_SW_HTML)}
-        assert offices == {"S"}
 
     def test_opting_in_finds_the_statewide_offices_on_the_same_page(self):
         found = {c[0] for c in tv._contests(NE_SW_HTML, state_offices=True)}

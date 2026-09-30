@@ -14,9 +14,6 @@ class TestNewFactsSince:
         # "what's not in previous", which for an empty previous is all of it.
         assert new_facts_since(["a", "b"], []) == ["a", "b"]
 
-    def test_identical_lists_have_nothing_new(self):
-        assert new_facts_since(["a", "b"], ["a", "b"]) == []
-
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     def test_only_the_added_fact_is_new(self, mock_embed):
         # Real bug this guards against (flaky under coverage
@@ -72,8 +69,9 @@ class TestNewFactsSince:
         assert new_facts_since(current, previous) == current
 
     def test_exact_carryover_skips_the_embedding_call_entirely(self):
-        # The fast path (byte-identical facts) must never need the model —
-        # this is what keeps the common case cheap.
+        # Identical lists have nothing new, and the fast path (byte-identical
+        # facts) must never need the model — this is what keeps the common
+        # case cheap.
         with patch("app.pipeline.analyze.action_center._embed_texts_sim") as mock_embed:
             assert new_facts_since(["a", "b"], ["a", "b"]) == []
         mock_embed.assert_not_called()

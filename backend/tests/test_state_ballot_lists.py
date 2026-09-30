@@ -203,16 +203,12 @@ def test_match_strips_a_suffix_filed_on_the_fec_surname():
 
 
 def test_match_confirms_one_person_filed_under_two_fec_ids():
-    # MO-1 2026: one Paul Berry, two FEC candidate ids.
+    # MO-1 2026: one Paul Berry, two FEC candidate ids. Two different people
+    # (SMITH, JANE / SMITH, BOB) are still refused: test_state_candidates.py
+    # TestMatchCandidate.test_returns_none_when_same_surname_and_party_both_ambiguous.
     stale = _cand("BERRY, PAUL", "REP", "H2MO01111")
     live = _cand("BERRY, PAUL", "REP", "H6MO01222", raised=150_000)
     assert _match_candidate([stale, live, _cand("BELL, WESLEY", "DEM", "b")], "Berry", "R") is live
-
-
-def test_match_still_refuses_two_different_people():
-    a = _cand("SULLIVAN, DAN", "REP", "a")
-    b = _cand("SULLIVAN, JOE", "REP", "b")
-    assert _match_candidate([a, b], "Sullivan", "R") is None
 
 
 # --- The sync: ballot-only rows, and a certified ballot being authoritative ---
@@ -231,14 +227,18 @@ def _db_cand(db, cid, race_id, name, party, **kw):
     db.add(Candidate(id=cid, race_id=race_id, name=name, party=party, **kw))
 
 
-@pytest.fixture()
-def only(monkeypatch):
+def _one_state(monkeypatch, state):
+    """Sync only `state`, with no FEC calendar fetch."""
     async def no_calendar(client, cycle):
         return {}, False
     monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {state})
 
+
+@pytest.fixture()
+def only(monkeypatch):
     def scope(state, records):
-        monkeypatch.setattr(sc, "configured_states", lambda: {state})
+        _one_state(monkeypatch, state)
         strategy = sc.source_for_state(state)["strategy"]
         monkeypatch.setitem(sc.STRATEGIES, strategy, AsyncMock(return_value=records))
     return scope
@@ -345,27 +345,23 @@ async def test_primary_results_never_unconfirm_anyone(db_session, only):
 
 
 def test_match_folds_accents_and_reads_married_names():
-    sanchez = _c("SANCHEZ, LINDA", "DEM", "a")
-    assert _match_candidate([sanchez, _c("LEE, AL", "REP", "b")], "Sánchez", "D") is sanchez
-    hinson = _c("ARENHOLZ, ASHLEY HINSON", "REP", "c")
-    assert _match_candidate([hinson, _c("TUREK, JOSHUA", "DEM", "d")], "Hinson", "R") is hinson
+    sanchez = _cand("SANCHEZ, LINDA", "DEM", "a")
+    assert _match_candidate([sanchez, _cand("LEE, AL", "REP", "b")], "Sánchez", "D") is sanchez
+    hinson = _cand("ARENHOLZ, ASHLEY HINSON", "REP", "c")
+    assert _match_candidate([hinson, _cand("TUREK, JOSHUA", "DEM", "d")], "Hinson", "R") is hinson
 
 
 def test_match_uses_the_given_name_between_two_same_party_namesakes():
-    eric, mayra = _c("FLORES, ERIC", "REP", "e"), _c("FLORES, MAYRA NOHEMI", "REP", "m")
+    eric, mayra = _cand("FLORES, ERIC", "REP", "e"), _cand("FLORES, MAYRA NOHEMI", "REP", "m")
     assert _match_candidate([eric, mayra], "FLORES", "R", "Mayra Flores") is mayra
     assert _match_candidate([eric, mayra], "FLORES", "R") is None
 
 
 def test_match_tolerates_one_transposed_letter_only_with_the_given_name():
-    fec = _c("DAUGHTERY, BRANDON", "LIB", "x")
+    fec = _cand("DAUGHTERY, BRANDON", "LIB", "x")
     assert _match_candidate([fec], "Daugherty", "L", "Brandon Coulter Daugherty") is fec
     assert _match_candidate([fec], "Daugherty", "L") is None
     assert _match_candidate([fec], "Daugherty", "L", "Kevin Daugherty") is None
-
-
-def _c(name, party, cid):
-    return SimpleNamespace(name=name, party=party, id=cid, has_raised_funds=False, contributions=0)
 
 
 # --- Wisconsin: the certified canvass, and a state's own fallback source ---
@@ -419,10 +415,7 @@ def test_canvass_reads_the_states_own_winner_marks():
 
 @pytest.mark.asyncio
 async def test_a_states_fallback_runs_when_its_source_returns_nothing(db_session, monkeypatch):
-    async def no_calendar(client, cycle):
-        return {}, False
-    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {"WI"})
+    _one_state(monkeypatch, "WI")
     monkeypatch.setitem(sc.STRATEGIES, "canvass_summary_pdf", AsyncMock(return_value=None))
     fallback = AsyncMock(return_value=[_rec("H", 2, "D", "Pocan", "Mark Pocan")])
     monkeypatch.setitem(sc.STRATEGIES, "google_civic", fallback)
@@ -455,10 +448,7 @@ def test_a_complete_ballot_readmits_no_unopposed_filer(db_session):
 
 @pytest.mark.asyncio
 async def test_a_fallback_answer_is_labelled_nominees_not_confirmed(db_session, monkeypatch):
-    async def no_calendar(client, cycle):
-        return {}, False
-    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {"CO"})
+    _one_state(monkeypatch, "CO")
     monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=None))
     monkeypatch.setitem(sc.STRATEGIES, "clarity", AsyncMock(return_value=[_rec("S", None, "D", "Hickenlooper", "John Hickenlooper")]))
     _race(db_session, "2026-SEN-CO", "CO")
@@ -524,10 +514,7 @@ async def test_a_certified_general_list_decides_federal_races_over_primary_resul
     # Maine 2026 in miniature: the primary results still name Platner, the
     # certified list names Jackson. The list runs first and alone decides;
     # Platner is never confirmed, not even for a moment within the run.
-    async def no_calendar(client, cycle):
-        return {}, False
-    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {"ME"})
+    _one_state(monkeypatch, "ME")
     monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[_rec("S", None, "D", "Platner", "Graham Platner")]))
     monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=[_rec("S", None, "D", "Jackson", "Troy D. Jackson")]))
     _race(db_session, "2026-SEN-ME", "ME")
@@ -836,10 +823,7 @@ async def test_a_partial_certified_list_decides_only_the_races_it_covers(db_sess
     # A national source knows only the districts it has a verified address
     # for. It decides those races; primary results still fill the rest, and
     # the page may call only the covered races "confirmed".
-    async def no_calendar(client, cycle):
-        return {}, False
-    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {"ME"})
+    _one_state(monkeypatch, "ME")
     monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[
         _rec("S", None, "D", "Platner", "Graham Platner"),
         _rec("H", 2, "R", "LePage", "Paul LePage"),
@@ -1045,10 +1029,7 @@ async def test_a_failed_main_source_claims_nothing_about_state_offices(db_sessio
     # the state offices itself, so this is the list reading none.) Syncing
     # the empty statewide list would write a marker, and the page would
     # call "we could not read it" a confirmed absence of a governor's race.
-    async def no_calendar(client, cycle):
-        return {}, False
-    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {"IL"})
+    _one_state(monkeypatch, "IL")
     monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=None))
     monkeypatch.setitem(sc.STRATEGIES, "grouped_list_pdf", AsyncMock(return_value=[_rec("S", None, "D", "Stratton", "Juliana Stratton")]))
     _race(db_session, "2026-SEN-IL", "IL")
@@ -1066,10 +1047,7 @@ async def test_an_empty_answer_claims_nothing_about_state_offices(db_session, mo
     # Massachusetts in miniature: its adapter returns [] while the primary
     # is inside its settle_days window, having read nothing. Syncing that
     # would write "checked, no Governor's race" and delete stored nominees.
-    async def no_calendar(client, cycle):
-        return {}, False
-    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {"MA"})
+    _one_state(monkeypatch, "MA")
     monkeypatch.setitem(sc.STRATEGIES, "ma_pd43", AsyncMock(return_value=[]))
     _race(db_session, "2026-SEN-MA", "MA")
     db_session.commit()

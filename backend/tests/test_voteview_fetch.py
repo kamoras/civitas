@@ -41,6 +41,13 @@ def _synthetic_rows(state_pvi: dict[str, int]) -> list[dict]:
     return rows
 
 
+def _patch_path(monkeypatch, tmp_path):
+    path = tmp_path / "member_ideal_points.json"
+    monkeypatch.setattr(score_calculator, "_MEMBER_IDEAL_POINTS_PATH", str(path))
+    monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", None)
+    return path
+
+
 class TestBuildAndGates:
     def test_clean_synthetic_population_passes_all_gates(self):
         state_pvi = score_calculator._state_pvi()
@@ -84,12 +91,6 @@ class TestBuildAndGates:
 
 
 class TestPersistence:
-    def _patch_path(self, monkeypatch, tmp_path):
-        path = tmp_path / "member_ideal_points.json"
-        monkeypatch.setattr(score_calculator, "_MEMBER_IDEAL_POINTS_PATH", str(path))
-        monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", None)
-        return path
-
     def _section(self):
         return {
             "members": {"X000001": -0.35},
@@ -98,7 +99,7 @@ class TestPersistence:
         }
 
     def test_write_then_load_roundtrip(self, monkeypatch, tmp_path):
-        self._patch_path(monkeypatch, tmp_path)
+        _patch_path(monkeypatch, tmp_path)
         score_calculator.write_member_ideal_points("senate", self._section())
         loaded = score_calculator._member_ideal_points("senate")
         assert loaded["members"] == {"X000001": -0.35}
@@ -108,7 +109,7 @@ class TestPersistence:
         """A House run must not clobber the Senate section — the two
         pipelines run independently (same contract as
         write_party_ideology_bounds)."""
-        path = self._patch_path(monkeypatch, tmp_path)
+        path = _patch_path(monkeypatch, tmp_path)
         score_calculator.write_member_ideal_points("senate", self._section())
         score_calculator.write_member_ideal_points("house", self._section())
         raw = json.loads(path.read_text())
@@ -122,19 +123,13 @@ class TestPersistence:
         score_calculator.write_member_ideal_points("senate", self._section())  # must not raise
 
     def test_missing_file_loads_empty(self, monkeypatch, tmp_path):
-        self._patch_path(monkeypatch, tmp_path)
+        _patch_path(monkeypatch, tmp_path)
         assert score_calculator._member_ideal_points("senate") == {}
 
 
 class TestRefresh:
-    def _patch_path(self, monkeypatch, tmp_path):
-        path = tmp_path / "member_ideal_points.json"
-        monkeypatch.setattr(score_calculator, "_MEMBER_IDEAL_POINTS_PATH", str(path))
-        monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", None)
-        return path
-
     async def test_successful_refresh_writes_section(self, monkeypatch, tmp_path):
-        path = self._patch_path(monkeypatch, tmp_path)
+        path = _patch_path(monkeypatch, tmp_path)
         state_pvi = score_calculator._state_pvi()
 
         async def fake_rows(chamber, congress, client=None):
@@ -147,7 +142,7 @@ class TestRefresh:
         assert score_calculator._member_ideal_points("senate")["fit"]["D"]["b"] > 0
 
     async def test_fetch_failure_keeps_previous_data(self, monkeypatch, tmp_path):
-        path = self._patch_path(monkeypatch, tmp_path)
+        path = _patch_path(monkeypatch, tmp_path)
         path.write_text(json.dumps({"senate": {"members": {"KEEP": 0.1}}}))
 
         async def fake_rows(chamber, congress, client=None):
@@ -158,7 +153,7 @@ class TestRefresh:
         assert json.loads(path.read_text())["senate"]["members"] == {"KEEP": 0.1}
 
     async def test_gate_failure_does_not_write(self, monkeypatch, tmp_path):
-        path = self._patch_path(monkeypatch, tmp_path)
+        path = _patch_path(monkeypatch, tmp_path)
         state_pvi = score_calculator._state_pvi()
         bad = _synthetic_rows(state_pvi)
         for r in bad:
@@ -172,7 +167,7 @@ class TestRefresh:
         assert not path.exists()
 
     async def test_unexpected_exception_never_raises(self, monkeypatch, tmp_path):
-        self._patch_path(monkeypatch, tmp_path)
+        _patch_path(monkeypatch, tmp_path)
 
         async def boom(chamber, congress, client=None):
             raise RuntimeError("unexpected")

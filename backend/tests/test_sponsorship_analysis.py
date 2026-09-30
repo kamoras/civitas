@@ -106,26 +106,6 @@ class TestCosponsorshipEdgeWeight:
 # ---------- matrix construction ----------
 
 class TestBuildCosponsorshipMatrix:
-    def test_simple_two_senators(self):
-        bills, cosponsors = _make_bills_and_cosponsors({
-            "A001": ["B002"],
-        })
-        id_to_row, n, P = _build_cosponsorship_matrix(
-            bills, cosponsors, {"A001", "B002"},
-        )
-        assert n == 2
-        sponsor_row = id_to_row["A001"]
-        cosponsor_row = id_to_row["B002"]
-        assert P[sponsor_row, cosponsor_row] == pytest.approx(1.0)  # sqrt(0+1)
-
-    def test_identity_diagonal(self):
-        """Diagonal starts at 1.0 (identity matrix), square-rooted."""
-        bills, cosponsors = _make_bills_and_cosponsors({"A001": []})
-        _, n, P = _build_cosponsorship_matrix(
-            bills, cosponsors, {"A001"},
-        )
-        assert P[0, 0] == pytest.approx(1.0)
-
     def test_ignores_non_senator_cosponsors(self):
         bills, cosponsors = _make_bills_and_cosponsors({
             "A001": ["HOUSE_REP_999"],
@@ -134,6 +114,10 @@ class TestBuildCosponsorshipMatrix:
             bills, cosponsors, {"A001"},
         )
         assert n == 1
+        # Diagonal starts at 1.0 (identity matrix), square-rooted, and the
+        # House member's cosponsorship adds nothing to it.
+        assert P.shape == (1, 1)
+        assert P[0, 0] == pytest.approx(1.0)
 
     def test_self_cosponsorship_excluded(self):
         """A senator cosponsoring their own bill should not add extra weight."""
@@ -147,8 +131,9 @@ class TestBuildCosponsorshipMatrix:
         assert P[row_a, row_a] == pytest.approx(1.0)
 
     def test_weight_fn_scales_edge_by_bill_outcome(self):
-        """Same shape as test_simple_two_senators, but with a bill that
-        never advanced — the cosponsorship still counts, just less."""
+        """Same shape as test_no_weight_fn_preserves_original_flat_weight,
+        but weighted by outcome: a bill that never advanced — the
+        cosponsorship still counts, just less."""
         bills, cosponsors = _make_bills_and_cosponsors({"A001": ["B002"]})
         bills[0]["isLaw"] = False
         bills[0]["latestAction"] = "Referred to the Committee on Finance."
@@ -169,9 +154,10 @@ class TestBuildCosponsorshipMatrix:
         id_to_row, n, P = _build_cosponsorship_matrix(
             bills, cosponsors, {"A001", "B002"},
         )
+        assert n == 2
         sponsor_row = id_to_row["A001"]
         cosponsor_row = id_to_row["B002"]
-        assert P[sponsor_row, cosponsor_row] == pytest.approx(1.0)
+        assert P[sponsor_row, cosponsor_row] == pytest.approx(1.0)  # sqrt(0+1)
 
 
 # ---------- rescale ----------
@@ -187,6 +173,22 @@ class TestRescale:
         import numpy as np
         result = _rescale(np.array([3.0, 3.0, 3.0]))
         assert all(v == pytest.approx(0.5) for v in result)
+
+    def test_log_scale_maps_the_median_to_one_half(self):
+        """The log branch, reached on purpose. The leadership tests only hit
+        it through float roundoff (tied PageRank values give a median of
+        exactly 0 or a hair above), so which way they went depended on the
+        hash seed's set ordering."""
+        import numpy as np
+        result = _rescale(np.array([0.0, 1.0, 2.0, 3.0, 10.0]), log_scale=True)
+        assert result[0] == pytest.approx(0.0)
+        assert result[2] == pytest.approx(0.5)  # linear would put it at 0.2
+        assert result[4] == pytest.approx(1.0)
+
+    def test_log_scale_keeps_linear_when_median_is_at_least_one_half(self):
+        import numpy as np
+        result = _rescale(np.array([0.0, 9.0, 10.0]), log_scale=True)
+        assert result == pytest.approx([0.0, 0.9, 1.0])
 
 
 # ---------- leadership (PageRank) ----------
@@ -318,6 +320,32 @@ class TestIdeology:
         bills, cosponsors = _make_bills_and_cosponsors(sponsor_map)
         result = compute_ideology_scores(bills, cosponsors, all_senators, parties)
         assert result == {}
+
+    @pytest.mark.parametrize("republicans", [
+        pytest.param(set(), id="no_r_cohort"),
+        # B000 sits at zero on the axis, so the R mean is ~0 — no usable sign.
+        pytest.param({"B000"}, id="r_cohort_with_zero_mean"),
+    ])
+    def test_unusable_republican_cohort_orients_by_first_sorted_member(self, republicans):
+        """With no usable R cohort to pin the sign, the axis is oriented so
+        the first bioguide-sorted member with a non-negligible coordinate is
+        positive — reproducible, not SVD's implementation-defined sign. Two
+        unequal cliques: the second singular vector lives on the smaller
+        one (A), so A000 anchors it and A's clique lands at the top."""
+        clique_a = [f"A{i:03d}" for i in range(5)]
+        clique_b = [f"B{i:03d}" for i in range(7)]
+        sponsor_map = {
+            s: [o for o in clique if o != s]
+            for clique in (clique_a, clique_b) for s in clique
+        }
+        bills, cosponsors = _make_bills_and_cosponsors(sponsor_map)
+        senators = set(clique_a + clique_b)
+        result = compute_ideology_scores(
+            bills, cosponsors, senators,
+            {s: "R" if s in republicans else "D" for s in senators},
+        )
+        assert all(result[s] == pytest.approx(1.0) for s in clique_a)
+        assert all(result[s] == pytest.approx(0.0) for s in clique_b)
 
 
 # ---------- describe position ----------
@@ -453,8 +481,7 @@ class TestBipartisanship:
     def test_zero_crossing_scores_zero(self):
         bills, cos, parties = self._cohort()
         scores = compute_bipartisanship_scores(bills, cos, parties, min_interactions=3)
-        if "D1" in scores:
-            assert scores["D1"] == 0.0
+        assert scores["D1"] == 0.0
 
     def test_no_fabrication_for_thin_data(self):
         bills, cos, parties = self._cohort()
@@ -493,8 +520,7 @@ class TestBipartisanship:
         )
         blend = compute_bipartisanship_scores(bills, cos, parties, min_interactions=3)
         assert blend["D0"] == 1.0
-        if "D0" in recv:
-            assert recv["D0"] == 0.0
+        assert recv["D0"] == 0.0
         assert "R0" in recv and recv["R0"] > 0.0
 
     def test_receive_direction_rejects_unknown_value(self):

@@ -139,10 +139,13 @@ class TestSumPrecinctVotes:
         assert ("H", 1, "D") not in choices  # not folded into a phantom D race either
 
     def test_non_federal_rows_are_ignored(self):
-        governor_rows = [r for r in ROWS if r.get("OFFICENAME") == "Governor"]
-        assert governor_rows == []  # fixture only carries federal rows
-        choices = tn._sum_precinct_votes(ROWS)
-        assert all(office in ("S", "H") for (office, _, _) in choices)
+        # The fixture only carries federal rows, so a constructed Governor
+        # row is added -- without it this could not fail.
+        governor = {"OFFICENAME": "Governor", "ELECTTYPE": "Republican Primary",
+                    "RNAME1": "Gov Candidate", "PARTY1": "Republican", "PVTALLY1": "500"}
+        choices = tn._sum_precinct_votes([*ROWS, governor])
+        assert choices and all(office in ("S", "H") for (office, _, _) in choices)
+        assert not any(n == "Gov Candidate" for race in choices.values() for n, _ in race)
 
 
 _REAL_URL = "https://sos-prod.tnsosgovfiles.com/s3fs-public/document/20260806AllbyPrecinct.xlsx"

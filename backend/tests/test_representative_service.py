@@ -35,13 +35,10 @@ def _make_rep(db_session, rep_id: str, donor_types: list[str]) -> Representative
 
 
 class TestBuildRepResponseDonorTypes:
-    def test_skip_donor_type_does_not_raise(self, db_session):
-        rep = _make_rep(db_session, "test-rep", ["SKIP"])
-        result = build_rep_response(rep, db_session)
-        assert result.funding.top_donors[0].type == "SKIP"
-
     def test_every_donor_type_seen_in_the_pipeline_is_accepted(self, db_session):
-        # donor_classifier_ai.py / normalize_finance.py's full output vocabulary.
+        # donor_classifier_ai.py / normalize_finance.py's full output vocabulary,
+        # including "SKIP" — the one that 500'd every House detail page
+        # (see the module docstring).
         donor_types = [
             "PAC", "Individual", "SuperPAC", "Org/Employees",
             "Party/Ideological", "CandidateAffiliated", "Self-Funded", "SKIP",

@@ -14,20 +14,6 @@ def _page(results: list[dict], page: int, pages: int) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_single_page(db_session):
-    with patch(
-        "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
-    ) as mock_fetch:
-        mock_fetch.return_value = _page(
-            [{"candidate_id": "S6ID00146", "name": "ACHILLES, TODD"}], page=1, pages=1,
-        )
-        results = await fetch_all_candidates(None, db_session, cycle=2026, office="S")
-    assert len(results) == 1
-    assert results[0]["candidate_id"] == "S6ID00146"
-    mock_fetch.assert_called_once()
-
-
-@pytest.mark.asyncio
 async def test_pages_through_all_results(db_session):
     async def fake_fetch(client, url, retries=None):
         if "&page=1" in url:
@@ -84,13 +70,15 @@ async def test_queries_election_year_not_cycle(db_session):
 
 
 @pytest.mark.asyncio
-async def test_uses_cache_on_second_call(db_session):
+async def test_single_page_then_served_from_cache(db_session):
     with patch(
         "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
     ) as mock_fetch:
         mock_fetch.return_value = _page(
-            [{"candidate_id": "S6ID00146"}], page=1, pages=1,
+            [{"candidate_id": "S6ID00146", "name": "ACHILLES, TODD"}], page=1, pages=1,
         )
-        await fetch_all_candidates(None, db_session, cycle=2026, office="S")
-        await fetch_all_candidates(None, db_session, cycle=2026, office="S")
-    mock_fetch.assert_called_once()  # second call served from ApiCache
+        first = await fetch_all_candidates(None, db_session, cycle=2026, office="S")
+        second = await fetch_all_candidates(None, db_session, cycle=2026, office="S")
+    assert [r["candidate_id"] for r in first] == ["S6ID00146"]
+    assert second == first
+    mock_fetch.assert_called_once()  # one page fetched; second call served from ApiCache

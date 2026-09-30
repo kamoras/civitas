@@ -235,18 +235,6 @@ def fresh_ranking(monkeypatch):
     explore_ranking.reset_cache()
 
 
-def test_a_moment_the_database_is_unreadable_keeps_the_calibration(fresh_ranking, monkeypatch):
-    # Not a change: falling back to the bundled weights because one check
-    # met a lock would rank worse for no reason.
-    from app.shared_state import UNREADABLE
-
-    _stub(monkeypatch, _row(1, 9))
-    assert fresh_ranking.source_diversity_cap() == 9
-    _stub(monkeypatch, UNREADABLE)
-    fresh_ranking._calibration.expire()
-    assert fresh_ranking.source_diversity_cap() == 9
-
-
 def test_a_stored_calibration_that_cannot_be_read_is_not_replaced_by_the_bundled_one(fresh_ranking, monkeypatch):
     # The row changed (a recalibration elsewhere) but its value couldn't be
     # decoded: keep the calibration in hand, stamped as the old row, so the
@@ -272,8 +260,9 @@ def test_a_forced_reload_during_a_lock_keeps_the_calibration(fresh_ranking, monk
     assert fresh_ranking.ranking(force_reload=True)["source_diversity_cap"] == 9
 
 
-def test_a_kept_calibration_is_not_reread_on_every_call(fresh_ranking, monkeypatch):
-    # Kept after a failed read, it counts as fresh: re-reading it on each of
+def test_a_moment_the_database_is_unreadable_keeps_the_calibration(fresh_ranking, monkeypatch):
+    # Not a change: falling back to the bundled weights because one check
+    # met a lock would rank worse for no reason. Kept after a failed read, it counts as fresh: re-reading it on each of
     # a search's half-dozen accessor calls until a read succeeded cost a
     # dozen database sessions per search.
     from app.shared_state import UNREADABLE

@@ -59,6 +59,8 @@ marked as the winner.
 
 from pathlib import Path
 
+import pytest
+
 from app.pipeline.fetch import state_candidates_ma as mam
 from app.pipeline.fetch.state_candidates_common import surname
 
@@ -86,6 +88,16 @@ STATEWIDE_PAGES = {
     "/172968/": COUNCIL5_R,
 }
 
+# Both real federal searches and the four real races they link.
+FEDERAL_PAGES = {
+    "office_id:5": SEARCH_HOUSE_SMALL,
+    "office_id:6": SEARCH_SENATE,
+    "/172973/": DISTRICT6,
+    "/172985/": DISTRICT2,
+    "/172905/": SENATE_D,
+    "/172906/": SENATE_R,
+}
+
 _REAL_HOUSE_IDS = {"172949", "172985", "172917", "172918", "173039", "173040", "173005", "173006", "172973", "172974", "173113", "172899", "172900", "172935", "172936"}
 
 
@@ -101,43 +113,26 @@ def _patched(monkeypatch, pages):
 
 
 class TestParseElection:
-    def test_reads_the_real_contested_district_field(self):
-        result = mam._parse_election(DISTRICT6, "172973", 2026, "H")
-        district, party, choices, _marked = result
-        # The parse keeps printed names; the resolver reduces the winner.
-        choices = [(surname(n), v) for n, v in choices]
-        assert district == 6
-        assert party == "D"
-        assert dict(choices) == {
+    @pytest.mark.parametrize("html,election_id,chamber,district,party,expected", [
+        pytest.param(DISTRICT6, "172973", "H", 6, "D", {
             "Koh": 47835, "Nguyen": 34324, "Beccia": 14215,
             "Belsito": 11268, "Lancaster": 4725, "Andres-Beck": 4385,
-        }
-
-    def test_reads_the_real_unopposed_district(self):
-        district, party, choices, _marked = mam._parse_election(DISTRICT2, "172985", 2026, "H")
+        }, id="contested_district_field"),
+        pytest.param(DISTRICT2, "172985", "H", 2, "D", {"McGovern": 80813},
+                     id="unopposed_district"),
+        # Senate has no district. Real data, not assumed: Markey's real
+        # primary opponent is Seth W. Moulton.
+        pytest.param(SENATE_D, "172905", "S", None, "D", {"Markey": 580628, "Moulton": 314198},
+                     id="senate_has_no_district"),
+        pytest.param(SENATE_R, "172906", "S", None, "R", {"Deaton": 221950},
+                     id="senate_republican_side_is_unopposed"),
+    ])
+    def test_reads_the_real_field(self, html, election_id, chamber, district, party, expected):
+        got_district, got_party, choices, _marked = mam._parse_election(html, election_id, 2026, chamber)
         # The parse keeps printed names; the resolver reduces the winner.
-        choices = [(surname(n), v) for n, v in choices]
-        assert district == 2
-        assert party == "D"
-        assert choices == [("McGovern", 80813)]
-
-    def test_senate_has_no_district(self):
-        district, party, choices, _marked = mam._parse_election(SENATE_D, "172905", 2026, "S")
-        # The parse keeps printed names; the resolver reduces the winner.
-        choices = [(surname(n), v) for n, v in choices]
-        assert district is None
-        assert party == "D"
-        # Real data, not assumed: Markey's real primary opponent is Seth
-        # W. Moulton.
-        assert dict(choices) == {"Markey": 580628, "Moulton": 314198}
-
-    def test_senate_republican_side_is_unopposed(self):
-        district, party, choices, _marked = mam._parse_election(SENATE_R, "172906", 2026, "S")
-        # The parse keeps printed names; the resolver reduces the winner.
-        choices = [(surname(n), v) for n, v in choices]
-        assert district is None
-        assert party == "R"
-        assert choices == [("Deaton", 221950)]
+        assert len(choices) == len(expected)
+        assert (got_district, got_party, dict((surname(n), v) for n, v in choices)) == (
+            district, party, expected)
 
     def test_wrong_year_in_title_returns_none(self):
         assert mam._parse_election(DISTRICT6, "172973", 2028, "H") is None
@@ -205,14 +200,7 @@ class TestDiscoverElectionIds:
 
 class TestFetchConfirmedCandidates:
     async def test_real_primaries_resolve_to_the_real_winners(self, monkeypatch):
-        _patched(monkeypatch, {
-            "office_id:5": SEARCH_HOUSE_SMALL,
-            "office_id:6": SEARCH_SENATE,
-            "/172973/": DISTRICT6,
-            "/172985/": DISTRICT2,
-            "/172905/": SENATE_D,
-            "/172906/": SENATE_R,
-        })
+        _patched(monkeypatch, FEDERAL_PAGES)
         result = await mam.fetch_confirmed_candidates(None, 2026, "MA", {})
         assert {"office": "H", "district": 6, "party": "D", "last_name": "Koh", "display_name": "Dan Koh"} in result
         assert {"office": "H", "district": 2, "party": "D", "last_name": "McGovern", "display_name": "James P. McGovern"} in result
@@ -222,14 +210,7 @@ class TestFetchConfirmedCandidates:
 
     async def test_a_known_primary_date_gates_via_settle_days(self, monkeypatch):
         monkeypatch.setattr(mam, "primary_date", lambda state, year: "2026-09-01")
-        _patched(monkeypatch, {
-            "office_id:5": SEARCH_HOUSE_SMALL,
-            "office_id:6": SEARCH_SENATE,
-            "/172973/": DISTRICT6,
-            "/172985/": DISTRICT2,
-            "/172905/": SENATE_D,
-            "/172906/": SENATE_R,
-        })
+        _patched(monkeypatch, FEDERAL_PAGES)
         # 36500 days is never settled -- proves the calendar-derived date
         # actually reaches _settled() rather than being ignored.
         assert await mam.fetch_confirmed_candidates(None, 2026, "MA", {"settle_days": 36500}) == []
@@ -239,14 +220,7 @@ class TestFetchConfirmedCandidates:
 
     async def test_no_known_primary_date_skips_the_gate_rather_than_blocking(self, monkeypatch):
         monkeypatch.setattr(mam, "primary_date", lambda state, year: None)
-        _patched(monkeypatch, {
-            "office_id:5": SEARCH_HOUSE_SMALL,
-            "office_id:6": SEARCH_SENATE,
-            "/172973/": DISTRICT6,
-            "/172985/": DISTRICT2,
-            "/172905/": SENATE_D,
-            "/172906/": SENATE_R,
-        })
+        _patched(monkeypatch, FEDERAL_PAGES)
         result = await mam.fetch_confirmed_candidates(None, 2026, "MA", {"settle_days": 36500})
         assert len(result) == 4
 
@@ -373,17 +347,7 @@ class TestStatewideOffices:
 
     async def test_a_failed_statewide_page_fails_the_run(self, monkeypatch):
         # A partial list would be synced as the whole truth.
-        async def fake(client, rl, url, label, **kw):
-            return None if "/172883/" in url else pages_lookup(url)
-        pages = {
-            "office_id:5": "<html><body></body></html>", "office_id:6": SEARCH_SENATE,
-            "/172905/": SENATE_D, "/172906/": SENATE_R,
-            "year_from:2026/year_to:2026/stage:Primaries": SEARCH_ALL, **STATEWIDE_PAGES,
-        }
-
-        def pages_lookup(url):
-            return next(v for k, v in pages.items() if k in url)
-        monkeypatch.setattr(mam, "fetch_text_with_retry", fake)
+        self._pages(monkeypatch, **{"/172883/": None})
         assert await mam.fetch_confirmed_candidates(None, 2026, "MA", self.SOURCE) is None
 
     async def test_a_failed_search_fails_the_run(self, monkeypatch):

@@ -3,11 +3,13 @@
 safety rules (never guess, never hide, never fabricate).
 """
 
+import json
 from unittest.mock import AsyncMock
 
 import pytest
 
 from app.models import Candidate, Race
+from app.pipeline.fetch import state_candidate_sources as sources
 from app.pipeline.fetch import state_candidates as sc
 from app.pipeline.fetch.state_candidates_common import InclusiveThreshold, runoff_threshold
 from app.pipeline.fetch.state_candidate_sources import configured_states
@@ -30,6 +32,24 @@ def _candidate(db, cand_id, race_id, name, party="REP", **overrides):
     return c
 
 
+def _no_calendar(monkeypatch, known=False):
+    """The sync refreshes the national FEC calendar first; not under test."""
+    async def no_calendar(client, cycle):
+        return {}, known
+
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+
+
+def _use_discovered(monkeypatch, tmp_path, entries):
+    """Point the crawler's discovered-sources file at a temp one holding
+    `entries`; returns its path."""
+    path = tmp_path / "discovered.json"
+    path.write_text(json.dumps(entries))
+    monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+    monkeypatch.setattr(sources, "_discovered_cache", None)
+    return path
+
+
 class TestCrawlAdoption:
     """The one path that can add a state with nobody reading it first, so
     the bar is positive proof: the nominees a discovered source names must
@@ -50,10 +70,7 @@ class TestCrawlAdoption:
         async def no_filings(client, state, cycle):
             return None
 
-        async def no_calendar(client, cycle):
-            return {}, False
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        _no_calendar(monkeypatch)
         monkeypatch.setattr(sc, "discover_source", fake_discover)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
@@ -65,6 +82,9 @@ class TestCrawlAdoption:
     async def test_adopts_a_source_whose_nominees_are_real_candidates(
         self, db_session, monkeypatch,
     ):
+        """And the state is still searched for a filing list: its general
+        rows are the only way to see a third-party candidate, and a state
+        the crawler found results for was never searched for one."""
         _race(db_session, "2026-HOUSE-ZZ-3", "ZZ", "H", 3)
         _candidate(db_session, "c1", "2026-HOUSE-ZZ-3", "FLOOD, MIKE", party="REP")
         db_session.commit()
@@ -72,9 +92,17 @@ class TestCrawlAdoption:
             monkeypatch,
             [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
         )
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
         assert outcomes["ZZ"].startswith("adopted")
         assert "ZZ" in saved
+        assert looked == ["ZZ"]
 
     @pytest.mark.asyncio
     async def test_sites_with_unreadable_robots_txt_are_reported(self, db_session, monkeypatch):
@@ -196,15 +224,10 @@ class TestCrawlAdoption:
         await sc.crawl_for_new_sources(db_session, None, 2026)
         assert looked == ["MI"]
 
-    @pytest.mark.asyncio
-    async def test_a_BROKEN_hand_verified_state_is_crawled_for_a_replacement(
-        self, db_session, monkeypatch,
-    ):
-        """A state that moves hosts between cycles is the whole reason
-        locations aren't trusted to stay put — so when a hand-written one
-        stops fetching, a replacement is looked for instead of the state
-        going dark until someone edits a URL. Its LAW still comes from the
-        hand-written entry."""
+    @staticmethod
+    async def _crawl_broken(db, monkeypatch, state, domain, strategy):
+        """Crawl `state` with its hand-verified `strategy` failing to fetch;
+        returns the outcomes and the rules discovery was asked to carry."""
         seen_rules = {}
 
         async def fake_discover(client, state, cycle, rules=None):
@@ -217,19 +240,23 @@ class TestCrawlAdoption:
         async def no_filings(client, state, cycle):
             return None
 
-        async def no_calendar(client, cycle):
-            return {}, False
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-        async def no_calendar(client, cycle):
-            return {}, False
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        _no_calendar(monkeypatch)
         monkeypatch.setattr(sc, "discover_source", fake_discover)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
-        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"GA": ["sos.ga.gov"]})
-        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken})
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {state: [domain]})
+        monkeypatch.setattr(sc, "STRATEGIES", {strategy: broken})
+        return await sc.crawl_for_new_sources(db, None, 2026), seen_rules
+
+    @pytest.mark.asyncio
+    async def test_a_BROKEN_hand_verified_state_is_crawled_for_a_replacement(
+        self, db_session, monkeypatch,
+    ):
+        """A state that moves hosts between cycles is the whole reason
+        locations aren't trusted to stay put — so when a hand-written one
+        stops fetching, a replacement is looked for instead of the state
+        going dark until someone edits a URL. Its LAW still comes from the
+        hand-written entry."""
+        outcomes, seen_rules = await self._crawl_broken(db_session, monkeypatch, "GA", "sos.ga.gov", "tabular")
         assert "GA" in outcomes
         # Georgia nominates on a majority — that rule is law, and must be
         # carried into whatever replacement gets found.
@@ -242,27 +269,7 @@ class TestCrawlAdoption:
         43.52), the one threshold met by reaching it rather than exceeding
         it. A replacement source that lost that flag would withhold a
         leader at exactly 35%."""
-        seen_rules = {}
-
-        async def fake_discover(client, state, cycle, rules=None):
-            seen_rules.update(rules or {})
-            return None
-
-        async def broken(client, cycle, state, source):
-            return None
-
-        async def no_filings(client, state, cycle):
-            return None
-
-        async def no_calendar(client, cycle):
-            return {}, False
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-        monkeypatch.setattr(sc, "discover_source", fake_discover)
-        monkeypatch.setattr(sc, "discover_filings", no_filings)
-        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"IA": ["sos.iowa.gov"]})
-        monkeypatch.setattr(sc, "STRATEGIES", {"clarity": broken})
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        outcomes, seen_rules = await self._crawl_broken(db_session, monkeypatch, "IA", "sos.iowa.gov", "clarity")
         assert "IA" in outcomes
         assert seen_rules["runoff_threshold_pct"] == 35.0
         assert seen_rules["runoff_threshold_inclusive"] is True
@@ -375,17 +382,10 @@ class TestForgetsBrokenDiscoveries:
 
 class TestForgettingKeepsTheFilingList:
     def test_only_the_results_source_goes(self, tmp_path, monkeypatch):
-        import json
-
-        from app.pipeline.fetch import state_candidate_sources as sources
-
-        path = tmp_path / "discovered.json"
-        path.write_text(json.dumps({
+        path = _use_discovered(monkeypatch, tmp_path, {
             "ZZ": {"strategy": "tabular", "source_name": "a file", "filings": {"url": "x"}},
             "YY": {"strategy": "tabular"},
-        }))
-        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
-        monkeypatch.setattr(sources, "_discovered_cache", None)
+        })
         sources.forget_results_source("ZZ")
         sources.forget_results_source("YY")
         assert json.loads(path.read_text()) == {"ZZ": {"filings": {"url": "x"}}}
@@ -497,20 +497,9 @@ class TestARaisingSourceIsNotFetching:
 
     @pytest.mark.asyncio
     async def test_a_spare_that_raises_does_not_end_the_sync(self, db_session, monkeypatch, tmp_path):
-        import json
-        from unittest.mock import AsyncMock
-
-        from app.pipeline.fetch import state_candidate_sources as sources
-
-        async def no_calendar(client, cycle):
-            return {}, False
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        _no_calendar(monkeypatch)
         monkeypatch.setattr(sc, "configured_states", lambda: {"TX", "WY"})
-        path = tmp_path / "d.json"
-        path.write_text(json.dumps({"TX": {"strategy": "tabular", "source_name": "x"}}))
-        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
-        monkeypatch.setattr(sources, "_discovered_cache", None)
+        _use_discovered(monkeypatch, tmp_path, {"TX": {"strategy": "tabular", "source_name": "x"}})
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
         monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(side_effect=ValueError("not a spreadsheet")))
         wy = sources.source_for_state("WY")
@@ -614,20 +603,10 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
 
     @staticmethod
     def _setup(monkeypatch, tmp_path, state, discovered=None):
-        import json
-
-        from app.pipeline.fetch import state_candidate_sources as sources
-
-        async def no_calendar(client, cycle):
-            return {}, True
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        _no_calendar(monkeypatch, known=True)
         monkeypatch.setattr(sc, "report_file_problems", lambda *a, **k: None)
         monkeypatch.setattr(sc, "configured_states", lambda: {state})
-        path = tmp_path / "d.json"
-        path.write_text(json.dumps(discovered or {}))
-        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
-        monkeypatch.setattr(sources, "_discovered_cache", None)
+        _use_discovered(monkeypatch, tmp_path, discovered or {})
         return sources.source_for_state(state)
 
     @staticmethod
@@ -655,10 +634,15 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         await sc.sync_confirmed_candidates(db_session, None, 2026)
         assert self._ids(db_session) == night1
 
+    @pytest.mark.parametrize("tonight", [
+        pytest.param(None, id="primary_results_beside_a_general_list_that_is_down"),
+        # A general list returning [] (Google dropping the election) or
+        # missing a race leaves those races to primary results, which must
+        # not prune the certified rows there.
+        pytest.param([], id="a_certified_list_that_answers_empty_or_partial"),
+    ])
     @pytest.mark.asyncio
-    async def test_primary_results_beside_a_general_list_that_is_down(self, db_session, monkeypatch, tmp_path):
-        from unittest.mock import AsyncMock
-
+    async def test_a_general_list_that_does_not_answer(self, db_session, monkeypatch, tmp_path, tonight):
         src = self._setup(monkeypatch, tmp_path, "CO")
         _race(db_session, "2026-SEN-CO", "CO", office="S")
         _candidate(db_session, "A", "2026-SEN-CO", "HICK, JOHN", party="DEM")
@@ -670,28 +654,7 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         await sc.sync_confirmed_candidates(db_session, None, 2026)
         night1 = self._ids(db_session)
         assert len(night1) == 2
-        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=None))
-        await sc.sync_confirmed_candidates(db_session, None, 2026)
-        assert self._ids(db_session) == night1
-
-    @pytest.mark.asyncio
-    async def test_a_certified_list_that_answers_empty_or_partial(self, db_session, monkeypatch, tmp_path):
-        """A general list returning [] (Google dropping the election) or
-        missing a race leaves those races to primary results, which must
-        not prune the certified rows there."""
-        from unittest.mock import AsyncMock
-
-        src = self._setup(monkeypatch, tmp_path, "CO")
-        _race(db_session, "2026-SEN-CO", "CO", office="S")
-        _candidate(db_session, "A", "2026-SEN-CO", "HICK, JOHN", party="DEM")
-        db_session.commit()
-        rec = [{"office": "S", "district": None, "party": "D", "last_name": "HICK", "display_name": "John Hick"}]
-        green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
-        monkeypatch.setitem(sc.STRATEGIES, src["strategy"], AsyncMock(return_value=rec))
-        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=rec + [green]))
-        await sc.sync_confirmed_candidates(db_session, None, 2026)
-        night1 = self._ids(db_session)
-        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=[]))
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=tonight))
         await sc.sync_confirmed_candidates(db_session, None, 2026)
         assert self._ids(db_session) == night1
 
@@ -741,13 +704,14 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
     @pytest.mark.parametrize("certified, tonight, fec", [
         ("T.J. Cox", "T.J. Cox", "COX, TERRANCE JOHN"),  # initials only
         ("Daniel Cox", "Dan Cox", "COX, DANIEL"),  # another source's short form
+        ("Bill Smith", "Bill Smith", "SMITH, WILLIAM"),  # a nickname
     ])
     def test_an_fec_match_replaces_its_placeholder_however_it_was_spelled(
         self, db_session, certified, tonight, fec,
     ):
         _race(db_session, "2026-HOUSE-CA-21", "CA", office="H", district=21)
         db_session.commit()
-        rec = {"office": "H", "district": 21, "party": "D", "last_name": "COX"}
+        rec = {"office": "H", "district": 21, "party": "D", "last_name": fec.split(",")[0]}
         sc._apply_ballot(db_session, 2026, "CA", [rec | {"display_name": certified}],
                          keep_unlisted=True, authoritative=True)
         assert any(i.startswith("ballot:") for i in self._ids(db_session))
@@ -933,16 +897,6 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         assert self._ids(db_session) == ["H1"]
         assert db_session.get(Candidate, "H1").confirmed_general is True
 
-    def test_a_nickname_placeholder_goes_when_its_fec_row_matches(self, db_session):
-        _race(db_session, "2026-HOUSE-CA-7", "CA", office="H", district=7)
-        db_session.commit()
-        bill = {"office": "H", "district": 7, "party": "D", "last_name": "SMITH", "display_name": "Bill Smith"}
-        sc._apply_ballot(db_session, 2026, "CA", [bill], keep_unlisted=True, authoritative=True)
-        _candidate(db_session, "H1", "2026-HOUSE-CA-7", "SMITH, WILLIAM", party="DEM")
-        db_session.commit()
-        sc._apply_ballot(db_session, 2026, "CA", [bill], keep_unlisted=True, authoritative=False, prune=False)
-        assert self._ids(db_session) == ["H1"]
-
     def test_names_without_a_given_half_match_nothing(self):
         assert sc._same_given_name("SMITH", "SMITH") is False
         assert sc._given_initial("SMITH, MR. J") == "j"
@@ -1067,12 +1021,8 @@ class TestTheCrawlAlwaysReports:
 class TestSyncRaisesAreReported:
     @pytest.mark.asyncio
     async def test_a_raising_source_in_the_sync_is_alerted(self, db_session, monkeypatch):
-        from unittest.mock import AsyncMock
-
-        async def no_calendar(client, cycle):
-            return {}, True
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        """Nor does it raise out of the sync: the state reads as fetch_failed."""
+        _no_calendar(monkeypatch, known=True)
         monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(side_effect=TypeError("refactor slip")))
         monkeypatch.setattr(sc, "_discovered_source", lambda st: None)
@@ -1128,29 +1078,6 @@ class TestAPrimarySeasonListSaysTheBallotIsNotYetWhole:
         assert recorded == [("NC", False)]
 
 
-class TestEveryCrawlLooksForAFilingList:
-    @pytest.mark.asyncio
-    async def test_a_state_whose_results_source_was_found_is_searched_too(self, db_session, monkeypatch):
-        """A filing list's general rows are the only way to see a third-party
-        candidate; a state the crawler found results for was never searched
-        for one."""
-        _race(db_session, "2026-HOUSE-ZZ-3", "ZZ", "H", 3)
-        _candidate(db_session, "c1", "2026-HOUSE-ZZ-3", "FLOOD, MIKE", party="REP")
-        db_session.commit()
-        TestCrawlAdoption._patch(
-            monkeypatch, [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
-        )
-        looked = []
-
-        async def filings(client, state, cycle):
-            looked.append(state)
-            return None
-
-        monkeypatch.setattr(sc, "discover_filings", filings)
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["ZZ"].startswith("adopted") and looked == ["ZZ"]
-
-
 class TestFilingsForHandVerifiedStates:
     def test_a_crawler_found_list_never_takes_a_verified_states_november_authority(
         self, tmp_path, monkeypatch,
@@ -1158,14 +1085,7 @@ class TestFilingsForHandVerifiedStates:
         """For a hand-verified state only a list in its own entry speaks for
         November (NC's); one the crawler found is unverified and must not
         strip a certified ballot's authority. Elsewhere a found list does."""
-        import json
-
-        from app.pipeline.fetch import state_candidate_sources as sources
-
-        path = tmp_path / "discovered.json"
-        path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}, "ZZ": {"filings": {"url": "y"}}}))
-        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
-        monkeypatch.setattr(sources, "_discovered_cache", None)
+        _use_discovered(monkeypatch, tmp_path, {"TX": {"filings": {"url": "x"}}, "ZZ": {"filings": {"url": "y"}}})
         assert sc._has_general_filings("TX") is False
         assert sc._has_general_filings("ZZ") is True
         assert sc._has_general_filings("NC") is True  # its own list
@@ -1177,20 +1097,9 @@ class TestFilingsForHandVerifiedStates:
         """TX's certified ballot drops a withdrawn nominee and records its
         basis whether or not the crawler has found TX a (primary-only)
         filing list; that list's general rows are not applied."""
-        import json
-        from unittest.mock import AsyncMock
-
-        from app.pipeline.fetch import state_candidate_sources as sources
-
-        async def no_calendar(client, cycle):
-            return {}, False
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        _no_calendar(monkeypatch)
         monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
-        path = tmp_path / "d.json"
-        path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}}))
-        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
-        monkeypatch.setattr(sources, "_discovered_cache", None)
+        _use_discovered(monkeypatch, tmp_path, {"TX": {"filings": {"url": "x"}}})
         _race(db_session, "2026-SEN-TX", "TX", office="S")
         _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
         _candidate(db_session, "B", "2026-SEN-TX", "WITHDRAWN, BOB", party="REP", confirmed_general=True)
@@ -1216,21 +1125,10 @@ class TestFilingsForHandVerifiedStates:
         """When TX's certified ballot is down and a discovered results file
         answers, that file isn't the certified ballot: it must not un-confirm
         a third-party nominee the ballot confirmed, nor be recorded as it."""
-        import json
-        from unittest.mock import AsyncMock
-
-        from app.pipeline.fetch import state_candidate_sources as sources
-
-        async def no_calendar(client, cycle):
-            return {}, False
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        _no_calendar(monkeypatch)
         monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
-        path = tmp_path / "d.json"
-        path.write_text(json.dumps({"TX": {"strategy": "tabular", "source_name": "a results file",
-                                           "description": "Found automatically on 2026-10-01: x"}}))
-        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
-        monkeypatch.setattr(sources, "_discovered_cache", None)
+        _use_discovered(monkeypatch, tmp_path, {"TX": {"strategy": "tabular", "source_name": "a results file",
+                                                       "description": "Found automatically on 2026-10-01: x"}})
         _race(db_session, "2026-SEN-TX", "TX", office="S")
         _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
         _candidate(db_session, "L", "2026-SEN-TX", "LIBBY, LARRY", party="LIB", confirmed_general=True)
@@ -1248,14 +1146,7 @@ class TestFilingsForHandVerifiedStates:
     def test_a_filing_list_found_for_a_hand_verified_state_is_read(self, tmp_path, monkeypatch):
         """The hand-verified entry won whole, so a filing list the crawler
         proved for such a state was stored and never used."""
-        import json
-
-        from app.pipeline.fetch import state_candidate_sources as sources
-
-        path = tmp_path / "discovered.json"
-        path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}}))
-        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
-        monkeypatch.setattr(sources, "_discovered_cache", None)
+        _use_discovered(monkeypatch, tmp_path, {"TX": {"filings": {"url": "x"}}})
         assert (sources.source_for_state("TX") or {}).get("filings") is None  # hand entry wins whole
         assert sources.filings_for_state("TX") == {"url": "x"}
         assert "TX" in sources.states_with_filings()
@@ -1313,12 +1204,10 @@ class TestFilingsForHandVerifiedStates:
 
 
 class TestIsConfigured:
-    def test_true_for_a_registered_state_with_a_real_strategy(self):
-        assert sc.is_configured("TX") is True
-
     def test_true_for_every_registered_state(self):
         """Each entry must name a strategy that actually exists — a typo'd
         key is a config bug that would silently drop that state."""
+        assert "TX" in configured_states()
         for state in configured_states():
             assert sc.is_configured(state) is True, state
 
@@ -1437,10 +1326,7 @@ class TestSyncConfirmedCandidates:
     def _no_calendar(self, monkeypatch):
         """The nightly sync refreshes the national calendar first; these
         tests are about matching, not about the FEC."""
-        async def none(client, cycle):
-            return {}, False
-
-        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", none)
+        _no_calendar(monkeypatch)
 
     @pytest.fixture(autouse=True)
     def _only_texas(self, monkeypatch):
@@ -1504,14 +1390,6 @@ class TestSyncConfirmedCandidates:
     @pytest.mark.asyncio
     async def test_fetch_failure_reports_status_without_raising(self, db_session, monkeypatch):
         mock_fetch = AsyncMock(return_value=None)
-        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", mock_fetch)
-        results = await sc.sync_confirmed_candidates(db_session, None, 2026)
-
-        assert results["TX"]["status"] == "fetch_failed"
-
-    @pytest.mark.asyncio
-    async def test_fetch_exception_reports_failed_status_not_raise(self, db_session, monkeypatch):
-        mock_fetch = AsyncMock(side_effect=RuntimeError("boom"))
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", mock_fetch)
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
 

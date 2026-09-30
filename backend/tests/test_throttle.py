@@ -18,6 +18,17 @@ def _rows(path: str, sql: str) -> list:
         conn.close()
 
 
+def _tomorrow(monkeypatch) -> None:
+    """Move the store's clock to a later UTC day (2099-01-02)."""
+
+    class _Tomorrow(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2099, 1, 2, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+
+
 def _worker(path: str, calls: int, start, results) -> None:
     """One API worker process: its own interpreter and module state, the
     same store file."""
@@ -165,12 +176,7 @@ class TestClientKey:
     def test_a_new_day_replaces_the_salt(self, throttle_store, monkeypatch):
         key = throttle.client_key("203.0.113.1", "once")
 
-        class _Tomorrow(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return datetime(2099, 1, 2, tzinfo=timezone.utc)
-
-        monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+        _tomorrow(monkeypatch)
         assert throttle.client_key("203.0.113.1", "once") != key
         assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'") == [("2099-01-02",)]
 
@@ -290,12 +296,7 @@ class TestForgetStaleSalt:
     def test_yesterdays_salt_is_dropped_without_a_new_key(self, throttle_store, monkeypatch):
         throttle.client_key("203.0.113.1", "write")
 
-        class _Tomorrow(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return datetime(2099, 1, 2, tzinfo=timezone.utc)
-
-        monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+        _tomorrow(monkeypatch)
         monkeypatch.setattr(throttle, "_last_forget", -1e9)
         throttle.forget_stale_salt()
         assert throttle._salt_cache == {}
@@ -334,12 +335,7 @@ def test_a_dropped_salt_leaves_no_bytes_behind(throttle_store, monkeypatch):
     throttle.client_key("203.0.113.1", "write")
     old_salt = _rows(throttle_store, "SELECT salt FROM salt_days WHERE kind = 'key'")[0][0]
 
-    class _Tomorrow(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime(2099, 1, 2, tzinfo=timezone.utc)
-
-    monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+    _tomorrow(monkeypatch)
     throttle.client_key("203.0.113.1", "write")
     monkeypatch.setattr(throttle, "_last_forget", -1e9)
     throttle.forget_stale_salt()  # the minute tick truncates the WAL
@@ -388,12 +384,7 @@ def test_a_truncation_blocked_by_a_reader_is_retried(throttle_store, monkeypatch
     reader.execute("BEGIN")
     reader.execute("SELECT * FROM salt_days").fetchall()  # holds a read snapshot
 
-    class _Tomorrow(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime(2099, 1, 2, tzinfo=timezone.utc)
-
-    monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+    _tomorrow(monkeypatch)
     monkeypatch.setattr(throttle, "_BUSY_TIMEOUT_S", 0.1)
     throttle.use_path(throttle_store)  # reconnect with the short timeout
     throttle.client_key("203.0.113.1", "write")  # drops yesterday's salt
@@ -412,12 +403,7 @@ def test_a_new_days_first_key_never_waits_on_a_checkpoint(throttle_store, monkey
     # The request path: truncation is left to the minute tick.
     throttle.client_key("203.0.113.1", "write")
 
-    class _Tomorrow(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime(2099, 1, 2, tzinfo=timezone.utc)
-
-    monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+    _tomorrow(monkeypatch)
     checkpoints = []
     monkeypatch.setattr(throttle, "_truncate_wal", lambda: checkpoints.append(1))
     throttle.client_key("203.0.113.1", "write")

@@ -228,15 +228,19 @@ def _rec(office, district, party, last, display=None):
     return rec
 
 
-@pytest.fixture()
-def tennessee(db_session, monkeypatch):
+def _state_fixture(db_session, monkeypatch, state, race_id, district):
     async def no_calendar(client, cycle):
         return {}, False
     monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {"TN"})
-    db_session.add(Race(id="2026-HOU-TN-06", cycle_year=2026, office="H", state="TN", district=6,
+    monkeypatch.setattr(sc, "configured_states", lambda: {state})
+    db_session.add(Race(id=race_id, cycle_year=2026, office="H", state=state, district=district,
                         is_special=False))
     db_session.commit()
+
+
+@pytest.fixture()
+def tennessee(db_session, monkeypatch):
+    _state_fixture(db_session, monkeypatch, "TN", "2026-HOU-TN-06", 6)
     return db_session
 
 
@@ -304,14 +308,7 @@ def colorado(db_session, monkeypatch):
     # Colorado's main source (Clarity primary results) opts in to state
     # offices itself, and so does its certified general_list.
     assert _SOURCES["CO"].get("statewide_offices") and _general("CO").get("statewide_offices")
-
-    async def no_calendar(client, cycle):
-        return {}, False
-    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {"CO"})
-    db_session.add(Race(id="2026-HOU-CO-08", cycle_year=2026, office="H", state="CO", district=8,
-                        is_special=False))
-    db_session.commit()
+    _state_fixture(db_session, monkeypatch, "CO", "2026-HOU-CO-08", 8)
     return db_session
 
 
@@ -388,16 +385,6 @@ async def test_a_joint_ticket_is_stored_as_one_governor_contest(colorado, monkey
 
 
 # ── ballotList: where the STATE-office rows came from ────────────────
-
-def _state_fixture(db_session, monkeypatch, state, race_id, district):
-    async def no_calendar(client, cycle):
-        return {}, False
-    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
-    monkeypatch.setattr(sc, "configured_states", lambda: {state})
-    db_session.add(Race(id=race_id, cycle_year=2026, office="H", state=state, district=district,
-                        is_special=False))
-    db_session.commit()
-
 
 @pytest.mark.asyncio
 async def test_north_carolinas_primary_results_are_not_called_the_ballot(db_session, monkeypatch):

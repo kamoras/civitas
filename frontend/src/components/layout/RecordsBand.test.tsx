@@ -48,6 +48,8 @@ describe("formatRunTimestamp", () => {
     // The whole value of a "filed at" stamp is that two people comparing
     // notes see the same string; a locale-formatted one does not.
     expect(formatRunTimestamp("2026-08-18T03:07:42Z")).toBe("2026-08-18 03:07 UTC");
+    // Single-digit months, days, hours and minutes are padded.
+    expect(formatRunTimestamp("2026-01-05T04:09:00Z")).toBe("2026-01-05 04:09 UTC");
   });
 
   it("treats an offset-less timestamp as UTC — which is the shape the API sends", () => {
@@ -58,10 +60,6 @@ describe("formatRunTimestamp", () => {
     // case is the one the endpoint actually produces; the Z-suffixed case
     // above never occurs in production.
     expect(formatRunTimestamp("2026-08-18T03:07:00")).toBe("2026-08-18 03:07 UTC");
-  });
-
-  it("pads single-digit months, days, hours and minutes", () => {
-    expect(formatRunTimestamp("2026-01-05T04:09:00Z")).toBe("2026-01-05 04:09 UTC");
   });
 
   it("returns null for an unparseable timestamp rather than 'NaN-NaN-NaN'", () => {

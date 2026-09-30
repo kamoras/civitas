@@ -18,20 +18,14 @@ import {
 } from "./formatting";
 
 describe("formatCurrency", () => {
-  it("formats billions", () => {
-    expect(formatCurrency(2_500_000_000)).toBe("$2.5B");
-  });
-
-  it("formats millions", () => {
-    expect(formatCurrency(1_200_000)).toBe("$1.2M");
-  });
-
-  it("formats thousands", () => {
-    expect(formatCurrency(45_000)).toBe("$45K");
-  });
-
-  it("formats sub-thousand amounts with locale grouping", () => {
-    expect(formatCurrency(999)).toBe("$999");
+  it.each([
+    ["billions", 2_500_000_000, "$2.5B"],
+    ["millions", 1_200_000, "$1.2M"],
+    ["thousands", 45_000, "$45K"],
+    ["sub-thousand amounts with locale grouping", 999, "$999"],
+    ["zero", 0, "$0"],
+  ])("formats %s", (_, amount, expected) => {
+    expect(formatCurrency(amount)).toBe(expected);
   });
 
   it("puts the sign outside the dollar sign for negative amounts", () => {
@@ -40,10 +34,6 @@ describe("formatCurrency", () => {
     // toLocaleString branch, rendering "$-1,000,000" instead of "-$1.0M".
     expect(formatCurrency(-1_000_000)).toBe("-$1.0M");
     expect(formatCurrency(-500)).toBe("-$500");
-  });
-
-  it("formats zero", () => {
-    expect(formatCurrency(0)).toBe("$0");
   });
 
   it("rounds sub-thousand cents rather than showing them raw", () => {
@@ -58,16 +48,15 @@ describe("formatCurrency", () => {
 
 describe("localDateStr", () => {
   it("formats a given date as YYYY-MM-DD in local time", () => {
-    expect(localDateStr(new Date(2026, 6, 4))).toBe("2026-07-04"); // month is 0-indexed
-  });
-
-  it("zero-pads single-digit month and day", () => {
-    expect(localDateStr(new Date(2026, 0, 5))).toBe("2026-01-05");
+    // Month is 0-indexed; single-digit month and day are zero-padded.
+    expect(localDateStr(new Date(2026, 6, 4))).toBe("2026-07-04");
   });
 });
 
 describe("formatUtcDate", () => {
-  it("formats a date string using the given locale/options", () => {
+  it("formats a date string using the given locale/options, keeping its calendar date", () => {
+    // Parsed as local noon specifically so a UTC-negative timezone (the suite
+    // runs in America/Los_Angeles) can't roll the date back to the previous day.
     expect(
       formatUtcDate("2026-07-04", { year: "numeric", month: "long", day: "numeric" }, "en-US")
     ).toBe("July 4, 2026");
@@ -75,18 +64,6 @@ describe("formatUtcDate", () => {
 
   it("returns an empty string for an empty input", () => {
     expect(formatUtcDate("")).toBe("");
-  });
-
-  it("preserves the calendar date regardless of local timezone", () => {
-    // Parsed as local noon specifically so a UTC-negative timezone can't
-    // roll the date back to the previous day.
-    const result = formatUtcDate(
-      "2026-01-01",
-      { year: "numeric", month: "numeric", day: "numeric" },
-      "en-US"
-    );
-    expect(result).toContain("2026");
-    expect(result).toMatch(/1\/1\/2026|1\/1\/26/);
   });
 });
 
@@ -146,16 +123,14 @@ describe("safeHref", () => {
     expect(safeHref("mailto:a@example.com")).toBe("mailto:a@example.com");
   });
 
-  it("rejects protocol-relative URLs before they can reach an attacker's host", () => {
-    expect(safeHref("//evil.com")).toBeUndefined();
-  });
-
-  it("rejects javascript: URLs", () => {
-    expect(safeHref("javascript:alert(1)")).toBeUndefined();
-  });
-
-  it("rejects data: URLs", () => {
-    expect(safeHref("data:text/html,<script>alert(1)</script>")).toBeUndefined();
+  it.each([
+    // Rejected before parsing, so it can't reach an attacker's host.
+    ["protocol-relative", "//evil.com"],
+    ["javascript:", "javascript:alert(1)"],
+    ["data:", "data:text/html,<script>alert(1)</script>"],
+    ["unparseable", "http://[invalid"],
+  ])("rejects %s URLs", (_, url) => {
+    expect(safeHref(url)).toBeUndefined();
   });
 
   it("returns undefined for null/undefined/empty input", () => {
@@ -163,25 +138,18 @@ describe("safeHref", () => {
     expect(safeHref(undefined)).toBeUndefined();
     expect(safeHref("")).toBeUndefined();
   });
-
-  it("returns undefined for URLs the URL constructor can't parse at all", () => {
-    expect(safeHref("http://[invalid")).toBeUndefined();
-  });
 });
 
 describe("formatWeekRange", () => {
   it("names the month once for a week inside a single month", () => {
+    // Exact, so ICU's best-fit rendering of a { day, year } pair can't leak:
+    // { day: "numeric", year: "numeric" } is not a CLDR skeleton; ICU renders
+    // it "2026 (day: 19)", which put "Jul 13–2026 (day: 19)" in the week header.
     expect(formatWeekRange("2026-07-13", "2026-07-19")).toBe("Jul 13–19, 2026");
   });
 
   it("names both months when the week crosses a month boundary", () => {
     expect(formatWeekRange("2026-06-29", "2026-07-05")).toBe("Jun 29–Jul 5, 2026");
-  });
-
-  it("does not leak ICU's best-fit rendering of a { day, year } pair", () => {
-    // { day: "numeric", year: "numeric" } is not a CLDR skeleton; ICU renders
-    // it "2026 (day: 19)", which put "Jul 13–2026 (day: 19)" in the week header.
-    expect(formatWeekRange("2026-07-13", "2026-07-19")).not.toContain("(day:");
   });
 
   it("falls back to the raw range for unparseable dates", () => {
@@ -194,20 +162,14 @@ describe("describeDaysLeft", () => {
   // timezone must not shift which day the countdown lands on.
   const asOf = Date.UTC(2026, 7, 18, 15, 0, 0);
 
-  it("counts whole days to a future deadline", () => {
-    expect(describeDaysLeft("2026-08-25", asOf)).toBe("7 days left");
-  });
-
-  it("says 'closes today' on the deadline itself", () => {
-    expect(describeDaysLeft("2026-08-18", asOf)).toBe("closes today");
-  });
-
-  it("says 'closes today' for a deadline already past", () => {
-    expect(describeDaysLeft("2026-08-01", asOf)).toBe("closes today");
-  });
-
-  it("uses the singular for the last full day", () => {
-    expect(describeDaysLeft("2026-08-19", asOf)).toBe("1 day left");
+  it.each([
+    ["counts whole days to a future deadline", "2026-08-25", "7 days left"],
+    ["says 'closes today' on the deadline itself", "2026-08-18", "closes today"],
+    ["says 'closes today' for a deadline already past", "2026-08-01", "closes today"],
+    ["uses the singular for the last full day", "2026-08-19", "1 day left"],
+    ["returns '' for an unparseable date rather than 'NaN days left'", "not a date", ""],
+  ])("%s", (_, closeDate, expected) => {
+    expect(describeDaysLeft(closeDate, asOf)).toBe(expected);
   });
 
   it("treats an offset-less timestamp as UTC, not viewer-local", () => {
@@ -216,10 +178,6 @@ describe("describeDaysLeft", () => {
     expect(describeDaysLeft("2026-08-21T00:00:00", asOf)).toBe(
       describeDaysLeft("2026-08-21T00:00:00Z", asOf)
     );
-  });
-
-  it("returns empty string for an unparseable date rather than 'NaN days left'", () => {
-    expect(describeDaysLeft("not a date", asOf)).toBe("");
   });
 });
 

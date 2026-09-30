@@ -31,73 +31,47 @@ _SAMPLE_YAML = """
 """
 
 
+async def _fetch(db_session, status_code, text=None):
+    response = MagicMock()
+    response.status_code = status_code
+    response.text = text
+    with patch(
+        "app.pipeline.fetch.congress_legislators.fetch_with_retry",
+        new=AsyncMock(return_value=response),
+    ):
+        return await fetch_bioguide_to_fec_ids(AsyncMock(), db_session)
+
+
 class TestFetchBioguideToFecIds:
     @pytest.mark.asyncio
     async def test_parses_bioguide_to_fec_mapping(self, db_session):
-        response = MagicMock()
-        response.status_code = 200
-        response.text = _SAMPLE_YAML
-        with patch(
-            "app.pipeline.fetch.congress_legislators.fetch_with_retry",
-            new=AsyncMock(return_value=response),
-        ):
-            result = await fetch_bioguide_to_fec_ids(AsyncMock(), db_session)
-        assert result == {"C001075": ["H8LA00017", "S4LA00107"]}
+        # Exact equality also confirms a legislator with a bioguide but no
+        # `fec` key, and one with no `id` block at all, don't raise or
+        # pollute the mapping.
+        assert await _fetch(db_session, 200, _SAMPLE_YAML) == {"C001075": ["H8LA00017", "S4LA00107"]}
 
+    @pytest.mark.parametrize("status_code, text", [
+        pytest.param(500, None, id="fetch_failure"),
+        pytest.param(200, "not: valid: yaml: [unclosed", id="unparseable_yaml"),
+    ])
     @pytest.mark.asyncio
-    async def test_entries_without_fec_ids_are_skipped_not_crashed_on(self, db_session):
-        # Confirms a legislator with a bioguide but no `fec` key, and one
-        # with no `id` block at all, don't raise or pollute the mapping.
-        response = MagicMock()
-        response.status_code = 200
-        response.text = _SAMPLE_YAML
-        with patch(
-            "app.pipeline.fetch.congress_legislators.fetch_with_retry",
-            new=AsyncMock(return_value=response),
-        ):
-            result = await fetch_bioguide_to_fec_ids(AsyncMock(), db_session)
-        assert "G000359" not in result
-        assert len(result) == 1
-
-    @pytest.mark.asyncio
-    async def test_fetch_failure_returns_empty_dict_not_none(self, db_session):
-        response = MagicMock()
-        response.status_code = 500
-        with patch(
-            "app.pipeline.fetch.congress_legislators.fetch_with_retry",
-            new=AsyncMock(return_value=response),
-        ):
-            result = await fetch_bioguide_to_fec_ids(AsyncMock(), db_session)
-        assert result == {}
-
-    @pytest.mark.asyncio
-    async def test_unparseable_yaml_returns_empty_dict(self, db_session):
-        response = MagicMock()
-        response.status_code = 200
-        response.text = "not: valid: yaml: [unclosed"
-        with patch(
-            "app.pipeline.fetch.congress_legislators.fetch_with_retry",
-            new=AsyncMock(return_value=response),
-        ):
-            result = await fetch_bioguide_to_fec_ids(AsyncMock(), db_session)
-        assert result == {}
+    async def test_failure_returns_empty_dict_not_none(self, db_session, status_code, text):
+        assert await _fetch(db_session, status_code, text) == {}
 
 
 class TestSelectFecIdForOffice:
-    def test_picks_the_senate_id_when_member_has_both(self):
-        assert select_fec_id_for_office(["H8LA00017", "S4LA00107"], "S") == "S4LA00107"
-
-    def test_picks_the_house_id_when_member_has_both(self):
-        assert select_fec_id_for_office(["H8LA00017", "S4LA00107"], "H") == "H8LA00017"
-
-    def test_case_insensitive_office_match(self):
-        assert select_fec_id_for_office(["S4LA00107"], "s") == "S4LA00107"
-
-    def test_no_matching_office_returns_none(self):
-        assert select_fec_id_for_office(["H8LA00017"], "S") is None
-
-    def test_empty_list_returns_none(self):
-        assert select_fec_id_for_office([], "S") is None
+    @pytest.mark.parametrize("fec_ids, office, expected", [
+        pytest.param(["H8LA00017", "S4LA00107"], "S", "S4LA00107", id="senate_id_when_member_has_both"),
+        pytest.param(["H8LA00017", "S4LA00107"], "H", "H8LA00017", id="house_id_when_member_has_both"),
+        pytest.param(["S4LA00107"], "s", "S4LA00107", id="case_insensitive_office_match"),
+        pytest.param(["H8LA00017"], "S", None, id="no_matching_office"),
+        pytest.param([], "S", None, id="empty_list"),
+        # The simple single-match helper stays first-match-in-crosswalk-order
+        # for callers that can't verify (see TestSelectAllFecIdsForOffice).
+        pytest.param(["H4NY04158", "H2NY04244"], "H", "H4NY04158", id="two_same_office_ids_returns_first"),
+    ])
+    def test_select(self, fec_ids, office, expected):
+        assert select_fec_id_for_office(fec_ids, office) == expected
 
 
 class TestSelectAllFecIdsForOffice:
@@ -107,18 +81,11 @@ class TestSelectAllFecIdsForOffice:
     behavior isn't enough on its own to recover from that; a caller that
     can verify needs every candidate, not just the first."""
 
-    def test_returns_every_match_in_crosswalk_order(self):
-        assert select_all_fec_ids_for_office(
-            ["H4NY04158", "S4LA00107", "H2NY04244"], "H",
-        ) == ["H4NY04158", "H2NY04244"]
-
-    def test_single_match_returns_a_one_item_list(self):
-        assert select_all_fec_ids_for_office(["H8LA00017", "S4LA00107"], "S") == ["S4LA00107"]
-
-    def test_no_matching_office_returns_empty_list(self):
-        assert select_all_fec_ids_for_office(["H8LA00017"], "S") == []
-
-    def test_select_fec_id_for_office_still_returns_only_the_first(self):
-        # The simple single-match helper is unchanged for callers that
-        # can't verify — first-match-in-crosswalk-order behavior.
-        assert select_fec_id_for_office(["H4NY04158", "H2NY04244"], "H") == "H4NY04158"
+    @pytest.mark.parametrize("fec_ids, office, expected", [
+        pytest.param(["H4NY04158", "S4LA00107", "H2NY04244"], "H", ["H4NY04158", "H2NY04244"],
+                     id="every_match_in_crosswalk_order"),
+        pytest.param(["H8LA00017", "S4LA00107"], "S", ["S4LA00107"], id="single_match_one_item_list"),
+        pytest.param(["H8LA00017"], "S", [], id="no_matching_office_empty_list"),
+    ])
+    def test_select_all(self, fec_ids, office, expected):
+        assert select_all_fec_ids_for_office(fec_ids, office) == expected

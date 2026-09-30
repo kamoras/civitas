@@ -10,7 +10,9 @@ from app.pipeline.analyze.cross_reference import (
     select_key_votes,
     detect_lobbying_matches,
 )
+from app.pipeline.analyze import policy_alignment
 from app.pipeline.analyze.policy_alignment import (
+    detect_donor_vote_connections,
     get_related_policies,
     industry_policy_similarity,
 )
@@ -197,7 +199,12 @@ class TestDetectLobbyingMatches:
         industry_breakdown = [{"industry": "PHARMA", "name": "PHARMA", "total": 5000, "percentage": 100}]
         assert detect_lobbying_matches(donors, [], industry_breakdown) == []
 
-    def test_max_eight_matches(self):
+    def test_no_substantial_industry_share_matches_nothing(self):
+        """Ten industries at 10% each: none clears the 25% share gate, so
+        even PHARMA, with related (healthcare) votes, is not flagged. (This
+        used to be named for the 8-match cap and assert `<= 8`, which this
+        input can never reach — at most four industries can each hold 25%;
+        the cap is test_the_match_cap_keeps_the_largest_donations below.)"""
         industries = [
             "PHARMA", "FINANCE", "TECH", "ENERGY", "DEFENSE",
             "GUNS", "LABOR_UNIONS", "REAL_ESTATE", "TELECOM", "AGRIBUSINESS",
@@ -210,26 +217,26 @@ class TestDetectLobbyingMatches:
             {"name": f"{ind} Corp", "industry": ind, "type": "PAC", "total": 1000}
             for ind in industries
         ]
-        # Broad vote set so most industries find at least one policy-area match.
-        votes = (
-            self._healthcare_votes()
-            + [
-                {"billId": "HR.100", "vote": "Yea", "billName": "Energy Independence Act",
-                 "policyArea": "ENERGY", "description": "Domestic energy production"},
-                {"billId": "HR.101", "vote": "Yea", "billName": "Defense Authorization Act",
-                 "policyArea": "DEFENSE", "description": "Military spending authorization"},
-                {"billId": "HR.102", "vote": "Yea", "billName": "Financial Reform Act",
-                 "policyArea": "FINANCIAL", "description": "Bank regulation reform"},
-                {"billId": "HR.103", "vote": "Yea", "billName": "Tech Privacy Act",
-                 "policyArea": "TECH", "description": "Data privacy regulation"},
-                {"billId": "HR.104", "vote": "Yea", "billName": "Labor Rights Act",
-                 "policyArea": "LABOR", "description": "Worker protections"},
-                {"billId": "HR.105", "vote": "Yea", "billName": "Gun Safety Act",
-                 "policyArea": "GUNS", "description": "Firearm background checks"},
-            ]
-        )
-        matches = detect_lobbying_matches(donors, votes, industry_breakdown)
-        assert len(matches) <= 8
+        assert detect_lobbying_matches(donors, self._healthcare_votes(), industry_breakdown) == []
+
+    def test_the_match_cap_keeps_the_largest_donations(self, monkeypatch):
+        """max_matches trims the list AFTER sorting by donation, so the cap
+        drops the smaller industries, never the largest. It can't bind at
+        the default 25% share gate (at most four industries clear it), so
+        it is exercised through its own parameter; similarity is pinned so
+        no model loads."""
+        monkeypatch.setattr(policy_alignment, "industry_policy_similarity", lambda *_: 1.0)
+        industry_breakdown = [
+            {"industry": "FINANCE", "name": "FINANCE", "total": 4000, "percentage": 40},
+            {"industry": "PHARMA", "name": "PHARMA", "total": 6000, "percentage": 60},
+        ]
+        votes = self._healthcare_votes()
+
+        both = detect_donor_vote_connections([], votes, industry_breakdown)
+        assert [m["industry"] for m in both] == ["PHARMA", "FINANCE"]
+
+        capped = detect_donor_vote_connections([], votes, industry_breakdown, max_matches=1)
+        assert [m["industry"] for m in capped] == ["PHARMA"]
 
     def test_lobbyists_industry_never_matches(self):
         """LOBBYISTS is a service profession, not a policy domain — a

@@ -28,9 +28,14 @@ def _seed(db_session, n=35):
     db_session.commit()
 
 
-def test_old_scale_reference_is_remeasured_and_scores_rescored(db_session, pinned_population_references):
+def _write_old_scale_reference():
+    """A senate reference from before stage totals were measured."""
     old = {k: v for k, v in LES_REFERENCE.load()["senate"].items() if k not in ("stage_totals", "n_members")}
     LES_REFERENCE.write("senate", old)
+
+
+def test_old_scale_reference_is_remeasured_and_scores_rescored(db_session, pinned_population_references):
+    _write_old_scale_reference()
     _seed(db_session)
 
     assert rescore_stale_legislative_effectiveness(_factory(db_session)) == ["senate"]
@@ -63,8 +68,7 @@ def test_current_scale_reference_is_left_alone(db_session, pinned_population_ref
 
 
 def test_skipped_while_a_pipeline_run_is_in_progress(db_session, pinned_population_references):
-    old = {k: v for k, v in LES_REFERENCE.load()["senate"].items() if k not in ("stage_totals", "n_members")}
-    LES_REFERENCE.write("senate", old)
+    _write_old_scale_reference()
     _seed(db_session)
     db_session.add(PipelineRun(status=PipelineStatus.RUNNING))
     db_session.commit()
@@ -77,8 +81,7 @@ def test_skipped_while_a_pipeline_run_is_in_progress(db_session, pinned_populati
 def test_reference_is_persisted_only_after_the_scores_commit(db_session, pinned_population_references, monkeypatch):
     from app.pipeline import les_rescore
 
-    old = {k: v for k, v in LES_REFERENCE.load()["senate"].items() if k not in ("stage_totals", "n_members")}
-    LES_REFERENCE.write("senate", old)
+    _write_old_scale_reference()
     _seed(db_session)
     import app.pipeline.analyze.score_calculator as sc
 
@@ -102,8 +105,7 @@ def test_an_orphaned_run_does_not_block(db_session, pinned_population_references
 
     from app.time_utils import utcnow
 
-    old = {k: v for k, v in LES_REFERENCE.load()["senate"].items() if k not in ("stage_totals", "n_members")}
-    LES_REFERENCE.write("senate", old)
+    _write_old_scale_reference()
     _seed(db_session)
     db_session.add(PipelineRun(status=PipelineStatus.RUNNING, started_at=utcnow() - timedelta(hours=13)))
     db_session.commit()

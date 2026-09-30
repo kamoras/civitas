@@ -39,19 +39,17 @@ class _HangingTransport(httpx.AsyncBaseTransport):
 
 
 class TestHangBackstopSeconds:
-    def test_plain_number_is_scaled_by_the_multiplier(self):
-        assert hang_backstop_seconds(30.0) == 30.0 * HANG_BACKSTOP_MULTIPLIER
-
-    def test_httpx_timeout_object_uses_its_longest_phase(self):
-        timeout = httpx.Timeout(connect=5.0, read=60.0, write=5.0, pool=5.0)
-        assert hang_backstop_seconds(timeout) == 60.0 * HANG_BACKSTOP_MULTIPLIER
-
-    def test_extensions_dict_form_uses_its_longest_phase(self):
+    @pytest.mark.parametrize("timeout, longest", [
+        pytest.param(30.0, 30.0, id="plain_number_is_scaled_by_the_multiplier"),
+        pytest.param(httpx.Timeout(connect=5.0, read=60.0, write=5.0, pool=5.0), 60.0,
+                     id="httpx_timeout_object_uses_its_longest_phase"),
         # This is the shape httpx puts in Request.extensions["timeout"],
         # which is what BackstoppedAsyncClient.send actually reads.
-        assert hang_backstop_seconds(
-            {"connect": 5.0, "read": 60.0, "write": 5.0, "pool": None}
-        ) == 60.0 * HANG_BACKSTOP_MULTIPLIER
+        pytest.param({"connect": 5.0, "read": 60.0, "write": 5.0, "pool": None}, 60.0,
+                     id="extensions_dict_form_uses_its_longest_phase"),
+    ])
+    def test_scales_the_longest_phase_by_the_multiplier(self, timeout, longest):
+        assert hang_backstop_seconds(timeout) == longest * HANG_BACKSTOP_MULTIPLIER
 
     @pytest.mark.parametrize(
         "timeout",
@@ -78,15 +76,7 @@ class TestBackstoppedClientBoundsDirectCalls:
     the client so those are covered without each one opting in."""
 
     @pytest.mark.asyncio
-    async def test_hung_get_raises_instead_of_hanging_forever(self):
-        transport = _HangingTransport()
-        async with make_async_client(transport=transport, timeout=0.05) as client:
-            with pytest.raises(TimeoutError):
-                await client.get("https://example.test/thing")
-        assert transport.calls == 1
-
-    @pytest.mark.asyncio
-    async def test_the_bound_is_actually_wall_clock(self):
+    async def test_hung_get_raises_within_the_wall_clock_bound(self):
         transport = _HangingTransport()
         async with make_async_client(transport=transport, timeout=0.05) as client:
             start = asyncio.get_running_loop().time()
@@ -98,6 +88,7 @@ class TestBackstoppedClientBoundsDirectCalls:
         # returning instantly either — a bound that fires immediately would
         # kill healthy requests.
         assert ceiling <= elapsed < ceiling + 1.0
+        assert transport.calls == 1
 
     @pytest.mark.asyncio
     async def test_per_request_timeout_overrides_the_client_default(self):

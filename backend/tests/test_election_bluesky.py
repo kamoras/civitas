@@ -67,24 +67,9 @@ class TestPostRaceCoverageUpdates:
         post = db_session.query(BroadcastPost).one()
         assert (post.kind, post.state, post.text, post.bsky_status) == ("race", "GA", "Ossoff holds a narrow lead.", "off")
         assert (post.title, post.subject) == ("Update on the GA Senate race", "race:2026-SEN-GA")
-        assert item.bsky_posted is True
-        assert bluesky_outbox == []
-
-    def test_successful_post_marks_item_and_increments(self, db_session, monkeypatch):
-        _stub_relevance(monkeypatch)
-        _race(db_session)
-        _candidate(db_session)
-        item = _item(db_session)
-        db_session.commit()
-
-        with patch.object(election_bluesky, "_generate_post_text", return_value="Ossoff holds a narrow lead, per new polling."), \
-             patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
-            posted = election_bluesky.post_race_coverage_updates(db_session)
-
-        assert posted == 1
-        mock_publish.assert_called_once()
         assert item.bsky_posted_at is not None
         assert item.bsky_posted is True  # actually published, counts toward the daily budget
+        assert bluesky_outbox == []
 
     def test_grounding_failure_marks_considered_but_not_posted(self, db_session, monkeypatch):
         _stub_relevance(monkeypatch)
@@ -408,7 +393,13 @@ class TestOnlyVettedSourcesArePosted:
     in its own voice is what made it an endorsement, so the fix is at the
     source, not in the wording."""
 
-    def test_an_arbitrary_social_post_is_never_eligible(self, db_session, monkeypatch):
+    @pytest.mark.parametrize("source_type, source_name, title, posted", [
+        pytest.param("bluesky", "@kaseylz.bsky.social", "VOTE VERONICA FERNANDEZ!", [],
+                     id="an_arbitrary_social_post_is_never_eligible"),
+        pytest.param("news", "Roll Call", "A real article about the race", ["some sentence."],
+                     id="a_news_item_still_posts"),
+    ])
+    def test_only_a_vetted_source_is_restated(self, db_session, monkeypatch, source_type, source_name, title, posted):
         _stub_relevance(monkeypatch)
         published = []
         monkeypatch.setattr(eb, "_publish", lambda db, text, race, source_url=None: published.append(text))
@@ -417,32 +408,13 @@ class TestOnlyVettedSourcesArePosted:
 
         db_session.add(Race(id="2026-SEN-NJ", cycle_year=2026, office="S", state="NJ"))
         db_session.add(RaceCoverageItem(
-            race_id="2026-SEN-NJ", source_type="bluesky", source_name="@kaseylz.bsky.social",
-            title="VOTE VERONICA FERNANDEZ!", url="u1",
-            match_basis="full_name", fetched_at=utcnow(),
+            race_id="2026-SEN-NJ", source_type=source_type, source_name=source_name,
+            title=title, url="u1", match_basis="full_name", fetched_at=utcnow(),
         ))
         db_session.commit()
 
-        assert eb.post_race_coverage_updates(db_session) == 0
-        assert published == []
-
-    def test_a_news_item_still_posts(self, db_session, monkeypatch):
-        _stub_relevance(monkeypatch)
-        published = []
-        monkeypatch.setattr(eb, "_publish", lambda db, text, race, source_url=None: published.append(text))
-        monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
-        monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
-
-        db_session.add(Race(id="2026-SEN-NJ", cycle_year=2026, office="S", state="NJ"))
-        db_session.add(RaceCoverageItem(
-            race_id="2026-SEN-NJ", source_type="news", source_name="Roll Call",
-            title="A real article about the race", url="u2",
-            match_basis="full_name", fetched_at=utcnow(),
-        ))
-        db_session.commit()
-
-        assert eb.post_race_coverage_updates(db_session) == 1
-        assert published == ["some sentence."]
+        assert eb.post_race_coverage_updates(db_session) == len(posted)
+        assert published == posted
 
 
 def test_no_item_is_started_past_the_deadline(db_session, monkeypatch):

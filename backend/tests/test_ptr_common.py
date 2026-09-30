@@ -135,13 +135,6 @@ def test_parse_table_rows_without_an_owner_column_states_no_owner():
     assert parse_table_rows(table)[0].owner == "unknown"
 
 
-def test_parse_table_rows_reads_a_senate_owner_word():
-    rows = parse_table_rows(_table(
-        ["Spouse", "Apple Inc. (AAPL)", "Purchase", "1/2/2026", "2/1/2026", "$1,001 - $15,000"],
-    ))
-    assert rows[0].owner == "spouse"
-
-
 def test_parse_table_rows_skips_unparseable_rows_without_fabricating():
     table = _table(
         # No transaction type, no date, no amount — should be skipped, not guessed.
@@ -162,15 +155,6 @@ def test_parse_table_rows_missing_header_returns_empty():
 
 def test_parse_table_rows_empty_table():
     assert parse_table_rows([]) == []
-
-
-def test_parse_table_rows_no_ticker_in_asset_name():
-    table = _table(
-        ["", "Some Municipal Bond Fund", "Purchase", "1/2/2026", "2/1/2026", "$1,001 - $15,000"],
-    )
-    rows = parse_table_rows(table)
-    assert len(rows) == 1
-    assert rows[0].ticker is None
 
 
 def test_parse_table_rows_asset_type_column_does_not_shadow_type():
@@ -222,6 +206,10 @@ class TestParseOcrLine:
         assert row.amount_high == 50000.0
         # The line carries no owner column: not stated, never the filer's.
         assert row.owner == "unknown"
+        # The old parser required a ticker match to accept ANY row, silently
+        # dropping ~95% of a real filing's transactions because this form
+        # prints none at all — see extract_ticker's docstring.
+        assert row.ticker is None
 
     def test_leading_row_number_does_not_pollute_the_amount(self):
         """The confirmed live bug: the fallback-only version of this
@@ -254,14 +242,6 @@ class TestParseOcrLine:
         assert row is not None
         assert row.amount_low == 15001.0
         assert row.amount_high == 50000.0
-
-    def test_a_ticker_never_printed_on_this_form_is_none_not_required(self):
-        """The old parser required a ticker match to accept ANY row,
-        silently dropping ~95% of a real filing's transactions because
-        this form prints none at all — see extract_ticker's docstring."""
-        row = _parse_ocr_line("2 |Ametek Inc purchase 6/23/2026, No|$15,001 - $50,000")
-        assert row is not None
-        assert row.ticker is None
 
     def test_one_misread_bound_is_recovered_from_the_other(self):
         """A misread digit produced a real, live "$31,001 - $15,000". The

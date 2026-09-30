@@ -98,6 +98,19 @@ class TestDiscovery:
         ]
 
 
+def _serve_guide(monkeypatch, listing_html, guide_text):
+    """Every page fetch returns `listing_html`; any PDF it links reads as
+    `guide_text`."""
+    async def fake_text(client, limiter, url, label, **kw):
+        return listing_html
+
+    async def fake_bytes(client, limiter, url, label, **kw):
+        return b"pdf"
+    monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
+    monkeypatch.setattr(me, "fetch_bytes_with_retry", fake_bytes)
+    monkeypatch.setattr(me, "_extract_text", lambda raw: guide_text)
+
+
 class TestFetchMeasures:
     async def test_guide_not_published_is_not_yet_published_never_empty(self, monkeypatch):
         async def fake_text(client, limiter, url, label, **kw):
@@ -120,41 +133,19 @@ class TestFetchMeasures:
 
     async def test_full_flow_with_the_real_2024_guide(self, monkeypatch):
         guide = "https://www.maine.gov/sos/x/Citizens-20Guide-2011.5.2024-20FINAL.pdf"
-
-        async def fake_text(client, limiter, url, label, **kw):
-            return f'<a href="{guide}">2024 Citizens Guide</a>'
-
-        async def fake_bytes(client, limiter, url, label, **kw):
-            return b"pdf"
-        monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
-        monkeypatch.setattr(me, "fetch_bytes_with_retry", fake_bytes)
-        monkeypatch.setattr(me, "_extract_text", lambda raw: GUIDE_2024)
+        _serve_guide(monkeypatch, f'<a href="{guide}">2024 Citizens Guide</a>', GUIDE_2024)
         result = await me.fetch_measures(None, 2024)
         assert [p["number"] for p, _ in result] == ["1", "2", "3", "4", "5"]
         assert all(url == guide for _, url in result)
 
     async def test_a_guide_for_another_year_is_refused(self, monkeypatch):
-        async def fake_text(client, limiter, url, label, **kw):
-            return '<a href="/x/MaineCitizensGuide2026.pdf">2026 Citizen Guide</a>'
-
-        async def fake_bytes(client, limiter, url, label, **kw):
-            return b"pdf"
-        monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
-        monkeypatch.setattr(me, "fetch_bytes_with_retry", fake_bytes)
-        monkeypatch.setattr(me, "_extract_text", lambda raw: GUIDE_2024)
+        _serve_guide(monkeypatch, '<a href="/x/MaineCitizensGuide2026.pdf">2026 Citizen Guide</a>', GUIDE_2024)
         assert await me.fetch_measures(None, 2026) is None
 
     async def test_a_parse_short_of_the_listing_is_none(self, monkeypatch):
-        async def fake_text(client, limiter, url, label, **kw):
-            return '<a href="/x/MaineCitizensGuide2024.pdf">2024 Citizen Guide</a>'
-
-        async def fake_bytes(client, limiter, url, label, **kw):
-            return b"pdf"
         # Drop question 3's Intent section: the listing still names 5.
         broken = GUIDE_2024.replace("A “YES” vote approves the issuance of up to $10 million", "X")
-        monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
-        monkeypatch.setattr(me, "fetch_bytes_with_retry", fake_bytes)
-        monkeypatch.setattr(me, "_extract_text", lambda raw: broken)
+        _serve_guide(monkeypatch, '<a href="/x/MaineCitizensGuide2024.pdf">2024 Citizen Guide</a>', broken)
         assert await me.fetch_measures(None, 2024) is None
 
 

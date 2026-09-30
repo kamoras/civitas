@@ -18,6 +18,9 @@ function run(overrides: Partial<PipelineHistoryRun> = {}): PipelineHistoryRun {
 const ALL_TYPES: PipelineType[] = ["senate", "house", "stock_trades", "supplementary", "election"];
 
 describe("describeRun — labels", () => {
+  // Every type pinned to its own label, so no non-senate run can read SENATE —
+  // the regression itself: Election runs rendered as SENATE because the old
+  // code defined "senate" as "none of the other four".
   it.each([
     ["senate", "SENATE"],
     ["house", "HOUSE"],
@@ -26,14 +29,6 @@ describe("describeRun — labels", () => {
     ["election", "ELECTION"],
   ] as const)("labels a %s run as %s", (pipelineType, label) => {
     expect(describeRun(run({ pipelineType })).label).toBe(label);
-  });
-
-  it("never labels a non-senate run as SENATE", () => {
-    // The regression itself: Election runs rendered as SENATE because the
-    // old code defined "senate" as "none of the other four".
-    for (const pipelineType of ALL_TYPES.filter((t) => t !== "senate")) {
-      expect(describeRun(run({ pipelineType })).label).not.toBe("SENATE");
-    }
   });
 
   it("treats a row with no pipelineType as senate", () => {

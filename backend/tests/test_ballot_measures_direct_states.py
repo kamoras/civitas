@@ -90,16 +90,14 @@ class TestAlabama:
         assert two["official_summary"].startswith("Currently, each county has a board of education")
         assert two["official_summary"].endswith("The Legislature could pass laws to implement approved mergers.")
 
-    def test_all_four_parse(self):
-        for n in "1234":
-            assert al.parse_statement(self.fx["statements"][n], n, 2026) is not None
-
     def test_refuses_wrong_election_or_mismatched_number(self):
         assert al.parse_statement(self.fx["statements"]["1"], "1", 2028) is None
         assert al.parse_statement(self.fx["statements"]["1"], "2", 2026) is None
 
     @pytest.mark.asyncio
     async def test_fetch_end_to_end_and_one_bad_statement_fails_everything(self, monkeypatch):
+        # fetch_measures refuses the state if any statement fails
+        # parse_statement, so four results means all four parse.
         links = al.statement_links(self.fx["landing_html"], al.LANDING_URL, 2026)
         pdfs = {links[n]: self.fx["statements"][n] for n in links}
         _stub_fetch(monkeypatch, al, {al.LANDING_URL: self.fx["landing_html"]}, pdfs=pdfs)

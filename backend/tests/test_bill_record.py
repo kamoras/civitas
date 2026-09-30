@@ -132,12 +132,6 @@ def test_a_part_that_misses_the_deadline_is_unavailable_and_asked_again(senate, 
     assert len(calls) == n + 2 and "/cosponsors" in calls[-2] and "/text" in calls[-1]
 
 
-def test_no_such_bill(senate, monkeypatch):
-    fake, _ = _answers(missing=True)
-    monkeypatch.setattr(br, "_congress_get", fake)
-    assert asyncio.run(br.fetch_bill_record(None, senate, 119, "S.99999"))["not_found"] is True
-
-
 def test_a_missing_bill_is_cached_so_asking_again_costs_nothing(senate, monkeypatch):
     # Probing wrong ids used to go to Congress.gov every time.
     fake, calls = _answers(missing=True)
@@ -199,9 +193,10 @@ class TestRoutes:
         yield TestClient(app)
         app.dependency_overrides.clear()
 
-    def test_record(self, client):
+    def test_a_complete_record_is_served_and_cacheable(self, client):
         r = client.get("/api/bills/S.4668/record?congress=119")
         assert r.status_code == 200 and r.json()["votes"][0]["number"] == 243
+        assert r.headers["Cache-Control"].startswith("public, max-age=")
 
     def test_a_partial_record_is_not_kept_by_any_cache(self, client, monkeypatch):
         fake, _ = _answers(fail={"text"})
@@ -212,10 +207,6 @@ class TestRoutes:
 
     def test_not_a_bill_id(self, client):
         assert client.get("/api/bills/PN.12/record").status_code == 404
-
-    def test_a_complete_record_is_cacheable(self, client):
-        r = client.get("/api/bills/S.4668/record?congress=119")
-        assert r.headers["Cache-Control"].startswith("public, max-age=")
 
     def test_a_congress_that_has_not_convened_is_refused(self, client):
         assert client.get("/api/bills/S.1/record?congress=200").status_code == 404

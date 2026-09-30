@@ -126,23 +126,15 @@ class TestFederalContests:
 
 class TestCurrentPrimaryGuid:
     async def test_finds_the_real_statewide_primary(self, monkeypatch):
+        # Real regression case: three other genuine 2026 elections share
+        # this list with the real primary -- two local specials
+        # (isStateWideElection: false) and one non-Primary type -- none
+        # of which should ever be picked (a second match would raise).
         async def fake_json(client, rl, url, label, **kw):
             return ELECTIONS
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
         assert await vtm._current_primary_guid(None, "VT", 2026) == _REAL_GUID
-
-    async def test_local_special_elections_are_not_matched(self, monkeypatch):
-        # Real regression case: three other genuine 2026 elections share
-        # this list with the real primary -- two local specials
-        # (isStateWideElection: false) and one non-Primary type -- none
-        # of which should ever be picked.
-        async def fake_json(client, rl, url, label, **kw):
-            return ELECTIONS
-
-        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        result = await vtm._current_primary_guid(None, "VT", 2026)
-        assert result == _REAL_GUID
 
     async def test_no_match_for_a_different_year_returns_none(self, monkeypatch):
         async def fake_json(client, rl, url, label, **kw):
@@ -151,40 +143,18 @@ class TestCurrentPrimaryGuid:
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
         assert await vtm._current_primary_guid(None, "VT", 2028) is None
 
-    async def test_fetch_failure_raises_discovery_failed(self, monkeypatch):
-        async def fake_json(client, rl, url, label, **kw):
-            return None
-
-        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm.DiscoveryFailed):
-            await vtm._current_primary_guid(None, "VT", 2026)
-
-    async def test_an_empty_elections_list_raises_discovery_failed(self, monkeypatch):
+    @pytest.mark.parametrize("elections", [
+        pytest.param(None, id="fetch_failure"),
         # The portal's own list always carries VT's full election history --
         # a genuinely empty list is a broken response, not a healthy state,
         # and must not read the same as "no match for this year".
+        pytest.param([], id="empty_elections_list"),
+        pytest.param([{**ELECTIONS[0], "electionGuid": None}], id="matched_election_missing_its_guid"),
+        pytest.param([*ELECTIONS, {**ELECTIONS[0], "electionGuid": "another-guid"}], id="more_than_one_match"),
+    ])
+    async def test_raises_discovery_failed(self, monkeypatch, elections):
         async def fake_json(client, rl, url, label, **kw):
-            return []
-
-        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm.DiscoveryFailed):
-            await vtm._current_primary_guid(None, "VT", 2026)
-
-    async def test_a_matched_election_missing_its_guid_raises_discovery_failed(self, monkeypatch):
-        missing_guid = [{**ELECTIONS[0], "electionGuid": None}]
-
-        async def fake_json(client, rl, url, label, **kw):
-            return missing_guid
-
-        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm.DiscoveryFailed):
-            await vtm._current_primary_guid(None, "VT", 2026)
-
-    async def test_more_than_one_match_raises_discovery_failed(self, monkeypatch):
-        duped = [*ELECTIONS, {**ELECTIONS[0], "electionGuid": "another-guid"}]
-
-        async def fake_json(client, rl, url, label, **kw):
-            return duped
+            return elections
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
         with pytest.raises(vtm.DiscoveryFailed):
@@ -210,28 +180,18 @@ class TestFederalReportUrl:
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
         assert await vtm._federal_report_url(None, "VT", _REAL_GUID) is None
 
-    async def test_detail_fetch_failure_raises_discovery_failed(self, monkeypatch):
-        async def fake_json(client, rl, url, label, **kw):
-            return None
-
-        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm.DiscoveryFailed):
-            await vtm._federal_report_url(None, "VT", _REAL_GUID)
-
-    async def test_enabled_with_no_path_raises_discovery_failed(self, monkeypatch):
-        async def fake_json(client, rl, url, label, **kw):
-            return {**DETAIL, "federal": {"isEnable": True}}
-
-        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm.DiscoveryFailed):
-            await vtm._federal_report_url(None, "VT", _REAL_GUID)
-
-    async def test_missing_election_date_raises_discovery_failed(self, monkeypatch):
+    @pytest.mark.parametrize("detail", [
+        pytest.param(None, id="detail_fetch_failure"),
+        pytest.param({**DETAIL, "federal": {"isEnable": True}}, id="enabled_with_no_path"),
         # Without this, a missing date would flow silently into _settled()
         # (which treats an unparseable date as "not settled") and look
         # forever like a healthy "waiting on settle_days", never a failure.
+        pytest.param({**DETAIL, "electionDetails": {**DETAIL["electionDetails"], "electionDate": None}},
+                     id="missing_election_date"),
+    ])
+    async def test_raises_discovery_failed(self, monkeypatch, detail):
         async def fake_json(client, rl, url, label, **kw):
-            return {**DETAIL, "electionDetails": {**DETAIL["electionDetails"], "electionDate": None}}
+            return detail
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
         with pytest.raises(vtm.DiscoveryFailed):

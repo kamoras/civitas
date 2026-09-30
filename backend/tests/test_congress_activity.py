@@ -5,7 +5,6 @@ versus failed sources."""
 import asyncio
 import json
 from datetime import date
-from pathlib import Path
 
 import pytest
 
@@ -14,7 +13,7 @@ from app.pipeline import congress_activity as ca
 from app.pipeline.fetch import daily_digest as dd
 from app.pipeline.fetch import floor_logs as fl
 
-FIX = Path(__file__).parent / "fixtures"
+from tests.congress_activity_helpers import FIX, _digest_responses, _fake_get
 
 
 def _digest(name: str) -> str:
@@ -152,6 +151,7 @@ class TestFloorLogs:
 
     def test_senate_floor_log(self):
         s = fl.parse_senate_floor((FIX / "floor_logs" / "09_24_2026_Senate_Floor.xml").read_bytes())
+        assert s["in_session"] is True  # a meeting day (cf. the day-off file below)
         assert (s["convened_at"], s["adjourned_at"]) == ("10 a.m.", "4:05 p.m.")
         iran = next(e for e in s["events"] if e["bill_id"] == "HCONRES.89")
         assert "Failed of passage in Senate by Yea-Nay Vote. 49 - 50" in iran["text"]
@@ -179,35 +179,8 @@ def test_next_meeting_from_iso_reads_like_the_digest():
 
 # ── The sync ──────────────────────────────────────────────────────
 
-def _fake_get(responses: dict):
-    async def fake(client, url, *, label, request_url=None):
-        for key, value in responses.items():
-            if key in url:
-                return value
-        return None
-    return fake
-
-
 def _run(coro):
     return asyncio.run(coro)
-
-
-DIGEST_LISTING = json.dumps({"granules": [
-    {"granuleId": "CREC-2026-09-24-pt1-PgD935", "granuleClass": "DAILYDIGEST", "title": "Daily Digest/Senate"},
-    {"granuleId": "CREC-2026-09-24-pt1-PgD936", "granuleClass": "DAILYDIGEST", "title": "Daily Digest/Senate Committee Meetings"},
-    {"granuleId": "CREC-2026-09-24-pt1-PgD937", "granuleClass": "DAILYDIGEST", "title": "Daily Digest/House of Representatives"},
-    {"granuleId": "CREC-2026-09-24-pt1-PgD937-2", "granuleClass": "DAILYDIGEST", "title": "Daily Digest/House Committee Meetings"},
-    {"granuleId": "CREC-2026-09-24-pt1-PgD937-4", "granuleClass": "DAILYDIGEST",
-     "title": "Daily Digest/Next Meeting of the SENATE + Next Meeting of the HOUSE OF REPRESENTATIVES"},
-    {"granuleId": "CREC-2026-09-24-pt1-PgS4959", "granuleClass": "SENATE", "title": "PRAYER"},
-]}).encode()
-
-
-def _digest_responses():
-    out = {"api.govinfo.gov/packages/CREC-2026-09-24/granules": DIGEST_LISTING}
-    for gid in ("PgD935", "PgD936", "PgD937-2", "PgD937-4", "PgD937"):
-        out[f"CREC-2026-09-24-pt1-{gid}.htm"] = (FIX / "daily_digest" / f"CREC-2026-09-24-pt1-{gid}.htm").read_bytes()
-    return out
 
 
 class TestSyncDigest:
@@ -474,11 +447,6 @@ def test_a_senate_file_for_a_day_off_is_not_a_session(db_session, monkeypatch):
     asyncio.run(ca.sync_floor_logs(None, db_session, date(2026, 9, 26)))
     row = db_session.query(CongressDay).filter_by(chamber="senate").one()
     assert row.in_session is False
-
-
-def test_a_meeting_day_is_a_session():
-    s = fl.parse_senate_floor((FIX / "floor_logs" / "09_24_2026_Senate_Floor.xml").read_bytes())
-    assert s["in_session"] is True
 
 
 def test_a_pending_day_of_the_last_week_is_read_again(db_session):

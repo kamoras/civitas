@@ -33,34 +33,27 @@ CORRECTION_RULE = {
 
 
 class TestIsCorrection:
-    def test_correction_suffix_matches(self):
-        assert _is_correction("Some Rule Title; Correction")
-
-    def test_case_insensitive(self):
-        assert _is_correction("Some Rule Title; CORRECTION")
-
-    def test_correction_and_technical_amendment_matches(self):
-        """Confirmed live (2026-17336): the real vocabulary is broader than
-        the bare word "Correction"."""
-        assert _is_correction("Streamlining Probationary and Trial Period Appeals; Correction and Technical Amendment")
-
-    def test_correcting_amendments_matches(self):
-        """Confirmed live (2026-17334)."""
-        assert _is_correction("Recruitment and Relocation Incentive Waivers; Correcting Amendments")
-
-    def test_ordinary_title_does_not_match(self):
-        assert not _is_correction("Process for Authorizing Seasonal Migratory Game Bird Hunting")
-
-    def test_correction_mid_title_without_semicolon_does_not_match(self):
-        """A rule that merely discusses corrections in its body, with no
-        semicolon-separated correction clause, isn't a correction notice."""
-        assert not _is_correction("Correction of prior enforcement guidance")
-
-    def test_correct_not_adjacent_to_semicolon_does_not_match(self):
-        """"correct" appearing later in a substantive clause must not be
-        mistaken for a correction-notice clause immediately after the
-        semicolon."""
-        assert not _is_correction("New Labeling Rule; Requiring Correct Nutritional Disclosures")
+    @pytest.mark.parametrize("title, expected", [
+        pytest.param("Some Rule Title; Correction", True, id="correction_suffix"),
+        pytest.param("Some Rule Title; CORRECTION", True, id="case_insensitive"),
+        # Confirmed live (2026-17336): the real vocabulary is broader than
+        # the bare word "Correction".
+        pytest.param("Streamlining Probationary and Trial Period Appeals; Correction and Technical Amendment",
+                     True, id="correction_and_technical_amendment"),
+        # Confirmed live (2026-17334).
+        pytest.param("Recruitment and Relocation Incentive Waivers; Correcting Amendments",
+                     True, id="correcting_amendments"),
+        pytest.param("Process for Authorizing Seasonal Migratory Game Bird Hunting", False, id="ordinary_title"),
+        # A rule that merely discusses corrections, with no semicolon-
+        # separated correction clause, isn't a correction notice.
+        pytest.param("Correction of prior enforcement guidance", False, id="correction_mid_title_without_semicolon"),
+        # "correct" appearing later in a substantive clause must not be
+        # mistaken for a correction-notice clause right after the semicolon.
+        pytest.param("New Labeling Rule; Requiring Correct Nutritional Disclosures", False,
+                     id="correct_not_adjacent_to_semicolon"),
+    ])
+    def test_is_correction(self, title, expected):
+        assert _is_correction(title) is expected
 
 
 def _mock_client(results: list[dict]):

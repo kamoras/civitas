@@ -18,43 +18,46 @@ from app.pipeline.analyze.grounding import validate_facts as _validate_facts
 # ---------------------------------------------------------------------------
 
 class TestIsNearDuplicate:
-    def test_identical_text_is_duplicate(self):
-        post = "The Senate passed the funding bill on a 68-32 vote."
-        assert _is_near_duplicate(post, [post]) is True
-
-    def test_reworded_same_story_is_duplicate(self):
-        prior = "The Senate passed the funding bill on a 68-32 vote Thursday."
-        candidate = "On Thursday the Senate passed the funding bill by a 68-32 vote."
-        assert _is_near_duplicate(candidate, [prior]) is True
-
-    def test_different_story_not_duplicate(self):
-        prior = "The Senate passed the funding bill on a 68-32 vote."
-        candidate = "The Supreme Court heard arguments on the new immigration rule."
-        assert _is_near_duplicate(candidate, [prior]) is False
-
-    def test_genuine_update_with_new_content_not_duplicate(self):
-        # Same topic but a materially new development introduces enough new
-        # vocabulary to clear the threshold.
-        prior = "The Senate advanced the funding bill in committee this week."
-        candidate = (
-            "The House rejected the funding bill 210-225 after the Senate "
-            "amendment on immigration enforcement failed a procedural motion."
-        )
-        assert _is_near_duplicate(candidate, [prior]) is False
-
-    def test_checks_all_prior_texts(self):
-        candidate = "The Senate passed the funding bill on a 68-32 vote."
-        priors = [
-            "The Supreme Court heard arguments on the immigration rule.",
-            "The Senate passed the funding bill on a 68-32 vote Thursday.",
-        ]
-        assert _is_near_duplicate(candidate, priors) is True
-
-    def test_empty_candidate_not_duplicate(self):
-        assert _is_near_duplicate("", ["some prior post text here"]) is False
-
-    def test_no_priors_not_duplicate(self):
-        assert _is_near_duplicate("A brand new post about a new topic.", []) is False
+    @pytest.mark.parametrize(
+        "candidate, priors, expected",
+        [
+            pytest.param(
+                "The Senate passed the funding bill on a 68-32 vote.",
+                ["The Senate passed the funding bill on a 68-32 vote."],
+                True, id="identical_text_is_duplicate",
+            ),
+            pytest.param(
+                "On Thursday the Senate passed the funding bill by a 68-32 vote.",
+                ["The Senate passed the funding bill on a 68-32 vote Thursday."],
+                True, id="reworded_same_story_is_duplicate",
+            ),
+            pytest.param(
+                "The Senate passed the funding bill on a 68-32 vote.",
+                [
+                    "The Supreme Court heard arguments on the immigration rule.",
+                    "The Senate passed the funding bill on a 68-32 vote Thursday.",
+                ],
+                True, id="checks_all_prior_texts",
+            ),
+            pytest.param(
+                "The Supreme Court heard arguments on the new immigration rule.",
+                ["The Senate passed the funding bill on a 68-32 vote."],
+                False, id="different_story_not_duplicate",
+            ),
+            # Same topic but a materially new development introduces enough
+            # new vocabulary to clear the threshold.
+            pytest.param(
+                "The House rejected the funding bill 210-225 after the Senate "
+                "amendment on immigration enforcement failed a procedural motion.",
+                ["The Senate advanced the funding bill in committee this week."],
+                False, id="genuine_update_with_new_content_not_duplicate",
+            ),
+            pytest.param("", ["some prior post text here"], False, id="empty_candidate_not_duplicate"),
+            pytest.param("A brand new post about a new topic.", [], False, id="no_priors_not_duplicate"),
+        ],
+    )
+    def test_is_near_duplicate(self, candidate, priors, expected):
+        assert _is_near_duplicate(candidate, priors) is expected
 
 
 # ---------------------------------------------------------------------------
@@ -86,21 +89,42 @@ class TestValidateFacts:
     def test_self_referential_comparison_dropped(self, fact):
         assert _validate_facts([fact]) == []
 
-    def test_keeps_apple_surpasses_microsoft(self):
-        facts = ["Apple surpassed Microsoft in market cap for the first time since 2021."]
-        result = _validate_facts(facts)
-        assert len(result) == 1
-        assert "Apple" in result[0]
-
-    def test_keeps_fact_without_comparison_verb(self):
-        facts = ["The Federal Reserve signaled it may pause rate hikes this year."]
-        result = _validate_facts(facts)
-        assert result == facts
-
-    def test_keeps_resolved_event_fact(self):
-        facts = ["Weinstein's New York rape charge was dropped after an overturned conviction."]
-        result = _validate_facts(facts)
-        assert result == facts
+    @pytest.mark.parametrize(
+        "fact",
+        [
+            pytest.param(
+                "Apple surpassed Microsoft in market cap for the first time since 2021.",
+                id="keeps_apple_surpasses_microsoft",
+            ),
+            # "surpass" with two clearly different capitalized entities
+            pytest.param(
+                "Biden's approval rating surpassed Trump's for the first time this quarter.",
+                id="comparison_verb_with_distinct_entities_kept",
+            ),
+            # Comparison verb but no proper nouns to detect self-reference
+            pytest.param(
+                "Inflation exceeded expectations for the third consecutive month.",
+                id="no_capitalized_words_comparison_kept",
+            ),
+            pytest.param(
+                "The Federal Reserve signaled it may pause rate hikes this year.",
+                id="keeps_fact_without_comparison_verb",
+            ),
+            pytest.param(
+                "Weinstein's New York rape charge was dropped after an overturned conviction.",
+                id="keeps_resolved_event_fact",
+            ),
+            # "report" appears, but as the actual event (a report was
+            # released), not as a meta-reference to "the articles"/"the
+            # coverage" itself.
+            pytest.param(
+                "The inspector general released a report finding no wrongdoing.",
+                id="keeps_fact_that_mentions_report_as_a_real_document",
+            ),
+        ],
+    )
+    def test_genuine_fact_kept_verbatim(self, fact):
+        assert _validate_facts([fact]) == [fact]
 
     def test_mixed_good_and_bad_facts(self):
         facts = [
@@ -116,13 +140,10 @@ class TestValidateFacts:
 
     # --- Input type handling ---
 
-    def test_non_list_returns_empty(self):
-        assert _validate_facts("not a list") == []
-        assert _validate_facts({"key": "val"}) == []
-        assert _validate_facts(None) == []
-
-    def test_empty_list_returns_empty(self):
-        assert _validate_facts([]) == []
+    @pytest.mark.parametrize("facts", ["not a list", {"key": "val"}, None, []],
+                             ids=["string", "dict", "none", "empty_list"])
+    def test_non_list_or_empty_returns_empty(self, facts):
+        assert _validate_facts(facts) == []
 
     def test_skips_non_string_items(self):
         facts = [42, None, "Valid fact about the Senate vote.", {"bad": "entry"}]
@@ -133,20 +154,6 @@ class TestValidateFacts:
         facts = ["  Fact with leading spaces.  "]
         result = _validate_facts(facts)
         assert result == ["Fact with leading spaces."]
-
-    # --- Edge cases for comparison detection ---
-
-    def test_comparison_verb_with_distinct_entities_kept(self):
-        # "surpass" with two clearly different capitalized entities
-        facts = ["Biden's approval rating surpassed Trump's for the first time this quarter."]
-        result = _validate_facts(facts)
-        assert len(result) == 1
-
-    def test_no_capitalized_words_comparison_kept(self):
-        # Comparison verb but no proper nouns to detect self-reference
-        facts = ["Inflation exceeded expectations for the third consecutive month."]
-        result = _validate_facts(facts)
-        assert result == facts
 
     # --- Meta-fact detection (fact describes the coverage, not an event) ---
 
@@ -172,17 +179,15 @@ class TestValidateFacts:
     def test_meta_fact_about_coverage_dropped(self, fact):
         assert _validate_facts([fact]) == []
 
-    def test_keeps_fact_that_mentions_report_as_a_real_document(self):
-        # "report" appears, but as the actual event (a report was released),
-        # not as a meta-reference to "the articles"/"the coverage" itself.
-        facts = ["The inspector general released a report finding no wrongdoing."]
-        result = _validate_facts(facts)
-        assert result == facts
-
 
 class TestProcessIssuesMetrics:
     """Audit M9: the poster's suppression path must increment the run
-    counters, and every path that marks an issue posted pins its facts."""
+    counters, and every path that marks an issue posted pins its facts.
+
+    Both paths that set bsky_posted_at (publishing, near-duplicate
+    suppression) assert bsky_posted_facts below: posted_at set with
+    posted_facts NULL must only ever mean "row predates the column", which
+    database._backfill_bsky_posted_facts relies on to be safe to re-run."""
 
     def _issue(self, **overrides):
         from app.models import ActionIssue
@@ -313,45 +318,6 @@ class TestProcessIssuesMetrics:
         assert seen["marked"] is True
         assert db_session.query(BroadcastPost).count() == 1
 
-    @pytest.mark.parametrize("publishes", [True, False])
-    def test_every_path_that_sets_posted_at_also_sets_posted_facts(
-        self, db_session, bluesky_configured, publishes,
-    ):
-        """bsky_posted_at set with bsky_posted_facts still NULL must only
-        ever mean "row predates the column".
-
-        database._backfill_bsky_posted_facts relies on exactly that: it
-        seeds any such row on startup and is safe to re-run because the
-        poster writes both in the same commit. A future path that marks an
-        issue handled without pinning the baseline would silently turn
-        that repair into a baseline overwrite on every deploy, so the
-        invariant is asserted here rather than left implicit in the two
-        tests above.
-        """
-        from datetime import datetime, timezone
-
-        from app.pipeline.analyze import bluesky_poster
-
-        issue = self._issue()
-        db_session.add(issue)
-        db_session.commit()
-
-        # publishes=True is the publish path; False routes through
-        # near-duplicate suppression, the other way posted_at gets set.
-        prior = "The House passed the defense bill 216-212."
-        if not publishes:
-            db_session.add(self._issue(
-                bsky_posted_at=datetime.now(timezone.utc),
-                bsky_last_post_text=prior,
-            ))
-            db_session.commit()
-
-        with patch.object(bluesky_poster, "_compose_new_post", return_value=prior):
-            bluesky_poster.process_issues_for_bluesky([issue], db_session)
-
-        if issue.bsky_posted_at is not None:
-            assert issue.bsky_posted_facts is not None
-
 
 class TestComposeNewPost:
     """The issue post is the verified lede, verbatim — not model prose.
@@ -382,6 +348,8 @@ class TestComposeNewPost:
         from app.pipeline.analyze import bluesky_poster
 
         assert not hasattr(bluesky_poster, "call_llm")
+        # A first post (bsky_posted_facts NULL) ignores the facts; published
+        # the same day as its article, it carries no staleness prefix.
         text = bluesky_poster._compose_new_post(self._issue(), "2026-07-24")
         assert text == "Trump said EU fines against major tech companies should be reversed."
 
@@ -423,16 +391,6 @@ class TestComposeNewPost:
         )
         assert bluesky_poster._compose_new_post(issue, "2026-07-24") == "The Commission said it would appeal."
 
-    def test_a_first_post_ignores_facts_and_uses_the_lede(self):
-        import json as _json
-
-        from app.pipeline.analyze import bluesky_poster
-
-        issue = self._issue(facts=_json.dumps(["The Commission said it would appeal."]), bsky_posted_facts=None)
-        assert bluesky_poster._compose_new_post(issue, "2026-07-24") == (
-            "Trump said EU fines against major tech companies should be reversed."
-        )
-
     def test_a_repost_with_no_new_fact_falls_back_to_the_lede(self):
         import json as _json
 
@@ -470,12 +428,6 @@ class TestStalenessPhrasing:
 
         text = bluesky_poster._compose_new_post(self._issue("2026-07-20"), "2026-07-25")
         assert text == "On July 20: Trump said EU fines against major tech companies should be reversed."
-
-    def test_not_stale_has_no_prefix(self):
-        from app.pipeline.analyze import bluesky_poster
-
-        text = bluesky_poster._compose_new_post(self._issue("2026-07-25"), "2026-07-25")
-        assert text == "Trump said EU fines against major tech companies should be reversed."
 
     def test_unreadable_or_missing_date_has_no_prefix(self):
         from app.pipeline.analyze import bluesky_poster

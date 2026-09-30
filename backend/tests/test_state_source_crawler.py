@@ -32,17 +32,15 @@ class TestInferFormatFromLabels:
     )
 
     def test_finds_every_role(self):
+        """The candidate is "Ballot Name", not "Choice ID": the id column
+        holds as few values per contest as "Ballot Name" — fewer, since the
+        summary row has a name but no id — so cardinality alone picks the
+        wrong one."""
         fmt = crawler.infer_format(self._ROWS)
         assert fmt["contest_column"] == "Office Name"
         assert fmt["choice_column"] == "Ballot Name"
         assert fmt["votes_column"] == "Total"
         assert fmt["party_column"] == "Party"
-
-    def test_an_id_column_is_not_mistaken_for_the_candidate(self):
-        """"Choice ID" holds as few values per contest as "Ballot Name" —
-        fewer, since the summary row has a name but no id — so cardinality
-        alone picks the wrong one."""
-        assert crawler.infer_format(self._ROWS)["choice_column"] != "Choice ID"
 
     def test_summary_rows_are_excluded(self):
         assert "Total Votes" in crawler.infer_format(self._ROWS)["exclude_choices"]

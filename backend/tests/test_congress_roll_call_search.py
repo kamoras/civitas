@@ -43,30 +43,16 @@ def _url_for_roll(roll: int) -> str:
     return f"https://example.test/roll{roll}.xml"
 
 
+_PROBES = [500, 300, 200, 150, 100, 75, 50, 25, 10]
+
+
+@pytest.mark.parametrize("max_valid", [
+    # Between the 200 and 300 probe points, so the narrow forward search
+    # from 200 must walk up to find it exactly.
+    pytest.param(217, id="exact_highest_between_probe_points"),
+    pytest.param(300, id="exact_probe_hit_needs_no_narrow_search"),
+    pytest.param(0, id="no_valid_roll_call_returns_zero"),
+])
 @pytest.mark.asyncio
-async def test_finds_exact_highest_between_probe_points():
-    # Highest valid roll is 217 — between the 200 and 300 probe points, so
-    # the narrow forward search from 200 must walk up to find it exactly.
-    client = _FakeClient(max_valid=217)
-    result = await _find_highest_roll_call(
-        client, _url_for_roll, [500, 300, 200, 150, 100, 75, 50, 25, 10],
-    )
-    assert result == 217
-
-
-@pytest.mark.asyncio
-async def test_no_valid_roll_call_returns_zero():
-    client = _FakeClient(max_valid=0)
-    result = await _find_highest_roll_call(
-        client, _url_for_roll, [500, 300, 200, 150, 100, 75, 50, 25, 10],
-    )
-    assert result == 0
-
-
-@pytest.mark.asyncio
-async def test_exact_probe_hit_needs_no_narrow_search():
-    client = _FakeClient(max_valid=300)
-    result = await _find_highest_roll_call(
-        client, _url_for_roll, [500, 300, 200, 150, 100, 75, 50, 25, 10],
-    )
-    assert result == 300
+async def test_finds_the_highest_valid_roll_call(max_valid):
+    assert await _find_highest_roll_call(_FakeClient(max_valid), _url_for_roll, _PROBES) == max_valid

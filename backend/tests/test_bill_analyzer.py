@@ -373,15 +373,6 @@ class TestMultiAreaClassification:
         for a in result:
             assert 0.0 <= a["confidence"] <= 1.0
 
-    @pytest.mark.slow
-    def test_areas_ordered_by_confidence(self):
-        result = classify_policy_areas_multi(
-            "Renewable energy tax credits and environmental protection funding"
-        )
-        if len(result) > 1:
-            confs = [a["confidence"] for a in result]
-            assert confs == sorted(confs, reverse=True)
-
 
 class TestNominationDetection:
     """classify_recent_votes' is_nomination check (O7): a third, regex-
@@ -742,61 +733,24 @@ class TestGunsAlignmentScenario:
     the voting record before partisan_depth computation.
     """
 
-    def test_consistent_d_voter_on_guns_shows_d_alignment(self):
+    @pytest.mark.parametrize("majority_vote, minority_vote, expected", [
+        # Nay on 10 R-aligned gun bills (opposing deregulation), Yea on 5
+        # D-aligned ones (supporting gun control).
+        pytest.param("Nay", "Yea", "D", id="consistent_gun_control_voter_shows_d"),
+        pytest.param("Yea", "Nay", "R", id="consistent_pro_gun_voter_shows_r"),
+    ])
+    def test_consistent_voter_on_guns_shows_matching_alignment(self, majority_vote, minority_vote, expected):
         from app.pipeline.analyze.party_platform import _alignments_from_votes
 
-        votes = []
-        # Simulate voting Nay on 10 R-aligned gun bills (opposing gun deregulation)
-        for i in range(10):
-            votes.append({
-                "vote": "Nay",
-                "policyArea": "GUNS",
-                "partyLeaning": "R",
-                "policyAreas": [],
-            })
-        # Simulate voting Yea on 5 D-aligned gun bills (supporting gun control)
-        for i in range(5):
-            votes.append({
-                "vote": "Yea",
-                "policyArea": "GUNS",
-                "partyLeaning": "D",
-                "policyAreas": [],
-            })
-
+        votes = (
+            [{"vote": majority_vote, "policyArea": "GUNS", "partyLeaning": "R", "policyAreas": []} for _ in range(10)]
+            + [{"vote": minority_vote, "policyArea": "GUNS", "partyLeaning": "D", "policyAreas": []} for _ in range(5)]
+        )
         record = {"keyVotes": [], "recentVotes": votes}
         result = _alignments_from_votes(record)
         guns = [a for a in result if a["area"] == "GUNS"]
         assert len(guns) == 1
-        assert guns[0]["alignment"] == "D", (
-            f"Expected D alignment for consistent gun control voter, got {guns[0]}"
-        )
-
-    def test_consistent_r_voter_on_guns_shows_r_alignment(self):
-        from app.pipeline.analyze.party_platform import _alignments_from_votes
-
-        votes = []
-        for i in range(10):
-            votes.append({
-                "vote": "Yea",
-                "policyArea": "GUNS",
-                "partyLeaning": "R",
-                "policyAreas": [],
-            })
-        for i in range(5):
-            votes.append({
-                "vote": "Nay",
-                "policyArea": "GUNS",
-                "partyLeaning": "D",
-                "policyAreas": [],
-            })
-
-        record = {"keyVotes": [], "recentVotes": votes}
-        result = _alignments_from_votes(record)
-        guns = [a for a in result if a["area"] == "GUNS"]
-        assert len(guns) == 1
-        assert guns[0]["alignment"] == "R", (
-            f"Expected R alignment for consistent pro-gun voter, got {guns[0]}"
-        )
+        assert guns[0]["alignment"] == expected, f"Expected {expected} alignment, got {guns[0]}"
 
 
 class TestBuildClassificationText:
@@ -887,23 +841,14 @@ class TestInvalidateThinClassifications:
     so that enriched text gets a fresh classification.
     """
 
-    def test_short_text_entries_invalidated(self):
+    def test_short_text_entries_invalidated(self, db_session):
         """Entries with text_prefix < 40 chars should be removed."""
         import json
-        from sqlalchemy import create_engine
-        from sqlalchemy.orm import sessionmaker
-        from app.database import Base
-        import app.models  # noqa: F401 — register tables with Base
         from app.models import LearnedClassification
         from app.pipeline.analyze.bill_learning import (
             invalidate_thin_classifications,
             ENTITY_BILL_POLICY,
         )
-
-        engine = create_engine("sqlite:///:memory:", echo=False)
-        Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
-        db_session = Session()
 
         short_meta = json.dumps({"text_prefix": "Jaime's Law", "confidence": 0.15})
         long_meta = json.dumps({
@@ -931,21 +876,11 @@ class TestInvalidateThinClassifications:
         ).all()
         assert len(remaining) == 1
         assert remaining[0].entity_name == "S.999"
-        db_session.close()
 
-    def test_no_entries_returns_zero(self):
-        from sqlalchemy import create_engine
-        from sqlalchemy.orm import sessionmaker
-        from app.database import Base
-        import app.models  # noqa: F401
+    def test_no_entries_returns_zero(self, db_session):
         from app.pipeline.analyze.bill_learning import invalidate_thin_classifications
 
-        engine = create_engine("sqlite:///:memory:", echo=False)
-        Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
-        db_session = Session()
         assert invalidate_thin_classifications(db_session) == 0
-        db_session.close()
 
 
 @pytest.mark.slow

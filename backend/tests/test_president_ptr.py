@@ -73,94 +73,70 @@ _SAMPLE_ROWS = [
 
 class TestIndexParsing:
     def test_keeps_only_this_presidents_periodic_and_annual_reports(self):
-        filings = [f for f in _parse_index(_SAMPLE_ROWS, "Donald Trump") if f["kind"] == "periodic"]
+        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
 
-        assert len(filings) == 1
+        # Exactly the president's own two rows. Every other official's
+        # filing is absent: another appointee (zinberg), a relative sharing
+        # the surname (etrump — relatives hold appointed positions and file
+        # their own 278-Ts; attributing one to the president would be a
+        # factual claim about who traded what, not a near miss), the vice
+        # president (vance), and another commissioner (weaver — out on
+        # name; the no-direct-PDF rule is test_a_row_without_a_usable_pdf_
+        # link_is_not_counted_as_a_filing, under the president's own name).
+        assert [(f["kind"], f["pdf_url"]) for f in filings] == [
+            ("periodic", "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/AAA/$FILE/trump-278t-111425.pdf"),
+            # The annual report is read by president_fd (its Part 7), never
+            # as a 278-T: its holdings tables would read as transactions.
+            ("annual", "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/BBB/$FILE/trump-2026-278annual.pdf"),
+        ]
         assert filings[0]["doc_id"].startswith("trump-278t-111425-")
         assert filings[0]["filing_date"] == "2025-11-14"
-        assert filings[0]["pdf_url"] == (
-            "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/AAA/$FILE/trump-278t-111425.pdf"
-        )
-
-    def test_annual_report_is_never_read_as_a_periodic_report(self):
-        """The annual report is read by president_fd (its Part 7), never as
-        a 278-T: its holdings tables would read as transactions."""
-        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
-        assert [f["kind"] for f in filings if "annual" in f["doc_id"]] == ["annual"]
-
-    def test_another_officials_filing_is_not_attributed_to_the_president(self):
-        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
-        assert all("zinberg" not in f["pdf_url"] for f in filings)
 
     def test_a_different_president_matches_nothing_here(self):
         assert _parse_index(_SAMPLE_ROWS, "Joseph Biden") == []
 
-    def test_a_row_with_no_direct_pdf_link_is_not_counted_as_a_filing(self):
-        """A filing that isn't directly downloadable renders its `type` cell
-        as a link to a "Request this Document" form instead of a PDF —
-        the same shape as a row genuinely missing a link would have."""
-        filings = _parse_index([_row(
-            "Trump, Donald J.", "President",
+    @pytest.mark.parametrize("type_html", [
+        # A filing that isn't directly downloadable renders its `type` cell
+        # as a link to a "Request this Document" form instead of a PDF —
+        # the same shape as a row genuinely missing a link would have.
+        pytest.param(
             "278 Transaction (<a href='https://extapps2.oge.gov/201/Presiden.nsf/201%20Request?OpenForm"
             "&Filer=Trump'>Request this Document</a>)",
-        )], "Donald Trump")
-        assert filings == []
-
-    def test_a_link_pointing_off_the_allowed_hosts_is_not_counted_as_a_filing(self):
-        filings = _parse_index([_row(
-            "Trump, Donald J.", "President",
-            "<a href='https://evil.example.com/ptr.pdf'>278 Transaction</a>",
-        )], "Donald Trump")
-        assert filings == []
-
-    def test_a_row_with_no_type_markup_parses_to_nothing(self):
-        assert _parse_index([_row("Trump, Donald J.", "President", "")], "Donald Trump") == []
-
-    def test_a_relative_sharing_the_surname_is_not_the_president(self):
-        """Presidential relatives hold appointed positions and file their
-        own 278-Ts. Attributing one to the president would be a factual
-        claim about who traded what, not a near miss."""
-        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
-        assert all("etrump" not in f["pdf_url"] for f in filings)
+            id="no_direct_pdf_link",
+        ),
+        pytest.param("<a href='https://evil.example.com/ptr.pdf'>278 Transaction</a>", id="link_off_allowed_hosts"),
+        pytest.param("", id="no_type_markup"),
+    ])
+    def test_a_row_without_a_usable_pdf_link_is_not_counted_as_a_filing(self, type_html):
+        assert _parse_index([_row("Trump, Donald J.", "President", type_html)], "Donald Trump") == []
 
     def test_the_vice_presidents_filing_is_not_the_presidents(self):
         filings = _parse_index(_SAMPLE_ROWS, "James Vance")
         # Surname matches and the position cell contains the word
         # "President" — but "Vice President" is not the office, so only the
-        # given-name match can qualify this row, and here it does.
+        # given-name match can qualify this row, and here it does. (It is
+        # never picked up for the president himself: see the first test.)
         assert len(filings) == 1
         assert "vance" in filings[0]["pdf_url"]
 
-        # ...and it is never picked up for the president himself.
-        assert all("vance" not in f["pdf_url"] for f in _parse_index(_SAMPLE_ROWS, "Donald Trump"))
-
 
 class TestFilerMatching:
-    def test_matches_the_indexs_lastname_first_format(self):
-        assert _names_this_president(["Trump, Donald J.", "President"], "Donald Trump") is True
-
-    def test_a_near_miss_surname_is_not_a_match(self):
-        assert _names_this_president(["Trumbull, Lyman", "Senator"], "Donald Trump") is False
-
-    def test_a_formal_first_name_still_matches_via_the_office_cell(self):
-        """The roster's display name and the index's formal name disagree
-        for several presidents ("Jimmy" vs "James E."). The office cell is
-        what keeps that from rejecting a genuine presidential filing."""
-        assert _names_this_president(["Carter, James E.", "President"], "Jimmy Carter") is True
-
-    def test_the_office_fallback_does_not_accept_vice_president(self):
-        assert _names_this_president(["Carter, James E.", "Vice President"], "Jimmy Carter") is False
-
-    def test_the_office_fallback_does_not_accept_a_staff_title(self):
-        assert _names_this_president(
-            ["Carter, James E.", "Assistant to the President"], "Jimmy Carter"
-        ) is False
-
-    def test_initials_and_suffixes_in_the_roster_name_do_not_block_a_match(self):
-        assert _names_this_president(["Bush, George", "President"], "George H. W. Bush") is True
-
-    def test_an_empty_president_name_matches_nothing(self):
-        assert _names_this_president(["Trump, Donald J.", "President"], "") is False
+    @pytest.mark.parametrize("cells, president, expected", [
+        pytest.param(["Trump, Donald J.", "President"], "Donald Trump", True, id="lastname_first_format"),
+        pytest.param(["Trumbull, Lyman", "Senator"], "Donald Trump", False, id="near_miss_surname"),
+        # The roster's display name and the index's formal name disagree
+        # for several presidents ("Jimmy" vs "James E."). The office cell is
+        # what keeps that from rejecting a genuine presidential filing.
+        pytest.param(["Carter, James E.", "President"], "Jimmy Carter", True, id="formal_first_name_via_office_cell"),
+        pytest.param(["Carter, James E.", "Vice President"], "Jimmy Carter", False,
+                     id="office_fallback_rejects_vice_president"),
+        pytest.param(["Carter, James E.", "Assistant to the President"], "Jimmy Carter", False,
+                     id="office_fallback_rejects_staff_title"),
+        pytest.param(["Bush, George", "President"], "George H. W. Bush", True, id="initials_and_suffixes_in_roster_name"),
+        pytest.param(["Trump, Donald J.", "President"], "", False, id="empty_president_name"),
+    ])
+    def test_names_this_president(self, cells, president, expected):
+        assert _names_this_president(cells, president) is expected
 
 
 class TestFilingIds:

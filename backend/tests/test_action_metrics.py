@@ -42,14 +42,6 @@ class TestCounters:
         )
         assert cached == {"counts": {"facts_dropped_placeholder": 1}}
 
-    def test_persist_failure_is_swallowed(self, db_session):
-        # A metrics write must never take down the refresh it reports on.
-        action_metrics.reset()
-        with patch(
-            "app.pipeline.cache.api_cache_set", side_effect=RuntimeError("boom"),
-        ):
-            action_metrics.persist(db_session, "run-x")  # must not raise
-
 
 class TestPersistMetricsHelper:
     """_persist_metrics is the shared exit-path writer in action_center.
@@ -75,8 +67,8 @@ class TestPersistMetricsHelper:
         assert json.loads(row.data_json)["counts"] == {"refresh_aborted_no_articles": 1}
 
     def test_survives_a_failing_write(self, db_session):
-        # Same posture as persist() itself: reporting on a refresh must
-        # never be what takes the refresh down.
+        # persist() swallows the failed write (this is its only test): a
+        # metrics write must never take down the refresh it reports on.
         from app.pipeline.analyze.action_center import _persist_metrics
 
         action_metrics.reset()

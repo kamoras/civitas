@@ -32,6 +32,9 @@ class TestContestResultsParser:
         return parser.contests
 
     def test_real_page_finds_every_real_contest(self):
+        # Real: Democrats fielded no candidate in CD1, CD2 or CD7 — those
+        # sections simply don't exist on the page, rather than existing
+        # empty, and the parser must not invent one.
         contests = self._parse(_FIXTURE)
         assert set(contests) == {
             "UNITED STATES REPRESENTATIVE, 1ST CONGRESSIONAL DISTRICT (REP)",
@@ -45,13 +48,6 @@ class TestContestResultsParser:
         contests = self._parse(_FIXTURE)
         cd1 = contests["UNITED STATES REPRESENTATIVE, 1ST CONGRESSIONAL DISTRICT (REP)"]
         assert ("Jerry Carl                             (REP)", 23325) in cd1
-
-    def test_a_district_with_no_democratic_candidate_has_no_democratic_section(self):
-        # Real: Democrats fielded no candidate in CD1, CD2 or CD7 — those
-        # sections simply don't exist on the page, rather than existing
-        # empty, and the parser must not invent one.
-        contests = self._parse(_FIXTURE)
-        assert "UNITED STATES REPRESENTATIVE, 1ST CONGRESSIONAL DISTRICT (DEM)" not in contests
 
     def test_the_column_labels_row_is_not_mistaken_for_a_candidate(self):
         # Real: every contest's candidate rows are preceded by a labels
@@ -119,15 +115,17 @@ class TestContestResultsParser:
         assert cd5 == []
 
 
+def _serve_page(monkeypatch, text):
+    async def fake_fetch_with_retry(client, rl, method, url, **kw):
+        return type("R", (), {"text": text})()
+
+    monkeypatch.setattr(al, "fetch_with_retry", fake_fetch_with_retry)
+
+
 @pytest.mark.asyncio
 class TestFetchConfirmedCandidates:
     async def test_real_page_resolves_to_the_real_winners(self, monkeypatch):
-        async def fake_fetch_with_retry(client, rl, method, url, **kw):
-            class _Resp:
-                text = _FIXTURE
-            return _Resp()
-
-        monkeypatch.setattr(al, "fetch_with_retry", fake_fetch_with_retry)
+        _serve_page(monkeypatch, _FIXTURE)
         result = await al.fetch_confirmed_candidates(None, 2026, "AL", _SOURCE)
         # CD1 REP is a real 4-candidate field (Burger, Carl, Mills,
         # Sidwell) with no runoff by law, and CD2 REP a real 6-candidate
@@ -147,12 +145,7 @@ class TestFetchConfirmedCandidates:
         # ecode=1001300 names one specific 2026 election with no date of
         # its own; a later cycle asking this strategy for candidates must
         # not get 2026's winners back just because nothing refuses them.
-        async def fake_fetch_with_retry(client, rl, method, url, **kw):
-            class _Resp:
-                text = _FIXTURE
-            return _Resp()
-
-        monkeypatch.setattr(al, "fetch_with_retry", fake_fetch_with_retry)
+        _serve_page(monkeypatch, _FIXTURE)
         assert await al.fetch_confirmed_candidates(None, 2028, "AL", _SOURCE) == []
 
     async def test_fetch_failure_returns_none(self, monkeypatch):
@@ -163,12 +156,7 @@ class TestFetchConfirmedCandidates:
         assert await al.fetch_confirmed_candidates(None, 2026, "AL", _SOURCE) is None
 
     async def test_a_page_with_no_parsable_contests_returns_none(self, monkeypatch):
-        async def fake_fetch_with_retry(client, rl, method, url, **kw):
-            class _Resp:
-                text = "<html><body>Results Coming Soon</body></html>"
-            return _Resp()
-
-        monkeypatch.setattr(al, "fetch_with_retry", fake_fetch_with_retry)
+        _serve_page(monkeypatch, "<html><body>Results Coming Soon</body></html>")
         assert await al.fetch_confirmed_candidates(None, 2026, "AL", _SOURCE) is None
 
 
@@ -267,7 +255,8 @@ class TestResolveStatewide:
         # A majority winner stands; Wahl (40.6%) and Zeigler (44.8%) were
         # short and are named by the runoff instead. The county school
         # board, the amendment, the legislative seat and the voided
-        # pre-redistricting House primary are all refused.
+        # pre-redistricting House primary are all refused, and without
+        # senate=True the Senate contests are not read at all.
         assert self._resolved(_STATEWIDE_RUNOFF) == [
             ("governor", None, "R", "Thomas Tuberville"),
             ("lt_governor", None, "R", "John Wahl"),
@@ -294,9 +283,6 @@ class TestResolveStatewide:
             ("S", None, "D", "Wess", "Everett Wess"),
             ("S", None, "R", "Moore", "Barry Moore"),
         ]
-
-    def test_the_senate_is_read_only_when_asked(self):
-        assert not any(r[0] == "S" for r in self._resolved(_STATEWIDE_RUNOFF))
 
     def test_a_senate_runoff_owed_but_unposted_is_owed(self):
         senate_only = {k: v for k, v in _STATEWIDE_PRIMARY.items() if "SENATOR (" in k[0] and "UNITED" in k[0]}
