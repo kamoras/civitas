@@ -1,11 +1,13 @@
 """
 Validator — validates and fixes a senator record to match the Senator type.
-Ports all validation rules, valid sets, and the clamp function.
+Ports all validation rules and valid sets. ``clamp`` is the scoring
+engine's own (score_calculator), so validation and scoring bound identically.
 """
 
 import logging
 
 from app.config_definitions import VALID_INDUSTRIES
+from app.pipeline.analyze.score_calculator import clamp
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +21,6 @@ VALID_VOTES = {"Yea", "Nay", "Not Voting"}
 # dimension key is genuinely ABSENT — a value that was actually computed
 # (even a real 0 for a fully-captured profile) is preserved as-is.
 NEUTRAL_SCORE = 50
-
-
-def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
-    """Clamp a value to [min_val, max_val] and round to int."""
-    return max(min_val, min(max_val, round(value)))
 
 
 def _validate_vote(v: dict, default_category: str = "recent") -> dict:

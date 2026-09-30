@@ -46,12 +46,9 @@ import math
 import statistics
 
 from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
+from app.pipeline.analyze.score_calculator import clamp
 
 logger = logging.getLogger(__name__)
-
-
-def clamp(v: float) -> int:
-    return max(0, min(100, round(v)))
 
 
 def _blend_live_components(components: list[dict]) -> dict:
