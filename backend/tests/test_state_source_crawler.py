@@ -232,16 +232,25 @@ class TestRobots:
     for, and a crawler that ignores it earns a block that takes the whole
     feature down."""
 
+    @staticmethod
+    def _serve(monkeypatch, status=200, text="", calls=None):
+        import httpx
+
+        async def fake_fetch(client, limiter, method, url, **kwargs):
+            if calls is not None:
+                calls.append(url)
+            if status is None:
+                return None  # a 5xx after retries, or no answer at all
+            if status >= 400 and status not in kwargs.get("expected_statuses", ()):
+                return None
+            return httpx.Response(status, text=text, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(crawler, "fetch_with_retry", fake_fetch)
+        monkeypatch.setattr(crawler, "_robots", {})
+
     @pytest.mark.asyncio
     async def test_a_disallowed_path_is_not_read(self, monkeypatch):
-        class _Resp:
-            text = "User-agent: *\nDisallow: /private/"
-
-        async def fake_get(client, url, label, timeout=20.0, probe=False):
-            return _Resp()
-
-        monkeypatch.setattr(crawler, "_get", fake_get)
-        monkeypatch.setattr(crawler, "_robots", {})
+        self._serve(monkeypatch, text="User-agent: *\nDisallow: /private/")
         assert await crawler._allowed(None, "https://x.gov/private/results.csv") is False
         assert await crawler._allowed(None, "https://x.gov/elections/results.csv") is True
 
@@ -249,27 +258,38 @@ class TestRobots:
     async def test_rules_addressed_to_civitas_apply(self, monkeypatch):
         """A site that names us gets its rules honoured, whatever it says
         to everyone else — and the token is the one our User-Agent sends."""
-        class _Resp:
-            text = "User-agent: Civitas\nDisallow: /results/\n\nUser-agent: *\nAllow: /\n"
-
-        async def fake_get(client, url, label, timeout=20.0, probe=False):
-            return _Resp()
-
-        monkeypatch.setattr(crawler, "_get", fake_get)
-        monkeypatch.setattr(crawler, "_robots", {})
+        self._serve(monkeypatch, text="User-agent: Civitas\nDisallow: /results/\n\nUser-agent: *\nAllow: /\n")
         assert f"{crawler.ROBOTS_AGENT}/" in crawler._HEADERS["User-Agent"]
         assert await crawler._allowed(None, "https://x.gov/results/live.csv") is False
         assert await crawler._allowed(None, "https://x.gov/elections/") is True
 
     @pytest.mark.asyncio
-    async def test_no_robots_file_means_permitted(self, monkeypatch):
-        """What the standard says absence means."""
-        async def fake_get(client, url, label, timeout=20.0, probe=False):
-            return None
+    async def test_the_query_string_is_part_of_the_path(self, monkeypatch):
+        self._serve(monkeypatch, text="User-agent: *\nDisallow: /*?export=\n")
+        assert await crawler._allowed(None, "https://x.gov/results?export=csv") is False
+        assert await crawler._allowed(None, "https://x.gov/results") is True
 
-        monkeypatch.setattr(crawler, "_get", fake_get)
-        monkeypatch.setattr(crawler, "_robots", {})
+    @pytest.mark.asyncio
+    async def test_no_robots_file_means_permitted(self, monkeypatch):
+        """A 4xx is what the standard says absence means (RFC 9309
+        §2.3.1.3) — and it is an answer, not an error to log."""
+        self._serve(monkeypatch, status=404)
         assert await crawler._allowed(None, "https://x.gov/anything") is True
+
+    @pytest.mark.asyncio
+    async def test_an_unreachable_robots_file_means_disallowed_for_a_while(self, monkeypatch):
+        """A 5xx or no answer is "assume complete disallow" (§2.3.1.4),
+        and the site is asked again after ROBOTS_UNREACHABLE_RETRY_S rather
+        than refused for the life of the process."""
+        calls = []
+        self._serve(monkeypatch, status=None, calls=calls)
+        assert await crawler._allowed(None, "https://x.gov/anything") is False
+        assert await crawler._allowed(None, "https://x.gov/other") is False
+        assert len(calls) == 1
+        now = crawler.time.monotonic()
+        monkeypatch.setattr(crawler.time, "monotonic", lambda: now + crawler.ROBOTS_UNREACHABLE_RETRY_S + 1)
+        assert await crawler._allowed(None, "https://x.gov/anything") is False
+        assert len(calls) == 2
 
 
 @pytest.mark.asyncio

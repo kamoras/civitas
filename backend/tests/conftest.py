@@ -1,5 +1,6 @@
 """Shared test fixtures."""
 
+import functools
 import os
 import threading
 
@@ -36,6 +37,7 @@ def db_session():
     one session/engine either way, so both bases are created here rather
     than standing up a second in-memory engine tests don't need.
     """
+    before = set(threading.enumerate())
     engine = create_engine(
         "sqlite:///:memory:", echo=False,
         connect_args={"check_same_thread": False}, poolclass=StaticPool,
@@ -52,7 +54,6 @@ def db_session():
     # is not a test of production.
     Session = sessionmaker(bind=engine, autoflush=False)
     session = Session()
-    before = set(threading.enumerate())
     yield session
     _join_app_threads_started_since(before)
     session.close()
@@ -70,12 +71,20 @@ def _join_app_threads_started_since(before: set) -> None:
     disposed crashes SQLite outright (a segfault that killed a CI run).
     Only threads running app code: a library's long-lived monitor thread
     started along the way would never finish."""
+    stuck = []
     for thread in set(threading.enumerate()) - before:
         target = getattr(thread, "_target", None)
+        while isinstance(target, functools.partial):
+            target = target.func
         if thread is threading.current_thread() or target is None:
             continue
         if (getattr(target, "__module__", "") or "").startswith("app."):
             thread.join(_THREAD_JOIN_S)
+            if thread.is_alive():
+                stuck.append(thread.name)
+    # Disposing under a live thread is the crash this exists to prevent:
+    # say which thread, rather than carry on into it.
+    assert not stuck, f"background threads still running at teardown: {stuck}"
 
 
 @pytest.fixture(scope="session")

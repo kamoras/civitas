@@ -40,12 +40,13 @@ into. That check is what makes automatic discovery safe enough to act on.
 import asyncio
 import logging
 import re
+import time
 from collections import defaultdict
 from urllib.parse import urljoin, urlparse
-from urllib.robotparser import RobotFileParser
 
 import httpx
 
+from app.pipeline.fetch import robots
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, runoff_threshold
 from app.pipeline.rate_limiter import RateLimiter
@@ -56,11 +57,14 @@ logger = logging.getLogger(__name__)
 
 _HEADERS = BROWSER_HEADERS
 # The name robots.txt rules address us by: the product token our
-# User-Agent carries ("... Civitas/1.0 (+contact)"). RobotFileParser
-# matches a group against the User-Agent only up to its first "/", which
-# for the whole browser-shaped string is "Mozilla", so a site's
-# "User-agent: Civitas" rules never applied.
+# User-Agent carries ("... Civitas/1.0 (+contact)"), matched as RFC 9309
+# says (fetch/robots.py). urllib.robotparser read the whole browser-shaped
+# string as "Mozilla", so a site's "User-agent: Civitas" rules never applied.
 ROBOTS_AGENT = "Civitas"
+# An unreachable robots.txt means "assume complete disallow" (RFC 9309
+# §2.3.1.4) — for this long, then it is asked again, rather than for the
+# life of the process.
+ROBOTS_UNREACHABLE_RETRY_S = 3600
 _rate_limiter = RateLimiter(rps=1.0)
 # Probing is one request each to fifty DIFFERENT hosts, and a rate limit
 # exists to be polite to ONE host — serialising the whole sweep through
@@ -136,7 +140,8 @@ async def _get(
     )
 
 
-_robots: dict[str, RobotFileParser | None] = {}
+# host -> (the rules, monotonic time they stop being trusted, or None).
+_robots: dict[str, tuple[robots.Robots, float | None]] = {}
 
 
 async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
@@ -144,24 +149,31 @@ async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
 
     A weekly sweep of fifty government sites is exactly the kind of thing
     robots.txt exists to govern, and a crawler that ignores it earns a
-    block that takes the whole feature down with it. Fetched once per host
-    per process; a site with no robots.txt, or one that can't be read, is
-    treated as permitting — that is what the standard says absence means.
+    block that takes the whole feature down with it. Read as RFC 9309 says
+    (fetch/robots.py), once per host per process: a 4xx means the site has
+    no rules for us; a 5xx or no answer at all means we may read nothing
+    there until it can be asked again.
     """
-    host = urlparse(url).netloc
-    if host not in _robots:
-        parser = RobotFileParser()
-        resp = await _get(
-            client, f"https://{host}/robots.txt", f"{host} robots.txt",
-            timeout=8.0, probe=True,
+    parts = urlparse(url)
+    host = parts.netloc
+    cached = _robots.get(host)
+    if cached is None or (cached[1] is not None and time.monotonic() >= cached[1]):
+        resp = await fetch_with_retry(
+            client, _probe_limiter, "GET", f"https://{host}/robots.txt",
+            timeout=8.0, retries=1, retry_on_4xx=False,
+            # A missing robots.txt is an answer, not a failure to log.
+            expected_statuses=tuple(range(400, 500)),
+            log_label=f"{host} robots.txt", headers=_HEADERS,
         )
         if resp is None:
-            _robots[host] = None
+            cached = (robots.DISALLOW_ALL, time.monotonic() + ROBOTS_UNREACHABLE_RETRY_S)
+        elif resp.status_code >= 400:
+            cached = (robots.ALLOW_ALL, None)
         else:
-            parser.parse(resp.text.splitlines())
-            _robots[host] = parser
-    parser = _robots[host]
-    return parser is None or parser.can_fetch(ROBOTS_AGENT, url)
+            cached = (robots.parse(resp.text), None)
+        _robots[host] = cached
+    path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+    return cached[0].allows(ROBOTS_AGENT, path)
 
 
 def _hosts_for(state: str) -> list[str]:

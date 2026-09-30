@@ -364,9 +364,11 @@ def _checked_in(backend):
     import subprocess
 
     repo = backend.parent
+    # A git hook's GIT_DIR / GIT_INDEX_FILE would point elsewhere.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     try:
         out = subprocess.run(
-            ["git", "-C", str(repo), "ls-files", "-z"], capture_output=True, check=True, timeout=30,
+            ["git", "-C", str(repo), "ls-files", "-z"], capture_output=True, check=True, timeout=30, env=env,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         if os.environ.get("CI"):
@@ -375,7 +377,26 @@ def _checked_in(backend):
     files = [repo / os.fsdecode(name) for name in out.split(b"\0") if name]
     if files:
         return files
-    return [p for d in ("app", "scripts", "migrations") for p in (backend / d).rglob("*.py")]
+    return [
+        p for d in ("app", "scripts", "migrations") for p in (backend / d).rglob("*")
+        if p.suffix in (".py", ".json") and "__pycache__" not in p.parts
+    ]
+
+
+def _text(path) -> str:
+    """A file's text, lowercased, with adjacent string literals run
+    together ("x@" "y.com" reads as "x@y.com"); UTF-16 by its byte-order
+    mark; "" for a directory entry or a tracked file deleted locally.
+    (A copy built with + or an f-string is out of reach of a text sweep.)"""
+    import re
+
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    encoding = "utf-16" if data[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8"
+    text = data.decode(encoding, errors="ignore").lower()
+    return re.sub(r"""["']\s*["']""", "", text)
 
 
 def test_contact_address_is_real_and_held_once():
@@ -406,6 +427,6 @@ def test_contact_address_is_real_and_held_once():
     for path in files:
         if path.resolve() == this:  # names the old address, to look for it
             continue
-        text = path.read_text(errors="ignore").lower() if path.is_file() else ""
+        text = _text(path)
         assert _OLD_CONTACT not in text, path
         assert path.resolve() in allowed or CONTACT_EMAIL.lower() not in text, path
