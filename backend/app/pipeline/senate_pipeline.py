@@ -647,6 +647,26 @@ def _clear_analysis_artifacts(db: Session) -> None:
     )
 
 
+def invalidate_stale_analysis(db: Session) -> None:
+    """At the start of a member pipeline (Senate or House), under its run
+    lock: purge analysis-derived data from prior runs when the analysis
+    code changed, and stored embeddings when the embedding model did, so
+    updated algorithms always produce fresh results. Preserves the API cache
+    (raw Congress.gov / FEC / GovInfo responses) since those reflect source
+    data, not our processing logic.
+
+    Both chambers run it because either may be the first to run after a
+    deploy — a House run doesn't wait on a Senate one succeeding
+    (app.pipeline_chain). Whichever runs first clears; the other finds the
+    stored hash and model version current and keeps everything.
+    """
+    _clear_analysis_artifacts(db)
+    if not check_model_version():
+        invalidate_on_model_change(db_session=db)
+    else:
+        _write_model_version()
+
+
 def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
     """Flatten every senator's FEC receipts into donor entries for
     classify_donors_hybrid.
@@ -970,17 +990,7 @@ async def run_senate_pipeline(
         from app.pipeline.transform.industry_classifier import clear_industry_embedding_cache
         clear_industry_embedding_cache()
 
-        # Purge all analysis-derived data from prior runs so updated
-        # algorithms always produce fresh results. Preserves the API cache
-        # (raw Congress.gov / FEC / GovInfo responses) since those reflect
-        # source data, not our processing logic.
-        _clear_analysis_artifacts(db)
-
-        # Verify embedding model version — invalidate stored embeddings on change
-        if not check_model_version():
-            invalidate_on_model_change(db_session=db)
-        else:
-            _write_model_version()
+        invalidate_stale_analysis(db)
 
         # Build party platform centroids from seeds + accumulated bill data.
         # This implements Bayesian self-training: seed descriptions act as a

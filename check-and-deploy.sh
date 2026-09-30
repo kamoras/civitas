@@ -154,6 +154,10 @@ pipeline_is_busy() {
   # on the Pi with semantic search off; a restart throws it away and the
   # next start begins it again.
   #
+  # pipelineChainIsRunning: a chain of pipelines (nightly or triggered)
+  # between its links, or waiting out another run before retrying one —
+  # a restart then drops the links it has yet to run.
+  #
   # exploreIsRunning: an Explore run holding its lease — a triggered or
   # startup run has no run row, and its top-up can run twenty-odd minutes.
   #
@@ -170,10 +174,10 @@ except ValueError:
 sys.exit(0 if any(d.get(k) for k in
     ("isRunning", "houseIsRunning", "stockTradesIsRunning",
      "supplementaryIsRunning", "electionIsRunning", "dataResetIsRunning",
-     "exploreIndexIsRebuilding", "exploreIsRunning")
+     "exploreIndexIsRebuilding", "exploreIsRunning", "pipelineChainIsRunning")
 ) else 1)
 '; then
-    _busy_reason="a pipeline, data reset, Explore run or Explore index rebuild is running"
+    _busy_reason="a pipeline or pipeline chain, data reset, Explore run or Explore index rebuild is running"
     return 0
   fi
   # The hourly action refresh is waited for too, but only while it is
