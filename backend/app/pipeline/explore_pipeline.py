@@ -562,9 +562,9 @@ def _purge_orphaned_vectors(db: Session) -> int:
     is about to re-embed, which by definition still exist.
     """
     try:
-        # Chunks and text-hash rows both: a document with no text has only
-        # its hash row, and chunks some other writer left have no hash row.
-        embedded = get_embedded_explore_ids() | set(get_embedded_hashes())
+        # Chunks and text-hash rows both (get_embedded_explore_ids): a
+        # document with no text has only its hash row.
+        embedded = get_embedded_explore_ids()
     except Exception:
         logger.warning("Could not read the vector index — skipping orphan sweep")
         return 0

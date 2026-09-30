@@ -104,10 +104,8 @@ _vec_conn: "sqlite3.Connection | None" = None
 # another thread's. Reentrant, for a writer that calls another (_set_meta).
 # Reads don't use the shared connection at all (_read_conn).
 _vec_lock = threading.RLock()
-# Bumped each time the shared connection is opened: a thread's read
-# connection from before (another file, in tests) is replaced.
-_vec_generation = 0
-_read_local = threading.local()
+_read_local = threading.local()  # each thread's read connection
+_write_local = threading.local()  # how deep this thread is in _writing
 
 
 def get_embedding_model() -> SentenceTransformer:
@@ -347,7 +345,7 @@ def is_busy_error(error: BaseException) -> bool:
 def get_vec_conn() -> sqlite3.Connection:
     """Get or create the sqlite-vec connection (singleton, extension loaded)
     — the one every write goes through, under _vec_lock (_writing)."""
-    global _vec_conn, _wal_retry_at, _vec_generation
+    global _vec_conn, _wal_retry_at
     conn, retry_at = _vec_conn, _wal_retry_at
     if conn is not None and (retry_at is None or time.monotonic() < retry_at):
         return conn  # open, no WAL retry due: nothing to wait on a writer for
@@ -385,7 +383,6 @@ def get_vec_conn() -> sqlite3.Connection:
                 raise
             _wal_retry_at = retry_at
             _vec_conn = conn
-            _vec_generation += 1
         return _vec_conn
 
 
@@ -395,11 +392,18 @@ def _read_conn() -> sqlite3.Connection:
     uncommitted rows (a document's old chunks gone, its new ones not yet
     in), a writer's rollback would abort a reader's statement, and readers
     would queue behind _vec_lock for the length of a write. In WAL a read
-    here waits on no writer at all."""
-    get_vec_conn()  # opened once: the schema, and the WAL switch
+    here waits on no writer at all.
+
+    The read-only API process opens nothing else: the schema and the WAL
+    switch are the pipeline process's (get_vec_conn), and a search before
+    they exist reads as not ready. Elsewhere the shared connection is
+    opened first, so they exist."""
+    from app.config import settings
+
+    if settings.PROCESS_ROLE != "api":
+        get_vec_conn()
     cached = getattr(_read_local, "conn", None)
-    key = (_VECTOR_DB_PATH, _vec_generation)
-    if cached is not None and cached[0] == key:
+    if cached is not None and cached[0] == _VECTOR_DB_PATH:
         return cached[1]
     if cached is not None:
         cached[1].close()
@@ -409,8 +413,21 @@ def _read_conn() -> sqlite3.Connection:
     except BaseException:
         conn.close()
         raise
-    _read_local.conn = (key, conn)
+    _read_local.conn = (_VECTOR_DB_PATH, conn)
     return conn
+
+
+@contextmanager
+def _snapshot():
+    """Reads that must agree with each other, in one read transaction on
+    this thread's read connection: in WAL, one snapshot of the file — a
+    rebuild's swap lands before them all or after."""
+    conn = _read_conn()
+    conn.execute("BEGIN")
+    try:
+        yield conn
+    finally:
+        conn.rollback()  # a read transaction: nothing to keep
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -519,14 +536,25 @@ def _get_meta(conn: sqlite3.Connection, key: str) -> str | None:
 def _writing(conn: sqlite3.Connection):
     """One write transaction on the shared connection: under _vec_lock from
     its first statement to its commit, rolled back if anything in it raises
-    — so a failure leaves nothing pending for another writer's commit."""
+    — so a failure leaves nothing pending for another writer's commit.
+    Nested (a writer calling _set_meta inside its own), the inner block is
+    part of the outer transaction: only the outermost commits or rolls
+    back."""
     with _vec_lock:
+        depth = getattr(_write_local, "depth", 0)
+        _write_local.depth = depth + 1
         try:
-            yield conn
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
+            if depth:
+                yield conn
+                return
+            try:
+                yield conn
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+        finally:
+            _write_local.depth = depth
 
 
 def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
@@ -866,14 +894,16 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
                 _record_text_hash(conn, doc_id, digest, meta)
         doc_ids.update(d for d, _, _ in batch)
 
-    if _get_meta(conn, _INDEX_MODEL) is None:
-        # A store never built at all (no identity, blank or other): only a
-        # direct caller's embed reaches here — tests, a one-off script —
-        # since every pipeline path builds through rebuild_explore_index,
-        # which blanks the identity first. Recorded so such a caller can
-        # search what it embedded; a partial or other-model index always
-        # carries an identity, and is never recorded here.
-        _set_meta(conn, _INDEX_MODEL, index_identity())
+    with _writing(conn):
+        if _get_meta(conn, _INDEX_MODEL) is None:
+            # A store never built at all (no identity, blank or other): only
+            # a direct caller's embed reaches here — tests, a one-off script
+            # — since every pipeline path builds through
+            # rebuild_explore_index, which blanks the identity first.
+            # Recorded so such a caller can search what it embedded; a
+            # partial or other-model index always carries an identity, and
+            # is never recorded here.
+            _set_meta(conn, _INDEX_MODEL, index_identity())
     if record_chunks_per_doc:
         _record_chunks_per_doc(conn)
 
@@ -888,19 +918,48 @@ def _record_chunks_per_doc(conn: sqlite3.Connection) -> None:
     """Mean chunks per document, measured rather than assumed: the search
     path needs it to know how many chunk slots to request for a given
     number of documents. Stored because it is a property of the index and
-    recomputing it per query is a COUNT DISTINCT over the whole table."""
-    total_chunks = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    total_docs = conn.execute(
-        "SELECT COUNT(*) FROM (SELECT DISTINCT doc_id FROM vec_explore)"
-    ).fetchone()[0]
-    if total_docs:
-        _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
-    else:  # an empty index: no ratio, rather than the last corpus's
-        with _writing(conn):
+    recomputing it per query is a COUNT DISTINCT over the whole table.
+    Counted and written in one transaction on the write connection, under
+    its lock: no other thread's uncommitted writes are counted."""
+    with _writing(conn):
+        total_chunks = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+        total_docs = conn.execute(
+            "SELECT COUNT(*) FROM (SELECT DISTINCT doc_id FROM vec_explore)"
+        ).fetchone()[0]
+        if total_docs:
+            _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
+        else:  # an empty index: no ratio, rather than the last corpus's
             conn.execute("DELETE FROM vec_meta WHERE key = 'explore_chunks_per_doc'")
 
 
 # ── Search ───────────────────────────────────────────────────────
+
+def _ready_count(conn: sqlite3.Connection) -> int | None:
+    """The explore index's chunk count, or None (logged) when it is not
+    ready to search."""
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+    except sqlite3.OperationalError:
+        # A model/schema-version bump briefly DROPs and recreates this
+        # table (see ensure_explore_index), and the API process never
+        # creates it: a query landing before it exists sees "no such
+        # table" rather than "0 rows". Same "not ready yet" contract as the
+        # empty-index case below, not a real error.
+        logger.warning("explore index mid-rebuild — not ready")
+        return None
+    if count == 0:
+        logger.warning("explore index empty — not ready")
+        return None
+    # Built by another model (a deploy changed it, and the pipeline process —
+    # which rebuilds the index — hasn't yet): its vectors don't live in this
+    # model's space, and ranking against them would be noise presented as a
+    # whole answer. Nor while a rebuild is partway, or after one failed: a
+    # few hundred documents are not the index. Not ready, either way.
+    if _get_meta(conn, _INDEX_MODEL) != index_identity():
+        logger.warning("explore index not a complete build by this model — not ready until it is rebuilt")
+        return None
+    return count
+
 
 def search_explore_documents(
     query: str,
@@ -920,48 +979,22 @@ def search_explore_documents(
     so a member-scoped search returns that member's real matches instead
     of the global top-k intersected down to near-empty.
     """
-    conn = _read_conn()
-
-    try:
-        count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    except sqlite3.OperationalError:
-        # A model/schema-version bump briefly DROPs and recreates this
-        # table (see ensure_explore_index) — search reads on its own
-        # connection (a read shouldn't block on a rebuild's writes), so
-        # a query landing in that brief gap sees "no such table" rather
-        # than "0 rows". Same "not ready yet" contract as the empty-index
-        # case below, not a real error.
-        logger.warning("explore index mid-rebuild — not ready")
-        return None
-    if count == 0:
-        logger.warning("explore index empty — not ready")
-        return None
-    # Built by another model (a deploy changed it, and the pipeline process —
-    # which rebuilds the index — hasn't yet): its vectors don't live in this
-    # model's space, and ranking against them would be noise presented as a
-    # whole answer. Nor while a rebuild is partway, or after one failed: a
-    # few hundred documents are not the index. Not ready, either way.
-    if _get_meta(conn, _INDEX_MODEL) != index_identity():
-        logger.warning("explore index not a complete build by this model — not ready until it is rebuilt")
+    # Checked before the query is encoded (not ready: no encode), and again
+    # with the search, in one snapshot: a rebuild's swap landing during the
+    # encode would otherwise hand an empty or partial table's answer on as
+    # a whole one.
+    if _ready_count(_read_conn()) is None:
         return None
 
     model = get_similarity_model()
     query_embedding = model.encode([query], show_progress_bar=False, normalize_embeddings=True)[0]
-
-    # The index holds chunks, so asking for `n_results` rows would return
-    # far fewer than `n_results` documents whenever a long rule occupies
-    # several of the top slots. Scale the request by the index's own
-    # measured mean chunks per document — written at embed time, not
-    # guessed here — and bound it by the table size.
-    chunks_per_doc = float(_get_meta(conn, "explore_chunks_per_doc") or 1.0)
-    k = min(max(int(n_results * max(chunks_per_doc, 1.0)), n_results), count)
 
     sql = (
         "SELECT doc_id, distance, title, date, doc_type, source, "
         "politician_name, politician_id, chamber, snippet "
         "FROM vec_explore WHERE embedding MATCH ? AND k = ?"
     )
-    params: list = [_serialize(query_embedding), k]
+    params: list = [_serialize(query_embedding), 0]  # k: set in the snapshot
     if doc_type:
         sql += " AND doc_type = ?"
         params.append(doc_type)
@@ -972,6 +1005,19 @@ def search_explore_documents(
         sql += " AND politician_id = ?"
         params.append(politician_id)
 
+    with _snapshot() as conn:
+        count = _ready_count(conn)
+        if count is None:
+            return None
+        # The index holds chunks, so asking for `n_results` rows would return
+        # far fewer than `n_results` documents whenever a long rule occupies
+        # several of the top slots. Scale the request by the index's own
+        # measured mean chunks per document — written at embed time, not
+        # guessed here — and bound it by the table size.
+        chunks_per_doc = float(_get_meta(conn, "explore_chunks_per_doc") or 1.0)
+        params[1] = min(max(int(n_results * max(chunks_per_doc, 1.0)), n_results), count)
+        rows = conn.execute(sql, params).fetchall()
+
     # Fold chunks back into documents by their best-matching chunk. Max
     # pooling, not averaging: a hundred-page rule with one passage squarely
     # on the query is a good answer, and averaging over its other ninety-nine
@@ -980,7 +1026,7 @@ def search_explore_documents(
     # first sighting of a doc_id is already its best chunk.
     matches: list[dict] = []
     seen: set[int] = set()
-    for row in conn.execute(sql, params).fetchall():
+    for row in rows:
         doc_id = int(row[0])
         if doc_id in seen:
             continue
@@ -1007,10 +1053,11 @@ def search_explore_documents(
 def collection_stats() -> dict:
     """Counts + size for the admin dashboard (replaces chroma's
     list_collections/peek API)."""
-    conn = _read_conn()
-    explore = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    bills = conn.execute("SELECT COUNT(*) FROM vec_bills").fetchone()[0]
-    recorded = _get_meta(conn, _INDEX_MODEL)  # once: a rebuild may be changing it
+    with _snapshot() as conn:  # one state of the file, a rebuild's swap or not
+        explore = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+        bills = conn.execute("SELECT COUNT(*) FROM vec_bills").fetchone()[0]
+        recorded = _get_meta(conn, _INDEX_MODEL)
+        chunks_per_doc = float(_get_meta(conn, "explore_chunks_per_doc") or 0.0)
     try:
         size = os.path.getsize(_VECTOR_DB_PATH)
     except OSError:
@@ -1023,7 +1070,7 @@ def collection_stats() -> dict:
             {"name": "bills", "count": bills, "metadata": {}},
         ],
         "indexModelVersion": recorded or "",
-        "chunksPerDocument": float(_get_meta(conn, "explore_chunks_per_doc") or 0.0),
+        "chunksPerDocument": chunks_per_doc,
         # "running" (in this process, the pipeline's), "incomplete" (not a
         # complete build by this model — a rebuild left it partway, empty
         # or not, or another model built it: search is off until a rebuild
@@ -1127,10 +1174,14 @@ def _record_text_hash(conn: sqlite3.Connection, doc_id: int, digest: str, meta: 
 
 
 def get_embedded_explore_ids() -> set[int]:
-    """Ids of explore documents with chunks in the index. Distinct `doc_id`,
-    not rowid: rows are chunks, and several of them belong to one document."""
-    conn = _read_conn()
-    return {r[0] for r in conn.execute("SELECT DISTINCT doc_id FROM vec_explore").fetchall()}
+    """Ids of explore documents the index holds anything for: chunks
+    (distinct `doc_id`, not rowid — several chunks belong to one document)
+    or a recorded hash (a document with no text has only that). Both read
+    in one snapshot, so a swap between them can't mix two indexes' ids."""
+    with _snapshot() as conn:
+        chunks = {r[0] for r in conn.execute("SELECT DISTINCT doc_id FROM vec_explore").fetchall()}
+        hashed = {r[0] for r in conn.execute("SELECT doc_id FROM vec_explore_text").fetchall()}
+    return chunks | hashed
 
 
 def get_embedded_hashes() -> dict[int, tuple[str, str]]:
@@ -1432,9 +1483,9 @@ def index_is_whole() -> bool:
     empty corpus's, empty, included: only a completed build records it.
     The table is read too, so one that can't be raises (and is rebuilt)
     rather than pass on its identity alone."""
-    conn = _read_conn()
-    conn.execute("SELECT rowid FROM vec_explore LIMIT 1").fetchall()
-    return _get_meta(conn, _INDEX_MODEL) == index_identity()
+    with _snapshot() as conn:
+        conn.execute("SELECT rowid FROM vec_explore LIMIT 1").fetchall()
+        return _get_meta(conn, _INDEX_MODEL) == index_identity()
 
 
 def ensure_explore_index(db_session_factory) -> None:

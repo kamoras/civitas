@@ -6,6 +6,7 @@ network.
 """
 
 import sqlite3
+import threading
 
 import numpy as np
 import sqlite_vec
@@ -20,6 +21,7 @@ from app.pipeline import vector_store
 def vec_env(tmp_path, monkeypatch):
     monkeypatch.setattr(vector_store, "_VECTOR_DB_PATH", str(tmp_path / "vectors.db"))
     monkeypatch.setattr(vector_store, "_vec_conn", None)
+    monkeypatch.setattr(vector_store, "_read_local", threading.local())  # this file's read connections
 
     def fake_encode(texts, **kwargs):
         # Deterministic unit vectors: direction keyed by simple content
@@ -440,6 +442,39 @@ class TestTextHashes:
     def test_the_relabel_counts_only_documents_still_embedded(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         assert vector_store.update_explore_metadata([_doc(1, "A title", chamber="Senate"), _doc(2, "Gone")]) == 1
+
+    def test_a_nested_write_is_part_of_the_outer_transaction(self, vec_env):
+        conn = vector_store.get_vec_conn()
+        with pytest.raises(RuntimeError):
+            with vector_store._writing(conn):
+                vector_store._set_meta(conn, "inner", "1")  # mustn't commit here
+                raise RuntimeError("the outer write fails after it")
+        assert vector_store._get_meta(conn, "inner") is None
+
+    def test_a_swap_during_the_query_encode_is_not_answered_as_whole(self, vec_env):
+        vector_store.embed_explore_documents([_doc(1, "Pentagon appropriations act")])
+        model = vector_store.get_similarity_model()
+        encode = model.encode.side_effect
+
+        def swapping(texts, **kw):
+            vector_store.reset_vector_db()  # a rebuild's swap: empty, no identity
+            return encode(texts, **kw)
+
+        model.encode.side_effect = swapping
+        assert vector_store.search_explore_documents("Pentagon") is None
+
+    def test_the_api_process_reads_without_opening_the_write_connection(self, vec_env, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "PROCESS_ROLE", "api")
+        # Nothing created yet (the pipeline process creates the schema):
+        # not ready, and no DDL from this process.
+        assert vector_store.search_explore_documents("anything") is None
+        assert vector_store._vec_conn is None
+
+    def test_the_embedded_ids_include_documents_with_only_a_hash(self, vec_env):
+        vector_store.embed_explore_documents([_doc(1, "A title"), _doc(2, "")])
+        assert vector_store.get_embedded_explore_ids() == {1, 2}
 
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])

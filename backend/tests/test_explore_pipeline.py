@@ -380,7 +380,7 @@ class TestOrphanedVectorPurge:
 
         deleted: list[set] = []
         monkeypatch.setattr(
-            explore_pipeline, "get_embedded_hashes", lambda: dict.fromkeys({1, 2, 3}, ("h", "m")))
+            explore_pipeline, "get_embedded_explore_ids", lambda: {1, 2, 3})
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: deleted.append(set(ids)) or len(ids))
@@ -396,7 +396,7 @@ class TestOrphanedVectorPurge:
 
         called = []
         monkeypatch.setattr(
-            explore_pipeline, "get_embedded_hashes", lambda: dict.fromkeys({1}, ("h", "m")))
+            explore_pipeline, "get_embedded_explore_ids", lambda: {1})
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: called.append(ids))
@@ -415,7 +415,7 @@ class TestOrphanedVectorPurge:
         def boom():
             raise RuntimeError("index mid-rebuild")
 
-        monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", boom)
+        monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", boom)
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: called.append(ids))
@@ -428,7 +428,7 @@ class TestOrphanedVectorPurge:
     def test_a_locked_delete_is_left_to_the_next_run(self, db_session, monkeypatch, error, raised):
         import sqlite3
 
-        monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", lambda: {9: ("h", "m")})
+        monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: {9})
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             MagicMock(side_effect=sqlite3.OperationalError(error)))
