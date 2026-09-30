@@ -11,8 +11,10 @@ change caller-visible behavior.
 """
 
 import asyncio
+import io
 import re
 import threading
+import tokenize
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -444,9 +446,12 @@ _BROWSER_ONLY_USER_AGENTS = {
     ("backend/scripts/fetch_site_fonts.py", "Chrome/104"),
 }
 # Where a User-Agent is set: a header key ("User-Agent": / ["User-Agent"] =
-# / ("User-Agent", ...) or a user_agent= / USER_AGENT = / UA = name.
+# / ("User-Agent", ...) — but not .get("User-Agent", default), which reads
+# one — or a user_agent= / USER_AGENT = / UA = name.
 _UA_SITE = re.compile(
-    r"""(["']user-agent["']\s*(?:\]\s*=|[:,])|\b(?:user_?agent|ua)\b\s*[:=](?!=))""", re.IGNORECASE,
+    r"""(["']user-agent["']\s*(?:\]\s*=|:)|(?<!get)\(\s*["']user-agent["']\s*,"""
+    r"""|\b(?:user_?agent|ua)\b\s*[:=](?!=))""",
+    re.IGNORECASE,
 )
 # A string literal naming Civitas as a client: "Civitas/1.0", "Civitas-OG/1".
 _CIVITAS_TOKEN = re.compile(r"""(?:^|[=:(,{\[]\s*)(?:[rbfu]{1,2})?["'`][^"'`\n]*\bcivitas[\w-]*/\d""", re.IGNORECASE)
@@ -456,45 +461,87 @@ _NAMES_CONTACT = re.compile(
 )
 
 
-def _user_agent_offenders(repo, files):
-    """Every User-Agent value written as a literal, and every literal
-    naming Civitas as a client, whose text (with the next two non-blank
-    lines, for a value split over lines) doesn't name the contact."""
+def _code_lines(path) -> list[str]:
+    """A source file's lines with what sends nothing blanked: comments, and
+    in Python triple-quoted strings (docstrings and prose, which may quote
+    a User-Agent). Line numbers are kept."""
+    text = path.read_text(encoding="utf-8")
+    if path.suffix != ".py":
+        return [
+            "" if line.lstrip().startswith(("//", "*", "/*")) else line
+            for line in text.splitlines()
+        ]
+    lines = text.splitlines()
+    blank = []
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        is_prose = tok.type == tokenize.STRING and re.match(r"[rbfu]{0,2}(\"\"\"|\'\'\')", tok.string, re.I)
+        if tok.type == tokenize.COMMENT or is_prose:
+            blank.append((tok.start, tok.end))
+    for (r0, c0), (r1, c1) in reversed(blank):
+        for r in range(r0, r1 + 1):
+            line = lines[r - 1]
+            a = c0 if r == r0 else 0
+            b = c1 if r == r1 else len(line)
+            lines[r - 1] = line[:a] + " " * (b - a) + line[b:]
+    return lines
+
+
+def _value_from(lines, i, rest):
+    """The text of a value starting at `rest` on line i, carried onto the
+    next lines while it is plainly unfinished: nothing yet but "(", an open
+    bracket, or a next line that continues it with another string."""
+    value, j = rest, i
+    for _ in range(3):
+        nxt = next((k for k in range(j + 1, len(lines)) if lines[k].strip()), None)
+        if nxt is None:
+            break
+        opened = sum(value.count(c) for c in "([{") - sum(value.count(c) for c in ")]}")
+        continues = re.match(r"""\s*(?:[rbfu]{1,2})?["'`]""", lines[nxt], re.I)
+        if value.strip() in ("", "(") or opened > 0 or continues:
+            value, j = value + " " + lines[nxt].strip(), nxt
+        else:
+            break
+    return value
+
+
+def _user_agent_offenders(backend, files):
+    """(offenders, files read): every User-Agent value written as a
+    literal, and every literal naming Civitas as a client, whose value
+    doesn't name the contact. Paths are named from the repo root
+    ("backend/app/…"), inside a git checkout or not. A browser string kept
+    in a constant under some other name is out of reach of a text sweep;
+    the reviews are the check there."""
     from app.contact import CONTACT_EMAIL
 
-    offenders = []
+    offenders, read = [], 0
     for path in files:
-        rel = path.relative_to(repo).as_posix()
+        rel = (
+            f"backend/{path.relative_to(backend).as_posix()}" if path.is_relative_to(backend)
+            else path.relative_to(backend.parent).as_posix()
+        )
         if path.suffix not in (".py", ".ts", ".tsx", ".mjs", ".js") or not (
             rel.startswith(("backend/app/", "backend/scripts/", "frontend/src/"))
         ) or ".test." in path.name or "/tests/" in rel:
             continue
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError:
+            lines = _code_lines(path)
+        except (OSError, SyntaxError, tokenize.TokenError):
             continue
-        in_docstring = False
+        read += 1
         for i, line in enumerate(lines):
-            if path.suffix == ".py":
-                # Prose in a docstring may quote a User-Agent; it sends none.
-                quotes = line.count('"""') + line.count("'''")
-                was_in, in_docstring = in_docstring, in_docstring ^ (quotes % 2 == 1)
-                if was_in or quotes:
+            values = [
+                _value_from(lines, i, line[site.end():]) for site in _UA_SITE.finditer(line)
+            ]
+            values = [v for v in values if re.match(r"""\s*\(?\s*(?:[rbfu]{1,2})?["'`]""", v, re.I)]
+            values += [_value_from(lines, i, line[m.start():]) for m in _CIVITAS_TOKEN.finditer(line)]
+            for value in values:
+                if _NAMES_CONTACT.search(value) or CONTACT_EMAIL in value:
                     continue
-            code = line.split("#", 1)[0] if path.suffix == ".py" else line
-            if code.lstrip().startswith(("//", "*", "/*")):
-                continue
-            window = " ".join([code] + [x for x in lines[i + 1:i + 4] if x.strip()][:2])
-            site = _UA_SITE.search(code)
-            literal_value = site and re.match(r"""\s*\(?\s*(?:[rbfu]{1,2})?["'`]""", window[site.end():])
-            if not (literal_value or _CIVITAS_TOKEN.search(code)):
-                continue
-            if _NAMES_CONTACT.search(window) or CONTACT_EMAIL in window:
-                continue
-            if any(rel == f and frag in window for f, frag in _BROWSER_ONLY_USER_AGENTS):
-                continue
-            offenders.append(f"{rel}:{i + 1}: {line.strip()}")
-    return offenders
+                if any(rel == f and frag in value for f, frag in _BROWSER_ONLY_USER_AGENTS):
+                    continue
+                offenders.append(f"{rel}:{i + 1}: {line.strip()}")
+                break  # one entry per line
+    return offenders, read
 
 
 def test_every_user_agent_names_the_contact():
@@ -509,13 +556,14 @@ def test_every_user_agent_names_the_contact():
 
     assert BOT_USER_AGENT.endswith(f"+{CONTACT_EMAIL})")
     assert SELF_FETCH_USER_AGENT.endswith(f"(+{CONTACT_EMAIL})")
-    repo = Path(__file__).resolve().parents[2]
-    files = _checked_in(repo / "backend")
-    assert _user_agent_offenders(repo, files) == []
+    backend = Path(__file__).resolve().parents[1]
+    offenders, read = _user_agent_offenders(backend, _checked_in(backend))
+    assert read > 50, "the sweep read almost nothing"
+    assert offenders == []
     # Each exemption still points at a line that exists.
     for rel, frag in _BROWSER_ONLY_USER_AGENTS:
-        if (repo / rel).exists():
-            assert frag in (repo / rel).read_text(encoding="utf-8"), rel
+        if (backend.parent / rel).exists():
+            assert frag in (backend.parent / rel).read_text(encoding="utf-8"), rel
 
 
 @pytest.mark.parametrize("source", [
@@ -523,15 +571,66 @@ def test_every_user_agent_names_the_contact():
     'headers["User-Agent"] = "Mozilla/5.0"',
     'h = [("User-Agent", "x")]',
     'client = httpx.Client(headers={\n    "User-Agent": (\n        "Civitas/1.0 (research)"\n    ),\n})',
+    'h = {\n    "User-Agent":\n        "Mozilla/5.0 Foo",\n}',
     'UA = "Civitas/1.0 (bill title calibration)"',
     'USER_AGENT = rf"Civitas/1.0"',
-    'fetch(u, { headers: { "User-Agent": `civitas-og` } })',
+    'H = {"Accept": "text/html#x", "User-Agent": "Civitas/1.0"}',
+    'A = {"User-Agent": "Mozilla/5.0 Foo"}\nB = BROWSER_HEADERS',
+    'ua = get(); h = {"User-Agent": "Mozilla/5.0 Foo"}',
+    'H = {"User-Agent": "Foo/1.0"}; DOC = """x"""',
 ])
 def test_the_user_agent_sweep_sees_every_shape(tmp_path, source):
     path = tmp_path / "backend" / "app" / "x.py"
     path.parent.mkdir(parents=True)
     path.write_text(source + "\n")
-    assert _user_agent_offenders(tmp_path, [path]) != []
+    offenders, read = _user_agent_offenders(tmp_path / "backend", [path])
+    assert read == 1 and offenders != []
+
+
+def test_the_user_agent_sweep_sees_the_frontend(tmp_path):
+    path = tmp_path / "frontend" / "src" / "x.ts"
+    path.parent.mkdir(parents=True)
+    path.write_text('fetch(u, { headers: { "User-Agent": `civitas-og` } });\n')
+    assert _user_agent_offenders(tmp_path / "backend", [path])[0] != []
+
+
+@pytest.mark.parametrize("source", [
+    'H = {"User-Agent": BOT_USER_AGENT}',
+    'H = {\n    "User-Agent": "CivitasCivicPlatform/1.0 (x; "\n    f"contact: {CONTACT_EMAIL})",\n}',
+    'def f():\n    """Sends "Civitas/1.0" as its User-Agent: "x"."""\n',
+    '# "User-Agent": "Civitas/1.0"',
+])
+def test_the_user_agent_sweep_passes_what_names_the_contact(tmp_path, source):
+    path = tmp_path / "backend" / "app" / "x.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(source + "\n")
+    assert _user_agent_offenders(tmp_path / "backend", [path]) == ([], 1)
+
+
+def test_the_sweep_names_paths_from_the_repo_root_outside_git(tmp_path):
+    """The backend image has no .git and no repo root around it: the sweep
+    still reads the backend's own files there, under the same names."""
+    backend = tmp_path / "app_root"
+    path = backend / "app" / "x.py"
+    path.parent.mkdir(parents=True)
+    path.write_text('H = {"User-Agent": "Civitas/1.0"}\n')
+    offenders, read = _user_agent_offenders(backend, [path])
+    assert read == 1 and offenders == ["backend/app/x.py:1: H = {\"User-Agent\": \"Civitas/1.0\"}"]
+
+
+def test_the_frontend_healthcheck_is_a_self_fetch():
+    """The frontend container probes "/" every 15s; without the marker the
+    middleware counts each probe as a visit."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    compose, middleware = root / "docker-compose.yml", root / "frontend" / "src" / "middleware.ts"
+    if not (compose.exists() and middleware.exists()):
+        pytest.skip("no full checkout")
+    marker = re.search(r'userAgent\.startsWith\("([^"]+)"\)', middleware.read_text(encoding="utf-8")).group(1)
+    probe = re.search(r'test: \["CMD", "wget",[^\]]*\]', compose.read_text(encoding="utf-8")).group(0)
+    agent = re.search(r'"-U", "([^"]+)"', probe)
+    assert agent and agent.group(1).startswith(marker)
 
 
 def test_the_link_card_reader_is_the_user_agent_the_site_skips():
