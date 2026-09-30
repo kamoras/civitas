@@ -1543,8 +1543,9 @@ _reembed_slot = threading.Lock()
 async def admin_trigger_house_pipeline():
     """Trigger a House representative pipeline run.
 
-    No pre-check here (unlike /pipeline/trigger's senate check) — run_house_pipeline
-    acquires its own DB lock and safely no-ops if already running.
+    Refused (409) while a pipeline chain is running (refuse_while_chain_runs:
+    it would run beside the chain's current link, and the chain runs House
+    itself); otherwise run_house_pipeline's own DB lock refuses a duplicate.
     """
     from app.pipeline.house_pipeline import run_house_pipeline
 
@@ -1622,7 +1623,8 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
 async def admin_trigger_supplementary_pipeline():
     """Trigger a supplementary (explore docs/SCOTUS/presidents) pipeline run.
 
-    Same self-guarding lock as the house trigger above — no pre-check needed.
+    Refused while a pipeline chain is running, like the house trigger above;
+    otherwise the pipeline's own run lock refuses a duplicate.
     """
     from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
 
@@ -1653,7 +1655,8 @@ async def admin_trigger_election_pipeline():
     """Trigger a midterm-elections pipeline run (candidate roster,
     financials, coverage ingestion, Bluesky posting).
 
-    Same self-guarding lock as the house trigger above — no pre-check needed.
+    Refused while a pipeline chain is running, like the house trigger above;
+    otherwise the pipeline's own run lock refuses a duplicate.
     """
     from app.pipeline.election_pipeline import run_election_pipeline
 
