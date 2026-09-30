@@ -937,6 +937,10 @@ export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> 
   });
 }
 
+// How many requests with no response at all (a reset, a network drop) the
+// summary page asks again after, before reporting it unavailable.
+const SUMMARY_UNANSWERED_RETRIES = 3;
+
 // Reads the SSE stream from POST /explore/:id/summary — one JSON object
 // per `data:` line, either {delta: "<chunk>"} while generating or the
 // terminal {done: true, summary, keyPoints, impact} (cache hits send only
@@ -972,6 +976,7 @@ export async function streamExploreDocumentSummary(
     if (signal?.aborted) throw error;
   }
   const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
+  let unanswered = 0;
   const waitFor = (retryAfter: string | null) =>
     wait(Math.min(summaryRetryDelayMs(retryAfter), Math.max(0, giveUpAt - Date.now())), signal);
   for (;;) {
@@ -980,9 +985,11 @@ export async function streamExploreDocumentSummary(
       res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST", signal });
     } catch (error) {
       // No response at all — the connection reset under a deploy, a
-      // moment's network loss: waited out like a cut stream, not reported
-      // as the analysis being unavailable.
-      if (signal?.aborted || Date.now() >= giveUpAt) throw error;
+      // moment's network loss: waited out like a cut stream, a few times.
+      // Not for ten minutes: a request that can never go out (offline, an
+      // extension blocking it) looks the same, and is reported as such.
+      if (signal?.aborted || Date.now() >= giveUpAt || ++unanswered > SUMMARY_UNANSWERED_RETRIES)
+        throw error;
       await waitFor(null);
       continue;
     }

@@ -450,6 +450,20 @@ describe("streamExploreDocumentSummary", () => {
     expect(waited).toHaveLength(1);
   });
 
+  it("reports a request that never gets a response, after a few tries", async () => {
+    const post = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    stubSummaryFetch(post);
+    await expect(
+      streamExploreDocumentSummary(
+        1,
+        () => {},
+        undefined,
+        async () => {}
+      )
+    ).rejects.toThrow("Failed to fetch");
+    expect(post).toHaveBeenCalledTimes(4);
+  });
+
   it("releases each refusal's body before waiting", async () => {
     const refused = new Response("busy", { status: 503, headers: { "X-Summary-Wait": "1" } });
     const cancel = vi.spyOn(refused.body!, "cancel");

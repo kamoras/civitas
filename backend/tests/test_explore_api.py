@@ -206,9 +206,9 @@ class TestStreaming:
         with patches[0], patches[1], patches[2]:
             assert "retryAfter" in (await _events(doc, db_session))[-1]
 
-    async def test_a_busy_answer_ends_an_unreachable_outage(self, db_session, monkeypatch):
-        # It answered: a later refusal (a second restart) is a new outage,
-        # with its own wait.
+    async def test_a_busy_answer_does_not_end_an_unreachable_outage(self, db_session, monkeypatch):
+        # A crash loop answers 503 "loading model" on every start: that
+        # mustn't restart the wait each cycle.
         doc = _make_doc(db_session)
 
         async def _busy(*_args, **_kwargs):
@@ -221,7 +221,7 @@ class TestStreaming:
         patches, _ = _llm(_busy)
         with patches[0], patches[1], patches[2]:
             await _events(doc, db_session)
-        assert explore_summary._unreachable is None
+        assert explore_summary._unreachable == (began, began)
 
     async def test_an_error_from_a_reachable_llm_does_not_restart_the_wait(self, db_session, monkeypatch):
         # A crash loop's 500 between refusals isn't the LLM back.

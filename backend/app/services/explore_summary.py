@@ -313,7 +313,7 @@ async def _generate(run: _Run) -> None:
     from app.pipeline.analyze import ollama_client
 
     text = ""
-    finished = at_limit = timed_out = llm_busy = answered_busy = False
+    finished = at_limit = timed_out = llm_busy = False
     deadline = asyncio.timeout(GENERATION_LIMIT_S)
     try:
         async with deadline:
@@ -339,7 +339,7 @@ async def _generate(run: _Run) -> None:
         # failure.
         if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in (429, 503):
             logger.warning("Explore doc summary for doc_id=%s: the LLM is busy", run.doc_id)
-            llm_busy = answered_busy = True
+            llm_busy = True
         elif isinstance(error, (httpx.ConnectError, httpx.ConnectTimeout)) and not text:
             llm_busy = _unreachable_is_a_wait()
             if llm_busy:
@@ -354,10 +354,10 @@ async def _generate(run: _Run) -> None:
         else:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", run.doc_id)
 
-    if text or finished or answered_busy:
-        # It answered — text, or that it is busy, which a live LLM says: the
-        # outage is over. Not merely an error from it (a 500 between a crash
-        # loop's refusals isn't an LLM that is back).
+    if text or finished:
+        # It answered: the outage is over. Not merely a refusal or an error
+        # from it — a crash loop answers 503 "loading model" on every start,
+        # and a 500 between refusals isn't an LLM that is back either.
         _reached()
     try:
         await _finish(run, text, finished=finished, at_limit=at_limit, timed_out=timed_out, llm_busy=llm_busy)
