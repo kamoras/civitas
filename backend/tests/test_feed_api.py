@@ -47,6 +47,7 @@ def test_an_empty_feed_is_still_a_valid_feed(client):
     assert root.findtext(f"{A}title") == "Civitas"
     assert root.findtext(f"{A}updated") == "2026-09-29T00:00:00Z"
     assert root.findtext(f"{A}author/{A}name") == "Civitas"
+    assert root.findtext(f"{A}icon") == "https://civitas-research.org/apple-icon.png"  # PNG: Discord can't draw SVG
     assert root.find(f"{A}link[@rel='self']").get("href") == "https://civitas-research.org/feed.xml"
     assert root.findall(f"{A}entry") == []
 
