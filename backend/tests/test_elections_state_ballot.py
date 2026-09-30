@@ -31,6 +31,13 @@ def _campaign_clock(monkeypatch):
     monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 10, 1))
 
 
+# Every fixture here is a 2026 race; pin the clock inside that cycle so the
+# tests don't all fail on election night (conftest.freeze_utcnow).
+@pytest.fixture(autouse=True)
+def _in_the_2026_cycle(freeze_utcnow):
+    freeze_utcnow(datetime(2026, 9, 30, 12, 0))
+
+
 def _body(response):
     return json.loads(response.body)
 

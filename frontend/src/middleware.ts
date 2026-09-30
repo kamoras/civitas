@@ -54,8 +54,11 @@ export const config = {
   // a second "/other" visit every time someone opened a state page. photo/
   // is the same: the member photo a share image fetches from a page already
   // counted (app/photo/bioguide/[id]/route.ts). The feeds are polled by
-  // readers and bots on a schedule, which is not anyone visiting.
+  // readers and bots on a schedule, which is not anyone visiting. The icons
+  // too: every feed entry names apple-icon.png, and a feed reader or chat
+  // bot fetching it sends no Sec-Fetch-Dest, so isPageLoad would count it
+  // (middleware.test.ts checks every icon and public/ file is excluded).
   matcher: [
-    "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|sitemap.xml|sitemap-index.xml|sitemaps/|robots.txt|opengraph-image|feed\\.xml|feed/).*)",
+    "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|apple-icon.png|sitemap.xml|sitemap-index.xml|sitemaps/|robots.txt|opengraph-image|feed\\.xml|feed/).*)",
   ],
 };
