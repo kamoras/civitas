@@ -564,14 +564,18 @@ def ocr_extract_rows(
     are ~6 px tall, and no reading of them was reliable (the best, matching
     rendered candidates, was right 38% of the time with no usable
     confidence), while its assets, types and amounts read."""
+    # Raised, not an empty list, when no page could be OCR'd at all: an
+    # empty read means "this scan holds no row the reader can stand behind",
+    # on which a stored filing's re-read drops its older reading
+    # (stock_pipeline._reread_trades). A missing tesseract is not that.
     try:
         import pytesseract
-    except ImportError:
-        logger.warning("pytesseract not available — cannot OCR scanned PTR")
-        return []
+    except ImportError as e:
+        raise RuntimeError("pytesseract not available — cannot OCR scanned PTR") from e
 
     rows: list[TradeRow] = []
     unread = 0
+    failed_pages = 0
     for page in pdf.pages:
         try:
             table = _ocr_table_page(page, not_before, not_after)
@@ -584,6 +588,9 @@ def ocr_extract_rows(
             unread += table[1] + (0 if keep_undated else len(undated))
         except Exception as e:
             logger.warning("OCR failed on PTR page: %s", e)
+            failed_pages += 1
+    if pdf.pages and failed_pages == len(pdf.pages):
+        raise RuntimeError(f"OCR failed on every page of a scanned PTR ({failed_pages})")
     if unread:
         logger.warning("OCR: %d transaction rows of a scanned PTR could not be read (%d read)", unread, len(rows))
     if undated := sum(r.transaction_date is None for r in rows):

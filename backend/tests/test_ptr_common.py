@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from PIL import Image
 
 from app.pipeline.fetch import ptr_common
@@ -375,3 +376,12 @@ class TestScannedTableReading:
         assert ptr_common.window_date("12/10/25", "2025-01-20", None) == "2025-12-10"
         assert ptr_common.form_bracket("Over $50,000,000") == (50_000_000.0, 50_000_000.0)
         assert ptr_common.form_bracket("$250,004 - $500,000") == (250_001.0, 500_000.0)
+
+
+def test_ocr_that_could_not_run_raises_rather_than_reading_nothing():
+    """An empty read of a scan drops its older reading on re-read; a page
+    that couldn't be OCR'd at all must not look like one."""
+    pdf = SimpleNamespace(pages=[object(), object()])
+    with patch.object(ptr_common, "_ocr_table_page", side_effect=OSError("tesseract crashed")), \
+            pytest.raises(RuntimeError):
+        ptr_common.ocr_extract_rows(pdf)
