@@ -218,6 +218,33 @@ def explore_lease(monkeypatch):
     monkeypatch.setattr(lease, "job", _Granted)
 
 
+class TestOneWritePerDocument:
+    def test_a_failure_partway_leaves_each_document_whole_old_or_new(self, vec_env, monkeypatch):
+        # Deleted up front and inserted in batches, a failure left documents
+        # with their old chunks gone and only some new ones in — which the
+        # next top-up reads as embedded, and never finishes.
+        vector_store.embed_explore_documents([_doc(1, "One old"), _doc(2, "Two old")])
+        conn = vector_store.get_vec_conn()
+        real_execute_count = {"n": 0}
+
+        class _Conn:
+            def __getattr__(self, name):
+                return getattr(conn, name)
+
+            def execute(self, sql, *a):
+                if sql.startswith("INSERT INTO vec_explore"):
+                    real_execute_count["n"] += 1
+                    if real_execute_count["n"] == 2:  # the second document's insert
+                        raise sqlite3.OperationalError("database is locked")
+                return conn.execute(sql, *a)
+
+        monkeypatch.setattr(vector_store, "get_vec_conn", lambda: _Conn())
+        with pytest.raises(sqlite3.OperationalError):
+            vector_store.embed_explore_documents([_doc(1, "One new"), _doc(2, "Two new")])
+        titles = dict(conn.execute("SELECT doc_id, title FROM vec_explore").fetchall())
+        assert titles == {1: "One new", 2: "Two old"}
+
+
 class TestEnsureExploreIndex:
     def test_noop_when_index_current(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "Anything")])
@@ -657,11 +684,10 @@ async def test_the_admin_re_embed_runs_in_the_background_and_refuses_when_it_can
     # One queued or running: a second is refused, not told it started.
     from app.api import admin
 
-    monkeypatch.setattr(admin, "_reembed_queued", True)
-    with pytest.raises(HTTPException) as refused:
-        await admin_reembed_explore(db=db_session)
+    with admin._reembed_slot:
+        with pytest.raises(HTTPException) as refused:
+            await admin_reembed_explore(db=db_session)
     assert refused.value.status_code == 409 and "already under way" in refused.value.detail
-    monkeypatch.setattr(admin, "_reembed_queued", False)
 
     # Held by an Explore run: refused with the reason, not started to skip.
     monkeypatch.setattr(lease, "holder", lambda session, tier: "Explore ingest" if tier == lease.EXPLORE else None)

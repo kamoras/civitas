@@ -1410,14 +1410,13 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         recalibrate_ranking,
     )
 
-    global _reembed_queued
     # One at a time: a second, while the first is queued or running, would
     # only be refused its lease in the background after a 202. A rebuild of
     # another kind running is no reason to refuse: the job waits its turn.
-    with _reembed_lock:
-        if _reembed_queued:
-            raise HTTPException(status_code=409, detail="Explore re-embed not started: one is already under way")
-        _reembed_queued = True
+    # (Released by the job, or here on the way out: a Lock may be released
+    # from another thread.)
+    if not _reembed_slot.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Explore re-embed not started: one is already under way")
 
     def why_not(session: Session) -> str | None:
         # Checked here so a refusal is answered, not only logged by the job
@@ -1430,10 +1429,10 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     try:
         refused = await off_loop(db, why_not)
     except BaseException:
-        _release_reembed()
+        _reembed_slot.release()
         raise
     if refused is not None:
-        _release_reembed()
+        _reembed_slot.release()
         raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {refused}")
 
     asked = time.monotonic()
@@ -1441,9 +1440,11 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     def _reembed() -> None:
         # A lease, so a reset or an explore ingest in another process sees
         # it too; start_writer registers it for this process's data reset.
-        # Underway as a rebuild from the start, keyword and authority passes
-        # included: check-and-deploy waits it out.
-        with rebuild_underway(), lease.job(lease.EXPLORE, who="Explore re-embed") as held:
+        # Underway as a rebuild once it holds the lease (not while it asks:
+        # refused, it rebuilds nothing, and a start mustn't have left an
+        # incomplete index to it), keyword and authority passes included:
+        # check-and-deploy waits it out.
+        with lease.job(lease.EXPLORE, who="Explore re-embed") as held, rebuild_underway():
             if not held:
                 return  # logged as a skip by lease.job
             try:
@@ -1480,25 +1481,19 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         try:
             _reembed()
         finally:
-            _release_reembed()
+            _reembed_slot.release()
 
     try:
         start_writer(_job, name="explore-reembed")
     except BaseException:
-        _release_reembed()
+        _reembed_slot.release()
         raise
     return {"started": True}
 
 
-# An admin re-embed queued or running (the pipeline process is one process).
-_reembed_queued = False
-_reembed_lock = threading.Lock()
-
-
-def _release_reembed() -> None:
-    global _reembed_queued
-    with _reembed_lock:
-        _reembed_queued = False
+# Held while an admin re-embed is queued or running (the pipeline process is
+# one process).
+_reembed_slot = threading.Lock()
 
 
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])

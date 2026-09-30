@@ -651,12 +651,16 @@ def chunk_text(text: str, max_tokens: int, count_tokens) -> list[str]:
     return windows
 
 
-def embed_explore_documents(docs: list[dict]) -> int:
+def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = True) -> int:
     """Embed explore documents for semantic search.
 
     Args:
         docs: list of dicts with keys: id (int), title, summary, body,
               doc_type, source, date, politician_name, chamber.
+
+        record_chunks_per_doc: measure the index's chunks per document
+              after (a rebuild measures once, at its end, not per batch
+              over a half-built table).
 
     Returns:
         Number of documents embedded.
@@ -688,37 +692,47 @@ def embed_explore_documents(docs: list[dict]) -> int:
     if not units:
         return 0
 
-    doc_ids = {doc_id for doc_id, _, _ in units}
-    with _vec_lock:
-        for doc_id in doc_ids:
-            conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
-        conn.commit()
-
+    # Encoded first, all of it, and only then written — each document's old
+    # chunks deleted and its new ones inserted in one transaction. A failure
+    # partway (a lock, an encode error) leaves every document either as it
+    # was or as it now is, never with its old chunks gone and only some of
+    # its new ones in: that state reads as embedded to the next top-up,
+    # which would never finish it.
     BATCH = 200
+    vectors = []
     for i in range(0, len(units), BATCH):
-        batch = units[i:i + BATCH]
-        embs = model.encode(
-            [t for _, t, _ in batch], show_progress_bar=False, normalize_embeddings=True,
-        )
+        vectors.extend(model.encode(
+            [t for _, t, _ in units[i:i + BATCH]], show_progress_bar=False, normalize_embeddings=True,
+        ))
+    by_doc: dict[int, list] = {}
+    for (doc_id, text, doc), emb in zip(units, vectors):
+        by_doc.setdefault(doc_id, []).append((text, doc, emb))
+    doc_ids = set(by_doc)
+    for doc_id, chunks in by_doc.items():
         with _vec_lock:
-            for (doc_id, text, doc), emb in zip(batch, embs):
-                conn.execute(
-                    "INSERT INTO vec_explore (embedding, doc_id, doc_type, chamber, "
-                    "politician_id, title, date, source, politician_name, snippet) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        _serialize(emb), doc_id,
-                        doc.get("doc_type", "") or "",
-                        doc.get("chamber") or "",
-                        doc.get("politician_id") or "",
-                        doc.get("title", "")[:200],
-                        doc.get("date", "") or "",
-                        doc.get("source", "") or "",
-                        doc.get("politician_name") or "",
-                        text[:300],
-                    ),
-                )
-            conn.commit()
+            try:
+                conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
+                for text, doc, emb in chunks:
+                    conn.execute(
+                        "INSERT INTO vec_explore (embedding, doc_id, doc_type, chamber, "
+                        "politician_id, title, date, source, politician_name, snippet) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            _serialize(emb), doc_id,
+                            doc.get("doc_type", "") or "",
+                            doc.get("chamber") or "",
+                            doc.get("politician_id") or "",
+                            doc.get("title", "")[:200],
+                            doc.get("date", "") or "",
+                            doc.get("source", "") or "",
+                            doc.get("politician_name") or "",
+                            text[:300],
+                        ),
+                    )
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
 
     if _get_meta(conn, _INDEX_MODEL) is None:
         # A store never built at all (no identity, blank or other): only a
@@ -728,23 +742,27 @@ def embed_explore_documents(docs: list[dict]) -> int:
         # search what it embedded; a partial or other-model index always
         # carries an identity, and is never recorded here.
         _set_meta(conn, _INDEX_MODEL, index_identity())
-    # Mean chunks per document, measured rather than assumed: the search
-    # path needs it to know how many chunk slots to request for a given
-    # number of documents. Stored here because it is a property of the
-    # index and recomputing it per query is a COUNT DISTINCT over the
-    # whole table.
-    total_chunks = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    total_docs = conn.execute(
-        "SELECT COUNT(*) FROM (SELECT DISTINCT doc_id FROM vec_explore)"
-    ).fetchone()[0]
-    if total_docs:
-        _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
+    if record_chunks_per_doc:
+        _record_chunks_per_doc(conn)
 
     logger.info(
         "Embedded %d explore documents as %d chunks (%.1f per document)",
         len(doc_ids), len(units), len(units) / len(doc_ids),
     )
     return len(doc_ids)
+
+
+def _record_chunks_per_doc(conn: sqlite3.Connection) -> None:
+    """Mean chunks per document, measured rather than assumed: the search
+    path needs it to know how many chunk slots to request for a given
+    number of documents. Stored because it is a property of the index and
+    recomputing it per query is a COUNT DISTINCT over the whole table."""
+    total_chunks = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+    total_docs = conn.execute(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT doc_id FROM vec_explore)"
+    ).fetchone()[0]
+    if total_docs:
+        _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
 
 
 # ── Search ───────────────────────────────────────────────────────
@@ -1081,6 +1099,7 @@ def _rebuild(db_session_factory, wait: bool, if_incomplete: bool, unless_rebuilt
         _swap_tables({"vec_explore": _EXPLORE_DDL.format(if_not_exists="")}, meta={_INDEX_MODEL: ""})
         try:
             total = _embed_all(db_session_factory)
+            _record_chunks_per_doc(conn)  # once, over the finished index
             _set_meta(conn, _INDEX_MODEL, index_identity())
         except Exception as error:
             raise RebuildFailed(f"explore index rebuild failed after its swap: {error}") from error
@@ -1137,28 +1156,15 @@ _BUSY_CHECKS = 10
 _BUSY_CHECK_EVERY_S = 30.0
 
 
-class TopUpFailed(Exception):
-    """A top-up raised partway: `ids` are the documents it was embedding,
-    some of whose chunks may be in and some not — owed, since the next
-    top-up would take them for embedded. The cause is __cause__."""
-
-    def __init__(self, ids: set[int]):
-        super().__init__(f"top-up of {len(ids)} documents failed")
-        self.ids = ids
-
-
 def top_up_explore_index(docs_to_embed) -> int:
     """An Explore run's incremental step, under the rebuild lock: a start's
     rebuild waits for it (and then looks again) rather than embed the same
     documents beside it. `docs_to_embed()` is asked under the lock, so what
     it finds missing is what the index lacks then, not before a rebuild
-    this waited out. Raises TopUpFailed when the embedding does."""
+    this waited out. A failure leaves each document as it was or as it now
+    is (embed_explore_documents writes them one transaction each)."""
     with _rebuild_lock:
-        docs = docs_to_embed()
-        try:
-            return embed_explore_documents(docs)
-        except Exception as error:
-            raise TopUpFailed({d["id"] for d in docs}) from error
+        return embed_explore_documents(docs_to_embed())
 
 
 def wait_for_rebuild() -> None:

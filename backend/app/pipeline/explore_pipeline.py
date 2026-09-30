@@ -52,7 +52,6 @@ from app.pipeline.vector_store import (
     explore_embed_dict,
     index_is_whole,
     is_busy_error,
-    TopUpFailed,
     alert_rebuild_failed,
     rebuild_explore_index,
     top_up_explore_index,
@@ -429,17 +428,15 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
             embedded = await _top_up(db, refreshed_ids)
             outcome = "topped up"
         except Exception as exc:
-            # Owed either way — the backfill, and whatever the top-up was
-            # writing when it failed (some of its chunks may be in, and the
-            # next top-up would take it for embedded). A lock skips the
-            # step; anything else fails the run as it always has.
-            cause = exc.__cause__ if isinstance(exc, TopUpFailed) else exc
-            owed_now = refreshed_ids | (exc.ids if isinstance(exc, TopUpFailed) else set())
-            if owed_now:
-                await _record_owed(db, owed_now)
-            if not is_busy_error(cause):
-                raise cause from None
-            logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", cause)
+            # Each document is left as it was or as it now is (one write
+            # each): a new one not reached is still missing, and the next
+            # top-up takes it; the backfilled ones are owed. A lock skips
+            # the step; anything else fails the run as it always has.
+            if refreshed_ids:
+                await _record_owed(db, refreshed_ids)
+            if not is_busy_error(exc):
+                raise
+            logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", exc)
             return 0
 
     if outcome == "skipped" or outcome == "failed":
