@@ -657,23 +657,24 @@ database holds, so a link that is skipped, fails or crashes is alerted
 (`nightly-skipped-*`; `nightly-crashed-*` for a crash or a `failed` /
 `no_data` run) and the next runs anyway. Until then any of those ended the
 chain, and Stock trades and Election once went 19 nights without running
-behind a Supplementary failure. A link skipped because another run holds
-the machine (another run of that pipeline, or, for Stock trades, a member
-pipeline) is not moved past: the chain waits that run out
-(`scheduler.pipelines_running`) so two heavy pipelines never run side by
-side, then moves on — Stock trades is tried again; another run of the same
-pipeline already refreshed its data, so that skip is not alerted. The
-skips that end a chain are a data reset holding the database, which every
-later link would hit too, and a run that holds a link off past
-`STALE_PIPELINE_TIMEOUT` (hung: alerted as `wedged`). A killed process
-still ends its chain; the staleness watch below is the backstop for that.
-Both member pipelines run the analysis-code-hash invalidation
-(`invalidate_stale_analysis`), since House may run after a failed Senate.
-`POST /api/admin/pipeline/trigger` (and the token-authenticated
-`/api/pipeline/trigger`) runs the same five-link chain, reported the same
-way, so a manual run can recover any of them (a single senator or a
-fetch-only run is the Senate pipeline alone); a full trigger is refused
-(409) while a chain is already running. `pipelineChainIsRunning` in
+behind a Supplementary failure. One chain runs at a time
+(`pipeline_chain.claim`): a trigger of any of its pipelines is refused (409) while one
+is going, and a nightly run that finds a triggered chain going leaves the
+night to it. A link skipped because another run holds the machine (another
+run of that pipeline, or a member pipeline holding Stock trades off) waits
+until no pipeline is running (`scheduler.pipelines_running`, which stops
+counting a run once it is past `STALE_PIPELINE_TIMEOUT`), then is tried once
+more and that attempt is what gets reported: the other run may have been a
+single senator, or have failed, so it never stands in for the link. The one
+skip that ends a chain is a data reset holding the database, which every
+later link would hit too. A killed process still ends its chain; the
+staleness watch below is the backstop for that. Both member pipelines run
+the analysis-code-hash invalidation (`invalidate_stale_analysis`), since
+House may run after a failed Senate. `POST /api/admin/pipeline/trigger`
+(and the token-authenticated `/api/pipeline/trigger`) runs the same
+five-link chain, reported the same way, so a manual run can recover any of
+them (a single senator or a fetch-only run is the Senate pipeline alone).
+`pipelineChainIsRunning` in
 the admin status keeps `check-and-deploy.sh` from restarting between two
 links. `ops_alerts.check_pipeline_staleness` still watches for a pipeline
 with no successful completion in `PIPELINE_STALE_ALERT_DAYS`;

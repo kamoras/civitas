@@ -102,13 +102,20 @@ def nightly_links() -> "list[Link]":
 def pipelines_running() -> bool:
     """Whether any of the chain's pipelines is running, in any process —
     what a link held off by another run waits on (app.pipeline_chain). Its
-    in-process flag or its live run row, as the admin status reads them."""
+    in-process flag or its live run row, as the admin status reads them,
+    each only until its run is past STALE_PIPELINE_TIMEOUT (hung, and its
+    lock taken over from then — a wait on it must end)."""
     from app.models import ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun
-    from app.pipeline.run_tracker import run_in_progress, senate_run_state
+    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, run_in_progress, senate_run_state
 
-    if (is_house_pipeline_running() or is_supplementary_pipeline_running()
-            or is_stock_pipeline_running() or is_election_pipeline_running()):
-        return True
+    for running, age in (
+        (is_house_pipeline_running, house_pipeline_age),
+        (is_supplementary_pipeline_running, supplementary_pipeline_age),
+        (is_stock_pipeline_running, stock_pipeline_age),
+        (is_election_pipeline_running, election_pipeline_age),
+    ):
+        if running() and not _is_stale(age(), STALE_PIPELINE_TIMEOUT):
+            return True
     db = SessionLocal()
     try:
         return senate_run_state(db)[1] or any(run_in_progress(db, model) for model in (
@@ -127,18 +134,12 @@ def reporter(run_name: str):
     nightly one's alert."""
     from app.ops_alerts import resolve_ops_alert, send_ops_alert
     from app.pipeline.run_tracker import skip_reason_text
-    from app.pipeline_chain import CRASHED, FAILED, ends_chain, ran_elsewhere
+    from app.pipeline_chain import CRASHED, FAILED, ends_chain
 
     def report(link, outcome) -> None:
         slug = link.label.lower().replace(" ", "-")
         skipped, crashed = f"nightly-skipped-{slug}", f"nightly-crashed-{slug}"
         tag = f"{run_name.lower()}-{slug}-{utcnow():%Y-%m-%d}"
-        if ran_elsewhere(outcome):
-            # Another run of it was going (the chain waited it out): its data
-            # is that run's, fresh, and that run's own outcome is its
-            # pipeline's to report — no lost run here.
-            logger.info("%s pipeline: another run of it was going — this chain's left to that one", link.label)
-            return
         if outcome.status == "skipped":
             reason = (outcome.result or {}).get("reason")
             logger.info("%s pipeline skipped — %s", link.label, reason or "unknown reason")
@@ -164,11 +165,10 @@ def reporter(run_name: str):
             else:
                 detail = (outcome.result or {}).get("error") or (outcome.result or {}).get("reason")
                 why = f"it ended {outcome.status} ({detail or 'see its run row'})"
-            rest = ("The rest of its chain is not run." if ends_chain(outcome)
-                    else "The rest of its chain still runs.")
             send_ops_alert(
                 f"{run_name} {link.label} run {'crashed' if outcome.status == CRASHED else 'failed'}",
-                f"{why}. {link.label} data will be a day stale unless triggered again. {rest}",
+                f"{why}. {link.label} data will be a day stale unless triggered again. The rest of its "
+                "chain still runs.",
                 dedupe_key=f"crashed-{tag}",
                 condition=crashed,
             )
@@ -178,14 +178,15 @@ def reporter(run_name: str):
     return report
 
 
-def triggered_chain():
-    """What a full pipeline trigger runs: the nightly chain's five
-    pipelines, each whatever the one before it did (so a trigger recovers
-    any of them, not only the first), reported like the nightly run."""
+def triggered_chain(chain_id: int):
+    """What a full pipeline trigger runs, under the chain slot it claimed
+    (pipeline_chain.claim): the nightly chain's five pipelines, each
+    whatever the one before it did (so a trigger recovers any of them, not
+    only the first), reported like the nightly run."""
     from app.pipeline_chain import run_chain
 
     async def chain() -> None:
-        await run_chain(nightly_links(), reporter("Triggered"), busy=pipelines_running)
+        await run_chain(nightly_links(), reporter("Triggered"), busy=pipelines_running, chain_id=chain_id)
 
     return chain
 
@@ -233,9 +234,11 @@ def _nightly_pipeline() -> None:
                 logger.exception("Pre-pipeline check %s failed", check.__name__)
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(run_chain(nightly_links(), reporter("Nightly"), busy=pipelines_running))
-            # The whole chain's alert, from before each link had its own.
-            resolve_ops_alert("nightly-crashed")
+            # None: a triggered chain is running the same five pipelines,
+            # and reports them — tonight is left to it.
+            if loop.run_until_complete(run_chain(nightly_links(), reporter("Nightly"), busy=pipelines_running)) is not None:
+                # The whole chain's alert, from before each link had its own.
+                resolve_ops_alert("nightly-crashed")
         except BaseException as e:
             # Only what the chain itself doesn't absorb — cancellation, an
             # exit — ends it early.

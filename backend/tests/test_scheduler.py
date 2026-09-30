@@ -212,7 +212,7 @@ class TestNightlyPipelineIndependentLinks:
                               ("house", "run_house_pipeline"), ("stock", "run_stock_trades_pipeline"),
                               ("election", "run_election_pipeline")):
                 outcome = results.get(key, {"status": "completed"})
-                mock = AsyncMock(side_effect=outcome) if isinstance(outcome, BaseException) \
+                mock = AsyncMock(side_effect=outcome) if isinstance(outcome, (BaseException, list)) \
                     else AsyncMock(return_value=outcome)
                 patches.append(patch(f"app.scheduler.{name}", mock))
                 mocks[key] = mock
@@ -243,14 +243,26 @@ class TestNightlyPipelineIndependentLinks:
         subject, body = alert.call_args[0][0], alert.call_args[0][1]
         assert "skipped" in subject and "still run" in body
 
-    @pytest.mark.parametrize("reason", ["already_running", "held_elsewhere"])
-    def test_a_link_another_run_of_it_holds_is_no_lost_run(self, reason):
-        # That run refreshes its data (the chain waited it out): nothing to
-        # alert, and nothing of that pipeline's to resolve either.
-        mocks, alert, resolve, _warm = self._run_chain(house={"status": "skipped", "reason": reason})
-        self._all_ran(mocks)
+    def test_a_link_held_off_by_another_run_is_tried_again_and_reported(self):
+        # The other run may have been one senator, or failed: the retry's
+        # outcome is what is reported.
+        mocks, alert, _resolve, _warm = self._run_chain(
+            house=[{"status": "skipped", "reason": "already_running"}, {"status": "failed", "error": "boom"}])
+        assert mocks["house"].await_count == 2
+        assert alert.call_args.kwargs["condition"] == "nightly-crashed-house"
+
+    def test_a_nightly_run_leaves_the_night_to_a_chain_already_running(self):
+        from app import pipeline_chain
+
+        chain_id = pipeline_chain.claim()
+        try:
+            mocks, alert, resolve, _warm = self._run_chain()
+        finally:
+            pipeline_chain.release(chain_id)
+        for mock in mocks.values():
+            mock.assert_not_called()
         alert.assert_not_called()
-        assert not {"nightly-skipped-house", "nightly-crashed-house"} & {c.args[0] for c in resolve.call_args_list}
+        assert "nightly-crashed" not in {c.args[0] for c in resolve.call_args_list}
 
     @pytest.mark.parametrize("link", ["senate", "supplementary", "house", "stock", "election"])
     def test_a_crash_anywhere_is_alerted_and_every_link_still_runs(self, link):
@@ -276,8 +288,8 @@ class TestNightlyPipelineIndependentLinks:
         warm.assert_called_once()
 
     def test_the_bills_cache_is_not_warmed_when_house_was_skipped(self):
-        # Another House run may be writing those rows right then.
-        _mocks, _alert, _resolve, warm = self._run_chain(house={"status": "skipped", "reason": "already_running"})
+        # Another writer may be writing those rows right then.
+        _mocks, _alert, _resolve, warm = self._run_chain(house={"status": "skipped", "reason": "busy"})
         warm.assert_not_called()
 
     def test_a_link_that_ran_resolves_its_skip_and_crash_alerts(self):

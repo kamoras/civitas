@@ -3,6 +3,7 @@ one before it did."""
 
 import asyncio
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -44,8 +45,9 @@ def test_a_result_without_a_status_is_no_success(result):
 
 class TestHeldOffByAnotherRun:
     """A link skipped because another run holds the machine waits that run
-    out rather than let the chain leapfrog it into the next heavy pipeline
-    beside it."""
+    out rather than let the chain leapfrog into the next heavy pipeline
+    beside it, then tries once more — the other run may have been one
+    senator, or have failed, so it never stands in for this one."""
 
     @pytest.fixture(autouse=True)
     def _no_sleep(self, monkeypatch):
@@ -59,38 +61,45 @@ class TestHeldOffByAnotherRun:
             return next(answers)
         return busy
 
-    @pytest.mark.parametrize("reason", ["already_running", "held_elsewhere"])
-    def test_another_run_of_the_same_pipeline_is_waited_out_then_the_chain_moves_on(self, reason):
+    @pytest.mark.parametrize("reason", ["already_running", "held_elsewhere", "member_pipeline_running"])
+    def test_it_waits_the_other_run_out_then_tries_again(self, reason):
         polls, order = [], []
-        first = AsyncMock(return_value={"status": "skipped", "reason": reason})
+
+        async def first():
+            order.append(("A", len(polls)))
+            return {"status": "skipped", "reason": reason} if len(order) == 1 else {"status": "completed"}
 
         async def second():
-            order.append(len(polls))
+            order.append(("B", len(polls)))
             return {"status": "completed"}
 
         outcomes = asyncio.run(run_chain([Link("A", first), Link("B", second)], busy=self._busy_for(2, polls)))
-        assert order == [3]  # B started only once busy() said free
-        first.assert_awaited_once()  # that run refreshed A's data: not rerun
-        assert pipeline_chain.ran_elsewhere(outcomes["A"])
+        # A retried, and B started, only once busy() said free (third look).
+        assert order == [("A", 0), ("A", 3), ("B", 3)]
+        assert outcomes["A"].status == "completed"
 
-    def test_a_link_held_off_by_a_member_pipeline_is_tried_again(self):
-        stock = AsyncMock(side_effect=[{"status": "skipped", "reason": "member_pipeline_running"},
-                                       {"status": "completed"}])
-        outcomes = asyncio.run(run_chain([Link("Stock", stock)], busy=self._busy_for(1, [])))
-        assert stock.await_count == 2 and outcomes["Stock"].status == "completed"
+    def test_a_retry_that_is_held_off_again_is_reported_as_skipped(self):
+        # Not waited on a second time: reported, and the chain moves on.
+        held = AsyncMock(return_value={"status": "skipped", "reason": "already_running"})
+        polls = []
+        outcomes = asyncio.run(run_chain([Link("A", held), Link("B", _completed())],
+                                         busy=self._busy_for(0, polls)))
+        assert held.await_count == 2 and len(polls) == 1
+        assert outcomes["A"].status == "skipped" and outcomes["B"].status == "completed"
 
-    def test_a_run_holding_it_past_the_stale_timeout_ends_the_chain(self, monkeypatch):
-        from datetime import timedelta
+    def test_the_chain_is_reported_running_while_it_waits(self, monkeypatch):
+        # A wait longer than the staleness cap still has the chain alive.
+        seen, now = [], [time.monotonic()]
 
-        monkeypatch.setattr(pipeline_chain, "STALE_PIPELINE_TIMEOUT", timedelta(0))
-        last = AsyncMock()
-        outcomes = asyncio.run(run_chain([
-            Link("A", AsyncMock(return_value={"status": "skipped", "reason": "already_running"})),
-            Link("B", last),
-        ], busy=lambda: True))
-        assert outcomes["A"].status == pipeline_chain.WEDGED
-        assert pipeline_chain.ends_chain(outcomes["A"])
-        last.assert_not_awaited()
+        def busy():
+            now[0] += 7 * 3600  # each look 7h after the last
+            seen.append(pipeline_chain.chain_running())
+            return len(seen) < 3
+
+        monkeypatch.setattr(pipeline_chain, "time", SimpleNamespace(monotonic=lambda: now[0]))
+        asyncio.run(run_chain([Link("A", AsyncMock(side_effect=[
+            {"status": "skipped", "reason": "already_running"}, {"status": "completed"}]))], busy=busy))
+        assert seen == [True, True, True]
 
     def test_other_skips_do_not_wait(self):
         busy = []
@@ -99,64 +108,23 @@ class TestHeldOffByAnotherRun:
         assert busy == []
 
 
-def test_skipped_and_failed_links_do_not_stop_the_chain():
-    last = _completed()
-    outcomes = asyncio.run(run_chain([
-        Link("A", AsyncMock(return_value={"status": "skipped", "reason": "already_running"})),
-        Link("B", AsyncMock(return_value={"status": "failed"})),
-        Link("C", last),
-    ]))
-    assert [o.status for o in outcomes.values()] == ["skipped", "failed", "completed"]
-    last.assert_awaited_once()
+class TestOneChainAtATime:
+    def test_a_chain_is_not_started_while_another_runs(self):
+        first = pipeline_chain.claim()
+        link = AsyncMock()
+        assert asyncio.run(run_chain([Link("A", link)])) is None
+        link.assert_not_awaited()
+        pipeline_chain.release(first)
+        assert pipeline_chain.claim() is not None
 
+    def test_a_wedged_chain_does_not_hold_the_slot(self, monkeypatch):
+        monkeypatch.setitem(pipeline_chain._chains, 1, time.monotonic() - 13 * 3600)
+        assert pipeline_chain.claim() is not None
 
-def test_a_data_reset_ends_the_chain():
-    # Every later link would be refused the same way (and alert for it).
-    from app.pipeline import lease
-
-    last = AsyncMock()
-    outcomes = asyncio.run(run_chain([
-        Link("A", AsyncMock(return_value={"status": "skipped", "reason": lease.REFUSED_BY_RESET})),
-        Link("B", last),
-    ]))
-    assert list(outcomes) == ["A"]
-    last.assert_not_awaited()
-
-
-def test_cancellation_still_ends_the_chain():
-    last = AsyncMock()
-    with pytest.raises(asyncio.CancelledError):
-        asyncio.run(run_chain([Link("A", AsyncMock(side_effect=asyncio.CancelledError())), Link("B", last)]))
-    last.assert_not_awaited()
-    assert not pipeline_chain.chain_running()
-
-
-def test_a_chain_is_reported_running_between_its_links():
-    # check-and-deploy.sh waits on it: a restart would drop the rest.
-    seen = []
-
-    async def second():
-        seen.append(pipeline_chain.chain_running())
-        return {"status": "completed"}
-
-    assert not pipeline_chain.chain_running()
-    asyncio.run(run_chain([Link("A", _completed()), Link("B", second)]))
-    assert seen == [True] and not pipeline_chain.chain_running()
-
-
-def test_a_chain_with_no_progress_for_a_runs_length_is_not_busy(monkeypatch):
-    # Wedged: reported busy forever, it would hold every deploy off.
-    monkeypatch.setitem(pipeline_chain._chains, 1, time.monotonic() - 13 * 3600)
-    assert not pipeline_chain.chain_running()
-
-
-@pytest.mark.asyncio
-async def test_the_status_reports_a_chain_so_deploys_wait_it_out(db_session, monkeypatch):
-    from app.api.admin import admin_pipeline_status
-
-    assert (await admin_pipeline_status(db=db_session))["pipelineChainIsRunning"] is False
-    monkeypatch.setitem(pipeline_chain._chains, 1, time.monotonic())
-    assert (await admin_pipeline_status(db=db_session))["pipelineChainIsRunning"] is True
+    def test_a_claimed_chain_runs_under_its_claim_and_releases_it(self):
+        chain_id = pipeline_chain.claim()
+        asyncio.run(run_chain([Link("A", _completed())], chain_id=chain_id))
+        assert not pipeline_chain.chain_running()
 
 
 class TestTriggers:
@@ -168,9 +136,17 @@ class TestTriggers:
     NAMES = ("run_senate_pipeline", "run_supplementary_pipeline", "run_house_pipeline",
              "run_stock_trades_pipeline", "run_election_pipeline")
 
-    def test_a_full_trigger_runs_every_nightly_link_and_reports_them(self):
-        from app.api.admin import _trigger_target
+    def _start(self, db_session, monkeypatch, senator=None, fetch_only=False):
+        from app.api import admin
 
+        started = []
+        monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda target, **kw: started.append(target))
+        asyncio.run(admin.admin_trigger_pipeline(senator=senator, fetch_only=fetch_only, db=db_session))
+        return started
+
+    def test_a_full_trigger_runs_every_nightly_link_and_reports_them(self, db_session, monkeypatch):
+        (target,) = self._start(db_session, monkeypatch)
+        assert pipeline_chain.chain_running()  # claimed before answering
         mocks = {n: _completed() for n in self.NAMES}
         mocks["run_senate_pipeline"] = AsyncMock(return_value={"status": "failed", "error": "boom"})
         with patch.multiple("app.scheduler", **mocks), \
@@ -178,29 +154,31 @@ class TestTriggers:
              patch("app.services.bill_service.warm_bill_collection_cache"), \
              patch("app.ops_alerts.send_ops_alert") as alert, \
              patch("app.ops_alerts.resolve_ops_alert"):
-            asyncio.run(_trigger_target(None, False)())
+            asyncio.run(target())
         for mock in mocks.values():
             mock.assert_awaited_once()
         assert alert.call_args.args[0] == "Triggered Senate run failed"
+        assert not pipeline_chain.chain_running()
 
     @pytest.mark.parametrize("senator,fetch_only", [("Smith", False), (None, True)])
-    def test_a_filtered_trigger_is_the_senate_pipeline_alone(self, senator, fetch_only):
-        from app.api.admin import _trigger_target
-
+    def test_a_filtered_trigger_is_the_senate_pipeline_alone(self, db_session, monkeypatch, senator, fetch_only):
         senate, house = _completed(), AsyncMock()
         with patch("app.pipeline.senate_pipeline.run_senate_pipeline", senate), \
              patch("app.scheduler.run_house_pipeline", house):
-            asyncio.run(_trigger_target(senator, fetch_only)())
+            (target,) = self._start(db_session, monkeypatch, senator, fetch_only)
+            assert not pipeline_chain.chain_running()  # no chain claimed
+            asyncio.run(target())
         senate.assert_awaited_once_with(senator_filter=senator, fetch_only=fetch_only)
         house.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_the_token_trigger_runs_the_same_chain(self, db_session, monkeypatch):
+        from app.api import admin
         from app.api import pipeline as pipeline_api
 
         started = []
         monkeypatch.setattr(pipeline_api, "check_pipeline_token", lambda _a: None)
-        monkeypatch.setattr(pipeline_api, "run_pipeline_in_thread", lambda target, **kw: started.append(target))
+        monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda target, **kw: started.append(target))
         await pipeline_api.trigger_pipeline(authorization="Bearer x", senator=None, fetch_only=False, db=db_session)
         mocks = {n: _completed() for n in self.NAMES}
         with patch.multiple("app.scheduler", **mocks), \
@@ -211,25 +189,49 @@ class TestTriggers:
         for mock in mocks.values():
             mock.assert_awaited_once()
 
+    def test_a_trigger_that_cannot_start_hands_the_slot_back(self, db_session, monkeypatch):
+        from app.api import admin
+        from app.background import WritesHeld
+
+        def held(*_a, **_k):
+            raise WritesHeld("a data reset holds writes")
+
+        monkeypatch.setattr(admin, "run_pipeline_in_thread", held)
+        with pytest.raises(WritesHeld):
+            asyncio.run(admin.admin_trigger_pipeline(senator=None, fetch_only=False, db=db_session))
+        assert not pipeline_chain.chain_running()
+
+
+TRIGGERS = [
+    ("admin_trigger_pipeline", {"senator": None, "fetch_only": False}),
+    ("admin_trigger_pipeline", {"senator": "Smith", "fetch_only": False}),
+    ("admin_trigger_pipeline", {"senator": None, "fetch_only": True}),
+    ("admin_trigger_house_pipeline", {}),
+    ("admin_trigger_supplementary_pipeline", {}),
+    ("admin_trigger_election_pipeline", {}),
+]
+
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("senator,fetch_only,refused", [(None, False, True), ("Smith", False, False), (None, True, False)])
-async def test_a_full_trigger_is_refused_while_a_chain_runs(db_session, monkeypatch, senator, fetch_only, refused):
-    # It would run every pipeline a second time behind the first.
+@pytest.mark.parametrize("endpoint,kwargs", TRIGGERS)
+async def test_every_trigger_is_refused_while_a_chain_runs(db_session, monkeypatch, endpoint, kwargs):
+    # A full one would run every pipeline a second time; any other would
+    # run beside the chain's current link.
     from fastapi import HTTPException
 
     from app.api import admin
 
     started = []
     monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda target, **kw: started.append(target))
+    if "senator" in kwargs:
+        kwargs = {**kwargs, "db": db_session}
     monkeypatch.setitem(pipeline_chain._chains, 1, time.monotonic())
-    if refused:
-        with pytest.raises(HTTPException) as error:
-            await admin.admin_trigger_pipeline(senator=senator, fetch_only=fetch_only, db=db_session)
-        assert error.value.status_code == 409 and not started
-    else:
-        await admin.admin_trigger_pipeline(senator=senator, fetch_only=fetch_only, db=db_session)
-        assert started
+    with pytest.raises(HTTPException) as error:
+        await getattr(admin, endpoint)(**kwargs)
+    assert error.value.status_code == 409 and not started
+    pipeline_chain._chains.clear()
+    await getattr(admin, endpoint)(**kwargs)
+    assert started
 
 
 def test_pipelines_running_reads_each_pipelines_flag_and_run_rows(db_session, monkeypatch):
@@ -240,3 +242,18 @@ def test_pipelines_running_reads_each_pipelines_flag_and_run_rows(db_session, mo
     assert scheduler.pipelines_running() is False
     monkeypatch.setattr(scheduler, "is_stock_pipeline_running", lambda: True)
     assert scheduler.pipelines_running() is True
+
+
+def test_pipelines_running_stops_counting_a_hung_run(monkeypatch):
+    # Else a link waiting on it would wait for ever.
+    from datetime import timedelta
+
+    from app import scheduler
+
+    monkeypatch.setattr(scheduler, "is_house_pipeline_running", lambda: True)
+    monkeypatch.setattr(scheduler, "house_pipeline_age", lambda: timedelta(hours=13))
+    with patch("app.pipeline.run_tracker.senate_run_state", return_value=(None, False, False)), \
+         patch("app.pipeline.run_tracker.run_in_progress", return_value=False):
+        assert scheduler.pipelines_running() is False
+        monkeypatch.setattr(scheduler, "house_pipeline_age", lambda: timedelta(hours=1))
+        assert scheduler.pipelines_running() is True

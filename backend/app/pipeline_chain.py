@@ -10,19 +10,22 @@ fails or crashes is reported and the next link runs anyway. (Until 2026-09
 any of those ended the chain there: a Supplementary failure once left
 House, Stock trades and Election unrun for 19 nights.)
 
-A link skipped because another run holds the machine — another run of
-the same pipeline (a single trigger, or another chain), or, for Stock
-trades, a member pipeline — is not a lost run, and moving straight on would
-put two heavy pipelines side by side. So the chain waits that run out
-first: another run of the same pipeline refreshes its data, and the chain
-moves on; a Stock trades run held off by a member pipeline is tried again.
-A run that holds the machine past STALE_PIPELINE_TIMEOUT is hung, and the
-chain ends there (WEDGED) rather than wait on it forever.
+One chain runs at a time (claim): a trigger is refused while one is going,
+and a nightly run that finds one going leaves the night to it. A link
+skipped because another run holds the machine — another run of the same
+pipeline, or, for Stock trades, a member pipeline — would otherwise have
+the chain move straight on and put two heavy pipelines side by side. So the
+chain waits until no pipeline is running, then tries that link once more
+and reports what that attempt did: the other run may have been a single
+senator, or have failed, so it never stands in for this one. The wait ends
+because what it waits on does — every "running" it reads stops counting
+once its run is past STALE_PIPELINE_TIMEOUT (scheduler.pipelines_running),
+and the retry's lock takes over a hung run's.
 
-The skips that end a chain are that one and a data reset holding the
-database: every later link would be refused the same way. What this can't
-cover is the process itself dying — a kill takes the rest of the chain with
-it; ops_alerts.check_pipeline_staleness is the backstop for that.
+The one skip that ends a chain is a data reset holding the database: every
+later link would be refused the same way. What this can't cover is the
+process itself dying — a kill takes the rest of the chain with it;
+ops_alerts.check_pipeline_staleness is the backstop for that.
 """
 
 import asyncio
@@ -40,15 +43,12 @@ logger = logging.getLogger(__name__)
 # A link's outcome: its run's own status ("completed", "failed", "partial",
 # "no_data", "skipped" …, from the dict it returned), or CRASHED (it raised).
 CRASHED = "crashed"
-# Held off by another run that outlived STALE_PIPELINE_TIMEOUT: the chain
-# stops waiting and ends.
-WEDGED = "wedged"
 # Returned no status: a bug in the pipeline, alerted rather than taken for
 # a success.
 UNKNOWN = "unknown"
 # Outcomes that are a lost run of the pipeline, alerted as such.
-FAILED = frozenset({CRASHED, WEDGED, UNKNOWN, "failed", "no_data"})
-# Waiting on another run: how often to look, and for how long at most.
+FAILED = frozenset({CRASHED, UNKNOWN, "failed", "no_data"})
+# How often a link held off by another run looks whether it has finished.
 WAIT_POLL_S = 30
 
 
@@ -69,20 +69,43 @@ class Outcome:
 
 
 # Chains in progress, by id: the monotonic time of their last progress (a
-# link starting or ending). What check-and-deploy.sh reads
-# (pipelineChainIsRunning), so a restart between two links doesn't drop the
-# rest. One with no progress for STALE_PIPELINE_TIMEOUT — one link that
-# long — is wedged, not busy: reported busy it would hold every deploy off,
-# the one that fixes it included.
+# link starting or ending, or a look while waiting). What check-and-deploy.sh
+# reads (pipelineChainIsRunning), so a restart between two links doesn't
+# drop the rest. One with no progress for STALE_PIPELINE_TIMEOUT — one link
+# that long — is wedged, not busy: reported busy it would hold every deploy
+# off, the one that fixes it included, and it no longer holds the slot.
 _chains: dict[int, float] = {}
 _chains_lock = threading.Lock()
 _ids = itertools.count(1)
 
 
+def _any_live(now: float) -> bool:
+    return any(now - progress < STALE_PIPELINE_TIMEOUT.total_seconds() for progress in _chains.values())
+
+
 def chain_running() -> bool:
     now = time.monotonic()
     with _chains_lock:
-        return any(now - progress < STALE_PIPELINE_TIMEOUT.total_seconds() for progress in _chains.values())
+        return _any_live(now)
+
+
+def claim() -> int | None:
+    """The chain slot: an id to run a chain under (run_chain), or None while
+    another chain is running. Taken where the chain is asked for — a trigger
+    claims before it answers — so two requests can't both find it free.
+    Hand it back with release() if the chain never starts."""
+    now = time.monotonic()
+    with _chains_lock:
+        if _any_live(now):
+            return None
+        chain_id = next(_ids)
+        _chains[chain_id] = now
+        return chain_id
+
+
+def release(chain_id: int) -> None:
+    with _chains_lock:
+        _chains.pop(chain_id, None)
 
 
 def _progress(chain_id: int) -> None:
@@ -95,42 +118,35 @@ def _skip_reason(outcome: Outcome) -> str | None:
 
 
 def ends_chain(outcome: Outcome) -> bool:
-    """A data reset refused it, or another run held the machine past the
-    point of being hung: every later link would be refused too."""
+    """A data reset refused it: every later link would be refused too."""
     from app.pipeline import lease
 
-    return outcome.status == WEDGED or _skip_reason(outcome) == lease.REFUSED_BY_RESET
+    return _skip_reason(outcome) == lease.REFUSED_BY_RESET
 
 
-def ran_elsewhere(outcome: Outcome) -> bool:
-    """Skipped because another run of the same pipeline holds it — its run
-    lock (ALREADY_RUNNING) or its job's lease (REFUSED_HELD): that run
-    refreshes the pipeline's data, so this is no lost run."""
+def held_off(outcome: Outcome) -> bool:
+    """Skipped because another run holds the machine: another run of the same
+    pipeline (its run lock, ALREADY_RUNNING, or its job's lease,
+    REFUSED_HELD), or a member pipeline holding Stock trades off."""
     from app.pipeline import lease
 
-    return _skip_reason(outcome) in (ALREADY_RUNNING, lease.REFUSED_HELD)
+    return _skip_reason(outcome) in (ALREADY_RUNNING, lease.REFUSED_HELD, MEMBER_PIPELINE_RUNNING)
 
 
-def _held_off(outcome: Outcome) -> bool:
-    """Skipped because another run holds the machine: the chain waits it out."""
-    return ran_elsewhere(outcome) or _skip_reason(outcome) == MEMBER_PIPELINE_RUNNING
-
-
-async def _wait_out(busy: Callable[[], bool]) -> bool:
-    """Until busy() is false (True), or STALE_PIPELINE_TIMEOUT has passed
-    (False: whatever holds the machine is hung)."""
-    deadline = time.monotonic() + STALE_PIPELINE_TIMEOUT.total_seconds()
+async def _wait_out(chain_id: int, busy: Callable[[], bool]) -> None:
+    """Until busy() is false — each run it reads stops counting once past
+    STALE_PIPELINE_TIMEOUT, so this ends. The chain's progress meanwhile:
+    it is alive, only waiting."""
     while True:
         try:
             if not busy():
-                return True
+                return
         except Exception:
-            # Can't tell: take it as free — the next link's own lock refuses
-            # it if not.
+            # Can't tell: take it as free — the retry's own lock refuses it
+            # if not.
             logger.exception("Checking for a running pipeline failed")
-            return True
-        if time.monotonic() >= deadline:
-            return False
+            return
+        _progress(chain_id)
         await asyncio.sleep(WAIT_POLL_S)
 
 
@@ -157,30 +173,29 @@ async def _run_link(link: Link) -> Outcome:
 
 async def run_chain(
     links: list[Link], on_outcome: Callable[[Link, Outcome], None] | None = None,
-    busy: Callable[[], bool] | None = None,
-) -> dict[str, Outcome]:
-    """Each link in turn, whatever the one before it did. `busy`: whether
-    any pipeline is running — what a link held off by another run waits on
+    busy: Callable[[], bool] | None = None, chain_id: int | None = None,
+) -> dict[str, Outcome] | None:
+    """Each link in turn, whatever the one before it did, under `chain_id`
+    (claimed already, or claimed here — None, and nothing runs, while
+    another chain holds the slot). `busy`: whether any pipeline is running —
+    what a link held off by another run waits on before its one retry
     (without it, the chain moves straight on)."""
-    chain_id = next(_ids)
+    if chain_id is None:
+        chain_id = claim()
+        if chain_id is None:
+            logger.info("Another pipeline chain is running — this one is not started")
+            return None
     outcomes: dict[str, Outcome] = {}
     try:
         for link in links:
             _progress(chain_id)
             outcome = await _run_link(link)
-            if busy is not None and _held_off(outcome):
-                logger.info("%s pipeline held off by another run — waiting it out", link.label)
-                # Still this chain's progress while it waits (up to the
-                # staleness cap, which is the wait's bound too).
+            if busy is not None and held_off(outcome):
+                logger.info("%s pipeline held off by another run — waiting it out, then trying again",
+                            link.label)
+                await _wait_out(chain_id, busy)
                 _progress(chain_id)
-                if not await _wait_out(busy):
-                    outcome = Outcome(WEDGED, {
-                        "status": WEDGED, "reason": (outcome.result or {}).get("reason"),
-                        "error": f"another run held it off for over {STALE_PIPELINE_TIMEOUT}",
-                    })
-                elif not ran_elsewhere(outcome):
-                    # Held off by another pipeline, not run by it.
-                    outcome = await _run_link(link)
+                outcome = await _run_link(link)
             _progress(chain_id)
             outcomes[link.label] = outcome
             logger.info("%s pipeline: %s", link.label,
@@ -191,9 +206,8 @@ async def run_chain(
                 except Exception:
                     logger.exception("Reporting %s's outcome failed", link.label)
             if ends_chain(outcome):
-                logger.warning("%s pipeline: %s — the rest of this chain is not run", link.label, outcome.status)
+                logger.warning("A data reset holds the database — the rest of this chain is not run")
                 break
     finally:
-        with _chains_lock:
-            _chains.pop(chain_id, None)
+        release(chain_id)
     return outcomes
