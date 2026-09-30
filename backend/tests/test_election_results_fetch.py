@@ -22,7 +22,8 @@ these feeds hold before November are past ones, so the tests pin the
 """
 
 import json
-from datetime import date
+from datetime import date, datetime
+from unittest.mock import patch
 
 import pytest
 from pathlib import Path
@@ -551,6 +552,41 @@ class TestEnhancedVotingDemoAndAmbiguity:
         self._serve(monkeypatch, index)
         with pytest.raises(election_results.UntrustedCount):
             await ev.fetch_general_results(None, date(2026, 11, 3), "UT", self.UT)
+
+
+class TestEnhancedVotingStampIsLastUpdatedOnly:
+    """asOf is when the payload was rendered — Utah's 2024 file has it a
+    year past lastUpdated. Stored from one poll that lacked lastUpdated, it
+    made every later lastUpdated poll "older" and refused as gone back."""
+
+    async def test_the_stamp_is_last_updated(self, monkeypatch):
+        TestEnhancedVotingDemoAndAmbiguity._serve(monkeypatch, _EV["indexes"]["UT"], _ev_payload("UT24"))
+        got = await ev.fetch_general_results(None, date(2024, 11, 5), "UT", TestEnhancedVotingDemoAndAmbiguity.UT)
+        assert got.source_updated.isoformat().startswith("2024-11-22T22:37:41")
+
+    async def test_no_last_updated_is_no_stamp_not_as_of(self, monkeypatch):
+        payload = _ev_payload("UT24")
+        del payload["election"]["lastUpdated"]
+        TestEnhancedVotingDemoAndAmbiguity._serve(monkeypatch, _EV["indexes"]["UT"], payload)
+        got = await ev.fetch_general_results(None, date(2024, 11, 5), "UT", TestEnhancedVotingDemoAndAmbiguity.UT)
+        assert got.source_updated is None
+
+    async def test_a_poll_without_it_does_not_freeze_the_state(self, monkeypatch, db_session):
+        from app.live_results import sync
+        from app.models import Race, RaceResult
+
+        db_session.add(Race(id="2024-SEN-UT", cycle_year=2024, office="S", state="UT"))
+        payload = _ev_payload("UT24")
+        del payload["election"]["lastUpdated"]
+        TestEnhancedVotingDemoAndAmbiguity._serve(monkeypatch, _EV["indexes"]["UT"], payload)
+        first = await ev.fetch_general_results(None, date(2024, 11, 5), "UT", TestEnhancedVotingDemoAndAmbiguity.UT)
+        db_session.add(RaceResult(race_id="2024-SEN-UT", election_date="2024-11-05", source_name="UT",
+                                  tallies="[]", votes_counted=0, source_updated_at=first.source_updated))
+        db_session.flush()
+        TestEnhancedVotingDemoAndAmbiguity._serve(monkeypatch, _EV["indexes"]["UT"], _ev_payload("UT24"))
+        later = await ev.fetch_general_results(None, date(2024, 11, 5), "UT", TestEnhancedVotingDemoAndAmbiguity.UT)
+        with patch.object(sync, "utcnow", return_value=datetime(2026, 1, 1)):
+            assert sync.freshness_problem(db_session, "UT", date(2024, 11, 5), later) is None
 
 
 class TestEnhancedVotingUnitsAndWriteIns:

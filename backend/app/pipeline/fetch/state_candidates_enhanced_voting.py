@@ -522,5 +522,10 @@ async def fetch_general_results(
         official=bool(meta.get("isOfficialResults")),
         unit_label=_unit_label(payload, source),
         contests=general_contests(payload, _house_patterns(source)),
-        source_updated=parse_utc(meta.get("lastUpdated")) or parse_utc(meta.get("asOf")),
+        # lastUpdated only — when the count last changed. asOf is when the
+        # payload was rendered (a year past lastUpdated in Utah's 2024
+        # file), and falling back to it for one poll stored a stamp every
+        # later lastUpdated was "older" than, refusing the state's count as
+        # gone back for as long as that gap. No lastUpdated: no time guard.
+        source_updated=parse_utc(meta.get("lastUpdated")),
     )
