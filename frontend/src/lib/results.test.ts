@@ -5,7 +5,11 @@ import {
   NO_COUNT_STRIPE,
   FEED_FAILED_MARK,
   POLLS_OPEN_MARK,
+  STALE_SHADOW,
   countReadAt,
+  countReadRange,
+  resultsNow,
+  stateFeedBehind,
   everyLiveStateVoting,
   feedBehind,
   feedFailed,
@@ -301,7 +305,9 @@ describe("stateFill", () => {
   });
 
   it("says each state's status in its accessible name, not in colour alone", () => {
-    expect(stateShade("GA", [], "S", true, true, false, true).label).toBe("GA: polls open");
+    expect(stateShade("GA", [], "S", true, true, false, true).label).toBe(
+      "GA: polls not yet closed"
+    );
     expect(stateShade("GA", [], "S", true, true, true).label).toBe("GA: results feed not read");
     expect(stateShade("GA", [], "S", true, true).label).toBe("GA Senate: no votes yet");
     expect(stateShade("GA", [], "S", false, true).label).toBe("GA: no live count here");
@@ -332,8 +338,17 @@ describe("stateFill", () => {
     expect(stateFill([], "S", true, true, false)).toBe(AWAITING_FILL);
     // A state with no feed at all is uncovered whatever its status says.
     expect(stateFill([], "S", false, true, true)).toBe(UNCOVERED_FILL);
-    // An older count still shown keeps its colour.
+    // An older count still shown keeps its colour — marked stale, so it
+    // never passes for a live one.
     expect(stateFill([race()], "S", true, true, true)).toMatch(/^rgba\(255,137,137/);
+    expect(stateShade("GA", [race()], "S", true, true, true).stale).toBe(true);
+    expect(stateShade("GA", [race(), race({ isSpecial: true })], "S", true, true, true).stale).toBe(
+      true
+    );
+    expect(stateShade("GA", [race()], "S", true, true, false).stale).toBe(false);
+    // Nothing to mark stale without a count, or a feed.
+    expect(stateShade("GA", [], "S", true, true, true).stale).toBe(false);
+    expect(stateShade("GA", [race()], "S", false, true, true).stale).toBe(false);
   });
 
   it("shades House by the party leading more districts", () => {
@@ -441,7 +456,9 @@ describe("describeUpdate", () => {
     expect(
       describeUpdate(event("all_reporting", { totalUnits: null, reportingUnits: null })).text
     ).toMatch(/^Every reporting unit is in\./);
-    expect(describeUpdate(event("official")).tag).toBe("OFFICIAL");
+    // Never a bare OFFICIAL beside the shares: that reads as a result.
+    expect(describeUpdate(event("official")).tag).toBe("OFFICIAL COUNT");
+    expect(describeUpdate(event("official")).text).toMatch(/Not called\.$/);
     expect(
       describeUpdate(
         event("flip_reversed", {
@@ -564,6 +581,74 @@ describe("the count-less fills' textures", () => {
   });
 });
 
+describe("the stale stripe", () => {
+  // As in the count-less fills' test above.
+  const parse = (c: string) =>
+    c.startsWith("#")
+      ? ([1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)).concat(1) as number[])
+      : c
+          .match(/[\d.]+/g)!
+          .map(Number)
+          .concat(1)
+          .slice(0, 4);
+  const over = (c: string, bg: number[]) => {
+    const [r, g, b, a] = parse(c);
+    return [r, g, b].map((v, i) => a * v + (1 - a) * bg[i]);
+  };
+  const lum = ([r, g, b]: number[]) => {
+    const ch = (v: number) => {
+      const x = v / 255;
+      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+  };
+  const ratio = (a: number[], b: number[]) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const SURFACE = parse("#14110e");
+
+  it("has a mark at least 3:1 against every fill a count can have (WCAG 1.4.11)", () => {
+    const fills = [TIED_FILL, AWAITING_FILL];
+    for (const rgb of ["130,172,255", "255,137,137", "201,149,255"])
+      for (const a of [0.3, 0.45, 0.55, 0.9, 1]) fills.push(`rgba(${rgb}, ${a})`);
+    for (const f of fills) {
+      const base = over(f, SURFACE);
+      const best = Math.max(
+        ratio(over(FEED_FAILED_MARK, base), base),
+        ratio(over(STALE_SHADOW, base), base)
+      );
+      expect(best, f).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+describe("the clock the results pages judge time by", () => {
+  const clock = { serverDate: Date.parse("2026-11-04T03:00:00Z"), receivedAt: 1_000_000 };
+
+  it("is the server's Date, not the browser's clock, however far off that is", () => {
+    // Browser three hours slow, or a quarter hour fast: the server's time.
+    expect(resultsNow({ clock }, 1_000_000)).toBe(clock.serverDate);
+    expect(resultsNow({ clock }, 1_000_000 + 30_000)).toBe(clock.serverDate + 30_000);
+  });
+
+  it("runs on at most one poll interval, so a tab back from hiding isn't judged by its absence", () => {
+    expect(resultsNow({ clock }, 1_000_000 + 60 * 60_000)).toBe(clock.serverDate + 60_000);
+    // A browser clock that jumped back runs nothing on.
+    expect(resultsNow({ clock }, 0)).toBe(clock.serverDate);
+  });
+
+  it("stops at the last answer while the page's own refreshes fail", () => {
+    expect(resultsNow({ clock }, 1_000_000 + 45_000, false)).toBe(clock.serverDate);
+  });
+
+  it("falls back to the arrival time with no Date header, and to the browser without a clock", () => {
+    expect(resultsNow({ clock: { serverDate: null, receivedAt: 5_000 } }, 6_000)).toBe(6_000);
+    expect(resultsNow({ clock: { serverDate: null, receivedAt: 5_000 } }, 9e9)).toBe(65_000);
+    expect(resultsNow(null, 1234)).toBe(1234);
+  });
+});
+
 describe("whether the backend is still reading a state's feed", () => {
   const moving = { lastResultChange: "2026-11-04T02:42:00Z" };
   const at = (iso: string) => Date.parse(iso);
@@ -588,6 +673,33 @@ describe("whether the backend is still reading a state's feed", () => {
   it("is never behind with no record to judge by", () => {
     expect(feedBehind(undefined, moving, at("2026-11-20T00:00:00Z"))).toBe(false);
     expect(feedBehind({ checkedAt: null }, moving, at("2026-11-20T00:00:00Z"))).toBe(false);
+  });
+
+  it("calls a state behind with no read record once its polls closed well over a pass ago", () => {
+    const base = {
+      phase: {
+        ...moving,
+        phase: "election_day" as const,
+        electionDate: "2026-11-03",
+        resultsUntil: null,
+      },
+      pollsClose: { GA: "2026-11-04T00:00:00Z" },
+      feeds: {},
+    };
+    expect(stateFeedBehind(base, "GA", at("2026-11-04T00:14:00Z"))).toBe(false);
+    expect(stateFeedBehind(base, "GA", at("2026-11-04T00:16:00Z"))).toBe(true);
+    // An older backend that keeps no read records: nothing to judge by.
+    expect(stateFeedBehind({ ...base, feeds: undefined }, "GA", at("2026-11-05T00:00:00Z"))).toBe(
+      false
+    );
+    // No known closing time: nothing to judge by either.
+    expect(stateFeedBehind({ ...base, pollsClose: {} }, "GA", at("2026-11-05T00:00:00Z"))).toBe(
+      false
+    );
+    // With a record, the record decides.
+    const read = { GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: null } };
+    expect(stateFeedBehind({ ...base, feeds: read }, "GA", at("2026-11-04T03:10:00Z"))).toBe(false);
+    expect(stateFeedBehind({ ...base, feeds: read }, "GA", at("2026-11-04T03:16:00Z"))).toBe(true);
   });
 });
 
@@ -621,6 +733,23 @@ describe("countReadAt", () => {
       })
     ).toBe("2026-11-04T03:25:00Z");
     expect(countReadAt({ races: [] })).toBeNull();
+  });
+});
+
+describe("countReadRange", () => {
+  it("gives the oldest and newest read of the states with a count", () => {
+    const feeds = {
+      GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T01:00:00Z" },
+      NC: { status: "ok", checkedAt: "2026-11-04T03:20:00Z", lastOkAt: "2026-11-04T03:20:00Z" },
+      // A state with no count doesn't stretch the range.
+      OH: { status: "ok", checkedAt: "2026-11-04T03:30:00Z", lastOkAt: "2026-11-04T03:30:00Z" },
+    };
+    const races = [race(), race({ state: "NC", raceId: "2026-SEN-NC" })];
+    expect(countReadRange({ feeds, races })).toEqual({
+      oldest: "2026-11-04T01:00:00Z",
+      newest: "2026-11-04T03:20:00Z",
+    });
+    expect(countReadRange({ feeds, races: [] })).toBeNull();
   });
 });
 

@@ -13,13 +13,14 @@ import ResultsOverview from "@/components/elections/results/ResultsOverview";
 import { formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
 import { formatUtcDate } from "@/lib/formatting";
 import {
-  countReadAt,
+  countReadRange,
   everyLiveStateVoting,
-  feedBehind,
   feedFailed,
   formatEasternTime,
   pollsStillOpen,
+  resultsNow,
   showsResults,
+  stateFeedBehind,
 } from "@/lib/results";
 import { useNow } from "@/hooks/useNow";
 import { fetchPviMap } from "@/lib/api";
@@ -120,72 +121,100 @@ export default function ElectionsPage() {
   // The clock is read only while the page shows results — for when polls
   // close, and for whether the backend is still reading the feeds. Any
   // other time, subscribing would re-render the whole page once a second.
-  const now = useNow(resultsMode);
-  // Election day before any covered state's polls close: people are still
-  // voting, so the masthead says results come in as polls close — not
+  // It is the server's clock as of the last answer (resultsNow), not the
+  // browser's, and it stops while this page's own refreshes fail.
+  const now = resultsNow(results, useNow(resultsMode), !resultsError);
+  // Election day before any covered state's polls close: nothing of any
+  // count is shown yet, so the masthead says when the first can be — not
   // "results" as if there were some. Once one state's polls close, the count
   // leads. The same rule words the page's search and link-card metadata
   // (elections/layout.tsx).
   const stillVoting = resultsMode && !!results && everyLiveStateVoting(results, now);
-  const firstClose = stillVoting
+  // The earliest a count can appear: the soonest of the covered states'
+  // LAST closing times (nothing of a state is read before its last polls
+  // close) — not when the first polls anywhere close.
+  const firstCount = stillVoting
     ? Object.values(results?.pollsClose ?? {})
         .filter((t) => Date.parse(t) > now)
         .sort((a, b) => Date.parse(a) - Date.parse(b))[0]
     : undefined;
-  // How old the count on screen is: said whenever it may not be live — a
-  // refresh that failed, or a backend that has stopped reading the feeds.
-  const readAt = results ? countReadAt(results) : null;
-  const readAtText = readAt
-    ? `SHOWING THE COUNT READ AT ${formatEasternTime(readAt).toUpperCase()}`
+  // How old the counts on screen are, said whenever they may not be live —
+  // a refresh that failed, or a backend that has stopped reading the feeds.
+  // Oldest and newest: the newest state's read alone would pass for all.
+  const range = results ? countReadRange(results) : null;
+  const readAtText = range
+    ? range.oldest === range.newest
+      ? `SHOWING THE COUNT READ AT ${formatEasternTime(range.newest).toUpperCase()}`
+      : `SHOWING COUNTS READ BETWEEN ${formatEasternTime(range.oldest).toUpperCase()} AND ${formatEasternTime(range.newest).toUpperCase()}`
     : null;
-  const refreshFailed = [
+  const refreshFailedDetail = [
     failedAt != null
-      ? `REFRESH FAILED AT ${formatEasternTime(new Date(failedAt).toISOString()).toUpperCase()}`
-      : "REFRESH FAILED",
+      ? `AT ${formatEasternTime(new Date(failedAt).toISOString()).toUpperCase()}`
+      : null,
     stillVoting ? null : readAtText,
     `RETRYING ${retryEvery}`,
   ]
     .filter(Boolean)
     .join(" · ");
   // Every covered state past its polls is either failing to read or hasn't
-  // been read for well over a sync pass: nothing on the page is live, so
-  // the masthead mustn't say LIVE. (Some but not all: their own rows say
+  // been read for well over a sync pass (a state with no read record at all
+  // by then counts: stateFeedBehind): nothing on the page is live, so the
+  // masthead mustn't say LIVE. (Some but not all: their own rows say
   // STALE.)
   const closedLive =
     resultsMode && results
-      ? results.liveStates.filter((st) => !pollsStillOpen(results, st, now) && results.feeds?.[st])
+      ? results.liveStates.filter((st) => !pollsStillOpen(results, st, now))
       : [];
+  const behindStates = results ? closedLive.filter((st) => stateFeedBehind(results, st, now)) : [];
+  const failedStates = closedLive.filter((st) => feedFailed(results?.feeds?.[st]));
   const nothingLive =
     closedLive.length > 0 &&
-    closedLive.every(
-      (st) =>
-        feedFailed(results?.feeds?.[st]) || feedBehind(results?.feeds?.[st], results?.phase, now)
-    );
+    closedLive.every((st) => behindStates.includes(st) || failedStates.includes(st));
+  // Which it is, since the two mean different things: the backend has
+  // stopped reading, or it reads and every read fails.
+  const staleWhy =
+    behindStates.length === closedLive.length
+      ? "NO STATE'S FEED CHECKED LATELY"
+      : behindStates.length === 0
+        ? "EVERY STATE'S LATEST FEED READ FAILED"
+        : "NO STATE'S FEED READ SUCCESSFULLY LATELY";
 
-  // The masthead's one status line (see the masthead below).
-  const status: { text: string; tone: "cyan" | "amber" | "muted" } | null =
+  // The masthead's one status line (see the masthead below): `text` is the
+  // live region — what the page's state is, which changes only on a
+  // transition — and `detail` its times and figures beside it, outside
+  // the region, so a count moving or a retry's wait growing isn't
+  // re-announced every pass.
+  const status: { text: string; detail?: string; tone: "cyan" | "amber" | "muted" } | null =
     stillVoting && results
-      ? {
-          tone: "cyan",
-          text: resultsError
-            ? refreshFailed
-            : firstClose
-              ? `POLLS OPEN · FIRST CLOSE ${formatEasternTime(firstClose).toUpperCase()}`
-              : "POLLS OPEN",
-        }
-      : resultsMode && results
-        ? {
-            tone: "amber",
-            text: resultsError
-              ? refreshFailed
-              : nothingLive
-                ? ["STALE · NO STATE'S FEED READ LATELY", readAtText].filter(Boolean).join(" · ")
-                : results.phase.lastResultChange
-                  ? `LIVE · LAST CHANGE ${formatEasternTime(results.phase.lastResultChange)}`
-                  : "LIVE · WAITING FOR FIRST COUNTS",
+      ? resultsError
+        ? { tone: "cyan", text: "REFRESH FAILED", detail: refreshFailedDetail }
+        : {
+            tone: "cyan",
+            text: "ELECTION DAY",
+            detail: firstCount
+              ? `FIRST STATE'S COUNT SHOWN AFTER ${formatEasternTime(firstCount).toUpperCase()}`
+              : "NO COUNT SHOWN UNTIL A STATE'S LAST POLLS CLOSE",
           }
+      : resultsMode && results
+        ? resultsError
+          ? { tone: "amber", text: "REFRESH FAILED", detail: refreshFailedDetail }
+          : results.liveStates.length === 0
+            ? { tone: "muted", text: "NO STATE'S COUNT IS READ LIVE HERE" }
+            : nothingLive
+              ? { tone: "amber", text: `STALE · ${staleWhy}`, detail: readAtText ?? undefined }
+              : {
+                  tone: "amber",
+                  text: "LIVE",
+                  detail: results.phase.lastResultChange
+                    ? `LAST CHANGE ${formatEasternTime(results.phase.lastResultChange).toUpperCase()}`
+                    : "NO COUNT HAS COME IN YET",
+                }
         : campaignMode && resultsError && !results
-          ? { tone: "muted", text: `COULDN'T CHECK FOR LIVE RESULTS · RETRYING ${retryEvery}` }
+          ? {
+              tone: "muted",
+              text: "COULDN'T CHECK FOR LIVE RESULTS",
+              detail: `RETRYING ${retryEvery}`,
+            }
           : null;
 
   useEffect(() => {
@@ -250,7 +279,7 @@ export default function ElectionsPage() {
             }
             title={
               stillVoting && results
-                ? `${results.cycleYear} midterms: polls are open`
+                ? `${results.cycleYear} midterms: election day`
                 : resultsMode && results
                   ? `${results.cycleYear} midterm results`
                   : campaignMode
@@ -266,11 +295,9 @@ export default function ElectionsPage() {
             aside={
               <div className="flex flex-col items-end gap-3">
                 <p
-                  role="status"
-                  aria-live="polite"
                   className={
                     status
-                      ? `flex items-center gap-2 border px-3 py-1.5 font-mono text-xs tracking-[0.12em] ${
+                      ? `flex flex-wrap items-center gap-x-2 border px-3 py-1.5 font-mono text-xs tracking-[0.12em] ${
                           status.tone === "cyan"
                             ? "border-signal-cyan/40 text-signal-cyan"
                             : status.tone === "amber"
@@ -288,7 +315,19 @@ export default function ElectionsPage() {
                       }`}
                     />
                   )}
-                  {status?.text ?? ""}
+                  {/* The live region: the page's state alone, so only a
+                      change of state is announced. */}
+                  <span role="status" aria-live="polite">
+                    {status?.text ?? ""}
+                  </span>
+                  {/* A space for the line's text as a whole (the flex gap
+                      is only visual). */}
+                  {status?.detail && (
+                    <>
+                      {" "}
+                      <span>· {status.detail}</span>
+                    </>
+                  )}
                 </p>
                 {campaignMode && pvi?.electionDay && asOf !== null && (
                   <ElectionCountdown electionDay={pvi.electionDay} asOf={asOf} />
@@ -298,16 +337,16 @@ export default function ElectionsPage() {
           >
             {stillVoting && results ? (
               <>
-                Voting is under way. Counts appear here as each state&apos;s polls close, as the
-                state&apos;s own election office publishes them — nothing of a state&apos;s count is
-                shown before its last polls close. Every state&apos;s ballot research is one click
-                away.
+                It&apos;s election day. Counts appear here as each state&apos;s last polls close, as
+                the state&apos;s own election office publishes them — nothing of a state&apos;s
+                count is shown before then. Every state&apos;s ballot research is one click away.
               </>
             ) : resultsMode && results ? (
               <>
-                Counts as each state&apos;s own election office publishes them, refreshed every
-                minute. A race is leading until the state calls its count official; Civitas does not
-                call races.
+                Counts as each state&apos;s own election office publishes them. Civitas reads each
+                state&apos;s feed every five minutes (hourly once no count has moved for a day), and
+                this page checks for a new read every minute. A race &ldquo;leads&rdquo; even once
+                the state lists its count as official; Civitas calls no race.
               </>
             ) : campaignMode ? (
               <>
@@ -317,7 +356,9 @@ export default function ElectionsPage() {
             ) : null}
           </PageMasthead>
 
-          {resultsMode && results && <ResultsOverview results={results} states={STATES} />}
+          {resultsMode && results && (
+            <ResultsOverview results={results} states={STATES} refreshFailed={!!resultsError} />
+          )}
 
           {error && campaignMode && (
             <div

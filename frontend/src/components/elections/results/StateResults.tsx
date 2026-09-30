@@ -10,13 +10,14 @@ import {
 } from "@/components/elections/results/RaceResult";
 import {
   countReadAt as readAtOf,
-  feedBehind,
   feedFailed,
   formatEasternTime,
   formatLed,
   pollsStillOpen,
+  resultsNow,
   seatsLed,
   showsResults,
+  stateFeedBehind,
 } from "@/lib/results";
 import { describeInterval, RESULTS_POLL_MS, RETRY_BACKOFF_MS } from "@/hooks/useLiveResults";
 import { useNow } from "@/hooks/useNow";
@@ -98,11 +99,15 @@ export default function StateResults({
   const led = seatsLed(house);
   const pollsClose = results?.pollsClose?.[ballot.state];
   const feed = results?.feeds?.[ballot.state];
-  const now = useNow();
-  // The backend hasn't read the state's feed for well over a sync pass: its
-  // sync has stopped, so the count below is not live whatever the last read
-  // said — the same rule that badges the state STALE on /elections.
-  const behind = !!results && feedBehind(feed, results.phase, now);
+  // The server's time as of the last answer, stopped while this page's own
+  // refreshes fail (resultsNow): not the browser's clock, and not blaming
+  // the feeds for this page's failure to ask.
+  const now = resultsNow(results, useNow(), !error);
+  // The backend hasn't read the state's feed for well over a sync pass (or
+  // has no record of reading it since its polls closed): its sync has
+  // stopped, so the count below is not live whatever the last read said —
+  // the same rule that badges the state STALE on /elections.
+  const behind = !!results && stateFeedBehind(results, ballot.state, now);
   const failed = feedFailed(feed) || behind;
   const stillVoting = !!results && pollsStillOpen(results, ballot.state, now);
 
@@ -197,61 +202,84 @@ export default function StateResults({
     <section aria-label={`${stateName} results`} className="mb-10 space-y-5">
       {/* How current the count on screen is, and whether this page is
           still managing to refresh it: a count that stopped refreshing
-          must not pass for a live one. The polite announcement for the
-          live-updates feed below, which is deliberately not live itself. */}
+          must not pass for a live one. The live region is the state alone
+          — refresh failed, stale, live, polls closed — so a screen reader
+          hears each change of state once, not every pass's new time; the
+          times sit beside it, outside the region. It is also the polite
+          announcement for the live-updates feed below, which is
+          deliberately not live itself. */}
       <p
-        role="status"
-        className={`font-mono text-xs tracking-[0.08em] ${
-          error ? "text-signal-amber" : "text-ink-min"
+        className={`flex flex-wrap gap-x-2 font-mono text-xs tracking-[0.08em] ${
+          error || (failed && races.length > 0) ? "text-signal-amber" : "text-ink-min"
         }`}
       >
-        {error
-          ? [
-              failedAt != null
-                ? `REFRESH FAILED AT ${formatEasternTime(new Date(failedAt).toISOString()).toUpperCase()}`
-                : "REFRESH FAILED",
-              races.length > 0
-                ? countReadAt
-                  ? `SHOWING THE COUNT READ AT ${formatEasternTime(countReadAt).toUpperCase()}`
-                  : "SHOWING AN OLDER COUNT"
-                : null,
-              `RETRYING ${describeInterval(retryMs ?? RETRY_BACKOFF_MS[0]).toUpperCase()}`,
-            ]
-              .filter(Boolean)
-              .join(" · ")
-          : [
-              countReadAt && !failed
-                ? `UPDATED ${formatEasternTime(countReadAt).toUpperCase()}`
-                : null,
-              `REFRESHED ${describeInterval(RESULTS_POLL_MS).toUpperCase()}`,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+        <span role="status">
+          {error
+            ? "REFRESH FAILED"
+            : stillVoting
+              ? "POLLS NOT YET CLOSED"
+              : failed
+                ? behind
+                  ? "STALE"
+                  : "FEED READ FAILED"
+                : races.length > 0
+                  ? "LIVE"
+                  : "POLLS CLOSED"}
+        </span>{" "}
+        <span>
+          {"· "}
+          {error
+            ? [
+                failedAt != null
+                  ? `AT ${formatEasternTime(new Date(failedAt).toISOString()).toUpperCase()}`
+                  : null,
+                races.length > 0
+                  ? countReadAt
+                    ? `SHOWING THE COUNT READ AT ${formatEasternTime(countReadAt).toUpperCase()}`
+                    : "SHOWING AN OLDER COUNT"
+                  : null,
+                `RETRYING ${describeInterval(retryMs ?? RETRY_BACKOFF_MS[0]).toUpperCase()}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : [
+                countReadAt && !failed
+                  ? `UPDATED ${formatEasternTime(countReadAt).toUpperCase()}`
+                  : null,
+                `THIS PAGE CHECKS ${describeInterval(RESULTS_POLL_MS).toUpperCase()}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+        </span>
       </p>
       {races.length === 0 &&
         (stillVoting ? (
           <p className="border border-white/[0.09] bg-surface p-4 text-sm text-ink-lo">
             {pollsClose && Date.parse(pollsClose) > now
               ? `${stateName}'s last polls close at ${formatEasternTime(pollsClose)}. Nothing of its count is shown before then.`
-              : `${stateName}'s polls are still open. Nothing of its count is shown before they close.`}
+              : `${stateName}'s polls haven't closed yet. Nothing of its count is shown before they do.`}
           </p>
-        ) : failed && feed ? (
+        ) : failed ? (
           // Not "hasn't started": a feed that's down or refused says
           // nothing about whether counting has begun.
-          <p
-            role="status"
-            className="border border-signal-amber/40 bg-surface p-4 text-sm text-ink-lo"
-          >
+          <p className="border border-signal-amber/40 bg-surface p-4 text-sm text-ink-lo">
             {behind ? (
-              <>
-                Civitas hasn&apos;t read {stateName}&apos;s results feed since{" "}
-                {formatEasternTime(feed.checkedAt)}, so no count is shown here.{" "}
-              </>
+              feed?.checkedAt ? (
+                <>
+                  Civitas hasn&apos;t read {stateName}&apos;s results feed since{" "}
+                  {formatEasternTime(feed.checkedAt)}, so no count is shown here.{" "}
+                </>
+              ) : (
+                <>
+                  Civitas has no record of reading {stateName}&apos;s results feed since its polls
+                  closed, so no count is shown here.{" "}
+                </>
+              )
             ) : (
               <>
                 Civitas couldn&apos;t read {stateName}&apos;s results feed (last tried{" "}
-                {formatEasternTime(feed.checkedAt)}), so no count is shown here yet. This page keeps
-                trying.{" "}
+                {formatEasternTime(feed?.checkedAt ?? "")}), so no count is shown here yet. This
+                page keeps trying.{" "}
               </>
             )}
             <OfficeLink
@@ -266,21 +294,30 @@ export default function StateResults({
             {`${stateName}'s count hasn't started yet. Results appear here as the state publishes them.`}
           </p>
         ))}
-      {races.length > 0 && failed && feed && (
-        <p role="status" className="font-mono text-xs tracking-[0.06em] text-signal-amber">
+      {/* Not while this page's own refreshes fail: the line above then
+          says so, and when the count was read — the only statement. */}
+      {races.length > 0 && failed && !error && (
+        <p className="font-mono text-xs tracking-[0.06em] text-signal-amber">
           {behind ? (
-            <>
-              STALE · {stateName.toUpperCase()}&apos;S FEED HASN&apos;T BEEN CHECKED SINCE{" "}
-              {formatEasternTime(feed.checkedAt).toUpperCase()}
-            </>
+            feed?.checkedAt ? (
+              <>
+                {stateName.toUpperCase()}&apos;S FEED HASN&apos;T BEEN CHECKED SINCE{" "}
+                {formatEasternTime(feed.checkedAt).toUpperCase()}
+              </>
+            ) : (
+              <>
+                NO RECORD OF {stateName.toUpperCase()}&apos;S FEED BEING CHECKED SINCE ITS POLLS
+                CLOSED
+              </>
+            )
           ) : (
             <>
               THE LAST READ OF {stateName.toUpperCase()}&apos;S FEED, AT{" "}
-              {formatEasternTime(feed.checkedAt).toUpperCase()}, COULDN&apos;T BE USED
+              {formatEasternTime(feed?.checkedAt ?? "").toUpperCase()}, COULDN&apos;T BE USED
             </>
           )}
-          {feed.lastOkAt
-            ? ` · THE COUNT BELOW WAS READ AT ${formatEasternTime(feed.lastOkAt).toUpperCase()}`
+          {countReadAt
+            ? ` · THE COUNT BELOW WAS READ AT ${formatEasternTime(countReadAt).toUpperCase()}`
             : ""}
         </p>
       )}
@@ -335,6 +372,7 @@ export default function StateResults({
               picked={null}
               results={byDistrict}
               feedAnswered
+              stale={failed}
               onPick={(raceId) => {
                 // Move focus with the scroll, so a keyboard or screen-reader
                 // user who picked a district lands on its row.

@@ -59,8 +59,8 @@ export default async function ElectionsChapter() {
         </Point>
         <Point>
           From election day the pages lead with the count, read from each state&apos;s own election
-          office. Civitas never calls a race: a candidate &ldquo;leads&rdquo; until the state says
-          its count is official.
+          office. A candidate &ldquo;leads&rdquo; even once the state lists its count as official;
+          Civitas calls no race.
         </Point>
       </Summary>
 
@@ -227,23 +227,23 @@ export default async function ElectionsChapter() {
           From election day, <span className="font-mono text-ink-hi">/elections</span> and each
           state page put results first. The national map is shaded by who is leading each race
           instead of by how the state usually leans — fainter while fewer than half its reporting
-          areas (usually precincts) are in, solid once the state calls its count official. Where a
-          state has more than one race on the map — its House seats, or both Senate seats — it takes
-          the colour of the party leading the most of them, grey when two lead equally many, and
-          stays fainter until every one has half in; it turns solid only when every count is
+          areas (usually precincts) are in, solid once the state lists its count as official. Where
+          a state has more than one race on the map — its House seats, or both Senate seats — it
+          takes the colour of the party leading the most of them, grey when two lead equally many,
+          and stays fainter until every one has half in; it turns solid only when every count is
           official. A state still voting, one with no votes yet and one whose feed couldn&apos;t be
           read are each marked with a pattern as well as a colour, and each state&apos;s name, read
           aloud, says where its count stands. Each state page says when its count was last read, and
           shows its Senate race or races, every House district and a district map shaded the same
           way, above the ballot research, and a live-updates feed tells each change as it happens:
-          first returns, a new leader, every reporting area in, a count called official, a seat
-          changing party. A district the state&apos;s results feed gives no count for — a contest it
-          doesn&apos;t list, an uncontested seat — is listed and marked as exactly that, not as
-          &ldquo;no votes yet&rdquo;. While a state&apos;s polls are still open, its page stays a
-          ballot-research page and the national map marks it &ldquo;polls open&rdquo;: nothing is
-          said about a count until its last polls close. From election day the elections pages show
-          no partisan lean, on a map or beside a district, even where there is no count to show:
-          next to a live count, a lean reads as a prediction of it.
+          first returns, a new leader, every reporting area in, a count the state lists as official,
+          a seat changing party. A district the state&apos;s results feed gives no count for — a
+          contest it doesn&apos;t list, an uncontested seat — is listed and marked as exactly that,
+          not as &ldquo;no votes yet&rdquo;. While a state&apos;s polls are still open, its page
+          stays a ballot-research page and the national map marks its polls &ldquo;not yet
+          closed&rdquo;: nothing is said about a count until its last polls close. From election day
+          the elections pages show no partisan lean, on a map or beside a district, even where there
+          is no count to show: next to a live count, a lean reads as a prediction of it.
         </P>
         <Sub title="Where the numbers come from">
           <P>
@@ -274,23 +274,31 @@ export default async function ElectionsChapter() {
             wrong election, or one older than what we already show is refused, and the page keeps
             the last count it trusted — and says so, with the time, if a state&apos;s feed
             couldn&apos;t be read at all rather than implying counting hasn&apos;t started. If the
-            page itself can&apos;t refresh, it says that too, with when the count still on screen
-            was read, so an old count never passes for a live one. A count that goes down (a county
-            pulling a bad upload) is shown but announces nothing.
+            page itself can&apos;t refresh, it says that too, with when the counts still on screen
+            were read, so an old count never passes for a live one &mdash; and that is all it says
+            then: it doesn&apos;t blame a state&apos;s feed for its own failure to ask. If Civitas
+            itself stops reading a state&apos;s feed &mdash; no check in well over a pass, 15
+            minutes while counts move or 70 once they are read hourly, or no record of one at all
+            since the state&apos;s polls closed &mdash; the state is marked <strong>stale</strong>:
+            its row says when its feed was last checked and when the count shown was read, and the
+            map keeps the last leader&apos;s colour under amber stripes. That is judged by the
+            server&apos;s clock, from the time on the page&apos;s latest answer, not by your
+            device&apos;s, which may be off. A count that goes down (a county pulling a bad upload)
+            is shown but announces nothing.
           </P>
           <P>
             We never call a race. A candidate &ldquo;leads&rdquo; &mdash; &ldquo;not final&rdquo;
-            until the state marks its count official, and still &ldquo;leads&rdquo; after, never
-            &ldquo;wins&rdquo;: an official count&apos;s leader can still face a runoff (Georgia
-            requires a majority), a recount or a court. A seat is only described as changing party
-            once half its reporting areas are in; where a state reports by county or town, each of
-            which &ldquo;reports&rdquo; with its first batch of ballots, it takes every county or
-            town in and six hours since the first votes, or the state&apos;s official count. Once
-            said, it stands until the lead itself goes back to the seat&apos;s party or ties: a
-            count that dips below that bar with the same candidate ahead is not a reversal. A House
-            seat in a state whose congressional map was redrawn for this election has no previous
-            holder to compare against — the district with the same number is a different district —
-            so it is never described as changing party.
+            while the state hasn&apos;t listed its count as official, and still &ldquo;leads&rdquo;
+            once it has, never &ldquo;wins&rdquo;: an official count&apos;s leader can still face a
+            runoff (Georgia requires a majority), a recount or a court. A seat is only described as
+            changing party once half its reporting areas are in; where a state reports by county or
+            town, each of which &ldquo;reports&rdquo; with its first batch of ballots, it takes
+            every county or town in and six hours since the first votes, or the state&apos;s
+            official count. Once said, it stands until the lead itself goes back to the seat&apos;s
+            party or ties: a count that dips below that bar with the same candidate ahead is not a
+            reversal. A House seat in a state whose congressional map was redrawn for this election
+            has no previous holder to compare against — the district with the same number is a
+            different district — so it is never described as changing party.
           </P>
         </Sub>
         <Sub title="Developing stories and posts">
@@ -299,13 +307,13 @@ export default async function ElectionsChapter() {
             <A href={ACTION_CENTER_HREF}>Action Center</A>, marked as not yet confirmed by the
             press; it follows the count, and if the lead reverts it comes off the Action Center and
             is rewritten to say the count no longer shows a change of party. Civitas&apos;s Bluesky
-            account posts fewer moments than the feed shows: a seat changing party, a count called
-            official (a Senate race, or a seat changing party), and the big moves in a Senate race —
-            a new leader with most of the count in, every reporting area in. A few an hour at most;
-            one that can&apos;t go out within two hours, or that a newer post about the same race
-            overtakes, is dropped rather than posted late, and a posted change of party that reverts
-            gets a correction. Every sentence in the feed, the story and the posts is a fixed
-            template around the state&apos;s own figures — no AI writes any of it.
+            account posts fewer moments than the feed shows: a seat changing party, a count the
+            state lists as official (a Senate race, or a seat changing party), and the big moves in
+            a Senate race — a new leader with most of the count in, every reporting area in. A few
+            an hour at most; one that can&apos;t go out within two hours, or that a newer post about
+            the same race overtakes, is dropped rather than posted late, and a posted change of
+            party that reverts gets a correction. Every sentence in the feed, the story and the
+            posts is a fixed template around the state&apos;s own figures — no AI writes any of it.
           </P>
         </Sub>
         <P>

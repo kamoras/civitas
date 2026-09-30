@@ -37,13 +37,15 @@ describe("/elections metadata", () => {
     updates: [],
   };
 
-  it("keeps the ballot wording on election day while every covered state is voting", async () => {
+  it("says election day, not results, while every covered state is voting", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-03T13:00:00Z"));
     mockBackend(liveDay);
     const meta = await generateMetadata();
-    expect(meta.title).toBe("2026 Elections by State: Senate, House & Ballot Measures");
-    expect(JSON.stringify(meta)).not.toMatch(/Results/);
+    // Not results, and not the campaign's lean map either: the page draws
+    // no lean from election day.
+    expect(meta.title).toBe("2026 Election Day: Senate & House Races by State");
+    expect(JSON.stringify(meta)).not.toMatch(/Results|partisan lean/);
   });
 
   it("turns to results once the first covered state's polls close", async () => {

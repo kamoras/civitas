@@ -11,7 +11,9 @@ import {
   AWAITING_SWATCH,
   NO_COUNT_STRIPE,
   NO_COUNT_SWATCH,
+  STALE_SWATCH,
   TIED_FILL,
+  heldByPhrase,
   isTied,
   partyLetter,
   partyTextClass,
@@ -133,7 +135,12 @@ export default function DistrictMap({
   feedAnswered,
   newLines = false,
   showLean = true,
+  stale = false,
 }: {
+  /** The state's feed isn't being refreshed (its latest read failed, or
+   * the backend has stopped reading it): every count is drawn with the
+   * stale stripe and named "not live", as the national map does. */
+  stale?: boolean;
   state: string;
   /** Off from election day (results mode): no lean is shown, shaded or
    * written, even where there is no count to shade by. */
@@ -153,7 +160,13 @@ export default function DistrictMap({
   feedAnswered?: boolean;
 }) {
   const hatchId = `no-count-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const { defs: textureDefs, paint } = useMapTextures();
+  // Every fill a counted district can take, for the stale pattern behind
+  // each (useMapTextures); none unless the counts are stale.
+  const staleFills = useMemo(
+    () => (stale && results ? [...results.values()].map((r) => resultFill(r, true)) : []),
+    [stale, results]
+  );
+  const { defs: textureDefs, paint } = useMapTextures(staleFills);
   const [topo, setTopo] = useState<Topo | null>(null);
   const [failed, setFailed] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -213,7 +226,7 @@ export default function DistrictMap({
           // no count for.
           <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-ink-min">
             <li>red = R leads · blue = D leads · purple = other party leads</li>
-            <li>fainter = under half in · solid = official</li>
+            <li>fainter = under half in · solid = count listed as official, still not called</li>
             <li className="flex items-center gap-1">
               <span
                 aria-hidden="true"
@@ -238,6 +251,16 @@ export default function DistrictMap({
                   style={{ background: `${NO_COUNT_SWATCH}, ${AWAITING_FILL}` }}
                 />
                 no count from the state&apos;s feed
+              </li>
+            )}
+            {stale && (
+              <li className="flex items-center gap-1">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-2 w-3 border border-white/30"
+                  style={{ background: `${STALE_SWATCH}, rgba(255,137,137,0.6)` }}
+                />
+                stale: the last count read, not live
               </li>
             )}
           </ul>
@@ -293,7 +316,9 @@ export default function DistrictMap({
               const { fill, opacity } = results
                 ? {
                     fill:
-                      !counted && answered ? `url(#${hatchId})` : paint(resultFill(counted, true)),
+                      !counted && answered
+                        ? `url(#${hatchId})`
+                        : paint(resultFill(counted, true), stale && !!counted),
                     opacity: 1,
                   }
                 : // A statewide stand-in says nothing about one district:
@@ -309,7 +334,7 @@ export default function DistrictMap({
               const label = results
                 ? `${name}: ${
                     counted
-                      ? raceStatusText(counted)
+                      ? `${raceStatusText(counted)}${stale ? "; not live, the last count read" : ""}`
                       : answered
                         ? "no count from the state's feed"
                         : "no votes yet"
@@ -358,6 +383,7 @@ export default function DistrictMap({
             district={focusRace.district ?? 0}
             result={results.get(focusRace.district ?? 0)}
             feedAnswered={answered}
+            stale={stale}
           />
         ) : focusRace ? (
           <DistrictPreview state={state} race={focusRace} showLean={showLean} />
@@ -417,11 +443,13 @@ function DistrictResultPreview({
   district,
   result,
   feedAnswered,
+  stale = false,
 }: {
   state: string;
   district: number;
   result: LiveRaceResult | undefined;
   feedAnswered: boolean;
+  stale?: boolean;
 }) {
   const [first, second] = result?.candidates ?? [];
   // An exact tie names both without either in a lead colour.
@@ -449,7 +477,20 @@ function DistrictResultPreview({
           ))}
           <span className="text-ink-min">{reportingText(result)}</span>
           <span className="text-ink-lo">
-            {result.official ? "official" : tied ? "tied, not called" : "leading, not called"}
+            {/* Never a bare "official" beside the names: that reads as a
+                result. An official count still only leads, and a seat
+                changing party says so whatever the count's standing. */}
+            {[
+              tied ? "tied" : result.official ? "leads" : "leading",
+              result.official ? "official count" : null,
+              "not called",
+              result.flip && !tied
+                ? `held by ${heldByPhrase(result.heldBy)}, leader from another party`
+                : null,
+              stale ? "not live" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </>
       )}

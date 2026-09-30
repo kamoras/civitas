@@ -147,7 +147,7 @@ function withShape<T extends object>(
   return out as T;
 }
 
-const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
+const _fetchCache = new Map<string, { entry: FetchedAt<unknown>; expiry: number }>();
 // In-flight requests keyed by URL. Concurrent callers of the same URL (e.g.
 // the home preview, the Action Center parent, and IssuesTab all requesting
 // /action/issues on mount) share a single network request instead of each
@@ -155,7 +155,7 @@ const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
 // they start before any of them has populated it. Entries are removed as soon
 // as the request settles so a later call re-fetches once the TTL lapses, and a
 // rejected request isn't cached (retries work).
-const _inflight = new Map<string, Promise<unknown>>();
+const _inflight = new Map<string, Promise<FetchedAt<unknown>>>();
 
 /** Test seam: drops both caches so one suite's stubbed fetch can't answer another's. */
 export function __resetApiCache(): void {
@@ -163,34 +163,54 @@ export function __resetApiCache(): void {
   _inflight.clear();
 }
 
-async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
+/** A response body with the clock it arrived by: the server's `Date`
+ * header (ms since epoch; null when absent or unreadable) and this
+ * browser's clock when it arrived. A copy served from the client cache
+ * keeps the clock of the response it came from. */
+interface FetchedAt<T> {
+  data: T;
+  serverDate: number | null;
+  receivedAt: number;
+}
+
+async function cachedFetchAt<T>(url: string, ttlMs: number): Promise<FetchedAt<T>> {
   const now = Date.now();
   const hit = _fetchCache.get(url);
-  if (hit && hit.expiry > now) return hit.data as T;
+  if (hit && hit.expiry > now) return hit.entry as FetchedAt<T>;
 
   const pending = _inflight.get(url);
-  if (pending) return pending as Promise<T>;
+  if (pending) return pending as Promise<FetchedAt<T>>;
 
   const request = (async () => {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const data: T = await res.json();
-    _fetchCache.set(url, { data, expiry: Date.now() + ttlMs });
+    const date = Date.parse(res.headers?.get?.("date") ?? "");
+    const entry: FetchedAt<T> = {
+      data,
+      serverDate: Number.isNaN(date) ? null : date,
+      receivedAt: Date.now(),
+    };
+    _fetchCache.set(url, { entry, expiry: Date.now() + ttlMs });
     if (_fetchCache.size > 100) {
       const cutoff = Date.now();
-      _fetchCache.forEach((entry, key) => {
-        if (entry.expiry <= cutoff) _fetchCache.delete(key);
+      _fetchCache.forEach((cached, key) => {
+        if (cached.expiry <= cutoff) _fetchCache.delete(key);
       });
     }
-    return data;
+    return entry;
   })();
 
   _inflight.set(url, request);
   try {
-    return (await request) as T;
+    return (await request) as FetchedAt<T>;
   } finally {
     _inflight.delete(url);
   }
+}
+
+async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
+  return (await cachedFetchAt<T>(url, ttlMs)).data;
 }
 
 export async function fetchSenatorsByState(state: string): Promise<Senator[]> {
@@ -1759,11 +1779,17 @@ export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
  * this, and a longer client cache would hold every poll to a stale copy. */
 export async function fetchLiveResults(state?: string): Promise<LiveResults> {
   const url = `${API_BASE}/elections/results${state ? `?state=${encodeURIComponent(state)}` : ""}`;
-  return withShape<LiveResults>(
-    await cachedFetch(url, TTL.VOLATILE),
+  const { data, serverDate, receivedAt } = await cachedFetchAt(url, TTL.VOLATILE);
+  const results = withShape<LiveResults>(
+    data,
     { lists: ["liveStates", "senateStates", "races", "updates"], records: ["phase"] },
     url
   );
+  // The clock the page judges this count by (lib/results resultsNow): the
+  // server's, from the response's Date header — never the browser's alone,
+  // which can be minutes or hours off. A stale body nginx serves from its
+  // cache still carries a fresh Date, so old read times in it read as old.
+  return { ...results, clock: { serverDate, receivedAt } };
 }
 
 export async function fetchPviMap(): Promise<PviMap> {

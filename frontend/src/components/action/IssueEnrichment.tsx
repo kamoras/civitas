@@ -485,7 +485,7 @@ export function Coverage({
 
 /** A count issue's facts are the count as Civitas read it: say when —
  *  the backend's own read time (countAsOf), the only time that describes
- *  the figures — and whether the state calls it official, inside the facts
+ *  the figures — and whether the state lists it as official, inside the facts
  *  section, so a shared image of it (card or page) says so too. With no
  *  countAsOf (an older backend) it names no time: the time a page happened
  *  to be rendered is not when the count was read (the issue is written at

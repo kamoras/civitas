@@ -45,7 +45,15 @@ describe("statusTag", () => {
     expect(statusTag(TIE).text).toBe("TIED");
     expect(statusTag(race()).text).toBe("LEADING");
     expect(statusTag(race({ votesCounted: 0 })).text).toBe("NO VOTES YET");
-    expect(statusTag({ ...TIE, official: true }).text).toBe("OFFICIAL");
+    expect(statusTag({ ...TIE, official: true }).text).toBe("TIED · OFFICIAL COUNT");
+  });
+
+  it("never puts a bare OFFICIAL beside an official count's leader, and keeps its flip", () => {
+    expect(statusTag(race({ official: true })).text).toBe("LEADS · OFFICIAL COUNT");
+    expect(statusTag(race({ official: true, flip: true })).text).toBe("FLIP · OFFICIAL COUNT");
+    expect(statusTag(race({ flip: true })).text).toBe("FLIP · LEADING");
+    for (const r of [race({ official: true }), race({ official: true, flip: true }), TIE])
+      expect(statusTag({ ...r, official: true }).text).not.toBe("OFFICIAL");
   });
 });
 
@@ -84,6 +92,19 @@ describe("RaceResultCard", () => {
     render(<RaceResultCard result={TIE} />);
     expect(screen.getByText(/Tied, not called/)).toBeInTheDocument();
     expect(screen.queryByText(/Leading, not called/)).not.toBeInTheDocument();
+  });
+
+  it("says an official count's leader still only leads, and keeps who held the seat", () => {
+    render(<RaceResultCard result={race({ official: true, flip: true, heldBy: "DEM" })} />);
+    expect(screen.getByText("FLIP · OFFICIAL COUNT")).toBeInTheDocument();
+    expect(document.body).toHaveTextContent(
+      "Leads in the count the state lists as official; not called. The seat was held by a Democrat; the leader is from another party."
+    );
+    expect(document.body).not.toHaveTextContent(/The state lists this count as official\./);
+    cleanup();
+    render(<RaceResultCard result={race({ official: true })} />);
+    expect(screen.getByText("LEADS · OFFICIAL COUNT")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/held by a/);
   });
 
   it("says a House seat on new district lines has no previous holder", () => {

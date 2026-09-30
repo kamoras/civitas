@@ -11,7 +11,7 @@ const TONE: Record<string, string> = {
 
 /**
  * The night as it happened: first returns, changes of leader, seats
- * changing party, counts the state calls official — newest first, each
+ * changing party, counts the state lists as official — newest first, each
  * worded from the state's own figures (lib/results describeUpdate).
  *
  * Not an aria-live region: a list that grows every few minutes would

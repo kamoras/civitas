@@ -12,15 +12,26 @@ import {
 import { safeHref } from "@/lib/formatting";
 import type { LiveRaceResult } from "@/types/election";
 
-/** Where the count stands, in the state's own words: official, leading,
- * tied, or no votes yet. Never "won", even once the state lists its count
- * as official: Civitas never calls a race. */
+/** Where the count stands, in the state's own words: leading, tied, or no
+ * votes yet — with "official count" once the state lists it so. Never
+ * "won", and never a bare "OFFICIAL" beside the leader's name, which reads
+ * as a result: an official count's leader still only leads (a Georgia
+ * general short of a majority goes to a runoff), and Civitas never calls a
+ * race. A seat changing party keeps its FLIP whatever the count's
+ * standing. */
 export function statusTag(r: LiveRaceResult): { text: string; className: string } {
-  if (r.official) return { text: "OFFICIAL", className: "border-phos/60 text-phos" };
   if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
-  if (isTied(r)) return { text: "TIED", className: "border-white/40 text-ink-hi" };
+  if (isTied(r))
+    return {
+      text: r.official ? "TIED · OFFICIAL COUNT" : "TIED",
+      className: "border-white/40 text-ink-hi",
+    };
   if (r.flip)
-    return { text: "FLIP · LEADING", className: "border-signal-amber/60 text-signal-amber" };
+    return {
+      text: r.official ? "FLIP · OFFICIAL COUNT" : "FLIP · LEADING",
+      className: "border-signal-amber/60 text-signal-amber",
+    };
+  if (r.official) return { text: "LEADS · OFFICIAL COUNT", className: "border-phos/60 text-phos" };
   const share = reportingShare(r);
   if (share != null && share < 0.5)
     return { text: "EARLY", className: "border-white/20 text-ink-lo" };
@@ -113,15 +124,24 @@ export function RaceResultCard({
         ))}
       </ol>
       <p className="mt-4 text-sm text-ink-lo">
-        {result.official
-          ? "The state lists this count as official."
-          : !result.votesCounted
+        {[
+          !result.votesCounted
             ? "No votes counted yet."
             : isTied(result)
-              ? "Tied, not called. The count is not final."
-              : result.flip && result.heldBy
-                ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party. The count is not final.`
-                : "Leading, not called. The count is not final."}{" "}
+              ? result.official
+                ? "Tied in the count the state lists as official; not called."
+                : "Tied, not called. The count is not final."
+              : result.official
+                ? "Leads in the count the state lists as official; not called."
+                : "Leading, not called. The count is not final.",
+          // Who held the seat, whether or not the count is official: an
+          // official count's change of party is still one.
+          result.votesCounted && !isTied(result) && result.flip && result.heldBy
+            ? `The seat was held by ${heldByPhrase(result.heldBy)}; the leader is from another party.`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}{" "}
         {sourceHref ? (
           <a
             href={sourceHref}

@@ -559,8 +559,8 @@ export interface LiveRaceResult {
   isSpecial: boolean;
   /** The party that held the seat going in; null when not knowable. */
   heldBy: string | null;
-  /** True only when the state itself calls its count official. Until
-   * then a race is "leading", never won — Civitas does not call races. */
+  /** True only when the state itself lists its count as official. A race
+   * still only "leads" then, never won — Civitas calls no race. */
   official: boolean;
   votesCounted: number;
   reportingUnits: number | null;
@@ -633,6 +633,11 @@ export interface LiveResults {
   races: LiveRaceResult[];
   /** Newest first. */
   updates: ResultEvent[];
+  /** Not from the backend's body: set by fetchLiveResults from the
+   * response itself — the server's Date header (null when it sent none or
+   * the browser can't read it) and the browser's clock on arrival — so the
+   * page judges time by the server's clock (lib/results resultsNow). */
+  clock?: { serverDate: number | null; receivedAt: number };
 }
 
 export interface LiveFeedStatus {

@@ -344,11 +344,30 @@ describe("the state page in results mode", () => {
     render(<StateBallotClient ballot={ballot()} />);
     expect(
       await screen.findByText(
-        /STALE · OHIO.S FEED HASN.T BEEN CHECKED SINCE NOV 3, 10:00 PM ET · THE COUNT BELOW WAS READ AT NOV 3, 10:00 PM ET/
+        /OHIO.S FEED HASN.T BEEN CHECKED SINCE NOV 3, 10:00 PM ET · THE COUNT BELOW WAS READ AT NOV 3, 10:00 PM ET/
       )
     ).toBeInTheDocument();
+    const region = screen.getByText("STALE", { selector: "[role=status]" });
     // Not "UPDATED …": that reads as a count still being refreshed.
-    expect(screen.getByText(/REFRESHED EVERY MINUTE/)).not.toHaveTextContent(/UPDATED/);
+    expect(region.parentElement).not.toHaveTextContent(/UPDATED/);
+    expect(region.parentElement).toHaveTextContent("STALE · THIS PAGE CHECKS EVERY MINUTE");
+  });
+
+  it("calls a state with no read record since its polls closed stale", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:20:00Z"));
+    fetchLiveResults.mockResolvedValue(
+      live({
+        phase: { ...PHASE, lastResultChange: "2026-11-04T02:42:00Z" },
+        pollsClose: { OH: "2026-11-04T00:30:00Z" },
+        feeds: {},
+      })
+    );
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(
+      await screen.findByText(/NO RECORD OF OHIO.S FEED BEING CHECKED SINCE ITS POLLS CLOSED/)
+    ).toBeInTheDocument();
+    expect(screen.getByText("STALE", { selector: "[role=status]" })).toBeInTheDocument();
   });
 
   it("says the feed hasn't been read lately, with no count, rather than that counting hasn't started", async () => {
@@ -478,19 +497,25 @@ describe("the state page in results mode", () => {
     fetchLiveResults.mockResolvedValueOnce(live()).mockRejectedValue(new Error("502"));
     render(<StateBallotClient ballot={ballot()} />);
     await screen.findByRole("region", { name: "U.S. House" });
-    const line = screen.getByText(/REFRESHED EVERY MINUTE/);
-    expect(line).toHaveAttribute("role", "status");
+    const line = screen.getByText(/THIS PAGE CHECKS EVERY MINUTE/).parentElement!;
+    // The live region is the state alone: its time is beside it, so a new
+    // read each pass isn't announced again.
+    const region = within(line).getByRole("status");
+    expect(region).toHaveTextContent(/^LIVE$/);
     // The backend's own read time, never the page's clock.
-    expect(line).toHaveTextContent("UPDATED NOV 3, 9:44 PM ET · REFRESHED EVERY MINUTE");
+    expect(line).toHaveTextContent(
+      "LIVE · UPDATED NOV 3, 9:44 PM ET · THIS PAGE CHECKS EVERY MINUTE"
+    );
     // The next refresh fails: the count stays, and the line says it is old.
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
     await waitFor(() =>
       expect(line).toHaveTextContent(
-        "REFRESH FAILED AT NOV 3, 10:10 PM ET · SHOWING THE COUNT READ AT NOV 3, 9:44 PM ET · RETRYING EVERY MINUTE"
+        "REFRESH FAILED · AT NOV 3, 10:10 PM ET · SHOWING THE COUNT READ AT NOV 3, 9:44 PM ET · RETRYING EVERY MINUTE"
       )
     );
+    expect(region).toHaveTextContent(/^REFRESH FAILED$/);
     expect(line).not.toHaveTextContent(/UPDATED/);
     expect(screen.getByText("Eric Conroy")).toBeInTheDocument();
   });

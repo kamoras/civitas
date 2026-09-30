@@ -191,9 +191,9 @@ export default async function LimitationsChapter() {
               : "some states publish"}{" "}
             one in a form we can read reliably. Other states&apos; pages say they have no live count
             and link to the office that publishes it; they are left unshaded on the results map
-            rather than drawn as having no votes. A count is never called: it reads
-            &ldquo;leading&rdquo; until the state marks it official. See{" "}
-            <A href="/about/elections#election-night">Elections &amp; ballots</A>.
+            rather than drawn as having no votes. A count is never called: a race
+            &ldquo;leads&rdquo; even once the state lists its count as official; Civitas calls no
+            race. See <A href="/about/elections#election-night">Elections &amp; ballots</A>.
           </P>
         </Limitation>
         <Limitation title="Ballot-measure coverage is still filling in">

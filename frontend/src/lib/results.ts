@@ -3,8 +3,8 @@
  *
  * Every sentence here is a fixed frame around the state's own numbers,
  * matching the backend's templates (live_results/bluesky.py):
- * a race is "leading" until the state itself calls its count official, and
- * nothing on the page projects or calls a winner.
+ * a race "leads", even once the state lists its count as official, and
+ * nothing on the page projects or calls a winner — Civitas calls no race.
  */
 
 import type {
@@ -65,6 +65,19 @@ export const FEED_FAILED_MARK = "rgba(255, 216, 77, 0.8)";
 export const POLLS_OPEN_SWATCH = `repeating-linear-gradient(45deg, ${POLLS_OPEN_MARK} 0 1.5px, transparent 1.5px 5px)`;
 export const FEED_FAILED_SWATCH = `repeating-linear-gradient(-45deg, ${FEED_FAILED_MARK} 0 1.5px, transparent 1.5px 5px)`;
 export const AWAITING_SWATCH = `radial-gradient(circle, ${AWAITING_MARK} 0 0.9px, transparent 1.1px) 0 0 / 4px 4px`;
+
+/*
+ * A count that is no longer being refreshed — its state's latest feed read
+ * failed, or the backend has stopped reading it (stateFeedBehind) — keeps
+ * its leader's colour (it is still who led when last read) with the same
+ * amber stripe as a feed not read laid over it, so it never passes for a
+ * live count. Each amber stripe runs beside a dark one: over the lighter
+ * party fills the dark stripe is the one that stands out, over the fainter
+ * ones the amber (results.test.ts checks at least one is 3:1 against every
+ * fill a count can have). The state's accessible name says "not live" too.
+ */
+export const STALE_SHADOW = "rgba(20, 17, 14, 0.9)";
+export const STALE_SWATCH = `repeating-linear-gradient(-45deg, ${FEED_FAILED_MARK} 0 1.5px, ${STALE_SHADOW} 1.5px 3px, transparent 3px 6px)`;
 
 /** Whether the page should lead with results rather than research: only
  * the two results phases the backend names. A missing or malformed phase
@@ -150,6 +163,73 @@ export function feedBehind(
   return now - checked > resultsSyncInterval(phase, now) + FEED_BEHIND_SLACK_MS;
 }
 
+/** A state read live that has no read record at all, although the backend
+ * keeps one (`feeds` is sent) and its polls closed well over a sync pass
+ * ago, is behind too: every pass records every covered state's read, so no
+ * record by then means the sync never reached it. Otherwise as
+ * feedBehind. False from an older backend that keeps no records, and for a
+ * state with no known closing time. */
+export function stateFeedBehind(
+  results: Pick<LiveResults, "phase" | "pollsClose" | "feeds">,
+  state: string,
+  now: number
+): boolean {
+  const feed = results.feeds?.[state];
+  if (feed && !Number.isNaN(Date.parse(feed.checkedAt ?? "")))
+    return feedBehind(feed, results.phase, now);
+  if (!results.feeds) return false;
+  const close = Date.parse(results.pollsClose?.[state] ?? "");
+  if (Number.isNaN(close)) return false;
+  return now - close > resultsSyncInterval(results.phase, now) + FEED_BEHIND_SLACK_MS;
+}
+
+/** How far the page lets its clock run on from the last answer it got,
+ * while its refreshes are succeeding: one poll interval
+ * (useLiveResults' RESULTS_POLL_MS). Enough for a state's polls to close
+ * on time between two polls; not enough for a tab left hidden for an hour
+ * (whose polling stops) to call every feed behind in the moment before its
+ * catch-up request answers. */
+const CLOCK_RUN_ON_MS = 60_000;
+
+/**
+ * The time the results pages judge the count by: the server's clock as of
+ * the last answer (its Date header, LiveResults.clock), run on by the time
+ * since it arrived — at most CLOCK_RUN_ON_MS, and not at all while the
+ * page's own refreshes are failing (`refreshing` false). Never the
+ * browser's clock alone: one a quarter of an hour fast would call every
+ * feed behind, one three hours slow would keep saying polls are open long
+ * after they closed. And while this page can't refresh, nothing it holds
+ * gets older in its own eyes — whether a feed has fallen behind is judged
+ * as the last answer stood; the refresh failure is the page's to say, not
+ * the feeds'. Without a clock (an older caller) it is `browserNow`.
+ */
+export function resultsNow(
+  results: Pick<LiveResults, "clock"> | null | undefined,
+  browserNow: number,
+  refreshing = true
+): number {
+  const clock = results?.clock;
+  if (!clock) return browserNow;
+  const elapsed = refreshing
+    ? Math.min(Math.max(browserNow - clock.receivedAt, 0), CLOCK_RUN_ON_MS)
+    : 0;
+  return (clock.serverDate ?? clock.receivedAt) + elapsed;
+}
+
+/** The oldest and newest times the counts on screen were read, over every
+ * state with a count (countReadAt per state). Null with no count read. A
+ * page that can't refresh says both, so the newest state's read never
+ * stands for all of them. */
+export function countReadRange(
+  results: Pick<LiveResults, "feeds" | "races">
+): { oldest: string; newest: string } | null {
+  const times = [...new Set(results.races.map((r) => r.state))]
+    .map((st) => countReadAt(results, st))
+    .filter((t): t is string => !!t && !Number.isNaN(Date.parse(t)))
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+  return times.length ? { oldest: times[0], newest: times[times.length - 1] } : null;
+}
+
 /** When the count on screen was read from the feeds: a state's last good
  * read, or — from an older backend with no feed record — the newest read
  * of any of its races. Without `state`, the newest of every state's. Never
@@ -220,7 +300,7 @@ function rgb(party: string | null): string {
 /** A race's map fill: its leader's party (purple for one the feed gives no
  * party the vocabulary knows), fainter (lower opacity, so dimmer over the
  * dark map — never lighter) while fewer than half the
- * units are in, solid once the state calls it official. */
+ * units are in, solid once the state lists its count as official. */
 export function resultFill(result: LiveRaceResult | undefined, covered: boolean): string {
   if (!result) return covered ? AWAITING_FILL : UNCOVERED_FILL;
   if (!(result.votesCounted > 0)) return AWAITING_FILL;
@@ -322,7 +402,9 @@ function sentence(...parts: string[]): string {
 }
 
 export interface UpdateText {
-  /** Short tag for the feed: FLIP, LEAD, OFFICIAL, ALL IN, FIRST, UPDATE. */
+  /** Short tag for the feed: FLIP, LEAD, OFFICIAL COUNT, ALL IN, FIRST,
+   * UPDATE. Never a bare OFFICIAL beside the leader's share, which reads as
+   * a result. */
   tag: string;
   tone: "flip" | "lead" | "official" | "neutral";
   text: string;
@@ -375,9 +457,9 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       };
     case "official":
       return {
-        tag: "OFFICIAL",
+        tag: "OFFICIAL COUNT",
         tone: "official",
-        text: sentence("The state lists its count as official", shares),
+        text: sentence("The state lists its count as official", shares, "Not called"),
       };
     case "flip":
       // Never "wins", even official: the state listing its count as
@@ -505,7 +587,7 @@ function progressPhrase(r: LiveRaceResult): string {
 
 /** One race's standing in words, as its map fill says it: "no votes yet",
  * "tied, 40% in", "Republican leads, 80% in, seat changing party". Never
- * "wins": a race leads until the state lists its count as official. */
+ * "wins": a race "leads" even once the state lists its count as official. */
 export function raceStatusText(r: LiveRaceResult): string {
   if (!(r.votesCounted > 0)) return "no votes yet";
   const progress = progressPhrase(r);
@@ -548,6 +630,9 @@ function pluralityLeader(races: LiveRaceResult[]): { party: string | null; tied:
 
 export interface StateShade {
   fill: string;
+  /** The fill is a count that isn't being refreshed (`feedDown` with a
+   * count to show): drawn with the stale stripe over it (STALE_SWATCH). */
+  stale: boolean;
   /** The state's standing in words — the map's accessible name for it, so
    * the fill is never the only way to tell. Starts with the state code. */
   label: string;
@@ -559,33 +644,39 @@ export interface StateShade {
  * the most of them, every party compared; tied or split when two or more
  * lead equally many. Fainter on the same scale as a single race, taken
  * from the least-counted of them: under half in anywhere is faint, and
- * solid only once every one is official. */
+ * solid only once every one is official. A count whose feed is down or
+ * behind keeps that fill and is marked `stale`. */
 export function stateShade(
   state: string,
   races: LiveRaceResult[],
   chamber: "S" | "H",
   covered: boolean,
   hasRace: boolean,
-  /** The state's latest feed read failed (feedFailed): with no count to
-   * show, it is drawn as FEED_FAILED_FILL, never as "no votes yet". */
+  /** The state's latest feed read failed (feedFailed) or the backend has
+   * stopped reading it (stateFeedBehind): with no count to show, it is
+   * drawn as FEED_FAILED_FILL, never as "no votes yet"; with one, `stale`. */
   feedDown = false,
   /** The state's polls are still open (pollsStillOpen): drawn as
    * POLLS_OPEN_FILL, which says nothing about the count. */
   pollsOpen = false
 ): StateShade {
   const what = chamber === "S" ? "Senate" : "House";
-  if (!hasRace) return { fill: UNCOVERED_FILL, label: `${state}: no Senate race this year` };
+  const plain = (fill: string, label: string): StateShade => ({ fill, label, stale: false });
+  if (!hasRace) return plain(UNCOVERED_FILL, `${state}: no Senate race this year`);
   const mine = races.filter((r) => r.office === chamber);
   if (!mine.length) {
-    if (!covered) return { fill: UNCOVERED_FILL, label: `${state}: no live count here` };
-    if (pollsOpen) return { fill: POLLS_OPEN_FILL, label: `${state}: polls open` };
-    if (feedDown) return { fill: FEED_FAILED_FILL, label: `${state}: results feed not read` };
-    return { fill: AWAITING_FILL, label: `${state} ${what}: no votes yet` };
+    if (!covered) return plain(UNCOVERED_FILL, `${state}: no live count here`);
+    if (pollsOpen) return plain(POLLS_OPEN_FILL, `${state}: polls not yet closed`);
+    if (feedDown) return plain(FEED_FAILED_FILL, `${state}: results feed not read`);
+    return plain(AWAITING_FILL, `${state} ${what}: no votes yet`);
   }
+  // A count to colour, stale when its feed isn't being read.
+  const stale = covered && feedDown;
   if (mine.length === 1) {
     return {
       fill: resultFill(mine[0], covered),
       label: `${state} ${what}: ${raceStatusText(mine[0])}`,
+      stale,
     };
   }
   const { party, tied } = pluralityLeader(mine);
@@ -622,7 +713,7 @@ export function stateShade(
       .filter(Boolean)
       .join(", ");
   }
-  return { fill, label };
+  return { fill, label, stale };
 }
 
 /** stateShade's fill alone. */

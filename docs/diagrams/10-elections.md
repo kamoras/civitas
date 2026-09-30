@@ -377,16 +377,46 @@ whose latest read was refused says the count shown is from an earlier read.
 On `/elections` the same distinction holds: a covered state whose latest read
 failed and has no count is drawn and listed as "feed not read" (its own fill
 and legend entry), never as "no votes yet", and one still showing an older
-count is marked stale with the time that count was read. An exact tie is
+count is marked stale with the time that count was read.
+
+A state is also **stale** when the backend has stopped reading it, whatever
+its last read said: its `checkedAt` is more than a sync pass plus
+`FEED_BEHIND_SLACK_MS` old (15 minutes while counts move, 70 once the sync
+reads hourly), or — while the backend sends `feeds` at all — it has no read
+record and its polls closed that long ago (`stateFeedBehind` in
+`frontend/src/lib/results.ts`). Its row says "not checked since <time>" and
+when the count shown was read; its state page says the feed "hasn't been
+checked since" that time; and on both maps a stale count keeps its leader's
+colour under the amber-and-dark stale stripe (`STALE_SWATCH`, its own legend
+entry and badge style), so it never passes for a live one. When every
+closed covered state is failing or behind, the masthead says STALE and which
+of the two it is, never LIVE. All of this is judged at **the server's time**
+(`resultsNow`): the `Date` header of the page's latest good response, run on
+by at most one poll interval since it arrived — never the browser's clock,
+which may be minutes or hours off, and not run on while a hidden tab has
+stopped polling. A stale body nginx serves from its cache still carries a
+fresh `Date`, so its old `checkedAt` still reads as stale. While the page's
+own refreshes fail its clock stops at the last good answer and "REFRESH
+FAILED", with when the counts on screen were read (oldest and newest), is
+the only statement: no feed is newly called behind for the page's own
+failure to ask. Polls closing is judged on the same clock. Only a change of
+state (live, stale, refresh failed, polls closed) is in the pages' polite
+live regions; the times beside it are not, so they aren't re-announced on
+every pass.
+
+An exact tie is
 tagged and worded as tied, never as a lead for whoever the feed lists first —
 and in the live-updates feed, where the backend sends no leader on a tie,
 as "the top two are tied", never naming the runner-up alone.
 
 **While a state is still voting** (its `pollsClose` ahead, or — from a
 backend that sends none — its last read `polls_open`) nothing is said about
-its count: `/elections` badges and fills it POLLS OPEN (its own legend
+its count: `/elections` badges and fills it POLLS NOT CLOSED (its own legend
 entry), not LIVE or "no votes yet", and until any covered state's polls
-close the masthead says polls are open and counts come in as they close. A
+close the masthead says ELECTION DAY and when the first state's count can be
+shown (the soonest of the covered states' *last* closing times) — not "polls
+open", which the page can't know from midnight Eastern, when the phase
+starts. A
 state page keeps its present-tense research framing ("Everyone on …'s
 ballot") until that state's polls close or the phase is `results`, with the
 count section saying when they close; only then does it read "… results" and
@@ -421,10 +451,13 @@ record. The homepage never hides one race's flip issue as a duplicate of
 another's (they share a title shape and the state's results page). It
 is a fixed template around the source's figures, never model text. The
 Action Center lists it beside the newest day's confirmed issues whatever its
-own date.
+own date. News promotes it only by naming its race — state and seat in one
+phrase (`_results_race_named`) — and once promoted it is the news story's,
+matching later coverage like any other issue.
 
 **Posts** (`bluesky.py`, published through `broadcast.publish`: the
-Elections feed first, then Bluesky): a flip, an official count (Senate, or a flip),
+Elections feed first, then Bluesky): a flip, an official count (Senate, or a House count still showing a flip
+when it goes out),
 a Senate lead change with most of the count in, and every unit reporting in
 a Senate race. Six posts an hour and forty an election; one post per race
 per 20 minutes. A post the budget or cooldown holds back waits for a later

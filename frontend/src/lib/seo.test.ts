@@ -114,16 +114,24 @@ describe("JSON-LD", () => {
 });
 
 describe("elections metadata", () => {
-  it("drops the lean map from /elections' description in the results window", () => {
-    const campaign = describeElections(2026, false);
+  it("drops the lean map from /elections' description from election day", () => {
+    const campaign = describeElections(2026, "campaign");
     expect(campaign.description).toMatch(/partisan lean/);
-    const results = describeElections(2026, true);
+    const results = describeElections(2026, "results");
     expect(results.title).toBe("2026 Election Results by State: Senate & House Count");
     expect(results.description).not.toMatch(/partisan lean/);
-    expect(results.description).toMatch(/Civitas calls none\.$/);
-    expect(results.description).not.toMatch(/\bwins?\b|\bwon\b/);
-    // Short enough that metaDescription never cuts the "calls none".
-    expect(results.description.length).toBeLessThanOrEqual(160);
+    expect(results.description).toMatch(/"leads" even once its count is official/);
+    expect(results.description).toMatch(/Civitas calls no race\.$/);
+    // Election morning: no count yet, and no lean either — the page draws
+    // none from election day.
+    const morning = describeElections(2026, "election_day");
+    expect(morning.title).not.toMatch(/Results/);
+    expect(morning.description).not.toMatch(/partisan lean|lean/);
+    for (const d of [campaign, results, morning]) {
+      expect(d.description).not.toMatch(/\bwins?\b|\bwon\b|until (?:the state|official)/);
+      // Short enough that metaDescription never cuts the qualifier.
+      expect(d.description.length).toBeLessThanOrEqual(160);
+    }
   });
 
   const ballot = {
@@ -145,15 +153,20 @@ describe("elections metadata", () => {
     expect(live.title).toBe("Georgia Election Results 2026: Senate & House Count and Ballot");
     expect(live.description).toMatch(/as its election office publishes it/);
     expect(live.description).toMatch(/Civitas calls no race/);
-    // A state not read live: no count promised, the office pointed to.
+    expect(live.description).toMatch(/"leads" even once official/);
+    // A state not read live: no count promised, in the title either.
     const notLive = describeStateBallot(ballot, true, false);
     expect(notLive.description).toMatch(/Civitas doesn't read it live/);
+    expect(notLive.title).not.toMatch(/Count/);
+    // The longest state name still fits.
+    const long = describeStateBallot({ ...ballot, stateName: "North Carolina" }, true, true);
+    expect(long.description.length).toBeLessThanOrEqual(160);
     // Couldn't check: promises neither.
     const unknown = describeStateBallot(ballot, true, null);
     expect(unknown.description).not.toMatch(/doesn't read|as its election office publishes it/);
     for (const d of [live, notLive, unknown]) {
       expect(d.description.length).toBeLessThanOrEqual(160);
-      expect(d.description).not.toMatch(/\bwins?\b|\bwon\b/);
+      expect(d.description).not.toMatch(/\bwins?\b|\bwon\b|until official/);
     }
   });
 });

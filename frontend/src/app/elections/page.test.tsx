@@ -99,6 +99,15 @@ vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
 vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/BackToTop", () => ({ default: () => null }));
 
+/** The masthead's status line: its live region (the page's state alone)
+ * and the times beside it, outside the region. */
+function statusRegion(): HTMLElement {
+  return document.querySelector("header [role=status]") as HTMLElement;
+}
+function statusLine(): HTMLElement {
+  return statusRegion().parentElement as HTMLElement;
+}
+
 beforeEach(() => {
   fetchLiveResults.mockResolvedValue(CAMPAIGN);
 });
@@ -173,7 +182,15 @@ describe("ElectionsPage", () => {
     expect(screen.getByRole("button", { name: "SENATE" })).toHaveAttribute("aria-pressed", "true");
     // The lean key is gone: the map now shades by the count.
     expect(screen.queryByText(/D-LEANING/)).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/LIVE · LAST CHANGE/);
+    expect(statusRegion()).toHaveTextContent(/^LIVE$/);
+    expect(statusLine()).toHaveTextContent("LIVE · LAST CHANGE NOV 3, 9:42 PM ET");
+    // How often the count is really read, not "refreshed every minute".
+    expect(
+      screen.getByText(
+        /reads each state.s feed every five minutes .* checks for a new read every minute/
+      )
+    ).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/until the state calls/);
   });
 
   it("keeps the campaign page when the backend predates the phase", async () => {
@@ -272,7 +289,7 @@ describe("ElectionsPage", () => {
     expect(ga).not.toHaveTextContent(/leads/);
   });
 
-  it("says polls are open on election day before any covered state's close, not results", async () => {
+  it("says election day, not results or polls open, before any covered state's last close", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-03T20:00:00Z"));
     fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
@@ -286,20 +303,28 @@ describe("ElectionsPage", () => {
     });
     render(<ElectionsPage />);
     const h1 = await screen.findByRole("heading", { level: 1 });
-    expect(h1).toHaveTextContent("2026 midterms: polls are open");
-    expect(h1).not.toHaveTextContent(/results/);
-    expect(screen.getByText(/POLLS OPEN · FIRST CLOSE NOV 3, 7:00 PM ET/)).toBeInTheDocument();
-    expect(screen.getByText(/Counts appear here as each state.s polls close/)).toBeInTheDocument();
-    // The state itself: polls open, and nothing about its count.
+    // The phase starts at midnight Eastern, before any poll opens: "polls
+    // are open" would be false for hours.
+    expect(h1).toHaveTextContent("2026 midterms: election day");
+    expect(h1).not.toHaveTextContent(/results|polls are open/);
+    expect(statusRegion()).toHaveTextContent(/^ELECTION DAY$/);
+    expect(statusLine()).toHaveTextContent(
+      "ELECTION DAY · FIRST STATE'S COUNT SHOWN AFTER NOV 3, 7:00 PM ET"
+    );
+    expect(
+      screen.getByText(/Counts appear here as each state.s last polls close/)
+    ).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Voting is under way|POLLS OPEN/);
+    // The state itself: polls not closed, and nothing about its count.
     const ga = within(screen.getByRole("region", { name: /By state/ })).getByRole("link", {
       name: /^GA/,
     });
-    expect(ga).toHaveTextContent("POLLS OPEN");
-    expect(ga).toHaveTextContent("Senate: polls still open");
+    expect(ga).toHaveTextContent("POLLS NOT CLOSED");
+    expect(ga).toHaveTextContent("Senate: polls not yet closed");
     expect(ga).not.toHaveTextContent(/LIVE|no votes yet/);
     expect(mapFill.current?.("GA")).toMatch(/^url\(#tex-.*-polls\)$/);
-    expect(mapFill.label?.("GA")).toBe("GA: polls open");
-    expect(screen.getByText(/POLLS OPEN$/, { selector: "li" })).toBeInTheDocument();
+    expect(mapFill.label?.("GA")).toBe("GA: polls not yet closed");
+    expect(screen.getByText(/POLLS NOT YET CLOSED$/, { selector: "li" })).toBeInTheDocument();
   });
 
   it("names a leader with no party as other, keys purple on the Senate map, and counts other leads", async () => {
@@ -394,7 +419,45 @@ describe("ElectionsPage", () => {
     await screen.findByText("2026 midterm results");
     expect(document.querySelectorAll("header [role=status]")).toHaveLength(1);
     expect(document.querySelector("header [role=status]")).toBe(status);
-    expect(status).toHaveTextContent(/LIVE · LAST CHANGE/);
+    // The region holds the state alone; the time is beside it.
+    expect(status).toHaveTextContent(/^LIVE$/);
+  });
+
+  it("doesn't re-announce the live region when only the time of the last change moves", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T02:45:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValueOnce(RESULTS).mockResolvedValue({
+      ...RESULTS,
+      phase: { ...RESULTS.phase, lastResultChange: "2026-11-04T02:47:00Z" },
+    });
+    render(<ElectionsPage />);
+    await screen.findByText("2026 midterm results");
+    const region = statusRegion();
+    const before = region.innerHTML;
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(await screen.findByText(/LAST CHANGE NOV 3, 9:47 PM ET/)).toBeInTheDocument();
+    expect(statusRegion()).toBe(region);
+    expect(region.innerHTML).toBe(before);
+  });
+
+  it("says no state is read live, not that it is waiting for counts, with no live state", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T06:00:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      phase: { ...RESULTS.phase, lastResultChange: null },
+      liveStates: [],
+      races: [],
+      updates: [],
+    });
+    render(<ElectionsPage />);
+    await screen.findByText("2026 midterm results");
+    expect(statusRegion()).toHaveTextContent("NO STATE'S COUNT IS READ LIVE HERE");
+    expect(document.body).not.toHaveTextContent(/WAITING FOR FIRST COUNTS|LIVE ·/);
   });
 
   it("doesn't say polls are open all day when no state is read live", async () => {
@@ -460,7 +523,8 @@ describe("ElectionsPage", () => {
       },
     });
     render(<ElectionsPage />);
-    expect(await screen.findByText(/^LIVE · LAST CHANGE/)).toBeInTheDocument();
+    expect(await screen.findByText(/LAST CHANGE/)).toBeInTheDocument();
+    expect(statusRegion()).toHaveTextContent(/^LIVE$/);
     // The next refresh fails: the masthead says when, and which count is
     // still on screen — not just that it is retrying.
     fetchLiveResults.mockRejectedValue(new Error("502"));
@@ -468,11 +532,91 @@ describe("ElectionsPage", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    const status = await screen.findByText(/^REFRESH FAILED/);
-    expect(status).toHaveTextContent(
-      "REFRESH FAILED AT NOV 3, 10:03 PM ET · SHOWING THE COUNT READ AT NOV 3, 10:00 PM ET · RETRYING EVERY MINUTE"
+    await screen.findByText(/SHOWING THE COUNT READ/);
+    expect(statusRegion()).toHaveTextContent(/^REFRESH FAILED$/);
+    expect(statusLine()).toHaveTextContent(
+      "REFRESH FAILED · AT NOV 3, 10:03 PM ET · SHOWING THE COUNT READ AT NOV 3, 10:00 PM ET · RETRYING EVERY MINUTE"
     );
-    expect(status).not.toHaveTextContent(/LIVE/);
+    expect(statusLine()).not.toHaveTextContent(/LIVE/);
+  });
+
+  it("while its own refreshes fail, says only that — never newly calls a feed stale", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValueOnce({
+      ...RESULTS,
+      clock: { serverDate: Date.parse("2026-11-04T03:02:00Z"), receivedAt: Date.now() },
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T03:00:00Z" },
+      },
+    });
+    render(<ElectionsPage />);
+    await screen.findByText(/LAST CHANGE/);
+    fetchLiveResults.mockRejectedValue(new Error("502"));
+    // Half an hour of failed refreshes: by the browser's clock the feed
+    // would be "behind", but that is this page's failure, not the feed's.
+    vi.setSystemTime(new Date("2026-11-04T03:32:00Z"));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await screen.findByText(/SHOWING THE COUNT READ/);
+    expect(statusRegion()).toHaveTextContent(/^REFRESH FAILED$/);
+    const ga = within(screen.getByRole("region", { name: /By state/ })).getByRole("link", {
+      name: /^GA/,
+    });
+    expect(ga).not.toHaveTextContent(/STALE|NOT CHECKED/);
+  });
+
+  it("judges staleness by the server's clock, not a browser clock that is off", async () => {
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    const feeds = {
+      GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T03:00:00Z" },
+    };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // The browser is 40 minutes fast; the server's Date says 03:02.
+    vi.setSystemTime(new Date("2026-11-04T03:42:00Z"));
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      feeds,
+      clock: { serverDate: Date.parse("2026-11-04T03:02:00Z"), receivedAt: Date.now() },
+    });
+    render(<ElectionsPage />);
+    await screen.findByText(/LAST CHANGE/);
+    expect(statusRegion()).toHaveTextContent(/^LIVE$/);
+    cleanup();
+    // The server's own Date 25 minutes after the read: stale, whatever a
+    // slow browser clock says.
+    vi.setSystemTime(new Date("2026-11-04T01:00:00Z"));
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      feeds,
+      clock: { serverDate: Date.parse("2026-11-04T03:25:00Z"), receivedAt: Date.now() },
+    });
+    render(<ElectionsPage />);
+    await screen.findByText(/SHOWING THE COUNT READ/);
+    expect(statusRegion()).toHaveTextContent("STALE · NO STATE'S FEED CHECKED LATELY");
+  });
+
+  it("calls a live state with no read record since its polls closed stale, not live", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:20:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      pollsClose: { GA: "2026-11-04T00:00:00Z" },
+      feeds: {},
+    });
+    render(<ElectionsPage />);
+    const ga = within(await screen.findByRole("region", { name: /By state/ })).getByRole("link", {
+      name: /^GA/,
+    });
+    expect(ga).toHaveTextContent("STALE");
+    // With no record, when the count was read is the race's own read time.
+    expect(ga).toHaveTextContent(
+      "NOT CHECKED SINCE ITS POLLS CLOSED · COUNT FROM NOV 3, 9:44 PM ET"
+    );
+    expect(statusRegion()).toHaveTextContent(/^STALE/);
   });
 
   it("marks a state STALE, not LIVE, once the backend stops reading its feed", async () => {
@@ -498,9 +642,18 @@ describe("ElectionsPage", () => {
       "NOT CHECKED SINCE NOV 3, 10:00 PM ET · COUNT FROM NOV 3, 10:00 PM ET"
     );
     expect(mapFill.label?.("GA")).toMatch(/; not live, not checked since Nov 3, 10:00 PM ET/);
+    // The map keeps the last leader's colour under the stale stripe, keyed.
+    expect(mapFill.current?.("GA")).toMatch(/^url\(#tex-.*-stale-0\)$/);
+    expect(screen.getByText(/STALE: NOT REFRESHED$/, { selector: "li" })).toBeInTheDocument();
+    // Not LIVE's badge with other words: its own look.
+    const badge = within(ga).getByText("STALE");
+    expect(badge.className).toMatch(/border-dashed/);
+    expect(
+      within(byState.getByRole("link", { name: /^NY/ })).getByText("LIVE").className
+    ).not.toMatch(/border-dashed/);
     // A state still read on time stays live, and so does the masthead.
     expect(byState.getByRole("link", { name: /^NY/ })).toHaveTextContent("LIVE");
-    expect(screen.getByText(/^LIVE · LAST CHANGE/)).toBeInTheDocument();
+    expect(statusRegion()).toHaveTextContent(/^LIVE$/);
   });
 
   it("says STALE in the masthead, with the count's read time, when no feed is being read", async () => {
@@ -514,9 +667,56 @@ describe("ElectionsPage", () => {
       },
     });
     render(<ElectionsPage />);
-    const status = await screen.findByText(/^STALE · /);
-    expect(status).toHaveTextContent(
-      "STALE · NO STATE'S FEED READ LATELY · SHOWING THE COUNT READ AT NOV 3, 10:00 PM ET"
+    await screen.findByText(/SHOWING THE COUNT READ/);
+    expect(statusLine()).toHaveTextContent(
+      "STALE · NO STATE'S FEED CHECKED LATELY · SHOWING THE COUNT READ AT NOV 3, 10:00 PM ET"
+    );
+  });
+
+  it("says every read failed, not that none was made, when feeds are read but fail", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      feeds: {
+        GA: {
+          status: "unavailable",
+          checkedAt: "2026-11-04T03:00:00Z",
+          lastOkAt: "2026-11-04T02:44:00Z",
+        },
+      },
+    });
+    render(<ElectionsPage />);
+    await screen.findByText(/SHOWING THE COUNT READ/);
+    expect(statusRegion()).toHaveTextContent("STALE · EVERY STATE'S LATEST FEED READ FAILED");
+  });
+
+  it("gives the oldest and newest read when counts were read at different times", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:40:00Z"));
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue({
+      ...RESULTS,
+      liveStates: ["GA", "NY"],
+      races: [
+        RESULTS.races[0],
+        {
+          ...RESULTS.races[0],
+          raceId: "2026-SEN-NY",
+          state: "NY",
+          fetchedAt: "2026-11-04T03:18:00Z",
+        },
+      ],
+      feeds: {
+        GA: { status: "ok", checkedAt: "2026-11-04T03:00:00Z", lastOkAt: "2026-11-04T03:00:00Z" },
+        NY: { status: "ok", checkedAt: "2026-11-04T03:18:00Z", lastOkAt: "2026-11-04T03:18:00Z" },
+      },
+    });
+    render(<ElectionsPage />);
+    await screen.findByText(/SHOWING COUNTS READ/);
+    expect(statusLine()).toHaveTextContent(
+      "SHOWING COUNTS READ BETWEEN NOV 3, 10:00 PM ET AND NOV 3, 10:18 PM ET"
     );
   });
 

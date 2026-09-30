@@ -20,7 +20,14 @@ import StateResults from "@/components/elections/results/StateResults";
 import { electionIsNear, msUntilNear, useLiveResults } from "@/hooks/useLiveResults";
 import { useHashAt } from "@/hooks/useHashAt";
 import { useNow } from "@/hooks/useNow";
-import { feedBehind, feedFailed, pollsClosed, pollsStillOpen, showsResults } from "@/lib/results";
+import {
+  feedFailed,
+  pollsClosed,
+  pollsStillOpen,
+  resultsNow,
+  showsResults,
+  stateFeedBehind,
+} from "@/lib/results";
 import {
   buildBallotContests,
   contestForHash,
@@ -966,10 +973,14 @@ function HouseDetail({
   onPick,
   results,
   feedAnswered,
+  countStale = false,
   lookupHref,
   lookupIsStateSpecific = false,
   resultsMode = false,
 }: {
+  /** The state's feed isn't being refreshed: the map marks its counts
+   * stale (DistrictMap's `stale`). */
+  countStale?: boolean;
   ballot: StateBallot;
   pickedId: string | null;
   onPick: (id: string | null) => void;
@@ -1101,6 +1112,7 @@ function HouseDetail({
         onPick={(id) => onPick(id)}
         results={results}
         feedAnswered={feedAnswered}
+        stale={countStale}
         showLean={!resultsMode}
       />
       {houseRaces.length > 3 && <DistrictFinder races={houseRaces} picked={null} onPick={onPick} />}
@@ -1527,7 +1539,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // Subscribed only while the live phase shows results (poll close is the
   // one time-dependent switch); otherwise the page would re-render its whole
   // tree once a second all year.
-  const now = useNow(!!live && showsResults(live.phase));
+  // The server's clock as of the last answer, stopped while refreshes fail
+  // (resultsNow) — not the browser's, which can be hours off either way.
+  const now = resultsNow(live, useNow(!!live && showsResults(live.phase)), !liveError);
   const resultsFraming =
     resultsMode &&
     (ballot.phase?.phase === "results" ||
@@ -1536,11 +1550,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // "no votes yet", which is a statement about the count.
   const stillVoting = !!live && pollsStillOpen(live, ballot.state, now);
   // The state's feed isn't being read (its latest read failed, or the sync
-  // hasn't read it for well over a pass: feedBehind).
+  // hasn't read it for well over a pass: stateFeedBehind).
   const feedDown =
-    !!live &&
-    (feedFailed(live.feeds?.[ballot.state]) ||
-      feedBehind(live.feeds?.[ballot.state], live.phase, now));
+    !!live && (feedFailed(live.feeds?.[ballot.state]) || stateFeedBehind(live, ballot.state, now));
   // Only a state read live gets a count-shaded map: for any other, an
   // empty map would draw every district as "no votes yet" — a state with
   // no feed shown as one where nothing has happened. Likewise a state whose
@@ -1646,6 +1658,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             onPick={(id) => openContest("house", id)}
             results={liveByDistrict}
             feedAnswered={feedAnswered}
+            countStale={feedDown && !stillVoting}
             lookupHref={lookupHref}
             lookupIsStateSpecific={lookupIsStateSpecific}
             resultsMode={resultsMode}

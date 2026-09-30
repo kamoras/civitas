@@ -13,9 +13,10 @@ import {
   FEED_FAILED_SWATCH,
   POLLS_OPEN_FILL,
   POLLS_OPEN_SWATCH,
+  STALE_SWATCH,
   TIED_FILL,
   UNCOVERED_FILL,
-  feedBehind,
+  countReadAt,
   feedFailed,
   formatEasternTime,
   formatLed,
@@ -23,7 +24,9 @@ import {
   partyLetter,
   pollsStillOpen,
   reportingShare,
+  resultsNow,
   seatsLed,
+  stateFeedBehind,
   stateShade,
   summarizeState,
 } from "@/lib/results";
@@ -51,7 +54,7 @@ function Swatch({ color, texture }: { color: string; texture?: string }) {
  * bare "official" beside a name, which reads as a result. */
 function senateLine(r: LiveRaceResult, several: boolean): string {
   const name = several ? `Senate${r.isSpecial ? " (special)" : ""}` : "Senate";
-  if (isTied(r)) return `${name}: tied${r.official ? " · official" : ""}`;
+  if (isTied(r)) return `${name}: tied${r.official ? " · official count" : ""}`;
   const lead = r.candidates[0];
   if (!lead || !r.votesCounted) return `${name}: no votes yet`;
   const share = reportingShare(r);
@@ -87,9 +90,14 @@ function LedTally({ led }: { led: Record<string, number> }) {
 export default function ResultsOverview({
   results,
   states,
+  refreshFailed = false,
 }: {
   results: LiveResults;
   states: string[];
+  /** The page's own latest refresh failed (useLiveResults' error): time
+   * stops at the last answer (resultsNow), so no feed is newly called
+   * behind for what is this page's failure to ask. */
+  refreshFailed?: boolean;
 }) {
   const router = useRouter();
   const [chamber, setChamber] = useState<"S" | "H">("S");
@@ -107,24 +115,31 @@ export default function ResultsOverview({
   // States, not races: a state electing both its senators counts once —
   // the response lists which states elect one, not how many seats each.
   const liveSenate = [...senateStates].filter((s) => live.has(s)).length;
-  const now = useNow();
+  // The server's time as of the last answer (resultsNow): never the
+  // browser's clock, which can be far off.
+  const now = resultsNow(results, useNow(), !refreshFailed);
   // A covered state whose feed isn't being read: its latest read failed,
   // or the backend hasn't read it for well over a sync pass (feedBehind —
   // its sync has stopped, whatever the last read said). With no count it
   // is "feed not read", never "no votes yet"; with an older count it is
   // stale, never live.
   const feeds = results.feeds ?? {};
-  const behind = (state: string) => live.has(state) && feedBehind(feeds[state], results.phase, now);
+  const behind = (state: string) => live.has(state) && stateFeedBehind(results, state, now);
   const readFailed = (state: string) =>
     live.has(state) && (feedFailed(feeds[state]) || behind(state));
   // What a stale count's row and map name say about it: when the feed was
   // last tried or last gave a count.
   const staleParts = (state: string): [string, string] => {
     const feed = feeds[state];
-    const from = feed?.lastOkAt ? `count from ${formatEasternTime(feed.lastOkAt)}` : "older count";
+    // The state's last good read, or its races' own read time with no
+    // record (countReadAt).
+    const readAt = countReadAt(results, state);
+    const from = readAt ? `count from ${formatEasternTime(readAt)}` : "older count";
     return [
-      behind(state) && feed
-        ? `not checked since ${formatEasternTime(feed.checkedAt)}`
+      behind(state)
+        ? feed?.checkedAt
+          ? `not checked since ${formatEasternTime(feed.checkedAt)}`
+          : "not checked since its polls closed"
         : "latest read failed",
       from,
     ];
@@ -144,7 +159,6 @@ export default function ResultsOverview({
   const redrawnSet = new Set(redrawn);
   const redrawnCounted = house.filter((r) => redrawnSet.has(r.state) && r.votesCounted > 0).length;
 
-  const { defs, paint } = useMapTextures();
   const shade = (state: string) =>
     stateShade(
       state,
@@ -155,13 +169,24 @@ export default function ResultsOverview({
       readFailed(state),
       voting(state)
     );
-  const fill = (state: string) => (state === "DC" ? DC_FILL : paint(shade(state).fill));
+  // Every fill a stale count is drawn in, so the map has a stale pattern
+  // for each (useMapTextures).
+  const staleFills = states
+    .map((st) => shade(st))
+    .filter((s) => s.stale)
+    .map((s) => s.fill);
+  const { defs, paint } = useMapTextures(staleFills);
+  const fill = (state: string) => {
+    if (state === "DC") return DC_FILL;
+    const s = shade(state);
+    return paint(s.fill, s.stale);
+  };
   // A count the feed is no longer refreshing says so in its name, as the
   // row's badge does: its colour is who led when it was last read.
   const label = (state: string) =>
     state === "DC"
       ? "DC: no voting member of Congress"
-      : readFailed(state) && (byState.get(state) ?? []).length > 0 && !voting(state)
+      : shade(state).stale && !voting(state)
         ? `${shade(state).label}; not live, ${staleParts(state).join(", ")}`
         : shade(state).label;
 
@@ -226,13 +251,18 @@ export default function ResultsOverview({
                 <Swatch color="rgba(201,149,255,0.6)" /> OTHER PARTY LEADS
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={POLLS_OPEN_FILL} texture={POLLS_OPEN_SWATCH} /> POLLS OPEN
+                <Swatch color={POLLS_OPEN_FILL} texture={POLLS_OPEN_SWATCH} /> POLLS NOT YET CLOSED
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={AWAITING_FILL} texture={AWAITING_SWATCH} /> NO VOTES YET
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={FEED_FAILED_FILL} texture={FEED_FAILED_SWATCH} /> FEED NOT READ
+              </li>
+              <li className="flex items-center gap-1.5">
+                {/* A count no longer refreshed keeps its leader's colour
+                    under the stripe. */}
+                <Swatch color="rgba(255,137,137,0.6)" texture={STALE_SWATCH} /> STALE: NOT REFRESHED
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={UNCOVERED_FILL} />{" "}
@@ -254,13 +284,14 @@ export default function ResultsOverview({
           </div>
           <p className="border-t border-white/[0.07] px-4 py-3 text-xs text-ink-min">
             Colour is who leads each state&apos;s own count, not a projection. Fainter means fewer
-            than half the precincts or counties are in; solid means the state calls its count
-            official.{" "}
+            than half the precincts or counties are in; solid means the state lists its count as
+            official, and a race there still only leads — Civitas calls no race.{" "}
             {chamber === "H"
               ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
               : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in."}{" "}
             Amber stripes mean Civitas couldn&apos;t read that state&apos;s feed, or hasn&apos;t
-            lately, which says nothing about whether counting has started.
+            lately: on a dark state, that says nothing about whether counting has started; over a
+            party&apos;s colour, the count is the last one read and is not live.
           </p>
         </section>
 
@@ -336,11 +367,19 @@ export default function ResultsOverview({
             const badge = !isLive
               ? { text: "NO FEED", className: "border-white/15 text-ink-min" }
               : stillVoting
-                ? { text: "POLLS OPEN", className: "border-signal-cyan/50 text-signal-cyan" }
+                ? {
+                    // Not "polls open": from midnight on election day,
+                    // before any poll opens, this is true too.
+                    text: "POLLS NOT CLOSED",
+                    className: "border-signal-cyan/50 text-signal-cyan",
+                  }
                 : failed
                   ? {
                       text: hasCount ? "STALE" : "FEED NOT READ",
-                      className: "border-signal-amber/50 text-signal-amber",
+                      // Not LIVE's look with other words: dashed, and
+                      // carrying the map's stripe for the same state.
+                      className: "border-dashed border-signal-amber/70 text-ink-hi",
+                      texture: hasCount ? STALE_SWATCH : FEED_FAILED_SWATCH,
                     }
                   : { text: "LIVE", className: "border-signal-amber/50 text-signal-amber" };
             return (
@@ -352,8 +391,15 @@ export default function ResultsOverview({
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="font-mono text-sm text-ink-hi">{state}</span>
                     <span
-                      className={`border px-1.5 font-mono text-[11px] tracking-[0.1em] ${badge.className}`}
+                      className={`flex items-center gap-1 border px-1.5 font-mono text-[11px] tracking-[0.1em] ${badge.className}`}
                     >
+                      {"texture" in badge && badge.texture && (
+                        <span
+                          aria-hidden="true"
+                          className="inline-block h-2.5 w-2.5"
+                          style={{ background: `${badge.texture}, ${FEED_FAILED_FILL}` }}
+                        />
+                      )}
                       {badge.text}
                     </span>
                   </span>
@@ -370,7 +416,7 @@ export default function ResultsOverview({
                       {senateStates.has(state)
                         ? isLive
                           ? stillVoting
-                            ? "Senate: polls still open"
+                            ? "Senate: polls not yet closed"
                             : failed
                               ? behind(state)
                                 ? "Senate: its feed hasn't been read lately"

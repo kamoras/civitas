@@ -141,12 +141,69 @@ describe("DistrictMap", () => {
     expect(screen.getByText("no votes yet")).toBeInTheDocument();
     // Share is drawn as opacity over a near-black page: less in reads
     // dimmer, not lighter, so the key says "fainter", never "paler".
-    expect(screen.getByText("fainter = under half in · solid = official")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "fainter = under half in · solid = count listed as official, still not called"
+      )
+    ).toBeInTheDocument();
     expect(screen.queryByText(/paler/)).not.toBeInTheDocument();
     shape.focus();
-    expect(await screen.findByText("tied, not called")).toBeInTheDocument();
+    expect(await screen.findByText("tied · not called")).toBeInTheDocument();
     expect(screen.getByText("TIED")).toBeInTheDocument();
     expect(screen.getByText(/Ann Rep/)).not.toHaveClass("text-rep-red");
+  });
+
+  it("previews an official count as a lead with its flip, and marks a stale count", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    const flip = {
+      raceId: "2026-HOUSE-CT-2",
+      state: "CT",
+      office: "H",
+      district: 2,
+      isSpecial: false,
+      heldBy: "DEM",
+      official: true,
+      votesCounted: 2000,
+      reportingUnits: 100,
+      totalUnits: 100,
+      unitLabel: "towns",
+      sourceName: "CT SOTS",
+      sourceUrl: null,
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: "REP",
+      flip: true,
+      candidates: [
+        { name: "Ann Rep", party: "REP", votes: 1200, pct: 60, candidateId: null },
+        { name: "Bo Dem", party: "DEM", votes: 800, pct: 40, candidateId: null },
+      ],
+    } as LiveRaceResult;
+    const { container } = render(
+      <DistrictMap
+        state="CT"
+        races={RACES}
+        picked={null}
+        onPick={vi.fn()}
+        results={new Map([[2, flip]])}
+        stale
+      />
+    );
+    const shape = await screen.findByRole("button", {
+      name: "CT-2: Republican leads, official count, seat changing party; not live, the last count read",
+    });
+    expect(screen.getByText("stale: the last count read, not live")).toBeInTheDocument();
+    // Its leader's colour under the stale stripe.
+    expect(container.querySelector("pattern[id$='-stale-0'] rect:nth-child(2)")).toHaveAttribute(
+      "fill",
+      "rgba(255,137,137, 1)"
+    );
+    shape.focus();
+    // Never a bare "official" beside the names, and the flip kept.
+    expect(
+      await screen.findByText(
+        "leads · official count · not called · held by a Democrat, leader from another party · not live"
+      )
+    ).toBeInTheDocument();
   });
 
   it("hatches a district the counting state's feed gives no count for, and keys purple", async () => {

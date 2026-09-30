@@ -79,7 +79,7 @@ export interface ActionIssue {
    *  older backend mid-rollout. */
   sourceType?: string | null;
   /** A seat-flip issue's count: when its figures were read (UTC ISO) and
-   * whether the state calls it official. Null otherwise; optional for an
+   * whether the state lists it as official. Null otherwise; optional for an
    * older backend. */
   countAsOf?: string | null;
   countOfficial?: boolean | null;

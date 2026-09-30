@@ -58,7 +58,7 @@ describe("a state page's metadata on election day", () => {
     mockBackend(BALLOT, results);
     const meta = await generateMetadata({ params });
     expect(meta.title).toBe("Georgia Ballot 2026: Senate, House Races & Ballot Measures");
-    expect(JSON.stringify(meta)).not.toMatch(/Results|leading until official/);
+    expect(JSON.stringify(meta)).not.toMatch(/Results|even once official/);
   });
 
   it("says results once the state's last polls have closed", async () => {
@@ -67,7 +67,7 @@ describe("a state page's metadata on election day", () => {
     mockBackend(BALLOT, results);
     const meta = await generateMetadata({ params });
     expect(meta.title).toBe("Georgia Election Results 2026: Senate & House Count and Ballot");
-    expect(meta.description).toMatch(/leading until official/);
+    expect(meta.description).toMatch(/"leads" even once official; Civitas calls no race/);
   });
 
   it("treats an unknown close as not closed, and the day after as closed everywhere", async () => {

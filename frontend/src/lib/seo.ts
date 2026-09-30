@@ -147,22 +147,29 @@ export function articleJsonLd(issue: ActionIssue) {
 }
 
 /**
- * /elections' title and description. From election day until the results
- * window closes (backend election_phase, `resultsMode`) the page leads with
- * the live count and draws no partisan lean, so the lean map is not what
- * it offers; the rest of the time it is a ballot-research index. The
- * results wording is kept under metaDescription's 160 characters, so the
- * part that says Civitas calls no race is never the part cut off.
+ * /elections' title and description, by what the page is showing
+ * (`mode`): the live count from the first state's last polls closing
+ * until the results window closes (backend election_phase); on election
+ * day before then, no count yet and — as all day — no partisan lean; the
+ * rest of the time a ballot-research index with its lean map. The results
+ * wording is kept under metaDescription's 160 characters, so the part that
+ * says Civitas calls no race is never the part cut off.
  */
 export function describeElections(
   cycleYear: number | null,
-  resultsMode: boolean
+  mode: "campaign" | "election_day" | "results"
 ): { title: string; description: string } {
   const year = cycleYear ? `${cycleYear} ` : "";
-  if (resultsMode) {
+  if (mode === "results") {
     return {
       title: `${year}Election Results by State: Senate & House Count`,
-      description: `The ${year}Senate and House count by state, as each state's election office publishes it. A race leads until the state calls it official; Civitas calls none.`,
+      description: `The ${year}Senate and House count by state, as each state's election office publishes it. A race "leads" even once its count is official; Civitas calls no race.`,
+    };
+  }
+  if (mode === "election_day") {
+    return {
+      title: `${year}Election Day: Senate & House Races by State`,
+      description: `Election day: each state's count appears here once its last polls close, as its election office publishes it. Senate and House candidates, and ballot measures.`,
     };
   }
   return {
@@ -193,10 +200,15 @@ export function describeStateBallot(
   const year = ballot.cycleYear;
   if (resultsMode) {
     return {
-      title: `${name} Election Results ${year}: Senate & House Count and Ballot`,
+      // "Count" only where the page shows one: a state not read live says
+      // where its count is published, not what it is.
+      title:
+        live === true
+          ? `${name} Election Results ${year}: Senate & House Count and Ballot`
+          : `${name} Election Results ${year}: Where to Find Them, and Ballot`,
       description:
         live === true
-          ? `${name}'s ${year} Senate and House count, as its election office publishes it — leading until official; Civitas calls no race — and who was on the ballot.`
+          ? `${name}'s ${year} Senate & House count as its election office publishes it — "leads" even once official; Civitas calls no race — and who was on the ballot.`
           : live === false
             ? `Where ${name}'s election office publishes its ${year} count (Civitas doesn't read it live), and who was on the ballot, with their FEC fundraising.`
             : `${name}'s ${year} election: where the state publishes its count, and who was on the ballot, with their FEC fundraising.`,
