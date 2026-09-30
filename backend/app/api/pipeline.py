@@ -7,7 +7,6 @@ from app.api.auth import check_pipeline_token
 from app.api.pipeline_runner import run_pipeline_in_thread
 from app.database import get_db
 from app.models import PipelineRun
-from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.schemas import PipelineRunSchema, PipelineStatusSchema
 
 logger = logging.getLogger(__name__)
@@ -79,12 +78,7 @@ async def trigger_pipeline(
     if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
-    async def _run_pipelines():
-        from app.pipeline.house_pipeline import run_house_pipeline
-        result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
-        if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
-            logger.info("Senate pipeline done — starting House pipeline")
-            await run_house_pipeline()
+    from app.api.admin import _triggered_chain
 
-    run_pipeline_in_thread(_run_pipelines, name="pipeline-run", error_label="Pipeline run failed")
+    run_pipeline_in_thread(_triggered_chain(senator, fetch_only), name="pipeline-run", error_label="Pipeline run failed")
     return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}

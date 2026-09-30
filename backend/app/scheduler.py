@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -25,6 +26,9 @@ from app.pipeline.analyze.congress_bluesky import post_daily_congress, post_week
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
 from app.pipeline import lease
+
+if TYPE_CHECKING:
+    from app.pipeline_chain import Link
 
 logger = logging.getLogger(__name__)
 
@@ -70,17 +74,42 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
             )
 
 
+def nightly_links() -> "list[Link]":
+    """The nightly run's pipelines, in order (app.pipeline_chain). The
+    admin trigger runs the same list."""
+    from app.models import (
+        ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
+    from app.pipeline_chain import Link
+
+    def warm_bills() -> None:
+        # Both chambers' sponsored-bill rows were rewritten (by one or
+        # both): swap them into the /api/bills collection cache now rather
+        # than wait out its TTL.
+        from app.services.bill_service import warm_bill_collection_cache
+
+        warm_bill_collection_cache()
+
+    # Called through the module's names at run time: tests patch them.
+    return [
+        Link("Senate", lambda: run_senate_pipeline(), PipelineRun),
+        Link("Supplementary", lambda: run_supplementary_pipeline(), SupplementaryPipelineRun),
+        Link("House", lambda: run_house_pipeline(), HousePipelineRun, after=warm_bills),
+        Link("Stock trades", lambda: run_stock_trades_pipeline(), StockTradesPipelineRun),
+        Link("Election", lambda: run_election_pipeline(), ElectionPipelineRun),
+    ]
+
+
 def _nightly_pipeline() -> None:
     """Run the nightly sequence: Senate, then explore docs/SCOTUS/
     presidents, then House, then stock trades, then elections — five
     independent pipelines run one after another, not one combined
-    pipeline. A skip or a crash anywhere ends the chain there.
+    pipeline. One at a time for the Pi's memory, but none waits on the
+    one before it succeeding: a skip, failure or crash is alerted and the
+    next still runs (app.pipeline_chain).
 
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.
-
-    Safe to call from multiple containers: ``run_senate_pipeline`` acquires
-    a database-level lock and skips if another instance is already running.
     """
     from app.ops_alerts import (
         check_current_congress_staleness,
@@ -89,30 +118,7 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
-
-    def _alert_if_skipped(label: str, result: dict) -> bool:
-        """Returns True (and alerts) if `result` reports the step was
-        skipped. Every step in the nightly chain shares the same DB-row
-        lock, and a skip anywhere silently takes the rest of the chain
-        down with it — this alert exists so a skip is never silent,
-        since downstream data can otherwise go stale for days with no
-        signal that anything is wrong.
-        """
-        condition = f"nightly-skipped-{label.lower().replace(' ', '-')}"
-        if result.get("status") != "skipped":
-            resolve_ops_alert(condition)  # it ran tonight
-            return False
-        logger.info("%s pipeline skipped — %s", label, result.get("reason", "unknown reason"))
-        send_ops_alert(
-            f"Nightly {label} run skipped",
-            f"The scheduled {label} pipeline did not start because {_skip_cause(result.get('reason'))}. {label} data will be a "
-            "day stale unless triggered manually. If this was Senate, "
-            "note that Supplementary/House/Stock never ran either tonight "
-            "— the chain stops here, it does not skip just this one step.",
-            dedupe_key=f"skipped-{label.lower()}-{utcnow():%Y-%m-%d}",
-            condition=condition,
-        )
-        return True
+    from app.pipeline_chain import CRASHED, run_chain
 
     def _skip_cause(reason: str | None) -> str:
         """What held the run off: the skip's own reason (every pipeline's
@@ -120,6 +126,38 @@ def _nightly_pipeline() -> None:
         from app.pipeline.run_tracker import skip_reason_text
 
         return skip_reason_text(reason)
+
+    def _report(link, outcome) -> None:
+        """Each link's outcome, alerted when it didn't run or crashed —
+        never silent, since its data otherwise goes a day stale with no
+        signal — and resolved when it ran."""
+        slug = link.label.lower().replace(" ", "-")
+        skipped, crashed = f"nightly-skipped-{slug}", f"nightly-crashed-{slug}"
+        if outcome.status == "skipped":
+            reason = (outcome.result or {}).get("reason")
+            logger.info("%s pipeline skipped — %s", link.label, reason or "unknown reason")
+            send_ops_alert(
+                f"Nightly {link.label} run skipped",
+                f"The scheduled {link.label} pipeline did not start because {_skip_cause(reason)}. "
+                f"{link.label} data will be a day stale unless triggered manually. The rest of tonight's "
+                "pipelines ran regardless.",
+                dedupe_key=f"skipped-{link.label.lower()}-{utcnow():%Y-%m-%d}",
+                condition=skipped,
+            )
+            return
+        resolve_ops_alert(skipped)  # it ran tonight (or another run of it did)
+        # A link reached: a reset no longer holds the chain off.
+        resolve_ops_alert("nightly-skipped-reset")
+        if outcome.status == CRASHED:
+            send_ops_alert(
+                f"Nightly {link.label} run crashed",
+                f"{type(outcome.error).__name__}: {outcome.error}. {link.label} data will be a day stale "
+                "unless triggered manually. The rest of tonight's pipelines ran regardless.",
+                dedupe_key=f"crashed-{slug}-{utcnow():%Y-%m-%d}",
+                condition=crashed,
+            )
+        else:
+            resolve_ops_alert(crashed)
 
     def _run():
         # Loud, deduped alerts before another night's scoring. Each is a
@@ -144,46 +182,16 @@ def _nightly_pipeline() -> None:
                 logger.exception("Pre-pipeline check %s failed", check.__name__)
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(run_senate_pipeline())
-            if _alert_if_skipped("Senate", result):
-                return
-            # The chain started, so a reset no longer holds it off.
-            resolve_ops_alert("nightly-skipped-reset")
-
-            logger.info("Senate pipeline done — starting supplementary pipeline")
-            supp_result = loop.run_until_complete(run_supplementary_pipeline())
-            logger.info("Supplementary pipeline: %s", supp_result)
-            if _alert_if_skipped("Supplementary", supp_result):
-                return
-
-            logger.info("Supplementary pipeline done — starting House pipeline")
-            house_result = loop.run_until_complete(run_house_pipeline())
-            logger.info("House pipeline: %s", house_result)
-            if _alert_if_skipped("House", house_result):
-                return
-
-            # Both chambers' sponsored-bill rows were just rewritten —
-            # swap fresh data into the /api/bills collection cache now
-            # instead of waiting out its TTL.
-            from app.services.bill_service import warm_bill_collection_cache
-            warm_bill_collection_cache()
-            logger.info("House pipeline done — starting stock trades pipeline")
-            stock_result = loop.run_until_complete(run_stock_trades_pipeline())
-            logger.info("Stock trades pipeline: %s", stock_result)
-            if _alert_if_skipped("Stock trades", stock_result):
-                return
-
-            logger.info("Stock trades pipeline done — starting election pipeline")
-            election_result = loop.run_until_complete(run_election_pipeline())
-            logger.info("Election pipeline: %s", election_result)
-            _alert_if_skipped("Election", election_result)
-            # The chain reached its end without raising.
+            loop.run_until_complete(run_chain(nightly_links(), _report))
+            # The whole chain's alert, from before each link had its own.
             resolve_ops_alert("nightly-crashed")
         except BaseException as e:
-            logger.exception("Nightly pipeline failed")
+            # Only what the chain itself doesn't absorb — cancellation, an
+            # exit — ends it early.
+            logger.exception("Nightly pipeline chain stopped")
             send_ops_alert(
-                "Nightly pipeline crashed",
-                f"{type(e).__name__}: {e}",
+                "Nightly pipeline chain stopped",
+                f"{type(e).__name__}: {e}. The pipelines after the one running then did not run tonight.",
                 dedupe_key=f"crashed-{utcnow():%Y-%m-%d}",
                 condition="nightly-crashed",
             )
@@ -452,10 +460,10 @@ def _election_ballot_sync() -> None:
     """Every state's ballot list, between nightly runs, in election season.
 
     The nightly election pipeline runs LAST in the chain (Senate ->
-    Supplementary -> House -> Stock -> Election), and a skip or crash
-    anywhere upstream ends the chain for the night — ballots would go a
-    day stale for reasons unrelated to elections, in exactly the weeks
-    voters are reading them. This runs only the ballot step
+    Supplementary -> House -> Stock -> Election): it starts only once the
+    four before it are done, hours into the night, and ballots would go
+    most of a day between refreshes in exactly the weeks voters are
+    reading them. This runs only the ballot step
     (run_ballot_sync) on its own clock, so a withdrawal or replacement
     reaches the page within hours. It reads state election offices'
     published lists only — a few requests per state at one per second — so

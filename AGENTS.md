@@ -650,15 +650,24 @@ The pipeline runs nightly (configurable via `PIPELINE_CRON_SCHEDULE`) or can
 be triggered manually via `POST /api/admin/pipeline/trigger`.
 
 `scheduler.py`'s `_nightly_pipeline()` runs FIVE pipelines as a chain, in
-order: **Senate → Supplementary → House → Stock trades → Election.** Each
-link starts only if the previous one finished, so a failure partway down
-means every pipeline after it does not run at all — and leaves no run row
-behind to look wrong. `ops_alerts.check_pipeline_staleness` watches for that
-(no successful completion in `PIPELINE_STALE_ALERT_DAYS`); `check_pipeline_
+order: **Senate → Supplementary → House → Stock trades → Election.** They
+run one at a time (the Pi's memory), but **none waits on the one before it
+succeeding** (`app/pipeline_chain.py`, 2026-09): each reads whatever the
+database holds, so a link that is skipped, fails or crashes is alerted
+(`nightly-skipped-*`, `nightly-crashed-*`) and the next runs anyway. Until
+then any of those ended the chain, and Stock trades and Election once went
+19 nights without running behind a Supplementary failure. Every chain in the
+pipeline process shares one lock held per link, so a manual run and the
+nightly one interleave rather than run two pipelines at once, and a link
+whose pipeline is already running elsewhere is waited out, not repeated.
+Neither wait outlasts `STALE_PIPELINE_TIMEOUT`, so a hung run can't stall
+the rest. `POST /api/admin/pipeline/trigger` runs the same five-link chain
+(a single senator or a fetch-only run is Senate alone), and the
+single-pipeline triggers are one-link chains under the same lock.
+`ops_alerts.check_pipeline_staleness` still watches for a pipeline with no
+successful completion in `PIPELINE_STALE_ALERT_DAYS`; `check_pipeline_
 overrun` watches the opposite case of a run that started and is taking too
-long. Note `POST /api/admin/pipeline/trigger` runs only the first three —
-it cannot recover Stock trades or Election, which reach completion solely
-via the nightly chain.
+long.
 
 Each member pipeline executes in 4 phases per chamber, defined in
 `senate_pipeline.py`/`house_pipeline.py`:

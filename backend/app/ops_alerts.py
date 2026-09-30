@@ -736,11 +736,10 @@ def check_pipeline_staleness() -> None:
             f"The {label} pipeline {detail} (expected nightly, alert "
             f"threshold {budget.days}d). It is not overrunning — there is no "
             f"run to overrun — so this is the only signal it emits. Likely "
-            f"causes: the nightly chain stopped partway (every pipeline after "
-            f"the failure point silently never starts), or the container was "
-            f"killed mid-run. Check the phase ABOVE this one in scheduler.py's "
-            f"chain first: Senate -> Supplementary -> House -> Stock trades -> "
-            f"Election.",
+            f"causes: its own nightly run keeps being skipped, failing or "
+            f"crashing (see its nightly-skipped / nightly-crashed alerts), the "
+            f"nightly job itself isn't running, or the container was killed "
+            f"mid-run.",
             # Per pipeline per day: a genuine multi-day stall should keep
             # reminding, but not once per watchdog tick.
             dedupe_key=f"stale-pipeline-{label.lower().replace(' ', '-')}-{utcnow():%Y-%m-%d}",

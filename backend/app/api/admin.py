@@ -834,6 +834,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
     from app.pipeline.election_pipeline import is_election_pipeline_running
     from app.pipeline.vector_store import is_rebuilding as is_explore_index_rebuilding
+    from app.pipeline_chain import chain_running
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
@@ -913,6 +914,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         # run has no run row, and its top-up can take twenty-odd minutes a
         # restart would throw away mid-batch.
         "exploreIsRunning": _explore_running(db),
+        # A chain of pipelines in progress (nightly or triggered), between
+        # its links too — waiting on the one before or on another chain's:
+        # a restart then would drop the links it has yet to run.
+        "pipelineChainIsRunning": chain_running(),
     }
 
     if last_supplementary_run:
@@ -1350,6 +1355,27 @@ async def admin_pipeline_timings(
     }
 
 
+def _triggered_chain(senator: str | None, fetch_only: bool):
+    """What a pipeline trigger runs: the nightly chain's five pipelines,
+    each whatever the one before it did (app.pipeline_chain) — so a
+    trigger recovers any of them, not only the first. A single senator or a
+    fetch-only run is the Senate pipeline alone."""
+    from app.models import PipelineRun
+    from app.pipeline.senate_pipeline import run_senate_pipeline
+    from app.pipeline_chain import one_link, run_chain
+    from app.scheduler import nightly_links
+
+    if senator is not None or fetch_only:
+        return one_link(
+            "Senate", lambda: run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only), PipelineRun,
+        )
+
+    async def chain() -> None:
+        await run_chain(nightly_links())
+
+    return chain
+
+
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
 async def admin_trigger_pipeline(
     senator: str | None = Query(default=None),
@@ -1358,23 +1384,12 @@ async def admin_trigger_pipeline(
 ):
     """Trigger a pipeline run from the admin panel."""
     from app.api.pipeline import _is_pipeline_running
-    from app.pipeline.senate_pipeline import run_senate_pipeline
 
     if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
-    async def _run_pipelines():
-        from app.pipeline.house_pipeline import run_house_pipeline
-        from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
-        result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
-        if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
-            logger.info("Senate pipeline done — starting supplementary pipeline")
-            await run_supplementary_pipeline()
-            logger.info("Supplementary pipeline done — starting House pipeline")
-            await run_house_pipeline()
-
     run_pipeline_in_thread(
-        _run_pipelines, name="pipeline-run", error_label="Admin-triggered pipeline run failed",
+        _triggered_chain(senator, fetch_only), name="pipeline-run", error_label="Admin-triggered pipeline run failed",
     )
     return {
         "message": "Pipeline triggered",
@@ -1518,8 +1533,11 @@ async def admin_trigger_house_pipeline():
     """
     from app.pipeline.house_pipeline import run_house_pipeline
 
+    from app.models import HousePipelineRun
+    from app.pipeline_chain import one_link
+
     run_pipeline_in_thread(
-        run_house_pipeline, name="house-pipeline-run", error_label="House pipeline run failed",
+        one_link("House", run_house_pipeline, HousePipelineRun), name="house-pipeline-run", error_label="House pipeline run failed",
     )
     return {"message": "House pipeline triggered"}
 
@@ -1595,8 +1613,11 @@ async def admin_trigger_supplementary_pipeline():
     """
     from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
 
+    from app.models import SupplementaryPipelineRun
+    from app.pipeline_chain import one_link
+
     run_pipeline_in_thread(
-        run_supplementary_pipeline,
+        one_link("Supplementary", run_supplementary_pipeline, SupplementaryPipelineRun),
         name="supplementary-pipeline-run",
         error_label="Supplementary pipeline run failed",
     )
@@ -1625,8 +1646,11 @@ async def admin_trigger_election_pipeline():
     """
     from app.pipeline.election_pipeline import run_election_pipeline
 
+    from app.models import ElectionPipelineRun
+    from app.pipeline_chain import one_link
+
     run_pipeline_in_thread(
-        run_election_pipeline,
+        one_link("Election", run_election_pipeline, ElectionPipelineRun),
         name="election-pipeline-run",
         error_label="Election pipeline run failed",
     )
