@@ -216,6 +216,9 @@ def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelt
 # A refusal because the lock's own holder is live (acquire_pipeline_lock_why);
 # the others are lease.refusal_code's.
 ALREADY_RUNNING = "already_running"
+# A House run in a job that holds an older Congress than one the process (or
+# the district-lines file) has already moved to (fetch/district_pvi._superseded).
+SUPERSEDED = "superseded_congress"
 # The stock pipeline's own: it waits for the member pipelines.
 MEMBER_PIPELINE_RUNNING = "member_pipeline_running"
 
@@ -231,6 +234,10 @@ def skip_reason_text(reason: str | None, tier: str | None = None, who: str | Non
         return lease.refusal_text(reason, tier, who)
     return {
         ALREADY_RUNNING: "a previous run of it was still active",
+        SUPERSEDED: (
+            "its job still held the outgoing Congress after a newer one had taken office "
+            "and been scored — the next job scores the House on the new Congress"
+        ),
         MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",
     }.get(reason or "", f"it was skipped ({reason or 'no reason given'})")
 

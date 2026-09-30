@@ -1620,7 +1620,8 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
 async def admin_trigger_supplementary_pipeline():
     """Trigger a supplementary (explore docs/SCOTUS/presidents) pipeline run.
 
-    Same self-guarding lock as the house trigger above — no pre-check needed.
+    No pre-check: the run takes its own run lock (acquire_tracked_run on
+    SupplementaryPipelineRun) and skips, logged, if another is running.
     """
     from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
 
@@ -1650,7 +1651,8 @@ async def admin_trigger_election_pipeline():
     """Trigger a midterm-elections pipeline run (candidate roster,
     financials, coverage ingestion, Bluesky posting).
 
-    Same self-guarding lock as the house trigger above — no pre-check needed.
+    No pre-check: the run takes its own run lock (acquire_tracked_run on
+    ElectionPipelineRun) and skips, logged, if another is running.
     """
     from app.pipeline.election_pipeline import run_election_pipeline
 

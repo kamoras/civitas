@@ -96,9 +96,13 @@ def _invalidate_orphaned_pipelines() -> None:
     exception is a Senate row whose lease still holds — it may be a run
     live in the other task, the one case that can be seen.
     """
+    from app.pipeline.fetch.district_pvi import release_orphaned_holds
     from app.pipeline.run_tracker import sweep_orphaned_runs
 
     sweep_orphaned_runs()
+    # And the district lines' lease a killed House run, refresh or startup
+    # rescore held (the House run's row is among those just swept).
+    release_orphaned_holds()
 
 
 # How often the API process checks that the pipeline service is alive, and
@@ -112,7 +116,9 @@ _LIVENESS_EVERY_S = 300
 _LIVENESS_GRACE_S = 120
 
 
-def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]:
+def rescore_constituent_alignment_on_current_lines(
+    session_factory, *, refresh_wait_s: float | None = None, poll_s: float | None = None,
+) -> list[str]:
     """The startup Constituent Alignment rescore (constituent_rescore.py) on
     one read of the district table, recording that read's Congress on each
     rescored representative in the same commit as their score. The file can
@@ -128,25 +134,42 @@ def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]
     HousePipelineRun row yet while it does — the rescore's run_in_progress
     check can't see it, and would commit the old lines' scores over the
     run's fresh ones. A House run that finds the rescore holding it waits
-    (district_pvi.WAITED_FOR). When the lease is held elsewhere the House
-    is left to the run holding it, which scores the House itself."""
+    (district_pvi.WAITED_FOR). A District PVI refresh holding it is waited
+    for, as a House run waits (up to REFRESH_WAIT_S, re-trying every
+    REFRESH_POLL_S): nothing retries the rescore later, so giving up would
+    leave the House on the old scale until the next House run. A House run
+    holding it is not waited for — it scores the House itself."""
+    import time
+
     from app.pipeline import lease
     from app.pipeline.constituent_rescore import _stale_chambers, rescore_stale_constituent_alignment
-    from app.pipeline.fetch.district_pvi import RESCORE_WHO, current_lines
+    from app.pipeline.fetch import district_pvi
+    from app.pipeline.fetch.district_pvi import RESCORE_WHO, REFRESH_WHO, current_lines
 
+    wait_s = district_pvi.REFRESH_WAIT_S if refresh_wait_s is None else refresh_wait_s
+    poll = district_pvi.REFRESH_POLL_S if poll_s is None else poll_s
+    log = logging.getLogger("app.main")
     done = rescore_stale_constituent_alignment(session_factory, house_lines=None, chambers=("senate",))
     try:
         if "house" not in _stale_chambers():
             return done
-        with lease.job(lease.DISTRICT_LINES, who=RESCORE_WHO) as granted:
-            if not granted:
+        deadline = time.monotonic() + wait_s
+        while True:
+            with lease.job(lease.DISTRICT_LINES, who=RESCORE_WHO) as granted:
+                if granted:
+                    with current_lines() as lines:
+                        return done + rescore_stale_constituent_alignment(
+                            session_factory, house_lines=lines, chambers=("house",),
+                        )
+            waitable = granted.holder == REFRESH_WHO or (
+                granted.code == lease.REFUSED_BUSY and granted.holder is None
+            )
+            if not waitable or time.monotonic() >= deadline:
+                log.info("Startup rescore (house) left to the House run: %s", granted.why)
                 return done
-            with current_lines() as lines:
-                return done + rescore_stale_constituent_alignment(
-                    session_factory, house_lines=lines, chambers=("house",),
-                )
+            time.sleep(min(poll, district_pvi.BUSY_RETRY_S) if granted.holder is None else poll)
     except Exception:
-        logging.getLogger("app.main").exception("Startup rescore (house): taking the district lines failed")
+        log.exception("Startup rescore (house): taking the district lines failed")
         return done
 
 

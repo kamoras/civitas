@@ -945,6 +945,50 @@ HOUSE_RUN_WHO = "House run"
 RESCORE_WHO = "startup Constituent Alignment rescore"
 WAITED_FOR = (REFRESH_WHO, RESCORE_WHO)
 
+
+def release_orphaned_holds() -> int:
+    """At pipeline-process startup only (main._invalidate_orphaned_pipelines,
+    beside run_tracker.sweep_orphaned_runs; never from the API process):
+    drop the DISTRICT_LINES lease a killed process left behind — a House
+    run, a refresh or the startup rescore, all threads of the pipeline
+    process, which holds the role lock, so no live holder can exist in
+    another one. The same premise the sweep marks their run rows stale on
+    (check-and-deploy.sh doesn't deploy while a run is going). Without it
+    the dead holder's lease stood for its hour-long stale window: House
+    triggers refused, a nightly House step ended the chain, and the startup
+    rescore skipped the House. Returns how many were released; logs, never
+    raises."""
+    from app.database import SessionLocal
+    from app.models import ApiCache
+    from app.pipeline import lease
+
+    ours = {HOUSE_RUN_WHO, REFRESH_WHO, RESCORE_WHO}
+    db = SessionLocal()
+    try:
+        released = 0
+        for row in db.query(ApiCache).filter(
+            ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
+        ).all():
+            try:
+                who = json.loads(row.data_json).get("who")
+            except (TypeError, ValueError, AttributeError):
+                who = None
+            if who not in ours:
+                continue
+            released += db.query(ApiCache).filter(
+                ApiCache.tier == lease.DISTRICT_LINES, ApiCache.cache_key == "lock",
+                ApiCache.data_json == row.data_json,
+            ).delete(synchronize_session=False)
+            logger.warning("Released the district lines a %s left behind in a process that is gone", who)
+        db.commit()
+        return released
+    except Exception:
+        db.rollback()
+        logger.exception("Releasing orphaned district-lines leases failed")
+        return 0
+    finally:
+        db.close()
+
 # How long a House run waits for a District PVI refresh that holds the
 # lines. A refresh is a handful of requests (one per pinned Congress, plus
 # the live revision), each retried with backoff (_RETRIES, _BACKOFF_S) —
@@ -989,6 +1033,13 @@ async def _refresh() -> bool:
     try:
         sources = load_sources()
         sitting = _sitting_congress()
+        newer = _superseded(_file_data())
+        if newer is not None:
+            logger.warning(
+                "district-pvi refresh skipped: this job holds the %s Congress, but the %s has taken "
+                "office — writing its lines would switch member scoring back", ordinal(sitting), ordinal(newer),
+            )
+            return False
         configured = sorted(int(c) for c in sources["congresses"])
         if configured and sitting < configured[0]:
             return await _check_without_writing(sources, sitting, configured[0])
@@ -1083,6 +1134,8 @@ def _ensure_sitting_lines() -> str:
       Congress's table — written in place of the file, since a
       pre-pinning file is known to mix maps.
     - "refresh failed": neither worked; an ops alert says so (once a day).
+    - "superseded": this job holds an older Congress than the process or
+      the file has moved to (_superseded) — nothing is written.
     - "no source configured": app/data/district_pvi_sources.json has no
       entry for the sitting Congress. Nothing can be fetched for it until
       someone adds one, so nothing is fetched for it (the configured
@@ -1098,6 +1151,13 @@ def _ensure_sitting_lines() -> str:
         data = json.loads(path.read_text())
     except Exception:
         data = {}
+    newer = _superseded(data if isinstance(data, dict) else {})
+    if newer is not None:
+        logger.warning(
+            "district-pvi: this job holds the %s Congress, but the %s has taken office — its lines "
+            "left alone", ordinal(sitting), ordinal(newer),
+        )
+        return "superseded"
     try:
         sources = load_sources()
         configured = str(sitting) in sources["congresses"]
@@ -1213,12 +1273,39 @@ async def _house_run_holding_the_lines(run_house) -> dict:
         return await _house_run_on_held_congress(run_house)
 
 
+def _file_data() -> dict:
+    try:
+        data = json.loads(pathlib.Path(_PVI_PATH).read_text())
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _superseded(data: dict) -> int | None:
+    """The newer Congress this job's held one is behind, or None. A job that
+    started before noon ET on Jan 3 still holds the outgoing Congress after
+    a job started later has advanced the process (settings.__dict__, not
+    this context's hold) or switched the file's lines (`data`, the file as
+    read) to the new one. Letting it settle ITS lines would switch the file
+    back and rescore every House member on the old map — and the next job
+    would switch them forward again. Never with an environment pin, which
+    may deliberately put the lines on an older Congress."""
+    from app.config import settings
+
+    if settings.current_congress_pinned:
+        return None
+    held = _sitting_congress()
+    on_file = data.get("congress") if data.get("congresses") and isinstance(data.get("congress"), int) else 0
+    newer = max(settings.__dict__["CURRENT_CONGRESS"], on_file)
+    return newer if newer > held else None
+
+
 async def _house_run_on_held_congress(run_house) -> dict:
     import asyncio
 
     from app.database import SessionLocal
     from app.models import HousePipelineRun
-    from app.pipeline.run_tracker import ALREADY_RUNNING, run_in_progress
+    from app.pipeline.run_tracker import ALREADY_RUNNING, SUPERSEDED, run_in_progress
 
     def _read(fn):
         db = SessionLocal()
@@ -1230,6 +1317,13 @@ async def _house_run_on_held_congress(run_house) -> dict:
     if await asyncio.to_thread(_read, lambda db: run_in_progress(db, HousePipelineRun)):
         logger.warning("House pipeline not started: a House run is already going; its district lines left alone")
         return {"status": "skipped", "reason": ALREADY_RUNNING}
+    newer = _superseded(await asyncio.to_thread(_file_data))
+    if newer is not None:
+        logger.warning(
+            "House pipeline not started: this job holds the %s Congress, but the %s has taken office "
+            "and been moved to — the lines and scores stay on it", ordinal(_sitting_congress()), ordinal(newer),
+        )
+        return {"status": "skipped", "reason": SUPERSEDED}
     try:
         outcome = await asyncio.to_thread(_ensure_sitting_lines)
         logger.info("district-pvi before the House run: %s", outcome)

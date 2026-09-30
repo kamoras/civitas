@@ -32,10 +32,12 @@ def _default_current_congress(now: datetime.datetime | None = None) -> int:
 
 # The Congress one background job holds (scoring_congress, taken by
 # app.background.start_writer and writing()): while set, every read of
-# settings.CURRENT_CONGRESS in that job's context (its tasks, and threads
-# started through asyncio.to_thread — not a plain threading.Thread, which
-# reads the process-wide value) answers it, whatever another job in the
-# same process advances meanwhile.
+# settings.CURRENT_CONGRESS in that job's context answers it, whatever
+# another job in the same process advances meanwhile. The context reaches
+# asyncio tasks, asyncio.to_thread and contextvars.copy_context().run — NOT
+# a plain threading.Thread, loop.run_in_executor or
+# ThreadPoolExecutor.submit, whose work reads the process-wide value: hand
+# work that reads the setting to a thread through asyncio.to_thread.
 _RUN_CONGRESS: ContextVar[int | None] = ContextVar("scoring_congress", default=None)
 
 

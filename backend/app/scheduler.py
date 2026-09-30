@@ -95,6 +95,7 @@ def _nightly_pipeline() -> None:
         send_ops_alert,
     )
     from app.pipeline.fetch.district_pvi import WAITED_FOR as DISTRICT_LINES_WAITED_FOR
+    from app.pipeline.run_tracker import SUPERSEDED, skip_reason_text
     from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
 
     _CHAIN = ["Senate", "Supplementary", "House", "Stock trades", "Election"]
@@ -132,8 +133,6 @@ def _nightly_pipeline() -> None:
         """What held the run off: the skip's own reason (every pipeline's
         lock refusal carries one — run_tracker.acquire_pipeline_lock_why),
         naming the lease's holder when the skip recorded it."""
-        from app.pipeline.run_tracker import skip_reason_text
-
         return skip_reason_text(result.get("reason"), who=result.get("holder"))
 
     def _run():
@@ -190,7 +189,12 @@ def _nightly_pipeline() -> None:
             # one that outlasts the wait (stuck) costs tonight's House scores but not Stock
             # trades or Election, which don't read them.
             held_by_refresh = house_result.get("holder") in DISTRICT_LINES_WAITED_FOR
-            if _alert_if_skipped("House", house_result, chain_continues=held_by_refresh) and not held_by_refresh:
+            if house_result.get("reason") == SUPERSEDED:
+                # This chain started before noon ET on Jan 3 and a job since
+                # has moved to the new Congress: nothing is wrong, the next
+                # job scores the House on it (district_pvi._superseded).
+                logger.info("House step left to the next job: %s", skip_reason_text(SUPERSEDED))
+            elif _alert_if_skipped("House", house_result, chain_continues=held_by_refresh) and not held_by_refresh:
                 return
 
             # Both chambers' sponsored-bill rows were just rewritten —

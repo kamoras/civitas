@@ -130,6 +130,25 @@ def recent_not_covered_by_key_bills(
     return [b for b in classified_recent if b.get("billId", "") not in covered]
 
 
+def roll_call_year(congress: int, now) -> tuple[int, bool]:
+    """(the Clerk year to read `congress`'s recent roll calls from, whether
+    that year is young — the first half of the year running now). The
+    clock's year, clamped to `congress`'s last: a job still holding the
+    outgoing Congress after the new one's first votes reads its own
+    Congress's final year, not the new one's. A clamped year is complete,
+    never young."""
+    year = min(now.year, congress_first_year(congress) + 1)
+    return year, year == now.year and now.month <= 6
+
+
+def in_congress(roll_calls: list[dict], congress: int) -> list[dict]:
+    """The roll calls of `congress`: any the Clerk's XML labels with another
+    Congress is dropped (the first days of an odd year's roll calls can be
+    either). One with no Congress in its metadata (0) is kept — its year
+    already bounds it."""
+    return [rc for rc in roll_calls if (rc.get("congress") or congress) == congress]
+
+
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
     db = SessionLocal()
@@ -275,13 +294,21 @@ async def run_house_pipeline() -> dict:
             # prior year is still within the current congress (2 calendar
             # years/term; see AGENTS.md "current term"), otherwise it would
             # silently pull in the previous congress's votes.
-            current_year = utcnow().year
+            # The year is the clock's, clamped to the Congress this job
+            # holds (app.config.scoring_congress): a job that started before
+            # noon ET on Jan 3 and reaches this step after the new
+            # Congress's first votes still reads its own Congress's last
+            # year. And a roll call the Clerk labels with another Congress
+            # (Jan 1-3 of an odd year belong to the outgoing one) is dropped.
+            scored = settings.CURRENT_CONGRESS
+            current_year, year_is_young = roll_call_year(scored, utcnow())
             recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=120)
-            same_congress_prior_year = current_year > congress_first_year(settings.CURRENT_CONGRESS)
-            if len(recent_rcs) < 60 and utcnow().month <= 6 and same_congress_prior_year:
+            same_congress_prior_year = current_year > congress_first_year(scored)
+            if len(recent_rcs) < 60 and year_is_young and same_congress_prior_year:
                 recent_rcs += await fetch_recent_house_roll_calls(
                     client, db, year=current_year - 1, count=120 - len(recent_rcs),
                 )
+            recent_rcs = in_congress(recent_rcs, scored)
             logger.info("Fetched %d recent House roll calls", len(recent_rcs))
 
             # Map recent roll calls by a synthetic billId

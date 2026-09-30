@@ -192,3 +192,47 @@ def test_env_example_does_not_pin_current_congress():
     # comment lines don't count.
     assert not re.search(r"(?m)^\s*(?:export\s+)?CURRENT_CONGRESS\s*=", text)
     assert re.search(r"(?m)^#\s*CURRENT_CONGRESS=", text), "keep the documented, commented-out example"
+
+
+class TestHouseRollCallsFollowTheHeldCongress:
+    """The House's recent roll calls come from the Clerk's per-year files.
+    The year used to be the clock's, and nothing filtered by Congress: a job
+    holding the 119th whose House step ran on Jan 3 2027 after the 120th's
+    first votes read them in."""
+
+    def test_the_year_is_clamped_to_the_held_congress(self):
+        from app.pipeline.house_pipeline import roll_call_year
+
+        assert roll_call_year(119, datetime(2027, 1, 3, 18)) == (2026, False)
+        assert roll_call_year(120, datetime(2027, 1, 3, 18)) == (2027, True)
+        assert roll_call_year(119, datetime(2026, 3, 1)) == (2026, True)
+        assert roll_call_year(119, datetime(2026, 9, 1)) == (2026, False)
+        assert roll_call_year(119, datetime(2025, 2, 1)) == (2025, True)
+
+    def test_roll_calls_of_another_congress_are_dropped(self):
+        from app.pipeline.house_pipeline import in_congress
+
+        rcs = [{"rollNumber": 1, "congress": 119}, {"rollNumber": 2, "congress": 120}, {"rollNumber": 3, "congress": 0}]
+        assert [rc["rollNumber"] for rc in in_congress(rcs, 120)] == [2, 3]
+        assert [rc["rollNumber"] for rc in in_congress(rcs, 119)] == [1, 3]
+
+
+def test_the_les_reference_is_labelled_with_the_congress_it_measured(monkeypatch):
+    """The startup rescore measures STORED bills: after a restart between
+    noon ET on Jan 3 and the next run, those are still the 119th's while the
+    job holds the 120th. The reference names the 119th — the data's."""
+    from app import config
+    from app.pipeline import live_references
+
+    captured = {}
+    monkeypatch.setattr(
+        "app.pipeline.analyze.score_calculator.compute_les_reference",
+        lambda members, congress, majority, rates: captured.setdefault("congress", congress),
+    )
+    members = [([{"congress": 119}, {"congress": 119}], "R"), ([], "D")]
+    with patch.object(config.settings, "CURRENT_CONGRESS", 120):
+        live_references.measure_les_reference("house", members, "R")
+        assert captured["congress"] == 119
+        captured.clear()
+        live_references.measure_les_reference("house", [([], "R")], "R")
+        assert captured["congress"] == 120

@@ -459,6 +459,9 @@ class TestRefresh:
         but the pinned tables are still fetched and gated and the live-drift
         check still runs, so a pin that needs advancing isn't hidden for as
         long as an environment pin stands."""
+        from app import config
+
+        monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118))
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=118)
         with patch.object(dp, "_check_live_drift", new_callable=AsyncMock) as drift:
             assert await dp.refresh_district_pvi() is False
@@ -1284,6 +1287,75 @@ class TestStoredScoresKeepTheirLines:
             lease.release(db_session, lease.DISTRICT_LINES, token)
         assert taken == []
 
+    def test_the_startup_rescore_waits_for_a_refresh(self, monkeypatch, tmp_path, db_session):
+        """A District PVI refresh holding the lines is waited for (bounded),
+        not given up on: nothing retries the rescore later."""
+        import threading
+        import time
+
+        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.pipeline import lease
+        from tests.test_constituent_rescore import _factory
+
+        self._file(monkeypatch, tmp_path, 120)
+        self._stale_house_on_119(db_session, monkeypatch, tmp_path)
+        token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO)
+        assert token is not None
+
+        def finish_refresh():
+            time.sleep(0.2)
+            lease.release(db_session, lease.DISTRICT_LINES, token)
+
+        t = threading.Thread(target=finish_refresh)
+        t.start()
+        assert rescore_constituent_alignment_on_current_lines(
+            _factory(db_session), refresh_wait_s=10, poll_s=0.02,
+        ) == ["house"]
+        t.join()
+
+    def test_the_startup_rescore_gives_up_on_a_stuck_refresh(self, monkeypatch, tmp_path, db_session):
+        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.pipeline import lease
+        from tests.test_constituent_rescore import _factory
+
+        self._file(monkeypatch, tmp_path, 120)
+        self._stale_house_on_119(db_session, monkeypatch, tmp_path)
+        token = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.REFRESH_WHO)
+        try:
+            assert rescore_constituent_alignment_on_current_lines(
+                _factory(db_session), refresh_wait_s=0.1, poll_s=0.02,
+            ) == []
+        finally:
+            lease.release(db_session, lease.DISTRICT_LINES, token)
+
+    async def test_a_restart_releases_the_lines_a_killed_holder_left(self, monkeypatch, tmp_path, db_session):
+        """A deploy or OOM kills a House run (or refresh, or rescore)
+        holding DISTRICT_LINES. The restarted pipeline process — the only
+        one, it holds the role lock — releases the lease beside sweeping
+        the run rows, instead of leaving it to its hour-long stale window:
+        the House trigger doesn't 409 for a dead run, a House run goes
+        ahead, and the startup rescore can take the lines."""
+        from app.api import admin
+        from app.main import _invalidate_orphaned_pipelines
+        from app.pipeline import lease
+
+        for who in (dp.HOUSE_RUN_WHO, dp.REFRESH_WHO, dp.RESCORE_WHO):
+            assert lease.acquire(db_session, lease.DISTRICT_LINES, who=who) is not None  # then killed
+            assert lease.holder(db_session, lease.DISTRICT_LINES) == who
+            _invalidate_orphaned_pipelines()
+            assert lease.holder(db_session, lease.DISTRICT_LINES) is None
+        monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
+        started = []
+        monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda f, **kw: started.append(f))
+        assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None
+        _invalidate_orphaned_pipelines()
+        assert admin.admin_trigger_house_pipeline(db=db_session) == {"message": "House pipeline triggered"}
+
+        async def house():
+            return {"status": "completed"}
+
+        assert await dp.run_house_on_sitting_lines(house, refresh_wait_s=0) == {"status": "completed"}
+
     async def test_a_house_run_waits_for_the_startup_rescore(self, monkeypatch, db_session):
         import asyncio
 
@@ -1418,8 +1490,11 @@ class TestStoredScoresKeepTheirLines:
         out, _, new = self._file(monkeypatch, tmp_path, 119)
         assert dp.lines_congress() == 119
         # Another process writes the 120th's lines (under the lease, before
-        # this run takes it) — this process's caches never hear of it.
+        # this run takes it) — this process's caches never hear of it. This
+        # job holds the 120th too (a job holding the 119th would be
+        # superseded: TestJan3Boundary).
         out.write_text(json.dumps(dp._reselect(json.loads(out.read_text()), 120)))
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: 120)
         monkeypatch.setattr(dp, "_ensure_sitting_lines", lambda: "current")
         seen = {}
 
@@ -1508,19 +1583,15 @@ class TestJan3Boundary:
         )
         assert seen == self._expect(119, base["TN-9"])
 
-    async def test_a_job_holds_its_congress_through_noon(self, monkeypatch, tmp_path):
-        """A job that started before noon (the nightly chain, a trigger)
-        keeps the outgoing Congress for its House run even after another
-        job, started after noon, has advanced the process-wide value:
-        windows and lines still agree."""
+    async def _pre_noon_job(self, monkeypatch, tmp_path, *, another_job_advances):
         import threading
 
         from app import config
 
-        clock = {"now": datetime(2027, 1, 3, 16)}
+        clock = {"now": datetime(2027, 1, 3, 16)}  # 11:00 ET
         monkeypatch.setattr("app.time_utils.utcnow", lambda: clock["now"])
         monkeypatch.setattr(config, "settings", config.Settings())
-        _, base, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
+        out, base, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=None)
         seen = {}
 
         async def house():
@@ -1531,12 +1602,54 @@ class TestJan3Boundary:
         with config.scoring_congress():
             assert await dp.refresh_district_pvi() is True
             clock["now"] = datetime(2027, 1, 3, 18)  # 13:00 ET
-            other = threading.Thread(target=config.advance_current_congress)  # another job starts
-            other.start()
-            other.join()
-            assert config.settings.__dict__["CURRENT_CONGRESS"] == 120
-            await dp.run_house_on_sitting_lines(house)
+            if another_job_advances:
+                other = threading.Thread(target=config.advance_current_congress)  # a job starting now
+                other.start()
+                other.join()
+                assert config.settings.__dict__["CURRENT_CONGRESS"] == 120
+            result = await dp.run_house_on_sitting_lines(house)
+        return result, seen, out, base
+
+    async def test_a_job_holds_its_congress_through_noon(self, monkeypatch, tmp_path):
+        """A job that started before noon (the nightly chain, a trigger)
+        keeps the outgoing Congress for its House run past noon: windows
+        and lines still agree."""
+        result, seen, _, base = await self._pre_noon_job(monkeypatch, tmp_path, another_job_advances=False)
+        assert result == {"status": "completed"}
         assert seen == {"windows": 119, "lines": 119, "tn9": base["TN-9"]}
+
+    async def test_a_superseded_job_leaves_the_house_to_the_new_congress(self, monkeypatch, tmp_path):
+        """Once a job started after noon has advanced the process to the
+        120th, an older job's House run is skipped rather than settle — and
+        score — the 119th's lines after the 120th's (which would flip the
+        site back until the next job flipped it forward)."""
+        from app.pipeline.run_tracker import SUPERSEDED, skip_reason_text
+
+        result, seen, out, _ = await self._pre_noon_job(monkeypatch, tmp_path, another_job_advances=True)
+        assert result == {"status": "skipped", "reason": SUPERSEDED}
+        assert seen == {}
+        assert "outgoing Congress" in skip_reason_text(SUPERSEDED)
+
+    async def test_an_older_job_never_rewrites_newer_lines(self, monkeypatch, tmp_path):
+        """The file already on the 120th's lines (a newer job, possibly in
+        another process): a job holding the 119th neither reselects the
+        119th's nor refreshes, and its House run is skipped."""
+        from app import config
+        from app.pipeline.run_tracker import SUPERSEDED
+
+        out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=120)
+        assert await dp.refresh_district_pvi() is True
+        before = out.read_text()
+        monkeypatch.setattr(config, "settings", config.Settings())
+        monkeypatch.setattr(dp, "_sitting_congress", lambda: 119)
+        assert await _in_thread(dp._ensure_sitting_lines) == "superseded"
+        assert await dp.refresh_district_pvi() is False
+
+        async def house():
+            raise AssertionError("must not run")
+
+        assert await dp.run_house_on_sitting_lines(house) == {"status": "skipped", "reason": SUPERSEDED}
+        assert out.read_text() == before
 
     def test_every_writer_holds_one_congress(self):
         """app.background.start_writer (every scheduled job, every trigger,

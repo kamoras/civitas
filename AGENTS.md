@@ -362,9 +362,11 @@ The correct pattern, established by `_district_pvi()` /
    job — `app.background.start_writer` (every scheduled job, every trigger,
    the startup rescore) and `writing()` take the hold themselves, so no
    writer can start without one. The hold is a ContextVar that every read
-   of the setting in the job's context answers (including work handed to
-   `asyncio.to_thread`; a plain `threading.Thread` started inside a job
-   does not inherit it and reads the process-wide value) — so a process
+   of the setting in the job's context answers (including asyncio tasks,
+   work handed to `asyncio.to_thread` and `contextvars.copy_context().run`;
+   a plain `threading.Thread`, `loop.run_in_executor` or
+   `ThreadPoolExecutor.submit` does not inherit it and reads the
+   process-wide value — hand such work over with `asyncio.to_thread`) — so a process
    running across Jan 3 moves at its next job with no restart, and a job
    running across noon stays on one Congress. The read-only API process
    runs no jobs; it advances the value on its liveness loop. An environment pin is the one thing that stops the switch: it
@@ -382,7 +384,16 @@ The correct pattern, established by `_district_pvi()` /
    refused rather than refreshing twice (a House run that finds a refresh
    holding the lease waits for it, up to `REFRESH_WAIT_S`, rather than
    skipping — and past that, the nightly chain still goes on to Stock
-   trades and Election). Each stored House score records the Congress
+   trades and Election; main's startup Constituent Alignment rescore takes
+   the same lease for its House part and waits for a refresh the same
+   way). The pipeline process releases a lease a killed holder left
+   (`district_pvi.release_orphaned_holds`, beside the startup run-row
+   sweep), so a deploy mid-run doesn't block House runs for the lease's
+   hour. A job still holding the outgoing Congress after a newer job has
+   moved to the new one (the process value, or the file's lines) neither
+   refreshes nor settles the lines, and its House step is skipped
+   (`district_pvi._superseded`, `run_tracker.SUPERSEDED`) — otherwise it
+   would switch the site back to the old map until the next job. Each stored House score records the Congress
    whose lines it used (`Representative.district_lines_congress`), and the
    score breakdown is recomputed on the same district lines
    (`district_pvi.lines_of`) — while a run is part-way through a switch,
