@@ -174,3 +174,32 @@ def test_ten_thousand_star_rules_against_a_long_path_are_fast():
     started = time.perf_counter()
     assert parsed.allows(AGENT, "/" + "a" * 2000) is True
     assert time.perf_counter() - started < 1.0
+
+
+class TestRecordsAfterReview:
+    def test_a_sitemap_url_does_not_split_at_its_colon(self):
+        text = "User-agent: Civitas\nSitemap https://x.gov/s.xml\nUser-agent: *\nDisallow: /\n"
+        assert _allows(text, "/x") is False
+
+    def test_a_key_with_a_space_and_no_colon(self):
+        assert _allows("User agent Civitas\nDisallow /r/\n", "/r/1") is False
+
+    def test_a_colon_inside_a_whitespace_separated_value(self):
+        assert _allows("User-agent: *\nDisallow /a:b\n", "/a:b/c") is False
+
+    def test_a_space_in_a_pattern_matches_its_encoding(self):
+        assert _allows("User-agent: *\nDisallow: /a b\n", "/a%20b") is False
+
+    def test_a_line_ending_exactly_at_the_limit_is_kept(self):
+        rule = "Disallow: /last"
+        pad = robots.MAX_BYTES - len("User-agent: *\n#\n") - len(rule) - 1
+        text = "User-agent: *\n#" + "x" * pad + "\n" + rule + "\n" + "Allow: /extra\n"
+        assert len(("User-agent: *\n#" + "x" * pad + "\n" + rule).encode()) == robots.MAX_BYTES - 1
+        assert _allows(text, "/last") is False
+
+    def test_the_limit_is_in_bytes_not_characters(self):
+        """Two-byte characters fill the limit in half as many characters."""
+        pad = (robots.MAX_BYTES - 40) // 2
+        text = "User-agent: *\n#" + "é" * pad + "\nDisallow: /beyond-the-limit\n"
+        assert len(text) < robots.MAX_BYTES < len(text.encode())
+        assert _allows(text, "/beyond-the-limit") is True

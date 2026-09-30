@@ -247,6 +247,27 @@ class TestRobots:
 
         monkeypatch.setattr(crawler, "fetch_with_retry", fake_fetch)
         monkeypatch.setattr(crawler, "_robots", {})
+        monkeypatch.setattr(crawler, "_robots_last_read", {})
+        monkeypatch.setattr(crawler, "_unreadable_refusals", set())
+
+    @staticmethod
+    def _routes(monkeypatch, routes, calls):
+        """Serve {url: (status, text, headers)}; anything else 404s."""
+        import httpx
+
+        async def fake_fetch(client, limiter, method, url, **kwargs):
+            calls.append(url)
+            status, text, headers = routes.get(url, (404, "", {}))
+            if status is None:
+                return None
+            if status >= 400 and status not in kwargs.get("expected_statuses", ()):
+                return None
+            return httpx.Response(status, text=text, headers=headers, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(crawler, "fetch_with_retry", fake_fetch)
+        monkeypatch.setattr(crawler, "_robots", {})
+        monkeypatch.setattr(crawler, "_robots_last_read", {})
+        monkeypatch.setattr(crawler, "_unreadable_refusals", set())
 
     @pytest.mark.asyncio
     async def test_a_disallowed_path_is_not_read(self, monkeypatch):
@@ -293,15 +314,70 @@ class TestRobots:
     @pytest.mark.asyncio
     async def test_the_clarity_probe_asks_robots_first(self, monkeypatch):
         """Every request the sweep makes is governed by robots.txt, the
-        fixed API paths included."""
-        self._serve(monkeypatch, text="User-agent: Civitas\nDisallow: /\n")
-
-        async def must_not_fetch(*args, **kwargs):
-            raise AssertionError("fetched a path robots.txt disallows")
-
-        monkeypatch.setattr(crawler, "_get", must_not_fetch)
+        fixed API paths included: only robots.txt itself is fetched."""
+        calls = []
+        self._serve(monkeypatch, text="User-agent: Civitas\nDisallow: /\n", calls=calls)
         assert await crawler._probe_clarity(None, "IA", 2026) is None
         assert await crawler._probe_enhanced_voting(None, "GA", 2026) is None
+        assert calls and all(url.endswith("/robots.txt") for url in calls)
+
+    @pytest.mark.asyncio
+    async def test_a_redirect_is_asked_about_at_every_hop(self, monkeypatch):
+        """Allowed on one site, redirected to a path the other site's
+        robots.txt forbids: that path is never requested."""
+        calls = []
+        self._routes(monkeypatch, {
+            "https://x.gov/robots.txt": (404, "", {}),
+            "https://x.gov/a": (302, "", {"location": "https://y.gov/private/b"}),
+            "https://y.gov/robots.txt": (200, "User-agent: *\nDisallow: /private/\n", {}),
+        }, calls)
+        assert await crawler._get_governed(None, "https://x.gov/a", "test") is None
+        assert "https://y.gov/private/b" not in calls
+
+    @pytest.mark.asyncio
+    async def test_an_allowed_redirect_is_followed(self, monkeypatch):
+        calls = []
+        self._routes(monkeypatch, {
+            "https://x.gov/a": (301, "", {"location": "/b"}),
+            "https://x.gov/b": (200, "found", {}),
+        }, calls)
+        resp = await crawler._get_governed(None, "https://x.gov/a", "test")
+        assert resp is not None and resp.text == "found"
+
+    @pytest.mark.asyncio
+    async def test_the_cut_at_max_bytes_happens_on_a_line_end(self, monkeypatch):
+        """A half-read "Disallow: /private-area" would read as "Disallow: /p"
+        and refuse /public."""
+        from app.pipeline.fetch import robots
+
+        pad = robots.MAX_BYTES - len("User-agent: *\n#\n") - len("Disallow: /p")
+        body = "User-agent: *\n#" + "x" * pad + "\n" + "Disallow: /private-area\n"
+        self._serve(monkeypatch, text=body)
+        assert await crawler._allowed(None, "https://x.gov/public") is True
+
+    @pytest.mark.asyncio
+    async def test_a_failed_read_keeps_the_copy_read_before(self, monkeypatch):
+        """§2.3.1.4: the last copy read still stands while a later read
+        fails, rather than refusing the whole site."""
+        calls = []
+        routes = {"https://x.gov/robots.txt": (200, "User-agent: *\nDisallow: /private/\n", {})}
+        self._routes(monkeypatch, routes, calls)
+        assert await crawler._allowed(None, "https://x.gov/public") is True
+        routes["https://x.gov/robots.txt"] = (None, "", {})
+        now = crawler.time.monotonic()
+        monkeypatch.setattr(crawler.time, "monotonic", lambda: now + crawler.ROBOTS_CACHE_S + 1)
+        assert await crawler._allowed(None, "https://x.gov/public") is True
+        assert await crawler._allowed(None, "https://x.gov/private/x") is False
+
+    @pytest.mark.asyncio
+    async def test_a_request_refused_for_an_unreadable_file_is_reported(self, monkeypatch):
+        """Not for the portal probe's guesses, which mostly don't exist."""
+        self._serve(monkeypatch, status=None)
+        assert await crawler._allowed(None, "https://guess.x.gov/api", probe=True) is False
+        assert crawler.take_unreadable_refusals() == []
+        assert await crawler._allowed(None, "https://x.gov/results") is False
+        assert crawler.take_unreadable_refusals() == ["https://x.gov"]
+        assert crawler.take_unreadable_refusals() == []
 
     @pytest.mark.asyncio
     async def test_path_parameters_are_part_of_the_path(self, monkeypatch):

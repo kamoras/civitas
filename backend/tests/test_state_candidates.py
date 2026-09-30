@@ -77,6 +77,34 @@ class TestCrawlAdoption:
         assert "ZZ" in saved
 
     @pytest.mark.asyncio
+    async def test_sites_with_unreadable_robots_txt_are_reported(self, db_session, monkeypatch):
+        """A refusal for an unreadable robots.txt looks, in the outcomes,
+        like a state with nothing to find — so it is an ops alert, naming
+        the host, and a stale refusal from an earlier pass is not."""
+        from app.pipeline.fetch import state_source_crawler as crawler
+
+        self._patch(monkeypatch, [])
+        crawler._unreadable_refusals.add("https://stale.example.gov")
+
+        async def refused_discover(client, state, cycle, rules=None):
+            crawler._unreadable_refusals.add("https://sos.example.gov")
+            return None
+
+        monkeypatch.setattr(sc, "discover_source", refused_discover)
+        alerts = []
+        monkeypatch.setattr(
+            "app.ops_alerts.send_ops_alert",
+            lambda subject, body, dedupe_key=None, condition=None: alerts.append((condition, body)),
+        )
+        monkeypatch.setattr("app.ops_alerts.resolve_ops_alert", lambda key: None)
+        await sc.crawl_for_new_sources(db_session, None, 2026)
+        robots = [body for condition, body in alerts if condition == "election-source-crawl-robots"]
+        assert len(robots) == 1
+        assert "sos.example.gov: robots.txt unreadable" in robots[0]
+        assert "stale.example.gov" not in robots[0]
+        assert not crawler._unreadable_refusals
+
+    @pytest.mark.asyncio
     async def test_rejects_a_source_naming_people_who_are_not_in_the_race(
         self, db_session, monkeypatch,
     ):

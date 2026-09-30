@@ -50,6 +50,10 @@ MAX_BYTES = 512 * 1024
 # RFC 3986 unreserved characters, which percent-encoding must not change.
 _UNRESERVED = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 _HEX = set("0123456789abcdefABCDEF")
+# Every other character a URI may carry as written (RFC 3986 §2.2); an
+# ASCII character outside both sets — a space, a quote, "<" — reaches the
+# server percent-encoded, so a pattern's is compared that way too.
+_URI_SAFE = _UNRESERVED | set(":/?#[]@!$&'()*+,;=%")
 
 
 @dataclass(frozen=True)
@@ -144,7 +148,7 @@ def normalize(value: str) -> str:
             out.append(decoded if decoded in _UNRESERVED else "%" + value[i + 1:i + 3].upper())
             i += 3
             continue
-        if ord(ch) > 127:
+        if ord(ch) > 127 or ch not in _URI_SAFE:
             out.append("".join(f"%{b:02X}" for b in ch.encode("utf-8")))
         else:
             out.append(ch)
@@ -152,6 +156,12 @@ def normalize(value: str) -> str:
     return "".join(out)
 
 
+# The record keys matched first, in the spellings Google's parser accepts,
+# with a colon or whitespace after them — so "Sitemap https://…" and
+# "Disallow /a:b" split after the key, not at a colon inside the value.
+_KNOWN_RECORD = re.compile(
+    r"^(user[\s_-]*agent|allow|dis+al+[oa]w|sitemaps?)\s*(?::|\s)\s*(.*)$", re.IGNORECASE,
+)
 # Record keys as Google's parser accepts them, spaces, "-" and "_" removed.
 _KEYS = {
     "useragent": "user-agent",
@@ -166,7 +176,10 @@ _RECORD = re.compile(r"^([A-Za-z][A-Za-z _-]*?)\s*(?::|\s)\s*(.*)$")
 def _record(line: str) -> tuple[str, str] | None:
     """(key, value) of one line, or None for a blank or unreadable one."""
     line = line.split("#", 1)[0].strip()
-    if ":" in line:
+    known = _KNOWN_RECORD.match(line)
+    if known:
+        key, value = known.group(1), known.group(2).strip()
+    elif ":" in line:
         key, value = (part.strip() for part in line.split(":", 1))
     else:
         match = _RECORD.match(line)
@@ -177,13 +190,23 @@ def _record(line: str) -> tuple[str, str] | None:
     return _KEYS.get(folded, folded), value
 
 
+def parse_bytes(body: bytes) -> Robots:
+    """A fetched robots.txt: the first MAX_BYTES (§2.5), cut at the last
+    line end within them — a half-read final line would be a rule its
+    author never wrote ("/*a*a…" read as "/*") — then read as UTF-8."""
+    if len(body) > MAX_BYTES:
+        cut = max(body.rfind(b"\n", 0, MAX_BYTES + 1), body.rfind(b"\r", 0, MAX_BYTES + 1))
+        body = body[:max(cut, 0)]
+    return _parse_lines(body.decode("utf-8-sig", errors="replace"))
+
+
 def parse(text: str) -> Robots:
+    return parse_bytes(text.encode("utf-8"))
+
+
+def _parse_lines(text: str) -> Robots:
     groups: list[_Group] = []
     current: _Group | None = None
-    if len(text) > MAX_BYTES:
-        # Cut at the last line end before the limit: a half-read final line
-        # would be a rule its author never wrote ("/*a*a…" read as "/*").
-        text = text[:max(text.rfind("\n", 0, MAX_BYTES), text.rfind("\r", 0, MAX_BYTES), 0)]
     for raw in re.split(r"\r\n|\r|\n", text.lstrip("\ufeff")):
         record = _record(raw)
         if record is None:
