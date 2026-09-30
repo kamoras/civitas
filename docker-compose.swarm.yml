@@ -163,7 +163,8 @@ services:
       # Startup recovery relies on this order too: a new pipeline process
       # treats a run row or DISTRICT_LINES lease the old one left as dead
       # (run_tracker.sweep_orphaned_runs, district_pvi.release_orphaned_holds
-      # — the latter also waits out a beat interval). Don't switch this to
+      # — the latter also waits for ten minutes without a beat, a second
+      # guard only, ORPHAN_RECHECK_S). Don't switch this to
       # start-first without revisiting both. The
       # gap still costs the admin endpoints and new Explore summaries until
       # the new task is healthy (nginx answers those as a wait the page

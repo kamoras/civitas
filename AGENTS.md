@@ -383,20 +383,21 @@ The correct pattern, established by `_district_pvi()` /
    lines never change under a House run and a second House trigger is
    refused rather than refreshing twice (a House run that finds a refresh
    holding the lease waits for it, up to `REFRESH_WAIT_S`, rather than
-   skipping — and past that, the nightly chain still goes on to Stock
-   trades and Election; main's startup Constituent Alignment rescore takes
+   skipping — and past that, the House link is reported skipped naming the
+   refresh, like any link (`app/pipeline_chain.py`); main's startup Constituent Alignment rescore takes
    the same lease for its House part and waits for a refresh the same
    way, between passes that hold nothing — no lease, no writer — so an
    admin data reset is never refused for the wait). The pipeline process
    releases a lease a killed holder left (`district_pvi.
    release_orphaned_holds`, beside the startup run-row sweep) once it has
-   gone a beat interval and a half without a beat, so a deploy mid-run
-   doesn't block House runs for the lease's hour (a House run, trigger or
+   gone `ORPHAN_RECHECK_S` (ten minutes, `lease.STALE_S`) without a beat, so
+   a deploy mid-run doesn't block House runs for the lease's hour (a House run, trigger or
    the startup rescore refused by a lease still being checked waits for
    the check, `district_pvi.waits_for`); that a leftover holder is
    dead rests on the pipeline service's stop-first update order
-   (`docker-compose.swarm.yml`), and the missed-beat check keeps a live
-   one's lease anyway. A job still holding the outgoing Congress after a
+   (`docker-compose.swarm.yml`); the missed-beat check is a second guard,
+   its window long enough that a live holder whose beats stall behind
+   another writer for minutes keeps its lease. A job still holding the outgoing Congress after a
    newer job has moved to the new one (the process value, or the file's
    lines while that Congress is in office by the clock — a file ahead of
    the clock is a removed pin's, and is settled over) neither
@@ -1299,6 +1300,14 @@ state in the query string is exposed to them.
 - Use `SimpleNamespace` or dicts for mock data in unit tests
 - Test scoring, classification, and validation logic — not LLM output
 - When changing scoring logic or classification, update corresponding tests to reflect the new expected behavior
+- Tests never write the data volume (`/data`): `conftest.py` points the
+  runtime paths into each test's `tmp_path` and refuses (and fails the test
+  on) any write that still reaches `/data`. A new runtime file under `/data`
+  needs its path redirected there.
+- Code that opens its own sessions from several threads (`asyncio.to_thread`,
+  a `threading.Timer`) gets `file_sessionmaker` (a file-backed database, a
+  connection per session) as its `SessionLocal`, never the test's one
+  `db_session` handed to every thread — two threads in one Session race.
 
 ### Deployment
 

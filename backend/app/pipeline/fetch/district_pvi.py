@@ -78,6 +78,7 @@ from app.atomic_write import write_text_atomic
 from app.file_cache import new_reload_lock, reload_if_moved
 from app.ordinals import ordinal
 from app.pipeline.fetch.house_clerk import fetch_house_apportionment
+from app.pipeline.lease import STALE_S as LEASE_STALE_S
 from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.state_names import STATE_NAME_TO_CODE, STATE_NAMES
@@ -960,31 +961,52 @@ REFRESH_POLL_S = 30.0
 BUSY_RETRY_S = 1.0
 
 
+# How long a leftover DISTRICT_LINES lease must go without a beat before the
+# pipeline process's startup releases it (release_orphaned_holds). A live
+# holder's beats can stall behind another SQLite writer — each attempt waits
+# up to database.SQLITE_BUSY_TIMEOUT_S, and a writer can hold the database
+# for minutes (lease.py) — so a beat interval and a half would release a live
+# holder whose beats had merely stalled. lease.STALE_S is lease.py's own
+# measure for that ("ten missed beats ride out a SQLite writer holding the
+# database for minutes"), used by every tier with no longer window of its
+# own. The cost is on the other side: a House run, refresh or rescore killed
+# by the deploy that starts this process holds the lines up to this long
+# after the restart, rather than the lease's hour-long stale window. Nothing
+# is refused meanwhile — a House run (nightly, triggered) or the startup
+# rescore refused by a lease under this re-check waits for it (waits_for),
+# and each of those waits (REFRESH_WAIT_S) outlasts it
+# (test_district_pvi_fetch checks both bounds).
+ORPHAN_RECHECK_S = float(LEASE_STALE_S)
+
+
 def release_orphaned_holds(*, recheck_after_s: float | None = None) -> "threading.Timer | None":
     """At pipeline-process startup only (main._invalidate_orphaned_pipelines,
     beside run_tracker.sweep_orphaned_runs; never from the API process):
     release the DISTRICT_LINES lease a killed House run, refresh or startup
     rescore left behind. Without it the dead holder's lease stood for its
-    hour-long stale window: House triggers refused, a nightly House step
-    ended the chain, and the startup rescore skipped the House.
+    hour-long stale window: House triggers refused, the nightly House step
+    skipped, and the startup rescore skipped the House.
 
-    What makes a leftover lease dead is not the role lock (that is per
-    container, /dev/shm) but the pipeline service's stop-first update
-    order (docker-compose.swarm.yml) and check-and-deploy.sh's busy check:
-    no other pipeline process should be running. This does not rely on it
-    alone: a live holder beats every lease.BEAT_S, so a lease is released
-    only once it has gone a beat interval and a half without one — at once
-    when its last beat is already that old, otherwise by a re-check that
-    long after this call, which deletes it only if it still carries the
-    beat it had now. A live holder elsewhere (a start-first change, a
-    second worker container on the volume) keeps its lease. Returns the
-    re-check's timer (None when nothing waits on one); logs, never raises."""
+    What makes a leftover lease dead is the pipeline service's stop-first
+    update order (docker-compose.swarm.yml) and check-and-deploy.sh's busy
+    check: when this process starts, no other pipeline process should be
+    running. That is the guarantee — not the role lock, which is per
+    container (/dev/shm). The missed-beat check here is a second guard, for
+    the case that guarantee is broken (a start-first change, a second
+    worker container on the volume): a lease is released only once it has
+    gone ORPHAN_RECHECK_S without a beat — at once when its last beat is
+    already that old, otherwise by a re-check that long after this call,
+    which deletes it only if it still carries the beat it had now. The
+    window is long enough to ride out a live holder's beats stalling behind
+    another writer (see ORPHAN_RECHECK_S); a holder stalled longer than
+    that, in a second process the update order should have ruled out, is
+    what this guard can't tell from a dead one. Returns the re-check's
+    timer (None when nothing waits on one); logs, never raises."""
     from datetime import timedelta
 
-    from app.pipeline import lease
     from app.time_utils import utcnow
 
-    wait = lease.BEAT_S * 1.5 if recheck_after_s is None else recheck_after_s
+    wait = ORPHAN_RECHECK_S if recheck_after_s is None else recheck_after_s
     cutoff = utcnow() - timedelta(seconds=wait)
     fresh = _release_ours(lambda row: row.cached_at < cutoff)
     if not fresh:

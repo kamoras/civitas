@@ -31,24 +31,24 @@ BUNDLED = dp.SOURCES_PATH.parent / "district_pvi.json"
 SEATS = dict(Counter(k.split("-")[0] for k in json.loads(BUNDLED.read_text())["congresses"]["119"]["districts"]))
 
 
-class _Unclosable:
-    """The test's one session, handed to code that closes what it opens."""
-
-    def __init__(self, session):
-        self._session = session
-
-    def close(self):
-        pass
-
-    def __getattr__(self, name):
-        return getattr(self._session, name)
+@pytest.fixture()
+def db_session(file_sessionmaker):
+    """The test's own session, on a file-backed database every other
+    session in the test opens its own connection to (file_sessionmaker)."""
+    session = file_sessionmaker()
+    yield session
+    session.close()
 
 
 @pytest.fixture(autouse=True)
-def _leases_on_the_test_database(db_session, monkeypatch):
+def _leases_on_the_test_database(file_sessionmaker, monkeypatch):
     """The refresh and every House run take the DISTRICT_LINES lease (a
-    row in api_cache): give them the test's database."""
-    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+    row in api_cache): give them the test's database — a session of their
+    own each, as in production. They take and release it from several
+    threads (lease.job_async's asyncio.to_thread, release_orphaned_holds'
+    re-check Timer, the test's own loop): one Session shared across them
+    raced (IllegalStateChangeError in lease.release)."""
+    monkeypatch.setattr("app.database.SessionLocal", file_sessionmaker)
     monkeypatch.setattr(dp, "house_seats", AsyncMock(return_value=SEATS))
 
 
@@ -1397,8 +1397,8 @@ class TestStoredScoresKeepTheirLines:
     async def test_a_restart_releases_the_lines_a_killed_holder_left(self, monkeypatch, tmp_path, db_session):
         """A deploy or OOM kills a House run (or refresh, or rescore)
         holding DISTRICT_LINES. The restarted pipeline process releases the
-        lease beside sweeping the run rows — its last beat already a beat
-        interval and a half old — instead of leaving it to its hour-long
+        lease beside sweeping the run rows — its last beat already
+        ORPHAN_RECHECK_S old — instead of leaving it to its hour-long
         stale window: the House trigger doesn't 409 for a dead run, and a
         House run goes ahead."""
         from app.api import admin
@@ -1407,7 +1407,7 @@ class TestStoredScoresKeepTheirLines:
 
         for who in (dp.HOUSE_RUN_WHO, dp.REFRESH_WHO, dp.RESCORE_WHO):
             assert lease.acquire(db_session, lease.DISTRICT_LINES, who=who) is not None  # then killed
-            self._age(db_session, lease.BEAT_S * 2)
+            self._age(db_session, dp.ORPHAN_RECHECK_S + lease.BEAT_S)
             assert lease.holder(db_session, lease.DISTRICT_LINES) == who
             _invalidate_orphaned_pipelines()
             assert lease.holder(db_session, lease.DISTRICT_LINES) is None
@@ -1415,7 +1415,7 @@ class TestStoredScoresKeepTheirLines:
         started = []
         monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda f, **kw: started.append(f))
         assert lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO) is not None
-        self._age(db_session, lease.BEAT_S * 2)
+        self._age(db_session, dp.ORPHAN_RECHECK_S + lease.BEAT_S)
         _invalidate_orphaned_pipelines()
         assert admin.admin_trigger_house_pipeline(db=db_session) == {"message": "House pipeline triggered"}
 
@@ -1423,6 +1423,37 @@ class TestStoredScoresKeepTheirLines:
             return {"status": "completed"}
 
         assert await dp.run_house_on_sitting_lines(house, refresh_wait_s=0) == {"status": "completed"}
+
+    def test_a_holder_whose_beats_stalled_for_minutes_keeps_its_lease(self, db_session):
+        """A live holder's beats can stall behind another SQLite writer for
+        minutes (lease.py): five minutes without a beat is not dead, so it
+        is not released at once — only a re-check ORPHAN_RECHECK_S later
+        would, and only if it still hasn't beaten."""
+        from app.pipeline import lease
+
+        live = lease.acquire(db_session, lease.DISTRICT_LINES, who=dp.HOUSE_RUN_WHO)
+        self._age(db_session, 5 * lease.BEAT_S)
+        timer = dp.release_orphaned_holds()
+        try:
+            assert timer is not None and timer.interval == dp.ORPHAN_RECHECK_S
+            assert lease.holder(db_session, lease.DISTRICT_LINES) == dp.HOUSE_RUN_WHO
+        finally:
+            timer.cancel()
+            dp._UNDER_RECHECK.discard(dp.HOUSE_RUN_WHO)
+        lease.release(db_session, lease.DISTRICT_LINES, live)
+
+    def test_the_recheck_window_rides_out_stalled_beats_and_the_waits_outlast_it(self):
+        """ORPHAN_RECHECK_S is several beats past a stalled beat's busy
+        timeout, and every wait on a lease under re-check — a House run's
+        (nightly, triggered) and the startup rescore's, both REFRESH_WAIT_S
+        — outlasts it, so none of them gives up on a dead holder's lease
+        before the re-check releases it."""
+        from app.database import SQLITE_BUSY_TIMEOUT_S
+        from app.pipeline import lease
+
+        assert dp.ORPHAN_RECHECK_S >= SQLITE_BUSY_TIMEOUT_S + 5 * lease.BEAT_S
+        assert dp.ORPHAN_RECHECK_S < lease.stale_after(lease.DISTRICT_LINES).total_seconds()
+        assert dp.REFRESH_WAIT_S > dp.ORPHAN_RECHECK_S + dp.REFRESH_POLL_S
 
     def test_a_holder_still_beating_keeps_its_lease(self, db_session):
         """A lease beaten recently may be live in another process (the role
@@ -1467,8 +1498,7 @@ class TestStoredScoresKeepTheirLines:
         recheck.join(5)
         assert lease.holder(db_session, lease.DISTRICT_LINES) is None
         timer.join(5)  # the next pass has been started as a writer
-        # ...and runs to the end (the test's session is shared with it, so
-        # nothing reads it until then).
+        # ...and runs to the end before the test reads what it wrote.
         for _ in range(200):
             if "startup-rescore" not in background.running_writers():
                 break

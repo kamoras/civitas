@@ -15,6 +15,19 @@ from app.database import reset_all_data
 from app.pipeline.run_tracker import DEAD_RUN_MESSAGE
 
 
+@pytest.fixture(autouse=True)
+def _no_bill_cache_rebuild_thread(monkeypatch):
+    """A reset ends by warming the bills collection (admin_reset_data), which
+    in the API role rebuilds it on a thread of its own, through
+    app.database.SessionLocal — here the test's one session. That thread
+    querying it while the test (or its teardown, disposing the engine)
+    uses it crashed the whole run (a segfault in sqlite3). The warm is
+    tested in test_bill_service.py; here it is only recorded."""
+    warmed = []
+    monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", lambda: warmed.append(1))
+    return warmed
+
+
 class TestResetAllDataVectorStoreSummary:
     def test_records_vector_db_collections_on_success(self, db_session, monkeypatch):
         monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)

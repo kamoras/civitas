@@ -7,6 +7,16 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 # the pipeline-process lock) — one per test run, so a local dev server's, or
 # a parallel run's, never meets this one's.
 os.environ.setdefault("CIVITAS_RAM_DIR", __import__("tempfile").mkdtemp(prefix="civitas-tests-"))
+# The data volume (/data) is the running site's, where one is mounted — a
+# test run must never write it (_data_volume_untouched below). The vector
+# store's path is read once, at import: set before anything imports it.
+os.environ.setdefault(
+    "VECTOR_DB_PATH",
+    os.path.join(__import__("tempfile").mkdtemp(prefix="civitas-tests-vectors-"), "vectors.db"),
+)
+
+import pathlib
+import sys
 
 import pytest
 from sqlalchemy import create_engine
@@ -53,6 +63,30 @@ def db_session():
     session = Session()
     yield session
     session.close()
+    engine.dispose()
+
+
+@pytest.fixture()
+def file_sessionmaker(tmp_path):
+    """A file-backed SQLite database in tmp_path, configured as production's
+    (app.database: busy timeout, WAL and the same pragmas), and a
+    sessionmaker bound to it — for code that opens its own sessions from
+    several threads (asyncio.to_thread, threading.Timer). Each session gets
+    its own connection, as in production. db_session's single in-memory
+    connection (StaticPool) handed to every thread is not that: two threads
+    using one Session at once raise IllegalStateChangeError."""
+    from sqlalchemy import event
+
+    from app.database import SQLITE_BUSY_TIMEOUT_S, _set_sqlite_pragmas
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'civitas-test.db'}", echo=False,
+        connect_args={"check_same_thread": False, "timeout": SQLITE_BUSY_TIMEOUT_S},
+    )
+    event.listens_for(engine, "connect")(_set_sqlite_pragmas)
+    Base.metadata.create_all(bind=engine)
+    VisitsBase.metadata.create_all(bind=engine)
+    yield sessionmaker(bind=engine, autocommit=False, autoflush=False)
     engine.dispose()
 
 
@@ -208,6 +242,13 @@ def pinned_population_references(tmp_path, monkeypatch):
         monkeypatch.setattr(ref, "bundled_path", bundled)
         monkeypatch.setattr(ref, "live_path", tmp_path / f"{ref.name}_live.json")
         monkeypatch.setattr(ref, "_cache", None)
+    # The last run's overlap reading (/data/signal_overlap.json), written by
+    # every member pipeline and the startup rescore (record_signal_overlap):
+    # its live file here too, over the real bundled one.
+    from app.pipeline.analyze.signal_overlap import SIGNAL_OVERLAP
+
+    monkeypatch.setattr(SIGNAL_OVERLAP, "live_path", tmp_path / "signal_overlap_live.json")
+    monkeypatch.setattr(SIGNAL_OVERLAP, "_cache", None)
     yield
 
 
@@ -296,3 +337,104 @@ def _no_running_pipeline_chains(monkeypatch):
     from app import pipeline_chain
 
     monkeypatch.setattr(pipeline_chain, "_chains", {})
+
+
+# --- The data volume -------------------------------------------------------
+#
+# Where /data exists (the backend container, a dev machine that mounts it),
+# it is the site's: the live references, the vector store, the heartbeat the
+# API process reads to decide the pipeline service is alive. Tests used to
+# write it — the rescore tests replaced signal_overlap.json, the app-startup
+# test the heartbeat and vectors.db, the election tests senate_classes.json.
+# Every runtime path is pointed into the test's tmp_path below, and an audit
+# hook refuses (PermissionError, as a read-only volume would) and records any
+# write that still reaches /data, failing the test that made it.
+
+_DATA_DIR = "/data"
+_data_writes: list[str] = []
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
+_PATH_EVENTS = {"os.rename", "os.remove", "os.rmdir", "os.truncate", "os.utime", "os.link", "os.symlink",
+                "os.chmod", "shutil.rmtree", "shutil.copyfile", "shutil.move"}
+
+
+def _on_data_volume(path) -> str | None:
+    if isinstance(path, int):
+        return None
+    try:
+        resolved = os.path.abspath(os.fsdecode(path))
+    except (TypeError, ValueError):
+        return None
+    return resolved if resolved == _DATA_DIR or resolved.startswith(_DATA_DIR + os.sep) else None
+
+
+def _refuse_data_writes(event: str, args: tuple) -> None:
+    hit = None
+    if event == "open":
+        path, mode, flags = args
+        writes = (isinstance(mode, str) and any(c in mode for c in "wax+")) or (
+            isinstance(flags, int) and flags & _WRITE_FLAGS)
+        if writes:
+            hit = _on_data_volume(path)
+    elif event == "os.mkdir":
+        hit = _on_data_volume(args[0])
+        if hit and os.path.isdir(hit):
+            hit = None  # makedirs(exist_ok=True) of a directory already there
+    elif event in _PATH_EVENTS:
+        hit = next((h for h in map(_on_data_volume, args[:2]) if h), None)
+    elif event == "sqlite3.connect":
+        hit = _on_data_volume(args[0]) if isinstance(args[0], (str, bytes, os.PathLike)) else None
+    if hit:
+        _data_writes.append(f"{event} {hit}")
+        raise PermissionError(f"test run wrote the data volume: {event} {hit}")
+
+
+sys.addaudithook(_refuse_data_writes)
+
+
+def redirect_data_volume(monkeypatch, data) -> None:
+    """Point the runtime data paths (what production keeps on /data) into
+    the directory `data`. A fixture with a wider scope than a test — one
+    that starts the real app's lifespan, whose scheduler writes its
+    heartbeat — calls this with its own MonkeyPatch."""
+    from app import election_calendar
+    from app.pipeline.fetch import senate_classes
+
+    data = pathlib.Path(data)
+    data.mkdir(parents=True, exist_ok=True)
+
+    def runtime_data_path(name: str) -> str:
+        return str(data / name)
+
+    monkeypatch.setattr("app.atomic_write.runtime_data_path", runtime_data_path)
+    for module in ("app.pipeline.fetch.state_candidate_sources", "app.pipeline.fetch.state_election_dates"):
+        if module in sys.modules:  # bound by name at their import
+            monkeypatch.setattr(f"{module}.runtime_data_path", runtime_data_path)
+    monkeypatch.setattr(senate_classes, "_PERSISTENT_PATH", str(data / "senate_classes.json"))
+    monkeypatch.setattr(
+        election_calendar, "_CLASS_FILES", (data / "senate_classes.json", *election_calendar._CLASS_FILES[1:]),
+    )
+    # Heavy to import (sentence-transformers): patched only once loaded — a
+    # write before then is refused by the hook, and the store logs it.
+    if "app.pipeline.vector_store" in sys.modules:
+        monkeypatch.setattr("app.pipeline.vector_store._VERSION_FILE", str(data / "classification_model_version"))
+
+
+@pytest.fixture(autouse=True)
+def _data_volume_untouched(tmp_path, monkeypatch):
+    """Point the runtime data paths into tmp_path, and fail a test that still
+    wrote /data (the audit hook above refused it)."""
+    redirect_data_volume(monkeypatch, tmp_path / "data-volume")
+    before = len(_data_writes)
+    yield
+    wrote = _data_writes[before:]
+    del _data_writes[before:]
+    if wrote:
+        pytest.fail("wrote the data volume: " + "; ".join(sorted(set(wrote))), pytrace=False)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """A write refused outside any test (a module fixture's background
+    thread, between tests) still fails the run."""
+    if _data_writes:
+        print("\nThe test run tried to write the data volume outside a test: " + "; ".join(sorted(set(_data_writes))))
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED

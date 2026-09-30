@@ -232,7 +232,7 @@ def test_middleware_is_mounted_on_the_real_app():
 
 
 @pytest.fixture(scope="module")
-def real_client():
+def real_client(tmp_path_factory):
     """The real app's lifespan for real: init_db, the scheduler, the
     embedding-model preload thread, the visit consumer, the explore-index
     bootstrap — all of it.
@@ -251,9 +251,14 @@ def real_client():
     per-test.
     """
     from app.main import app
+    from tests.conftest import redirect_data_volume
 
-    with TestClient(app) as client:
-        yield client
+    # Its scheduler beats the heartbeat file, on its own thread, for as long
+    # as the module runs — outside any one test's redirect of /data.
+    with pytest.MonkeyPatch.context() as mp:
+        redirect_data_volume(mp, tmp_path_factory.mktemp("data-volume"))
+        with TestClient(app) as client:
+            yield client
 
 
 def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client):
