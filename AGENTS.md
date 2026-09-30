@@ -781,7 +781,9 @@ wrong number on election night is worse than none:
   `scripts/fetch_poll_close_times.py` — regenerate each cycle).
 - Test, preview or mismatched data raises `UntrustedCount` and stores nothing
   (Enhanced Voting `isProduction`, Clarity `istestmode`, Tally
-  `previewElections`/`electionID`); a feed that goes backwards in time or
+  `previewElections`/`electionID`; a general's date listing no general —
+  several unsingled entries, or only a runoff, recount or special —
+  `pick_general`); a feed that goes backwards in time or
   version is refused; an impossible count is dropped; a poll whose total fell
   is stored but announces nothing.
 - Civitas never calls a race. A count is "leading" — "not final" until the

@@ -139,7 +139,8 @@ def pick_general(elections: list[tuple[str, dict]], state: str = "") -> dict | N
     Demo/test/preview copies and recounts are never it, and a runoff only
     when it is also named "general" ("General Election and Nonpartisan
     Runoff") and no other election that day is. Of what remains: the only
-    one; else the only one named "general" that is not
+    one (unless it is a special not also named "general", which raises);
+    else the only one named "general" that is not
     also a special; else the only one named "general" at all (Georgia
     named its 2022 ballot "November 8, 2022 - General/Special Election").
     None when nothing is held that day (a vendor's test copy of the day,
@@ -168,7 +169,18 @@ def pick_general(elections: list[tuple[str, dict]], state: str = "") -> dict | N
             )
         return None
     if len(candidates) == 1:
-        return candidates[0][1]
+        name, entry = candidates[0]
+        if _GENERAL_RE.search(name) or not _SPECIAL_RE.search(name):
+            return entry
+        # A lone "Special Election" is not the general: every general's date
+        # is a federal general in every state (even years only), so a day
+        # whose only entry is a special has the general missing, not held
+        # under that name. Returned, a special's contests were read as the
+        # regular races' count.
+        raise UntrustedCount(
+            f"{state or 'state'}: the only election on the general's date is {name!r}, a special, not the "
+            "general; refusing to guess",
+        )
     named = [(name, entry) for name, entry in candidates if _GENERAL_RE.search(name)]
     regular = [entry for name, entry in named if not _SPECIAL_RE.search(name)]
     if len(regular) == 1:

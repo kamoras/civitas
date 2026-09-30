@@ -244,7 +244,7 @@ def _already_said(kind: str, race_id: str, h: _History) -> bool:
     return kind in (er.OFFICIAL, er.ALL_REPORTING) and (race_id, kind) in h.said
 
 
-def _still_true(kind: str, result: RaceResult, d: dict) -> bool:
+def _still_true(kind: str, race: Race, result: RaceResult, d: dict) -> bool:
     """Whether a pending event still describes the count: one held back by
     the budget can be overtaken before its turn comes — a correction
     included, when the flip it corrects has come back."""
@@ -266,7 +266,11 @@ def _still_true(kind: str, result: RaceResult, d: dict) -> bool:
     # switched back off said "official", and an all-reporting post after
     # units were added said "all 105 precincts have reported" at 100 of 105.
     if kind == er.OFFICIAL:
-        return bool(result.official)
+        # A House race's official count earns a post only while it shows the
+        # seat changing party (_postable_kind), so that has to hold now too:
+        # posted after the holder's party retook the lead, it said nothing
+        # the account posts House counts for.
+        return bool(result.official) and (race.office == "S" or er.challenger_leads(result))
     if kind == er.ALL_REPORTING:
         return bool(result.total_units) and result.reporting_units == result.total_units
     return True
@@ -334,7 +338,7 @@ def post_result_updates(db: Session, election_date: str) -> int:
                 or _already_said(kind, race.id, h):
             event.bsky_posted_at = now
             continue
-        if not _still_true(kind, result, detail):
+        if not _still_true(kind, race, result, detail):
             if kind in _RAISED_ONCE:
                 continue  # held: the count raises it once, and it may be true again within the age cap
             event.bsky_posted_at = now

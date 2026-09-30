@@ -3771,6 +3771,56 @@ _ELECTION_RESULTS_SOURCE = "election_results"
 _RACE_LINK_RE = re.compile(r"#race-(\d{4})-(SEN|HOUSE)-([A-Z]{2})(?:-(\d+|SPECIAL))?$")
 
 
+# A story names a race only when the state and the seat appear together in
+# one phrase. Testing them independently let a roundup ("Georgia's 6th and
+# Florida's 2nd districts") name GA-2, a dateline ("WASHINGTON (AP)") name
+# any Washington seat, and "West Virginia" name Virginia. Every state name
+# in the story is read longest-first (so "west virginia" is one name, never
+# "virginia") and replaced by a marker — _OURS for the issue's state, _OTHER
+# for any other — before the phrase patterns below run.
+_OURS, _OTHER = "\x01", "\x02"
+_POSS = r"(?:['’]s?)?"  # Georgia's / Texas' / bare
+_ORD = r"\d+(?:st|nd|rd|th)"
+_HOUSE_PHRASES = (
+    # "Georgia's 2nd District", "Georgia's 2nd and 6th congressional districts"
+    rf"{_OURS}{_POSS}\s+(?P<ords>{_ORD}(?:(?:\s*,\s*|\s+and\s+|\s*,\s*and\s+){_ORD})*)"
+    r"(?:\s+congressional)?\s+districts?\b",
+    # "Georgia's District 2", "Georgia congressional district 2"
+    rf"{_OURS}{_POSS}\s+(?:congressional\s+)?district\s+(?P<num>\d+)\b",
+    # "the 2nd congressional district of Georgia", "2nd District in Georgia"
+    rf"\b(?P<ord>{_ORD})\s+(?:congressional\s+)?district\s+(?:of|in)\s+{_OURS}",
+)
+_AT_LARGE_PHRASES = (
+    rf"{_OURS}{_POSS}\s+at[- ]large\b",
+    r"\bat[- ]large\s+(?:congressional\s+)?(?:district|seat|race|contest)\s+(?:of|in)\s+" + _OURS,
+)
+# "Senate" only with a race word or "U.S." beside it, and never "state
+# Senate": a legislature's upper chamber is a different contest.
+_SENATE_PHRASES = (
+    rf"{_OURS}{_POSS}\s+(?:special\s+)?(?:u\.?s\.?\s+)?senate\s+(?:special\s+)?"
+    r"(?:race|seat|contest|election|runoff)\b",
+    rf"{_OURS}{_POSS}\s+u\.?s\.?\s+senate\b",
+    r"(?:\bu\.?s\.?\s+|(?<!state\s))\bsenate\s+(?:special\s+)?(?:race|seat|contest|election|runoff)\s+"
+    rf"(?:in|for|from)\s+{_OURS}",
+    rf"\bu\.?s\.?\s+senate\s+(?:in|for|from)\s+{_OURS}",
+)
+# "special" belongs to the race phrase itself, or to the words just before
+# it ("the special election for Georgia's Senate seat").
+_SPECIAL_LEAD = re.compile(r"\bspecial\s+(?:election|race|contest)\s+(?:for|in)\s+(?:the\s+)?$")
+
+
+def _ordinal(n: int) -> str:
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def _mark_states(text: str, state_name: str) -> str:
+    from app.state_names import STATE_NAMES
+
+    names = sorted({v.lower() for v in STATE_NAMES.values()}, key=len, reverse=True)
+    pattern = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b")
+    return pattern.sub(lambda m: _OURS if m.group(0) == state_name else _OTHER, text)
+
+
 def _results_race_named(issue, story_text: str) -> bool:
     """Whether `story_text` (a news cluster's title, summary and facts)
     names the race an election-results issue is about. False when the
@@ -3786,29 +3836,48 @@ def _results_race_named(issue, story_text: str) -> bool:
     if race is None:
         return False
     _, office, state, part = race.groups()
-    lower = story_text.lower()
     state_name = STATE_NAMES.get(state, "").lower()
-    names_state = bool(state_name) and re.search(rf"\b{re.escape(state_name)}\b", lower) is not None
-    if office == "SEN":
-        special = re.search(r"\bspecial\b", lower) is not None
-        return names_state and "senate" in lower and special == (part == "SPECIAL")
-    n = int(part or 0)
-    if re.search(rf"\b{state}-0?{n}\b", story_text):  # "GA-2", "GA-02"
-        return True
-    if not names_state:
+    if not state_name:
         return False
+    marked = _mark_states(re.sub(r"\s+", " ", story_text.lower()), state_name)
+    if office == "SEN":
+        for phrase in _SENATE_PHRASES:
+            for m in re.finditer(phrase, marked):
+                special = (re.search(r"\bspecial\b", m.group(0)) is not None
+                           or _SPECIAL_LEAD.search(marked[max(0, m.start() - 40):m.start()]) is not None)
+                if special == (part == "SPECIAL"):
+                    return True
+        return False
+    n = int(part or 0)
+    # Postal-code form, case-sensitive: "GA-2", "GA-02", "AK-AL".
+    code = r"(?:0?0|AL)" if n == 0 else rf"0?{n}"
+    if re.search(rf"\b{state}-{code}\b", story_text):
+        return True
     if n == 0:
-        return re.search(r"\bat[- ]large\b", lower) is not None
-    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return re.search(
-        rf"\b{n}{suffix}\s+(?:congressional\s+)?district\b|\bdistrict\s+{n}\b", lower,
-    ) is not None
+        return any(re.search(p, marked) for p in _AT_LARGE_PHRASES)
+    ordinal = _ordinal(n)
+    for phrase in _HOUSE_PHRASES:
+        for m in re.finditer(phrase, marked):
+            groups = m.groupdict()
+            if groups.get("ords") and ordinal in re.findall(_ORD, groups["ords"]):
+                return True
+            if groups.get("num") and int(groups["num"]) == n:
+                return True
+            if groups.get("ord") == ordinal:
+                return True
+    return False
 
 
 def _may_match(candidate, title: str, facts: list, summary: str) -> bool:
     """Whether a news cluster may update `candidate` at all: any issue but
-    an election-results one, which only a story naming its race may."""
-    if candidate.source_type != _ELECTION_RESULTS_SOURCE:
+    a still-DEVELOPING election-results one, which only a story naming its
+    race may. Once news has promoted one (CONFIRMED), the row is the news
+    story's: promotion replaced its actions — the `#race-…` link included —
+    with the cluster's, so its race can no longer be read, and gating it
+    would make every later update of the same story a duplicate row (the
+    old one retired, its id and history lost, Bluesky posting again). It
+    matches like any other issue from then on."""
+    if candidate.source_type != _ELECTION_RESULTS_SOURCE or candidate.status != ActionIssueStatus.DEVELOPING:
         return True
     if not candidate.is_current:
         return False  # retired (reverted, or its flip retired): never promoted back

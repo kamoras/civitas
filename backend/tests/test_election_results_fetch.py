@@ -105,8 +105,22 @@ class TestPickGeneral:
                      ("Special Election - State Senate District 4", "b")]) == "a"
         assert pick([("Special Election - State Senate District 4", "b"),
                      ("General Election and Nonpartisan Runoff", "a")]) == "a"
-        # A plain runoff (not named general) is still never a candidate.
-        assert pick([("Nonpartisan Runoff", "a"), ("Special Election", "b")]) == "b"
+        # A plain runoff (not named general) is still never a candidate —
+        # and the special left over is not the general either.
+        with pytest.raises(election_results.UntrustedCount):
+            pick([("Nonpartisan Runoff", "a"), ("Special Election", "b")], "XX")
+
+    def test_a_lone_special_is_not_the_general(self):
+        """Every general's date holds a federal general in every state, so a
+        day listing only a special has the general missing: returned, the
+        special's contests were read as the regular races' count."""
+        pick = election_results.pick_general
+        for lone in ("Special Election", "Special Election - U.S. House District 7", "Unexpired Term Election"):
+            with pytest.raises(election_results.UntrustedCount):
+                pick([(lone, "a")], "XX")
+        # Named general too, it is the general; unnamed and not special, the only one.
+        assert pick([("November 8, 2022 - General/Special Election", "a")]) == "a"
+        assert pick([("November 5 Election", "a")]) == "a"
 
     def test_a_general_that_is_also_a_special_is_still_the_general(self):
         # Georgia's real 2022 name, beside a hypothetical local special.

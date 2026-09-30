@@ -3185,3 +3185,68 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         issue = self._flip_issue()
         issue.source_type = "vote"
         assert self._match(issue, issue.title.replace("2nd", "6th"), json.loads(issue.facts)) is issue
+
+    def test_a_confirmed_results_issue_matches_its_story_again(self):
+        """Once news promotes a flip issue, promotion swaps its actions for
+        the cluster's (the #race- link goes), so gating it on its race made
+        the next hour's update of the same story a new row."""
+        from app.models import ActionIssueStatus
+
+        issue = self._flip_issue()
+        issue.status = ActionIssueStatus.CONFIRMED
+        issue.actions = json.dumps([{"text": "Read the AP story", "type": "read",
+                                     "url": "https://apnews.com/article/ga-2"}])
+        issue.source_urls = json.dumps(["https://apnews.com/article/ga-2"])
+        issue.title = "Republican Ray Jones flips Georgia's 2nd District"
+        issue.facts = json.dumps(["Ray Jones, a Republican, leads Democrat Dana Smith in southwest Georgia",
+                                  "The seat has been held by Democrats since 1993"])
+        # By shared URL…
+        assert self._match(issue, "Jones widens lead in southwest Georgia House race",
+                           urls=["https://apnews.com/article/ga-2"]) is issue
+        # …and by signature, with no URL in common.
+        assert self._match(issue, issue.title, json.loads(issue.facts),
+                           urls=["https://npr.org/other"]) is issue
+
+    @pytest.mark.parametrize("race_id,label,text", [
+        # The state name inside a longer one is not that state.
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District",
+         "Republican leads in West Virginia's 2nd District"),
+        # A dateline names a city, not a seat.
+        ("2026-HOUSE-WA-3", "Washington's 3rd Congressional District",
+         "WASHINGTON (AP) — Republicans lead the 3rd District count in Oregon"),
+        # A roundup: the state and the district number belong to different races.
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District",
+         "Republicans lead in Georgia's 6th and Florida's 2nd districts"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District",
+         "Republicans lead in Georgia's 6th District and Florida's 2nd District"),
+        # A legislature's upper chamber is not the U.S. Senate.
+        ("2026-SEN-GA", "Georgia's U.S. Senate", "Democrats flip Georgia state Senate seat"),
+        ("2026-SEN-GA", "Georgia's U.S. Senate", "Democrats flip a state Senate seat in Georgia"),
+        # "Senate" with no race word, beside a state, is not the race.
+        ("2026-SEN-WA", "Washington's U.S. Senate", "WASHINGTON (AP) — The Senate returns next week"),
+        ("2026-HOUSE-AK-0", "Alaska's at-large seat", "Alaska voters weigh at-large seats on the borough assembly"),
+    ])
+    def test_a_story_that_does_not_name_the_race_in_one_phrase_does_not_promote(self, race_id, label, text):
+        issue = self._flip_issue(race_id, label)
+        assert self._match(issue, text) is None
+
+    @pytest.mark.parametrize("race_id,label,text", [
+        ("2026-HOUSE-VA-2", "Virginia's 2nd Congressional District", "Republican leads in Virginia's 2nd District"),
+        ("2026-HOUSE-WV-2", "West Virginia's 2nd Congressional District",
+         "Republican leads in West Virginia's 2nd District"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District",
+         "Republicans lead in Georgia's 2nd and 6th congressional districts"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District", "Count tightens in Georgia's District 2"),
+        ("2026-HOUSE-GA-2", "Georgia's 2nd Congressional District",
+         "Count tightens in the 2nd Congressional District of Georgia"),
+        ("2026-HOUSE-TX-12", "Texas's 12th Congressional District", "Count tightens in Texas' 12th District"),
+        ("2026-HOUSE-AK-0", "Alaska's at-large seat", "Republican leads Alaska's at-large House race"),
+        ("2026-HOUSE-AK-0", "Alaska's at-large seat", "Count tightens in AK-AL"),
+        ("2026-SEN-GA", "Georgia's U.S. Senate", "Democrat leads the U.S. Senate race in Georgia"),
+        ("2026-SEN-GA", "Georgia's U.S. Senate", "Democrat leads in Georgia's U.S. Senate count"),
+        ("2026-SEN-GA-SPECIAL", "Georgia's U.S. Senate special election",
+         "Democrat leads the special election for Georgia's Senate seat"),
+    ])
+    def test_a_story_naming_the_race_in_one_phrase_does(self, race_id, label, text):
+        issue = self._flip_issue(race_id, label)
+        assert self._match(issue, text) is issue

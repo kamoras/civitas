@@ -546,6 +546,26 @@ class TestLiveResults:
             [race] = _body(elections.live_results(None, db_session))["races"]
         assert race["flip"] is False
 
+    def test_an_announced_flip_whose_lead_went_back_is_not_marked(self, db_session):
+        """A poll whose votes-counted fell is stored but announces nothing —
+        no FLIP_REVERSED — so flip_announced stays set while the holder may
+        lead again. The page never says "flip" beside the holder's lead."""
+        import json as _json
+
+        from app.models import RaceResult
+
+        self._seed(db_session)
+        row = db_session.get(RaceResult, "2026-HOUSE-GA-2")
+        row.tallies = _json.dumps([{"name": "Dana Smith", "party": "DEM", "votes": 500, "candidateId": "H1"},
+                                   {"name": "Ray Jones", "party": "REP", "votes": 450, "candidateId": None}])
+        row.votes_counted = 950
+        db_session.flush()
+        assert row.flip_announced is True
+        with self._results_window():
+            [race] = _body(elections.live_results(None, db_session))["races"]
+        assert race["leaderParty"] == race["heldBy"] == "DEM"
+        assert race["flip"] is False
+
     def test_says_how_each_feed_read_went(self, db_session):
         from datetime import datetime
 

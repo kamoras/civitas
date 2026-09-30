@@ -542,6 +542,25 @@ class TestAHeldPostSaysOnlyWhatIsStillSo:
         [(text, _)] = _run(db_session)
         assert "all 105 precincts have reported" in text
 
+    def test_a_house_official_count_is_held_once_the_holder_leads_again(self, db_session):
+        """A House count's OFFICIAL post is earned by the seat changing
+        party; after the holder's party retakes the lead it is held."""
+        import json
+
+        _race(db_session, "2026-HOUSE-GA-2", office="H", district=2)
+        db_session.flush()
+        result = db_session.get(RaceResult, "2026-HOUSE-GA-2")
+        result.official = True
+        good = result.tallies
+        result.tallies = json.dumps([{"name": "Dana Smith", "party": "DEM", "votes": 1000},
+                                     {"name": "Ray Jones", "party": "REP", "votes": 900}])
+        event = _event(db_session, "2026-HOUSE-GA-2", er.OFFICIAL, _detail(reporting=100, official=True))
+        assert _run(db_session) == []
+        assert event.bsky_posted_at is None  # held, not settled
+        result.tallies = good
+        [(text, _)] = _run(db_session)
+        assert "the state lists its count as official" in text
+
     def test_a_lapsed_one_is_dropped_at_the_age_cap(self, db_session):
         _race(db_session, "2026-SEN-GA")
         db_session.flush()
