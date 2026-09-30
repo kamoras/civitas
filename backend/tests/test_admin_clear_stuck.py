@@ -1,6 +1,6 @@
-"""Coverage for the shared _clear_stuck_runs helper behind the House and
-Stock Trades "clear stuck run" admin endpoints (consolidated from two
-near-identical copies — see admin.py's _clear_stuck_runs).
+"""Coverage for the shared _clear_stuck_runs helper behind the House,
+Stock Trades, Supplementary and Election "clear stuck run" admin endpoints
+(consolidated from near-identical copies — see admin.py's _clear_stuck_runs).
 """
 
 from datetime import timedelta
@@ -9,12 +9,18 @@ from app.time_utils import utcnow
 import pytest
 from fastapi import HTTPException
 
-from app.models import ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun
+from app.models import (
+    ElectionPipelineRun,
+    HousePipelineRun,
+    StockTradesPipelineRun,
+    SupplementaryPipelineRun,
+)
 
 
 @pytest.mark.parametrize("endpoint, model, hours", [
     ("admin_clear_stuck_house", HousePipelineRun, 9),
     ("admin_clear_stuck_stock_trades", StockTradesPipelineRun, 3),
+    ("admin_clear_stuck_supplementary", SupplementaryPipelineRun, 5),
     ("admin_clear_stuck_election", ElectionPipelineRun, 13),
 ])
 @pytest.mark.asyncio
@@ -41,16 +47,24 @@ async def test_clear_stuck_house_no_op_when_nothing_stuck(db_session):
     assert result == {"cleared": 0, "message": "No stuck runs found"}
 
 
+# Each endpoint hands _clear_stuck_runs its own pipeline's running flag; only
+# that flag raised must refuse, so wiring an endpoint to another pipeline's
+# flag (or none) fails here.
+@pytest.mark.parametrize("endpoint, flag", [
+    ("admin_clear_stuck_house", "app.pipeline.house_pipeline.is_house_pipeline_running"),
+    ("admin_clear_stuck_stock_trades", "app.pipeline.stock_pipeline.is_stock_pipeline_running"),
+    ("admin_clear_stuck_supplementary",
+     "app.pipeline.supplementary_pipeline.is_supplementary_pipeline_running"),
+    ("admin_clear_stuck_election", "app.pipeline.election_pipeline.is_election_pipeline_running"),
+])
 @pytest.mark.asyncio
-async def test_clear_stuck_election_refuses_while_actively_running(db_session, monkeypatch):
-    import app.api.admin as admin_module
+async def test_clear_stuck_refuses_while_its_own_pipeline_is_running(db_session, monkeypatch, endpoint, flag):
+    from app.api import admin
 
-    monkeypatch.setattr(
-        "app.pipeline.election_pipeline.is_election_pipeline_running", lambda: True
-    )
+    monkeypatch.setattr(flag, lambda: True)
 
     with pytest.raises(HTTPException) as exc_info:
-        await admin_module.admin_clear_stuck_election(db=db_session)
+        await getattr(admin, endpoint)(db=db_session)
 
     assert exc_info.value.status_code == 409
 

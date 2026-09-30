@@ -35,7 +35,7 @@ from pathlib import Path
 import pytest
 
 from app.pipeline.fetch import state_candidates_me as me
-from tests.test_state_candidates_tabular import _workbook
+from tests.xlsx_helpers import _workbook
 
 FIXTURES = Path(__file__).parent
 LANDING_HTML = (FIXTURES / "fixtures_me_results_page.html").read_text()

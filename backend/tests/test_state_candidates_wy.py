@@ -31,7 +31,7 @@ from pathlib import Path
 
 from app.pipeline.fetch import state_candidates_wy as wy
 from app.pipeline.fetch.state_candidates_common import surname
-from tests.test_state_candidates_tabular import _col_letter
+from tests.xlsx_helpers import _col_letter
 
 FIXTURES = Path(__file__).parent
 

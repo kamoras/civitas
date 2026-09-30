@@ -287,14 +287,15 @@ class TestFreshnessGate:
 
         The indexed date stays inside this cycle (discovery only matches a
         2026 entry, so an out-of-year date would return [] before the gate
-        is ever reached) and settle_days is set so it can never elapse. The
-        results payload is re-stamped long settled, so this also proves the
-        window is measured from the INDEX entry's date, which is what dates
-        the cycle -- not from the payload, which a vendor could re-stamp on
-        every amendment."""
+        is ever reached), and a century-long settle_days keeps it unsettled
+        until 2126. The results payload is re-stamped 1900-01-01, which that
+        same window has already cleared, so the two dates disagree: this
+        proves the window is measured from the INDEX entry's date, which is
+        what dates the cycle -- not from the payload, which a vendor could
+        re-stamp on every amendment."""
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        results["election"]["electionDate"] = "2000-01-01"
+        results["election"]["electionDate"] = "1900-01-01"
         _patched(monkeypatch, index=_index_held_on("2026-12-31"), results=results)
         assert await _fetch({**RI_SOURCE, "settle_days": 36500}) == []
 

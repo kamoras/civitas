@@ -80,7 +80,9 @@ class TestIndexParsing:
         # the surname (etrump — relatives hold appointed positions and file
         # their own 278-Ts; attributing one to the president would be a
         # factual claim about who traded what, not a near miss), the vice
-        # president (vance), and a row with no direct PDF (weaver).
+        # president (vance), and another commissioner (weaver — out on
+        # name; the no-direct-PDF rule is test_a_row_without_a_usable_pdf_
+        # link_is_not_counted_as_a_filing, under the president's own name).
         assert [(f["kind"], f["pdf_url"]) for f in filings] == [
             ("periodic", "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/AAA/$FILE/trump-278t-111425.pdf"),
             # The annual report is read by president_fd (its Part 7), never

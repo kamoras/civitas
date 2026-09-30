@@ -10,7 +10,9 @@ from app.pipeline.analyze.cross_reference import (
     select_key_votes,
     detect_lobbying_matches,
 )
+from app.pipeline.analyze import policy_alignment
 from app.pipeline.analyze.policy_alignment import (
+    detect_donor_vote_connections,
     get_related_policies,
     industry_policy_similarity,
 )
@@ -199,9 +201,10 @@ class TestDetectLobbyingMatches:
 
     def test_no_substantial_industry_share_matches_nothing(self):
         """Ten industries at 10% each: none clears the 25% share gate, so
-        nothing is flagged however related the votes are. (This used to be
-        named for the 8-match cap and assert `<= 8`, which this input can
-        never reach — at most four industries can each hold 25%.)"""
+        even PHARMA, with related (healthcare) votes, is not flagged. (This
+        used to be named for the 8-match cap and assert `<= 8`, which this
+        input can never reach — at most four industries can each hold 25%;
+        the cap is test_the_match_cap_keeps_the_largest_donations below.)"""
         industries = [
             "PHARMA", "FINANCE", "TECH", "ENERGY", "DEFENSE",
             "GUNS", "LABOR_UNIONS", "REAL_ESTATE", "TELECOM", "AGRIBUSINESS",
@@ -216,6 +219,25 @@ class TestDetectLobbyingMatches:
         ]
         assert detect_lobbying_matches(donors, self._healthcare_votes(), industry_breakdown) == []
 
+
+    def test_the_match_cap_keeps_the_largest_donations(self, monkeypatch):
+        """max_matches trims the list AFTER sorting by donation, so the cap
+        drops the smaller industries, never the largest. It can't bind at
+        the default 25% share gate (at most four industries clear it), so
+        it is exercised through its own parameter; similarity is pinned so
+        no model loads."""
+        monkeypatch.setattr(policy_alignment, "industry_policy_similarity", lambda *_: 1.0)
+        industry_breakdown = [
+            {"industry": "FINANCE", "name": "FINANCE", "total": 4000, "percentage": 40},
+            {"industry": "PHARMA", "name": "PHARMA", "total": 6000, "percentage": 60},
+        ]
+        votes = self._healthcare_votes()
+
+        both = detect_donor_vote_connections([], votes, industry_breakdown)
+        assert [m["industry"] for m in both] == ["PHARMA", "FINANCE"]
+
+        capped = detect_donor_vote_connections([], votes, industry_breakdown, max_matches=1)
+        assert [m["industry"] for m in capped] == ["PHARMA"]
     def test_lobbyists_industry_never_matches(self):
         """LOBBYISTS is a service profession, not a policy domain — a
         lobbying firm's PAC represents undisclosed clients across every

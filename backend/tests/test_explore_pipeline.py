@@ -9,7 +9,8 @@ audit: 1,758 exact-duplicate rows, 31% of the table).
 """
 
 import asyncio
-from contextlib import ExitStack
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
 import os
 import subprocess
@@ -42,7 +43,8 @@ def _no_real_vector_store(monkeypatch):
     monkeypatch.setattr(explore_pipeline, "get_embedded_hashes", lambda: {})
 
 
-def _stubbed_run(db_session, **stubs) -> ExitStack:
+@contextmanager
+def _stubbed_run(db_session, **stubs) -> Iterator[None]:
     """The outside world of the REAL run_explore_pipeline stubbed empty:
     its session, every fetcher, the lexical index, authority, calibration
     and the cache. `stubs` replaces or adds explore_pipeline attributes —
@@ -59,10 +61,12 @@ def _stubbed_run(db_session, **stubs) -> ExitStack:
         "calibrate_and_store": MagicMock(return_value={}),
         "api_cache_set": MagicMock(),
     }
-    stack = ExitStack()
-    for name, stub in {**defaults, **stubs}.items():
-        stack.enter_context(patch.object(explore_pipeline, name, stub))
-    return stack
+    # Entered inside the `with`, so a patch that fails partway (a renamed
+    # attribute) unwinds the ones before it instead of leaking them.
+    with ExitStack() as stack:
+        for name, stub in {**defaults, **stubs}.items():
+            stack.enter_context(patch.object(explore_pipeline, name, stub))
+        yield
 
 
 class TestStableHash:

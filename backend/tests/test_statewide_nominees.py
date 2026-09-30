@@ -339,7 +339,6 @@ class TestMinorPartyLabel:
         assert (nominee["party"], nominee["partyLabel"]) == ("N", "Nonpartisan")
 
 
-
 class TestStatewideBodySeatedByDistrict:
     """Georgia's Public Service Commission is elected statewide, but a
     commissioner holds the seat for a district and each seat is its own

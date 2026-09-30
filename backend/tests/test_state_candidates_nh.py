@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 from app.pipeline.fetch import state_candidates_nh as nh
-from tests.test_state_candidates_tabular import _workbook
+from tests.xlsx_helpers import _workbook
 
 FIXTURES = Path(__file__).parent
 ROOT_HTML = (FIXTURES / "fixtures_nh_elections_root.html").read_text()

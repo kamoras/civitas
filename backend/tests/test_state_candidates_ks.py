@@ -72,7 +72,10 @@ class TestParseTotalsPdf:
             ("S", None, "R", "Marshall"),
         ]
         senate_d = [r for r in results if r["office"] == "S" and r["party"] == "D"]
-        assert senate_d[0]["display_name"] == "Adam Hamilton"
+        assert senate_d == [{
+            "office": "S", "district": None, "party": "D",
+            "last_name": "Hamilton", "display_name": "Adam Hamilton",
+        }]
 
 
 class TestStateOffices:
