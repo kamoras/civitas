@@ -5,6 +5,7 @@ import math
 
 from app.models import Senator
 from app.pipeline.analyze import score_calculator
+from app.pipeline.analyze.score_bounds import clamp
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
     _calc_constituent_alignment,
@@ -20,13 +21,23 @@ from app.pipeline.analyze.score_calculator import (
     _les_stage_counts,
     _les_significance_weight,
     calculate_scores,
-    clamp,
     compute_les_reference,
     compute_overall_score,
 )
 
 
 class TestClamp:
+    """The one clamp, shared by scoring, the validator and the president
+    scorer (each used to carry its own copy)."""
+
+    def test_is_shared(self):
+        from app.pipeline.analyze import president_scorer
+        from app.pipeline.assemble import validator
+
+        assert score_calculator.clamp is clamp
+        assert validator.clamp is clamp
+        assert president_scorer.clamp is clamp
+
     def test_within_range(self):
         assert clamp(50.3) == 50
 
@@ -39,6 +50,15 @@ class TestClamp:
     def test_exact_boundaries(self):
         assert clamp(0.0) == 0
         assert clamp(100.0) == 100
+
+    def test_rounds_half_to_even(self):
+        # Python's round(), not round-half-up.
+        assert clamp(50.5) == 50
+        assert clamp(51.5) == 52
+
+    def test_custom_range(self):
+        assert clamp(200.0, 0, 1000) == 200
+        assert clamp(-5.0, 0, 1000) == 0
 
 
 class TestFundingIndependence:
