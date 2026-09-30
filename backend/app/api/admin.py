@@ -1410,7 +1410,6 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         rebuild_explore_index,
         rebuild_underway,
         recalibrate_ranking,
-        wait_for_rebuild,
     )
 
     # One at a time: a second, while the first is queued or running, would
@@ -1446,10 +1445,10 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         # Underway as a rebuild once it holds the lease (not while it asks:
         # refused, it rebuilds nothing, and a start mustn't have left an
         # incomplete index to it), keyword and authority passes included:
-        # check-and-deploy waits it out. A start's rebuild (which takes no
-        # lease) is waited out first, without the lease: holding it through
-        # that wait would refuse an Explore run its ingest for nothing.
-        wait_for_rebuild()
+        # check-and-deploy waits it out. The lease is taken before waiting
+        # out a start's rebuild, not after: that rebuild's own refit asks
+        # for it the moment the rebuild ends, and would win it from an
+        # accepted re-embed that then does nothing.
         with lease.job(lease.EXPLORE, who="Explore re-embed") as held:
             if not held:
                 return  # logged as a skip by lease.job

@@ -914,16 +914,19 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
                 _record_text_hash(conn, doc_id, digest, meta)
         doc_ids.update(d for d, _, _ in batch)
 
-    with _writing(conn):
-        if _get_meta(conn, _INDEX_MODEL) is None:
-            # A store never built at all (no identity, blank or other): only
-            # a direct caller's embed reaches here — tests, a one-off script
-            # — since every pipeline path builds through
-            # rebuild_explore_index, which blanks the identity first.
-            # Recorded so such a caller can search what it embedded; a
-            # partial or other-model index always carries an identity, and
-            # is never recorded here.
-            _set_meta(conn, _INDEX_MODEL, index_identity())
+    # A plain read first: the write lock only when there is something to
+    # write, never in a rebuild (its fresh table's identity is blank).
+    if not fresh and _get_meta(_read_conn(), _INDEX_MODEL) is None:
+        with _writing(conn):
+            if _get_meta(conn, _INDEX_MODEL) is None:
+                # A store never built at all (no identity, blank or other):
+                # only a direct caller's embed reaches here — tests, a
+                # one-off script — since every pipeline path builds through
+                # rebuild_explore_index, which blanks the identity first.
+                # Recorded so such a caller can search what it embedded; a
+                # partial or other-model index always carries an identity,
+                # and is never recorded here.
+                _set_meta(conn, _INDEX_MODEL, index_identity())
     if record_chunks_per_doc:
         _record_chunks_per_doc(conn)
 

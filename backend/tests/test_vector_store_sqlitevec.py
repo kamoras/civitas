@@ -479,6 +479,22 @@ class TestTextHashes:
         vector_store.embed_explore_documents([_doc(1, "A title"), _doc(2, "")])
         assert vector_store.get_embedded_explore_ids() == {1, 2}
 
+    def test_an_embed_takes_the_write_lock_only_to_write(self, vec_env):
+        # The identity is recorded already: no write transaction just to
+        # read it — the batch's, and the ratio's (with its nested meta
+        # write), nothing else.
+        vector_store.embed_explore_documents([_doc(1, "A title")])
+        real = vector_store._writing
+        opened = []
+
+        def counting(conn):
+            opened.append(1)
+            return real(conn)
+
+        with patch.object(vector_store, "_writing", counting):
+            vector_store.embed_explore_documents([_doc(2, "B title")])
+        assert len(opened) == 3
+
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         emptied = _doc(1, "")
@@ -949,31 +965,3 @@ def test_each_tables_width_is_its_models_own():
     assert vector_store.get_similarity_model().get_sentence_embedding_dimension() == vector_store.SIMILARITY_DIMENSIONS
     assert vector_store.get_embedding_model().get_sentence_embedding_dimension() == vector_store.EMBEDDING_DIMENSIONS
 
-
-async def test_the_re_embed_waits_out_a_start_rebuild_before_taking_the_lease(monkeypatch, db_session):
-    # A start's rebuild takes no lease: held through that wait, the lease
-    # would refuse the nightly Explore run its ingest for nothing.
-    import threading as _t
-
-    from app.api.admin import admin_reembed_explore
-    from app.pipeline import lease
-
-    events: list[str] = []
-
-    class _Recorded(_Granted):
-        def __enter__(self):
-            events.append("lease")
-            return True
-
-    monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda _f, **_k: events.append("rebuild") or 0)
-    monkeypatch.setattr("app.pipeline.lexical_index.rebuild_index", lambda db: 0)
-    monkeypatch.setattr("app.pipeline.analyze.document_authority.update_document_authority", lambda db: {})
-    monkeypatch.setattr(lease, "job", _Recorded)
-    with vector_store._rebuild_lock:  # a start's rebuild, running
-        assert await admin_reembed_explore(db=db_session) == {"started": True}
-        _t.Event().wait(0.3)
-        assert events == []
-    for t in _t.enumerate():
-        if t.name == "explore-reembed":
-            t.join(timeout=10)
-    assert events == ["lease", "rebuild"]
