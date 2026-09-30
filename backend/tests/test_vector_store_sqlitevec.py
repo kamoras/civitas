@@ -8,6 +8,7 @@ network.
 import sqlite3
 
 import numpy as np
+import sqlite_vec
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -318,11 +319,34 @@ class TestTextHashes:
         # Every old row reads as never labelled, so the next run relabels it.
         assert vector_store.get_embedded_meta_hashes() == {1: ""}
 
-    def test_a_failed_relabel_does_not_hide_the_embed(self, vec_env):
-        with patch.object(vector_store, "update_explore_metadata", side_effect=RuntimeError("boom")):
-            n = vector_store.top_up_explore_index(lambda: [_doc(1, "A title")], lambda: [_doc(2, "B")])
-        assert n == 1
+    def test_a_failed_relabel_raises_and_keeps_the_embed(self, vec_env):
+        # Raised, so the run reports it rather than resolve its alert; the
+        # embed before it is committed.
+        with patch.object(vector_store, "update_explore_metadata", side_effect=RuntimeError("boom")), \
+             pytest.raises(RuntimeError):
+            vector_store.top_up_explore_index(lambda: [_doc(1, "A title")], lambda: [_doc(2, "B")])
         assert set(vector_store.get_embedded_text_hashes()) == {1}
+
+    def test_another_process_adding_meta_hash_first_is_not_an_error(self, vec_env):
+        conn = sqlite3.connect(vector_store._VECTOR_DB_PATH)
+        conn.execute("CREATE TABLE vec_explore_text (doc_id INTEGER PRIMARY KEY, text_hash TEXT NOT NULL)")
+        conn.commit()
+        real_execute = sqlite3.Connection.execute
+
+        class Racing(sqlite3.Connection):
+            def execute(self, sql, *args):
+                if sql.startswith("ALTER TABLE vec_explore_text"):
+                    real_execute(self, sql, *args)  # the other process's
+                return real_execute(self, sql, *args)
+
+        racing = sqlite3.connect(vector_store._VECTOR_DB_PATH, factory=Racing)
+        racing.enable_load_extension(True)
+        sqlite_vec.load(racing)
+        vector_store._ensure_schema(racing)
+        cols = {r[1] for r in racing.execute("PRAGMA table_info(vec_explore_text)")}
+        assert "meta_hash" in cols
+        racing.close()
+        conn.close()
 
     def test_the_chunk_insert_writes_the_fields_the_hash_covers(self):
         columns = vector_store._CHUNK_INSERT.split("(")[1].split(")")[0].split(", ")

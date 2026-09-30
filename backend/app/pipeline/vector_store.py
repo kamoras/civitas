@@ -388,8 +388,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     if "meta_hash" not in columns:
         # A table from before the column (a development store): added in
         # place; every row then reads as relabel-worthy, which is only
-        # right — its metadata was never recorded.
-        conn.execute("ALTER TABLE vec_explore_text ADD COLUMN meta_hash TEXT NOT NULL DEFAULT ''")
+        # right — its metadata was never recorded. Every process opening
+        # the store checks at once, so another may have added it first.
+        try:
+            conn.execute("ALTER TABLE vec_explore_text ADD COLUMN meta_hash TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc):
+                raise
     conn.execute(_BILLS_DDL.format(if_not_exists="IF NOT EXISTS "))
     conn.commit()
 
@@ -1315,12 +1320,10 @@ def top_up_explore_index(docs_to_embed, docs_to_relabel=None) -> int:
     with _rebuild_lock:
         embedded = embed_explore_documents(docs_to_embed())
         if docs_to_relabel is not None:
-            try:
-                update_explore_metadata(docs_to_relabel())
-            except Exception:
-                # Apart from the embed, whose outcome it mustn't hide: its
-                # hashes are unchanged, so the next run relabels them.
-                logger.warning("Explore index metadata update failed — the next run retries it", exc_info=True)
+            # A failure raises like the embed's (the run fails, or skips on
+            # a lock): the embed is committed already, and the relabel's
+            # hashes are unchanged, so the next run relabels them.
+            update_explore_metadata(docs_to_relabel())
         return embedded
 
 

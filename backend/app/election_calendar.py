@@ -44,9 +44,14 @@ def _classes(data) -> dict[int, frozenset[str]] | None:
     """The class sets a file holds, or None when it doesn't hold them in
     this shape (a malformed file: the next one, the bundled copy, is used)."""
     try:
-        return {int(k): frozenset(v) for k, v in data["classes"].items()}
+        classes = {int(k): v for k, v in data["classes"].items()}
     except (AttributeError, KeyError, TypeError, ValueError):
         return None
+    # A list of state codes each: a string would pass frozenset() as its
+    # characters.
+    if not all(isinstance(v, list) and all(isinstance(s, str) for s in v) for v in classes.values()):
+        return None
+    return {k: frozenset(v) for k, v in classes.items()}
 
 
 def senate_classes() -> dict[int, frozenset[str]]:

@@ -27,3 +27,14 @@ def test_a_malformed_refreshed_file_falls_back_to_the_bundled_one(tmp_path, monk
     election_calendar.reset_senate_classes()
     assert election_calendar.senate_classes()[1] == frozenset({"AA"})
     election_calendar.reset_senate_classes()
+
+
+def test_a_string_where_a_list_of_states_belongs_falls_back(tmp_path, monkeypatch):
+    # frozenset("CA,NY") would be its characters, not two states.
+    live, bundled = tmp_path / "live.json", tmp_path / "bundled.json"
+    bundled.write_text(json.dumps({"classes": {"1": ["CA"], "2": [], "3": []}}))
+    live.write_text(json.dumps({"classes": {"1": "CA,NY", "2": [], "3": []}}))
+    monkeypatch.setattr(election_calendar, "_CLASS_FILES", (live, bundled))
+    election_calendar.reset_senate_classes()
+    assert election_calendar.senate_classes()[1] == frozenset({"CA"})
+    election_calendar.reset_senate_classes()
