@@ -1,6 +1,8 @@
 """Shared test fixtures."""
 
+import functools
 import os
+import threading
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 # The per-container RAM directory (api/throttle.RAM_DIR: the throttle store,
@@ -35,6 +37,7 @@ def db_session():
     one session/engine either way, so both bases are created here rather
     than standing up a second in-memory engine tests don't need.
     """
+    before = set(threading.enumerate())
     engine = create_engine(
         "sqlite:///:memory:", echo=False,
         connect_args={"check_same_thread": False}, poolclass=StaticPool,
@@ -52,8 +55,42 @@ def db_session():
     Session = sessionmaker(bind=engine, autoflush=False)
     session = Session()
     yield session
+    _join_app_threads_started_since(before)
     session.close()
     engine.dispose()
+
+
+# How long teardown waits for one background thread the test left running.
+_THREAD_JOIN_S = 10
+
+
+def _join_app_threads_started_since(before: set) -> None:
+    """Wait for the app's own background threads the test started (the
+    bills-cache rebuild admin_reset_data kicks off, a start_writer job):
+    one still querying the shared in-memory connection when the engine is
+    disposed crashes SQLite outright (a segfault that killed a CI run).
+    Only threads running app code (by their target, or by a Thread
+    subclass the app defines): a library's long-lived monitor thread
+    started along the way would never finish. One that outlives the join
+    fails the test by name — a test that takes a lease must release it, or
+    its heartbeat (lease._keep) is exactly such a thread. Executor workers
+    (asyncio.to_thread, ThreadPoolExecutor) run no app target of their
+    own and aren't joined: work sent there must be awaited in the test."""
+    stuck = []
+    for thread in set(threading.enumerate()) - before:
+        target = getattr(thread, "_target", None)
+        while isinstance(target, functools.partial):
+            target = target.func
+        if thread is threading.current_thread():
+            continue
+        modules = (getattr(target, "__module__", "") or "", type(thread).__module__)
+        if any(m.startswith("app.") for m in modules):
+            thread.join(_THREAD_JOIN_S)
+            if thread.is_alive():
+                stuck.append(thread.name)
+    # Disposing under a live thread is the crash this exists to prevent:
+    # say which thread, rather than carry on into it.
+    assert not stuck, f"background threads still running at teardown: {stuck}"
 
 
 @pytest.fixture(scope="session")

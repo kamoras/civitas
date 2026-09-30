@@ -46,6 +46,7 @@ import re
 import httpx
 from lxml import html as lxml_html
 
+from app.contact import BOT_USER_AGENT
 from app.pipeline.fetch.state_candidates_common import (
     ballot_list_party,
     normalize_party,
@@ -69,7 +70,7 @@ _EID_RE = re.compile(r"candidatelist\.aspx\?eid=(\d+)", re.IGNORECASE)
 _WITHDRAWN_RE = re.compile(r"\(\s*withdrawn\b", re.IGNORECASE)
 
 _TIMEOUT = 30.0
-_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; civitas/1.0)"}
+_HEADERS = {"User-Agent": BOT_USER_AGENT}
 
 
 async def _get_text(client: httpx.AsyncClient, url: str, label: str) -> str | None:

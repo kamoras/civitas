@@ -24,6 +24,8 @@ from defusedxml import ElementTree as SafeET
 
 import httpx
 
+from app.contact import BOT_USER_AGENT
+
 logger = logging.getLogger(__name__)
 
 FEED_TIMEOUT = 15.0
@@ -503,7 +505,7 @@ def fetch_news_articles(
         t0 = time.perf_counter()
         try:
             resp = httpx.get(url, timeout=FEED_TIMEOUT, follow_redirects=True, headers={
-                "User-Agent": "Civitas/1.0 (civic engagement platform)",
+                "User-Agent": BOT_USER_AGENT,
             })
             resp.raise_for_status()
             articles = _parse_rss_feed(resp.content, name)

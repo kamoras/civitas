@@ -15,7 +15,7 @@ request headers.
 
 Headers: michigan.gov's CDN (Akamai) refuses the codebase's standard
 BROWSER_HEADERS with a 403, and measured 2026-09-28 that the refusal is
-keyed on the "(+contact@...)" comment in the User-Agent — the same
+keyed on the "(+<contact email>)" comment in the User-Agent — the same
 header set with that comment removed gets 200, as does the same
 User-Agent still ending in "Civitas/1.0". So this module sends
 BROWSER_HEADERS with the User-Agent's trailing comment dropped: still
