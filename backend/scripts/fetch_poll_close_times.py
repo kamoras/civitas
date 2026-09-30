@@ -39,6 +39,10 @@ import re
 import sys
 import urllib.request
 
+# Runs from the repo root on a bare python3: app.contact is standard library only.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from app.contact import BOT_USER_AGENT  # noqa: E402
+
 STATE_NAMES = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
     "CA": "California", "CO": "Colorado", "CT": "Connecticut",
@@ -71,8 +75,8 @@ STATE_ZONES = {
 _ZONE_WORDS = {"eastern": ET, "central": CT, "mountain": MT, "pacific": PT}
 
 # Ballotpedia answers a bare non-browser User-Agent with an empty 202;
-# the "compatible;" form still names Civitas and a contact address.
-UA = {"User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0; poll-closing times; +mack.ryanm@gmail.com)"}
+# the "compatible;" form (BOT_USER_AGENT) still names Civitas and a contact.
+UA = {"User-Agent": BOT_USER_AGENT}
 SOURCE_URL = "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_({year})"
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "poll_close_times.json"
 

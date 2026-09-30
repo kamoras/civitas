@@ -63,6 +63,9 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+# Runs from the repo root on a bare python3: app.contact is standard library only.
+sys.path.insert(0, str(REPO / "backend"))
+from app.contact import BOT_USER_AGENT  # noqa: E402
 OUT_PATH = REPO / "backend" / "app" / "data" / "county_district_crosswalk.json"
 
 _RDO = "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files"
@@ -72,8 +75,8 @@ COUNTY_NAMES_URL = (
     "https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt"
 )
 
-# Generic on purpose: no personal identifier leaves the machine.
-USER_AGENT = "CivitasCivicPlatform/1.0 (congressional district crosswalk build)"
+# Names Civitas and its contact, as every fetch does (app/contact.py).
+USER_AGENT = BOT_USER_AGENT
 
 CD119 = "CD119"
 CD120 = "CD120"
