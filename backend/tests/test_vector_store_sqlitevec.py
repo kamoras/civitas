@@ -232,17 +232,28 @@ class TestEnsureExploreIndex:
             vector_store.ensure_explore_index(lambda: None)
         thread.assert_called_once()
 
-    def test_nothing_is_built_without_documents(self, vec_env, db_session, explore_lease, monkeypatch):
-        # The first Explore run builds it; a start before then has nothing
-        # to rebuild, and mustn't blank and drop the index for nothing.
-        started = []
-        monkeypatch.setattr(vector_store, "rebuild_explore_index", lambda f: started.append(1))
+    def test_an_empty_corpus_is_built_and_recorded_whole(self, vec_env, db_session, explore_lease):
+        # A blank identity left by a cut-off rebuild ends here too, rather
+        # than read "incomplete" at every start until a run happens by.
+        vector_store._set_meta(vector_store.get_vec_conn(), vector_store._INDEX_MODEL, "")
         vector_store.ensure_explore_index(lambda: db_session)
         import threading as _t
         for t in _t.enumerate():
             if t.name == "explore-reindex":
                 t.join(timeout=10)
-        assert started == []
+        assert vector_store.index_is_whole()
+
+    def test_a_lock_while_checking_raises_rather_than_rebuild(self, vec_env, monkeypatch):
+        # Can't tell whether it's whole: never a reason to drop it.
+        def locked():
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(vector_store, "index_is_whole", locked)
+        swap = MagicMock()
+        monkeypatch.setattr(vector_store, "_swap_tables", swap)
+        with pytest.raises(sqlite3.OperationalError):
+            vector_store.rebuild_explore_index(lambda: None, wait=True, if_incomplete=True)
+        swap.assert_not_called()
 
     def test_a_rebuild_reads_documents_by_id_so_deletions_skip_none(self, vec_env, db_session, monkeypatch):
         # An Explore run may delete documents while a start's rebuild pages
@@ -461,7 +472,9 @@ class TestEnsureExploreIndex:
             raise sqlite3.OperationalError("database is locked")
 
         monkeypatch.setattr(vector_store, "embed_explore_documents", fails_after_a_batch)
-        with pytest.raises(sqlite3.OperationalError):
+        # After the swap: a RebuildFailed, whatever the cause — the index is
+        # gone, and no caller may take it for a harmless lock.
+        with pytest.raises(vector_store.RebuildFailed):
             vector_store.rebuild_explore_index(lambda: db_session)
         monkeypatch.setattr(vector_store, "embed_explore_documents", real_embed)
 
@@ -641,10 +654,14 @@ async def test_the_admin_re_embed_runs_in_the_background_and_refuses_when_it_can
         if t.name == "explore-reembed":
             t.join(timeout=10)  # underway until its last pass is done
 
-    with vector_store.rebuild_underway():
-        with pytest.raises(HTTPException) as refused:
-            await admin_reembed_explore(db=db_session)
-    assert refused.value.status_code == 409
+    # One queued or running: a second is refused, not told it started.
+    from app.api import admin
+
+    monkeypatch.setattr(admin, "_reembed_queued", True)
+    with pytest.raises(HTTPException) as refused:
+        await admin_reembed_explore(db=db_session)
+    assert refused.value.status_code == 409 and "already under way" in refused.value.detail
+    monkeypatch.setattr(admin, "_reembed_queued", False)
 
     # Held by an Explore run: refused with the reason, not started to skip.
     monkeypatch.setattr(lease, "holder", lambda session, tier: "Explore ingest" if tier == lease.EXPLORE else None)

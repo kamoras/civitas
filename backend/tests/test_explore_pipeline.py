@@ -636,3 +636,24 @@ async def test_a_top_up_failing_partway_owes_what_it_was_writing(db_session):
          patch.object(explore_pipeline, "top_up_explore_index", failing):
         assert await explore_pipeline._embed_step(db_session, {7}) == 0
     owe.assert_called_once_with(db_session, {7, 11, 12})
+
+
+@pytest.mark.asyncio
+async def test_a_lock_after_the_rebuilds_swap_is_a_failure_not_a_skip(db_session):
+    # The index is gone by then: no alert, and a log saying "busy", would
+    # leave a partial index unreported until the next run.
+    import sqlite3
+
+    from app.pipeline import explore_pipeline, vector_store
+
+    def failing(*_a, **_k):
+        raise vector_store.RebuildFailed("after the swap") from sqlite3.OperationalError("database is locked")
+
+    alert = MagicMock()
+    with patch.object(explore_pipeline, "_owed_reembeds", return_value=set()), \
+         patch.object(explore_pipeline, "_owe_reembeds"), \
+         patch.object(explore_pipeline, "index_is_whole", return_value=False), \
+         patch.object(explore_pipeline, "rebuild_explore_index", failing), \
+         patch.object(explore_pipeline, "alert_rebuild_failed", alert):
+        assert await explore_pipeline._embed_step(db_session, set()) == 0
+    alert.assert_called_once()

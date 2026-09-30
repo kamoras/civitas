@@ -164,7 +164,7 @@ async def run_recorder() -> None:
                 # Keep this worker's own sample current, so the round it
                 # wins measures a recent interval rather than a long one.
                 global _previous
-                totals = own_totals()
+                totals = await asyncio.to_thread(own_totals)
                 if totals is not None:
                     _previous = (*totals, time.monotonic())
         except Exception:

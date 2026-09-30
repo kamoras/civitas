@@ -53,6 +53,7 @@ from app.pipeline.vector_store import (
     index_is_whole,
     is_busy_error,
     TopUpFailed,
+    alert_rebuild_failed,
     rebuild_explore_index,
     top_up_explore_index,
     wait_for_rebuild,
@@ -391,8 +392,7 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
     backfill won't return those documents again, and they are in the index
     already.
     """
-    from app.ops_alerts import resolve_ops_alert, send_ops_alert
-    from app.time_utils import utcnow
+    from app.ops_alerts import resolve_ops_alert
 
     owed = await asyncio.to_thread(_owed_reembeds, db)
     refreshed_ids = refreshed_ids | owed
@@ -406,20 +406,14 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
             # it would insert every missing document's chunks twice.
             rebuilt = await asyncio.to_thread(rebuild_explore_index, SessionLocal, wait=True, if_incomplete=True)
         except Exception as exc:
+            # A lock before the swap touched nothing: skipped. After it
+            # (RebuildFailed, whatever the cause) the index is gone: failed.
             if is_busy_error(exc):
                 logger.warning("Explore pipeline: vector index busy — rebuild left to the next run (%s)", exc)
             else:
                 logger.exception("Explore pipeline: vector index rebuild failed")
                 outcome = "failed"
-                await asyncio.to_thread(
-                    send_ops_alert,
-                    "Explore vector index rebuild failed",
-                    f"The Explore run's rebuild of the search vector index raised ({type(exc).__name__}: "
-                    f"{exc}). Semantic search stays off (keyword-only) until a rebuild completes; the next "
-                    "Explore run or pipeline start tries again.",
-                    dedupe_key=f"explore-index-rebuild-{utcnow():%Y-%m-%d}",
-                    condition="explore-index-rebuild",
-                )
+                await asyncio.to_thread(alert_rebuild_failed, "Explore run", exc)
         else:
             if rebuilt is not None:
                 outcome, embedded = "rebuilt", rebuilt
@@ -442,11 +436,7 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
             cause = exc.__cause__ if isinstance(exc, TopUpFailed) else exc
             owed_now = refreshed_ids | (exc.ids if isinstance(exc, TopUpFailed) else set())
             if owed_now:
-                try:
-                    await asyncio.to_thread(_owe_reembeds, db, owed_now)
-                except Exception:
-                    logger.exception("Explore pipeline: could not record %d documents' re-embeds as owed",
-                                     len(owed_now))
+                await _record_owed(db, owed_now)
             if not is_busy_error(cause):
                 raise cause from None
             logger.warning("Explore pipeline: vector index busy — top-up left to the next run (%s)", cause)
@@ -454,16 +444,12 @@ async def _embed_step(db: Session, refreshed_ids: set[int]) -> int:
 
     if outcome == "skipped" or outcome == "failed":
         if refreshed_ids:
-            try:
-                await asyncio.to_thread(_owe_reembeds, db, refreshed_ids)
-            except Exception:
-                logger.exception("Explore pipeline: could not record %d documents' re-embeds as owed",
-                                 len(refreshed_ids))
+            await _record_owed(db, refreshed_ids)
         if outcome == "skipped":
             logger.warning("Explore pipeline: vector index busy — embed step skipped this run")
     else:
         if owed:
-            await asyncio.to_thread(_owe_reembeds, db, set())
+            await _record_owed(db, set())
         # Whole now, by this run or a start's: a failed rebuild's alert ends.
         await asyncio.to_thread(resolve_ops_alert, "explore-index-rebuild")
     return embedded
@@ -516,12 +502,28 @@ def _owed_reembeds(db: Session) -> set[int]:
 
 def _owe_reembeds(db: Session, ids: set[int]) -> None:
     """Record `ids` as owed — or, empty, clear the record (deleted: an empty
-    payload never overwrites one in api_cache)."""
-    if ids:
-        api_cache_set(db, "explore", _REEMBED_OWED_KEY, sorted(ids))
-    else:
-        db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _REEMBED_OWED_KEY).delete()
-        db.commit()
+    payload never overwrites one in api_cache). Rolls the session back on
+    a failure, so the run's later steps use it as before."""
+    try:
+        if ids:
+            api_cache_set(db, "explore", _REEMBED_OWED_KEY, sorted(ids))
+        else:
+            db.query(ApiCache).filter(ApiCache.tier == "explore", ApiCache.cache_key == _REEMBED_OWED_KEY).delete()
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
+async def _record_owed(db: Session, ids: set[int]) -> None:
+    """_owe_reembeds off the loop; a failure is logged, not raised: the
+    step it follows is done either way (an unrecorded debt is re-owed by the
+    next run that skips, and a record left uncleared costs one re-embed)."""
+    try:
+        await asyncio.to_thread(_owe_reembeds, db, ids)
+    except Exception:
+        logger.exception("Explore pipeline: could not %s the owed re-embeds",
+                         "record" if ids else "clear")
 
 
 async def _index_is_whole_or_none() -> bool | None:

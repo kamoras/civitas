@@ -1005,6 +1005,30 @@ def explore_embed_dict(d) -> dict:
     }
 
 
+class RebuildFailed(Exception):
+    """A rebuild raised after its swap: the old index is gone and the new
+    one partial, whatever the cause — a lock included. (One that raises
+    before the swap left the index as it was.) The cause is __cause__."""
+
+
+def alert_rebuild_failed(where: str, error: BaseException) -> None:
+    """The one alert for a rebuild that left the index incomplete, from any
+    of the three that can (an Explore run, a start, an admin re-embed);
+    resolved by the next that completes."""
+    from app.ops_alerts import send_ops_alert
+    from app.time_utils import utcnow
+
+    cause = error.__cause__ if isinstance(error, RebuildFailed) and error.__cause__ else error
+    send_ops_alert(
+        "Explore vector index rebuild failed",
+        f"The {where}'s rebuild of the search vector index raised ({type(cause).__name__}: {cause}). "
+        "Semantic search stays off (keyword-only) until a rebuild completes; the next Explore run or "
+        "pipeline start tries again.",
+        dedupe_key=f"explore-index-rebuild-{utcnow():%Y-%m-%d}",
+        condition="explore-index-rebuild",
+    )
+
+
 def rebuild_explore_index(
     db_session_factory, *, wait: bool = False, if_incomplete: bool = False, unless_rebuilt_since: float | None = None,
 ) -> int | None:
@@ -1034,14 +1058,15 @@ def _rebuild(db_session_factory, wait: bool, if_incomplete: bool, unless_rebuilt
     if not _rebuild_lock.acquire(blocking=wait):
         return None
     try:
-        from app.models import ExploreDocument
-
         if if_incomplete:
             try:
                 whole = index_is_whole()
             except Exception as error:
-                # Unreadable is not whole: this rebuild recreates it. (Busy
-                # too, here: the caller has already decided to rebuild.)
+                if is_busy_error(error):
+                    # Can't tell: never a reason to drop an index — the
+                    # caller sees the lock, before anything was touched.
+                    raise
+                # Unreadable is not whole: this rebuild recreates it.
                 logger.warning("Explore index unreadable (%s) — rebuilding it", error)
                 whole = False
             if whole:
@@ -1054,34 +1079,44 @@ def _rebuild(db_session_factory, wait: bool, if_incomplete: bool, unless_rebuilt
         # blanked with the swap, so a swap that fails leaves a whole index
         # whole.
         _swap_tables({"vec_explore": _EXPLORE_DDL.format(if_not_exists="")}, meta={_INDEX_MODEL: ""})
-
-        db = db_session_factory()
         try:
-            total = 0
-            after = 0
-            while True:
-                # By id, not OFFSET: an Explore run may delete documents
-                # meanwhile, and an offset would then skip past ones never
-                # embedded. One deleted after its batch leaves an orphan
-                # vector, which the run's own purge removes.
-                docs = (
-                    db.query(ExploreDocument)
-                    .filter(ExploreDocument.id > after)
-                    .order_by(ExploreDocument.id)
-                    .limit(_REBUILD_BATCH).all()
-                )
-                if not docs:
-                    break
-                total += embed_explore_documents([explore_embed_dict(d) for d in docs])
-                after = docs[-1].id
-        finally:
-            db.close()
-        _set_meta(conn, _INDEX_MODEL, index_identity())
+            total = _embed_all(db_session_factory)
+            _set_meta(conn, _INDEX_MODEL, index_identity())
+        except Exception as error:
+            raise RebuildFailed(f"explore index rebuild failed after its swap: {error}") from error
         _last_rebuilt_at = time.monotonic()
         logger.info("Explore index rebuild complete: %d documents", total)
         return total
     finally:
         _rebuild_lock.release()
+
+
+def _embed_all(db_session_factory) -> int:
+    """Every document into the (fresh) index, in batches by id."""
+    from app.models import ExploreDocument
+
+    db = db_session_factory()
+    try:
+        total = 0
+        after = 0
+        while True:
+            # By id, not OFFSET: an Explore run may delete documents
+            # meanwhile, and an offset would then skip past ones never
+            # embedded. One deleted after its batch leaves an orphan
+            # vector, which the run's own purge removes.
+            docs = (
+                db.query(ExploreDocument)
+                .filter(ExploreDocument.id > after)
+                .order_by(ExploreDocument.id)
+                .limit(_REBUILD_BATCH).all()
+            )
+            if not docs:
+                break
+            total += embed_explore_documents([explore_embed_dict(d) for d in docs])
+            after = docs[-1].id
+    finally:
+        db.close()
+    return total
 
 
 def recalibrate_ranking(db_session_factory) -> None:
@@ -1214,22 +1249,20 @@ def ensure_explore_index(db_session_factory) -> None:
         return
 
     def _reindex() -> None:
-        from app.models import ExploreDocument
-
+        # An empty corpus too: its (empty) build is complete, and recording
+        # it ends an incomplete index's "incomplete" and its open alert.
         try:
-            db = db_session_factory()
-            try:
-                if db.query(ExploreDocument.id).first() is None:
-                    return  # nothing to build yet: the first Explore run builds it
-            finally:
-                db.close()
             logger.warning("Explore index not a complete build by %s — rebuilding", index_identity())
             # Waiting out an Explore run's top-up (or its rebuild) rather
             # than embedding beside it; None when that left it whole.
             if rebuild_explore_index(db_session_factory, wait=True, if_incomplete=True) is None:
                 return
-        except Exception:
+        except Exception as error:
+            if is_busy_error(error):
+                logger.warning("Explore index busy — rebuild left to the next Explore run (%s)", error)
+                return
             logger.exception("Explore index rebuild failed — not ready until one completes")
+            alert_rebuild_failed("pipeline start", error)
             return
         from app.ops_alerts import resolve_ops_alert
 

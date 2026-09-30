@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 from datetime import datetime
 from collections.abc import Callable
 from typing import Annotated
@@ -1401,10 +1402,22 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     from app.ops_alerts import resolve_ops_alert
     import time
 
-    from app.pipeline.vector_store import is_rebuilding, rebuild_explore_index, rebuild_underway, recalibrate_ranking
+    from app.pipeline.vector_store import (
+        RebuildFailed,
+        alert_rebuild_failed,
+        rebuild_explore_index,
+        rebuild_underway,
+        recalibrate_ranking,
+    )
 
-    if is_rebuilding():
-        raise HTTPException(status_code=409, detail="Explore re-embed not started: the index is already being rebuilt")
+    global _reembed_queued
+    # One at a time: a second, while the first is queued or running, would
+    # only be refused its lease in the background after a 202. A rebuild of
+    # another kind running is no reason to refuse: the job waits its turn.
+    with _reembed_lock:
+        if _reembed_queued:
+            raise HTTPException(status_code=409, detail="Explore re-embed not started: one is already under way")
+        _reembed_queued = True
 
     def why_not(session: Session) -> str | None:
         # Checked here so a refusal is answered, not only logged by the job
@@ -1414,8 +1427,13 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         who = lease.holder(session, lease.EXPLORE)
         return lease.refusal_text(lease.REFUSED_HELD, lease.EXPLORE, who) if who is not None else None
 
-    refused = await off_loop(db, why_not)
+    try:
+        refused = await off_loop(db, why_not)
+    except BaseException:
+        _release_reembed()
+        raise
     if refused is not None:
+        _release_reembed()
         raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {refused}")
 
     asked = time.monotonic()
@@ -1432,7 +1450,16 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
                 # Waiting out a top-up, or a rebuild begun since it was asked
                 # for — which did this work already (None), so it isn't redone.
                 count = rebuild_explore_index(SessionLocal, wait=True, unless_rebuilt_since=asked)
-                resolve_ops_alert("explore-index-rebuild")  # whole again
+            except Exception as error:
+                if isinstance(error, RebuildFailed):  # the index is gone
+                    logger.exception("Explore re-embed failed — search's vector index is not ready until a "
+                                     "rebuild completes (the next Explore run or start retries it)")
+                    alert_rebuild_failed("admin re-embed", error)
+                else:  # before the swap: the index is as it was
+                    logger.exception("Explore re-embed not done — the index is unchanged")
+                return
+            resolve_ops_alert("explore-index-rebuild")  # whole again
+            try:
                 # Not _write_model_version: that records the classification
                 # model's vectors as current, which this doesn't touch.
                 db = SessionLocal()
@@ -1446,11 +1473,32 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
                 logger.info("Explore re-embed complete: %s embedded, %d keyword-indexed, authority %s",
                             "none newly" if count is None else count, indexed, authority)
             except Exception:
-                logger.exception("Explore re-embed failed — search's vector index is not ready until a rebuild "
-                                 "completes (the next Explore run or start retries it)")
+                logger.exception("Explore re-embed: the vector index is rebuilt, but a later pass failed "
+                                 "(the next Explore run redoes them)")
 
-    start_writer(_reembed, name="explore-reembed")
+    def _job() -> None:
+        try:
+            _reembed()
+        finally:
+            _release_reembed()
+
+    try:
+        start_writer(_job, name="explore-reembed")
+    except BaseException:
+        _release_reembed()
+        raise
     return {"started": True}
+
+
+# An admin re-embed queued or running (the pipeline process is one process).
+_reembed_queued = False
+_reembed_lock = threading.Lock()
+
+
+def _release_reembed() -> None:
+    global _reembed_queued
+    with _reembed_lock:
+        _reembed_queued = False
 
 
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])
