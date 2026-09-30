@@ -389,6 +389,12 @@ class TestPipelineServiceLiveness:
     """The API process alerts when the pipeline service stops: the site
     stays up without it, and every other watchdog runs inside it."""
 
+    @pytest.fixture(autouse=True)
+    def _records_in_tmp(self, tmp_path, monkeypatch):
+        # The missing-heartbeat record lives on the data volume: here, a
+        # directory of the test's own, whether or not /data exists.
+        monkeypatch.setattr("app.atomic_write.runtime_data_path", lambda name: str(tmp_path / name))
+
     @pytest.fixture()
     def sent(self, monkeypatch):
         alerts = []
