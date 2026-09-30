@@ -177,7 +177,7 @@ sys.exit(0 if any(d.get(k) for k in
      "exploreIndexIsRebuilding", "exploreIsRunning", "pipelineChainIsRunning")
 ) else 1)
 '; then
-    _busy_reason="a pipeline, data reset, Explore run or Explore index rebuild is running"
+    _busy_reason="a pipeline or pipeline chain, data reset, Explore run or Explore index rebuild is running"
     return 0
   fi
   # The hourly action refresh is waited for too, but only while it is
