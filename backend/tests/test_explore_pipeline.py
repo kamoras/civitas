@@ -617,7 +617,9 @@ def test_a_top_up_takes_documents_missing_or_changed_since_they_were_embedded(db
     assert [(doc["title"], digest) for doc, digest in embed] == [
         ("Changed", hashed(changed)), ("Missing", hashed(missing))]
     # Metadata alone changed: written in place, not re-encoded.
-    assert [(doc["title"], digest) for doc, digest in relabel] == [("Current", meta(current))]
+    # The plan keeps only what the relabel writes, not the text it skips.
+    assert [(doc["id"], digest) for doc, digest in relabel] == [(current.id, meta(current))]
+    assert set(relabel[0][0]) == {"id", *vector_store._META_FIELDS}
 
 
 def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):

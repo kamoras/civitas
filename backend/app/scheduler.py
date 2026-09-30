@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -656,7 +656,6 @@ def start_scheduler() -> None:
     # registering one would make an admin data reset refuse while it runs
     # (and skip it for the length of a reset). APScheduler runs a plain
     # function on a worker thread; the first beat goes out at once.
-    from datetime import datetime, timezone
 
     scheduler.add_job(
         _heartbeat,

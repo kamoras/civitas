@@ -48,6 +48,7 @@ from app.pipeline.analyze.document_authority import update_document_authority
 from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
 from app.pipeline.vector_store import (
+    _META_FIELDS,
     alert_rebuild_failed,
     delete_explore_vectors,
     explore_embed_dict,
@@ -481,7 +482,9 @@ def _top_up_plan(db: Session) -> tuple[list[tuple[dict, str]], list[tuple[dict, 
                 if texts.get(d.id) != text:
                     embed.append((doc, text))
                 elif metas.get(d.id) != (meta := explore_meta_hash(doc)):
-                    relabel.append((doc, meta))
+                    # Its id and metadata only: the body isn't written, and
+                    # is let go of with the batch.
+                    relabel.append(({f: doc[f] for f in ("id", *_META_FIELDS)}, meta))
             after = docs[-1].id
             scan.expunge_all()  # the bodies read, let go of
 

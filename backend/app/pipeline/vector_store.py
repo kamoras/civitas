@@ -384,6 +384,12 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     # into document-level results.
     conn.execute(_EXPLORE_DDL.format(if_not_exists="IF NOT EXISTS "))
     conn.execute(_TEXT_HASH_DDL.format(if_not_exists="IF NOT EXISTS "))
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(vec_explore_text)")}
+    if "meta_hash" not in columns:
+        # A table from before the column (a development store): added in
+        # place; every row then reads as relabel-worthy, which is only
+        # right — its metadata was never recorded.
+        conn.execute("ALTER TABLE vec_explore_text ADD COLUMN meta_hash TEXT NOT NULL DEFAULT ''")
     conn.execute(_BILLS_DDL.format(if_not_exists="IF NOT EXISTS "))
     conn.commit()
 
@@ -406,27 +412,39 @@ _TEXT_HASH_DDL = """CREATE TABLE {if_not_exists}vec_explore_text (
 _META_FIELDS = ("doc_type", "chamber", "politician_id", "date", "source", "politician_name")
 
 
-def explore_text_hash(doc: dict) -> str:
-    """A hash of the text embed_explore_documents encodes from a document —
-    its title, summary and body. Not the metadata columns beside it: a
-    member's departure blanking politician_id on their speeches doesn't
-    call for re-encoding them."""
+# The one statement a chunk is written by, its metadata columns from
+# _META_FIELDS — the same list the relabel writes and explore_meta_hash
+# covers, so a column added to one is in all three.
+_CHUNK_INSERT = (
+    "INSERT INTO vec_explore (embedding, doc_id, " + ", ".join(_META_FIELDS) + ", title, snippet) "
+    "VALUES (" + ", ".join("?" * (len(_META_FIELDS) + 4)) + ")"
+)
+
+
+def _meta_values(doc: dict) -> list[str]:
+    return [doc.get(f) or "" for f in _META_FIELDS]
+
+
+def _fields_hash(doc: dict, fields) -> str:
     import hashlib
 
-    fields = ("title", "summary", "body")
     return hashlib.sha256(
         json.dumps([doc.get(f) or "" for f in fields], ensure_ascii=False).encode()
     ).hexdigest()[:32]
 
 
+def explore_text_hash(doc: dict) -> str:
+    """A hash of the text embed_explore_documents encodes from a document —
+    its title, summary and body. Not the metadata columns beside it: a
+    member's departure blanking politician_id on their speeches doesn't
+    call for re-encoding them."""
+    return _fields_hash(doc, ("title", "summary", "body"))
+
+
 def explore_meta_hash(doc: dict) -> str:
     """A hash of the vec0 metadata columns a document's chunks carry
     besides their text (_META_FIELDS)."""
-    import hashlib
-
-    return hashlib.sha256(
-        json.dumps([doc.get(f) or "" for f in _META_FIELDS], ensure_ascii=False).encode()
-    ).hexdigest()[:32]
+    return _fields_hash(doc, _META_FIELDS)
 
 
 _EXPLORE_DDL = f"""CREATE VIRTUAL TABLE {{if_not_exists}}vec_explore USING vec0(
@@ -792,20 +810,8 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
                         conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
                 for (doc_id, text, doc), emb in zip(batch, embs):
                     conn.execute(
-                        "INSERT INTO vec_explore (embedding, doc_id, doc_type, chamber, "
-                        "politician_id, title, date, source, politician_name, snippet) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            _serialize(emb), doc_id,
-                            doc.get("doc_type", "") or "",
-                            doc.get("chamber") or "",
-                            doc.get("politician_id") or "",
-                            doc.get("title", "")[:200],
-                            doc.get("date", "") or "",
-                            doc.get("source", "") or "",
-                            doc.get("politician_name") or "",
-                            text[:300],
-                        ),
+                        _CHUNK_INSERT,
+                        (_serialize(emb), doc_id, *_meta_values(doc), (doc.get("title") or "")[:200], text[:300]),
                     )
                 for doc_id, (digest, meta) in digests.items():
                     _record_text_hash(conn, doc_id, digest, meta)
@@ -1099,13 +1105,21 @@ def update_explore_metadata(docs: list[dict]) -> int:
         return 0
     conn = get_vec_conn()
     rows = [(doc, explore_meta_hash(doc)) for doc in docs]
+    wanted = {int(doc["id"]) for doc in docs}
+    # By rowid, read once: vec0 can't index doc_id outside a KNN query, so
+    # a WHERE doc_id per document scans every chunk each time (measured
+    # ~50x slower on a production-sized table).
+    update = "UPDATE vec_explore SET " + ", ".join(f"{f} = ?" for f in _META_FIELDS) + " WHERE rowid = ?"
     with _vec_lock:
+        chunks: dict[int, list[int]] = {}
+        for rowid, doc_id in conn.execute("SELECT rowid, doc_id FROM vec_explore").fetchall():
+            if doc_id in wanted:
+                chunks.setdefault(doc_id, []).append(rowid)
         try:
             for doc, meta in rows:
-                conn.execute(
-                    "UPDATE vec_explore SET " + ", ".join(f"{f} = ?" for f in _META_FIELDS) + " WHERE doc_id = ?",
-                    (*[doc.get(f) or "" for f in _META_FIELDS], int(doc["id"])),
-                )
+                values = _meta_values(doc)
+                for rowid in chunks.get(int(doc["id"]), ()):
+                    conn.execute(update, (*values, rowid))
                 conn.execute("UPDATE vec_explore_text SET meta_hash = ? WHERE doc_id = ?", (meta, int(doc["id"])))
             conn.commit()
         except BaseException:
@@ -1301,7 +1315,12 @@ def top_up_explore_index(docs_to_embed, docs_to_relabel=None) -> int:
     with _rebuild_lock:
         embedded = embed_explore_documents(docs_to_embed())
         if docs_to_relabel is not None:
-            update_explore_metadata(docs_to_relabel())
+            try:
+                update_explore_metadata(docs_to_relabel())
+            except Exception:
+                # Apart from the embed, whose outcome it mustn't hide: its
+                # hashes are unchanged, so the next run relabels them.
+                logger.warning("Explore index metadata update failed — the next run retries it", exc_info=True)
         return embedded
 
 

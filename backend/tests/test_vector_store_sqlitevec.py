@@ -291,6 +291,47 @@ class TestTextHashes:
         assert not vector_store.search_explore_documents("Same title", chamber="House")
         assert vector_store.get_embedded_meta_hashes() == {1: vector_store.explore_meta_hash(corrected)}
 
+    def test_the_relabel_reaches_every_chunk_and_only_its_document(self, vec_env):
+        long_body = " ".join(f"word{i}." for i in range(40))
+        model = vector_store.get_similarity_model()
+        model.max_seq_length = 16
+        model.tokenizer.tokenize.side_effect = str.split
+        vector_store.embed_explore_documents([
+            _doc(1, "Long speech", body=long_body, chamber="House"),
+            _doc(2, "Other speech", chamber="House"),
+        ])
+        conn = vector_store.get_vec_conn()
+        chunks = conn.execute("SELECT COUNT(*) FROM vec_explore WHERE doc_id = 1").fetchone()[0]
+        assert chunks > 1
+        vector_store.update_explore_metadata([_doc(1, "Long speech", body=long_body, chamber="Senate")])
+        rows = conn.execute("SELECT doc_id, chamber FROM vec_explore").fetchall()
+        assert {c for d, c in rows if d == 1} == {"Senate"}
+        assert sum(1 for d, _ in rows if d == 1) == chunks
+        assert {c for d, c in rows if d == 2} == {"House"}
+
+    def test_a_store_from_before_meta_hash_gains_the_column(self, vec_env):
+        conn = sqlite3.connect(vector_store._VECTOR_DB_PATH)
+        conn.execute("CREATE TABLE vec_explore_text (doc_id INTEGER PRIMARY KEY, text_hash TEXT NOT NULL)")
+        conn.execute("INSERT INTO vec_explore_text VALUES (1, 'abc')")
+        conn.commit()
+        conn.close()
+        # Every old row reads as never labelled, so the next run relabels it.
+        assert vector_store.get_embedded_meta_hashes() == {1: ""}
+
+    def test_a_failed_relabel_does_not_hide_the_embed(self, vec_env):
+        with patch.object(vector_store, "update_explore_metadata", side_effect=RuntimeError("boom")):
+            n = vector_store.top_up_explore_index(lambda: [_doc(1, "A title")], lambda: [_doc(2, "B")])
+        assert n == 1
+        assert set(vector_store.get_embedded_text_hashes()) == {1}
+
+    def test_the_chunk_insert_writes_the_fields_the_hash_covers(self):
+        columns = vector_store._CHUNK_INSERT.split("(")[1].split(")")[0].split(", ")
+        assert tuple(columns[2:-2]) == vector_store._META_FIELDS
+        assert vector_store._CHUNK_INSERT.count("?") == len(columns)
+        doc = _doc(1, "A title")
+        for field in vector_store._META_FIELDS:
+            assert vector_store.explore_meta_hash(doc) != vector_store.explore_meta_hash({**doc, field: "changed"})
+
     def test_a_document_left_without_text_loses_its_old_chunks(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "A title")])
         emptied = _doc(1, "")
