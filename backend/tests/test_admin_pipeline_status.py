@@ -154,6 +154,29 @@ async def test_status_reports_an_explore_run_so_deploys_wait_it_out(db_session):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("error,running", [("database is locked", True), ("no such table: api_cache", False)])
+async def test_an_unreadable_explore_lease_holds_deploys_only_while_locked(db_session, monkeypatch, error, running):
+    # Any other failure, held as running, would hold every deploy off —
+    # the one that fixes it included.
+    import sqlite3
+
+    from sqlalchemy.exc import OperationalError
+
+    from app.api.admin import admin_pipeline_status
+    from app.pipeline import lease
+
+    real = lease.holder
+
+    def unreadable(db, tier):
+        if tier != lease.EXPLORE:
+            return real(db, tier)
+        raise OperationalError("SELECT", {}, sqlite3.OperationalError(error))
+
+    monkeypatch.setattr(lease, "holder", unreadable)
+    assert (await admin_pipeline_status(db=db_session))["exploreIsRunning"] is running
+
+
+@pytest.mark.asyncio
 async def test_check_and_deploy_waits_on_every_busy_flag_the_status_reports(db_session):
     # electionIsRunning was once published and not read: a deploy killed an
     # election run five minutes in. Every top-level boolean named for work

@@ -1070,7 +1070,12 @@ async function readSummaryStream(
       const line = event.trim();
       if (!line.startsWith("data:")) continue;
       const parsed = JSON.parse(line.slice("data:".length).trim());
-      if (parsed.done) return toSummary(parsed);
+      if (parsed.done) {
+        // Released, not left to the server to close: the rest is nothing
+        // this reader needs, and an open body can hold its connection.
+        reader.cancel().catch(() => {});
+        return toSummary(parsed);
+      }
       if (typeof parsed.delta === "string") {
         fullText += parsed.delta;
         onDelta(fullText);
