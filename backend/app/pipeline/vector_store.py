@@ -760,6 +760,9 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
     doc_ids: set[int] = set()
     for batch in batches:
         embs = model.encode([t for _, t, _ in batch], show_progress_bar=False, normalize_embeddings=True)
+        # Hashed before the write lock (or taken from the plan that already
+        # hashed it: "_text_hash"), not over long bodies inside it.
+        digests = {d: doc.get("_text_hash") or explore_text_hash(doc) for d, _, doc in batch}
         with _vec_lock:
             try:
                 if not fresh:
@@ -782,8 +785,8 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
                             text[:300],
                         ),
                     )
-                for doc_id, doc in {d: doc for d, _, doc in batch}.items():
-                    _record_text_hash(conn, doc_id, explore_text_hash(doc))
+                for doc_id, digest in digests.items():
+                    _record_text_hash(conn, doc_id, digest)
                 conn.commit()
             except BaseException:
                 conn.rollback()
@@ -1012,17 +1015,6 @@ def clear_bills() -> int:
         conn.execute("DELETE FROM vec_bills")
         conn.commit()
     return n
-
-
-def get_embedded_explore_ids() -> set[int]:
-    """Ids of explore documents already in the index (incremental embedding).
-
-    Distinct `doc_id`, not rowid: rows are chunks now, and several of them
-    belong to one document.
-    """
-    conn = get_vec_conn()
-    return {r[0] for r in conn.execute(
-        "SELECT DISTINCT doc_id FROM vec_explore").fetchall()}
 
 
 def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:

@@ -186,7 +186,7 @@ class TestDeepPassageRetrieval:
         vector_index.embed_explore_documents([
             _doc(1, "One", FILLER), _doc(2, "Two", FILLER),
         ])
-        assert vector_index.get_embedded_explore_ids() == {1, 2}
+        assert set(vector_index.get_embedded_text_hashes()) == {1, 2}
 
     def test_empty_index_still_reports_not_ready(self, vector_index):
         assert vector_index.search_explore_documents("anything", n_results=5) is None

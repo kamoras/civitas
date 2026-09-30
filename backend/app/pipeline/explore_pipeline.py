@@ -58,7 +58,6 @@ from app.pipeline.vector_store import (
     rebuild_explore_index,
     top_up_explore_index,
     wait_for_rebuild,
-    get_embedded_explore_ids,
 )
 
 logger = logging.getLogger(__name__)
@@ -180,8 +179,8 @@ async def _backfill_presidential_bodies(
 ) -> list[int]:
     """Fetch body text for presidential documents that have empty body/summary.
 
-    Returns the ids of documents whose body changed (the embed step finds
-    them by their text hash, not by this list)."""
+    Returns the ids of documents whose body changed, for the log. The embed
+    step finds them by their text hash, not by this list."""
     docs = (
         db.query(ExploreDocument)
         .filter(
@@ -236,7 +235,7 @@ async def _backfill_presidential_bodies(
 async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
     """Fetch full body text for rulemaking docs that only have the abstract.
 
-    Returns the ids of documents whose body changed, same contract as
+    Returns the ids of documents whose body changed, for the log, as
     _backfill_presidential_bodies."""
     docs = (
         db.query(ExploreDocument)
@@ -483,7 +482,7 @@ def _still_wanted(plan: list[tuple[dict, str]]) -> list[dict]:
     documents with their current text's hash, and they aren't embedded
     twice."""
     hashes = get_embedded_text_hashes()
-    return [doc for doc, current in plan if hashes.get(doc["id"]) != current]
+    return [{**doc, "_text_hash": current} for doc, current in plan if hashes.get(doc["id"]) != current]
 
 
 async def _top_up(db: Session) -> int:
@@ -533,9 +532,9 @@ def _purge_orphaned_vectors(db: Session) -> int:
     is about to re-embed, which by definition still exist.
     """
     try:
-        # Text-hash rows too: a document with none of its own chunks (no
-        # text, or marked stale before it was ever embedded) has only that.
-        embedded = get_embedded_explore_ids() | set(get_embedded_text_hashes())
+        # By text-hash row: every embedded document has one, written with
+        # its chunks, and one with no text has only that.
+        embedded = set(get_embedded_text_hashes())
     except Exception:
         logger.warning("Could not read the vector index — skipping orphan sweep")
         return 0
@@ -767,8 +766,10 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # --- 6. Backfill docs missing body content ---
         # Their vectors are re-embedded in step 7, whose text hashes show
         # the change.
-        await _backfill_presidential_bodies(db, client)
-        await _backfill_rulemaking_bodies(db)
+        backfilled = await _backfill_presidential_bodies(db, client)
+        backfilled += await _backfill_rulemaking_bodies(db)
+        if backfilled:
+            logger.info("Explore pipeline: backfilled %d document bodies", len(backfilled))
 
         # --- 7. Embed new/refreshed documents into ChromaDB ---
         # Before embedding, not after: a duplicate removed now is one

@@ -487,6 +487,9 @@ class TestEnsureExploreIndex:
         # check-and-deploy mustn't restart the pipeline just as it begins.
         import threading as _t
 
+        # Whole, so the waiter, once through, has nothing to do.
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+
         with vector_store._rebuild_lock:
             waiting = _t.Thread(target=vector_store.rebuild_explore_index, args=(lambda: None,),
                                 kwargs={"wait": True, "if_incomplete": True})

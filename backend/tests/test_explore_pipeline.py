@@ -364,30 +364,13 @@ class TestOrphanedVectorPurge:
     so nothing swept these before.
     """
 
-    @pytest.fixture(autouse=True)
-    def _no_text_hashes(self, monkeypatch):
-        monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", lambda: {})
-
-    def test_a_text_hash_without_a_row_is_deleted_too(self, db_session, monkeypatch):
-        # A document with no chunks of its own (no text, or marked stale
-        # before it was embedded) has only its hash row to leave behind.
-        db_session.add(_floor_doc(1, "senate-floor-A-2026-05-19-aaaaaaaa", "Kept."))
-        db_session.commit()
-        deleted: list[set] = []
-        monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", lambda: {1})
-        monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", lambda: {1: "h", 4: "stale"})
-        monkeypatch.setattr(explore_pipeline, "delete_explore_vectors",
-                            lambda ids: deleted.append(set(ids)) or 0)
-        explore_pipeline._purge_orphaned_vectors(db_session)
-        assert deleted == [{4}]
-
     def test_vectors_without_a_row_are_deleted(self, db_session, monkeypatch):
         db_session.add(_floor_doc(1, "senate-floor-A-2026-05-19-aaaaaaaa", "Kept."))
         db_session.commit()
 
         deleted: list[set] = []
         monkeypatch.setattr(
-            explore_pipeline, "get_embedded_explore_ids", lambda: {1, 2, 3})
+            explore_pipeline, "get_embedded_text_hashes", lambda: dict.fromkeys({1, 2, 3}, "h"))
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: deleted.append(set(ids)) or len(ids))
@@ -403,7 +386,7 @@ class TestOrphanedVectorPurge:
 
         called = []
         monkeypatch.setattr(
-            explore_pipeline, "get_embedded_explore_ids", lambda: {1})
+            explore_pipeline, "get_embedded_text_hashes", lambda: dict.fromkeys({1}, "h"))
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: called.append(ids))
@@ -422,7 +405,7 @@ class TestOrphanedVectorPurge:
         def boom():
             raise RuntimeError("index mid-rebuild")
 
-        monkeypatch.setattr(explore_pipeline, "get_embedded_explore_ids", boom)
+        monkeypatch.setattr(explore_pipeline, "get_embedded_text_hashes", boom)
         monkeypatch.setattr(
             explore_pipeline, "delete_explore_vectors",
             lambda ids: called.append(ids))
@@ -631,6 +614,6 @@ def test_the_plan_is_rechecked_against_the_index_under_the_lock(db_session):
                       return_value={5: vector_store.explore_text_hash(doc)}):
         assert explore_pipeline._still_wanted(plan) == []
     with patch.object(explore_pipeline, "get_embedded_text_hashes", return_value={}):
-        assert explore_pipeline._still_wanted(plan) == [doc]
+        assert explore_pipeline._still_wanted(plan) == [{**doc, "_text_hash": plan[0][1]}]
 
 

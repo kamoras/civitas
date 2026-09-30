@@ -22,7 +22,6 @@ mid-term) or bad data — election_pipeline._sync_roster uses this to
 label specials instead of trusting any single upstream field.
 """
 
-import json
 import logging
 import pathlib
 from datetime import date
@@ -36,30 +35,50 @@ _CLASS_FILES = (
     pathlib.Path(__file__).resolve().parent / "data" / "senate_classes.json",
 )
 _senate_classes_cache: dict[int, frozenset[str]] | None = None
+_senate_classes_stamp = None
+_senate_classes_lock = None
 
 
 def senate_classes() -> dict[int, frozenset[str]]:
     """{1: states, 2: states, 3: states}: which states hold a seat in each
-    Senate class, from the refreshed file, else the bundled one."""
-    global _senate_classes_cache
-    if _senate_classes_cache is None:
-        for path in _CLASS_FILES:
-            try:
-                raw = json.loads(path.read_text())["classes"]
-                _senate_classes_cache = {int(k): frozenset(v) for k, v in raw.items()}
-                break
-            except Exception:
-                continue
-        else:
+    Senate class, from the refreshed file, else the bundled one. Reloaded
+    when the refreshed file moves: the Election run rewrites it in the
+    pipeline process, and the API processes must see that (AGENTS.md, the
+    file_cache rule) — clearing a cache from the writer clears only its own."""
+    global _senate_classes_cache, _senate_classes_stamp, _senate_classes_lock
+    from app.file_cache import Uncached, new_reload_lock, read_json_preferring, reload_if_moved
+
+    if _senate_classes_lock is None:
+        _senate_classes_lock = new_reload_lock()
+
+    def load() -> dict[int, frozenset[str]]:
+        empty = {1: frozenset(), 2: frozenset(), 3: frozenset()}
+        try:
+            data = read_json_preferring(*_CLASS_FILES, default=None,
+                                        accept=lambda d: isinstance(d, dict) and "classes" in d)
+        except Uncached as unreadable:
+            # Stood in for a file that couldn't be read: used now, read again next time.
+            fallback = unreadable.value
+            raise Uncached(
+                empty if fallback is None else {int(k): frozenset(v) for k, v in fallback["classes"].items()}
+            ) from None
+        if data is None:
             logger.error("senate_classes.json unavailable in /data and the bundled fallback")
-            _senate_classes_cache = {1: frozenset(), 2: frozenset(), 3: frozenset()}
-    return _senate_classes_cache
+            return empty
+        return {int(k): frozenset(v) for k, v in data["classes"].items()}
+
+    with _senate_classes_lock:
+        _senate_classes_cache, _senate_classes_stamp = reload_if_moved(
+            [_CLASS_FILES[0]], _senate_classes_cache, _senate_classes_stamp, load,
+        )
+        return _senate_classes_cache
 
 
 def reset_senate_classes() -> None:
-    """Drop the cached sets, after a refresh wrote new ones."""
-    global _senate_classes_cache
-    _senate_classes_cache = None
+    """Drop this process's cached sets, after a refresh wrote new ones (the
+    other processes notice the file move on their next read)."""
+    global _senate_classes_cache, _senate_classes_stamp
+    _senate_classes_cache, _senate_classes_stamp = None, None
 
 
 def federal_states() -> frozenset[str]:
