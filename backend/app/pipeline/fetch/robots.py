@@ -11,12 +11,20 @@ to a crawler that wants to be told no:
   nothing);
 - it has no "*" or "$" in paths.
 
-Matching here (RFC 9309 §2.2): a group applies when one of its
-user-agent lines names our product token, case-insensitively; the groups
-naming it are combined, and only when none does do the "*" groups apply.
-Of the rules whose pattern matches the path, the longest pattern wins, an
-allow winning a tie; no match means allowed. /robots.txt itself is always
-allowed.
+Parsing (§2.1): a group is a run of user-agent lines followed by its
+records; any other record — a rule, even an empty one, or crawl-delay and
+the like — ends the run, so the next user-agent line starts a new group.
+Sitemap lines belong to no group. A UTF-8 byte-order mark is dropped, and
+only the first MAX_BYTES are read (§2.5 asks for at least 500 KiB).
+
+Matching (§2.2): a group applies when one of its user-agent lines names
+our product token, case-insensitively; the groups naming it are combined,
+and only when none does do the "*" groups apply. Paths and patterns are
+compared after the same percent-encoding normalisation (§2.2.2). Of the
+rules whose pattern matches, the longest pattern wins, an allow winning a
+tie; no match means allowed. /robots.txt itself is always allowed. The
+matcher is linear in path × pattern: a site's file is external input, and
+a backtracking regex over a run of "*"s could stall the event loop.
 
 What an unreadable file means is the caller's to apply (§2.3.1): a 4xx
 means there are no rules, a 5xx or no answer means assume complete
@@ -26,11 +34,20 @@ disallow.
 import re
 from dataclasses import dataclass, field
 
+# §2.5: parse at least 500 KiB; nothing more is read.
+MAX_BYTES = 512 * 1024
+# RFC 3986 unreserved characters, which percent-encoding must not change.
+_UNRESERVED = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+_HEX = set("0123456789abcdefABCDEF")
+
 
 @dataclass
 class _Group:
     agents: list[str] = field(default_factory=list)
     rules: list[tuple[bool, str]] = field(default_factory=list)
+    # Any record after the user-agent lines ends the run of them, even one
+    # that adds no rule (an empty Disallow, a crawl-delay).
+    closed: bool = False
 
 
 @dataclass
@@ -45,9 +62,10 @@ class Robots:
     def allows(self, agent: str, path: str) -> bool:
         if self.blanket is not None:
             return self.blanket
+        path = normalize(path or "/")
         if path == "/robots.txt":
             return True
-        token = agent.lower()
+        token = _agent_token(agent)
         mine = [g for g in self.groups if token in g.agents]
         rules = [r for g in (mine or [g for g in self.groups if "*" in g.agents]) for r in g.rules]
         best: tuple[int, bool] | None = None
@@ -64,36 +82,68 @@ DISALLOW_ALL = Robots(blanket=False)
 
 
 def _agent_token(value: str) -> str:
-    """The product token a user-agent line names: "Civitas/1.0" -> "civitas"."""
-    return re.split(r"[/\s]", value.strip(), maxsplit=1)[0].lower()
+    """The product token a user-agent line names: "Civitas/1.0" and
+    "Civitas;" -> "civitas" (§2.2.1: letters, "_" and "-")."""
+    match = re.match(r"[A-Za-z_-]+", value.strip())
+    return match.group(0).lower() if match else ""
+
+
+def normalize(value: str) -> str:
+    """§2.2.2: non-ASCII as UTF-8 percent-encoding, %XX of an unreserved
+    character decoded, every other %XX in upper case — so /~joe,
+    /%7Ejoe and /%7ejoe are one path. "*" and "$" pass through."""
+    out = []
+    i = 0
+    while i < len(value):
+        ch = value[i]
+        if ch == "%" and i + 2 < len(value) and value[i + 1] in _HEX and value[i + 2] in _HEX:
+            decoded = chr(int(value[i + 1:i + 3], 16))
+            out.append(decoded if decoded in _UNRESERVED else "%" + value[i + 1:i + 3].upper())
+            i += 3
+            continue
+        if ord(ch) > 127:
+            out.append("".join(f"%{b:02X}" for b in ch.encode("utf-8")))
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def parse(text: str) -> Robots:
     groups: list[_Group] = []
     current: _Group | None = None
-    for raw in text.splitlines():
+    for raw in text[:MAX_BYTES].lstrip("﻿").splitlines():
         line = raw.split("#", 1)[0].strip()
         if ":" not in line:
             continue
         key, value = (part.strip() for part in line.split(":", 1))
         key = key.lower()
         if key == "user-agent":
-            # Consecutive user-agent lines share one group; one after a
-            # rule starts the next.
-            if current is None or current.rules:
+            if current is None or current.closed:
                 current = _Group()
                 groups.append(current)
-            current.agents.append(_agent_token(value) if value != "*" else "*")
-        elif key in ("allow", "disallow") and current is not None:
-            if value:  # An empty Disallow disallows nothing.
-                current.rules.append((key == "allow", value))
+            current.agents.append("*" if value == "*" else _agent_token(value))
+        elif key == "sitemap" or current is None:
+            continue  # Belongs to no group.
+        else:
+            current.closed = True
+            if key in ("allow", "disallow") and value:  # An empty Disallow disallows nothing.
+                current.rules.append((key == "allow", normalize(value)))
     return Robots(groups=groups)
 
 
 def _matches(pattern: str, path: str) -> bool:
-    """RFC 9309 §2.2.3: "*" is any run of characters, a trailing "$" pins
-    the end; otherwise a pattern matches as a prefix."""
+    """§2.2.3: "*" is any run of characters, a trailing "$" pins the end;
+    otherwise a pattern matches as a prefix. Tracks the set of path
+    positions the pattern so far can end at, so it never backtracks."""
     anchored = pattern.endswith("$")
-    body = pattern[:-1] if anchored else pattern
-    regex = "".join(".*" if ch == "*" else re.escape(ch) for ch in body)
-    return re.match(regex + ("$" if anchored else ""), path) is not None
+    body = re.sub(r"\*+", "*", pattern[:-1] if anchored else pattern)
+    positions = [0]
+    for ch in body:
+        if ch == "*":
+            positions = list(range(positions[0], len(path) + 1))
+        else:
+            positions = [p + 1 for p in positions if p < len(path) and path[p] == ch]
+            if not positions:
+                return False
+    return len(path) in positions if anchored else True

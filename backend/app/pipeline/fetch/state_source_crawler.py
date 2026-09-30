@@ -42,7 +42,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlsplit
 
 import httpx
 
@@ -65,6 +65,9 @@ ROBOTS_AGENT = "Civitas"
 # §2.3.1.4) — for this long, then it is asked again, rather than for the
 # life of the process.
 ROBOTS_UNREACHABLE_RETRY_S = 3600
+# A file that was read is trusted this long (§2.4: SHOULD NOT be used for
+# more than 24 hours) — the pipeline process outlives many nightly runs.
+ROBOTS_CACHE_S = 24 * 3600
 _rate_limiter = RateLimiter(rps=1.0)
 # Probing is one request each to fifty DIFFERENT hosts, and a rate limit
 # exists to be polite to ONE host — serialising the whole sweep through
@@ -140,8 +143,8 @@ async def _get(
     )
 
 
-# host -> (the rules, monotonic time they stop being trusted, or None).
-_robots: dict[str, tuple[robots.Robots, float | None]] = {}
+# scheme://host -> (the rules, the monotonic time they stop being trusted).
+_robots: dict[str, tuple[robots.Robots, float]] = {}
 
 
 async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
@@ -150,28 +153,39 @@ async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
     A weekly sweep of fifty government sites is exactly the kind of thing
     robots.txt exists to govern, and a crawler that ignores it earns a
     block that takes the whole feature down with it. Read as RFC 9309 says
-    (fetch/robots.py), once per host per process: a 4xx means the site has
-    no rules for us; a 5xx or no answer at all means we may read nothing
-    there until it can be asked again.
+    (fetch/robots.py) and kept ROBOTS_CACHE_S: a 4xx means the site has no
+    rules for us; a 5xx, a 429 or no answer at all means we may read
+    nothing there until it can be asked again, ROBOTS_UNREACHABLE_RETRY_S
+    later (logged here, so a refusal it causes isn't mistaken for the
+    site's own).
     """
-    parts = urlparse(url)
-    host = parts.netloc
-    cached = _robots.get(host)
-    if cached is None or (cached[1] is not None and time.monotonic() >= cached[1]):
+    parts = urlsplit(url)
+    origin = f"{parts.scheme or 'https'}://{parts.netloc}"
+    cached = _robots.get(origin)
+    now = time.monotonic()
+    if cached is None or now >= cached[1]:
         resp = await fetch_with_retry(
-            client, _probe_limiter, "GET", f"https://{host}/robots.txt",
+            client, _probe_limiter, "GET", f"{origin}/robots.txt",
             timeout=8.0, retries=1, retry_on_4xx=False,
-            # A missing robots.txt is an answer, not a failure to log.
-            expected_statuses=tuple(range(400, 500)),
-            log_label=f"{host} robots.txt", headers=_HEADERS,
+            # A missing robots.txt is an answer, not a failure to log. A 429
+            # is handled before this, as a failed fetch: asked to slow down,
+            # we read nothing there rather than everything.
+            expected_statuses=tuple(s for s in range(400, 500) if s != 429),
+            log_label=f"{parts.netloc} robots.txt", headers=_HEADERS,
         )
         if resp is None:
-            cached = (robots.DISALLOW_ALL, time.monotonic() + ROBOTS_UNREACHABLE_RETRY_S)
+            logger.warning(
+                "%s/robots.txt unreachable — reading nothing there for %d minutes (RFC 9309 §2.3.1.4)",
+                origin, ROBOTS_UNREACHABLE_RETRY_S // 60,
+            )
+            cached = (robots.DISALLOW_ALL, now + ROBOTS_UNREACHABLE_RETRY_S)
         elif resp.status_code >= 400:
-            cached = (robots.ALLOW_ALL, None)
+            cached = (robots.ALLOW_ALL, now + ROBOTS_CACHE_S)
         else:
-            cached = (robots.parse(resp.text), None)
-        _robots[host] = cached
+            text = resp.content[:robots.MAX_BYTES].decode("utf-8-sig", errors="replace")
+            cached = (robots.parse(text), now + ROBOTS_CACHE_S)
+        _robots[origin] = cached
+    # urlsplit keeps ";params" in the path, which urlparse would cut off.
     path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
     return cached[0].allows(ROBOTS_AGENT, path)
 
@@ -419,7 +433,7 @@ async def _probe_pages(
                 return
             seen.add(url)
             if not await _allowed(client, url):
-                logger.info("%s: robots.txt disallows %s — not reading it", state, url)
+                logger.info("%s: robots.txt does not allow %s — not reading it", state, url)
                 return
             resp = await _get(client, url, f"{state} page scan", timeout=15.0)
             if resp is None or "html" not in resp.headers.get("content-type", ""):
@@ -826,7 +840,7 @@ async def _read(client: httpx.AsyncClient, url: str, label: str):
     from app.pipeline.fetch.state_candidates_tabular import MAX_DOWNLOAD_BYTES, _rows
 
     if not await _allowed(client, url):
-        logger.info("%s: robots.txt disallows %s — not downloading it", label, url)
+        logger.info("%s: robots.txt does not allow %s — not downloading it", label, url)
         return None, None
     resp = await _get(client, url, label, timeout=90.0)
     if resp is None or len(resp.content) > MAX_DOWNLOAD_BYTES:

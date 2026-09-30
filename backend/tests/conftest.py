@@ -69,16 +69,20 @@ def _join_app_threads_started_since(before: set) -> None:
     bills-cache rebuild admin_reset_data kicks off, a start_writer job):
     one still querying the shared in-memory connection when the engine is
     disposed crashes SQLite outright (a segfault that killed a CI run).
-    Only threads running app code: a library's long-lived monitor thread
-    started along the way would never finish."""
+    Only threads running app code (by their target, or by a Thread
+    subclass the app defines): a library's long-lived monitor thread
+    started along the way would never finish. One that outlives the join
+    fails the test by name — a test that takes a lease must release it, or
+    its heartbeat (lease._keep) is exactly such a thread."""
     stuck = []
     for thread in set(threading.enumerate()) - before:
         target = getattr(thread, "_target", None)
         while isinstance(target, functools.partial):
             target = target.func
-        if thread is threading.current_thread() or target is None:
+        if thread is threading.current_thread():
             continue
-        if (getattr(target, "__module__", "") or "").startswith("app."):
+        modules = (getattr(target, "__module__", "") or "", type(thread).__module__)
+        if any(m.startswith("app.") for m in modules):
             thread.join(_THREAD_JOIN_S)
             if thread.is_alive():
                 stuck.append(thread.name)

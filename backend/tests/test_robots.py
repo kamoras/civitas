@@ -72,3 +72,68 @@ class TestRules:
 def test_the_blanket_answers():
     assert robots.ALLOW_ALL.allows(AGENT, "/x") is True
     assert robots.DISALLOW_ALL.allows(AGENT, "/x") is False
+
+
+class TestGroupBoundaries:
+    """Any record after the user-agent lines ends the group (RFC 9309
+    §2.1): the next user-agent line starts another."""
+
+    def test_an_empty_disallow_closes_its_group(self):
+        """The commonest real file: everyone allowed but one bot."""
+        text = "User-agent: *\nDisallow:\n\nUser-agent: BadBot\nDisallow: /\n"
+        assert _allows(text, "/x") is True
+        assert _allows(text, "/x", agent="BadBot") is False
+
+    def test_an_allow_all_for_us_is_not_merged_into_the_next_group(self):
+        text = "User-agent: Civitas\nDisallow:\n\nUser-agent: *\nDisallow: /\n"
+        assert _allows(text, "/x") is True
+
+    def test_a_crawl_delay_closes_its_group(self):
+        text = "User-agent: *\nCrawl-delay: 5\n\nUser-agent: BadBot\nDisallow: /\n"
+        assert _allows(text, "/x") is True
+
+    def test_a_sitemap_line_belongs_to_no_group(self):
+        text = "User-agent: Civitas\nSitemap: https://x.gov/s.xml\nUser-agent: Other\nDisallow: /r/\n"
+        assert _allows(text, "/r/1") is False
+
+    def test_a_token_with_trailing_punctuation_still_names_us(self):
+        assert _allows("User-agent: Civitas;\nDisallow: /\n", "/x") is False
+
+
+class TestNormalization:
+    """§2.2.2: a path and a pattern are compared after the same
+    percent-encoding normalisation."""
+
+    def test_an_encoded_unreserved_character_is_the_character(self):
+        assert _allows("User-agent: *\nDisallow: /~joe\n", "/%7Ejoe") is False
+        assert _allows("User-agent: *\nDisallow: /%7ejoe\n", "/~joe") is False
+
+    def test_non_ascii_is_its_utf8_encoding(self):
+        assert _allows("User-agent: *\nDisallow: /café\n", "/caf%C3%A9") is False
+        assert _allows("User-agent: *\nDisallow: /caf%c3%a9\n", "/café") is False
+
+    def test_hex_case_does_not_matter(self):
+        assert _allows("User-agent: *\nDisallow: /a%3cb\n", "/a%3Cb") is False
+
+    def test_a_reserved_character_stays_encoded(self):
+        """%2F is not "/": decoding it would change the path."""
+        assert _allows("User-agent: *\nDisallow: /a/b\n", "/a%2Fb") is True
+
+
+class TestHostileFiles:
+    def test_many_stars_match_in_linear_time(self):
+        """A backtracking regex took minutes on this; the file is
+        external input and matching runs on the event loop."""
+        import time
+
+        pattern = "/" + "*a" * 40 + "X"
+        started = time.perf_counter()
+        assert _allows(f"User-agent: *\nDisallow: {pattern}\n", "/" + "a" * 2000) is True
+        assert time.perf_counter() - started < 1.0
+
+    def test_a_byte_order_mark_does_not_hide_the_first_line(self):
+        assert _allows("﻿User-agent: *\nDisallow: /private\n", "/private") is False
+
+    def test_only_the_first_max_bytes_are_read(self):
+        padding = "#" * robots.MAX_BYTES + "\n"
+        assert _allows(f"User-agent: *\n{padding}Disallow: /\n", "/x") is True

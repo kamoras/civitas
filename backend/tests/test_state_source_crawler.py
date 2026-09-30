@@ -277,6 +277,39 @@ class TestRobots:
         assert await crawler._allowed(None, "https://x.gov/anything") is True
 
     @pytest.mark.asyncio
+    async def test_path_parameters_are_part_of_the_path(self, monkeypatch):
+        self._serve(monkeypatch, text="User-agent: *\nDisallow: /dir/page;\n")
+        assert await crawler._allowed(None, "https://x.gov/dir/page;jsessionid=1") is False
+
+    @pytest.mark.asyncio
+    async def test_a_read_file_is_asked_again_after_a_day(self, monkeypatch):
+        """§2.4: a cached robots.txt is not trusted past 24 hours — the
+        pipeline process outlives many nightly runs."""
+        calls = []
+        self._serve(monkeypatch, status=404, calls=calls)
+        assert await crawler._allowed(None, "https://x.gov/a") is True
+        assert await crawler._allowed(None, "https://x.gov/b") is True
+        assert len(calls) == 1
+        now = crawler.time.monotonic()
+        monkeypatch.setattr(crawler.time, "monotonic", lambda: now + crawler.ROBOTS_CACHE_S + 1)
+        assert await crawler._allowed(None, "https://x.gov/a") is True
+        assert len(calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_too_many_requests_is_not_an_absent_file(self, monkeypatch):
+        """Asked to slow down, the crawler reads nothing there — never
+        everything, as a 4xx "no rules" would allow."""
+        self._serve(monkeypatch, status=429)
+        assert await crawler._allowed(None, "https://x.gov/anything") is False
+
+    @pytest.mark.asyncio
+    async def test_an_unreachable_file_says_so_in_the_log(self, monkeypatch, caplog):
+        self._serve(monkeypatch, status=None)
+        with caplog.at_level("WARNING"):
+            assert await crawler._allowed(None, "https://x.gov/anything") is False
+        assert "robots.txt unreachable" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_an_unreachable_robots_file_means_disallowed_for_a_while(self, monkeypatch):
         """A 5xx or no answer is "assume complete disallow" (§2.3.1.4),
         and the site is asked again after ROBOTS_UNREACHABLE_RETRY_S rather
