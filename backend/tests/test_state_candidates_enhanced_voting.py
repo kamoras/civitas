@@ -64,6 +64,21 @@ RI_SOURCE = {
 }
 
 
+def _index_held_on(date: str) -> dict:
+    """The election index with the RI primary moved to `date`.
+
+    The settle window is measured from the INDEX entry's date, not the
+    results payload's. Tests that need an unsettled election used to set
+    only the payload's electionDate, so they leaned on the fixture's real
+    2026-09-09 being recent, and all three started failing on 2026-09-30,
+    21 days (settle_days) later."""
+    index = json.loads(json.dumps(INDEX))
+    for entry in index["elections"]:
+        if entry["publicElectionId"] == "RI2026StatewidePrimary":
+            entry["electionDate"] = date
+    return index
+
+
 def _patched(monkeypatch, index=INDEX, results=RESULTS):
     """Both GETs, answered from fixtures. `index`/`results` may be set to
     None to simulate that hop failing."""
@@ -269,18 +284,6 @@ class TestCandidates:
         assert ev._candidates(contest) == []
 
 
-def _index_dated(date: str) -> dict:
-    """INDEX with the primary's indexed date moved — the date the settle
-    window is measured from. "Unsettled" pinned to a future one: the
-    fixture's own 2026-09-09 settled on 2026-09-30, and a test leaning on it
-    began asserting the opposite of its name that day."""
-    index = json.loads(json.dumps(INDEX))
-    for entry in index["elections"]:
-        if entry["publicElectionId"] == "RI2026StatewidePrimary":
-            entry["electionDate"] = date
-    return index
-
-
 class TestFreshnessGate:
     @pytest.mark.asyncio
     async def test_certified_results_pass_immediately(self, monkeypatch):
@@ -294,8 +297,7 @@ class TestFreshnessGate:
     async def test_uncertified_and_unsettled_confirms_nobody(self, monkeypatch):
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, index=_index_dated("2099-01-01"), results=results)
+        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio
@@ -462,8 +464,7 @@ class TestStatewideExecutiveResults:
         any more than it confirms a senator — one gate, not two."""
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, index=_index_dated("2099-01-01"), results=results)
+        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio
@@ -544,8 +545,7 @@ class TestStateLegislativeResults:
     async def test_legislative_records_are_withheld_by_the_same_freshness_gate(self, monkeypatch):
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
-        results["election"]["electionDate"] = "2099-01-01"
-        _patched(monkeypatch, index=_index_dated("2099-01-01"), results=results)
+        _patched(monkeypatch, index=_index_held_on("2099-01-01"), results=results)
         assert await _fetch() == []
 
     @pytest.mark.asyncio
