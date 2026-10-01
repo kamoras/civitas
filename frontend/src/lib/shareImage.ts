@@ -28,7 +28,7 @@ const CAPTURING_ATTR = "data-share-capturing";
 
 /** What the frame around a captured section says. */
 export interface ShareSubject {
-  /** Who or what the page is about: "Tim Burchett", "H.R. 1234". */
+  /** Who or what the page is about: "Jane Doe", "H.R. 1234". */
   title: string;
   /** One line under it: "Representative · TN-2 · Republican". */
   subtitle?: string;

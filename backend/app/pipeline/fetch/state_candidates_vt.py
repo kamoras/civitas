@@ -70,8 +70,8 @@ spellings of the same real name across different towns ("SUZANNE
 SEYMOUR" / "SUZ SEYMOUR" / "SUE SEYMOUR" all appear live). `cid` is only
 scoped to one (party, office) tally, not a single global identity — the
 SAME real candidate carries a DIFFERENT `cid` in each party/office
-block they appear under (verified live: Becca Balint has three distinct
-`cid`s across her real D ballot line and her R/PR write-in tallies), so
+block they appear under (verified live: one 2026 candidate carried three
+distinct `cid`s, for a party line and two write-in tallies), so
 aggregation must group by (office, district, party) FIRST and only key
 by `cid` within that group — confirmed live that no two same-named
 candidates ever share one group with different ids, or vice versa.
@@ -126,11 +126,9 @@ elect up to two members each and nothing here has been checked against
 them, so the page keeps saying it omits them. The federal contests are
 unchanged -- still primary winners.
 
-Verified live 2026-09-08 against the real 2026 August Primary: Becca
-Balint (D, real incumbent, 159,358 votes, unopposed on the real ballot
-line) and Gerald Malloy (R, real plurality winner of a real 3-way field,
-31,324 over runner-up Mark Coester's 9,046) for Vermont's single
-at-large House seat.
+Verified live 2026-09-08 against the 2026 August Primary: both party
+nominees for the at-large House seat resolve, an incumbent unopposed on
+the party line and a plurality winner of a three-way field.
 """
 
 import logging
@@ -308,8 +306,7 @@ def _general_ballot_statewide(report: dict) -> list[dict]:
     and Unity, Peace and Justice -- is kept under OTHER_PARTY with its
     label as printed (ballot_list_party). The 2026 general report (read
     2026-09-28) prints 17 statewide ballot lines; before this, four of
-    them (Dean Roy, June Goodband, Rachel Shaw, Zachary Hampl) were left
-    off the page.
+    them were left off the page.
 
     Write-in tallies (`wc`) are ignored: they are not ballot lines."""
     found: dict[tuple[str, str | None, int], tuple[str, str]] = {}

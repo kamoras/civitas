@@ -344,9 +344,7 @@ def _unopposed_nominees(
     candidate who drew no opponent. `_confirmed_or_all` would then treat
     that candidate as a loser and drop them — which deleted 36 real
     candidates from live races, 19 of them SITTING members of Congress
-    running for re-election: Warner and Ernst in their own Senate races,
-    Crockett, Himes, Castor, Griffith, Bilirakis and a dozen more in
-    theirs. A voter reading those pages saw a one-party ballot.
+    running for re-election, two senators among them. A voter reading those pages saw a one-party ballot.
 
     Scoped tightly, because the filter it relaxes exists for a real
     reason (TX's 19 stale FEC filers). A candidate comes back only when

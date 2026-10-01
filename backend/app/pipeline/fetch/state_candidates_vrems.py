@@ -5,12 +5,12 @@ South Carolina sat on `google_civic` all cycle. Its primary results ARE
 reachable (a Clarity host, enr-scvotes.org), but reading nominees from
 them would have published the wrong Senate nominee: Lindsey Graham won
 the June 9 Republican primary outright, then a separate US Senate
-Special Republican Primary (August 11) and its runoff nominated Darline
-Graham. Any primary-results reader that stops at June names the wrong
+Special Republican Primary (August 11) and its runoff nominated someone
+else. Any primary-results reader that stops at June names the wrong
 person; one that tries to follow specials has to know every special
 exists. The candidate-tracking list for the 11/3/2026 Statewide General
-Election answers the question directly — Darline Graham, alongside the
-Constitution, Libertarian and Workers candidates no primary ever lists.
+Election answers the question directly: the special's nominee, alongside
+the Constitution, Libertarian and Workers candidates no primary ever lists.
 
 Flow (read from the site's own SelectElection.js / CandidateSearch.js):
   GET  {base}/Candidate/GetElections?electionType=General&year={year}

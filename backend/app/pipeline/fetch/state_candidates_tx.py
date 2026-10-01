@@ -22,10 +22,10 @@ rendered Angular SPA) on 2026-08-09:
 
 3. `cdFilingStatus` is the authoritative status field: "CG" = "Candidate
    in the General Election" is the only status this module treats as
-   confirmed. Verified against known-correct 2026 ground truth: Ken
-   Paxton beat John Cornyn in the May 26 Republican runoff — Paxton's row
-   carries cdFilingStatus "CG", Cornyn has no row at all under the GE
-   election id (correctly absent, not fabricated as some other status).
+   confirmed. Verified against known-correct 2026 ground truth: the
+   winner of a 2026 Senate primary runoff carries cdFilingStatus "CG", and
+   the loser has no row at all under the GE election id (correctly absent,
+   not fabricated as some other status).
    Other real statuses seen live: "LP" (Lost Primary), "LR" (Lost
    Runoff), "W" (Withdrawn), and independents can lack cdFilingStatus
    entirely and instead carry cdDeclarationStatus ("A"=Accepted,

@@ -110,7 +110,7 @@ class _SpeakerLookup:
     members first, then anyone still on file. It used to be a dict of last
     name -> id built over every row, so of two members sharing a surname
     the later row won, a departed member could take a sitting one's
-    speeches, and "Jr." or "Van Hollen" never matched at all.
+    speeches, and a "Jr." or a two-word surname never matched at all.
     """
 
     def __init__(self, rows):

@@ -177,10 +177,10 @@ stripped on both sides:
 
 1. Exact surname.
 2. Otherwise, in order, each only if the one before found nobody: the FEC
-   surname's last token (`WASSERMAN SCHULTZ`); the state surname's last token
-   (Maryland's "McClain Delaney" is `DELANEY, APRIL MCCLAIN`); a surname filed as the last
-   given name (`ARENHOLZ, ASHLEY HINSON`); one spelling slip with the given
-   name agreeing (`DAUGHTERY` / Daugherty).
+   surname's last token (`VAN DOREN`); the state surname's last token
+   (a ballot's "Hale Morrow" is `MORROW, JANE HALE`); a surname filed as the last
+   given name (`MORROW, JANE HALE` for a ballot's "Jane Hale"); one spelling
+   slip with the given name agreeing (`DOUGHTERY` / Dougherty).
 3. Several matches → the one whose party matches, then the one whose given
    name matches (TX-34's Eric and Mayra Flores).
 4. Same surname, given name and party → one person under two FEC ids;
@@ -260,7 +260,7 @@ sync keys on; `ballot_name` is the state's printing ("Roy Cooper"), kept by
 `_note_ballot_name` whenever a state record matches — confirmed or primary
 ballot — and served as `ballotName`. The page shows it through
 `candidateName()` and falls back to the FEC name. A "Last, First" printing is
-skipped unless the comma precedes a suffix ("Olszewski, Jr.").
+skipped unless the comma precedes a suffix ("Doe, Jr.").
 
 A candidate the state has confirmed is on the ballot counts as active
 whatever their FEC record says (`isActiveCandidate`): North Carolina's
@@ -568,11 +568,11 @@ which stands) is read against the person's FEC filing: its given name
 starts at the first word that is a filed name or a short or long form of
 the first filed name or nickname (the filed name beginning it,
 "Christopher" for CHRIS; or no longer and sharing its first two letters,
-"Steve" for STEPHEN), so "Congressman Steve Womack" (filed STEPHEN) is
-Steve and "Congressman Womack" states no given name. A short-form fit
+"Steve" for STEPHEN), so "Congressman Steve Doe" (filed STEPHEN) is
+Steve and "Congressman Doe" states no given name. A short-form fit
 followed by a full word that fits nothing filed states none
-("Representative Bob Latta" for ROBERT E), and so does a printed middle
-name not on file ("Steve Allen Womack" beside a filing of STEPHEN alone);
+("Representative Bob Roe" for ROBERT E), and so does a printed middle
+name not on file ("Steve Allen Doe" beside a filing of STEPHEN alone);
 a parenthesised word is a nickname only if it fits ("(Incumbent)" is
 not); a row linked to no candidate is read against the race's filings of
 that surname ("Congressman Smith" beside SMITH, CHARLES states none). So
@@ -593,16 +593,15 @@ every word before the surname and the surname's last word capitalised
 ("WAYNE JOHNSON" counts, "mark green ribbons" is not Mark Green). Two
 people sharing a full name aren't told apart — an accepted limit. A
 surname alone never counts
-("Johnson", "Rep. Bishop", "Sen. Warnock"): graded surname evidence went
+("Johnson", "Rep. Bishop", "Sen. Doe"): graded surname evidence went
 through eight review rounds, and each found a new namesake, title or
 common word it let through. A legislature or commission story names other
 people, so no prose regex has to foresee it.
 Where a state holds two Senate races, a phrase saying neither "special" nor
-"regular" is told apart by whose candidates it names ("Raphael Warnock
-defeats Kelly Loeffler in Georgia Senate runoff" is the 2020 special;
-naming both races' candidates names neither, and any mention of the other
-race's candidate — a capitalised surname alone included — holds it back:
-"Raphael Warnock leads as Perdue concedes to Ossoff" is about both). With no candidate on record the phrase decides
+"regular" is told apart by whose candidates it names (a headline naming one
+race's two candidates is about that race; naming both races' candidates
+names neither, and any mention of the other race's candidate, a capitalised
+surname alone included, holds it back). With no candidate on record the phrase decides
 alone. A story naming the race but no candidate leaves the issue
 DEVELOPING — a miss the next story can fix, where a wrong promotion can't
 be undone. Once promoted it is the news story's, matching later coverage

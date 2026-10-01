@@ -101,7 +101,7 @@ AFFILIATED_RECEIPT_TYPES = {"18G", "18H", "18K", "18J", "22G", "22H"}
 # entity", never a person. A genuine self-funded contribution is FEC
 # entity_type IND or CAN and its contributor_name is the candidate's own
 # name as filed — it is never itself phrased as a fund or committee. A
-# 2026-08 audit found "Rutherford Victory Fund" (and siblings) classified
+# 2026-08 audit found "<Surname> Victory Fund" committees classified
 # Self-Funded off the SequenceMatcher ratio below, purely because the
 # candidate's own surname dominates a short committee name — a joint
 # fundraising committee's money is split with party/PAC committees and is
@@ -276,7 +276,7 @@ def classify_donor_type_semantic(
 
     For candidate-affiliated detection, dynamically generates a personalized
     template using the candidate's last name so the model can detect entities
-    like "Sullivan Victory" or "Cruz for Senate" without hardcoded patterns.
+    like "Doe Victory" or "Roe for Senate" without hardcoded patterns.
 
     2026-07 fix: threshold was 0.35, skip_threshold 0.45 — both far
     below the real floor. Live-measured against 800 real, already-labeled

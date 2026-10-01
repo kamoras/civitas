@@ -11,7 +11,8 @@ import pytest
 from app.models import Candidate, Race
 from app.pipeline.fetch import state_candidate_sources as sources
 from app.pipeline.fetch import state_candidates as sc
-from app.pipeline.fetch.state_candidates_common import InclusiveThreshold, runoff_threshold
+from app.pipeline.fetch import state_candidates_common as sc_common
+from app.pipeline.fetch.state_candidates_common import InclusiveThreshold, fec_party, runoff_threshold
 from app.pipeline.fetch.state_candidate_sources import configured_states
 
 
@@ -788,6 +789,18 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         assert db_session.get(Candidate, "S2").confirmed_general is True
         assert not any(i.startswith("ballot:") for i in self._ids(db_session))
 
+    def test_a_surname_with_a_connector_is_matched_through_its_last_word(self, db_session):
+        """The ballot's display name gives only its trailing token ("Del
+        Valle" -> "Valle"), and FEC files the whole compound surname: the
+        multi-word rule reaches it."""
+        _race(db_session, "2026-HOUSE-WY-0", "WY", office="H", district=0)
+        _candidate(db_session, "H1", "2026-HOUSE-WY-0", "DEL VALLE, MARIA", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-WY-0").candidates
+        last = sc_common.surname("Maria\nDel Valle")
+        assert last == "Valle"
+        assert sc._match_candidate(rows, last, "D", "Maria Del Valle").id == "H1"
+
     def test_a_surname_alone_has_no_given_name_to_contradict(self, db_session):
         _race(db_session, "2026-HOUSE-OR-1", "OR", office="H", district=1)
         _candidate(db_session, "H1", "2026-HOUSE-OR-1", "SMITH, JOHN", party="DEM")
@@ -1443,7 +1456,6 @@ class TestFecPartyCodes:
     same party — never a different one."""
 
     def test_translations(self):
-        from app.pipeline.fetch.state_candidates_common import fec_party
 
         assert fec_party("DFL") == fec_party("DNL") == "DEM"
         assert {fec_party(c) for c in ("NPA", "UN", "NNE", "NOP", "NON")} == {"IND"}

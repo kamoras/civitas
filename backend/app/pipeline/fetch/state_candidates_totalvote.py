@@ -64,27 +64,10 @@ still being updated as late as 7/17/2026, exactly 45 days after the June
 2 primary: real, observed evidence of how long this vendor's count kept
 moving on at least one of its states, not a cited statutory deadline.
 
-Verified live 2026-09-06/07 against each state's real, certified 2026
-primary:
-
-Montana (page dated "Results last updated: 6/29/2026", 100% precincts
-reporting): Kurt Alme (Senate R, real plurality winner of a 3-way field,
-76.1%), Alani Bankhead (Senate D, real plurality winner of a 5-way field,
-43.6%), Aaron Flint (CD1 R, real plurality winner of a 4-way field), Sam
-Forstag (CD1 D, real plurality winner of a 4-way field), Troy Downing
-(CD2 R, unopposed), Brian J Miller (CD2 D, real plurality winner of a
-3-way field).
-
-Nebraska: Pete Ricketts (Senate R, real plurality winner of a 5-way
-field, 160,547 votes), Cindy Burbank (Senate D, real plurality winner of
-a 2-way field, 110,210 votes), Mike Flood (CD1 R, unopposed), Chris
-Backemeyer (CD1 D, real plurality winner of a 2-way field, 26,523 over
-19,508), Nik Sandman (CD1 L, unopposed), Brinker Harding (CD2 R,
-unopposed), Denise Powell (CD2 D, real plurality winner of a close 7-way
-field, 22,516 over runner-up John Cavanaugh's 21,115), Eric Michael
-Foreman (CD2 L, unopposed), Adrian Smith (CD3 R, real plurality winner of
-a 2-way field, 60,549 over 33,020), Becky Kelly Stille (CD3 D,
-unopposed).
+Verified live 2026-09-06/07 against Montana's and Nebraska's certified 2026
+primaries: every federal contest resolved to its certified winner,
+including plurality winners of fields of two to seven, unopposed
+nominees and Libertarian nominees.
 
 STATE OFFICES. This vendor's pages mix them in with the federal races --
 the module already noted that Nebraska's "SW" query carries Governor and

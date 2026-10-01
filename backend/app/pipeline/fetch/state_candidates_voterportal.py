@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 _rate_limiter = RateLimiter(rps=1.0)
 
-# "Julia Letlow (REP)" — the party code is the trailing parenthetical.
+# "Jane Doe (REP)" — the party code is the trailing parenthetical.
 # A nickname in quotes or a middle parenthetical stays in the name.
 _DESC_RE = re.compile(r"^(?P<name>.*\S)\s*\((?P<party>[^()]+)\)\s*$")
 

@@ -97,9 +97,9 @@ RACE_COOLDOWN_HOURS = 48
 # Measured over the 257 race-coverage posts that existed when this
 # shipped: 233 came from news outlets, 24 from arbitrary Bluesky
 # accounts, and essentially every bad post in the account's history was
-# in that 24 — the endorsement above, "nominates Gary Palmer as a
-# candidate" (from "I nominate ... Gary Palmer! 😎"), "Morgan Wallen's
-# presence in local campaigns", plus race "coverage" derived from a 1969
+# in that 24 — the endorsement above, a joke post read as a candidate
+# "nominating" someone, a musician's "presence in local campaigns", plus
+# race "coverage" derived from a 1969
 # Laugh-In listing, a jazz anniversary and a Reservoir Dogs iTunes sale.
 # The restriction removes the whole class rather than pattern-matching
 # its symptoms one at a time.
@@ -190,7 +190,7 @@ Rules:
 - "actor" is who did or said it: a named person, body or organisation.
 - "predicate" starts with the verb and runs to the END of the phrase — \
 include the object. "takes a selfie with" is wrong; "takes a selfie with \
-Maryland Sens. Chris Van Hollen and Angela Alsobrooks" is right.
+Maryland Sens. Ana Ruiz and Paul Grant" is right.
 - If the Source names no one doing anything — an opinion, an advert, a \
 listing — answer with two empty strings. That is a correct answer.
 

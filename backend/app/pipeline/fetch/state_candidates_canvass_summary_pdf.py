@@ -10,7 +10,7 @@ of them. It reads, per page:
 
     Office REPRESENTATIVE IN CONGRESS DISTRICT 1 Total Votes: 122,554
     Party: Republican Total Votes: 51,119
-    Winner 50,915 99.6% Bryan Steil Republican
+    Winner 50,915 99.6% Jane Doe Republican
     204 .4%
     SCATTERING
 

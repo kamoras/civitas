@@ -354,8 +354,7 @@ def party_ideology_bounds(
     fall in that empty valley, so the "moderate/centrist" band captures ~0%
     of members and every D reads "progressive", every R "conservative" —
     the label collapses to party identity even though the WITHIN-party
-    spread is real and large (DW-NOMINATE: Warren far left of Fetterman,
-    both Democrats). Scoring each member against their own party's terciles
+    spread is real and large (DW-NOMINATE). Scoring each member against their own party's terciles
     makes "moderate Democrat" mean moderate AMONG Democrats — the same
     cohort-relative, recomputed-every-run pattern this module already uses
     for bipartisanship and score_calculator uses for seat-relative alignment.

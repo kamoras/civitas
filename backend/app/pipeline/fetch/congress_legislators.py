@@ -17,12 +17,13 @@ guessing at all. fec.py's nickname-matching fallback still exists for the
 rare case of a member genuinely missing from this crosswalk (e.g. a
 brand-new special-election winner not yet added upstream).
 
-Verified live (2026-07): Bill Cassidy's real entry —
+Verified live (2026-07) on a member who served in both chambers, whose
+entry has this shape —
     id:
-      bioguide: C001075
+      bioguide: X000000
       fec:
-      - H8LA00017
-      - S4LA00107
+      - H0XX00000
+      - S0XX00000
 — confirming both the field names and that a member's fec id list has one
 entry per distinct office run for (House vs. Senate), not one per cycle.
 """

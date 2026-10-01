@@ -63,10 +63,10 @@ def _entry_for(chamber: str, state: str, name: str, district: int | None, party:
     when the surname alone is ambiguous). A first initial that matches,
     directly or through a quoted nickname, settles it; failing that, a
     unique same-surname, same-party entry for the seat stands for a first
-    name the survey spells differently ("Dick Durbin" for "Richard J.
-    Durbin"). constituent_approval only asks for members already in office
+    name the survey spells differently ("Bob Doe" for "Robert J.
+    Doe"). constituent_approval only asks for members already in office
     when the survey was fielded, which is what keeps a namesake successor
-    (Adelita Grijalva after Raul Grijalva) from inheriting the reading."""
+    (a relative who succeeds a member) from inheriting the reading."""
     parts = _name_parts(name)
     if parts is None:
         return None
@@ -78,7 +78,7 @@ def _entry_for(chamber: str, state: str, name: str, district: int | None, party:
     ]
     if chamber == "house":
         # Only the district the member represents now: a member redistricted
-        # into another seat (Barry Moore, AL-2 to AL-1) was rated by other
+        # into another seat (as one was in 2026) was rated by other
         # people. An at-large seat is district 0 here and "1" in the survey.
         seat = "1" if district == 0 else str(district)
         candidates = [m for m in candidates if m.get("district") == seat]

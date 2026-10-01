@@ -14,7 +14,7 @@ write-ins (party WRI), who are not printed either.
 Shape (canlist.asp, form POST, read live 2026-09-26):
 
     <b>United States Senator</b>
-    <table class="results"> ... <td>Moody, Ashley (REP) *Incumbent</td>
+    <table class="results"> ... <td>Doe, Jane (REP) *Incumbent</td>
                                <td>Qualified</td><td>Won</td> ...
 
 The election id is the general-election date ("20261103-GEN"), derived
@@ -73,10 +73,10 @@ logger = logging.getLogger(__name__)
 _rate_limiter = RateLimiter(rps=1.0)
 
 _NAME_RE = re.compile(r"^(?P<last>[^,]+),\s*(?P<first>.*?)\s*\((?P<party>[A-Z]{2,4})\)")
-# The running mate after a governor's name: "/ Graham, Gwen".
+# The running mate after a governor's name: "/ Roe, Jane".
 _MATE_RE = re.compile(r"^\s*/\s*(?P<last>[^,/]+),\s*(?P<first>[^/]+?)\s*$")
 # "Unopposed" is a candidate Florida deems elected without printing them
-# (Maxwell Frost, FL-10, 2026): the seat's only candidate, so shown as such
+# (a 2026 House incumbent was): the seat's only candidate, so shown as such
 # rather than falling back to every FEC filer who withdrew.
 _ON_BALLOT = frozenset({"QUALIFIED", "UNOPPOSED"})
 _WRITE_IN = "WRI"
@@ -112,7 +112,7 @@ def _state_record(
     if party is None or len(name.split()) < 2:
         return None
     # A governor's line names the running mate after a slash, last name
-    # first ("Jolly, David (DEM) / Graham, Gwen"): Florida elects the two
+    # first ("Doe, John (DEM) / Roe, Jane"): Florida elects the two
     # as one ticket (Fla. Const. art. IV sec. 5), so the pair is shown.
     mate = _MATE_RE.search(name_cell[m.end():])
     if mate:

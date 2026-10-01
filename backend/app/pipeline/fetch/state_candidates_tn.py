@@ -27,10 +27,8 @@ Tennessee nominates by PLURALITY. This module used to withhold any
 leader under 50% on the belief that a runoff followed; none does. The
 Secretary of State's certified November 2026 lists name the plurality
 leader of every one of the seven 2026 party fields that came in under
-50% — Marsha Blackburn for Governor (43.6%), Victoria Broderick TN-4 D
-(37.9%), Chaz Molder TN-5 D (40.5%), Mike Croley TN-6 D (28.9%), Johnny
-Garrett TN-6 R (43.6%), Darden Copeland TN-7 D (39.8%) and Brent Taylor
-TN-9 R (46.0%) — and the results page lists no runoff election after
+50% (leaders on 28.9% to 46.0%), and the results page lists no runoff
+election after
 the August 6 primary. The threshold is read from the state's entry
 (null), like every other adapter's.
 

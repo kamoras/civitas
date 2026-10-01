@@ -40,13 +40,13 @@ _TITLED_NAME_RE = re.compile(
 )
 
 # Appositive form: a role description set off by commas rather than a title
-# word directly prefixing the name — "the Senate Republican leader, Chuck
-# Schumer, has said ...". _TITLED_NAME_RE requires the title word immediately
+# word directly prefixing the name — "the Senate Republican leader, Jane
+# Doe, has said ...". _TITLED_NAME_RE requires the title word immediately
 # before the name and doesn't cover this at all, which is exactly how a
 # fabricated name reached production ungrounded (2026-07: a full-story
-# generation invented "The Senate Republican leader, Chuck Schumer, has said
-# Graham's death has made a hard month harder for the Senate agenda" — no
-# Schumer mention anywhere in the source material, and the only grounding
+# generation attributed a statement to a party leader of the wrong party,
+# about a death the source did not report, with no mention of that leader
+# anywhere in the source material, and the only grounding
 # check run on full-story text was for fabricated statistics). A short
 # unclaimed span between the role keyword and the comma keeps this from
 # crossing into an unrelated clause; requiring the trailing comma (not just
@@ -82,9 +82,9 @@ def ungrounded_numbers(generated: str, source: str) -> list[str]:
     )
 
 
-# The name patterns accept apostrophes so O'Rourke and D'Esposito survive as
-# single tokens, which also swallows the possessive in "Sen. Wyden's": the
-# surname came out as "wyden's" and could never match a source saying "Wyden",
+# The name patterns accept apostrophes so O'Brien and D'Amato survive as
+# single tokens, which also swallows the possessive in "Sen. Doe's": the
+# surname came out as "doe's" and could never match a source saying "Doe",
 # so every possessive reference to a real, sourced official was flagged as
 # fabricated. Stripping the possessive is a false-positive fix only — the bare
 # surname still has to appear in the source.
@@ -100,14 +100,14 @@ def ungrounded_titled_names(generated: str, source: str) -> list[str]:
     """Titled-official references in ``generated`` whose surname is absent
     from ``source``.
 
-    Covers both a title word directly prefixing a name ("Sen. Collins") and
+    Covers both a title word directly prefixing a name ("Sen. Doe") and
     a role description set off by commas ("the Senate Republican leader,
-    Chuck Schumer,") — see _APPOSITIVE_ROLE_RE for why the second form
+    Jane Doe,") — see _APPOSITIVE_ROLE_RE for why the second form
     matters.
 
     Only the surname (last token of the captured name) is required to
-    appear, so "Sen. Collins" is grounded by source text that says
-    "Susan Collins" without a title. The surname must appear as a whole
+    appear, so "Sen. Rivera" is grounded by source text that says
+    "Maria Rivera" without a title. The surname must appear as a whole
     WORD (2026-07 fix): the original bare-substring check grounded
     "Rep. Ford" in any source containing "affordable" and "Sen. Price"
     in "prices" — short surnames were effectively never checkable.
@@ -320,8 +320,8 @@ def ungrounded_electoral_claims(generated: str, source: str) -> list[str]:
     A recurring, high-damage hallucination class for a civic platform is the
     model inventing an *electoral contest* between two officials who both
     appear in the source material for an unrelated reason — e.g. a post about
-    Sen. Graham's death that stated he "was facing competition from Susan
-    Collins for his senate race" (2026-07). Both surnames were grounded and no
+    one senator's death that said the senator "was facing competition from"
+    another senator named in the same source (2026-07). Both surnames were grounded and no
     number was fabricated, so neither ungrounded_titled_names nor
     ungrounded_numbers caught it: the fabrication was the *relationship*,
     framed as a campaign that never existed.
@@ -344,8 +344,8 @@ def ungrounded_electoral_claims(generated: str, source: str) -> list[str]:
 # argument and is deliberately absolute. The rest ask "is this supported
 # by the source?"; this one asks "may Civitas say this at all?", and the
 # answer is no regardless of support. That distinction is the whole
-# lesson of the 2026-09-23 incident: the platform posted "VOTE VERONICA
-# FERNANDEZ! ... She's better for Jersey than Booker!" and every existing
+# lesson of the 2026-09-23 incident: the platform posted a member of the
+# public's "VOTE <CANDIDATE>! ... better for <state> than <senator>!" and every existing
 # guard passed it, correctly — the source was a member of the public's
 # campaign post, so the endorsement was perfectly grounded, and
 # ungrounded_electoral_claims is (by design) silent whenever the source
@@ -354,13 +354,13 @@ def ungrounded_electoral_claims(generated: str, source: str) -> list[str]:
 #
 # Kept narrow so ordinary reporting survives: it fires on the imperative
 # voter directive ("vote for X", "re-elect X", "cast your ballot for")
-# and on a bare comparative ranking of candidates ("better for Jersey
-# than Booker"). Reporting that someone ELSE endorsed or outperformed
+# and on a bare comparative ranking of candidates ("better for the state
+# than Doe"). Reporting that someone ELSE endorsed or outperformed
 # someone is untouched — "Smith endorsed Jones" has no imperative and no
-# first-person comparative, and "leads Booker by six points" is a
+# first-person comparative, and "leads Doe by six points" is a
 # measurement, not a judgment.
 
-# What separates "vote for Fernandez" from the legislative floor-vote
+# What separates "vote for Doe" from the legislative floor-vote
 # sense that dominates this domain ("vote for the third time", "vote for
 # cloture") is what FOLLOWS the preposition: an endorsement names a
 # person, procedure names a thing. Listing the function words and
@@ -428,7 +428,7 @@ def electioneering_language(generated: str) -> list[str]:
 # Unfilled template tokens: "[date]", "[name]", "[specific date]". Every
 # other check in this module is digit- or name-based, which is exactly why
 # this class reached production unchecked (2026-07 audit: a published fact
-# read "Thune announced the tribute details on [date]." and the Bluesky
+# read "<Senator> announced the tribute details on [date]." and the Bluesky
 # post shipped with the literal "[date]" in it — no digits, no fabricated
 # name, nothing else fired). Alphabetic-only content keeps this from
 # flagging legitimate bracketed material like vote tallies "[216-212]" or
@@ -629,7 +629,7 @@ _PARTY_CLAIM_RE = re.compile(
 # Plurals are matched too: "Senate Republicans agreed" and "Democrats withheld
 # support" are how civic prose overwhelmingly refers to a party, and the
 # singular-only pattern treated those sources as having no party vocabulary at
-# all — flagging "Republican Senator Collins" as unsourced against a source
+# all — flagging "Republican Senator Doe" as unsourced against a source
 # that plainly discusses Republicans.
 _PARTY_CONTEXT_RE = re.compile(
     r"\bRepublicans?\b|\bDemocratic\b|\bDemocrats?\b|\bGOP\b|\([RD]-[A-Za-z]{2}\)",

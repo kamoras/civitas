@@ -689,8 +689,8 @@ def extract_senator_vote(
     """Extract a senator's vote from roll call vote data.
 
     Matches by last name + state since senate.gov XML doesn't include bioguideId.
-    Handles multi-word last names (e.g. "Cortez Masto", "Van Hollen") and
-    accented characters (e.g. "Luján" vs "Lujan") via Unicode normalization.
+    Handles multi-word last names (e.g. "De la Rosa", "Van Doren") and
+    accented characters (e.g. "Núñez" vs "Nunez") via Unicode normalization.
 
     Args:
         roll_call_data: Parsed roll call vote data from senate.gov.

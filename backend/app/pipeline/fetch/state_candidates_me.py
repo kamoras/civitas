@@ -89,20 +89,19 @@ for both the ordinary vote-count path and the RCV path (whose own 50%
 majority bar is enforced by Maine's tabulation itself, not by this
 module re-deriving it).
 
-Verified live 2026-09-09 against the real, certified 2026 primary:
-Matthew Dunlap (CD2 D, real RCV winner — trailed Joseph Baldacci in
-first-choice votes, won on the third and final elimination round) and
-Chellie Pingree (CD1 D, real incumbent, plain plurality, no RCV needed).
+Verified live 2026-09-09 against the certified 2026 primary: a
+ranked-choice winner who trailed on first-choice votes and won on the
+final elimination round, and a plain-plurality winner who needed no
+ranked-choice rounds.
 
 With `statewide_offices`, the GOVERNOR is read the same two ways — the
 only executive office Maine elects by popular vote (the Legislature
 chooses its Attorney General, Secretary of State and Treasurer). Both
 2026 governor primaries were ranked-choice, so each winner comes from
-its RCV Summary Report, never from first choices: Hannah M. Pingree (D)
-trailed Nirav D. Shah 50,552 to 58,606 in round 1 and won round 4, and
-Robert B. Charles (R) won in round 7. A statewide nominee is shown under
-the whole printed name, put in reading order ("Pingree, Hannah M." ->
-"Hannah M. Pingree"). A governor tabulation that fails its cross-check
+its RCV Summary Report, never from first choices: one 2026 winner
+trailed in round 1 and won in round 4, the other won in round 7. A
+statewide nominee is shown under the whole printed name, put in reading
+order ("Doe, Jane M." -> "Jane M. Doe"). A governor tabulation that fails its cross-check
 fails the whole fetch, exactly as a federal one does: returning the
 federal records alone would record Maine as checked with no governor's
 race on its ballot. Legislative seats are not read: each party's
@@ -292,8 +291,8 @@ def _municipality_choices(rows: list[dict]) -> list[tuple[str, int]]:
 
 
 def _first_last(name: str) -> str:
-    """Maine's "LAST, FIRST MIDDLE[, SUFFIX]" ("Pingree, Hannah M.", "King,
-    Angus, III") in reading order ("Hannah M. Pingree", "Angus King III"),
+    """Maine's "LAST, FIRST MIDDLE[, SUFFIX]" ("Doe, Jane M.", "Roe,
+    John, III") in reading order ("Jane M. Doe", "John Roe III"),
     otherwise verbatim — the whole printed name a statewide nominee is
     shown under, where a federal one only needs the surname."""
     parts = [p.strip() for p in (name or "").split(",")]

@@ -18,8 +18,8 @@ from app.pipeline.transform.normalize_members import strip_accents
 def _fold(text: str | None) -> str:
     """Lowercased, accents stripped, punctuation to spaces — the folding
     AGENTS.md 4a applies to roll-call names (the same strip_accents), because
-    the disclosure systems print "LUJAN" and "Velazquez" where the roster
-    says "Luján" and "Velázquez", and SQL ILIKE doesn't fold accents."""
+    the disclosure systems print "NUNEZ" and "Pena" where the roster
+    says "Núñez" and "Peña", and SQL ILIKE doesn't fold accents."""
     return " ".join(re.sub(r"[^a-z0-9]+", " ", strip_accents(text or "").lower()).split())
 
 

@@ -132,8 +132,8 @@ def _full_name_pattern(first: str, surname: str) -> "re.Pattern[str]":
     Up to two intervening tokens carry real middle names and initials
     ("Robert F. Kennedy"). Compiled case-INSENSITIVELY, with
     capitalisation verified on the matched text by the caller, for the
-    same reason _matches_as_a_name documents: building "Mcconnell" to
-    compare case-sensitively rejects every real "McConnell".
+    same reason _matches_as_a_name documents: building "Mcallister" to
+    compare case-sensitively rejects every real "McAllister".
     """
     f, ln = re.escape(first), re.escape(surname)
     return re.compile(
@@ -168,7 +168,7 @@ def _matches_as_a_name(pattern: "re.Pattern[str]", text: str) -> bool:
     coverage. It needs no curated stop-word list, and it keeps intercaps
     names, which is why the match is found case-insensitively and only
     the matched TEXT is checked: lower-casing the tail to build
-    "Mcconnell" would reject every real "McConnell" (that error is what
+    "Mcallister" would reject every real "McAllister" (that error is what
     a first, wrong measurement of this rule reported as an 18.8% cost).
 
     ALL-CAPS headlines still qualify — the first character is a capital.

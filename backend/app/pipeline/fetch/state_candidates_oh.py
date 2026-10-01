@@ -32,7 +32,7 @@ three summary workbooks (Democratic, Libertarian, Republican).
 THE SHAPE. Each sheet is a wide cross-tab: row 1 names each contest once,
 in the first column of its group (blank across the rest of the group --
 forward-filled here); the "County Name" row names every candidate as
-"Jon Husted (R)", a write-in as "Linda Matthews (WI)* (R)"; then one row
+"Jane Doe (R)", a write-in as "John Roe (WI)* (R)"; then one row
 per county, and one "Total" row -- read directly, exactly one required,
 as Wyoming's is. The header row is found by its content ("County Name" in
 the first cell), never a fixed index.
@@ -45,8 +45,8 @@ A write-in who led a contest where nobody was printed is withheld: Ohio
 nominates them only with as many votes as the office's petition
 signatures (R.C. 3513.23), which the canvass does not print. A write-in
 who beat a printed candidate is nominated like anyone else.
-Uncontested nominees are printed with their votes (Jim Jordan's
-district 4), so they are read like any other.
+Uncontested nominees are printed with their votes, so they are read like
+any other.
 
 Every matched workbook is required: one party's file failing would drop
 that party's nominees, and an empty party read as "nobody filed".
@@ -93,7 +93,7 @@ _R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
 _HEADER_LABEL = "county name"
 _TOTAL_LABEL = "total"
-# "Jon Husted (R)", "Linda Matthews (WI)* (R)": the trailing code is the
+# "Jane Doe (R)", "John Roe (WI)* (R)": the trailing code is the
 # candidate's party; "(WI)*" marks a certified write-in.
 _CANDIDATE_RE = re.compile(r"^(?P<name>.+?)\s*(?:\(WI\)\*?\s*)?\((?P<party>[A-Z]{1,3})\)\s*$")
 _TITLE_DATE_RE = re.compile(r"([A-Z][a-z]+\s+\d{1,2},\s+\d{4})")
