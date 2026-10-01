@@ -116,6 +116,10 @@ def _utime(path, times=None, *, ns=None, **kwargs):
 
 def _install(at: str) -> None:
     global _OFFSET_NS
+    # A FREEZE_AT with no Z or offset is UTC, as documented. time-machine's
+    # default (MIXED) would read it in the process's local zone, hours off
+    # the hand-over instant on a machine not set to UTC.
+    time_machine.naive_mode = time_machine.NaiveMode.UTC
     time_machine.travel(at, tick=os.environ.get("FREEZE_TICK", "1") != "0").start()
     _OFFSET_NS = time.time_ns() - escape_hatch.time.time_ns()
     os.stat = _wrap_stat(os.stat)
