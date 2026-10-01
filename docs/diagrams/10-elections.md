@@ -181,7 +181,7 @@ stripped on both sides:
    given name (`MORROW, JANE HALE` for a ballot's "Jane Hale"); one spelling
    slip with the given name agreeing (`DOUGHTERY` / Dougherty).
 3. Several matches → the one whose party matches, then the one whose given
-   name matches (TX-34's Eric and Mayra Flores).
+   name matches (two same-party siblings in one district).
 4. Same surname, given name and party → one person under two FEC ids;
    confirm the record that raised money.
 5. Still ambiguous → nothing is confirmed.
@@ -254,8 +254,8 @@ everything below reads it.
   on that district), `#ballot-{key}` any other contest. Opening a contest
   rewrites the hash, so what a reader sees can be linked.
 
-Names: `Candidate.name` is the FEC's ("COOPER, ROY") and stays what the roster
-sync keys on; `ballot_name` is the state's printing ("Roy Cooper"), kept by
+Names: `Candidate.name` is the FEC's ("DOE, JANE") and stays what the roster
+sync keys on; `ballot_name` is the state's printing ("Jane Doe"), kept by
 `_note_ballot_name` whenever a state record matches — confirmed or primary
 ballot — and served as `ballotName`. The page shows it through
 `candidateName()` and falls back to the FEC name. A "Last, First" printing is
@@ -559,7 +559,7 @@ candidates by full name — the leader or runner-up in the stored count
 (else its `Candidate` rows). A full name is a given name the records state
 (FEC's first given name or a nickname it quotes, the count's or ballot's
 printed first name, or its initial with a period), matched exactly — no
-prefix fit, so "Donna Davis" is not Don Davis — then optionally a middle
+prefix fit, so "Donna Lee" is not Don Lee — then optionally a middle
 name or initial that doesn't contradict the record, then the whole surname
 (multi-word or hyphenated as a unit, accents and curly apostrophes folded,
 a suffix allowed after). A results feed's printed name (not the ballot's,
@@ -589,7 +589,7 @@ the race stands as printed. Initials count only together ("A.J.", "A. J.", "AJ";
 Vance" for a record of initials alone), never as one bare letter; a quoted
 single letter ("(I)") is an annotation. The name must be written as one:
 every word before the surname and the surname's last word capitalised
-("WAYNE JOHNSON" counts, "mark green ribbons" is not Mark Green). Two
+("DALE CARVER" counts, "mark brown ribbons" is not Mark Brown). Two
 people sharing a full name aren't told apart — an accepted limit. A
 surname alone never counts
 ("Johnson", "Rep. Bishop", "Sen. Doe"): graded surname evidence went

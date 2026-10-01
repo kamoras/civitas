@@ -90,7 +90,7 @@ _DISTRICT_RE = re.compile(r"(\d+)(?:st|nd|rd|th)\s+Congressional District")
 _PARTY_RE = re.compile(r"(Republican|Democratic)\s+Party")
 # "ALL-CAPS" isn't quite literal: the real document prints Mc/Mac
 # surnames with the prefix's second letter lowercase even in its
-# all-caps header style ("McGRATH" for Amy McGrath, confirmed live) —
+# all-caps header style ("McGRATH", confirmed live) —
 # so a leading Mc/Mac keeps its natural casing here, and everything
 # after it must still be uppercase like every other surname.
 _SURNAME_RE = re.compile(r"^(?:(?:Mc|Mac)[A-Z][A-Z'\-]*|[A-Z][A-Z'\-]+)$")

@@ -198,7 +198,7 @@ Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
 
     for attempt in range(2):
         result = call_llm(
-            prompt_version="election_coverage_extract_v1",
+            prompt_version="election_coverage_extract_v2",
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             model=settings.OLLAMA_STORY_MODEL or None,

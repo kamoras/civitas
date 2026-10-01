@@ -63,14 +63,14 @@ class TestACompletedElectionMustBeTheOneThatSeatedThem:
     carry an OLD LOSING RUN on their FEC record, and unbounded it wins
     over the campaign they actually hold the seat from.
 
-    Found against live FEC data for 25 current House members: Clay Fuller
+    Found against live FEC data for 25 current House members: Clay Fulton
     (GA-14, seated by a 2026 special, years_in_office=0) has rows for
     2026 ($1.8M, in progress) and 2020 ($0.4M). Unbounded, he is scored
     on the 2020 race — a campaign that won him nothing, at a fifth of the
     money.
     """
 
-    FULLER = [
+    FULTON = [
         {"candidate_election_year": 2026, "receipts": 1_800_000},
         {"candidate_election_year": 2020, "receipts": 400_000},
     ]
@@ -84,14 +84,14 @@ class TestACompletedElectionMustBeTheOneThatSeatedThem:
 
     def test_an_old_losing_run_does_not_outrank_the_current_campaign(self):
         with _at(2026, 9, 24):
-            got = select_recent_elections(self.FULLER, office="H")
+            got = select_recent_elections(self.FULTON, office="H")
             assert got[0]["candidate_election_year"] == 2026
 
     def test_without_office_the_bound_does_not_apply(self):
         """A caller that cannot say which chamber must not silently lose
         data — it keeps the unbounded behaviour."""
         with _at(2026, 9, 24):
-            got = select_recent_elections(self.FULLER)
+            got = select_recent_elections(self.FULTON)
             assert got[0]["candidate_election_year"] == 2020
 
     def test_a_senator_elected_six_years_ago_is_still_in_bounds(self):
@@ -102,10 +102,10 @@ class TestACompletedElectionMustBeTheOneThatSeatedThem:
 
     def test_donor_detail_window_is_bounded_the_same_way(self):
         # compute_recent_election_cycles picks the cycles whose itemized
-        # donors are fetched; unbounded, Fuller's detail would come from
+        # donors are fetched; unbounded, Fulton's detail would come from
         # the 2020 race while his totals come from 2026.
         with _at(2026, 9, 24):
-            assert compute_recent_election_cycles(self.FULLER, "H") == [2026]
+            assert compute_recent_election_cycles(self.FULTON, "H") == [2026]
 
     def test_the_ordinary_house_member_is_unaffected(self):
         rows = [

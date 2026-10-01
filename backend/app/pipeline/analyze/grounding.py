@@ -365,7 +365,7 @@ def ungrounded_electoral_claims(generated: str, source: str) -> list[str]:
 # cloture") is what FOLLOWS the preposition: an endorsement names a
 # person, procedure names a thing. Listing the function words and
 # procedural nouns that can legitimately follow keeps the check
-# case-insensitive — needed for "VOTE VERONICA FERNANDEZ!" and "Vote for
+# case-insensitive — needed for "VOTE JANE DOE!" and "Vote for
 # ..." alike — without a capitalisation test that all-caps shouting
 # defeats anyway.
 _NOT_A_CANDIDATE = (
@@ -388,15 +388,15 @@ _ELECTIONEERING_RE = re.compile(
 )
 
 
-# The bare imperative with no preposition — "VOTE VERONICA FERNANDEZ!",
-# the literal text this platform published. _ELECTIONEERING_RE misses it
+# The bare imperative with no preposition — "VOTE <NAME>!",
+# the shape of the text this platform published. _ELECTIONEERING_RE misses it
 # because that one keys on "vote for"/"vote against"; here the name
 # follows directly. Case-SENSITIVE on purpose: the capitalisation is what
 # separates the imperative-plus-name from the ordinary lowercase verb
 # ("lawmakers vote Tuesday"), and the stop-list covers the adverbs and
 # procedural words that legitimately follow a capitalised "Vote" at the
 # start of a sentence.
-# An imperative is clause-initial ("VOTE VERONICA FERNANDEZ!"), which is
+# An imperative is clause-initial ("VOTE JANE DOE!"), which is
 # what distinguishes it from the same capitalised word inside a Title Case
 # headline — "the House Came One Vote From Telling Trump to End the Iran
 # War" is a real coverage headline in this database and must not flag. So
@@ -553,8 +553,8 @@ def ungrounded_relationship_claims(generated: str, source: str) -> list[str]:
 # stale-training-data hallucination class: the local model's weights encode
 # who held an office as of its training cutoff, so it silently "corrects" a
 # sitting official's title to match its outdated world knowledge (2026-07:
-# a live Bluesky post described "former President Donald Trump" while the
-# source material said "President Trump" — no fabricated number, the
+# a live Bluesky post called the sitting president "former President"
+# while the source material said "President" — no fabricated number, the
 # surname was grounded, no electoral or family claim, and "President"
 # isn't a _TITLED_NAME_RE title, so nothing fired). Like the electoral and
 # relationship guards, nothing here encodes who actually holds an office —
@@ -610,7 +610,7 @@ def ungrounded_former_official_claims(generated: str, source: str) -> list[str]:
 # Party-affiliation claims in the GENERATED text. Same stale-training-data
 # class as _FORMER_CLAIM_RE: the model attaches a party label to an official
 # from its own memory rather than the source material, which is exactly how
-# "former President Donald Trump" reached production (2026-07) when the
+# "former President <name>" reached production (2026-07) when the
 # source only ever said "President Trump." A party label carries the same
 # risk — it can be wrong (a since-corrected training error, a party switch)
 # with no source basis for anyone to catch it before it publishes.

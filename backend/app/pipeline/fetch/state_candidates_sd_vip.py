@@ -18,14 +18,14 @@ ON the November ballot — the exact question `confirmed_general` asks,
 answered directly rather than inferred from primary vote totals. That
 makes it a better source than the one it replaces, not merely a
 substitute: nothing has to be reconstructed from counts, and a
-general-only independent (Brian Bengs, IND, running for the US Senate
-seat here) appears, where a primary-results reading structurally cannot
+general-only independent (one running for the US Senate seat here)
+appears, where a primary-results reading structurally cannot
 see one.
 
 Two things the page does that this has to handle:
 
   * **Withdrawn candidates stay listed**, marked in the name itself
-    ("Julian Beaudion (Withdrawn 08/04/2026)"). They are on the page and
+    ("John Doe (Withdrawn 08/04/2026)"). They are on the page and
     not on the ballot, so they are dropped — the one case where taking
     the page literally would be wrong.
   * **The grid is paged** — 745 rows across 15 pages, and Telerik pages

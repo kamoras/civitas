@@ -27,7 +27,7 @@ costs one post, which is the right cost profile for a ranking decision.
 
 Safety decisions are deliberately NOT made here. A classifier has a
 false-negative rate, and one miss on an endorsement is another "VOTE
-VERONICA FERNANDEZ" on a non-partisan account. Endorsements and invented
+<NAME>" on a non-partisan account. Endorsements and invented
 facts are made impossible structurally in post_composer.py; this module
 only decides what is worth saying at all.
 

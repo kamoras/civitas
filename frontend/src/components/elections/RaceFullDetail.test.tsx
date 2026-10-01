@@ -252,7 +252,7 @@ describe("RaceFullDetail", () => {
     expect(screen.queryByText(/more filed/)).not.toBeInTheDocument();
   });
   it("marks an unopposed candidate UNCONFIRMED inside an otherwise state-verified race", () => {
-    // Brian Mast's real shape: the other party's nominee came from the
+    // Bryce Mast's real shape: the other party's nominee came from the
     // primary file, his own uncontested primary was never held, so he
     // is real but unconfirmed. He must appear AND be distinguishable.
     render(

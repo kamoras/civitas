@@ -32,7 +32,7 @@ def _race(db, race_id="2026-SEN-GA", state="GA", office="S"):
     return r
 
 
-def _candidate(db, cand_id="S6GA001", race_id="2026-SEN-GA", name="OSSOFF, JON"):
+def _candidate(db, cand_id="S6GA001", race_id="2026-SEN-GA", name="BRENNAN, JON"):
     c = Candidate(id=cand_id, race_id=race_id, name=name, party="DEM")
     db.add(c)
     return c
@@ -43,7 +43,7 @@ def _item(db, race_id="2026-SEN-GA", **overrides):
     # individual tests override to exercise the gates.
     defaults = dict(
         race_id=race_id, source_type="news", source_name="AP News",
-        title="Ossoff holds narrow lead", url="https://apnews.com/a1",
+        title="Brennan holds narrow lead", url="https://apnews.com/a1",
         summary="Polling shows a tight contest.",
         matched_candidate_id="S6GA001", match_basis="full_name",
     )
@@ -61,11 +61,11 @@ class TestPostRaceCoverageUpdates:
         item = _item(db_session)
         db_session.commit()
 
-        with patch.object(election_bluesky, "_generate_post_text", return_value="Ossoff holds a narrow lead."):
+        with patch.object(election_bluesky, "_generate_post_text", return_value="Brennan holds a narrow lead."):
             assert election_bluesky.post_race_coverage_updates(db_session) == 1
 
         post = db_session.query(BroadcastPost).one()
-        assert (post.kind, post.state, post.text, post.bsky_status) == ("race", "GA", "Ossoff holds a narrow lead.", "off")
+        assert (post.kind, post.state, post.text, post.bsky_status) == ("race", "GA", "Brennan holds a narrow lead.", "off")
         assert (post.title, post.subject) == ("Update on the GA Senate race", "race:2026-SEN-GA")
         assert item.bsky_posted_at is not None
         assert item.bsky_posted is True  # actually published, counts toward the daily budget
@@ -336,7 +336,7 @@ class TestRosterFact:
         db_session.commit()
 
         fact = election_bluesky._roster_fact(item, race, db_session)
-        assert fact == "FEC filings list OSSOFF, JON as a candidate in the GA Senate race."
+        assert fact == "FEC filings list BRENNAN, JON as a candidate in the GA Senate race."
 
     def test_no_matched_candidate_id_is_none(self, db_session):
         race = _race(db_session)
@@ -507,18 +507,18 @@ class TestGeneratePostText:
     """The composed sentence is published whole or not at all."""
 
     def _generate(self, monkeypatch, predicate):
-        monkeypatch.setattr(eb, "call_llm", lambda **k: {"actor": "Jon Ossoff", "predicate": predicate})
+        monkeypatch.setattr(eb, "call_llm", lambda **k: {"actor": "Jon Brennan", "predicate": predicate})
         race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
-        item = RaceCoverageItem(race_id=race.id, title=f"Jon Ossoff {predicate}", summary="", url="https://apnews.com/a1")
-        return eb._generate_post_text(item, race, "FEC filings list OSSOFF, JON as a candidate in the GA Senate race.")
+        item = RaceCoverageItem(race_id=race.id, title=f"Jon Brennan {predicate}", summary="", url="https://apnews.com/a1")
+        return eb._generate_post_text(item, race, "FEC filings list BRENNAN, JON as a candidate in the GA Senate race.")
 
     def test_a_post_that_fits_is_returned_whole(self, monkeypatch):
-        assert self._generate(monkeypatch, "leads the race") == "Jon Ossoff leads the race."
+        assert self._generate(monkeypatch, "leads the race") == "Jon Brennan leads the race."
 
     def test_a_post_too_long_for_bluesky_beside_its_link_is_not_cut(self, monkeypatch):
         # Cut at a word boundary, this read "...said Sens." or stopped before
         # the object its verb needs, and the feed stored the cut text.
-        clause = "said Sens. Warnock and Ossoff " + "would fund rural hospitals and roads " * 7 + "this year"
+        clause = "said Sens. Warnock and Brennan " + "would fund rural hospitals and roads " * 7 + "this year"
         race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
-        assert len(f"Jon Ossoff {clause}.") > eb._post_budget(race)
+        assert len(f"Jon Brennan {clause}.") > eb._post_budget(race)
         assert self._generate(monkeypatch, clause) is None

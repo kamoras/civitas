@@ -94,10 +94,10 @@ class TestPickPolitician:
 
 class TestComposeSpotlight:
     def test_a_senator_is_their_scores_and_rank_as_numbers(self):
-        s = _senator("Chuck Grassley", score_funding_independence=43.0,
+        s = _senator("Chuck Grantham", score_funding_independence=43.0,
                      score_constituent_alignment=71.25, score_legislative_effectiveness=94.0)
         text = compose_spotlight(s, 12, 100, "senate")
-        assert text.startswith("Chuck Grassley (R-IA): Representation Score ")
+        assert text.startswith("Chuck Grantham (R-IA): Representation Score ")
         assert ", #12 of 100 senators. " in text
         assert text.endswith(
             "Funding Independence 43.0, Constituent Alignment 71.2, Legislative Effectiveness 94.0.")
@@ -120,19 +120,19 @@ class TestPublishSpotlight:
     Bluesky post 2026-07-13)."""
 
     def test_links_to_politicians_profile_not_old_scorecard_route(self, db_session, bluesky_configured):
-        senator = Senator(id="chuck-grassley", name="Chuck Grassley", state="IA", party="R")
+        senator = Senator(id="chuck-grantham", name="Chuck Grantham", state="IA", party="R")
 
         _publish_spotlight(db_session, "Some spotlight text.", senator, "senate")
 
         post = db_session.query(BroadcastPost).one()
-        assert post.url == "https://civitas-research.org/politicians/chuck-grassley"
+        assert post.url == "https://civitas-research.org/politicians/chuck-grantham"
         assert bluesky_configured == [("Some spotlight text.", post.url)]
         # Filed under the member's state, for that state's feed.
         assert (post.kind, post.subject, post.state, post.title) == (
-            "spotlight", "member:senate:chuck-grassley", "IA", "Member spotlight: Chuck Grassley (R-IA)")
+            "spotlight", "member:senate:chuck-grantham", "IA", "Member spotlight: Chuck Grantham (R-IA)")
 
     def test_published_once_a_day_without_a_bluesky_account(self, db_session, bluesky_outbox):
-        db_session.add(_senator("Chuck Grassley"))
+        db_session.add(_senator("Chuck Grantham"))
         db_session.commit()
 
         post_daily_spotlight(db_session)

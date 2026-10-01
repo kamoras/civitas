@@ -282,9 +282,9 @@ def _without_trailing_suffix(name: str) -> str:
 def _given_names(name: str) -> list[str]:
     """The given-name tokens, folded, with honorifics and initials dropped.
 
-    Both sides are normalised the same way: FEC files "SULLIVAN, DANIEL
-    J" (surname, then given names) and a state prints "Sullivan, Daniel
-    J. Jr." or "Daniel J. Sullivan Jr.". Taking the tokens AFTER any comma
+    Both sides are normalised the same way: FEC files "DOE, JOHN
+    J" (surname, then given names) and a state prints "Doe, John
+    J. Jr." or "John J. Doe Jr.". Taking the tokens AFTER any comma
     handles the first two; for the third the leading token already is the
     given name."""
     name = _without_trailing_suffix(name)
@@ -353,8 +353,8 @@ def _surname_fallbacks(
     if found:
         return found
     # A one-letter slip on either side, only with the given name agreeing
-    # too: the ballot's "Brandon Coulter Daugherty" is FEC's "DAUGHTERY,
-    # BRANDON" (MO-2, 2026). Short surnames are excluded — one edit away
+    # too: the ballot's "Brandon Coulter Doherty" is FEC's "DOHERTY,
+    # BRANDON" (a 2026 case). Short surnames are excluded — one edit away
     # from "Lee" is too many real names.
     wanted = _first_name_key(display_name or "")
     if wanted and len(target) >= 5:

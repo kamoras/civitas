@@ -4,7 +4,7 @@ FEC's `district` field on a candidate record can lag a member's current
 Congress.gov district after redistricting — a district-constrained search
 then finds nothing even though the candidate exists (2026-07 audit: 16
 sitting representatives had $0 recorded funding because of exactly this;
-Al Green (TX-9 on Congress.gov) is on file with FEC under district 18).
+Cal Green (TX-9 on Congress.gov) is on file with FEC under district 18).
 """
 
 from unittest.mock import AsyncMock, patch
@@ -42,14 +42,14 @@ async def test_district_mismatch_falls_back_to_name_only(db_session):
     async def fake_fetch(client, url, retries=None):
         if "district=" in url:
             return {"results": []}  # district-constrained search: nothing
-        return {"results": [_candidate("GREEN, ALEXANDER", "H4TX09095", "18")]}
+        return {"results": [_candidate("GREEN, CALEXANDER", "H4TX09095", "18")]}
 
     with patch(
         "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
     ) as mock_fetch:
         mock_fetch.side_effect = fake_fetch
         result = await find_candidate(
-            None, db_session, "Al Green", "TX", office="H", district="09"
+            None, db_session, "Cal Green", "TX", office="H", district="09"
         )
         assert result is not None
         assert result["candidate_id"] == "H4TX09095"
@@ -70,7 +70,7 @@ async def test_fallback_requires_genuine_name_match(db_session):
     ) as mock_fetch:
         mock_fetch.side_effect = fake_fetch
         result = await find_candidate(
-            None, db_session, "Al Green", "TX", office="H", district="09"
+            None, db_session, "Cal Green", "TX", office="H", district="09"
         )
         assert result is None
 
@@ -91,8 +91,8 @@ async def test_no_district_provided_no_fallback_attempted(db_session):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("name, state, fec_name, fec_id", [
-    pytest.param("Darline Graham", "SC", "GRAHAM, LINDSEY O", "S0SC00149", id="fec_name_with_middle_initial"),
-    pytest.param("Chuck Grassley", "IA", "GRASSLEY, BARBARA", "S0IA00099", id="fec_name_without_middle"),
+    pytest.param("Delia Whitfield", "SC", "WHITFIELD, LOWELL O", "S0SC00149", id="fec_name_with_middle_initial"),
+    pytest.param("Chuck Grantham", "IA", "GRANTHAM, BARBARA", "S0IA00099", id="fec_name_without_middle"),
 ])
 async def test_primary_search_requires_genuine_name_match(db_session, name, state, fec_name, fec_id):
     """A same-surname/state/office candidate from the primary (non-district)
@@ -132,7 +132,7 @@ class TestBioguideCrosswalkTakesPriority:
             return_value={"results": [{"candidate_id": "S4LA00107"}]},
         ) as mock_fetch:
             result = await find_candidate(
-                None, db_session, "Bill Cassidy", "LA", office="S", bioguide_id="C001075",
+                None, db_session, "Bill Cassell", "LA", office="S", bioguide_id="C001075",
             )
         assert result == {"candidate_id": "S4LA00107"}
         mock_fetch.assert_called_once()
@@ -140,7 +140,7 @@ class TestBioguideCrosswalkTakesPriority:
 
     @pytest.mark.asyncio
     async def test_stale_crosswalk_id_falls_through_to_the_next_valid_one(self, db_session):
-        # 2026-08-26 audit: three sitting members (Gillen/NY, Self/TX,
+        # 2026-08-26 audit: three sitting members (Gillis/NY, Self/TX,
         # Ivey/MD) showed $0 raised because the crosswalk carried TWO
         # ids for the same office — one stale/invalid, one real — and
         # the unverified first match happened to be the invalid one in
@@ -160,7 +160,7 @@ class TestBioguideCrosswalkTakesPriority:
             "app.pipeline.fetch.fec._fetch_with_retry", side_effect=fake_fetch,
         ):
             result = await find_candidate(
-                None, db_session, "Laura Gillen", "NY", office="H", bioguide_id="G000598",
+                None, db_session, "Laura Gillis", "NY", office="H", bioguide_id="G000598",
             )
         assert result == {"candidate_id": "H2NY04244"}
 
@@ -174,10 +174,10 @@ class TestBioguideCrosswalkTakesPriority:
         ) as mock_fetch:
             mock_fetch.side_effect = [
                 {"results": []},  # the one crosswalk id doesn't resolve
-                {"results": [_candidate("CASSIDY, BILL", "S6LA00201", "")]},  # name search
+                {"results": [_candidate("CASSELL, BILL", "S6LA00201", "")]},  # name search
             ]
             result = await find_candidate(
-                None, db_session, "Bill Cassidy", "LA", office="S", bioguide_id="C001075",
+                None, db_session, "Bill Cassell", "LA", office="S", bioguide_id="C001075",
             )
         assert result["candidate_id"] == "S6LA00201"
         assert mock_fetch.call_count == 2
@@ -190,9 +190,9 @@ class TestBioguideCrosswalkTakesPriority:
         ), patch(
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
         ) as mock_fetch:
-            mock_fetch.return_value = {"results": [_candidate("RISCH, JAMES E MR.", "S8ID00092", "")]}
+            mock_fetch.return_value = {"results": [_candidate("RASCH, JAMES E MR.", "S8ID00092", "")]}
             result = await find_candidate(
-                None, db_session, "James E. Risch", "ID", office="S", bioguide_id="Z999999",
+                None, db_session, "James E. Rasch", "ID", office="S", bioguide_id="Z999999",
             )
         assert result is not None
         assert result["candidate_id"] == "S8ID00092"
@@ -209,9 +209,9 @@ class TestBioguideCrosswalkTakesPriority:
         ), patch(
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
         ) as mock_fetch:
-            mock_fetch.return_value = {"results": [_candidate("RISCH, JAMES E MR.", "S8ID00092", "")]}
+            mock_fetch.return_value = {"results": [_candidate("RASCH, JAMES E MR.", "S8ID00092", "")]}
             result = await find_candidate(
-                None, db_session, "James E. Risch", "ID", office="S", bioguide_id="R000584",
+                None, db_session, "James E. Rasch", "ID", office="S", bioguide_id="R000584",
             )
         assert result["candidate_id"] == "S8ID00092"
         mock_fetch.assert_called_once()
@@ -225,13 +225,13 @@ class TestMiddleInitialFallback:
     because FEC files under the legal name/format (nickname, no/spelled-
     out middle initial), which never satisfies the strict all-parts
     match above. The fallback resolves the middle-initial/punctuation
-    class only ("James E. Risch" vs FEC's "RISCH, JAMES E") — nickname
-    resolution ("Bill" -> "CASSIDY, WILLIAM M.") is deliberately NOT
+    class only ("James E. Rasch" vs FEC's "RASCH, JAMES E") — nickname
+    resolution ("Bill" -> "CASSELL, WILLIAM M.") is deliberately NOT
     name-matched; it's the bioguide crosswalk's job (see
     TestBioguideCrosswalkTakesPriority above), since any hand-maintained
     alias table silently misses the next new nickname. The fallback must
     still reject a genuinely different first name sharing a surname
-    (Darline vs. Lindsey Graham — covered by
+    (Delia vs. Lowell Whitfield — covered by
     test_primary_search_requires_genuine_name_match above)."""
 
     @pytest.mark.asyncio
@@ -243,9 +243,9 @@ class TestMiddleInitialFallback:
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
         ) as mock_fetch:
             mock_fetch.return_value = {
-                "results": [_candidate("CASSIDY, WILLIAM M.", "S4LA00107", "")]
+                "results": [_candidate("CASSELL, WILLIAM M.", "S4LA00107", "")]
             }
-            result = await find_candidate(None, db_session, "Bill Cassidy", "LA", office="S")
+            result = await find_candidate(None, db_session, "Bill Cassell", "LA", office="S")
         assert result is None
 
     @pytest.mark.asyncio
@@ -256,9 +256,9 @@ class TestMiddleInitialFallback:
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
         ) as mock_fetch:
             mock_fetch.return_value = {
-                "results": [_candidate("RISCH, JAMES E MR.", "S8ID00092", "")]
+                "results": [_candidate("RASCH, JAMES E MR.", "S8ID00092", "")]
             }
-            result = await find_candidate(None, db_session, "James E. Risch", "ID", office="S")
+            result = await find_candidate(None, db_session, "James E. Rasch", "ID", office="S")
         assert result is not None
         assert result["candidate_id"] == "S8ID00092"
         mock_crosswalk.assert_not_called()  # no bioguide_id: the crosswalk is skipped entirely
@@ -273,11 +273,11 @@ class TestMiddleInitialFallback:
         ) as mock_fetch:
             mock_fetch.return_value = {
                 "results": [
-                    _candidate("WARNER, JOHN WILLIAM", "S8VA00107", ""),
-                    _candidate("WARNER, MARK ROBERT", "S6VA00093", ""),
+                    _candidate("WARDELL, JOHN WILLIAM", "S8VA00107", ""),
+                    _candidate("WARDELL, MARK ROBERT", "S6VA00093", ""),
                 ]
             }
-            result = await find_candidate(None, db_session, "Mark R. Warner", "VA", office="S")
+            result = await find_candidate(None, db_session, "Mark R. Wardell", "VA", office="S")
         assert result is not None
         assert result["candidate_id"] == "S6VA00093"
 
@@ -326,7 +326,7 @@ class TestCandidateProfileCaching:
 
 @pytest.mark.asyncio
 async def test_the_current_campaigns_id_wins_over_an_older_valid_one(db_session):
-    """John McGuire (VA-5): the crosswalk lists his 2022 VA-7 id first; both
+    """John McGuinn (VA-5): the crosswalk lists his 2022 VA-7 id first; both
     resolve on FEC. The 2024/2026 id is the seat he holds."""
     async def fake_fetch(client, url, *a, **kw):
         if "H2VA07196" in url:
@@ -340,6 +340,6 @@ async def test_the_current_campaigns_id_wins_over_an_older_valid_one(db_session)
         new=AsyncMock(return_value={"M001239": ["H2VA07196", "H0VA07133"]}),
     ), patch("app.pipeline.fetch.fec._fetch_with_retry", side_effect=fake_fetch):
         result = await find_candidate(
-            None, db_session, "John McGuire", "VA", office="H", district="05", bioguide_id="M001239",
+            None, db_session, "John McGuinn", "VA", office="H", district="05", bioguide_id="M001239",
         )
     assert result == {"candidate_id": "H0VA07133"}

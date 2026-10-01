@@ -701,7 +701,7 @@ class TestElectioneeringLanguage:
         "Rivera leads Doe by six points in a new poll.",
         # A real headline in this database — "Vote" mid-title, not imperative.
         "Twice the House Came One Vote From Telling Varga to End the Iran War",
-        "FEC filings list CHRIS COONS as a candidate in the DE Senate race.",
+        "FEC filings list CHRIS COMBS as a candidate in the DE Senate race.",
     ])
     def test_leaves_ordinary_reporting_alone(self, text):
         assert grounding.electioneering_language(text) == []

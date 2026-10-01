@@ -46,7 +46,7 @@ never use the final output's identifying field as the INTERNAL aggregation
 key when a richer one is available.
 
 This also transparently absorbs a real oddity in the 2026 Democratic file:
-a late-qualified candidate (Jeffrey Hulum III, confirmed via AP/local
+a late-qualified candidate (confirmed via AP/local
 reporting to be a candidate for the 4th Congressional District) is appended
 in his own trailing block, AFTER the shared table's own pagination has
 already finished, with no contest header repeated for him — he simply

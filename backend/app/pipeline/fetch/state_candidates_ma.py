@@ -106,7 +106,7 @@ empty state.
 THE STATE'S OWN WINNER MARK is a second gate after the vote count. PD43+
 tags the nominee's Totals cell `winner`, and a named write-in who
 topped the named field is not always one: the real 2026 5th
-Congressional District Republican primary lists Walter Grochowski and
+Congressional District Republican primary lists one named candidate and
 the 1st Governor's Council District Republican primary lists Mary
 Catherine Dormer (write-in, 455 votes against 1,212 "All Others"), and
 the archive marks neither as having won. Picked on votes alone, both

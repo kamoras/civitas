@@ -172,12 +172,12 @@ class TestFiltering:
         assert result.bills[0].bill_id == "S.1"
 
     def test_search_matches_sponsor_name(self, db_session):
-        warren = _make_senator(db_session, id="s1", name="Sen. Elizabeth Warren")
+        fairley = _make_senator(db_session, id="s1", name="Sen. Joan Fairley")
         other = _make_senator(db_session, id="s2", name="Sen. Someone Else")
-        _make_sponsored_bill(db_session, warren.id, "S.1", "INTRODUCED", title="A bill")
+        _make_sponsored_bill(db_session, fairley.id, "S.1", "INTRODUCED", title="A bill")
         _make_sponsored_bill(db_session, other.id, "S.2", "INTRODUCED", title="Another bill")
 
-        result = get_bills_in_flight(db_session, q="warren")
+        result = get_bills_in_flight(db_session, q="fairley")
 
         assert result.total == 1
         assert result.bills[0].bill_id == "S.1"

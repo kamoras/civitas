@@ -570,7 +570,7 @@ def fetch_news_articles(
 # Hill, Politico, Roll Call), which cannot cover 50 states' House and
 # Senate races. That gap is what the open Bluesky candidate-name search
 # was filling, and it filled it with 7,740 items of which Minnesota's
-# contribution included "Dave Hughes still a whiny cunt" and a post about
+# contribution included a profane insult of a candidate and a post about
 # the Australian comedian of the same name. A name mention is not
 # coverage; the answer is to widen the SOURCES rather than to filter a
 # firehose harder, which four successive filters failed to do.

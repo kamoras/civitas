@@ -1,7 +1,7 @@
 """Tests for the @unitedstates/congress-legislators bioguide<->FEC-
 candidate-ID crosswalk (congress_legislators.py) — the authoritative,
 no-name-matching-required alternative to fec.py's nickname-table
-fallback. Real shape verified live (2026-07): Bill Cassidy's entry has
+fallback. Real shape verified live (2026-07): Bill Cassell's entry has
 id.bioguide=C001075, id.fec=[H8LA00017, S4LA00107]."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,7 +21,7 @@ _SAMPLE_YAML = """
     - H8LA00017
     - S4LA00107
   name:
-    official_full: Bill Cassidy
+    official_full: Bill Cassell
 - id:
     bioguide: G000359
   name:

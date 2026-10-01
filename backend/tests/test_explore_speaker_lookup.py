@@ -4,10 +4,10 @@ surname names exactly one, sitting members first."""
 from app.pipeline.explore_pipeline import _SpeakerLookup, _speaker_surname
 
 ROWS = [
-    ("scott-rick", "Rick Scott", "FL", True),
-    ("scott-tim", "Tim Scott", "SC", True),
+    ("scott-rex", "Rex Scott", "FL", True),
+    ("scott-tad", "Tad Scott", "SC", True),
     ("vandorn-chris", "Chris Van Dorn", "MD", True),
-    ("lujan-ben", "Ben Ray Luján", "NM", True),
+    ("montano-ben", "Ben Ray Montaño", "NM", True),
     ("casey-robert", "Robert P., Jr. Casey", "PA", False),
     ("delgado-rob", "Rob Delgado", "TX", True),
     ("delgado-old", "Old Delgado", "TX", False),
@@ -17,15 +17,15 @@ ROWS = [
 def test_a_shared_surname_needs_its_state():
     lookup = _SpeakerLookup(ROWS)
     assert lookup.get("SCOTT") is None
-    assert lookup.get("SCOTT of Florida") == "scott-rick"
-    assert lookup.get("SCOTT of South Carolina") == "scott-tim"
+    assert lookup.get("SCOTT of Florida") == "scott-rex"
+    assert lookup.get("SCOTT of South Carolina") == "scott-tad"
     assert lookup.get("SCOTT of Nowhere") is None
 
 
 def test_surnames_the_last_word_misses():
     lookup = _SpeakerLookup(ROWS)
     assert lookup.get("VAN DORN") == "vandorn-chris"
-    assert lookup.get("LUJAN") == "lujan-ben"
+    assert lookup.get("MONTANO") == "montano-ben"
     assert lookup.get("CASEY") == "casey-robert"  # departed, but nobody sitting shares it
 
 

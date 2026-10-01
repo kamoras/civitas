@@ -73,7 +73,7 @@ def rep(db_session):
 
 @pytest.fixture()
 def senator(db_session):
-    s = Senator(id="S1", name="Tammy Baldwin", state="WI", party="D", is_current=True)
+    s = Senator(id="S1", name="Tess Bradwell", state="WI", party="D", is_current=True)
     db_session.add(s)
     db_session.commit()
     return s
@@ -205,8 +205,8 @@ class TestIngestHouseHoldings:
         assert db_session.query(FinancialDisclosure).one().filing_id == "OLD"
 
 
-def _senate_filing(uuid, title="Annual Report for CY 2025", filed="2026-05-11", office="Baldwin, Tammy (Senator)",
-                   paper=False, last="Baldwin", first="Tammy"):
+def _senate_filing(uuid, title="Annual Report for CY 2025", filed="2026-05-11", office="Bradwell, Tess (Senator)",
+                   paper=False, last="Bradwell", first="Tess"):
     kind = "paper" if paper else "annual"
     return {
         "last": last, "first": first, "office": office, "title": title, "filed_date": filed,
@@ -1613,10 +1613,10 @@ class TestIndexAndMatchEdges:
 
     async def test_a_formal_first_name_still_matches_the_member(self, db_session):
         """The index often uses a formal or nickname variant ("Rohit" for Ro
-        Khanna); the district and surname decide."""
-        db_session.add(Representative(id="R1", name="Ro Khanna", state="CA", district=17, party="D", is_current=True))
+        Kanna); the district and surname decide."""
+        db_session.add(Representative(id="R1", name="Raj Kanna", state="CA", district=17, party="D", is_current=True))
         db_session.commit()
-        index = {2025: [_house_filing("K", first="Rohit", last="Khanna", district="CA17")]}
+        index = {2025: [_house_filing("K", first="Rohit", last="Kanna", district="CA17")]}
         count, _ = await _ingest_house(db_session, index, {"K": AnnualReport("Member", [_row()])})
         assert count == 1
 

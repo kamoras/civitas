@@ -33,7 +33,7 @@ impossible, structurally rather than by detection:
     "Ends", because "Ends" is not a span of the source. The Iran class
     of error requires inventing a word, and no invented word survives
     the verbatim check.
-  * Imperatives. "VOTE VERONICA FERNANDEZ" has no grammatical subject,
+  * Imperatives. "VOTE JANE DOE" has no grammatical subject,
     so there is no actor span to extract, so nothing is composed. An
     endorsement cannot be phrased as actor + predicate.
   * Emptiness. No actor and predicate means no fact, which means no

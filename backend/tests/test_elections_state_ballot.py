@@ -234,8 +234,8 @@ def _filer(cand_id, name, party, contributions, cash_on_hand):
     # the first name in the other -- FEC doesn't put JR/SR in a consistent
     # place, so the surname normalization has to strip it from either side.
     pytest.param("2026-HOUSE-MO-3", "MO", "H", 3, [
-        _filer("H8MO09146", "ONDER JR, ROBERT FRANK", "REP", 878006.03, 471458.89),
-        _filer("H4MO03221", "ONDER, ROBERT FOR JR.", "REP", 878006.03, 471458.89),
+        _filer("H8MO09146", "ONDREY JR, ROBERT FRANK", "REP", 878006.03, 471458.89),
+        _filer("H4MO03221", "ONDREY, ROBERT FOR JR.", "REP", 878006.03, 471458.89),
     ], 1, id="generational_suffix_on_either_side_still_matches"),
     # Real Ohio Senate data, live-verified 2026-09-04: the plainest real
     # case, no name-variant handling needed, just two ids for one filer.
@@ -401,29 +401,29 @@ class TestIncumbentRecordLink:
 
     def test_house_incumbent_links_by_exact_district(self, db_session):
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
-        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I")
-        _representative(db_session, "R-MCBATH", "Lucy McBath", "GA", 6, score_funding_independence=70.0)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBRIDE, LUCY", incumbent_challenge="I")
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6, score_funding_independence=70.0)
         db_session.commit()
 
         data = _body(elections.state_ballot("GA", db_session))
         cand = data["houseRaces"][0]["candidates"][0]
-        assert cand["incumbentRecord"]["id"] == "R-MCBATH"
+        assert cand["incumbentRecord"]["id"] == "R-MCBRIDE"
         assert isinstance(cand["incumbentRecord"]["score"], float)
 
     def test_house_incumbent_whose_own_surname_carries_a_generational_suffix_still_links(self, db_session):
-        """Real Missouri data: FEC's "ONDER JR, ROBERT FRANK" attaches
+        """Real Missouri data: FEC's "ONDREY JR, ROBERT FRANK" attaches
         the suffix to the surname segment itself. Before _incumbent_link
         reused candidate_dedup's normalized_surname, the raw
         `name.split(",")[0]` extraction included "jr" as part of the
         last name, which could never match a Representative row's plain
-        "Robert Onder" -- this incumbent would silently get no link."""
+        "Robert Ondrey" -- this incumbent would silently get no link."""
         _race(db_session, "2026-HOUSE-MO-3", "MO", office="H", district=3)
-        _candidate(db_session, "H8MO09146", "2026-HOUSE-MO-3", "ONDER JR, ROBERT FRANK", incumbent_challenge="I")
-        _representative(db_session, "R-ONDER", "Robert Onder", "MO", 3)
+        _candidate(db_session, "H8MO09146", "2026-HOUSE-MO-3", "ONDREY JR, ROBERT FRANK", incumbent_challenge="I")
+        _representative(db_session, "R-ONDREY", "Robert Ondrey", "MO", 3)
         db_session.commit()
 
         data = _body(elections.state_ballot("MO", db_session))
-        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-ONDER"
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-ONDREY"
 
     def test_an_incumbent_renumbered_by_a_redrawn_map_still_links(self, db_session):
         """Utah's 2026 map renumbers seats; an incumbent running in a
@@ -445,9 +445,9 @@ class TestIncumbentRecordLink:
         """A member within the retirement grace period shares the district
         number with their successor; only current members are matched."""
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
-        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I")
-        _representative(db_session, "R-NEW", "Lucy McBath", "GA", 6)
-        _representative(db_session, "R-OLD", "Old McBath", "GA", 6, is_current=False)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBRIDE, LUCY", incumbent_challenge="I")
+        _representative(db_session, "R-NEW", "Lucy McBride", "GA", 6)
+        _representative(db_session, "R-OLD", "Old McBride", "GA", 6, is_current=False)
         db_session.commit()
 
         data = _body(elections.state_ballot("GA", db_session))
@@ -465,7 +465,7 @@ class TestIncumbentRecordLink:
     def test_house_non_incumbent_gets_no_link(self, db_session):
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
         _candidate(db_session, "H1", "2026-HOUSE-GA-6", "CHALLENGER, PAT", incumbent_challenge="C")
-        _representative(db_session, "R-MCBATH", "Lucy McBath", "GA", 6)
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6)
         db_session.commit()
 
         data = _body(elections.state_ballot("GA", db_session))
@@ -655,10 +655,10 @@ class TestIncumbentRecordOnceTheElectedCongressSits:
         self, db_session, monkeypatch, congress,
     ):
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
-        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I")
-        _representative(db_session, "R-MCBATH", "Lucy McBath", "GA", 6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBRIDE, LUCY", incumbent_challenge="I")
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6)
         record = self._on_jan_3(db_session, monkeypatch, congress)["houseRaces"][0]["candidates"][0]["incumbentRecord"]
-        assert record["id"] == "R-MCBATH"
+        assert record["id"] == "R-MCBRIDE"
         if congress == 119:
             assert record["seat"] == "GA-6"
         else:
@@ -719,14 +719,14 @@ class TestIncumbentRecordOnceTheElectedCongressSits:
         """FEC's duplicate record of the same person (same money, same
         surname) is merged into one card, and must not suppress its link."""
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
-        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I",
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBRIDE, LUCY", incumbent_challenge="I",
                    contributions=100.0, cash_on_hand=50.0, confirmed_general=True)
-        _candidate(db_session, "H1B", "2026-HOUSE-GA-6", "MCBATH, LUCY K", incumbent_challenge="I",
+        _candidate(db_session, "H1B", "2026-HOUSE-GA-6", "MCBRIDE, LUCY K", incumbent_challenge="I",
                    contributions=100.0, cash_on_hand=50.0)
-        _representative(db_session, "R-MCBATH", "Lucy McBath", "GA", 6)
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6)
         candidates = self._on_jan_3(db_session, monkeypatch, 120)["houseRaces"][0]["candidates"]
         assert [c["id"] for c in candidates] == ["H1"]
-        assert candidates[0]["incumbentRecord"]["id"] == "R-MCBATH"
+        assert candidates[0]["incumbentRecord"]["id"] == "R-MCBRIDE"
 
     def test_a_namesake_who_is_not_a_confirmed_nominee_still_counts(self, db_session, monkeypatch):
         """The roster can hold any winner the page doesn't show as a
@@ -798,7 +798,7 @@ class TestIncumbentRecordOnceTheElectedCongressSits:
 
 
 class TestStaleIncumbentFlag:
-    """Real MI 2026 Senate shape, live-verified 2026-09: Sen. Gary Peters
+    """Real MI 2026 Senate shape, live-verified 2026-09: Sen. Glen Peterson
     stayed FEC-coded incumbent_challenge="I" months after announcing he
     would not seek re-election, while every other filer in the race
     correctly synced to "O" (open seat) — FEC has no "declined to run"
@@ -818,7 +818,7 @@ class TestStaleIncumbentFlag:
             db_session, "ELSAYED", "2026-SEN-MI", "EL-SAYED, ABDUL",
             incumbent_challenge="O", cash_on_hand=2_552_763, contributions=14_479_903,
         )
-        _senator(db_session, "SEN-PETERS", "Gary Peters", "MI")
+        _senator(db_session, "SEN-PETERS", "Glen Peterson", "MI")
         db_session.commit()
 
         data = _body(elections.state_ballot("MI", db_session))

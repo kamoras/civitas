@@ -141,10 +141,10 @@ def survey(monkeypatch):
         "survey": "CES 2024", "fielded": "2024-10/2024-11", "fielded_year": utcnow().year - 2,
         "members": [
             member("ME", "senate", "Ruth Pryor", "R"),
-            member("IL", "senate", "Dick Durbin", "D"),
-            member("AZ", "house", "Raul Grijalva", "D", "7"),
-            member("GA", "house", "Buddy Carter", "R", "1"),
-            member("TX", "house", "Al Green", "D", "9"),
+            member("IL", "senate", "Dick Dunbar", "D"),
+            member("AZ", "house", "Rafael Villalba", "D", "7"),
+            member("GA", "house", "Sonny Carter", "R", "1"),
+            member("TX", "house", "Cal Green", "D", "9"),
             member("TX", "house", "Mark Brown", "R", "7"),
             member("TN", "house", "Mark Brown", "R", "7"),
         ],
@@ -165,31 +165,31 @@ class TestJoin:
         assert got["by_party"][2]["approve"] is None and got["by_party"][2]["respondents"] == 12
 
     def test_a_quoted_nickname_counts_as_the_first_name(self, survey):
-        got = constituent_survey.constituent_approval("house", "GA", 'Earl L. "Buddy" Carter', "R", 11, 1)
-        assert got["surveyed_as"] == "Buddy Carter"
+        got = constituent_survey.constituent_approval("house", "GA", 'Ervin L. "Sonny" Carter', "R", 11, 1)
+        assert got["surveyed_as"] == "Sonny Carter"
 
     def test_a_first_name_spelled_differently_matches_a_unique_same_party_surname(self, survey):
-        got = constituent_survey.constituent_approval("senate", "IL", "Richard J. Durbin", "D", 28)
-        assert got["surveyed_as"] == "Dick Durbin"
+        got = constituent_survey.constituent_approval("senate", "IL", "Robert J. Dunbar", "D", 28)
+        assert got["surveyed_as"] == "Dick Dunbar"
 
     def test_a_namesake_successor_does_not_inherit_the_reading(self, survey):
-        # Adelita Grijalva took the seat after the survey was fielded.
-        assert constituent_survey.constituent_approval("house", "AZ", "Adelita S. Grijalva", "D", 1, 7) is None
+        # Amalia Villalba took the seat after the survey was fielded.
+        assert constituent_survey.constituent_approval("house", "AZ", "Amalia S. Villalba", "D", 1, 7) is None
 
     def test_a_redistricted_member_is_not_given_another_districts_rating(self, survey):
         # Surveyed as TX-9; now representing TX-18: other people rated them.
-        assert constituent_survey.constituent_approval("house", "TX", "Al Green", "D", 20, 18) is None
+        assert constituent_survey.constituent_approval("house", "TX", "Cal Green", "D", 20, 18) is None
 
     def test_an_at_large_seat_matches_the_surveys_district_one(self, survey):
         survey["members"].append({
-            "state": "WY", "chamber": "house", "district": "1", "name": "Harriet Hageman",
+            "state": "WY", "chamber": "house", "district": "1", "name": "Hattie Hagemeyer",
             "member_party": "R", "by_party": {"R": {"n": 40, "rate": 0.8, "shrunk": 0.8, "n_eff": 30.0}},
         })
-        got = constituent_survey.constituent_approval("house", "WY", "Harriet M. Hageman", "R", 4, 0)
-        assert got["surveyed_as"] == "Harriet Hageman"
+        got = constituent_survey.constituent_approval("house", "WY", "Hattie M. Hagemeyer", "R", 4, 0)
+        assert got["surveyed_as"] == "Hattie Hagemeyer"
 
     def test_same_surname_in_the_state_is_told_apart_by_party_and_district(self, survey):
-        assert constituent_survey.constituent_approval("house", "TX", "Al Green", "D", 20, 9)["surveyed_as"] == "Al Green"
+        assert constituent_survey.constituent_approval("house", "TX", "Cal Green", "D", 20, 9)["surveyed_as"] == "Cal Green"
         assert constituent_survey.constituent_approval("house", "TX", "Mark Brown", "R", 8, 7)["surveyed_as"] == "Mark Brown"
 
     def test_another_chamber_or_state_is_never_matched(self, survey):

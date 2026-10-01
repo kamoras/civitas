@@ -372,7 +372,7 @@ describe("matchesDistrictQuery", () => {
   const race = {
     district: 4,
     areas: ["Providence County", "Washington County", "Kent County"],
-    candidates: [{ name: "Gabe Amo" }, { name: "Gerry W. Leonard Jr." }],
+    candidates: [{ name: "Gabe Amaro" }, { name: "Gerry W. Leonard Jr." }],
   };
 
   it("matches on a county the reader lives in", () => {
@@ -391,7 +391,7 @@ describe("matchesDistrictQuery", () => {
   });
 
   it("matches on a candidate or sitting representative's name", () => {
-    expect(matchesDistrictQuery(race, "amo")).toBe(true);
+    expect(matchesDistrictQuery(race, "amaro")).toBe(true);
     expect(matchesDistrictQuery(race, "leonard")).toBe(true);
   });
 
@@ -437,27 +437,27 @@ describe("matchesDistrictQuery", () => {
   it("tolerates a race with no county data", () => {
     const noCounties = { ...race, areas: null };
     expect(matchesDistrictQuery(noCounties, "providence")).toBe(false);
-    expect(matchesDistrictQuery(noCounties, "amo")).toBe(true);
+    expect(matchesDistrictQuery(noCounties, "amaro")).toBe(true);
   });
 });
 
 describe("candidateName", () => {
   it("prefers the name the state prints on its ballot", () => {
-    expect(candidateName({ name: "COOPER, ROY", ballotName: "Roy Cooper" })).toBe("Roy Cooper");
+    expect(candidateName({ name: "DOE, JANE", ballotName: "Jane Doe" })).toBe("Jane Doe");
   });
 
   it("falls back to the FEC name until a state source names the candidate", () => {
-    expect(candidateName({ name: "COOPER, ROY", ballotName: null })).toBe("COOPER, ROY");
-    expect(candidateName({ name: "COOPER, ROY" })).toBe("COOPER, ROY");
+    expect(candidateName({ name: "DOE, JANE", ballotName: null })).toBe("DOE, JANE");
+    expect(candidateName({ name: "DOE, JANE" })).toBe("DOE, JANE");
   });
 
   it("lets a reader find a district by the printed name too", () => {
     const race = {
       district: 1,
       areas: [],
-      candidates: [{ name: "COOPER, ROY", ballotName: "Roy Cooper" }],
+      candidates: [{ name: "DOE, JANE", ballotName: "Jane Doe" }],
     };
-    expect(matchesDistrictQuery(race, "roy cooper")).toBe(true);
+    expect(matchesDistrictQuery(race, "jane doe")).toBe(true);
   });
 });
 

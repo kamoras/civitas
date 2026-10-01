@@ -56,12 +56,12 @@ function houseRace(overrides: Partial<RaceWithCandidates> = {}): RaceWithCandida
     candidates: [
       candidate({
         id: "dem1",
-        name: "Greg Landsman",
+        name: "Greg Lindqvist",
         party: "DEM",
         incumbentChallenge: "I",
         cashOnHand: 3_610_213,
       }),
-      candidate({ id: "rep1", name: "Eric Conroy", party: "REP", cashOnHand: 474_156 }),
+      candidate({ id: "rep1", name: "Eric Conway", party: "REP", cashOnHand: 474_156 }),
     ],
     ...overrides,
   };
@@ -195,7 +195,7 @@ describe("the ballot page", () => {
                 candidate({ id: "d", name: "A Dem", party: "DEM" }),
                 candidate({
                   id: "l",
-                  name: "Shannon Bray",
+                  name: "Shannon Bly",
                   party: "LIB",
                   confirmed: true,
                   candidateStatus: "N",
@@ -208,7 +208,7 @@ describe("the ballot page", () => {
       />
     );
     const box = screen.getByTestId("ballot-columns");
-    expect(within(box).getByText("Shannon Bray")).toBeInTheDocument();
+    expect(within(box).getByText("Shannon Bly")).toBeInTheDocument();
   });
 
   it("keeps the list of what this page does not cover in view", () => {
@@ -343,7 +343,7 @@ describe("U.S. Representative", () => {
   it("lists each district's leading matchup in the picker", async () => {
     render(<StateBallotClient ballot={twoDistricts()} />);
     const drawer = await openContest(/U\.S\. Representative/);
-    expect(drawer.getByText("Greg Landsman (I)")).toBeInTheDocument();
+    expect(drawer.getByText("Greg Lindqvist (I)")).toBeInTheDocument();
     expect(drawer.getByText("Second District Dem")).toBeInTheDocument();
   });
 
@@ -359,9 +359,9 @@ describe("U.S. Representative", () => {
   it("marks a sitting member on new lines as a sitting member, never the new district's incumbent", async () => {
     render(<StateBallotClient ballot={twoDistricts({ newDistrictLines: true })} />);
     const drawer = await openContest(/U\.S\. Representative/);
-    expect(drawer.getByText("Greg Landsman (sitting member)")).toBeInTheDocument();
+    expect(drawer.getByText("Greg Lindqvist (sitting member)")).toBeInTheDocument();
     expect(drawer.queryByText(/\(I\)/)).not.toBeInTheDocument();
-    await userEvent.click(drawer.getByRole("button", { name: /Greg Landsman/ }));
+    await userEvent.click(drawer.getByRole("button", { name: /Greg Lindqvist/ }));
     const research = within(screen.getByRole("dialog"));
     expect(research.getByText("SITTING MEMBER")).toBeInTheDocument();
     expect(research.queryByText("INCUMBENT")).not.toBeInTheDocument();
@@ -393,7 +393,7 @@ describe("U.S. Representative", () => {
     ).toBeInTheDocument();
     expect(window.location.hash).toBe("#race-d2");
     await userEvent.click(drawer.getByRole("button", { name: "← PICK ANOTHER DISTRICT" }));
-    expect(within(screen.getByRole("dialog")).getByText("Greg Landsman (I)")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("Greg Lindqvist (I)")).toBeInTheDocument();
     window.location.hash = "";
   });
 

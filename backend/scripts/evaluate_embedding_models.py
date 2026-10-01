@@ -97,13 +97,13 @@ CANDIDATES = [
 DISAMBIG_POSITIVE = [
     ("Senator Lowell Whitfield from SC", "the floor speech in which Whitfield criticized the bill as"),
     ("Senator Ray Holloway from SD", "leadership change. Holloway announced the tribute details on"),
-    ("Representative Ted Lieu from CA", "Committee hearing. Lieu criticized Ambassador Mike Waltz during"),
-    ("Senator Gary Peters from MI", "planning gaps; Peters noted the Pentagon budget lacked"),
+    ("Representative Dana Liu from CA", "Committee hearing. Liu criticized the ambassador during"),
+    ("Senator Glen Peterson from MI", "planning gaps; Peterson noted the Pentagon budget lacked"),
 ]
 DISAMBIG_NEGATIVE = [
-    ("Representative Ritchie Torres from NY", "Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal"),
-    ("Representative Norma J. Torres from CA", "Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal"),
-    ("Senator Tim Scott from SC", "the film's director Scott accepted the award at the festival"),
+    ("Representative Marco Torres from NY", "Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal"),
+    ("Representative Inez J. Torres from CA", "Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal"),
+    ("Senator Ron Scott from SC", "the film's director Scott accepted the award at the festival"),
 ]
 
 # ---------------------------------------------------------------------------

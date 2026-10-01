@@ -154,7 +154,7 @@ Optional, each because a live state needed it:
                                      marked state_offices_incomplete
   format.name_regex                  the name is inside a longer cell; the
                                      regex's first group is the name
-                                     (Oklahoma prints "KEVIN HERN,
+                                     (Oklahoma prints "JOHN DOE,
                                      REPUBLICAN" in one cell)
   statewide_offices                  also read the state's own executive
                                      contests and legislative seats, through
@@ -392,7 +392,7 @@ def report_grid_rows(page: bytes, headings: list[str]) -> list[dict]:
 
 def _reading_order(printed: str) -> tuple[str, str]:
     """("Given Surname Suffix", "Surname") for a "Surname, Given Suffix"
-    name -- "Sullivan, Daniel J. Jr." reads "Daniel J. Sullivan Jr."."""
+    name -- "Doe, John J. Jr." reads "John J. Doe Jr."."""
     surname_part, _, given = printed.partition(",")
     given, suffix = _SUFFIX_RE.subn("", clean_display_name(given))
     tail = _SUFFIX_RE.search(clean_display_name(printed.partition(",")[2]))

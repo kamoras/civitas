@@ -1276,7 +1276,7 @@ def normalize_party(text: str, ballot_list: bool = False) -> str | None:
     ballot rather than primary results, where that reasoning inverts: an
     independent is a perfectly ordinary entry, and dropping them loses
     exactly the candidate a ballot list exists to show. South Dakota's
-    Senate race is the live case — Brian Bengs (IND) is on the November
+    Senate race is the live case: an independent is on the November
     ballot and no primary-results source can ever see him. PARTY_CODE_MAP
     already carries "I" -> "IND", so nothing downstream needed changing;
     only this refused to produce it.
@@ -1428,7 +1428,7 @@ def federal_record(
     `last_name` is what the matcher compares with FEC's surname.
     `display_name` is the printed name, kept for the two things a surname
     cannot do: tell apart two same-party candidates who share a surname
-    (TX-34's Eric and Mayra Flores), and show a candidate who is on the
+    (two same-party siblings in one district), and show a candidate who is on the
     ballot but never filed with the FEC, who has no FEC row to show
     instead. A strategy that reduces names to surnames before picking a
     winner loses the second one silently, which is why this takes the

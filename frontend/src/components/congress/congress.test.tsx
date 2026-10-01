@@ -424,7 +424,7 @@ const detail: VoteDetail = {
     },
     {
       lastName: "Paul",
-      firstName: "Rand",
+      firstName: "Reed",
       party: "R",
       state: "KY",
       position: "Nay",
@@ -452,7 +452,7 @@ describe("bill page", () => {
     // A part Congress.gov did not return is said to be missing, not shown empty.
     expect(screen.getByText(/did not return the cosponsors/)).toBeTruthy();
     expect(await screen.findByRole("link", { name: "Rob Delgado" })).toBeTruthy();
-    expect(screen.getByText("Rand Paul")).toBeTruthy();
+    expect(screen.getByText("Reed Paul")).toBeTruthy();
     await userEvent.selectOptions(screen.getByLabelText("State"), "KY");
     expect(screen.queryByRole("link", { name: "Rob Delgado" })).toBeNull();
     expect(

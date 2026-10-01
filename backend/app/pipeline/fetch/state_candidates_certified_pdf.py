@@ -16,7 +16,7 @@ This document has no vote counts. Its text is a plain sequence:
 
     REPUBLICAN CANDIDATES          <- a party section
     For U.S. Representative        <- an office within it
-    District 1, Paul Berry III     <- one line per candidate
+    District 1, John Q. Doe III     <- one line per candidate
     ...
     INDEPENDENT CANDIDATES
     JUDICIAL CANDIDATES            <- non-partisan: parsing stops mattering

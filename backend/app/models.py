@@ -936,7 +936,7 @@ class Candidate(Base):
     # ballot says nothing about surviving it, so once a state confirms
     # nominees, those win (see _confirmed_or_all).
     on_primary_ballot: Mapped[bool] = mapped_column(Boolean, default=False)
-    # The name as the state prints it on its ballot ("Roy Cooper"), from
+    # The name as the state prints it on its ballot ("Jane Doe"), from
     # whichever state source last matched this candidate. `name` stays the
     # FEC's own ("COOPER, ROY") — it is what the roster sync keys on and
     # what every non-ballot page shows. Null until a state source names

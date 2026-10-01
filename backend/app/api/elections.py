@@ -739,7 +739,7 @@ STATE_COVERAGE_QUERY_LIMIT = 100
 #   has_advocacy — does it tell a reader how to vote?
 #
 # Measured over 1,500 real Bluesky items: 31.5% clear relevance, and 7%
-# of those are campaign advocacy — "Elect Jonathan Nez to Congress!"
+# of those are campaign advocacy — "Elect <candidate> to Congress!"
 # scores 0.632, because campaign material is maximally on-topic for a
 # campaign. Gating on relevance alone would have concentrated the feed
 # toward exactly the content that caused the 2026-09-23 incident;
@@ -758,8 +758,8 @@ def _coverage_is_displayable(db: Session):
     This relaxed once, to let real local newsrooms that publish on
     Bluesky back in (@nebraskaexaminer, @journalstar), gated on
     relevance, no-advocacy and a DNS-verified domain handle. That was
-    wrong, and Minnesota's page is why: it carried "Dave Hughes still a
-    whiny cunt" from @crowbar.wtf — which passes the domain rule,
+    wrong, and Minnesota's page is why: it carried a profane insult of a
+    candidate from one account — which passes the domain rule,
     because it IS a domain — and directly beneath it a post about the
     AUSTRALIAN comedian of the same name defending Pauline Hanson's One
     Nation, filed as MN-7 coverage.

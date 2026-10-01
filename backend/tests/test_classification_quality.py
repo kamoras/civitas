@@ -135,7 +135,7 @@ DONOR_TYPE_HOLDOUT: list[tuple[str, str, str | None]] = [
     ("Sullivan Victory Fund", "CandidateAffiliated", "SULLIVAN, DAN S"),
     ("Wicker for Senate", "CandidateAffiliated", "WICKER, ROGER F"),
     ("Cassidy for Louisiana", "CandidateAffiliated", "CASSIDY, WILLIAM"),
-    ("Friends of Maria Cantwell", "CandidateAffiliated", "CANTWELL, MARIA"),
+    ("Friends of Maria Bellweather", "CandidateAffiliated", "BELLWEATHER, MARIA"),
 ]
 
 
