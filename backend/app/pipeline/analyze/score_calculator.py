@@ -1567,8 +1567,8 @@ def _signed_state_alignment(
     House members are measured against their DISTRICT's lean when the
     per-district table has it; state lean is the senator measure and the
     House fallback. For Independents, uses effective_party (inferred
-    caucus) to determine alignment. Sanders (I-VT, caucuses D) gets the
-    D lean for Vermont.
+    caucus) to determine alignment: an Independent who caucuses with
+    the Democrats is measured against the D lean.
     """
     pvi = _seat_pvi(state, district)
     eval_party = effective_party or party
@@ -2428,7 +2428,7 @@ def _funding_diversity_core(funding: dict) -> dict:
     # thin a slice to measure HHI on. Previously a flat step (65 if
     # small_frac > 0.3 else 50) regardless of how far past 0.3 small_frac
     # actually was — so a senator overwhelmingly funded by small donors
-    # (Bernie Sanders: 63% small-donor, 0.28% classified-industry money)
+    # (one 2026-07 senator: 63% small-donor, 0.28% classified-industry money)
     # got exactly the same 65 as one just barely over the threshold.
     # That silently capped Funding Diversity's population-wide maximum at
     # 69 (2026-07 audit: 0/100 senators break 69, the ceiling this flat
