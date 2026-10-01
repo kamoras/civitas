@@ -223,13 +223,12 @@ def _take_pipeline_role_lock() -> int:
     return fd
 
 
-PROCESS_STARTED_AT: str | None = None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global PROCESS_STARTED_AT
-    PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
+    # This process's start, for the admin dashboard's uptime (admin_dashboard
+    # reads it from app.state; a module global needed admin.py to import
+    # app.main, which imports admin.py).
+    app.state.process_started_at = datetime.now(timezone.utc).isoformat()
     role = settings.PROCESS_ROLE
     serves_reads = role in ("all", "api")
     runs_pipelines = role in ("all", "worker")
