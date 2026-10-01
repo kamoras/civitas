@@ -138,6 +138,22 @@ def _asserted_together(actor: str, predicate: str, source: str) -> str | None:
     class `ungrounded_relationship_claims` demonstrably misses (a
     published story called Donald Trump Jr. Hunter Biden's son).
     """
+    found = _locate_assertion(actor, predicate, source)
+    if found is None:
+        return None
+    # The gap is RETURNED so compose renders it. Dropping it changed who
+    # acted: "OpenAI agent made unauthorized attempts" composed as "OpenAI
+    # made unauthorized attempts" (live, 2026-09-27), and "Trump's lawyer
+    # argued" would compose as "Trump argued". The published sentence is
+    # now one contiguous span of the source.
+    tail, hit = found
+    return tail[:hit.start()]
+
+
+def _locate_assertion(actor: str, predicate: str, source: str) -> tuple[str, re.Match] | None:
+    """(the flattened source after ACTOR, the PREDICATE's match in it) at
+    the first place the source says the predicate of the actor — the
+    occurrence _asserted_together and _complete_predicate both read."""
     haystack = _flatten(source)
     needle_predicate = re.compile(re.escape(_flatten(predicate)), re.IGNORECASE)
     for match in re.finditer(re.escape(_flatten(actor)), haystack, re.IGNORECASE):
@@ -145,25 +161,19 @@ def _asserted_together(actor: str, predicate: str, source: str) -> str | None:
         hit = needle_predicate.search(tail)
         if hit is None:
             continue
-        found = hit.start()
         # Only the GAP between them is constrained. The predicate itself
         # may legitimately contain a period — "takes a selfie with
         # Maryland Sens. Chris Van Hollen" is one assertion, and an
         # earlier version of this check truncated the clause at the "."
         # in "Sens." and rejected it.
-        gap = tail[:found]
+        gap = tail[:hit.start()]
         if len(gap.split()) > _MAX_GAP_WORDS:
             continue
         # A period inside the gap means the predicate belongs to the
         # NEXT sentence, whose subject is somebody else.
         if "." in gap:
             continue
-        # The gap is RETURNED so compose renders it. Dropping it changed
-        # who acted: "OpenAI agent made unauthorized attempts" composed as
-        # "OpenAI made unauthorized attempts" (live, 2026-09-27), and
-        # "Trump's lawyer argued" would compose as "Trump argued". The
-        # published sentence is now one contiguous span of the source.
-        return gap
+        return tail, hit
     return None
 
 
@@ -205,6 +215,12 @@ _TRAILING_MODIFIER_OPENERS = frozenset({
 })
 
 
+# Punctuation that ends a clause. A "." or "," followed by a digit is
+# inside a number — "$1.5 billion", "1,000 jobs" — and ending there would
+# render "cuts $1." as the fact.
+_CLAUSE_END = re.compile(r"[;:!?]|[.,](?!\d)")
+
+
 def _ends_at_clause_boundary(predicate: str, source: str) -> bool:
     """True when the predicate runs to a natural break in the source.
 
@@ -224,7 +240,7 @@ def _ends_at_clause_boundary(predicate: str, source: str) -> bool:
     needle = _normalise(predicate)
     for match in re.finditer(re.escape(needle), haystack):
         rest = haystack[match.end():].lstrip(" '\"’”)")
-        if not rest or rest[0] in ".,;:!?":
+        if not rest or _CLAUSE_END.match(rest):
             return True
         # A span may legitimately stop before a trailing modifier: the
         # source may run on "...liable for sexual abuse and defamation
@@ -240,6 +256,60 @@ def _ends_at_clause_boundary(predicate: str, source: str) -> bool:
     return False
 
 
+# The longest run-on a completed predicate may take on: a headline's
+# clause is a few words, a lede sentence rarely more than twenty. Longer,
+# and the "clause" is more likely two run together than one.
+_MAX_COMPLETION_WORDS = 25
+
+
+def _complete_predicate(actor: str, predicate: str, source: str) -> str | None:
+    """PREDICATE run on, in the source's own words, to where its clause ends.
+
+    The model reliably finds who did it and the verb, and as reliably
+    stops there: replayed on a live hour (2026-10-01), 7 of 10 located
+    claims were rejected as too short or cut mid-phrase — "Blackburn" +
+    "sues" from "Blackburn sues Jack Smith for obtaining her phone
+    records", "Supreme Court" + "grants review of" — though the prompt
+    asks for the whole phrase. The rest of the phrase is right there,
+    after the verb, in the same sentence the source says it of that
+    actor (_locate_assertion), so it is copied, never written: the result
+    is still one contiguous span of the source, and compose then puts it
+    through every check a whole predicate gets.
+
+    It stops at the first clause punctuation, so it can't run into the
+    next clause or sentence; None when there is none within reach
+    (_MAX_COMPLETION_WORDS) — a claim this can't complete is dropped, as
+    before.
+    """
+    found = _locate_assertion(actor, predicate, source)
+    if found is None:
+        return None
+    tail, hit = found
+    rest = tail[hit.end():]
+    end = _CLAUSE_END.search(rest)
+    if end is None:
+        # The 400-character window ran out before any punctuation: no
+        # boundary seen, so nothing is assumed.
+        return None
+    completion = rest[:end.start()]
+    if len(completion.split()) > _MAX_COMPLETION_WORDS:
+        return None
+    if end.group(0) == "." and _may_be_abbreviation((hit.group(0) + completion).split()[-1]):
+        # "takes a selfie with Maryland Sens. Chris Van Hollen": that
+        # period ends an abbreviation, not the clause. Which one it is
+        # can't be told from the text alone, so no completion is
+        # attempted — the claim is dropped, as it was before.
+        return None
+    return (hit.group(0) + completion).strip()
+
+
+def _may_be_abbreviation(word: str) -> bool:
+    """A word a following period could be abbreviating: a short
+    capitalised token ("Sens", "Dr", "Gov") or one already dotted
+    ("D.C", "U.S")."""
+    return "." in word or (word[:1].isupper() and len(word) <= 4)
+
+
 def compose(actor: str, predicate: str, source: str) -> str | None:
     """A sentence built from two verbatim source spans, or None.
 
@@ -250,7 +320,7 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     actor = (actor or "").strip().strip(",;:")
     predicate = (predicate or "").strip().strip(",;:")
 
-    if len(actor) < MIN_ACTOR_CHARS or len(predicate) < MIN_PREDICATE_CHARS:
+    if len(actor) < MIN_ACTOR_CHARS or not predicate:
         return None
     if not _looks_like_an_actor(actor):
         return None
@@ -261,6 +331,17 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     # sentence case this closes.
     gap = _asserted_together(actor, predicate, source)
     if gap is None:
+        return None
+    # A predicate cut short — a bare verb, a phrase stopped before its
+    # object — is completed from the source (_complete_predicate) and
+    # then held to every check below, like any other.
+    tail_word = re.sub(r"[^\w]", "", predicate.split()[-1]).lower()
+    if (
+        len(predicate) < MIN_PREDICATE_CHARS or tail_word in _DANGLING_TAIL
+        or not _ends_at_clause_boundary(predicate, source)
+    ):
+        predicate = _complete_predicate(actor, predicate, source) or predicate
+    if len(predicate) < MIN_PREDICATE_CHARS:
         return None
     # A predicate that restates its own actor is malformed, not a fact:
     # "Veronica Fernandez" + "VOTE VERONICA FERNANDEZ" are both verbatim

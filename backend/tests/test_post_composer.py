@@ -224,3 +224,60 @@ class TestTheGapIsRenderedNotDropped:
         assert compose("Sen. Susan Collins", "rejected the nominee", src) == (
             "Sen. Susan Collins on Tuesday rejected the nominee."
         )
+
+
+class TestATruncatedPredicateIsCompletedFromItsSource:
+    """A live replay of 10 rejected claims found 7 refused because the model
+    stopped its predicate span early ("sues", "grants review of"). The
+    source still says the rest of the clause, so compose reads it on to the
+    next clause punctuation — verbatim, never written — and refuses when it
+    cannot tell where the clause ends.
+    """
+
+    def test_a_bare_verb_runs_to_the_end_of_its_headline(self):
+        src = headline_source("Blackburn sues Jack Smith for obtaining her phone records", None)
+        assert compose("Blackburn", "sues", src) == (
+            "Blackburn sues Jack Smith for obtaining her phone records."
+        )
+
+    def test_a_dangling_preposition_is_completed(self):
+        title = ("Supreme Court grants review of Trump administration's mandatory "
+                 "detention policy for immigrants")
+        assert compose("Supreme Court", "grants review of", headline_source(title, None)) == f"{title}."
+
+    def test_the_completion_stops_at_clause_punctuation(self):
+        src = "Senate passes the funding bill, sending it to the House."
+        assert compose("Senate", "passes", src) == "Senate passes the funding bill."
+
+    def test_a_possible_abbreviation_refuses_rather_than_guesses(self):
+        # "Sens." could end the sentence or not; the completion is refused
+        # rather than truncated there.
+        src = ("Cory Booker takes a selfie with Maryland Sens. Chris Van Hollen "
+               "and Angela Alsobrooks.")
+        assert compose("Cory Booker", "takes a selfie with", src) is None
+
+    def test_a_predicate_in_a_later_sentence_is_still_refused(self):
+        src = "Carroll spoke on Tuesday. The court sues nobody for anything at all."
+        assert compose("Carroll", "sues", src) is None
+
+    def test_a_clause_that_never_ends_within_reach_is_refused(self):
+        src = "Governor signs " + " ".join(["word"] * 30) + "."
+        assert compose("Governor", "signs", src) is None
+
+    def test_no_boundary_at_all_is_refused_in_running_text(self):
+        src = "The governor signs the order and then"
+        assert compose("The governor", "signs", src) is None
+
+    @pytest.mark.parametrize("source,expected", [
+        ("Pentagon cuts $1.5 billion from the program.", "Pentagon cuts $1.5 billion from the program."),
+        ("Pentagon cuts 1,000 jobs at the base.", "Pentagon cuts 1,000 jobs at the base."),
+    ])
+    def test_a_number_is_not_a_clause_end(self, source, expected):
+        assert compose("Pentagon", "cuts", source) == expected
+
+    def test_a_span_stopped_inside_a_number_is_refused(self):
+        # Before: ".5 billion" read as the end of the clause, so the
+        # model's span "cuts $1" composed as a fact with the wrong number.
+        assert compose("Pentagon", "cuts funding by $1", "Pentagon cuts funding by $1.5 billion.") == (
+            "Pentagon cuts funding by $1.5 billion."
+        )

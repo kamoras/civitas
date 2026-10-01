@@ -101,10 +101,12 @@ export default function NewsChapter() {
           A model is asked only to locate an assertion in one article — who did something, and what
           they did. The site then checks that both parts appear in the article word for word, that
           the article asserts one of the other rather than merely containing both, and that the span
-          runs to the end of its clause. Only then is the sentence shown, in the source&apos;s own
-          words, naming the outlet. The headline is the top article&apos;s real headline, and an
-          issue&apos;s full story is every checked sentence, listed under the outlet that reported
-          it.
+          runs to the end of its clause. Where the model stops short (&ldquo;Senator sues&rdquo;),
+          the site reads on in the article to the end of that clause, and drops the claim if it
+          can&apos;t tell where the clause ends. Only then is the sentence shown, in the
+          source&apos;s own words, naming the outlet. The headline is the top article&apos;s real
+          headline, and an issue&apos;s full story is every checked sentence, listed under the
+          outlet that reported it.
         </P>
         <P>
           This replaced asking a model to write neutrally and checking whether it had. That approach
