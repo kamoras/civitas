@@ -230,7 +230,7 @@ class TestFetchAndParseFiling:
         ) as mock_fetch:
             rows = await fetch_and_parse_ptr(db_session, filing)
 
-        assert rows == []
+        assert rows is None
         mock_fetch.assert_not_called()
 
 
@@ -282,12 +282,8 @@ class TestIngestPresident:
                 new_callable=AsyncMock, return_value=rows,
             ),
             patch(
-                "app.pipeline.stock_pipeline.resolve_tickers",
-                new_callable=AsyncMock, return_value={"AAPL": "Apple Inc"},
-            ),
-            patch(
-                "app.pipeline.stock_pipeline.classify_batch_with_learning",
-                return_value=({"Apple Inc": "TECH", "Bitcoin": "CRYPTO"}, []),
+                "app.pipeline.stock_pipeline.issuer_industries",
+                new_callable=AsyncMock, return_value=({"AAPL": "TECH"}, {}),
             ),
         ):
             return await _ingest_president(db_session, AsyncMock())
@@ -305,15 +301,18 @@ class TestIngestPresident:
         # Ranges as filed — the form reports no single figure and none is invented.
         assert (stored[0].amount_low, stored[0].amount_high) == (1000001.0, 5000000.0)
 
-    async def test_untickered_crypto_is_classified_not_left_unclassified(self, db_session):
-        """A ticker-only classification pass leaves every crypto line
-        UNCLASSIFIED — virtual currency has no SEC ticker to resolve."""
+    async def test_industry_comes_from_the_sec_record_and_nothing_else(self, db_session):
+        """A 278-T states no asset type, so a line the SEC has no record of
+        (virtual currency, a bond) stays UNCLASSIFIED. The name-embedding
+        guess this replaced labelled all 10 of the president's CRYPTO lines
+        wrongly in production (Coinbase stock, municipal bonds, Dollar
+        General) and none rightly (2026-09-29)."""
         self._seed_president(db_session)
 
         await self._ingest(db_session, self._rows())
 
         by_asset = {t.asset_name: t.industry for t in db_session.query(PresidentTrade).all()}
-        assert by_asset["Bitcoin"] == "CRYPTO"
+        assert by_asset["Bitcoin"] == "UNCLASSIFIED"
         assert by_asset["Apple Inc. (AAPL)"] == "TECH"
 
     async def test_disclosure_timeliness_is_computed_from_the_filed_dates(self, db_session):
