@@ -41,7 +41,7 @@ import pdfplumber
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked
 from app.pipeline.fetch.ballot_measures_al import fetch_measures as al_fetch_measures
 from app.pipeline.fetch.ballot_measures_ar import fetch_measures as ar_fetch_measures
 from app.pipeline.fetch.ballot_measures_ca import fetch_measures as ca_fetch_measures
@@ -79,10 +79,13 @@ from app.pipeline.fetch.ballot_measures_nm import fetch_measures as nm_fetch_mea
 from app.pipeline.fetch.ballot_measures_wa import fetch_measures as wa_fetch_measures
 from app.pipeline.fetch.ballot_measures_wy import parse_document as parse_wy_document
 from app.pipeline.fetch.ballot_measures_ga import fetch_measures as ga_fetch_measures
+from app.pipeline.fetch.ballot_measures_ga import fetch_republished as ga_fetch_republished
 from app.pipeline.fetch.ballot_measures_ms import fetch_measures as ms_fetch_measures
 from app.pipeline.fetch.ballot_measures_nh import fetch_measures as nh_fetch_measures
 from app.pipeline.fetch.ballot_measures_nv import fetch_measures as nv_fetch_measures
+from app.pipeline.fetch.ballot_measures_nv import fetch_republished as nv_fetch_republished
 from app.pipeline.fetch.ballot_measures_oh import fetch_measures as oh_fetch_measures
+from app.pipeline.fetch.ballot_measures_state_common import same_site
 from app.pipeline.fetch.ballot_measures_ut import fetch_measures as ut_fetch_measures
 
 logger = logging.getLogger(__name__)
@@ -97,17 +100,6 @@ _ID_KEY_RE = re.compile(r"[^A-Za-z0-9]+")
 # vocabulary terms, not any one state's branding, used to recognize a
 # PAGE worth following, not to identify a specific document.
 _FOLLOW_KEYWORDS = ("ballot", "measure", "amendment", "proposition", "referendum", "initiative", "voter guide", "pamphlet", "blue book")
-
-
-def _same_site(host: str, start_host: str) -> bool:
-    """`host` is the starting host or one of its subdomains. A state's site
-    spreads over subdomains of its own name — Colorado's Legislature lists
-    the 2026 Blue Book on leg.colorado.gov but publishes it from
-    content.leg.colorado.gov — and those are the same publisher. A sibling
-    or parent (the Secretary of State's sos.state.co.us, colorado.gov) is
-    not: a subdomain of the start, never the other way round."""
-    host, start_host = host.lower().removeprefix("www."), start_host.lower().removeprefix("www.")
-    return host == start_host or host.endswith("." + start_host)
 
 
 def _matches(haystack: str, year: int, keywords: tuple[str, ...], exclude: tuple[str, ...]) -> bool:
@@ -155,7 +147,7 @@ async def discover_pdf_url_checked(
     archive, where "nov" alone also matched an unrelated "November 2024
     Presidential Election" link, needing "nov" AND "constitutional"
     together to pick the right document). Never leaves the starting
-    site (the starting host and its subdomains, _same_site), so a page
+    site (the starting host and its subdomains, same_site), so a page
     that happens to link an outside site (a news article, a different
     state, Ballotpedia) can't pull this off course.
 
@@ -203,7 +195,7 @@ async def discover_pdf_url_checked(
             if not any(k in haystack for k in _FOLLOW_KEYWORDS):
                 continue
             next_url = urljoin(url, href)
-            if _same_site(urlparse(next_url).netloc, start_domain) and next_url not in visited:
+            if same_site(urlparse(next_url).netloc, start_domain) and next_url not in visited:
                 queue.append((next_url, depth + 1))
 
     # A crawl that stopped at its page budget with links still queued did
@@ -273,6 +265,16 @@ MULTI_DOCUMENT_STRATEGIES = {
     "ut_general_election_certification": ut_fetch_measures,
 }
 
+# Readers that can read the state's own document from a county election
+# office's republication of it, when the state's site can't be read at all
+# (SourceBlocked) — `republished_by` in the registry names the offices.
+# Each takes (client, year, the county's page) and returns verified
+# (parsed, url) pairs or None.
+REPUBLISHED_STRATEGIES = {
+    "ga_amendments_booklet": ga_fetch_republished,
+    "nv_ballot_questions_booklet": nv_fetch_republished,
+}
+
 # These are documents a state republishes wholesale on the rare occasion
 # they change, so there is little to catch by polling more often: the
 # platform's general 72h API-cache default. That applies to a non-empty list only:
@@ -337,6 +339,10 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
         "title_authority": parsed.get("title_authority"),
         "fiscal_authority": parsed.get("fiscal_authority"),
         "source_url": source_url,
+        # Set only when the state's own site couldn't be read and its
+        # document was read from a county election office's republication
+        # (_from_republished_copy): the card names both.
+        "republished_by": parsed.get("republished_by"),
         # The state's own record says this measure was struck from the
         # ballot (Florida's Status "Removed"). Not upserted as on the
         # ballot; election_pipeline reconciles it to removed and counts it
@@ -360,6 +366,24 @@ def forget_cached(db, state: str, year: int) -> None:
     db.query(ApiCache).filter(
         ApiCache.tier == CACHE_TIER, ApiCache.cache_key == f"{state}-{year}",
     ).delete(synchronize_session=False)
+
+
+async def _from_republished_copy(
+    client: httpx.AsyncClient, state: str, source: dict, strategy_key: str, year: int, blocked: SourceBlocked,
+) -> list[tuple[dict, str]] | None:
+    """The state's own document, read from the first county office in
+    `republished_by` whose copy the reader verifies, each measure marked
+    with who republished it (the card says so). None when the state is
+    blocked and no copy verifies: still a failure, never "none" — a county
+    page without the booklet says nothing about the state's ballot."""
+    reader = REPUBLISHED_STRATEGIES.get(strategy_key)
+    for office in source.get("republished_by", []) if reader else []:
+        pairs = await reader(client, year, office["url"])
+        if pairs:
+            logger.info("%s: %s; read the state's document as republished by %s", state, blocked, office["name"])
+            return [({**parsed, "republished_by": office["name"]}, url) for parsed, url in pairs]
+    logger.warning("%s: %s, and no county republication of its document verified", state, blocked)
+    return None
 
 
 def _duplicate_ids(measures: list[dict]) -> list[str]:
@@ -452,6 +476,8 @@ async def fetch_state_measures_pdf(
             pairs = await multi_strategy(client, year)
         except NotYetPublished:
             raise
+        except SourceBlocked as blocked:
+            pairs = await _from_republished_copy(client, state, source, strategy_key, year, blocked)
         except Exception:
             logger.exception("Multi-document ballot measure fetch failed for %s %d", state, year)
             return None

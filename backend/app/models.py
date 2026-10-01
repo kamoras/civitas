@@ -1767,6 +1767,12 @@ class BallotMeasure(Base):
 
     source_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The county election office whose republication of the state's own
+    # document this was read from, when the state's site couldn't be read
+    # at all (Georgia's and Nevada's are behind bot walls). source_name
+    # stays the state's — it is the state's document — and the card names
+    # both. Null whenever the state's own copy was read.
+    republished_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # Watermark for the reconciliation grace period (see
     # election_pipeline._sync_ballot_measures): a measure absent from a
     # sync isn't deleted on the spot, because one truncated upstream
