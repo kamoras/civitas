@@ -959,8 +959,9 @@ const HOUSE_ONE_EACH_RESULTS = "Each voter has exactly one of these on the ballo
  * district is a navigation problem: point at the map, pick your county,
  * or filter by a county, a candidate's name or a district number.
  *
- * In a state whose lines were redrawn after its sitting members were
- * elected (ballot.newDistrictLines) every
+ * In a state whose lines were redrawn after its members were elected —
+ * the members going into this election, or the ones sitting now
+ * (ballot.newDistrictLines) — every
  * representative-based route answers for the OLD map: house.gov's lookup
  * and "your representative's name" both lead to the district today's
  * member was elected in, and on the new map that number is a different
@@ -1054,11 +1055,17 @@ function HouseDetail({
         <p className="mb-3 text-[13px] text-ink-lo">
           {resultsMode ? (
             <>
-              {HOUSE_ONE_EACH_RESULTS} This election in {stateName} was held on{" "}
+              {/* "is", not "was held": results mode starts at midnight on
+                  election day, polls still open. "Going into this
+                  election", not "current": from noon on Jan 3 (still
+                  inside the results window) the members sitting were
+                  elected on these very lines. */}
+              {HOUSE_ONE_EACH_RESULTS} This election in {stateName} is on{" "}
               <strong className="font-semibold text-ink-hi">
                 new congressional district lines
               </strong>
-              , so your district may not be the one your current representative was elected in
+              , so your district may not be the one your representative going into this election was
+              elected in
             </>
           ) : (
             // Worded around the sitting member, not "this year": the flag
@@ -1066,7 +1073,7 @@ function HouseDetail({
             // the new lines take their seats (Jan 3), while the page is
             // already on the next cycle's ballot.
             <>
-              {HOUSE_ONE_EACH} {stateName} has{" "}
+              {HOUSE_ONE_EACH} {stateName} has drawn{" "}
               <strong className="font-semibold text-ink-hi">
                 new congressional district lines
               </strong>{" "}
@@ -1074,8 +1081,8 @@ function HouseDetail({
               they were elected in
             </>
           )}
-          , and lookups by representative show the districts members hold today, not these. Point at
-          the map, pick your county, or filter by a county or district number
+          , and lookups by representative can answer for the old map, not these lines. Point at the
+          map, pick your county, or filter by a county or district number
           {lookupIsStateSpecific ? (
             <>
               {" "}

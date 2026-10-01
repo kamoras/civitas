@@ -395,10 +395,11 @@ export interface StateBallot {
    * state, never a fabricated 0. */
   statePvi: number | null;
   /** The state votes this cycle on congressional lines other than the
-   * ones its sitting members were elected on (backend
-   * redrawn_congressional_maps.json). A district number then names a
-   * different place than today's member's, so any lookup by
-   * representative (house.gov, a member's name) answers for the old map.
+   * ones its members were elected on — those going into this election,
+   * or those sitting now (backend redrawn_states,
+   * redrawn_congressional_maps.json). A district number can then name a
+   * different place than a member's, so a lookup by representative
+   * (house.gov, a member's name) can answer for the old map.
    * Optional for an older backend: absent reads as false. */
   newDistrictLines?: boolean;
   senateRaces: RaceWithCandidates[];
@@ -663,9 +664,9 @@ export interface LiveResults {
    * count shown here" beside the one that has one. Optional for an older
    * backend. */
   senateRaces?: Record<string, ListedSenateRace[]>;
-  /** States voting on new congressional lines this cycle: their House
-   * seats have no holder going in (heldBy null), so none can count as a
-   * seat changing party. Optional for an older backend. */
+  /** States voting this cycle on lines other than the ones the members
+   * going into it were elected on: their House seats have no holder going
+   * in (heldBy null), so none can count as a seat changing party. Optional for an older backend. */
   redrawnStates?: string[];
   /** When each live state's last polls close (UTC ISO). Nothing of its
    * count is read or shown before then. Optional for an older backend. */

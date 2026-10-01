@@ -160,11 +160,14 @@ def seat_holder_party(db: Session, race: Race) -> str | None:
     which seat is up), else — an open seat — the state's senators' party
     only when both share it.
 
-    Either way only while the stored members are the ones going into the
-    election: once the Congress it seated sits (Jan 3 can still be inside
-    the results window), the roster holds its winners — or, until the
-    House run refreshes it, members of other districts — so the holder is
-    unknowable from it and None."""
+    Either way only while the members going into the election sit: once
+    the Congress it seated does (from the first job after noon ET on Jan 3,
+    which the results window can still include), any member run — the
+    nightly chain starts at 22:00 ET that evening — can switch the roster
+    to the winners, and nothing stored says which Congress it holds, so
+    the holder is unknowable from it and None. A redrawn state's House
+    seats are None either way (redrawn_states keeps them for their own
+    cycle whoever sits)."""
     if congress_first_year(settings.CURRENT_CONGRESS) - 1 >= race.cycle_year:
         return None
     if race.office == "H":

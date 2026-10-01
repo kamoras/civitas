@@ -287,7 +287,9 @@ none of which sends anything anywhere:
 - **Text filter** (`matchesDistrictQuery`) — county names, any
   candidate's name (the representative's only when they are running
   again), or a district number. In a state whose lines were
-  redrawn after its sitting members were elected (`newDistrictLines`) the page offers counties and numbers only, and
+  redrawn after its members were elected — those going into the election
+  (`cycle - 2`'s map) or those sitting now (`newDistrictLines`,
+  `live_results.sync.redrawn_states`) — the page offers counties and numbers only, and
   drops the house.gov link: both answer by representative, i.e. for the
   old map.
 
@@ -390,10 +392,11 @@ links to its election office, never as a state where nothing has happened.
   none: the district of the same number is a different district), so no flip
   is announced for it, on the page, in an issue or on Bluesky.
 - A holder is read from the member list only while the members going into
-  the election still sit: from Jan 3 (the new Congress's first day, which
-  the results window can still include) the list holds the winners, or —
-  until the House run refreshes it — members of other districts, so a
-  holder still unknown then stays unknown. A holder already read stands.
+  the election still sit: from noon ET on Jan 3 (the new Congress takes
+  office; the results window can still include that day) any member run —
+  the nightly chain at 03:00 UTC is 22:00 ET that evening — can switch the
+  list to the winners, and nothing stored says which Congress it holds, so
+  a holder still unknown then stays unknown. A holder already read stands.
 - Events are diffed against what has already been announced
   (`announced_state`), not against the previous poll, so a change inside a
   held poll is still announced on the next one.

@@ -119,13 +119,13 @@ export default async function ElectionsChapter() {
           the page: nothing is typed into a lookup, sent or stored.
         </P>
         <P>
-          In a state whose lines were redrawn after its sitting members were elected, a lookup by
-          representative — house.gov&apos;s, or your current member&apos;s name — answers for the
-          district your current member was elected in, which on the new map can be a different place
-          under the same number. Those pages point to the map, the counties and the state&apos;s own
-          ballot lookup instead. For the same reason a member of Congress running there is marked a
-          &ldquo;sitting member&rdquo;, not the &ldquo;incumbent&rdquo;: the district they hold
-          today is on the old map, and no seat on the new one has a previous holder.
+          In a state whose lines were redrawn after its members were elected (those going into the
+          election, or those sitting now), a lookup by representative — house.gov&apos;s, or your
+          current member&apos;s name — answers for the district your current member was elected in,
+          which on the new map can be a different place under the same number. Those pages point to
+          the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
+          a member of Congress running there is marked a &ldquo;sitting member&rdquo;, not the
+          &ldquo;incumbent&rdquo;: no seat on the new map has a previous holder.
         </P>
         <Sub title="The optional town selector">
           <P>
@@ -311,8 +311,9 @@ export default async function ElectionsChapter() {
             reversal. A House seat in a state whose congressional map was redrawn for this election
             has no previous holder to compare against — the district with the same number is a
             different district — so it is never described as changing party. Nor is a seat whose
-            previous holder was still unknown when the new Congress took office on January 3: from
-            then the member list shows the winners, not who held the seat going in.
+            previous holder was still unknown when the new Congress took office at noon on January
+            3: from then the member list is changing over to the winners, so it no longer says who
+            held the seat going in.
           </P>
         </Sub>
         <Sub title="Developing stories and posts">

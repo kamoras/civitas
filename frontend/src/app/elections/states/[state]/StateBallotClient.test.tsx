@@ -468,13 +468,13 @@ describe("U.S. Representative", () => {
     expect(drawer.getByText(/new congressional district lines/)).toBeInTheDocument();
     // Campaign wording, addressed to someone who is about to vote.
     expect(drawer.getByText(/new congressional district lines/).closest("p")).toHaveTextContent(
-      /^You vote in exactly one of these\. Texas has new congressional district lines since your current representative was elected, so your district may not be the one they were elected in, and lookups/
+      /^You vote in exactly one of these\. Texas has drawn new congressional district lines since your current representative was elected, so your district may not be the one they were elected in, and lookups/
     );
     expect(drawer.getByText(/new congressional district lines/).closest("p")).not.toHaveTextContent(
       /this year/
     );
     expect(
-      drawer.getByText(/lookups by representative show the districts members hold today, not these/)
+      drawer.getByText(/lookups by representative can answer for the old map, not these lines/)
     ).toBeInTheDocument();
     // The state's own lookup does know the new lines.
     expect(
@@ -517,7 +517,7 @@ describe("U.S. Representative", () => {
     const drawer = await openContest(/U\.S\. Representative/);
     const intro = drawer.getByText(/new congressional district lines/).closest("p");
     expect(intro).toHaveTextContent(
-      /Texas has new congressional district lines since your current representative was elected, so your district may not be the one they were elected in, and lookups/
+      /Texas has drawn new congressional district lines since your current representative was elected, so your district may not be the one they were elected in, and lookups/
     );
     expect(intro).not.toHaveTextContent(/this year/);
     expect(drawer.queryByRole("link", { name: /house\.gov/ })).not.toBeInTheDocument();

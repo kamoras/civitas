@@ -620,7 +620,7 @@ describe("the state page in results mode", () => {
     const drawer = within(screen.getByRole("dialog"));
     const intro = drawer.getByText(/new congressional district lines/).closest("p");
     expect(intro).toHaveTextContent(
-      /^Each voter has exactly one of these on the ballot\. This election in Ohio was held on new congressional district lines, so your district/
+      /^Each voter has exactly one of these on the ballot\. This election in Ohio is on new congressional district lines, so your district may not be the one your representative going into this election was elected in/
     );
     expect(intro).not.toHaveTextContent(/You vote in|votes on new/);
   });

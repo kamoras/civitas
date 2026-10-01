@@ -1198,10 +1198,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "ballotBasis": _ballot_basis(senate_races + house_races, primary_date(state, cycle)),
         "statePvi": state_pvi.get(state),
         # The state votes this cycle on congressional lines other than the
-        # ones its sitting members were elected on
-        # (app/data/redrawn_congressional_maps.json): a district number
-        # names a different place than today's member's, so a lookup by
-        # representative (house.gov, a member's name) answers for the
+        # ones its members were elected on — the members going into this
+        # election, or the ones sitting now (redrawn_states;
+        # app/data/redrawn_congressional_maps.json): a district number can
+        # name a different place than a member's, so a lookup by
+        # representative (house.gov, a member's name) can answer for the
         # old map.
         "newDistrictLines": state in redrawn_states(cycle),
         "senateRaces": senate_races,
