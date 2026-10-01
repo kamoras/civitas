@@ -228,8 +228,8 @@ async def find_candidate(
         # "genuinely unmeasurable," just never fetched.
         #
         # Fall back to last-name + EXACT first-name — still rejects a
-        # same-surname different person (e.g. "Darline Graham" vs. FEC's
-        # "GRAHAM, LINDSEY O"), which is the actual misattribution risk
+        # same-surname different person (e.g. "Jane Doe" vs. FEC's
+        # "DOE, JOHN Q"), which is the actual misattribution risk
         # this function guards against; the middle name is what stops
         # mattering. Deliberately NO nickname aliasing here ("Bill" ->
         # WILLIAM): nickname resolution is the bioguide crosswalk's job

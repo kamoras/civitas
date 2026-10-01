@@ -13,9 +13,9 @@ vi.mock("@/lib/shareImage", async (importOriginal) => ({
 }));
 
 const subject: ShareSubject = {
-  title: "Tim Burchett",
+  title: "Jordan Hale",
   subtitle: "Representative · TN-2 · Republican",
-  url: "https://civitas-research.org/politicians/tim-burchett",
+  url: "https://civitas-research.org/politicians/jordan-hale",
 };
 
 function Section({ children }: { children: React.ReactNode }) {
@@ -95,7 +95,7 @@ describe("ShareSectionButton", () => {
     expect((section as HTMLElement).dataset.shareSection).toBe("funding-independence");
     expect(passedSubject).toBe(subject);
     expect(opts).toMatchObject({
-      link: "https://civitas-research.org/politicians/tim-burchett#funding-independence",
+      link: "https://civitas-research.org/politicians/jordan-hale#funding-independence",
       withStrip: true,
     });
 
@@ -104,7 +104,7 @@ describe("ShareSectionButton", () => {
       "blob:preview"
     );
     expect(dialog).toHaveTextContent(
-      "https://civitas-research.org/politicians/tim-burchett#funding-independence"
+      "https://civitas-research.org/politicians/jordan-hale#funding-independence"
     );
 
     await user.click(screen.getByRole("button", { name: "Copy image" }));
@@ -122,10 +122,10 @@ describe("ShareSectionButton", () => {
     );
     await user.click(screen.getByRole("button", { name: "Share Senate as an image" }));
     expect(
-      screen.getByText("https://civitas-research.org/politicians/tim-burchett")
+      screen.getByText("https://civitas-research.org/politicians/jordan-hale")
     ).toBeInTheDocument();
     expect(captureSection.mock.calls[0][2]).toMatchObject({
-      link: "https://civitas-research.org/politicians/tim-burchett",
+      link: "https://civitas-research.org/politicians/jordan-hale",
     });
   });
 
@@ -151,7 +151,7 @@ describe("ShareSectionButton", () => {
     const user = setup();
     const closeDrawer = vi.fn();
     render(
-      <ScorecardDrawer title="Donors" subtitle="Tim Burchett" onClose={closeDrawer}>
+      <ScorecardDrawer title="Donors" subtitle="Jordan Hale" onClose={closeDrawer}>
         <Section>
           <ShareSectionButton label="Funding Independence" />
         </Section>

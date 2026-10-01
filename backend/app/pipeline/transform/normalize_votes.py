@@ -241,8 +241,8 @@ def _determine_party_alignment(
     the losing side stays a break.
 
     For Independents, uses their inferred caucus party (see
-    _infer_caucus_party). This ensures that senators like Sanders (I-VT)
-    and King (I-ME) — who caucus with Democrats — are measured against
+    _infer_caucus_party). This ensures that Independent senators who caucus
+    with Democrats are measured against
     the D party line rather than being excluded entirely.
 
     Args:

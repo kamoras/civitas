@@ -79,8 +79,8 @@ RACE_COOLDOWN_HOURS = 48
 
 # Which coverage sources Civitas will restate IN ITS OWN VOICE.
 #
-# 2026-09-23 incident: this platform posted "VOTE VERONICA FERNANDEZ!
-# ... She's better for Jersey than Booker!" about the NJ Senate race. The
+# 2026-09-23 incident: this platform posted a member of the public's
+# "VOTE <candidate>!" endorsement about the NJ Senate race. The
 # source was one member of the public's campaign post, ingested as
 # "coverage" because it named a candidate on that race's FEC roster. Every
 # guard here worked as written — full_name match basis, grounding,

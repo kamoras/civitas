@@ -97,9 +97,8 @@ from the JSON on the date shown; the JSON is authoritative.
 
 **Prefer the ballot over results wherever a state publishes it.** Results
 have to be *interpreted* — runoff thresholds, top-two, certification flags —
-and can still be wrong. Maine's Democratic Senate primary winner (Graham
-Platner) withdrew in July and the party nominated Troy Jackson by
-convention; South Carolina's June Senate winner was replaced through a
+and can still be wrong. Maine's Democratic Senate primary winner withdrew in
+July and the party nominated a replacement by convention; South Carolina's June Senate winner was replaced through a
 special primary and runoff. A results reader publishes the wrong person in
 both. A certified ballot needs no interpretation.
 

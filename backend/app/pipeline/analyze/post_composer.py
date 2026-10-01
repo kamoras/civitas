@@ -164,7 +164,7 @@ def _locate_assertion(actor: str, predicate: str, source: str) -> tuple[str, re.
             continue
         # Only the GAP between them is constrained. The predicate itself
         # may legitimately contain a period — "takes a selfie with
-        # Maryland Sens. Chris Van Hollen" is one assertion, and an
+        # Maryland Sens. Sam Lee and Dana Cruz" is one assertion, and an
         # earlier version of this check truncated the clause at the "."
         # in "Sens." and rejected it.
         gap = tail[:hit.start()]
@@ -296,7 +296,7 @@ def _complete_predicate(actor: str, predicate: str, source: str) -> str | None:
     if len(completion.split()) > _MAX_COMPLETION_WORDS:
         return None
     if end.group(0) == "." and _may_be_abbreviation((hit.group(0) + completion).split()[-1]):
-        # "takes a selfie with Maryland Sens. Chris Van Hollen": that
+        # "takes a selfie with Maryland Sens. Sam Lee": that
         # period ends an abbreviation, not the clause. Which one it is
         # can't be told from the text alone, so no completion is
         # attempted — the claim is dropped, as it was before.
@@ -357,7 +357,7 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
         return None
     # A bare participle is a fragment, not a clause: measured live, the
     # model returned "unveiling legislation" for a source whose own
-    # sentence was "Sanders unveils a bill", giving "Sen. Bernie Sanders
+    # sentence was "<senator> unveils a bill", giving "Sen. <senator>
     # unveiling legislation." An auxiliary ("is unveiling") is fine, so
     # only a LEADING -ing word is rejected.
     head = re.sub(r"[^\w]", "", predicate.split()[0]).lower()

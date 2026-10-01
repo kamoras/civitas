@@ -95,8 +95,8 @@ CANDIDATES = [
 # HIGHER than a different person's (sports) usage of the same surname.
 # ---------------------------------------------------------------------------
 DISAMBIG_POSITIVE = [
-    ("Senator Lindsey Graham from SC", "the floor speech in which Graham criticized the bill as"),
-    ("Senator John Thune from SD", "leadership change. Thune announced the tribute details on"),
+    ("Senator Lowell Whitfield from SC", "the floor speech in which Whitfield criticized the bill as"),
+    ("Senator Ray Holloway from SD", "leadership change. Holloway announced the tribute details on"),
     ("Representative Ted Lieu from CA", "Committee hearing. Lieu criticized Ambassador Mike Waltz during"),
     ("Senator Gary Peters from MI", "planning gaps; Peters noted the Pentagon budget lacked"),
 ]

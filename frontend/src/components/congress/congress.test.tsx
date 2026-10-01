@@ -352,14 +352,14 @@ const record: BillRecord = {
   },
   sponsors: [
     {
-      name: "Sen. Cruz, Ted [R-TX]",
+      name: "Sen. Delgado, Rob [R-TX]",
       party: "R",
       state: "TX",
       district: null,
       bioguideId: "C001098",
       isOriginalCosponsor: null,
       sponsorshipDate: null,
-      page: "/politicians/ted-cruz",
+      page: "/politicians/rob-delgado",
     },
   ],
   cosponsors: [],
@@ -414,13 +414,13 @@ const detail: VoteDetail = {
   parties: record.votes[0].parties,
   members: [
     {
-      lastName: "Cruz",
-      firstName: "Ted",
+      lastName: "Delgado",
+      firstName: "Rob",
       party: "R",
       state: "TX",
       position: "Yea",
       bucket: "yea",
-      page: "/politicians/ted-cruz",
+      page: "/politicians/rob-delgado",
     },
     {
       lastName: "Paul",
@@ -451,10 +451,10 @@ describe("bill page", () => {
     ).toBeTruthy();
     // A part Congress.gov did not return is said to be missing, not shown empty.
     expect(screen.getByText(/did not return the cosponsors/)).toBeTruthy();
-    expect(await screen.findByRole("link", { name: "Ted Cruz" })).toBeTruthy();
+    expect(await screen.findByRole("link", { name: "Rob Delgado" })).toBeTruthy();
     expect(screen.getByText("Rand Paul")).toBeTruthy();
     await userEvent.selectOptions(screen.getByLabelText("State"), "KY");
-    expect(screen.queryByRole("link", { name: "Ted Cruz" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Rob Delgado" })).toBeNull();
     expect(
       within(screen.getByRole("link", { name: /Thu, Sep 24, 2026/ })).getByText(/Sep 24/)
     ).toBeTruthy();
@@ -471,7 +471,7 @@ describe("bill page", () => {
         stageName={null}
       />
     );
-    await screen.findByRole("link", { name: "Ted Cruz" });
+    await screen.findByRole("link", { name: "Rob Delgado" });
     expect(await violations()).toEqual([]);
   });
 });

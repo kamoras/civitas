@@ -703,9 +703,9 @@ def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
     `confirmed_general` is otherwise never cleared, which is right for
     primary results (a nominee does not stop being one because a later
     fetch hiccupped) and wrong once the state has certified its ballot.
-    Maine confirmed Graham Platner from the June primary he won; he
-    withdrew in July and the party nominated Troy Jackson. Adding Jackson
-    alone would have shown both. Scoped to the races the list actually
+    Maine confirmed its Democratic Senate nominee from the June primary;
+    the winner withdrew in July and the party nominated a replacement.
+    Adding the replacement alone would have shown both. Scoped to the races the list actually
     covers, so a race the list is missing (a parse slip) keeps what it
     had rather than losing everyone."""
     changed = 0

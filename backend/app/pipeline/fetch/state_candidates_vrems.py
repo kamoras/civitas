@@ -3,7 +3,7 @@
 
 South Carolina sat on `google_civic` all cycle. Its primary results ARE
 reachable (a Clarity host, enr-scvotes.org), but reading nominees from
-them would have published the wrong Senate nominee: Lindsey Graham won
+them would have published the wrong Senate nominee: one candidate won
 the June 9 Republican primary outright, then a separate US Senate
 Special Republican Primary (August 11) and its runoff nominated someone
 else. Any primary-results reader that stops at June names the wrong

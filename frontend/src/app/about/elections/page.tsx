@@ -195,9 +195,9 @@ export default async function ElectionsChapter() {
           </P>
           <P>
             Reading the ballot rather than primary results also catches a nominee replaced after the
-            primary: in Maine, Graham Platner won the Democratic Senate primary, withdrew in July,
-            and the party nominated Troy Jackson; in South Carolina a special primary replaced the
-            June Senate winner. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland, Iowa,
+            primary: in Maine, the winner of the Democratic Senate primary withdrew in July and the
+            party nominated a replacement; in South Carolina a special primary replaced the June
+            Senate winner. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland, Iowa,
             Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska, Montana, Illinois and
             North Dakota are read from their certified lists (Tennessee&apos;s federal races alone
             list 36 independents), and Wisconsin from its official primary canvass.
