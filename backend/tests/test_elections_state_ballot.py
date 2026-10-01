@@ -710,7 +710,7 @@ class TestIncumbentRecordOnceTheElectedCongressSits:
         the longer one, and a rival's is its trailing token."""
         _race(db_session, "2026-SEN-GA", "GA")
         _candidate(db_session, "S1", "2026-SEN-GA", "VAN DORN, CHRIS", incumbent_challenge="I")
-        _candidate(db_session, "S2", "2026-SEN-GA", "HOLLEN, DANA", incumbent_challenge="C", party="REP")
+        _candidate(db_session, "S2", "2026-SEN-GA", "DORN, DANA", incumbent_challenge="C", party="REP")
         _senator(db_session, "SEN-VH", "Chris Van Dorn", "GA")
         data = self._on_jan_3(db_session, monkeypatch, 120)
         assert all(c["incumbentRecord"] is None for c in data["senateRaces"][0]["candidates"])

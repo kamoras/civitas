@@ -3377,7 +3377,7 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         "Dale Carver flips Georgia's 2nd District",
         "Dale Carver Flips Georgia's 2nd District",
         "DALE CARVER LEADS IN GEORGIA'S 2ND DISTRICT",
-        "W. Carver leads in Georgia's 2nd District",
+        "D. Carver leads in Georgia's 2nd District",
         "Dale Carver's lead grows in GA-02",
         "Leland D. Mason Jr. leads in Georgia's 2nd District",
         "Leland D. Mason Leads In Georgia's 2nd District",
@@ -3388,7 +3388,7 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         "Georgia's 2nd District flips the seat to Dale Carver",
         "Georgia's 2nd District heads to a recount; Dale Carver leads",
         "Georgia's 2nd District House of Representatives seat goes to Dale Carver",
-        "Republican leads in Georgia's 2nd District\nWayne Carver ahead with most precincts in",
+        "Republican leads in Georgia's 2nd District\nDale Carver ahead with most precincts in",
     ])
     def test_the_race_is_named_by_a_candidates_full_name(self, db_session, text):
         # The count prints "Leland D. Mason, Jr.": the comma sets off a
@@ -3467,25 +3467,25 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
     def test_full_names_are_read_as_names(self, db_session):
         # Accents and curly apostrophes folded either way, multi-word and
         # hyphenated surnames whole.
-        db = self._count(db_session, "2026-HOUSE-CA-38", "Linda T. Sánchez", "Eric Ching")
-        self._count(db, "2026-HOUSE-IA-1", "Mariannette Miller-Meeks", "Christina Bohannan")
+        db = self._count(db_session, "2026-HOUSE-CA-38", "Lucia T. Peña", "Eric Tolan")
+        self._count(db, "2026-HOUSE-IA-1", "Marisol Hart-Keller", "Christina Wexley")
         self._count(db, "2026-HOUSE-TX-16", "Kip O'Dwyer", "Pat Quimby")
-        self._count(db, "2026-HOUSE-TX-15", "Beto O’Rourke", "Pat Quimby")
+        self._count(db, "2026-HOUSE-TX-15", "Kip O’Dwyer", "Pat Quimby")
         ca = self._flip_issue("2026-HOUSE-CA-38", "California's 38th")
-        assert self._match(ca, "Linda Sanchez leads in California's 38th District", db=db) is ca
-        assert self._match(ca, "Linda Sánchez leads in California's 38th District", db=db) is ca
-        assert self._match(ca, "Sánchez leads in California's 38th District", db=db) is None
+        assert self._match(ca, "Lucia Pena leads in California's 38th District", db=db) is ca
+        assert self._match(ca, "Lucia Peña leads in California's 38th District", db=db) is ca
+        assert self._match(ca, "Peña leads in California's 38th District", db=db) is None
         ia = self._flip_issue("2026-HOUSE-IA-1", "Iowa's 1st")
-        assert self._match(ia, "Mariannette Miller-Meeks trails in Iowa's 1st District", db=db) is ia
-        assert self._match(ia, "Mariannette Miller Meeks trails in Iowa's 1st District", db=db) is ia
-        assert self._match(ia, "Mariannette Meeks trails in Iowa's 1st District", db=db) is None
-        assert self._match(ia, "Miller-Meeks trails in Iowa's 1st District", db=db) is None
+        assert self._match(ia, "Marisol Hart-Keller trails in Iowa's 1st District", db=db) is ia
+        assert self._match(ia, "Marisol Hart Keller trails in Iowa's 1st District", db=db) is ia
+        assert self._match(ia, "Marisol Keller trails in Iowa's 1st District", db=db) is None
+        assert self._match(ia, "Hart-Keller trails in Iowa's 1st District", db=db) is None
         for race_id in ("2026-HOUSE-TX-16", "2026-HOUSE-TX-15"):
             tx = self._flip_issue(race_id, "Texas")
             district = race_id.rsplit("-", 1)[1] + "th"
-            assert self._match(tx, f"Beto O’Rourke leads in Texas’ {district} District", db=db) is tx
+            assert self._match(tx, f"Kip O’Dwyer leads in Texas’ {district} District", db=db) is tx
             assert self._match(tx, f"Kip O'Dwyer leads in Texas's {district} District", db=db) is tx
-            assert self._match(tx, f"O’Rourke leads in Texas’ {district} District", db=db) is None
+            assert self._match(tx, f"O’Dwyer leads in Texas’ {district} District", db=db) is None
 
     def test_candidate_rows_stand_in_before_a_count(self, db_session):
         """No count stored: the certified nominees, by FEC's "LAST, FIRST"
@@ -3526,7 +3526,7 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
 
         db = self._count(db_session, "2026-HOUSE-GA-2", "Leland D. Mason, Jr.", "Dale Carver")
         people = sorted(_race_people(db, "2026-HOUSE-GA-2"))
-        assert [(p.surname, sorted(p.leads)) for p in people] == [("mason", ["leland"]), ("carver", ["dale"])]
+        assert [(p.surname, sorted(p.leads)) for p in people] == [("carver", ["dale"]), ("mason", ["leland"])]
 
     def test_with_no_candidate_on_record_the_phrase_decides_alone(self, db_session):
         db = self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
