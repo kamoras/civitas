@@ -32,6 +32,19 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "President v6",
+    date: "2026-10-01",
+    title:
+      "Approval trend judged against where the term started; the sitting president compared over the same time",
+    tldr: "A president whose approval starts low has little room to fall, so a small decline from a low start used to look better than average. The trend is now compared with what presidents who started at the same level went on to do. The sitting president, partway through a term, is now compared with predecessors over the same number of days instead of their whole terms.",
+    changes: [
+      "Why: across the 14 completed presidencies with polling, where approval started explains 45% of how far it moved (r = -0.67): high starters fell a long way and low starters didn't. Scored against the flat average fall of 14 points, the sitting president's 5.6-point fall from 41% scored 67, though presidents starting that low have historically gained.",
+      "Approval trend is now scored against the change history predicts from the president's own starting level, refitted on every update.",
+      "The sitting president's approval was compared with whole terms and was also included in the average everyone else was compared with. Approval falls as a term goes on (predecessors averaged 57.5% over their first 598 days and 51.9% over full terms), so both comparisons flattered a partial term. The sitting president is now compared with each predecessor over the same number of days, and the full-term comparison uses completed presidencies only.",
+      "Effect on October 2026 data: the sitting president's Public Mandate moves from 29 to 13 and Trump's first term from 38 to 24; Kennedy from 81 to 92 and Eisenhower from 82 to 88; most others move down a few points. docs/research/president-scores.md has the table.",
+    ],
+  },
+  {
     version: "v6.24",
     date: "2026-09-29",
     title: "Funding Independence: the Senate's small-donor baseline is measured every run",

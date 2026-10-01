@@ -75,13 +75,17 @@ export default function PresidentsAndJusticesChapter() {
         <Sub title="Public Mandate (21.67%)">
           <P>
             Approval over the term: 70% the average, 30% the trend from start to finish, each scored
-            against every president&apos;s actual polling history. Data comes from the American
-            Presidency Project at UC Santa Barbara, which aggregates AP-NORC, CNN-SSRS, Marist, Pew
-            and Verasight — Gallup, the original source, stopped tracking presidential approval in
-            February 2026. Presidents before Truman, from before polling, are scored on their
-            average margin of victory instead. The four who have neither — Tyler, Fillmore, Arthur
-            and Andrew Johnson, who never won a presidential election and served before polling —
-            read N/A.
+            against every completed presidency&apos;s actual polling history. The trend is compared
+            with what presidents who started at the same level went on to do, because approval is
+            bounded: across the 14 completed presidencies with polling, the higher the start, the
+            further it fell. The sitting president is compared with predecessors over the same
+            number of days from the start of their terms, since approval falls as a term goes on.
+            Data comes from the American Presidency Project at UC Santa Barbara, which aggregates
+            AP-NORC, CNN-SSRS, Marist, Pew and Verasight — Gallup, the original source, stopped
+            tracking presidential approval in February 2026. Presidents before Truman, from before
+            polling, are scored on their average margin of victory instead. The four who have
+            neither — Tyler, Fillmore, Arthur and Andrew Johnson, who never won a presidential
+            election and served before polling — read N/A.
           </P>
         </Sub>
         <Sub title="Effectiveness (21.67%)">

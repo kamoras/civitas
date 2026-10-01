@@ -744,6 +744,11 @@ class President(Base):
     # (see calc_public_mandate) — persisted for the same on-demand
     # score-breakdown-recompute reason as rulemaking_finalized_pct above.
     approval_trend: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # First-quartile average approval: where the term started. The trend
+    # is judged against what presidents starting at that level went on to
+    # do (president_scorer.fit_trend_on_start), since a president who
+    # starts high has far further to fall.
+    approval_start: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
     # Lincoln=897) — persisted alongside the normalized score_
     # historical_legacy for the same on-demand-recompute reason as

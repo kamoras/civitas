@@ -103,6 +103,13 @@ export interface PublicMandateFacts {
   approvalMean: number | null;
   approvalTrend: number | null;
   trendMean: number | null;
+  /** First-quartile average approval: where the term started. */
+  approvalStart?: number | null;
+  /** The change presidents starting at approvalStart went on to make. */
+  trendExpected?: number | null;
+  /** Set for the sitting president: the comparison is predecessors over
+   *  their first this-many days, not their full terms. */
+  comparedOverDays?: number | null;
   electionMargin: number | null;
   marginMean: number | null;
   /** Average approval over the last 90 days (not scored). */
