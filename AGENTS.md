@@ -236,7 +236,8 @@ exemption list covers what cannot affect classification or scoring:
 `_NOT_ANALYSIS_PATHS` (the holdings ingest, filer matching, the run-coordination
 modules, the election run's orchestration, the LDA bill-name matcher
 `analyze/lobbying_records.py`, the Explore summary prompt `analyze/prompts.py`,
-the modules that word and publish posts) and
+the modules that word and publish posts, the Action Center's hourly run
+(`_ACTION_CENTER_PATHS`), which keeps no learned data) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
 both in `senate_pipeline.py`. This fingerprint is
 compared to the stored hash from the last pipeline run:
