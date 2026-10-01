@@ -378,6 +378,27 @@ describe("DistrictMap", () => {
     expect(await screen.findByText("R+6 (statewide)")).toBeInTheDocument();
   });
 
+  it("names the dark no-lean fill, and leaves a shape with no race out of the buttons", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    // CT-5 has no race on the ballot; CT-4's race has no lean at all.
+    const races = [1, 2, 3, 4].map((d) => race(d, d === 4 ? null : 6));
+    render(<DistrictMap state="CT" races={races} picked={null} onPick={vi.fn()} />);
+
+    await screen.findByRole("button", { name: "CT-2" });
+    expect(screen.getByText(/redder = safer R.* · dark = no lean on file/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /CT-5/ })).not.toBeInTheDocument();
+    const five = screen.getByRole("img", { name: "CT-5: no race on file" });
+    expect(five.getAttribute("tabindex")).toBe("-1");
+    expect(five).not.toHaveAttribute("aria-pressed");
+  });
+
+  it("names no dark fill when every shape has a lean", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    render(<DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} />);
+    await screen.findByRole("button", { name: "CT-2" });
+    expect(screen.queryByText(/dark = no lean on file/)).not.toBeInTheDocument();
+  });
+
   it("keys lean intensity as fainter = closer, never paler", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
     render(<DistrictMap state="CT" races={RACES} picked={null} onPick={vi.fn()} />);

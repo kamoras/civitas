@@ -127,7 +127,7 @@ export function leanFill(pvi: number | null): { fill: string; opacity: number } 
 interface Topo {
   type: "Topology";
   bbox: Bbox;
-  objects: { districts: unknown };
+  objects: { districts: { geometries?: { properties?: { district?: number } }[] } };
 }
 
 type GeographyProp = Parameters<typeof Geographies>[0]["geography"];
@@ -206,6 +206,13 @@ export default function DistrictMap({
   }, [races]);
 
   const fit = useMemo(() => (topo?.bbox ? fitMercator(topo.bbox, WIDTH) : null), [topo]);
+  const shapes = useMemo(
+    () =>
+      (topo?.objects.districts.geometries ?? [])
+        .map((g) => g.properties?.district)
+        .filter((d): d is number => typeof d === "number"),
+    [topo]
+  );
 
   if (!multiDistrict || failed || !topo || !fit) return null;
 
@@ -217,6 +224,15 @@ export default function DistrictMap({
   const stateLevel = drawn.filter((r) => r.pviLevel === "state").length;
   // No drawn district has a lean of its own: nothing to key red/blue by.
   const unshaded = !results && (!showLean || (drawn.length > 0 && stateLevel === drawn.length));
+  // A shape leanFill paints UNKNOWN: no race on the ballot for it, or a race
+  // with no lean at all. The legend has to name that dark fill when it shows.
+  const unknownShown =
+    !results &&
+    !unshaded &&
+    shapes.some((d) => {
+      const r = byDistrict.get(d);
+      return !r || (r.pviLevel !== "state" && r.pvi == null);
+    });
 
   return (
     <div className="mb-4 border border-white/15">
@@ -281,6 +297,7 @@ export default function DistrictMap({
             {newLines ? "the new 2026 districts · " : ""}
             redder = safer R · bluer = safer D · fainter = closer
             {stateLevel > 0 && " · grey = no district lean yet"}
+            {unknownShown && " · dark = no lean on file"}
           </p>
         )}
       </div>
@@ -323,22 +340,28 @@ export default function DistrictMap({
               const name = district === 0 ? `${state} at-large` : `${state}-${district}`;
               // Shaded by the count, the district's standing is in its
               // name too: the fill is never the only way to read it.
-              const label = results
-                ? `${name}: ${
-                    counted
-                      ? `${raceStatusText(counted)}${stale ? "; not live, the last count read" : ""}`
-                      : answered
-                        ? NO_COUNT_TEXT
-                        : "no votes yet"
-                  }`
-                : name;
+              const label =
+                !race && !counted
+                  ? `${name}: no race on file`
+                  : results
+                    ? `${name}: ${
+                        counted
+                          ? `${raceStatusText(counted)}${stale ? "; not live, the last count read" : ""}`
+                          : answered
+                            ? NO_COUNT_TEXT
+                            : "no votes yet"
+                      }`
+                    : name;
               return (
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  role="button"
+                  // A shape with no race on file has nothing to open: not a
+                  // button, and out of the tab order.
+                  role={race ? "button" : "img"}
+                  tabIndex={race ? 0 : -1}
                   aria-label={label}
-                  aria-pressed={isPicked}
+                  aria-pressed={race ? isPicked : undefined}
                   onMouseEnter={() => setHovered(district)}
                   onMouseLeave={() => setHovered(null)}
                   onFocus={() => setHovered(district)}
