@@ -300,9 +300,19 @@ TEST_CONSTITUENT_REFERENCE = {
 def pinned_population_references(tmp_path, monkeypatch):
     """Point every per-chamber reference at test-controlled files: no live
     /data file, and a bundled file holding the pinned values above."""
+    pin_population_references(monkeypatch, tmp_path)
+    yield
+
+
+def pin_population_references(monkeypatch, tmp_path) -> None:
+    """pinned_population_references' work, for a fixture with a wider scope
+    than a test — one that starts the real app's lifespan, whose startup
+    rescore reads and writes these — with its own MonkeyPatch."""
     import json
 
     from app.pipeline.analyze import population_reference
+
+    tmp_path = pathlib.Path(tmp_path)
 
     for ref, values in (
         (population_reference.LES_REFERENCE, TEST_LES_REFERENCE),
@@ -322,7 +332,6 @@ def pinned_population_references(tmp_path, monkeypatch):
 
     monkeypatch.setattr(SIGNAL_OVERLAP, "live_path", tmp_path / "signal_overlap_live.json")
     monkeypatch.setattr(SIGNAL_OVERLAP, "_cache", None)
-    yield
 
 
 @pytest.fixture()
@@ -633,6 +642,45 @@ def redirect_data_volume(monkeypatch, data) -> None:
     for module in ("app.pipeline.fetch.state_candidate_sources", "app.pipeline.fetch.state_election_dates"):
         if module in sys.modules:
             monkeypatch.setattr(f"{module}.runtime_data_path", runtime_data_path)
+
+
+def use_app_database(monkeypatch, directory):
+    """Point the app's own database (app.database: engine, visits_engine,
+    SessionLocal, VisitsSessionLocal, and the URLs init_db's lock reads)
+    at fresh files in `directory`, configured as production's; returns the
+    main engine. For a fixture that starts the real app's lifespan.
+
+    The run's DATABASE_URL is `sqlite:///:memory:`, whose default pool
+    (SingletonThreadPool) gives every thread its own connection — so its
+    own, empty, database — and keeps at most five: the sixth thread to
+    connect closes one of the others, whichever a set.pop() picks, and its
+    database with it. A real lifespan builds its schema on one thread
+    (init_db, on TestClient's portal thread), and its own background
+    threads (the startup rescore, the bill cache, the explore reindex) each
+    connect too, on top of whatever earlier tests' threads left in the
+    pool: the portal's connection was closed under /api/health, which then
+    read "no such table" or "Cannot operate on a closed database",
+    depending on test order. A file is one database for every thread, as
+    production's is, and its pool closes nothing it doesn't own."""
+    from sqlalchemy import event
+
+    from app import database
+
+    directory = pathlib.Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    url = f"sqlite:///{directory / 'civitas.db'}"
+    visits_url = database._derive_visits_database_url(url)
+    engines = {}
+    for name, u in (("engine", url), ("visits_engine", visits_url)):
+        engines[name] = create_engine(u, connect_args=database._sqlite_connect_args_for(u), pool_pre_ping=True)
+        event.listens_for(engines[name], "connect")(database._set_sqlite_pragmas)
+        monkeypatch.setattr(database, name, engines[name])
+    monkeypatch.setattr(database.settings, "DATABASE_URL", url)
+    monkeypatch.setattr(database, "VISITS_DATABASE_URL", visits_url)
+    # Imported by name all over the app: rebind the sessionmakers themselves.
+    monkeypatch.setitem(database.SessionLocal.kw, "bind", engines["engine"])
+    monkeypatch.setitem(database.VisitsSessionLocal.kw, "bind", engines["visits_engine"])
+    return engines["engine"]
 
 
 # For the whole run, from here: a test module reading a data file as it is
