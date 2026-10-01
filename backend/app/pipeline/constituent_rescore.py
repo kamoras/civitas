@@ -66,7 +66,8 @@ def rescore_stale_constituent_alignment(
     raises.
 
     `house_lines` is the Congress whose district lines the caller holds in
-    effect for the rescore (district_pvi.current_lines — main's lifespan).
+    effect for the rescore (district_pvi.current_lines, taken by
+    main._rescore_house_on_current_lines in the startup-rescore writer).
     Each rescored representative records it (district_lines_congress) in
     the same commit as their new score, so the score breakdown — and the
     overlap check measured from it just below — recompute on the lines the
@@ -76,9 +77,9 @@ def rescore_stale_constituent_alignment(
     mid-rollout) would have its members stamped with this rescore's
     lines.
 
-    `chambers` limits it to those (main.rescore_constituent_alignment_on_
-    current_lines runs the Senate alone, then the House under the district
-    lines' lease)."""
+    `chambers` limits it to those (main._run_startup_rescore runs the
+    Senate alone, then main._rescore_house_on_current_lines the House under
+    the district lines' lease)."""
     from app.models import HousePipelineRun, PipelineRun, Representative, Senator
     from app.pipeline.analyze.ground_truth import _vote_query_for
     from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
