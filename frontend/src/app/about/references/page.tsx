@@ -19,7 +19,7 @@ export default function ReferencesChapter() {
       lede={<p>The research every method in these pages is built on, cited where it is used.</p>}
     >
       <P>
-        Citing a study means a method follows it or was tested the way it describes — not that its
+        Citing a study means a method follows it or was tested the way it describes, not that its
         authors endorse how it is applied here.
       </P>
       <ol className="space-y-4">

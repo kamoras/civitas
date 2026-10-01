@@ -4,7 +4,7 @@ import { pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "Bills in Congress: Status, Sponsors & What's Moving",
   description:
-    "Track every bill moving through the current Congress — introduced, in committee, passed, or signed into law — with sponsors, latest actions, and related news.",
+    "Track every bill moving through the current Congress (introduced, in committee, passed, or signed into law), with sponsors, latest actions, and related news.",
   path: "/congress/bills",
 });
 

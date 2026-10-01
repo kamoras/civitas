@@ -145,7 +145,7 @@ async function issueImage(
     ? issue.summary.length > 140
       ? issue.summary.slice(0, 137) + "…"
       : issue.summary
-    : "Track what Congress is doing — and what you can do about it.";
+    : "Track what Congress is doing, and what you can do about it.";
   const section = "ACTION CENTER";
   const footerLabel = "PUBLIC FEDERAL DATA";
 
@@ -560,7 +560,7 @@ async function electionImage(ballot: StateBallot | null, code: string) {
   if (!ballot) {
     return genericCard({
       section,
-      title: `${code} — Civitas Elections`,
+      title: `${code} | Civitas Elections`,
       description: "Federal contests and statewide ballot measures.",
       footerLabel,
     });

@@ -353,12 +353,12 @@ export default function ResultsOverview({
           <p className="border-t border-white/[0.07] px-4 py-3 text-xs text-ink-min">
             Colour is who leads each state&apos;s own count, not a projection. Fainter means fewer
             than half the precincts or counties are in; solid means the state lists its count as
-            official, and a race there still only leads — Civitas calls no race.{" "}
+            official, and a race there still only leads: Civitas calls no race.{" "}
             {chamber === "H"
               ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
               : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in; with only one of its two races counted, it is shaded by that one, and the other is named as having no count."}{" "}
             Hatched grey means Civitas shows a count for the state&apos;s other chamber&apos;s races
-            but none for this one&apos;s — not that no votes are in.{" "}
+            but none for this one&apos;s, not that no votes are in.{" "}
             {refreshFailed ? (
               <>
                 This page couldn&apos;t refresh the count, so none of it is live: stripes over a
@@ -429,7 +429,7 @@ export default function ResultsOverview({
               {redrawn.length === 1 ? "state" : `${redrawn.length} states`} voting on new district
               lines ({redrawn.join(", ")}), which have no previous holder
               {redrawnCounted > 0 &&
-                ` — ${redrawnCounted} of the districts with a count so far are among them`}
+                `; ${redrawnCounted} of the districts with a count so far are among them`}
               .
             </p>
           )}

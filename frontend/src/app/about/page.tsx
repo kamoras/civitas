@@ -10,7 +10,7 @@ import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
 export const metadata = pageMetadata({
   title: "About Civitas: How Members of Congress Are Scored",
   description:
-    "What Civitas is, how it scores senators, representatives, presidents and justices from public records, and the rules it holds itself to — in five minutes.",
+    "What Civitas is, how it scores senators, representatives, presidents and justices from public records, and the rules it holds itself to: in five minutes.",
   path: "/about",
 });
 
@@ -22,7 +22,7 @@ export const metadata = pageMetadata({
 const PRINCIPLES: readonly { title: string; body: string }[] = [
   {
     title: "Public records only",
-    body: "Every score is computed from official records — Congress.gov, the FEC, the Federal Register, the courts. Nothing is purchased, and nothing is invented to fill a gap.",
+    body: "Every score is computed from official records: Congress.gov, the FEC, the Federal Register, the courts. Nothing is purchased, and nothing is invented to fill a gap.",
   },
   {
     title: "One formula for every party",
@@ -65,7 +65,7 @@ const SCORE_PARTS: readonly {
     name: "Constituent Alignment",
     question: "Do they vote the way their seat elected them to?",
     high: "Breaks with their party about as often as members in similar seats.",
-    low: "Breaks far more often than that — or, less costly, far less.",
+    low: "Breaks far more often than that, or, less costly, far less.",
   },
   {
     href: "/about/scores#effectiveness",
@@ -119,8 +119,8 @@ export default function AboutOverview() {
       title="About Civitas"
       lede={
         <p>
-          Civitas scores the people who represent you — senators, representatives, presidents and
-          Supreme Court justices — using only public records and formulas anyone can check.
+          Civitas scores the people who represent you (senators, representatives, presidents and
+          Supreme Court justices) using only public records and formulas anyone can check.
         </p>
       }
     >
@@ -173,7 +173,7 @@ export default function AboutOverview() {
           ))}
         </div>
         <P>
-          Scores cover the current Congress, not a whole career — two years of votes and bills —
+          Scores cover the current Congress (two years of votes and bills), not a whole career,
           except funding, which covers the election that won the member their seat. Every number on
           a scorecard has a <span className="font-mono text-ink-hi">[?]</span> beside it explaining
           what it measures. <A href="/about/scores">Read how each part is calculated</A>.
@@ -206,7 +206,7 @@ export default function AboutOverview() {
           <Caveat>
             <strong className="text-ink-hi">Why someone voted.</strong> A score reads what members
             did, not their reasons. A donor whose industry lines up with a vote shows where money
-            and votes meet — not that the money bought the vote.
+            and votes meet, not that the money bought the vote.
           </Caveat>
           <Caveat>
             <strong className="text-ink-hi">
@@ -255,7 +255,7 @@ export default function AboutOverview() {
       <Section id="who" title="Who runs it">
         <P>
           One developer, as a hobby, on a Raspberry Pi at home. There is no company, no cloud
-          service, no advertising and no outside money — Civitas takes nothing from parties,
+          service, no advertising and no outside money: Civitas takes nothing from parties,
           candidates or PACs and sells nothing. It exists partly to show that a civic accountability
           tool doesn&apos;t need venture capital or a data center: the whole thing uses about as
           much electricity in a year as a refrigerator does in six weeks.

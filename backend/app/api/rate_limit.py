@@ -90,7 +90,7 @@ class _PerClientLimit:
         if not decision.allowed:
             raise HTTPException(
                 status_code=429,
-                detail=f"Rate limit exceeded — {self.limit} {self.what} per minute per IP.",
+                detail=f"Rate limit exceeded: {self.limit} {self.what} per minute per IP.",
                 headers={"Retry-After": retry_after(decision.reset_at)},
             )
 
@@ -180,7 +180,7 @@ async def public_read_limit(request: Request) -> None:
     if not decision.allowed:
         raise HTTPException(
             status_code=429,
-            detail=f"Rate limit exceeded — {PUBLIC_READ_LIMIT} requests per minute per IP.",
+            detail=f"Rate limit exceeded: {PUBLIC_READ_LIMIT} requests per minute per IP.",
             headers={
                 "X-RateLimit-Limit": str(PUBLIC_READ_LIMIT),
                 "X-RateLimit-Remaining": "0",

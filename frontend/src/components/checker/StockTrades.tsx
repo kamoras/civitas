@@ -55,7 +55,7 @@ function TimelinessBadge({ late, daysToDisclose }: { late: boolean; daysToDisclo
           ? "text-signal-magenta border-signal-magenta/40 bg-signal-magenta/10 font-bold"
           : "text-ink-lo border-white/[0.07] bg-white/[0.03]"
       }`}
-      title={`Disclosed ${daysToDisclose} day${daysToDisclose !== 1 ? "s" : ""} after the transaction — the STOCK Act requires disclosure within 45 days.`}
+      title={`Disclosed ${daysToDisclose} day${daysToDisclose !== 1 ? "s" : ""} after the transaction: the STOCK Act requires disclosure within 45 days.`}
     >
       {late ? "LATE DISCLOSURE" : "ON TIME"}
     </span>
@@ -68,7 +68,7 @@ function TradeRow({ trade }: { trade: StockTrade }) {
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <TransactionBadge type={trade.transactionType} />
         <span className="text-ink text-sm">
-          {trade.ticker ? `${trade.ticker} — ${trade.assetName}` : trade.assetName}
+          {trade.ticker ? `${trade.ticker}: ${trade.assetName}` : trade.assetName}
         </span>
         {trade.parseConfidence === "ocr" && (
           <MetricTooltip text="Read by OCR from a scanned filing. The amount is one of the form's own ranges, but a digit of the date may be misread, so no timeliness is shown. A president's scanned periodic reports are replaced by the annual report, which lists the year's transactions as text, once it is filed.">
@@ -90,7 +90,7 @@ function TradeRow({ trade }: { trade: StockTrade }) {
         <span
           title={
             trade.amountOpenEnded
-              ? "The filing used the form's open-ended top bracket — it discloses a minimum and no maximum."
+              ? "The filing used the form's open-ended top bracket: it discloses a minimum and no maximum."
               : undefined
           }
         >
@@ -131,9 +131,9 @@ const SOURCE_LABEL = {
 
 const ABOUT_DATA = {
   congress:
-    "Disclosed under the STOCK Act (2012), which requires members of Congress to report stock transactions within 45 days. Informational only — not part of the overall score, since disclosure completeness varies widely per member.",
+    "Disclosed under the STOCK Act (2012), which requires members of Congress to report stock transactions within 45 days. Informational only, not part of the overall score, since disclosure completeness varies widely per member.",
   president:
-    "Every securities and virtual-currency purchase, sale, or exchange over $1,000 the president disclosed. For a year the annual report (OGE Form 278e) covers, its list of the year's transactions is the record; after it, the periodic reports (OGE Form 278-T) the STOCK Act requires within 45 days, which the White House files as scans. Amounts are the value ranges the forms report — they carry no cost basis or share count, so no profit or gain figure is shown or derived. Informational only, not part of the overall score.",
+    "Every securities and virtual-currency purchase, sale, or exchange over $1,000 the president disclosed. For a year the annual report (OGE Form 278e) covers, its list of the year's transactions is the record; after it, the periodic reports (OGE Form 278-T) the STOCK Act requires within 45 days, which the White House files as scans. Amounts are the value ranges the forms report: they carry no cost basis or share count, so no profit or gain figure is shown or derived. Informational only, not part of the overall score.",
 } as const;
 
 export default function StockTrades({ politicianId, filer = "senate" }: StockTradesProps) {

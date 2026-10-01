@@ -72,7 +72,7 @@ describe("statewide ballot measures", () => {
       measures: [m("SQ 1", "removed")],
     } as unknown as Partial<StateBallot>);
     const subtitle = buildBallotContests(b, false).find((c) => c.kind === "measures")!.subtitle;
-    expect(subtitle).toBe("None current — check the official lookup");
+    expect(subtitle).toBe("None current: check the official lookup");
   });
 
   it("does not word an operator's 'none' as the state's", () => {

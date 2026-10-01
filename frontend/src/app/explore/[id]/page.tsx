@@ -123,7 +123,7 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
               htmlFor="comment-draft"
               className="text-xs font-mono text-ink-lo block mb-1 tracking-wider"
             >
-              YOUR COMMENT — EDIT BEFORE SUBMITTING
+              YOUR COMMENT: EDIT BEFORE SUBMITTING
             </label>
             <textarea
               id="comment-draft"
@@ -726,7 +726,7 @@ export default function ExploreDetailPage() {
                   </span>
                   <p className="text-ink-min text-xs mt-2">
                     {summaryQueued
-                      ? "Other analyses are being written — this one is queued and starts as soon as the analyzer is free."
+                      ? "Other analyses are being written: this one is queued and starts as soon as the analyzer is free."
                       : "This may take a moment"}
                   </p>
                 </div>
@@ -848,7 +848,7 @@ export default function ExploreDetailPage() {
               {sourceUrl && (
                 <>
                   {" "}
-                  —{" "}
+                  ·{" "}
                   <a
                     href={safeHref(sourceUrl) || "#"}
                     target="_blank"

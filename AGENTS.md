@@ -1300,6 +1300,10 @@ the pending list).
 - Tailwind CSS for styling
 - API calls go through `src/lib/api.ts`
 - Dynamic configuration fetched from `GET /api/config` — never hardcode industry codes, score weights, or category labels
+- **Site prose uses no em dashes** (2026-10). Use a comma, colon, parentheses or a
+  full stop; for a separator inside a label, the middle dot " · ". A string that is
+  only "—" is the table placeholder for no data and stays.
+  `src/lib/noEmDash.test.ts` fails on any other em dash in a user-visible string.
 - Every metric shown on scorecards has a `MetricTooltip` component providing
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they
@@ -1346,7 +1350,7 @@ the pending list).
   taken from the record, not the request's spelling.
 - Titles lead with what people type into a search box (member name +
   party-state, bill number, full state name); the root template appends
-  " — Civitas". Search-facing wording lives in `src/lib/seo.ts`, not in
+  " | Civitas" (no em dashes in site prose, 2026-10). Search-facing wording lives in `src/lib/seo.ts`, not in
   `page.tsx` (Next rejects extra exports there).
 - A missing record is a real 404 via `notFound()` plus `noindex`, never a
   200 page that says "not found". The converse holds too: an unreachable

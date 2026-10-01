@@ -77,7 +77,7 @@ export function formerOfficeBadge(input: OfficeStatusInput): string {
   const suffix =
     input.branch === "senate" || input.branch === "house"
       ? input.vacancyReason
-        ? ` — ${input.vacancyReason.toUpperCase()}`
+        ? ` · ${input.vacancyReason.toUpperCase()}`
         : ""
       : "";
   return `${label.toUpperCase()}${suffix}`;

@@ -631,7 +631,7 @@ describe("statewide executive offices", () => {
       />
     );
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/EXECUTIVE COUNCIL — 4 SEATS/)).toBeInTheDocument();
+    expect(drawer.getByText(/EXECUTIVE COUNCIL · 4 SEATS/)).toBeInTheDocument();
     expect(drawer.getByText(/Each voter votes in one district's seat only/)).toBeInTheDocument();
     fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), {
       target: { value: "concord" },
@@ -886,8 +886,8 @@ describe("state legislature", () => {
   it("renders both chambers with their contested seat counts", async () => {
     render(<StateBallotClient ballot={ballot(legislature)} />);
     const drawer = await open();
-    expect(drawer.getByText("STATE SENATE — 1 SEAT CONTESTED")).toBeInTheDocument();
-    expect(drawer.getByText("STATE HOUSE — 4 SEATS CONTESTED")).toBeInTheDocument();
+    expect(drawer.getByText("STATE SENATE · 1 SEAT CONTESTED")).toBeInTheDocument();
+    expect(drawer.getByText("STATE HOUSE · 4 SEATS CONTESTED")).toBeInTheDocument();
   });
 
   it("shows each seat's towns so a reader can find it without an address", async () => {
@@ -1247,7 +1247,7 @@ describe("ballot measures", () => {
       />
     );
     const box = within(screen.getByTestId("ballot-columns"));
-    expect(box.getByText(/From our last successful read — may be out of date/)).toBeInTheDocument();
+    expect(box.getByText(/From our last successful read: may be out of date/)).toBeInTheDocument();
     expect(box.getByText("removed")).toBeInTheDocument();
     expect(box.getByText("1 measure")).toBeInTheDocument();
   });
@@ -1536,7 +1536,7 @@ describe("state office terms", () => {
       />
     );
     const drawer = await openContest(/State Senate/);
-    expect(drawer.getByText(/STATE SENATE — 1 SEAT CONTESTED/).textContent).toContain(
+    expect(drawer.getByText(/STATE SENATE · 1 SEAT CONTESTED/).textContent).toContain(
       "4-YEAR TERMS"
     );
   });

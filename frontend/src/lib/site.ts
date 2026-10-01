@@ -56,7 +56,7 @@ export const DEFAULT_OG_IMAGE: OgImage = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: "Civitas — public-record scorecards for Congress",
+  alt: "Civitas: public-record scorecards for Congress",
 };
 
 /**
@@ -68,7 +68,7 @@ export const DEFAULT_OG_IMAGE: OgImage = {
  * builds the complete set every time instead.
  *
  * `title` is the page's own title; the root layout's template appends
- * " — Civitas". Pass `absoluteTitle` to opt out (the homepage).
+ * " | Civitas". Pass `absoluteTitle` to opt out (the homepage).
  *
  * `images` defaults to the site card. It has to be explicit: the root
  * `opengraph-image` file is NOT inherited by a route that sets `openGraph`
@@ -92,7 +92,7 @@ export function pageMetadata({
   absoluteTitle?: boolean;
   noindex?: boolean;
 }): Metadata {
-  const fullTitle = absoluteTitle ? title : `${title} — ${SITE_NAME}`;
+  const fullTitle = absoluteTitle ? title : `${title} | ${SITE_NAME}`;
   const desc = metaDescription(description);
   return {
     title: absoluteTitle ? { absolute: title } : title,
@@ -122,6 +122,6 @@ export function pageMetadata({
  * fallbacks. They lead with what people type into a search box — the old
  * title, "CIVITAS // PUBLIC RECORD", matched no query anyone makes.
  */
-export const HOME_TITLE = "Civitas — Congress Scorecards, Voting Records & Campaign Finance";
+export const HOME_TITLE = "Civitas: Congress Scorecards, Voting Records & Campaign Finance";
 export const HOME_DESCRIPTION =
   "Nonpartisan scorecards for every senator, representative, president, and Supreme Court justice: voting records, donors, PAC money, and bills from public data.";

@@ -160,7 +160,7 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
                      text-xs font-mono tracking-wide transition-colors"
         >
           <span aria-hidden="true">✎</span>
-          SUBMIT YOUR COMMENT —{" "}
+          SUBMIT YOUR COMMENT ·{" "}
           {remaining === 0 ? "closes today" : `${remaining} day${remaining !== 1 ? "s" : ""} left`}
         </Link>
       )}
@@ -200,7 +200,7 @@ const searchKey = (s: SubmittedSearch) =>
 const RESULT_LIMIT = 30;
 
 const INDEX_BUILDING_MESSAGE =
-  "The search index is still being built. This happens right after a data refresh — please check back in a few minutes.";
+  "The search index is still being built. This happens right after a data refresh: please check back in a few minutes.";
 
 // Stable identity: a fresh [] on every render would restart every memo and
 // effect downstream of `results` for no reason.
@@ -371,8 +371,8 @@ function ExplorePageInner() {
           >
             <p>
               Search any issue to see what all branches of government and federal agencies have done
-              about it — by topic, or by exact name, number, or &ldquo;quoted phrase&rdquo;. Many
-              regulatory documents are open for public comment — make your voice heard.
+              about it: by topic, or by exact name, number, or &ldquo;quoted phrase&rdquo;. Many
+              regulatory documents are open for public comment: make your voice heard.
             </p>
           </PageMasthead>
 
@@ -558,7 +558,7 @@ function ExplorePageInner() {
               className="mb-4 px-3 py-2 border border-signal-amber/30 bg-signal-amber/5"
             >
               <p className="text-signal-amber text-xs">
-                Showing keyword matches only — the meaning-based index is rebuilding after a data
+                Showing keyword matches only: the meaning-based index is rebuilding after a data
                 refresh. Searches by topic will return more once it finishes, usually within a few
                 minutes.
               </p>
@@ -585,10 +585,10 @@ function ExplorePageInner() {
                   </>
                 )}
                 {commentableOnly && (
-                  <span className="text-phos-mid ml-2">— open for comment only</span>
+                  <span className="text-phos-mid ml-2">· open for comment only</span>
                 )}
                 <span className="text-ink-min ml-2">
-                  — sorted by{" "}
+                  · sorted by{" "}
                   {!resultsFor || submitted?.sort === "date" ? "newest first" : "relevance"}
                 </span>
               </h2>

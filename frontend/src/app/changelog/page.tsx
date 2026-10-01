@@ -9,7 +9,7 @@ import { SCORE_VERSIONS, type ScoreVersion } from "@/lib/scoreVersions";
 export const metadata = pageMetadata({
   title: "Scoring Changelog",
   description:
-    "Version history of the Civitas scoring algorithms — every formula and data-input change, when it was released, and why it was made.",
+    "Version history of the Civitas scoring algorithms: every formula and data-input change, when it was released, and why it was made.",
   path: "/changelog",
 });
 

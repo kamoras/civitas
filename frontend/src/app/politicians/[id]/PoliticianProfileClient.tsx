@@ -292,7 +292,7 @@ export default function PoliticianProfileClient({
                 </div>
               </div>
               <p className="font-mono text-xs text-ink-min tracking-widest text-center py-4">
-                SCORECARD NOT YET GENERATED — CHECK BACK AFTER NEXT PIPELINE RUN
+                SCORECARD NOT YET GENERATED: CHECK BACK AFTER NEXT PIPELINE RUN
               </p>
             </SectionBlock>
           )}

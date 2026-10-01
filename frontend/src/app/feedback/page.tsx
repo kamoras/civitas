@@ -81,7 +81,7 @@ export default function FeedbackPage() {
             {status === "success" ? (
               <div className="text-center py-8 space-y-4">
                 <p className="font-mono text-base text-ink-hi">
-                  Thanks — your feedback has been received.
+                  Thanks: your feedback has been received.
                 </p>
                 {issueUrl && (
                   <p className="font-mono text-xs text-ink-min">
@@ -189,7 +189,7 @@ export default function FeedbackPage() {
                   >
                     open-source repo
                   </a>
-                  . Don&apos;t include anything you wouldn&apos;t want public — including your own
+                  . Don&apos;t include anything you wouldn&apos;t want public, including your own
                   email, if you&apos;d rather not.
                 </p>
               </form>

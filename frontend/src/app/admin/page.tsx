@@ -376,7 +376,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
                     {r.status === "failed"
                       ? "FAILED"
                       : r.status === "stuck"
-                        ? "STOPPED WITHOUT AN OUTCOME — SEE PIPELINES"
+                        ? "STOPPED WITHOUT AN OUTCOME: SEE PIPELINES"
                         : r.status === "partial"
                           ? "FINISHED PARTIAL"
                           : "COMPLETED"}
