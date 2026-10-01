@@ -29,8 +29,9 @@ function raisedLabel(c: BallotCandidate): string {
  * column is exactly the endless list this page exists to avoid.
  *
  * `newLines` is StateBallot.newDistrictLines: on a redrawn House seat the
- * member going into the election reads SITTING MEMBER — MEMBER GOING IN
- * from election day on (`resultsMode`) — not INCUMBENT (incumbencyLabel). */
+ * member going into the election reads SITTING MEMBER — MEMBER BEFORE
+ * THIS ELECTION from election day on (`resultsMode`) — not INCUMBENT
+ * (incumbencyLabel). */
 export default function BallotRaceRows({
   race,
   newLines = false,

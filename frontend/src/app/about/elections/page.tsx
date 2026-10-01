@@ -125,9 +125,9 @@ export default async function ElectionsChapter() {
           which on the new map can be a different place under the same number. Those pages point to
           the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
           a member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
-          day on, a &ldquo;member going in&rdquo;, since the results stay up until the new Congress
-          is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has a previous
-          holder.
+          day on, a &ldquo;member before this election&rdquo;, since the results can stay up until
+          the new Congress is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has
+          a previous holder.
         </P>
         <Sub title="The optional town selector">
           <P>

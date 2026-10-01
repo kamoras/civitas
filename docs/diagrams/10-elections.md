@@ -295,11 +295,12 @@ none of which sends anything anywhere:
 
 On such a seat a member of Congress running is never called the new
 district's "incumbent" (`incumbencyLabel`): before election day they read
-SITTING MEMBER, and from election day on MEMBER GOING IN, since the results
-window runs to January 3 and from noon that day the Congress the election
+SITTING MEMBER, and from election day on MEMBER BEFORE THIS ELECTION, since
+the results window can run to January 3 and from noon that day the Congress the election
 seated sits — a defeated member no longer does, and a re-elected one sits
 for the new seat. Where the API names the seat they held going in
-(`incumbentRecord.seat`) it is added ("MEMBER GOING IN, TX-35"). The API
+(`incumbentRecord.seat`) it is added ("MEMBER BEFORE THIS ELECTION,
+TX-35"), naming a time, not a seat they are headed into. The API
 stops naming it once that Congress sits (`_incumbent_link`, the same
 `congress_first_year(CURRENT_CONGRESS) - 1 >= cycle` guard as
 `seat_holder_party`): the member table may hold either Congress until the

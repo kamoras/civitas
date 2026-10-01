@@ -217,15 +217,17 @@ export function isRedrawnSeat(
  *
  * How "I" is worded depends on `resultsMode` (from election day on):
  * before it the member is sitting — SITTING MEMBER, TX-35 — but the
- * results window runs to January 3, when the Congress this election
+ * results window can run to January 3, when the Congress this election
  * seated takes office, and from noon that day a defeated member no longer
  * sits and a re-elected one sits for the new seat. So in results mode it
- * reads MEMBER GOING IN, TX-35, true on any day of the window, the same
- * framing as the district drawer's "your representative going into this
- * election". redrawnMemberWords is that wording alone, for a page that
+ * reads MEMBER BEFORE THIS ELECTION, TX-35, true on any day of the
+ * window, the same framing as the district drawer's "your representative
+ * going into this election". It names a time, not a direction: "member
+ * going in" beside a live count read as headed into the seat, which is a
+ * step from calling the race. redrawnMemberWords is that wording alone, for a page that
  * sets it in its own case. */
 export function redrawnMemberWords(resultsMode: boolean): string {
-  return resultsMode ? "MEMBER GOING IN" : "SITTING MEMBER";
+  return resultsMode ? "MEMBER BEFORE THIS ELECTION" : "SITTING MEMBER";
 }
 
 export function incumbencyLabel(

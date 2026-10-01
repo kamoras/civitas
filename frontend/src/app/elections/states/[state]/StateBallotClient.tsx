@@ -876,8 +876,9 @@ function leanTextClass(race: {
  * their district by the names they know as well as by county.
  *
  * On new lines the member going into the election is marked "(sitting
- * member)" — "(member going in)" from election day on, since the results
- * window runs to January 3, when the new Congress sits — never "(I)": they
+ * member)" — "(member before this election)" from election day on, since
+ * the results window can run to January 3, when the new Congress sits —
+ * never "(I)": they
  * are not this district's incumbent (incumbencyLabel). From election day
  * the lean is left out, as it is from the page header: beside a live count
  * it reads as a prediction of it. */

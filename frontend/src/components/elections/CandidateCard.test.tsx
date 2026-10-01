@@ -77,7 +77,7 @@ describe("incumbency badge", () => {
     expect(screen.queryByText("CHALLENGER")).not.toBeInTheDocument();
   });
 
-  it("calls them the member going in from election day on, with the seat they held", () => {
+  it("calls them the member before this election from election day on, with the seat they held", () => {
     render(
       <CandidateCard
         candidate={candidate({
@@ -88,7 +88,7 @@ describe("incumbency badge", () => {
         resultsMode
       />
     );
-    expect(screen.getByText("MEMBER GOING IN, TX-35")).toBeInTheDocument();
+    expect(screen.getByText("MEMBER BEFORE THIS ELECTION, TX-35")).toBeInTheDocument();
     expect(screen.queryByText(/SITTING MEMBER/)).not.toBeInTheDocument();
   });
 });

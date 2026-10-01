@@ -254,7 +254,14 @@ describe("the contest drawer", () => {
     drawer.getByRole("tab", { name: "Money" }).focus();
     await userEvent.keyboard("{ArrowRight}");
     expect(drawer.getByRole("tab", { name: "Record" })).toHaveAttribute("aria-selected", "true");
-    expect(drawer.getAllByText("no scorecard")).toHaveLength(2);
+    // "Not linked", never "no scorecard": the API links only an
+    // unambiguously matched incumbent, so an unlinked candidate can still
+    // be a member of Congress with one.
+    expect(drawer.getAllByText("not linked")).toHaveLength(2);
+    expect(drawer.queryByText(/no scorecard|has a Civitas scorecard/i)).toBeNull();
+    expect(
+      drawer.getByText("No one in this race is linked to a Civitas scorecard.")
+    ).toBeInTheDocument();
   });
 
   it("opens the race a #race-{id} link names, and can still be closed", async () => {

@@ -78,11 +78,11 @@ describe("RaceMoneyBars", () => {
     expect(screen.queryByText("INCUMBENT")).not.toBeInTheDocument();
   });
 
-  it("calls them the member going in from election day on", () => {
+  it("calls them the member before this election from election day on", () => {
     render(
       <RaceMoneyBars candidates={[cand({ incumbentChallenge: "I" })]} redrawnSeat resultsMode />
     );
-    expect(screen.getByText("MEMBER GOING IN")).toBeInTheDocument();
+    expect(screen.getByText("MEMBER BEFORE THIS ELECTION")).toBeInTheDocument();
     expect(screen.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
   });
 

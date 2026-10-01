@@ -486,13 +486,13 @@ describe("incumbencyLabel", () => {
     // The results window runs to Jan 3, when the Congress the election
     // seated takes office: from noon that day a defeated member no longer
     // sits, and a re-elected one sits for the new seat.
-    expect(incumbencyLabel("I", true, null, true)).toBe("MEMBER GOING IN");
-    expect(incumbencyLabel("I", true, "TX-35", true)).toBe("MEMBER GOING IN, TX-35");
+    expect(incumbencyLabel("I", true, null, true)).toBe("MEMBER BEFORE THIS ELECTION");
+    expect(incumbencyLabel("I", true, "TX-35", true)).toBe("MEMBER BEFORE THIS ELECTION, TX-35");
     expect(incumbencyLabel("C", true, null, true)).toBeNull();
     // FEC's code for the seat itself is about the election, true either way.
     expect(incumbencyLabel("I", false, "GA-6", true)).toBe("INCUMBENT");
     expect(redrawnMemberWords(false)).toBe("SITTING MEMBER");
-    expect(redrawnMemberWords(true)).toBe("MEMBER GOING IN");
+    expect(redrawnMemberWords(true)).toBe("MEMBER BEFORE THIS ELECTION");
   });
 
   it("treats only House seats in a state on new lines as redrawn", () => {

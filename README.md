@@ -731,9 +731,9 @@ two lists drift, so a page never calls a district new while serving the old
 seat's lean.
 The same list tells the election-night sync that a redrawn seat has no
 holder to measure a flip against, and lets an incumbent running under a new
-number link to their record — labelled a *sitting member* there (a *member
-going in* from election day on, when the results window can run past the
-new Congress's first day), never the new district's incumbent
+number link to their record — labelled a *sitting member* there (a *member before this election* from
+election day on, when the results window can include the new Congress's
+first day), never the new district's incumbent
 (`incumbencyLabel` in `frontend/src/lib/elections.ts`). Regenerate after any redistricting:
 
 ```bash
