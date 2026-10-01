@@ -32,19 +32,6 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
-    version: "President v6",
-    date: "2026-10-01",
-    title:
-      "Approval trend judged against where the term started; the sitting president compared over the same time",
-    tldr: "A president whose approval starts low has little room to fall, so a small decline from a low start used to look better than average. The trend is now compared with what presidents who started at the same level went on to do. The sitting president, partway through a term, is now compared with predecessors over the same number of days instead of their whole terms.",
-    changes: [
-      "Why: across the 14 completed presidencies with polling, where approval started explains 45% of how far it moved (r = -0.67): high starters fell a long way and low starters didn't. Scored against the flat average fall of 14 points, a small fall from a low start scored well above average, though presidents starting that low have historically gained.",
-      "Approval trend is now scored against the change history predicts from the president's own starting level, refitted on every update.",
-      "The sitting president's approval was compared with whole terms and was also included in the average everyone else was compared with. Approval falls as a term goes on (predecessors averaged 57.5% over their first 598 days and 51.9% over full terms), so both comparisons flattered a partial term. The sitting president is now compared with each predecessor over the same number of days, and the full-term comparison uses completed presidencies only.",
-      "Effect on October 2026 data: the sitting president's Public Mandate falls by about half; completed presidencies that started high and held their approval rise 5 to 11 points; most others move down a few points. docs/research/president-scores.md has the method.",
-    ],
-  },
-  {
     version: "v6.25",
     date: "2026-10-01",
     title:
@@ -55,6 +42,19 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "The cause was measured, not assumed: in samples of bills from both the 117th Congress (Democratic majority) and the 119th (Republican majority), Republican-sponsored bills drew a larger share of cosponsors from the other party under both majorities. So it is party, not majority status, and comparing by majority status would not have fixed it.",
       "Now: the median member of each party scores 50 on this component. The give-and-receive bipartisanship figure shown on profiles is unchanged.",
       "Effect on October 2026 data: the median Senate Democrat moves from 49.0 to 52.7 on Legislative Effectiveness and the median Republican from 53.0 to 51.5; in the House, 50.0 to 51.8 and 55.0 to 51.6. The average member moves about 2 points, at most 6. docs/methodology/member-score/v6.25.md has the measurements.",
+    ],
+  },
+  {
+    version: "President v6",
+    date: "2026-10-01",
+    title:
+      "Approval trend judged against where the term started; the sitting president compared over the same time",
+    tldr: "A president whose approval starts low has little room to fall, so a small decline from a low start used to look better than average. The trend is now compared with what presidents who started at the same level went on to do. The sitting president, partway through a term, is now compared with predecessors over the same number of days instead of their whole terms.",
+    changes: [
+      "Why: across the 14 completed presidencies with polling, where approval started explains 45% of how far it moved (r = -0.67): high starters fell a long way and low starters didn't. Scored against the flat average fall of 14 points, a small fall from a low start scored well above average, though presidents starting that low have historically gained.",
+      "Approval trend is now scored against the change history predicts from the president's own starting level, refitted on every update.",
+      "The sitting president's approval was compared with whole terms and was also included in the average everyone else was compared with. Approval falls as a term goes on (predecessors averaged 57.5% over their first 598 days and 51.9% over full terms), so both comparisons flattered a partial term. The sitting president is now compared with each predecessor over the same number of days, and the full-term comparison uses completed presidencies only.",
+      "Effect on October 2026 data: the sitting president's Public Mandate falls by about half; completed presidencies that started high and held their approval rise 5 to 11 points; most others move down a few points. docs/research/president-scores.md has the method.",
     ],
   },
   {
