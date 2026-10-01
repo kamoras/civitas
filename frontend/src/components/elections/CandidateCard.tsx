@@ -111,7 +111,7 @@ export default function CandidateCard({
           {showUnconfirmed && !candidate.confirmed && (
             <span
               className="border border-dashed border-white/20 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-min"
-              title="This state's primary file doesn't list this candidate — an uncontested primary isn't held, so there is no result to read. Their FEC filing is the source."
+              title="This state's primary file doesn't list this candidate: an uncontested primary isn't held, so there is no result to read. Their FEC filing is the source."
             >
               UNCONFIRMED
             </span>

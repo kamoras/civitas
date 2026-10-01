@@ -158,7 +158,7 @@ def _clear_stuck_runs(db: Session, model, is_running: Callable[[], bool], pipeli
     ]
     if is_running():
         raise HTTPException(
-            status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
+            status_code=409, detail=f"{pipeline_label} pipeline is actively running: stop it first"
         )
     if not stuck:
         return {"cleared": 0, "message": "No stuck runs found"}
@@ -312,7 +312,7 @@ def _collect_vector_db_stats(db: Session) -> dict:
 
     except Exception:
         logger.exception("Vector DB stats collection failed")
-        stats = {"status": "unavailable", "error": "collection failed — see server logs"}
+        stats = {"status": "unavailable", "error": "collection failed; see server logs"}
 
     # Learning store metrics (always attempt even if chroma is down)
     try:
@@ -351,7 +351,7 @@ def _collect_vector_db_stats(db: Session) -> dict:
         }
     except Exception:
         logger.exception("Learning store metrics collection failed")
-        stats["learningStore"] = {"error": "collection failed — see server logs"}
+        stats["learningStore"] = {"error": "collection failed; see server logs"}
 
     return stats
 
@@ -1602,7 +1602,7 @@ def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
         _run, name="house-pipeline-run", error_label="House pipeline run failed",
     )
     if district_pvi.waits_for(holder):
-        return {"message": f"House pipeline triggered — it starts when the {holder} holding the district lines finishes"}
+        return {"message": f"House pipeline triggered: it starts when the {holder} holding the district lines finishes"}
     return {"message": "House pipeline triggered"}
 
 
@@ -1626,7 +1626,7 @@ async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=409,
             detail=(
-                "The Senate run's lease still speaks for this row — it may be a live run whose heartbeat "
+                "The Senate run's lease still speaks for this row; it may be a live run whose heartbeat "
                 "is stalled. If it has died, it is marked stale within about two hours of its last beat."
             ),
         )

@@ -150,7 +150,7 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
   return (
     <div className="mb-5 last:mb-0">
       <h3 className="font-mono text-xs text-ink-lo mb-1">
-        {chamber.label.toUpperCase()} — {chamber.districts.length}{" "}
+        {chamber.label.toUpperCase()} · {chamber.districts.length}{" "}
         {chamber.districts.length === 1 ? "SEAT" : "SEATS"} CONTESTED
         {termPhrase(chamber.termYears) && (
           <span className="text-ink-min"> · {termPhrase(chamber.termYears)!.toUpperCase()}</span>
@@ -192,7 +192,7 @@ function StateLegislatureDetail({ ballot }: { ballot: StateBallot }) {
   return (
     <div>
       <p className="text-xs text-ink-min mb-3">
-        Each voter votes in exactly one seat per chamber. Each is listed with the towns it covers —
+        Each voter votes in exactly one seat per chamber. Each is listed with the towns it covers:
         filter by yours to find it.
       </p>
       {ballot.stateLegRaces.map((chamber) => (
@@ -278,7 +278,7 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
  * listed with one party's nominee while another party's is not, and no
  * independent or minor-party candidate ever appears. */
 const PRIMARY_RESULTS_CAVEAT =
-  "Names come from primary results, which can omit a nominee who ran unopposed, independent candidates (who run in no primary) and anyone a party named or replaced after the primary — so an office may be missing, or missing a party's nominee.";
+  "Names come from primary results, which can omit a nominee who ran unopposed, independent candidates (who run in no primary) and anyone a party named or replaced after the primary, so an office may be missing, or missing a party's nominee.";
 
 function StatewideOfficeRow({ race }: { race: StatewideRace }) {
   return (
@@ -325,7 +325,7 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
   return (
     <div className="border border-white/[0.09] bg-surface px-3 py-2.5">
       <h3 className="font-mono text-xs text-ink-lo">
-        {label.toUpperCase()} — {seats.length} {seats.length === 1 ? "SEAT" : "SEATS"}
+        {label.toUpperCase()} · {seats.length} {seats.length === 1 ? "SEAT" : "SEATS"}
         {termPhrase(first.termYears) && (
           <span className="text-ink-min"> · {termPhrase(first.termYears)!.toUpperCase()}</span>
         )}
@@ -479,7 +479,7 @@ function StateOfficesNotLoaded({
   return (
     <div className="border border-signal-amber/40 bg-signal-amber/10 p-4">
       <p className="text-sm text-signal-amber">
-        Civitas does not have {ballot.state}&apos;s own offices yet — its statewide offices, state
+        Civitas does not have {ballot.state}&apos;s own offices yet: its statewide offices, state
         legislature and elected judges.
       </p>
       <p className="text-xs text-ink-lo mt-2">
@@ -513,10 +513,10 @@ function StateOfficesNotLoaded({
 const OPERATOR_NONE_TEXT = (state: string) =>
   `No statewide ballot measures remain on ${state}'s ballot as far as Civitas can tell. This is our ` +
   `operator's determination, made after checking the state's own announcements when its published ` +
-  `list stopped being available — not a list published by the state.`;
+  `list stopped being available, not a list published by the state.`;
 /** The shareable measures box's short form of OPERATOR_NONE_TEXT. */
 const OPERATOR_NONE_SHORT =
-  "None remain as far as Civitas can tell — our determination, not a list from the state.";
+  "None remain as far as Civitas can tell: our determination, not a list from the state.";
 
 function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
   const { measures, measureCoverage, state } = ballot;
@@ -554,8 +554,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
             <p className="text-xs text-signal-amber">
               Civitas has stopped reading {state}&apos;s measures automatically. The list below is
-              from our last read{readDate ? `, ${readDate}` : ""}, and may be out of date — check
-              the{" "}
+              from our last read{readDate ? `, ${readDate}` : ""}, and may be out of date: check the{" "}
               <a
                 href={lookupHref}
                 target="_blank"
@@ -579,7 +578,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
               {measureCoverage.lastAttemptAt
                 ? ` (checked ${measureCoverage.lastAttemptAt.slice(0, 10)})`
                 : ""}
-              . This does <strong>not</strong> mean there are none — check the{" "}
+              . This does <strong>not</strong> mean there are none: check the{" "}
               <a
                 href={lookupHref}
                 target="_blank"
@@ -607,7 +606,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
                 ? ` (${measureCoverage.lastAttemptAt.slice(0, 10)})`
                 : ""}
               . The list below is from the last successful read
-              {readDate ? `, ${readDate}` : ""}, and may be out of date — check the{" "}
+              {readDate ? `, ${readDate}` : ""}, and may be out of date: check the{" "}
               <a
                 href={lookupHref}
                 target="_blank"
@@ -662,7 +661,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         <p className="text-[10px] text-ink-min mt-2">
           Per {measureCoverage.sourceName || "our source"}
           {measureCoverage.checkedAt ? `, checked ${measureCoverage.checkedAt.slice(0, 10)}` : ""}.
-          Your county or city may still have local measures — check the{" "}
+          Your county or city may still have local measures: check the{" "}
           <a
             href={lookupHref}
             target="_blank"
@@ -695,7 +694,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
           : `${state}'s statewide ballot measures are not yet covered.`}
       </p>
       <p className="text-xs text-ink-lo mt-2">
-        This does <strong>not</strong> mean there are none — {why} Use the{" "}
+        This does <strong>not</strong> mean there are none: {why} Use the{" "}
         <a
           href={lookupHref}
           target="_blank"
@@ -772,7 +771,7 @@ function TownDetail({
     <div>
       <p className="text-[11px] text-ink-min mb-3">
         Optional and approximate: results are resolved against a fixed, public address in the town
-        you pick (e.g. town hall) — never an address you type in. If your own precinct differs from
+        you pick (e.g. town hall), never an address you type in. If your own precinct differs from
         that address within town limits, some local races here may not match yours.
       </p>
       <select
@@ -785,7 +784,7 @@ function TownDetail({
         className="bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-3 py-2 mb-4 min-h-[44px]"
         aria-label="Select your town for local races (optional, approximate)"
       >
-        <option value="">— choose a town —</option>
+        <option value="">Choose a town</option>
         {towns.map((t) => (
           <option key={t.name} value={t.name}>
             {t.name}
@@ -812,9 +811,9 @@ function TownDetail({
                 <p className="text-xs text-signal-amber">
                   These local races are from {selected}&apos;s{" "}
                   {ballot.electionName || "most recently published ballot"}
-                  {ballot.electionDate ? ` (${ballot.electionDate})` : ""} — <strong>not</strong>{" "}
-                  the {pageElectionDate} general election. {selected} has not yet published a ballot
-                  for that election.
+                  {ballot.electionDate ? ` (${ballot.electionDate})` : ""}, <strong>not</strong> the{" "}
+                  {pageElectionDate} general election. {selected} has not yet published a ballot for
+                  that election.
                 </p>
               </div>
             )}
@@ -853,7 +852,7 @@ function TownDetail({
 
       {selected && !loading && ballot?.status === "ingest_failed" && (
         <p className="text-xs text-signal-amber">
-          Could not load {selected}&apos;s local races right now — try again shortly.
+          Could not load {selected}&apos;s local races right now: try again shortly.
         </p>
       )}
     </div>
@@ -1090,8 +1089,7 @@ function HouseDetail({
           map, pick your county, or filter by a county or district number
           {lookupIsStateSpecific ? (
             <>
-              {" "}
-              — or check{" "}
+              , or check{" "}
               <a
                 href={lookupHref}
                 target="_blank"
@@ -1108,7 +1106,7 @@ function HouseDetail({
       ) : (
         <p className="mb-3 text-[13px] text-ink-lo">
           {resultsMode ? HOUSE_ONE_EACH_RESULTS : HOUSE_ONE_EACH} Point at the map, pick your
-          county, or filter by a county, a candidate&apos;s name or a district number — or{" "}
+          county, or filter by a county, a candidate&apos;s name or a district number, or{" "}
           <a
             href="https://www.house.gov/representatives/find-your-representative"
             target="_blank"
@@ -1152,8 +1150,8 @@ function HouseDetail({
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
           <p className="mt-1.5 text-[10px] text-ink-min">
-            Filtered here in your browser — nothing is sent anywhere, and Civitas never asks for
-            your address.
+            Filtered here in your browser: nothing is sent anywhere, and Civitas never asks for your
+            address.
           </p>
           {/* Typing silently rewrites the list below, which a sighted
               reader sees and a screen-reader user otherwise would not. */}
@@ -1177,8 +1175,8 @@ function HouseDetail({
         <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
           No district matches “{filter}”.{" "}
           {newLines
-            ? "Try a county name or a district number — or pick a county above."
-            : "Try a county name, a candidate’s surname, or a district number — or pick a county above."}
+            ? "Try a county name or a district number, or pick a county above."
+            : "Try a county name, a candidate’s surname, or a district number, or pick a county above."}
         </p>
       )}
     </div>
@@ -1382,7 +1380,7 @@ function ContestOverview({
       return box(
         ballot.judicialRaces.length === 0 ? (
           <p className="px-4 py-3 text-[13px] text-ink-lo">
-            None on this ballot — judges here are elected at the primary.
+            None on this ballot: judges here are elected at the primary.
           </p>
         ) : (
           <>
@@ -1406,7 +1404,7 @@ function ContestOverview({
       return box(
         <>
           <p className="px-4 pt-3 text-[13px] text-ink-lo">
-            Civitas does not have this state&apos;s own offices yet — that does not mean there are
+            Civitas does not have this state&apos;s own offices yet: that does not mean there are
             none on the ballot.
           </p>
           <OpenButton label="DETAILS" onClick={() => onOpen(contest.key)} />
@@ -1424,7 +1422,7 @@ function ContestOverview({
               (ballot.measureCoverage.status !== "covered" &&
                 ballot.measureCoverage.status !== "confirmed_none")) && (
               <p className="border-b border-white/[0.09] px-4 py-2 text-[12px] text-signal-amber">
-                From our last successful read — may be out of date.
+                From our last successful read: may be out of date.
               </p>
             )}
             {/* An operator's accepted absence marks every row removed; say
@@ -1461,7 +1459,7 @@ function ContestOverview({
                 ? ballot.measureCoverage.basis === "operator"
                   ? OPERATOR_NONE_SHORT
                   : "No statewide measures are on record for this ballot."
-                : "Civitas does not have this state's measures yet — that does not mean there are none."}
+                : "Civitas does not have this state's measures yet: that does not mean there are none."}
             </p>
             <OpenButton label="DETAILS" onClick={() => onOpen(contest.key)} />
           </>

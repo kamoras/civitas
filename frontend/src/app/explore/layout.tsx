@@ -4,7 +4,7 @@ import { pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "Search Congressional Records, Floor Speeches & Executive Orders",
   description:
-    "Search floor speeches, executive orders, federal rules, and bills by topic, and see which members of Congress are shaping each issue — all from public federal records.",
+    "Search floor speeches, executive orders, federal rules, and bills by topic, and see which members of Congress are shaping each issue: all from public federal records.",
   path: "/explore",
 });
 

@@ -14,15 +14,15 @@ import Link from "next/link";
 
 const SOURCES: readonly { label: string; detail: string }[] = [
   { label: "MEMBERS", detail: "Congress.gov · Senate.gov · Clerk.House.gov" },
-  { label: "MONEY", detail: "FEC — itemised receipts and committee filings" },
+  { label: "MONEY", detail: "FEC: itemised receipts and committee filings" },
   { label: "BILLS", detail: "Congress.gov stage histories · GovInfo full text" },
-  { label: "COURT", detail: "Oyez — argued cases and opinion alignment" },
+  { label: "COURT", detail: "Oyez: argued cases and opinion alignment" },
   { label: "ECONOMY", detail: "BLS · BEA · Federal Register" },
 ];
 
 const TERMS: readonly { label: string; detail: string }[] = [
   { label: "CODE", detail: "Open source · AGPL-3.0 · re-runnable" },
-  { label: "MODELS", detail: "Run locally — no third-party AI services" },
+  { label: "MODELS", detail: "Run locally, no third-party AI services" },
   { label: "SCORES", detail: "Fixed formulas, no AI · missing data scores a neutral 50" },
 ];
 
@@ -55,9 +55,8 @@ export default function Holdings() {
       </dl>
 
       <p className="mt-4 font-display text-base leading-relaxed text-ink-lo">
-        Civitas is an open source, volunteer-run project — not a registered organization of any
-        kind. It takes no money from parties, candidates or PACs, requires no account, and sells
-        nothing.
+        Civitas is an open source, volunteer-run project, not a registered organization of any kind.
+        It takes no money from parties, candidates or PACs, requires no account, and sells nothing.
       </p>
 
       <Link

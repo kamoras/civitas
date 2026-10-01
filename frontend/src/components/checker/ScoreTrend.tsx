@@ -175,7 +175,7 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
       </div>
       {versionChanges.length > 0 && (
         <div className="text-xs text-ink-lo font-mono mt-0.5">
-          ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}) — see{" "}
+          ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}): see{" "}
           <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
             scoring changelog
           </a>
@@ -183,8 +183,8 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
       )}
       {congressChanges.length > 0 && (
         <div className="text-xs text-signal-orange font-mono mt-0.5">
-          ┊ {congressChanges.map((c) => `${ordinal(c.congress)} Congress`).join(", ")} began —
-          scores reset to reflect the new term
+          ┊ {congressChanges.map((c) => `${ordinal(c.congress)} Congress`).join(", ")} began: scores
+          reset to reflect the new term
         </div>
       )}
     </div>

@@ -35,7 +35,7 @@ export default async function ElectionsChapter() {
       title="Elections & ballots"
       lede={
         <p>
-          Each state has a ballot page built for researching what&apos;s on the ballot — who is
+          Each state has a ballot page built for researching what&apos;s on the ballot: who is
           running, their money and record, and every statewide measure in the state&apos;s own
           words.
         </p>
@@ -54,8 +54,8 @@ export default async function ElectionsChapter() {
           named. No AI writes or summarizes anything on these pages.
         </Point>
         <Point>
-          Each page says what its candidate lists are — a certified ballot, primary results, or
-          campaign filings — and when a primary has already passed.
+          Each page says what its candidate lists are (a certified ballot, primary results, or
+          campaign filings), and when a primary has already passed.
         </Point>
         <Point>
           From election day the pages lead with the count, read from each state&apos;s own election
@@ -69,13 +69,13 @@ export default async function ElectionsChapter() {
           Each state&apos;s page at{" "}
           <span className="font-mono text-ink-hi">/elections/states/ST</span> is laid out as a
           research tool, not a mock ballot, and never marks a choice. On a computer it sets out the
-          ballot in three columns — federal offices, state offices, then measures and local contests
-          — and opens any contest&apos;s research beside it: money raised, a member of
+          ballot in three columns (federal offices, state offices, then measures and local
+          contests), and opens any contest&apos;s research beside it: money raised, a member of
           Congress&apos;s voting record, news coverage. On a phone it opens one contest per screen.
         </P>
         <P>
           Candidates appear under the name their state prints on its ballot. Each contest states the
-          term it is for — two years for the House, six for the Senate, and for state offices, the
+          term it is for: two years for the House, six for the Senate, and for state offices, the
           term set by that state&apos;s constitution or statute (none is shown where we haven&apos;t
           confirmed it). Where a state&apos;s own results or candidate list name them, the page also
           covers statewide executive offices, state legislative seats and elected judgeships; where
@@ -93,12 +93,12 @@ export default async function ElectionsChapter() {
           A ballot is defined by the exact set of contests a voter is eligible for. Precincts split
           by district lines carry several versions, one county can print dozens, and nationally
           there are tens of thousands. Showing someone their exact ballot would mean asking for
-          their home address and sending it to a lookup service — which is exactly what Civitas is
+          their home address and sending it to a lookup service, which is exactly what Civitas is
           built not to do.
         </P>
         <P>
-          So each page covers what&apos;s uniform statewide and lists what it omits — county and
-          city offices, local measures, primary ballots and so on — with a link to your own election
+          So each page covers what&apos;s uniform statewide and lists what it omits (county and city
+          offices, local measures, primary ballots and so on), with a link to your own election
           office. Once a gap closes for a state, it comes off that state&apos;s list: a disclaimer
           that outlives the gap stops describing the page.
         </P>
@@ -120,8 +120,8 @@ export default async function ElectionsChapter() {
         </P>
         <P>
           In a state whose lines were redrawn after its members were elected (those going into the
-          election, or those sitting now), a lookup by representative — house.gov&apos;s, or your
-          current member&apos;s name — answers for the district your current member was elected in,
+          election, or those sitting now), a lookup by representative (house.gov&apos;s, or your
+          current member&apos;s name) answers for the district your current member was elected in,
           which on the new map can be a different place under the same number. Those pages point to
           the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
           a member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
@@ -131,7 +131,7 @@ export default async function ElectionsChapter() {
         </P>
         <Sub title="The optional town selector">
           <P>
-            For a small, hand-picked list of towns, a selector shows local races — city council,
+            For a small, hand-picked list of towns, a selector shows local races: city council,
             school board, local measures. It never asks for or sends your address: it looks up a
             fixed public address we chose for that town, its town hall, so everyone who picks the
             town gets the identical lookup and nothing about you leaves the server.
@@ -140,7 +140,7 @@ export default async function ElectionsChapter() {
             It is an approximation, and says so beside the selector: a town can contain several
             precincts, so a race tied to your street may be missing or one from across town may
             appear. Its source only carries an election close to the date, so months ahead a town
-            may show &ldquo;could not load local races right now&rdquo; — that is the likely reason,
+            may show &ldquo;could not load local races right now&rdquo;: that is the likely reason,
             not a fault.
           </P>
         </Sub>
@@ -150,7 +150,7 @@ export default async function ElectionsChapter() {
         <P>Four different things can fill a candidate list, and each page says which one it has:</P>
         <List>
           <Item label="A certified ballot">
-            The state&apos;s own list of who is on the November ballot — third-party and independent
+            The state&apos;s own list of who is on the November ballot: third-party and independent
             candidates included. When a state&apos;s source is its certified ballot, it is the final
             word: anyone not on it comes off the page.
           </Item>
@@ -161,7 +161,7 @@ export default async function ElectionsChapter() {
           </Item>
           <Item label="A primary ballot">Before the primary, the people running in it.</Item>
           <Item label="Campaign filings">
-            When nothing is confirmed yet, everyone who filed with the FEC — some of whom will never
+            When nothing is confirmed yet, everyone who filed with the FEC: some of whom will never
             be on any ballot. Before a primary that is the best available answer; after one, the
             page says plainly that the ballot has been decided and we don&apos;t have it yet.
           </Item>
@@ -171,14 +171,14 @@ export default async function ElectionsChapter() {
           (&ldquo;no FEC filing&rdquo; appears in place of fundraising figures). Declared write-ins
           aren&apos;t printed on the ballot and are never shown as if they were. A Senate race
           appears only where the FEC&apos;s election calendar lists one. We don&apos;t read
-          candidate lists published only as scanned images — one misread name would take a real
-          nominee off the page — and we don&apos;t work around bot challenges or logins on state
+          candidate lists published only as scanned images (one misread name would take a real
+          nominee off the page), and we don&apos;t work around bot challenges or logins on state
           election sites.
         </P>
         <More label="How the candidate lists were checked, September 2026">
           <P>
             On 26 September 2026, 39 states had certified candidates and eleven were still showing
-            FEC filers months after their primary — Ohio by 144 days, New York by 95, with one New
+            FEC filers months after their primary: Ohio by 144 days, New York by 95, with one New
             York race listing 25 filers for a ballot holding about two. Those pages said nominees
             &ldquo;aren&apos;t confirmed yet&rdquo;, telling readers a settled contest was open.
             Pages now lead with what their lists are.
@@ -187,8 +187,8 @@ export default async function ElectionsChapter() {
             Re-probing those eleven found three causes. Nine relied on a national source that
             doesn&apos;t publish general-election candidates until close to the election. New
             Hampshire wasn&apos;t broken: its results are held for 21 days and were 18 days old.
-            South Dakota was the one real fault — its election-night site had moved on to a July
-            runoff — and now reads the Secretary of State&apos;s list of who is on the November
+            South Dakota was the one real fault (its election-night site had moved on to a July
+            runoff), and now reads the Secretary of State&apos;s list of who is on the November
             ballot, which also shows an independent candidate primary results never could. A second
             look found Louisiana, South Carolina and Missouri publish their November ballots
             directly, and they are now read as such.
@@ -204,7 +204,7 @@ export default async function ElectionsChapter() {
           </P>
           <P>
             Utah and Alabama publish certified lists only as scanned images. For races those states,
-            Arkansas and Connecticut leave unseen — districts whose primary was uncontested —
+            Arkansas and Connecticut leave unseen (districts whose primary was uncontested),
             Google&apos;s election index fills in once it publishes the general election, and only
             for those races. Michigan, Ohio and Oklahoma are read from lists the states publish
             themselves (Oklahoma&apos;s results API requires a login, so its State Election
@@ -214,7 +214,7 @@ export default async function ElectionsChapter() {
           </P>
           <P>
             Where a state&apos;s results are reached through a link on its own site, each linked
-            election is checked for its own name and date first — West Virginia moved its primary
+            election is checked for its own name and date first: West Virginia moved its primary
             link to an archive of every election since 2016. Texas lists write-ins alongside
             nominees, and until 27 September 2026 this site showed four of them as Senate
             candidates. Before the FEC calendar check, people who file paperwork in many states at
@@ -229,9 +229,9 @@ export default async function ElectionsChapter() {
         <P>
           From election day, <span className="font-mono text-ink-hi">/elections</span> and each
           state page put results first. The national map is shaded by who is leading each race
-          instead of by how the state usually leans — fainter while fewer than half its reporting
+          instead of by how the state usually leans: fainter while fewer than half its reporting
           areas (usually precincts) are in, solid once the state lists its count as official. Where
-          a state has more than one race on the map — its House seats, or both Senate seats — it
+          a state has more than one race on the map (its House seats, or both Senate seats), it
           takes the colour of the party leading the most of them, grey when two lead equally many,
           and stays fainter until every one has half in; it turns solid only when every count is
           official. A state still voting, one with no votes yet and one whose feed couldn&apos;t be
@@ -241,12 +241,12 @@ export default async function ElectionsChapter() {
           way, above the ballot research, and a live-updates feed tells each change as it happens:
           first returns, a new leader, every reporting area in, a count the state lists as official,
           a seat changing party. A district or Senate race Civitas shows no count for while it shows
-          one for the state&apos;s other races — a contest the feed doesn&apos;t list or that
+          one for the state&apos;s other races (a contest the feed doesn&apos;t list or that
           couldn&apos;t be matched, two Senate contests that couldn&apos;t be told apart, a count
-          set aside as impossible, an uncontested seat — is listed and marked as exactly that, not
-          as &ldquo;no votes yet&rdquo;; so is a whole chamber on the national map, hatched and
-          named &ldquo;no count shown here&rdquo;, and, in a state electing both its senators with a
-          count shown for only one, the other race on that state&apos;s map label and row. While a
+          set aside as impossible, an uncontested seat) is listed and marked as exactly that, not as
+          &ldquo;no votes yet&rdquo;; so is a whole chamber on the national map, hatched and named
+          &ldquo;no count shown here&rdquo;, and, in a state electing both its senators with a count
+          shown for only one, the other race on that state&apos;s map label and row. While a
           state&apos;s polls are still open, its page stays a ballot-research page and the national
           map marks its polls &ldquo;not yet closed&rdquo;: nothing is said about a count until its
           last polls close. From election day the elections pages show no partisan lean, on a map or
@@ -256,8 +256,8 @@ export default async function ElectionsChapter() {
         <Sub title="Where the numbers come from">
           <P>
             Every five minutes while counts are moving (hourly once none has moved for a day), from
-            the state&apos;s own election-night results site — the same systems Civitas already
-            reads for confirmed candidates.{" "}
+            the state&apos;s own election-night results site: the same systems Civitas already reads
+            for confirmed candidates.{" "}
             {live && live.length > 0 ? (
               <>
                 {capitalize(countWord(live.length))}{" "}
@@ -280,7 +280,7 @@ export default async function ElectionsChapter() {
             A wrong number on election night is worse than none. Nothing from a state is read until
             its last polls close. A feed marked as test or practice data, one answering for the
             wrong election, or one older than what we already show is refused, and the page keeps
-            the last count it trusted — and says so, with the time, if a state&apos;s feed
+            the last count it trusted, and says so, with the time, if a state&apos;s feed
             couldn&apos;t be read at all rather than implying counting hasn&apos;t started. If the
             page itself can&apos;t refresh, it says that too, with when the counts still on screen
             were read; no state is marked live and every count on the map is striped, so an old
@@ -311,8 +311,8 @@ export default async function ElectionsChapter() {
             official count. Once said, it stands until the lead itself goes back to the seat&apos;s
             party or ties: a count that dips below that bar with the same candidate ahead is not a
             reversal. A House seat in a state whose congressional map was redrawn for this election
-            has no previous holder to compare against — the district with the same number is a
-            different district — so it is never described as changing party. Nor is a seat whose
+            has no previous holder to compare against (the district with the same number is a
+            different district), so it is never described as changing party. Nor is a seat whose
             previous holder was still unknown when the new Congress took office at noon on January
             3: from then the member list is changing over to the winners, so it no longer says who
             held the seat going in.
@@ -322,18 +322,18 @@ export default async function ElectionsChapter() {
           <P>
             A seat changing party opens a <em>developing</em> story in the{" "}
             <A href={ACTION_CENTER_HREF}>Action Center</A>, marked as not yet confirmed by the
-            press. Until a news story naming that race — the state&apos;s seat, and one of its
-            candidates by full name (&ldquo;Wayne Johnson&rdquo;, never just &ldquo;Johnson&rdquo;)
-            — confirms it, it follows the count, and if the lead reverts it comes off the Action
+            press. Until a news story naming that race (the state&apos;s seat, and one of its
+            candidates by full name (&ldquo;Wayne Johnson&rdquo;, never just &ldquo;Johnson&rdquo;))
+            confirms it, it follows the count, and if the lead reverts it comes off the Action
             Center and is rewritten to say the count no longer shows a change of party; once
             confirmed, it is the news story. Civitas&apos;s Bluesky account posts fewer moments than
             the feed shows: a seat changing party, a count the state lists as official (a Senate
-            race, or a seat changing party), and the big moves in a Senate race — a new leader with
+            race, or a seat changing party), and the big moves in a Senate race: a new leader with
             most of the count in, every reporting area in. A few an hour at most; one that
             can&apos;t go out within two hours, or that a newer post about the same race overtakes,
             is dropped rather than posted late, and a posted change of party that reverts gets a
             correction. Every sentence in the feed, the story and the posts is a fixed template
-            around the state&apos;s own figures — no AI writes any of it.
+            around the state&apos;s own figures; no AI writes any of it.
           </P>
         </Sub>
         <P>
@@ -345,15 +345,15 @@ export default async function ElectionsChapter() {
       <Section id="measures" title="Ballot measures: quoted, never rewritten">
         <P>
           Each measure shows its official ballot title, official summary, fiscal impact statement,
-          and the state&apos;s own description of what a YES and a NO vote do — all verbatim, linked
+          and the state&apos;s own description of what a YES and a NO vote do: all verbatim, linked
           to the source. Where a state publishes no yes/no description, none is shown. We never
           infer one: the intuitive reading (&ldquo;yes enacts it&rdquo;) is backwards on a veto
           referendum, where approving <em>keeps</em> the law being challenged.
         </P>
         <Sub title="Who wrote the words you’re reading">
           <P>
-            Ballot titles are among the most litigated documents in election law — courts have
-            voided measures over a legislature&apos;s wording. So each quote names its author
+            Ballot titles are among the most litigated documents in election law: courts have voided
+            measures over a legislature&apos;s wording. So each quote names its author
             (&ldquo;Drafted by the Georgia General Assembly&rdquo;, &ldquo;Prepared by the
             Legislative Analyst&rsquo;s Office&rdquo;): who wrote it tells you how to weigh it. We
             don&apos;t reproduce the pro and con arguments in voter guides; campaigns write those,
@@ -363,28 +363,28 @@ export default async function ElectionsChapter() {
         </Sub>
         <Sub title="“No measures” is different from “we don’t know yet”">
           <P>
-            An empty section reads as &ldquo;nothing to research&rdquo; — a damaging thing to imply
+            An empty section reads as &ldquo;nothing to research&rdquo;: a damaging thing to imply
             about a state with seventeen amendments pending. So a state is shown as having no
             statewide measures only when its official source establishes it, and a state we
             haven&apos;t covered, or whose ingest failed, says <em>that</em> and points to the
-            official lookup. Measures removed from the ballot — courts have struck about 2.3% since
-            1995 — are marked removed and kept for a while, not silently deleted.
+            official lookup. Measures removed from the ballot (courts have struck about 2.3% since
+            1995) are marked removed and kept for a while, not silently deleted.
           </P>
         </Sub>
         <Sub title="Why there’s no plain-language summary">
           <P>
-            Ballot language is hard to read — statewide measures averaged a grade-21 reading level
-            in 2025 — and a plain-language version would genuinely help. We left it out on purpose.
-            Our checks on generated text confirm that its words appear in the source; they
-            can&apos;t tell whether a sentence points the same direction. &ldquo;A YES vote repeals
-            this tax&rdquo;, when the official text says approval <em>keeps</em> it, passes every
-            check, because every word is in the source. On a page that can change how someone votes,
-            an error we can&apos;t detect is one we won&apos;t ship.
+            Ballot language is hard to read (statewide measures averaged a grade-21 reading level in
+            2025), and a plain-language version would genuinely help. We left it out on purpose. Our
+            checks on generated text confirm that its words appear in the source; they can&apos;t
+            tell whether a sentence points the same direction. &ldquo;A YES vote repeals this
+            tax&rdquo;, when the official text says approval <em>keeps</em> it, passes every check,
+            because every word is in the source. On a page that can change how someone votes, an
+            error we can&apos;t detect is one we won&apos;t ship.
           </P>
         </Sub>
         <P>
-          Every measure is read directly from the state itself — its Secretary of State, elections
-          board or legislature — through its certified list, voter guide or ballot notice. We use no
+          Every measure is read directly from the state itself (its Secretary of State, elections
+          board or legislature) through its certified list, voter guide or ballot notice. We use no
           third-party source for measures. A state we don&apos;t read automatically yet, or which
           publishes no official list, says it isn&apos;t covered and which of the two it is; a guide
           not yet published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s

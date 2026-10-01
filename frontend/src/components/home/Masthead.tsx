@@ -68,7 +68,7 @@ export default function Masthead() {
               inaccurate — and the people asking for power are half of what a
               voter comes here to check. */}
           <h1 className="mt-6 max-w-2xl font-display text-[26px] font-semibold leading-[1.22] tracking-[-0.015em] text-ink-hi sm:mt-7 sm:text-[32px]">
-            A public record of the people who hold power and the people asking for it — who funds
+            A public record of the people who hold power and the people asking for it, who funds
             them, how they vote, and what they pass.
           </h1>
 

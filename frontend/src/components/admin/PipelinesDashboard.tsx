@@ -325,7 +325,7 @@ function PhaseTimings({ token }: { token: string }) {
 
       {!loading && runs.length === 0 ? (
         <div className="text-ink-min text-xs font-mono">
-          No phase timings recorded yet — they are written as each run completes its steps.
+          No phase timings recorded yet: they are written as each run completes its steps.
         </div>
       ) : (
         <div className={loading ? "opacity-50 transition-opacity" : "transition-opacity"}>
@@ -355,7 +355,7 @@ function PhaseTimings({ token }: { token: string }) {
                   SHARE OF RUN BLOCKED ON RATE LIMITS
                 </div>
                 <p className="mt-2 text-xs font-mono text-ink-min">
-                  None — no run in this window waited on an external API&apos;s rate limit, so its
+                  None: no run in this window waited on an external API&apos;s rate limit, so its
                   time is all local work.
                 </p>
               </div>
@@ -491,7 +491,7 @@ function PhaseTimings({ token }: { token: string }) {
                     </div>
                     {run.untimedSteps > 0 && (
                       <div className="text-ink-min text-xs font-mono pt-1">
-                        {run.untimedSteps} step(s) without a duration — excluded from totals.
+                        {run.untimedSteps} step(s) without a duration: excluded from totals.
                       </div>
                     )}
                   </div>
@@ -533,7 +533,7 @@ function LastRunCards({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <PipelineRunDetailCard
-        title="Senate — last run"
+        title="Senate: last run"
         run={senate}
         extraStats={
           senate && (
@@ -557,7 +557,7 @@ function LastRunCards({
         }
       />
       <PipelineRunDetailCard
-        title="House — last run"
+        title="House: last run"
         run={house}
         extraStats={
           house && (
@@ -571,7 +571,7 @@ function LastRunCards({
         }
       />
       <PipelineRunDetailCard
-        title="Supplementary — last run"
+        title="Supplementary: last run"
         run={supp}
         extraStats={
           supp && (
@@ -586,7 +586,7 @@ function LastRunCards({
         }
       />
       <PipelineRunDetailCard
-        title="Stock trades — last run"
+        title="Stock trades: last run"
         run={stock}
         extraStats={
           stock && (
@@ -598,7 +598,7 @@ function LastRunCards({
         }
       />
       <PipelineRunDetailCard
-        title="Election — last run"
+        title="Election: last run"
         run={election}
         extraStats={
           election && (
@@ -724,7 +724,7 @@ export function PipelinesDashboard({
 
       <Panel title="Run duration">
         <p className="mb-4 text-xs font-mono text-ink-min">
-          One chart per pipeline — their run lengths differ by two orders of magnitude, so a shared
+          One chart per pipeline: their run lengths differ by two orders of magnitude, so a shared
           axis would flatten the short ones. Each point is one finished run; failed runs are
           included, since a run that died early is itself worth seeing.
         </p>

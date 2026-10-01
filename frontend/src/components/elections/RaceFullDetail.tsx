@@ -16,10 +16,10 @@ import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
 const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
   confirmed: "This state's official general-election ballot for this race.",
   nominees:
-    "Nominees confirmed by this state's primary results. Candidates who reach the general election without running in a primary — Libertarian, Green or independent — aren't covered for this state yet, so this list may be short.",
-  primary: "Ranked by money raised — the nominee isn't decided until this state's primary.",
+    "Nominees confirmed by this state's primary results. Candidates who reach the general election without running in a primary (Libertarian, Green or independent) aren't covered for this state yet, so this list may be short.",
+  primary: "Ranked by money raised: the nominee isn't decided until this state's primary.",
   filers:
-    "Ranked by money raised — this state's nominees aren't confirmed yet, so this is every FEC filer.",
+    "Ranked by money raised: this state's nominees aren't confirmed yet, so this is every FEC filer.",
 };
 
 /** The `filers` note above says nominees "aren't confirmed YET", which is
@@ -29,7 +29,7 @@ const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
  * open. Eleven states were in exactly that position on 2026-09-26, Ohio
  * 144 days past its primary. */
 const SUPERSEDED_NOTE =
-  "Ranked by money raised. This state's primary has already been held, so its ballot is decided — these are FEC filers, and some of them lost.";
+  "Ranked by money raised. This state's primary has already been held, so its ballot is decided: these are FEC filers, and some of them lost.";
 
 /** A leader gets the fuller CandidateCard; anyone in the tail gets one
  * compact line — same party-colour dot the leader cards carry on their
@@ -106,7 +106,7 @@ export default function RaceFullDetail({
                 ? SUPERSEDED_NOTE
                 : SOURCE_NOTE[race.candidateSource]}
               {hasUnconfirmed &&
-                " Candidates marked UNCONFIRMED drew no primary opponent, so this state held no primary for them and its results file doesn't list them — they're shown from their FEC filing."}
+                " Candidates marked UNCONFIRMED drew no primary opponent, so this state held no primary for them and its results file doesn't list them: they're shown from their FEC filing."}
             </p>
             {tiered && (
               <span className="shrink-0 border border-white/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-min">
@@ -186,7 +186,7 @@ export default function RaceFullDetail({
               actually raising money here", not silently dropped from it. */}
           <RaceFinancials candidates={active} />
           <p className="mt-3 font-mono text-xs leading-relaxed text-ink-min">
-            Per FEC filings — totals lag by up to a quarter and amendments. Source: fec.gov.
+            Per FEC filings: totals lag by up to a quarter and amendments. Source: fec.gov.
           </p>
         </div>
       )}

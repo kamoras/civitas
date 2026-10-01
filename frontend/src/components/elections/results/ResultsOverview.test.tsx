@@ -114,7 +114,7 @@ describe("the seats-changing-party card", () => {
     expect(card.getByText("1")).toBeInTheDocument();
     expect(
       card.getByText(
-        "Not counted: House seats in the 2 states voting on new district lines (NC, TX), which have no previous holder — 2 of the districts with a count so far are among them."
+        "Not counted: House seats in the 2 states voting on new district lines (NC, TX), which have no previous holder; 2 of the districts with a count so far are among them."
       )
     ).toBeInTheDocument();
   });

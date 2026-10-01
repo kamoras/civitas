@@ -231,7 +231,7 @@ export default function LineChart({
           <div
             tabIndex={0}
             role="slider"
-            aria-label={`${title} — line chart; arrow keys step through the points`}
+            aria-label={`${title}: line chart; arrow keys step through the points`}
             aria-valuemin={0}
             aria-valuemax={Math.max(0, n - 1)}
             aria-valuenow={active ?? n - 1}

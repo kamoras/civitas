@@ -60,7 +60,7 @@ describe("formerOfficeNotice", () => {
 describe("formerOfficeBadge", () => {
   it("appends the vacancy reason for congressional seats", () => {
     expect(formerOfficeBadge({ branch: "senate", name: "Jane Doe", vacancyReason: "died" })).toBe(
-      "SEAT VACANT — DIED"
+      "SEAT VACANT · DIED"
     );
   });
 

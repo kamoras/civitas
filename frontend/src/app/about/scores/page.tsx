@@ -20,7 +20,7 @@ import SignalOverlapReading from "@/components/about/SignalOverlapReading";
 export const metadata = pageMetadata({
   title: "How Senators and Representatives Are Scored",
   description:
-    "The three parts of every member of Congress's Representation Score — Funding Independence, Constituent Alignment and Legislative Effectiveness — what moves each, and the evidence behind them.",
+    "The three parts of every member of Congress's Representation Score (Funding Independence, Constituent Alignment and Legislative Effectiveness), what moves each, and the evidence behind them.",
   path: "/about/scores",
 });
 
@@ -44,7 +44,7 @@ export default function ScoresChapter() {
           whether their legislation goes anywhere.
         </Point>
         <Point>
-          Members are compared with their own chamber — and on voting, with their own party in seats
+          Members are compared with their own chamber, and on voting, with their own party in seats
           that lean the same way. Those comparisons are re-measured on every nightly run, not typed
           in by hand.
         </Point>
@@ -70,7 +70,7 @@ export default function ScoresChapter() {
         </P>
         <P>
           Each part answers to the same yardstick: does the member carry out the will of the
-          majority of their constituents — not the preferences of a few large donors, and not party
+          majority of their constituents, not the preferences of a few large donors, and not party
           defection for its own sake? Crossing party lines earns credit only where it plausibly
           moves toward what the seat wants, and the funding measures exist because money
           concentrated in few hands is the main way representation drifts away from the majority.
@@ -95,7 +95,7 @@ export default function ScoresChapter() {
             That is stricter than a six-year Senate term, and it avoids guessing term boundaries the
             official records don&apos;t publish. Funding is the exception: senators legitimately
             raise little money outside election years, so funding covers the member&apos;s most
-            recent completed election — the campaign that won the current seat, not a re-election
+            recent completed election: the campaign that won the current seat, not a re-election
             campaign still under way. Score trend charts mark the start of each Congress so a reset
             reads as what it is.
           </P>
@@ -121,7 +121,7 @@ export default function ScoresChapter() {
             doesn&apos;t (0.05).
           </Step>
           <Step n={2} title="Small-donor share">
-            Money in gifts under $200 — the broadest possible funding base. A senator is compared
+            Money in gifts under $200: the broadest possible funding base. A senator is compared
             with what a state of that population typically raises this way; a representative, with
             the House median.
           </Step>
@@ -142,15 +142,15 @@ export default function ScoresChapter() {
           </Step>
         </Steps>
         <P>
-          Shares are of contributions — money given by individuals, PACs, party committees or the
-          candidate — not of total receipts, which also count transfers from joint fundraising
+          Shares are of contributions (money given by individuals, PACs, party committees or the
+          candidate), not of total receipts, which also count transfers from joint fundraising
           committees whose sources aren&apos;t broken out. Money that can&apos;t be attributed at
           all (committee transfers, donations with no employer listed; a median of about a third of
           senators&apos; funding) is scored as neutral, not as a sign of concentration.
         </P>
         <P>
-          Democrats and Republicans raise money differently on average — in July 2026 Senate data,
-          Democrats took roughly half the PAC share and twice the small-donor share — so average
+          Democrats and Republicans raise money differently on average (in July 2026 Senate data,
+          Democrats took roughly half the PAC share and twice the small-donor share), so average
           scores differ by party too, though the formula has no party term.
         </P>
         <More label="The evidence, and two inputs we removed">
@@ -190,16 +190,16 @@ export default function ScoresChapter() {
             <Step n={1} title="Pick the party-line votes">
               Every roll call of the current Congress counts when the parties split on it: at least
               65% of one party voting yes and at most 35% of the other. Votes with no recorded roll
-              call don&apos;t count, and neither does housekeeping — quorum calls, adjourning, the
-              House&apos;s previous question, motions to table or to recommit — which splits on
+              call don&apos;t count, and neither does housekeeping (quorum calls, adjourning, the
+              House&apos;s previous question, motions to table or to recommit), which splits on
               party lines as a matter of course. Each bill or nomination counts once, however many
               times it came to a vote: cloture and then confirmation on one nominee is one decision.
             </Step>
             <Step n={2} title="Count breaks toward the other party">
               A member breaks when they vote with the other side <em>and</em> the party&apos;s
               members who broke on that vote sit nearer the other party than the party does. A vote
-              against the party from its own flank — hardliners voting down their party&apos;s bill
-              — is listed on the profile but not counted here, because how far toward the flank a
+              against the party from its own flank (hardliners voting down their party&apos;s bill)
+              is listed on the profile but not counted here, because how far toward the flank a
               member sits is already scored by where their record sits (below)
               <Cite id="kirkland2017" />. Every break on a profile shows that roll call&apos;s party
               tallies.
@@ -209,8 +209,8 @@ export default function ScoresChapter() {
               seats with the same partisan lean (Cook PVI). Each party gets its own line, allowed to
               bend at swing seats, so a Republican in a seat Biden won is compared with how
               Republicans in seats like that actually vote. A House seat&apos;s lean is the district
-              the member was elected on — their Congress&apos;s lines, not the map the next election
-              uses — and a score&apos;s worked math is redone on the same lines as the score.
+              the member was elected on (their Congress&apos;s lines, not the map the next election
+              uses), and a score&apos;s worked math is redone on the same lines as the score.
             </Step>
             <Step n={4} title="Measure the gap">
               In standard deviations, not percentage points. Four extra points on a seat whose
@@ -232,15 +232,15 @@ export default function ScoresChapter() {
           <P>
             One procedural exception, read from the chamber&apos;s own recorded result: a majority
             leader who votes with the winning side against their party on a motion, so that they can
-            move to reconsider it, is not counted as breaking — and only during their time in that
+            move to reconsider it, is not counted as breaking, and only during their time in that
             office. The Speaker and minority leaders are never exempted.
           </P>
         </Sub>
         <Sub title="Where their voting record sits">
           <P>
-            The other 30% compares the member&apos;s overall roll-call position from Voteview — the
+            The other 30% compares the member&apos;s overall roll-call position from Voteview: the
             congress-specific Nokken-Poole estimate
-            <Cite id="nokken2004" />, not a career average — with what a same-party member of a
+            <Cite id="nokken2004" />, not a career average, with what a same-party member of a
             similarly-leaning seat typically holds. Toward the party&apos;s flank scores below
             neutral; toward the seat&apos;s center scores above, by the same amount either way. When
             that data isn&apos;t available, the score is all break-rate.
@@ -255,7 +255,7 @@ export default function ScoresChapter() {
           <P>
             They are relative positions, not verdicts. A 100 means the member breaks with their
             party about as often as members of their own party in seats that lean the same way. A 0
-            means they break far more often than that — or, much more rarely, far less. Because each
+            means they break far more often than that, or, much more rarely, far less. Because each
             party&apos;s yardstick is measured from its own members, a party that happens to be more
             unified isn&apos;t scored higher for it: across every Senate from 1989 on, the two
             parties&apos; averages differed by 1.8 points on average, and which one was higher
@@ -302,7 +302,7 @@ export default function ScoresChapter() {
             seat&apos;s norm lost about 3 points per standard deviation. The electorate as a whole
             leans the other way: in Senate general elections from 1990 to 2024 and the 2004 House
             elections, members who broke more than their seat&apos;s norm did somewhat better. We
-            report that rather than hide it — the score follows what a member was elected under, not
+            report that rather than hide it: the score follows what a member was elected under, not
             what maximizes their vote share.
           </P>
           <P>
@@ -318,8 +318,8 @@ export default function ScoresChapter() {
         <More label="What this part used to measure">
           <P>
             Until v6.20 (September 2026) the break rate was read from a sample of each member&apos;s
-            latest votes, counted every vote against most of the party — including breaks from the
-            party&apos;s flank — and counted a nominee&apos;s cloture and confirmation as two. Over
+            latest votes, counted every vote against most of the party, including breaks from the
+            party&apos;s flank, and counted a nominee&apos;s cloture and confirmation as two. Over
             the whole Congress, counting only breaks toward the other party and each measure once
             predicted election results at least as well (docs/research/constituent-alignment.md,
             sections 11 and 12). The September 2026 figures above were measured before that change.
@@ -354,7 +354,7 @@ export default function ScoresChapter() {
         <List>
           <Item label="Bills and how far they got (60%)">
             The member&apos;s legislative record, compared with the typical sponsor of the same
-            status — majority or minority — in the same chamber.
+            status, majority or minority, in the same chamber.
           </Item>
           <Item label="Legislative leadership (25%)">
             How central the member is in the network of who cosponsors whose bills (see{" "}
@@ -383,8 +383,8 @@ export default function ScoresChapter() {
           <Steps>
             <Step n={1} title="Weight by significance">
               Bills and joint resolutions count five times as much as simple and concurrent
-              resolutions. Commemorative bills — renaming a post office, awarding a Congressional
-              Gold Medal — count like resolutions; they are recognized from the title.
+              resolutions. Commemorative bills (renaming a post office, awarding a Congressional
+              Gold Medal) count like resolutions; they are recognized from the title.
             </Step>
             <Step n={2} title="Credit every stage reached">
               Introduced, action in committee (a hearing or markup), action beyond committee
@@ -397,7 +397,7 @@ export default function ScoresChapter() {
             </Step>
             <Step n={4} title="Compare with the typical member of the same status">
               Majority-party members advance bills far more often, so each member is compared with
-              the median member of their own status in their own chamber, re-measured every run — as
+              the median member of their own status in their own chamber, re-measured every run, as
               in Volden and Wiseman&apos;s own benchmarks.
             </Step>
           </Steps>
@@ -411,8 +411,8 @@ export default function ScoresChapter() {
         <Sub title="Why bipartisan attraction">
           <P>
             Attracting cosponsors from the other party robustly predicts lawmaking success for
-            majority and minority members alike, and it is specifically attracting them — not
-            cosponsoring across the aisle — that carries the effect
+            majority and minority members alike, and it is specifically attracting them, not
+            cosponsoring across the aisle, that carries the effect
             <Cite id="harbridgeyong2023" />. So this uses a receive-only rate, not the
             give-and-receive bipartisanship figure shown on profiles. That evidence is a strong
             association rather than proof of cause, and the measure is an input to effectiveness
@@ -448,7 +448,7 @@ export default function ScoresChapter() {
             scaled by the ratio of the two parties&apos; advancement rates (in a July 2026
             measurement, Senate majority sponsors advanced 3.6% of bills against 2.4% for the
             minority; House 6.4% against 2.4%). Most credit came from introducing bills, which
-            majority status doesn&apos;t change, so that ratio over-corrected — the House&apos;s gap
+            majority status doesn&apos;t change, so that ratio over-corrected: the House&apos;s gap
             between the parties reached 18 points. Each status is now centered on its own typical
             member. Since v6.9 all of this is measured separately for each chamber; one pooled
             figure had understated House members and overstated senators. The{" "}
@@ -459,7 +459,7 @@ export default function ScoresChapter() {
 
       <Section id="leadership" kicker="Context on the leaderboard" title="Leadership and ideology">
         <P>
-          Two more figures come from the cosponsorship network — who signs onto whose bills, a
+          Two more figures come from the cosponsorship network (who signs onto whose bills), a
           separate network for each chamber. Leadership feeds Legislative Effectiveness; ideology is
           context only.
         </P>
@@ -467,35 +467,35 @@ export default function ScoresChapter() {
           <P>
             PageRank
             <Cite id="brin1998" /> over the cosponsorship network, the approach GovTrack uses
-            <Cite id="tauberer2012" />: a member whose bills attract many cosponsors — especially
-            influential ones — scores higher. Each cosponsorship is weighted by what happened to the
-            bill (became law, advanced, or stalled — a stalled bill still counts for something, as
+            <Cite id="tauberer2012" />: a member whose bills attract many cosponsors, especially
+            influential ones, scores higher. Each cosponsorship is weighted by what happened to the
+            bill (became law, advanced, or stalled: a stalled bill still counts for something, as
             evidence of a working relationship), so signing onto symbolic bills doesn&apos;t build
             the same weight as signing onto laws. Raw values are log-rescaled within the chamber, so
             the median member sits near 50 and the lowest member scores 0.
           </P>
           <P>
             Network position takes years to build, so for members with under six years in office,
-            the part of Legislative Effectiveness built from it — and the leader or backbencher
-            label on their profile — is pulled toward neutral in proportion to tenure. A newcomer
-            reads as &ldquo;not enough track record yet&rdquo;, not &ldquo;bad at leadership&rdquo;.
-            The leaderboard shows the unadjusted network score.
+            the part of Legislative Effectiveness built from it, and the leader or backbencher label
+            on their profile, is pulled toward neutral in proportion to tenure. A newcomer reads as
+            &ldquo;not enough track record yet&rdquo;, not &ldquo;bad at leadership&rdquo;. The
+            leaderboard shows the unadjusted network score.
           </P>
         </Sub>
         <Sub title="Ideology (0–1) and partisan depth">
           <P>
             A behavioral left–right position from singular value decomposition of the cosponsorship
             matrix, following GovTrack
-            <Cite id="tauberer2012" /> — like DW-NOMINATE
+            <Cite id="tauberer2012" />, like DW-NOMINATE
             <Cite id="poole1985" />, but from cosponsorships rather than votes. Lower is more
             progressive, higher more conservative.
           </P>
           <P>
-            Partisan depth — how strongly a member leans within each policy area — comes mainly from
+            Partisan depth (how strongly a member leans within each policy area) comes mainly from
             their votes. The ideology score only steadies it for members with few votes, fading to
             no weight at 15. The label (deep, moderate or centrist) is the member&apos;s third
-            within their own party — or &ldquo;cross-cutting&rdquo; when more than 30% of their
-            positions sit with the other party — so a fixed cut-off can&apos;t make one party look
+            within their own party, or &ldquo;cross-cutting&rdquo; when more than 30% of their
+            positions sit with the other party, so a fixed cut-off can&apos;t make one party look
             more extreme just because the two parties sit on different ranges. The one-line
             description on a profile (say, &ldquo;Progressive Democrat leader&rdquo;) combines
             ideology, party and a leadership tier.
@@ -511,7 +511,7 @@ export default function ScoresChapter() {
           majorities is not a party-line vote.
         </P>
         <P>
-          Only where no roll call exists does the bill&apos;s content decide — for the policy-area
+          Only where no roll call exists does the bill&apos;s content decide: for the policy-area
           breakdown of partisan depth, never for a break. The bill is compared with each
           party&apos;s platform positions in that policy area
           <Cite id="manning2008" />, with its direction (does it strengthen or roll back?)
@@ -522,10 +522,10 @@ export default function ScoresChapter() {
         </P>
         <More label="Why votes win over content">
           <P>
-            Roll calls don&apos;t always reflect sincere preferences — vote trading, whip pressure
+            Roll calls don&apos;t always reflect sincere preferences: vote trading, whip pressure
             and omnibus packaging all intervene
             <Cite id="clinton2004" />
-            <Cite id="snyder2000" /> — which is why content analysis was once the primary signal. A
+            <Cite id="snyder2000" />, which is why content analysis was once the primary signal. A
             2026-06 audit found that choice marked members as voting &ldquo;against their
             party&rdquo; on bills nearly everyone supported, pinning every House member&apos;s score
             near 87–89. The question this label answers is whether a member broke with their party,
@@ -539,7 +539,7 @@ export default function ScoresChapter() {
           Not scored. An industry that makes up at least a quarter of a member&apos;s classifiable
           donor money is matched to the member&apos;s votes on legislation in that industry&apos;s
           policy area. For the industry&apos;s largest donor we look up the Lobbying Disclosure Act
-          registry (lda.gov) under the donor&apos;s name — the sponsoring company&apos;s when the
+          registry (lda.gov) under the donor&apos;s name: the sponsoring company&apos;s when the
           donor is its PAC. A PAC the FEC lists no separate sponsor for is searched under its own
           name, and finding nothing there is reported as unknown, not as no lobbying.
         </P>
@@ -568,7 +568,7 @@ export default function ScoresChapter() {
         </P>
         <P>
           These forms report each amount as a range, with no purchase price or share count, so no
-          profit or net-worth figure is produced — the ranges are shown as filed. A range with no
+          profit or net-worth figure is produced: the ranges are shown as filed. A range with no
           ceiling, such as &ldquo;Over $50,000,000&rdquo;, is shown as &ldquo;$50,000,000+&rdquo;.
           The holdings chart sizes each asset by its range&apos;s midpoint (an open-ended range by
           its minimum) and says so. Asset categories come only from the type the filer declared on
