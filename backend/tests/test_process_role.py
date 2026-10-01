@@ -53,11 +53,10 @@ def started(monkeypatch):
     monkeypatch.setattr(main_module, "stop_scheduler", lambda: None)
     monkeypatch.setattr(main_module, "_start_pipeline_side_startup_jobs", record("startup-jobs"))
     monkeypatch.setattr(main_module, "_bootstrap_explore", _bootstrap)
-    monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", record("bill-cache"))
-    monkeypatch.setattr("app.api.visits.run_visit_consumer", _idle)
+    monkeypatch.setattr(main_module, "warm_bill_collection_cache", record("bill-cache"))
+    monkeypatch.setattr(main_module, "run_visit_consumer", _idle)
     monkeypatch.setattr(main_module.asyncio, "get_running_loop", lambda: _Loop())
     return ran
-
 
 
 class TestStartup:

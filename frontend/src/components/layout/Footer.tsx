@@ -18,6 +18,7 @@ const INTERNAL_LINKS: readonly { href: string; label: string }[] = [
   { href: "/politicians", label: "Politicians" },
   { href: "/about", label: "Methodology" },
   { href: "/feeds", label: "Feeds" },
+  { href: "/developers", label: "API" },
   { href: "/changelog", label: "Changelog" },
   { href: "/accessibility", label: "Accessibility" },
   { href: "/environmental", label: "Environmental" },

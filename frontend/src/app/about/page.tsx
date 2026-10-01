@@ -263,6 +263,7 @@ export default function AboutOverview() {
           <PillLink href={GITHUB_REPO_URL} external>
             Source code
           </PillLink>
+          <PillLink href="/developers">Public API and MCP server</PillLink>
           <PillLink href="/changelog">Scoring changelog</PillLink>
           <PillLink href="/feedback">Disagree with a score? Tell us</PillLink>
         </div>

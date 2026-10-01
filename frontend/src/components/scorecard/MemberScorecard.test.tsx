@@ -42,7 +42,8 @@ const member = {
   funding: {
     totalRaised: 1238070,
     totalContributions: 1212091,
-    totalFromPACs: 138817,
+    totalFromPacs: 138817,
+    pacSharePct: 5,
     smallDonorPercentage: 24,
     topDonors: [
       {

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Literal, get_args
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
 
 def to_camel(string: str) -> str:
@@ -45,17 +45,21 @@ class IndustryDonationSchema(CamelModel):
 
 
 class RepresentationScoreSchema(CamelModel):
-    funding_independence: float
-    promise_persistence: float
-    constituent_alignment: float
-    funding_diversity: float
-    legislative_effectiveness: float = 0.0
+    funding_independence: float = Field(
+        description="0-100: how free the member is from PAC and large-donor dependence. Weighted into overall")
+    promise_persistence: float = Field(description="0-100, informational: not part of overall since v6.0")
+    constituent_alignment: float = Field(
+        description="0-100: how the member's votes compare with what the seat's partisan lean predicts. Weighted into overall")
+    funding_diversity: float = Field(
+        description="0-100, informational: how widely funding spreads across industries and donor kinds")
+    legislative_effectiveness: float = Field(
+        0.0, description="0-100: how far the member's bills advance, and the coalitions they draw. Weighted into overall")
     # Backend-computed overall (score_calculator.compute_overall_score) — the
     # frontend must never recompute this from the sub-scores itself (see
     # lib/representation.ts's removed weightedScore).
-    overall: float = 0.0
-    # Per-dimension data-sufficiency: "high" | "medium" | "low"
-    confidence: dict[str, str] | None = None
+    overall: float = Field(0.0, description="The weighted overall score, 0-100 (weights: the API index's scoreWeights)")
+    confidence: dict[str, str] | None = Field(
+        None, description='How much data backs each sub-score: "high", "medium" or "low"')
 
 
 class PolicyAreaDetail(CamelModel):
@@ -84,22 +88,30 @@ class KeyVoteSchema(CamelModel):
 
 
 class FundingSchema(CamelModel):
-    total_raised: float
+    """The member's most recent completed election campaign (FEC)."""
+    total_raised: float = Field(description="All receipts, in dollars")
     # Denominator for PAC / small-donor shares (contributions + candidate
     # self-loans; see normalize_finance.summarize_election_totals). None on
     # records scored before it existed — clients fall back to total_raised.
     total_contributions: float | None = None
-    total_from_pacs: float = Field(alias="totalFromPACs", serialization_alias="totalFromPACs")
-    small_donor_percentage: float
+    # Read from the pipeline's "totalFromPACs" key; written as "totalFromPacs",
+    # the spelling every other response (the leaderboards) uses.
+    total_from_pacs: float = Field(
+        validation_alias=AliasChoices("totalFromPACs", "totalFromPacs"), serialization_alias="totalFromPacs",
+    )
+    pac_share_pct: float = Field(0.0, description="PAC money as a percentage of contributions, 0-100")
+    small_donor_percentage: float = Field(
+        description="Share of contributions that were unitemized individual gifts (donors giving $200 or less), 0-100")
     top_donors: list[DonorSchema]
-    industry_breakdown: list[IndustryDonationSchema]
+    industry_breakdown: list[IndustryDonationSchema] = Field(description="Contributions by industry")
 
 
 class VotingRecordSchema(CamelModel):
+    """Roll-call votes in the current Congress."""
     total_votes: int
-    voted_with_party_count: int = 0
-    voted_against_party_count: int = 0
-    party_loyalty_pct: float = 0.0
+    voted_with_party_count: int = Field(0, description="Votes cast with the member's party majority")
+    voted_against_party_count: int = Field(0, description="Votes cast against the member's party majority")
+    party_loyalty_pct: float = Field(0.0, description="With-party share of party-line votes, 0-100")
     recent_vote_count: int = 0
     key_vote_count: int = 0
 
@@ -474,15 +486,17 @@ class _PersonDetailBase(CamelModel):
     party: Literal["D", "R", "I"]
     years_in_office: int
     initials: str
-    leadership_title: str | None = None
+    leadership_title: str | None = Field(None, description="A party leadership post, if the member holds one")
     committees: list[CommitteeSchema] = []
     representation_score: RepresentationScoreSchema
     funding: FundingSchema
     voting_record: VotingRecordSchema
-    lobbying_matches: list[LobbyingMatchSchema]
+    lobbying_matches: list[LobbyingMatchSchema] = Field(
+        description="Donors who also lobby, with the bills they lobbied on that the member voted on")
     campaign_promises: list[CampaignPromiseSchema] = []
-    partisan_depth: PartisanDepthSchema | None = None
-    sponsored_bills: list[SponsoredBillSchema] = []
+    partisan_depth: PartisanDepthSchema | None = Field(
+        None, description="How strongly the member's votes lean to one party, by policy area")
+    sponsored_bills: list[SponsoredBillSchema] = Field([], description="Bills the member sponsored this Congress")
     leadership_score: float | None = None
     bipartisanship_score: float | None = None
     ideology_score: float | None = None
@@ -528,6 +542,7 @@ class LeaderboardEntrySchema(CamelModel):
     total_raised: float
     total_contributions: float | None = None
     total_from_pacs: float
+    pac_share_pct: float = Field(0.0, description="PAC money as a percentage of contributions, 0-100")
     small_donor_percentage: float
     top_industry: str | None = None
     trend: ScoreTrendSchema = Field(default_factory=ScoreTrendSchema)
@@ -547,6 +562,126 @@ class LeaderboardEntrySchema(CamelModel):
     # disproportionate cosponsor weight. None when too little
     # cosponsorship data exists to compute it.
     leadership_score: float | None = None
+
+
+# --- Public API v1 (api/public.py) ---
+#
+# Documentation of the public contract, not how it's built: those routes
+# return JSONResponse directly, which FastAPI never validates against a
+# response_model, so these could drift from the real bodies unnoticed.
+# extra="forbid" plus tests/test_public_api_contract.py, which validates
+# every endpoint's actual output against these, is what stops that — a
+# field added to a response without being added here fails the test.
+
+
+class _PublicModel(CamelModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+
+_SITE_URL = Field(description="This record's page on Civitas")
+_RANK = Field(description="Place in the whole chamber by overall score, whatever the filters (ties share one: 1, 2, 2, 4)")
+
+
+class PublicApiIndexSchema(_PublicModel):
+    name: str
+    version: str
+    rate_limit: str
+    score_weights: dict[str, float] = Field(description="How the sub-scores weigh into representationScore.overall")
+    endpoints: dict[str, str]
+    docs: str
+    openapi: str
+    mcp: str = Field(description="MCP server (streamable HTTP) exposing these endpoints as tools")
+    source: str
+
+
+class PublicStateSchema(_PublicModel):
+    code: str = Field(description="Two-letter state code")
+    name: str
+    senator_count: int
+    representative_count: int
+
+
+class PublicSenatorRowSchema(LeaderboardEntrySchema):
+    model_config = _PublicModel.model_config
+    rank: int = _RANK
+    site_url: str = _SITE_URL
+
+
+class PublicRepresentativeRowSchema(LeaderboardEntrySchema):
+    model_config = _PublicModel.model_config
+    rank: int = _RANK
+    district: int = Field(description="Congressional district; 0 for an at-large seat")
+    site_url: str = _SITE_URL
+
+
+class PublicSenatorProfileSchema(SenatorSchema):
+    model_config = _PublicModel.model_config
+    site_url: str = _SITE_URL
+
+
+class PublicRepresentativeProfileSchema(RepresentativeSchema):
+    model_config = _PublicModel.model_config
+    site_url: str = _SITE_URL
+
+
+class _PublicPage(_PublicModel):
+    total: int = Field(description="Matching members across every page")
+    page: int
+    per_page: int
+    total_pages: int
+
+
+class PublicSenatorPageSchema(_PublicPage):
+    entries: list[PublicSenatorRowSchema]
+
+
+class PublicRepresentativePageSchema(_PublicPage):
+    entries: list[PublicRepresentativeRowSchema]
+
+
+class PublicScoreSnapshotSchema(_PublicModel):
+    date: str = Field(description="When the scores were computed, YYYY-MM-DD")
+    overall: float
+    funding_independence: float
+    promise_persistence: float
+    constituent_alignment: float
+    funding_diversity: float
+    legislative_effectiveness: float
+
+
+class PublicHistorySchema(_PublicModel):
+    id: str = Field(description="The member's id")
+    snapshots: list[PublicScoreSnapshotSchema] = Field(description="Oldest first")
+
+
+class PublicSearchResultSchema(_PublicModel):
+    id: int
+    title: str
+    date: str
+    doc_type: str
+    source: str
+    politician_name: str = Field(description="The member who delivered or signed it; empty when none")
+    politician_id: str
+    chamber: str
+    agency_name: str
+    url: str = Field(description="The document at its official source")
+    site_url: str = _SITE_URL
+    summary: str
+    comment_url: str = Field(description="Where to comment, for a rule whose comment period is open")
+    comments_close_on: str
+    cited_by_count: int = Field(description="How many indexed documents cite this one")
+    matched_by: list[Literal["semantic", "keyword"]] = Field(description="Which search found it: by meaning, by exact words, or both")
+    distance: float | None = Field(description="Distance in meaning from the query; null when only the exact words matched")
+    snippet: str
+    duplicate_count: int = Field(description="Near-identical copies folded into this result")
+
+
+class PublicSearchResponseSchema(_PublicModel):
+    query: str
+    results: list[PublicSearchResultSchema] = Field(description="Best match first")
+    count: int
+    partial: bool = Field(description="True when only the exact-words search could answer, so the ranking is incomplete")
+    index_building: bool = Field(description="True while the search index is being built; results are empty until it is")
 
 
 # --- Pipeline / Health schemas ---

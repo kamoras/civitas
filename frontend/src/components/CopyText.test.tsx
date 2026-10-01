@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import CopyFeedUrl from "./CopyFeedUrl";
+import CopyText from "./CopyText";
 
 const URL = "https://civitas-research.org/feed/elections.xml";
 
@@ -10,12 +10,12 @@ function stubClipboard(writeText: () => Promise<void>) {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 }
 
-describe("CopyFeedUrl", () => {
+describe("CopyText", () => {
   it("copies the address and announces it in a live region, not by renaming the button", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);
     stubClipboard(writeText);
-    render(<CopyFeedUrl url={URL} label="Elections" />);
+    render(<CopyText text={URL} label="Elections feed address" />);
 
     await user.click(screen.getByRole("button", { name: "Copy the Elections feed address" }));
 
@@ -33,7 +33,7 @@ describe("CopyFeedUrl", () => {
   it("says so, visibly, when the browser refuses", async () => {
     const user = userEvent.setup();
     stubClipboard(vi.fn().mockRejectedValue(new Error("denied")));
-    render(<CopyFeedUrl url={URL} label="Elections" />);
+    render(<CopyText text={URL} label="Elections feed address" />);
 
     await user.click(screen.getByRole("button", { name: "Copy the Elections feed address" }));
 

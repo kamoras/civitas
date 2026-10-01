@@ -86,6 +86,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.4,
     })),
     { url: `${SITE_URL}/feeds`, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${SITE_URL}/developers`, changeFrequency: "monthly", priority: 0.4 },
     { url: `${SITE_URL}/changelog`, changeFrequency: "weekly", priority: 0.3 },
     { url: `${SITE_URL}/accessibility`, changeFrequency: "monthly", priority: 0.3 },
     { url: `${SITE_URL}/environmental`, changeFrequency: "monthly", priority: 0.3 },

@@ -9,11 +9,14 @@ resolving it.
 """
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
+from app.api import explore
 from app.api.explore import VALID_DOC_TYPES, search_explore
+from app.api.public import search_documents as public_search
 from app.models import ExploreDocument
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.services import explore_search
@@ -247,10 +250,6 @@ class TestPublicSearch:
     nothing there that the site's own search page found."""
 
     async def _public(self, db, q, **overrides):
-        from types import SimpleNamespace
-
-        from app.api.public import search as public_search
-
         params = {"chamber": None, "doc_type": None, "politician_id": None, "limit": 20}
         params.update(overrides)
         request = SimpleNamespace(state=SimpleNamespace())
@@ -273,15 +272,13 @@ class TestPublicSearch:
         for result in body["results"]:
             assert "\x02" not in result["snippet"] and "\x03" not in result["snippet"]
 
-    async def test_nothing_answerable_reports_index_empty(self, indexed_db):
+    async def test_nothing_answerable_reports_the_index_building(self, indexed_db):
         body = _body(await self._public(indexed_db, "wildfire"))
-        assert body == {"query": "wildfire", "results": [], "count": 0, "indexEmpty": True}
+        assert body == {"query": "wildfire", "results": [], "count": 0, "partial": False, "indexBuilding": True}
 
 
 class TestPartialAnswersAreCachedBriefly:
-    async def test_a_keyword_only_answer_is_not_kept_for_a_successs_lifetime(self, db_session, monkeypatch):
-        from app.api import explore
-
+    async def test_a_keyword_only_answer_is_not_kept_for_a_success_lifetime(self, db_session, monkeypatch):
         outcome = {"indexReady": True, "results": [], "count": 0, "semanticUnavailable": True, "channels": {}}
         monkeypatch.setattr(explore, "hybrid_search", lambda *a, **k: outcome)
         resp = await _search(db_session)

@@ -1,22 +1,42 @@
 import asyncio
+import fcntl
+import hashlib
+import logging
 import os
 import threading
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
-
-import logging
-from app.config import settings
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.engine import make_url
 
+from app import net_stats
 from app.api.cache_headers import ETagCacheMiddleware
+from app.api.public_mcp import PATH as MCP_PATH, McpEndpoint
 from app.api.router import api_router
-from app.database import init_db
-from app.scheduler import start_scheduler, stop_scheduler
+from app.api.throttle import RAM_DIR, run_maintenance
+from app.api.visits import run_visit_consumer
 from app.background import WritesElsewhere, WritesHeld, start_writer, writing
+from app.config import settings
+from app.database import SessionLocal, init_db
+from app.models import ExploreDocument
+from app.ops_alerts import check_pipeline_service_alive
+from app.pipeline import lease, vector_store
+from app.pipeline.run_tracker import sweep_orphaned_runs
+from app.scheduler import start_scheduler, stop_scheduler
+from app.services.bill_service import warm_bill_collection_cache
+
+# Imported where they run, not here: pipeline-side modules the read-only
+# API process never needs (explore_pipeline, les_rescore,
+# constituent_rescore, explore_summary). Each API worker holds its own
+# copy of whatever this module imports (docker-compose.swarm.yml's
+# per-worker memory budget), and nothing else in the API imports these.
+
+logger = logging.getLogger(__name__)
 
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
 _level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
@@ -41,18 +61,13 @@ async def _bootstrap_explore() -> None:
     """Run explore pipeline once at startup if the document store is empty."""
     await asyncio.sleep(5)
     try:
-        from app.database import SessionLocal
-        from app.models import ExploreDocument
-
         db = SessionLocal()
         count = db.query(ExploreDocument.id).limit(1).first()
         db.close()
 
         if count is None:
-            _logger = logging.getLogger("app.main")
-            _logger.info("Explore document store is empty — running initial ingestion")
+            logger.info("Explore document store is empty — running initial ingestion")
             from app.pipeline.explore_pipeline import run_explore_pipeline
-            from app.pipeline import lease
 
             # Registered for the admin data reset: the pipeline hands its
             # writes to threads while this awaits. And a lease, so a reset in
@@ -62,9 +77,9 @@ async def _bootstrap_explore() -> None:
                     if held:
                         await run_explore_pipeline(days_back=60)
     except WritesHeld as held:
-        logging.getLogger("app.main").info("%s", held)
+        logger.info("%s", held)
     except Exception as e:
-        logging.getLogger("app.main").warning("Explore bootstrap failed: %s", e)
+        logger.warning("Explore bootstrap failed: %s", e)
 
 
 def _preload_models() -> None:
@@ -74,12 +89,10 @@ def _preload_models() -> None:
     requests"). Only that one: the primary model served /api/qa's intent
     classification, which is gone, and every API worker would hold a copy
     no request uses."""
-    from app.pipeline import vector_store
-
     try:
         vector_store.get_similarity_model()
     except Exception as e:
-        logging.getLogger("app.main").warning("Embedding model preload failed: %s", e)
+        logger.warning("Embedding model preload failed: %s", e)
 
 
 def _invalidate_orphaned_pipelines() -> None:
@@ -96,8 +109,6 @@ def _invalidate_orphaned_pipelines() -> None:
     exception is a Senate row whose lease still holds — it may be a run
     live in the other task, the one case that can be seen.
     """
-    from app.pipeline.run_tracker import sweep_orphaned_runs
-
     sweep_orphaned_runs()
 
 
@@ -114,8 +125,6 @@ _LIVENESS_GRACE_S = 120
 
 async def _watch_pipeline_service() -> None:
     """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive)."""
-    from app.ops_alerts import check_pipeline_service_alive
-
     # Every API worker runs this; the alert's dedupe (send_ops_alert) is
     # what makes a stale heartbeat page once, not once per worker.
     await asyncio.sleep(_LIVENESS_GRACE_S)
@@ -123,7 +132,7 @@ async def _watch_pipeline_service() -> None:
         try:
             await asyncio.to_thread(check_pipeline_service_alive)
         except Exception:
-            logging.getLogger("app.main").warning("Pipeline liveness check failed", exc_info=True)
+            logger.warning("Pipeline liveness check failed", exc_info=True)
         await asyncio.sleep(_LIVENESS_EVERY_S)
 
 
@@ -137,11 +146,9 @@ def _start_pipeline_side_startup_jobs() -> None:
     # and waits out a lock another writer holds rather than guess.
     def _check_explore_index() -> None:
         try:
-            from app.database import SessionLocal
-            from app.pipeline.vector_store import ensure_explore_index
-            ensure_explore_index(SessionLocal)
+            vector_store.ensure_explore_index(SessionLocal)
         except Exception:
-            logging.getLogger(__name__).exception("Explore index check failed (non-fatal)")
+            logger.exception("Explore index check failed (non-fatal)")
 
     threading.Thread(target=_check_explore_index, daemon=True, name="explore-index-check").start()
 
@@ -150,28 +157,25 @@ def _start_pipeline_side_startup_jobs() -> None:
     # the nightly run; bring them over now so pages and their breakdowns agree
     # (les_rescore.py, constituent_rescore.py). One thread, one after the
     # other, so the two never contend for SQLite's write lock.
-    from app.database import SessionLocal as _rescore_session
     from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
     from app.pipeline.les_rescore import rescore_stale_legislative_effectiveness
 
     def _startup_rescore() -> None:
-        from app.pipeline import lease
-
         # A lease, so an admin data reset in another process sees this run
         # and this run sees the reset (lease.DATA_RESET).
-        db = _rescore_session()
+        db = SessionLocal()
         try:
             with lease.holding(db, lease.STARTUP_RESCORE, yield_to=lease.DATA_RESET) as token:
                 if token is None:
-                    logging.getLogger("app.main").info(
+                    logger.info(
                         "Startup rescore skipped: %s", lease.refusal(db, lease.STARTUP_RESCORE),
                     )
                     return
-                rescore_stale_legislative_effectiveness(_rescore_session)
-                rescore_stale_constituent_alignment(_rescore_session)
+                rescore_stale_legislative_effectiveness(SessionLocal)
+                rescore_stale_constituent_alignment(SessionLocal)
         except Exception:
             # Each rescore logs its own failures; this is the lease's.
-            logging.getLogger("app.main").exception("Startup rescore failed")
+            logger.exception("Startup rescore failed")
         finally:
             db.close()
 
@@ -190,12 +194,6 @@ def _role_lock_path() -> str:
     databases — a second local dev server — share no run state to protect.
     The database is its resolved file, not the URL: the default URL is a
     relative path, the same string for every checkout's own ./data."""
-    import hashlib
-
-    from sqlalchemy.engine import make_url
-
-    from app.api.throttle import RAM_DIR
-
     try:
         database = make_url(settings.DATABASE_URL).database or ""
     except Exception:
@@ -212,8 +210,6 @@ _ROLE_LOCK_PATH = _role_lock_path()
 def _take_pipeline_role_lock() -> int:
     """The lock's file descriptor, held for the process's life; raises when
     another process in this container already runs the pipeline side."""
-    import fcntl
-
     fd = os.open(_ROLE_LOCK_PATH, os.O_RDWR | os.O_CREAT, 0o666)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -233,12 +229,11 @@ PROCESS_STARTED_AT: str | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global PROCESS_STARTED_AT
-    from datetime import datetime, timezone
     PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
     role = settings.PROCESS_ROLE
     serves_reads = role in ("all", "api")
     runs_pipelines = role in ("all", "worker")
-    logging.getLogger("app.main").info("Backend process role: %s", role)
+    logger.info("Backend process role: %s", role)
     # Before init_db: in a pipeline-side role it already starts background
     # work (the keyword index backfill), which a second such process must
     # not start before it refuses.
@@ -255,7 +250,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Pre-build the bills-in-flight collection cache on a background
         # thread so the first /api/bills request after a deploy is a cache
         # hit instead of paying the ~1.5s cold rebuild (see bill_service.py).
-        from app.services.bill_service import warm_bill_collection_cache
         warm_bill_collection_cache()
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, _preload_models)
@@ -268,8 +262,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         bootstrap_task = asyncio.create_task(_bootstrap_explore())
         _start_pipeline_side_startup_jobs()
 
-    from app.api.throttle import run_maintenance
-    from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())
     # Drops the rate-limit store's salts on time, traffic or not.
     throttle_task = asyncio.create_task(run_maintenance())
@@ -280,11 +272,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # its own container's network counters: the API records its own.
     net_task = None
     if role == "api":
-        from app.net_stats import run_recorder
+        net_task = asyncio.create_task(net_stats.run_recorder())
 
-        net_task = asyncio.create_task(run_recorder())
-
-    yield
+    async with mcp_endpoint.run():
+        yield
 
     visit_consumer_task.cancel()
     throttle_task.cancel()
@@ -292,9 +283,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         liveness_task.cancel()
     if net_task is not None:
         net_task.cancel()
-        from app.net_stats import forget_own_record
-
-        forget_own_record()
+        net_stats.forget_own_record()
     if bootstrap_task is not None:
         bootstrap_task.cancel()
     from app.services import explore_summary
@@ -353,3 +342,8 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+# The public API as an MCP server (api/public_mcp.py). A raw ASGI route, not
+# an APIRoute: the SDK speaks the transport itself.
+mcp_endpoint = McpEndpoint()
+app.add_route(MCP_PATH, mcp_endpoint, methods=["GET", "POST", "DELETE"], include_in_schema=False)
