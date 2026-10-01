@@ -722,6 +722,13 @@ bucket) — no hash, no User-Agent, no exact duration. The endpoint reads nothin
 about the caller at all. Keep it that way: a timing row that could be joined to
 a `SiteVisit` would turn a performance histogram into a per-visitor log.
 
+Public API and MCP use (`ApiRequestCount`) is counted the same way: one
+counter per (day, endpoint, channel, status), recorded by the public
+router's route class (`api/public.py` `_CountedRoute`) and written by the
+visit consumer, with nothing about the caller. It is not a visit and never
+reaches the visitor figures; it has its own admin tab. The channel header
+that marks an MCP tool call is cleared by nginx on every outside request.
+
 The site is served through Cloudflare, which by default rewrites pages on the
 way out: it injected its Web Analytics beacon (loaded from
 `static.cloudflareinsights.com`) and a JavaScript Detections script that sets
@@ -1069,6 +1076,7 @@ the pending list).
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |
+| Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
@@ -1126,6 +1134,13 @@ the pending list).
   `torch-cpu-watch.yml`) reports a newer build and prints the replacement
   lines. Research/calibration scripts' extra packages (pandas, statsmodels,
   …) live in `scripts/requirements-research.txt`, never in the image.
+- **The public API's documentation is its contract.** A route under
+  `/api/public/v1` declares a `response_model` from the "Public API v1"
+  schemas (which forbid extra fields), a `summary`, a tag and parameter
+  descriptions; `/developers` and the MCP tools are generated from exactly
+  that, so nothing else needs editing. `tests/test_public_api_contract.py`
+  must cover the new endpoint, since those routes return `JSONResponse` and
+  FastAPI would otherwise never check the body against the documented shape.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
   time. The `senator_service.py` and `representative_service.py` read paths use

@@ -16,7 +16,8 @@
         "http://localhost:3000/explore",
         "http://localhost:3000/compare",
         "http://localhost:3000/changelog",
-        "http://localhost:3000/feeds"
+        "http://localhost:3000/feeds",
+        "http://localhost:3000/developers"
       ],
       "settings": {
         "onlyCategories": ["accessibility", "seo"],

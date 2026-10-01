@@ -32,6 +32,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.api.visits import _visit_queue
 from app.database import Base, VisitsBase
 
 
@@ -161,6 +162,15 @@ def file_sessionmaker(tmp_path):
     yield sessionmaker(bind=engine, autocommit=False, autoflush=False)
     _join_app_threads_started_since(before)
     engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _empty_visit_queue():
+    """The visit/API-count queue is module-global (api/visits.py), so events
+    a test queued and never drained would otherwise be written into the next
+    test's database by its first drain. Discarded, not written."""
+    while not _visit_queue.empty():
+        _visit_queue.get_nowait()
 
 
 @pytest.fixture(scope="session")

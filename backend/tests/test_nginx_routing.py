@@ -24,6 +24,8 @@ SERVED_BY_API = {
     "/api/feedback",
     "/api/track-visit",
     "/api/track-timing",
+    # The public API's MCP server: its POSTs are read-only tool calls.
+    "/api/public/v1/mcp",
 }
 
 
@@ -224,3 +226,12 @@ def test_only_the_action_center_lists_are_served_stale_while_updating():
         assert "updating" not in _match(_locations(public), path)[3], path
     zone = re.search(r"keys_zone=action_lists_cache:\S+.*?inactive=(\d+)m", CONF.read_text(), re.S)
     assert zone is not None and int(zone.group(1)) <= 5
+
+
+def test_callers_cannot_claim_the_mcp_channel():
+    """Usage counts trust CHANNEL_HEADER (api/public.py); only the MCP
+    server's in-process calls may set it, so nginx clears it on the way in."""
+    public_server, _ = _servers()
+    for path in ("/api/public/v1/senators", "/api/public/v1/mcp"):
+        body = _match(_locations(public_server), path)[3]
+        assert re.search(r'proxy_set_header\s+X-Civitas-Channel\s+"";', body), path

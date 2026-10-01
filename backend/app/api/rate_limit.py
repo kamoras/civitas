@@ -156,3 +156,39 @@ async def spend_upstream(calls: int) -> None:
 def reset_upstream_budget() -> None:
     """For tests: clear the budget and the lookups limit."""
     throttle.clear(_UPSTREAM_BUCKET, _upstream_route_limiter.bucket)
+
+
+# ── Public reads: the developer API and the site's own search ────
+#
+# One bucket for both: GET /api/public/v1/* and GET /api/explore, whose
+# search runs the same hybrid engine as the public one. Shared so that
+# the site's search can't be used to get past the public API's limit.
+# The count is left on request.state for the public API's
+# X-RateLimit-* response headers (api/public.py).
+PUBLIC_READ_LIMIT = 60        # requests per minute per IP
+_PUBLIC_READ_PERIOD = 60.0
+
+
+async def public_read_limit(request: Request) -> None:
+    """FastAPI dependency: PUBLIC_READ_LIMIT requests/minute per IP."""
+    decision = await throttle.run(
+        limit_client, client_ip(request), "public-api", limit=PUBLIC_READ_LIMIT, period=_PUBLIC_READ_PERIOD,
+    )
+    request.state.rl_remaining = decision.remaining
+    request.state.rl_reset = decision.reset_at
+    request.state.rl_counted = decision.counted
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded — {PUBLIC_READ_LIMIT} requests per minute per IP.",
+            headers={
+                "X-RateLimit-Limit": str(PUBLIC_READ_LIMIT),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(decision.reset_at),
+                "Retry-After": retry_after(decision.reset_at),
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+
+PublicReadLimit = Annotated[None, Depends(public_read_limit)]
