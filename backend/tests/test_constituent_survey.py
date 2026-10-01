@@ -201,9 +201,9 @@ class TestJoin:
         assert constituent_survey.constituent_approval("senate", "ME", "Susan Collins", "R", 28) is None
 
 
-def test_the_bundled_data_joins_to_its_own_members():
+def test_the_bundled_data_joins_to_its_own_members(monkeypatch):
     """The checked-in file is well formed: every entry's own name finds it."""
-    constituent_survey._survey_cache = None
+    monkeypatch.setattr(constituent_survey, "_survey_cache", None)
     data = constituent_survey._survey()
     assert data["members"] and data["fielded_year"]
     years = utcnow().year - data["fielded_year"]

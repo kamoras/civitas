@@ -11,9 +11,12 @@ from app.models import ApiCache
 from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch import congress
 from app.time_utils import utcnow
+from tests.conftest import TEST_CONGRESS
 
 KEY = "member-sponsored-v2-X000001"
-BILL = {"congress": congress.settings.CURRENT_CONGRESS, "type": "S", "number": "1", "title": "A bill"}
+# The Congress conftest pins every test to, not the import-time (real
+# clock) settings.CURRENT_CONGRESS.
+BILL = {"congress": TEST_CONGRESS, "type": "S", "number": "1", "title": "A bill"}
 
 
 async def test_failed_request_with_nothing_cached_is_unknown(db_session):

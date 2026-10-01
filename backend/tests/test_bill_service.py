@@ -13,8 +13,11 @@ from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, S
 from app.services.bill_service import (
     clear_bill_collection_cache, get_bill_detail, get_bills_in_flight, short_title_index,
 )
+from tests.conftest import TEST_CONGRESS
 
-CURRENT = settings.CURRENT_CONGRESS
+# The Congress conftest pins every test to — never settings.CURRENT_CONGRESS
+# read here, at import, which is the real clock's.
+CURRENT = TEST_CONGRESS
 
 
 @pytest.fixture(autouse=True)

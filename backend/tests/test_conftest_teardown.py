@@ -62,7 +62,11 @@ def test_a_timer_left_waiting_to_run_app_code_fails_the_test(tmp_path):
     cases.write_text(_CASES)
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-p", "tests.conftest",
-         "-c", str(BACKEND / "pytest.ini"), "--rootdir", str(tmp_path), "-q", "-rE", str(cases)],
+         "-c", str(BACKEND / "pytest.ini"), "--rootdir", str(tmp_path), "-q", "-rE", str(cases),
+         # Its own temp root, not the user's shared /tmp/pytest-of-<user>:
+         # another pytest run pruning that at the same moment adds a
+         # PytestWarning to the summary line asserted below.
+         "--basetemp", str(tmp_path / "basetemp")],
         cwd=BACKEND, env=dict(os.environ), capture_output=True, text=True, timeout=300,
     )
     out = result.stdout + result.stderr

@@ -135,6 +135,14 @@ class TestModuleLevelWrappers:
     _ensure_platform_embeddings() preserve the exact pre-refactor public API
     and delegate to the module-level cache instance."""
 
+    @pytest.fixture(autouse=True)
+    def _own_singleton(self, monkeypatch):
+        """A fresh module-level cache for each test, the process's own put
+        back at teardown: these tests fill it with a fake model's vectors."""
+        from app.pipeline.analyze import party_platform
+
+        monkeypatch.setattr(party_platform, "_platform_cache", _PlatformEmbeddingCache())
+
     def test_clear_platform_cache_clears_module_singleton(self):
         from app.pipeline.analyze import party_platform
 

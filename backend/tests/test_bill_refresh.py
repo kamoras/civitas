@@ -12,13 +12,15 @@ from datetime import timedelta
 
 import pytest
 
-from app.config import settings
 from app.models import Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.pipeline import bill_refresh
 from app.pipeline.cache import api_cache_set
 from app.time_utils import utcnow
+from tests.conftest import TEST_CONGRESS
 
-CURRENT = settings.CURRENT_CONGRESS
+# The Congress conftest pins every test to — never settings.CURRENT_CONGRESS
+# read here, at import, which is the real clock's.
+CURRENT = TEST_CONGRESS
 
 
 def _make_senate_bill(

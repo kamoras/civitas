@@ -2559,17 +2559,15 @@ class TestSimilarityModelGates:
         assert boosts[0] > 0
 
 
-def test_get_similarity_model_lazy_singleton():
+def test_get_similarity_model_lazy_singleton(monkeypatch):
     from app.pipeline import vector_store
 
     fake = MagicMock()
+    # The model a slow test loaded earlier is put back at teardown.
+    monkeypatch.setattr(vector_store, "_similarity_model", None)
     with patch.object(vector_store, "SentenceTransformer", return_value=fake) as ctor:
-        vector_store._similarity_model = None
-        try:
-            first = vector_store.get_similarity_model()
-            second = vector_store.get_similarity_model()
-        finally:
-            vector_store._similarity_model = None
+        first = vector_store.get_similarity_model()
+        second = vector_store.get_similarity_model()
     assert first is fake and second is fake
     ctor.assert_called_once_with(vector_store._SIMILARITY_MODEL_NAME)
 
