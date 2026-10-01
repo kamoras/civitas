@@ -384,14 +384,15 @@ def _html_table_to_rows(table_el) -> list[list[str | None]]:
 
 async def fetch_and_parse_ptr(
     client: httpx.AsyncClient, db: Session, filing: dict,
-) -> list[TradeRow]:
+) -> list[TradeRow] | None:
     """Fetch one PTR report page and parse its transactions.
 
     Electronic filings render as an HTML transactions table (parsed
     directly). Paper filings link to a PDF/scanned image and reuse the
     House module's pdfplumber/OCR path. Returns rows tagged with
-    parse_confidence ("text" or "ocr"); never fabricates a row it can't
-    confidently parse.
+    parse_confidence ("text" or "ocr"), an empty list when the report was
+    read and holds none, or None when it couldn't be fetched or parsed;
+    never fabricates a row it can't confidently parse.
     """
     filing_id = senate_filing_id(filing["report_url"])
     cache_key = f"ptr-parsed-v{PTR_PARSER_VERSION}-{filing_id}"
@@ -401,41 +402,48 @@ async def fetch_and_parse_ptr(
 
     resp = await _request_with_retry(client, "GET", filing["report_url"])
     if resp is None:
-        return []
-
-    rows: list[TradeRow] = []
-    confidence = "text"
-    page_filed = None
-    if filing.get("is_paper"):
-        pdf_link = re.search(r'href="([^"]+\.pdf)"', resp.text, re.I)
-        if pdf_link:
-            pdf_resp = await _request_with_retry(client, "GET", f"{EFD_BASE}{pdf_link.group(1)}")
-            if pdf_resp is not None:
-                try:
-                    # A blank owner is not stated on the Senate's forms, as
-                    # on its electronic tables.
-                    # A row whose date alone isn't legible is kept undated
-                    # (ptr_common.ocr_extract_rows); its disclosure date is
-                    # the filed date, below.
-                    rows, confidence = parse_pdf_bytes(pdf_resp.content, blank_owner="unknown", keep_undated=True)
-                except Exception as e:
-                    logger.error("Failed to parse Senate paper PTR %s: %s", filing["report_url"], e)
-    else:
-        try:
-            doc = lxml_html.fromstring(resp.text)
-            page_filed = _page_filed_date(doc)
-            for table_el in doc.xpath("//table"):
-                table_rows = _html_table_to_rows(table_el)
-                # eFD prints every owner as a word, "Self" included.
-                rows.extend(parse_table_rows(table_rows, blank_owner="unknown"))
-        except Exception as e:
-            logger.error("Failed to parse Senate PTR HTML %s: %s", filing["report_url"], e)
+        return None
+    try:
+        doc = lxml_html.fromstring(resp.text)
+    except Exception as e:
+        logger.error("Failed to parse Senate PTR HTML %s: %s", filing["report_url"], e)
+        return None
 
     # The search result's filed date; for a re-read of a stored filing,
     # which has no search result, the one the page states in its header
     # ("Filed 09/21/2026 @ 2:52 PM"), or failing that the one its stored
     # rows already carried.
-    filed_date = filing.get("filed_date") or page_filed or filing.get("stored_filed_date")
+    filed_date = filing.get("filed_date") or _page_filed_date(doc) or filing.get("stored_filed_date")
+    rows: list[TradeRow] = []
+    confidence = "text"
+    if filing.get("is_paper"):
+        pdf_link = re.search(r'href="([^"]+\.pdf)"', resp.text, re.I)
+        if pdf_link:
+            pdf_resp = await _request_with_retry(client, "GET", f"{EFD_BASE}{pdf_link.group(1)}")
+            if pdf_resp is None:
+                return None
+            try:
+                # A blank owner is not stated on the Senate's forms, as on
+                # its electronic tables. A scan's dates are read only up to
+                # the filing's date, as house_ptr's are, and a row whose date
+                # alone isn't legible is kept undated
+                # (ptr_common.ocr_extract_rows); its disclosure date is the
+                # filed date, below.
+                rows, confidence = parse_pdf_bytes(
+                    pdf_resp.content, blank_owner="unknown", not_after=filed_date, keep_undated=True,
+                )
+            except Exception as e:
+                logger.error("Failed to parse Senate paper PTR %s: %s", filing["report_url"], e)
+                return None
+    else:
+        try:
+            for table_el in doc.xpath("//table"):
+                # eFD prints every owner as a word, "Self" included.
+                rows.extend(parse_table_rows(_html_table_to_rows(table_el), blank_owner="unknown"))
+        except Exception as e:
+            logger.error("Failed to parse Senate PTR HTML %s: %s", filing["report_url"], e)
+            return None
+
     for row in rows:
         row.parse_confidence = confidence
         row.source_url = filing["report_url"]

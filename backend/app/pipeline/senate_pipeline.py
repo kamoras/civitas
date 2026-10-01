@@ -490,6 +490,10 @@ _ACTION_CENTER_PATHS = {
 }
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",
+    # Trade ingest: its industry labels come from SEC codes (fetch/
+    # sec_tickers.py), never the learning store or an embedding, and are
+    # read by no score (test_stock_pipeline_imports_no_analysis_code).
+    "pipeline/stock_pipeline.py",
     "pipeline/filer_matching.py",
     # Which bills a lobbying filing names: shown beside donor-vote
     # connections, read by no classifier or score.

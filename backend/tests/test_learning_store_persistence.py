@@ -168,6 +168,26 @@ class TestNormalizedSource:
                 elif isinstance(node, ast.Import):
                     assert all(a.name != "app.pipeline.analyze.prompts" for a in node.names), py
 
+    def test_stock_pipeline_imports_no_analysis_code(self):
+        """Exempt because trade industry is a lookup of the SEC's own code:
+        importing a classifier, the learning store or config_definitions
+        again would make an edit here able to change a result the hash no
+        longer notices (and would write trade names into the donor store,
+        as it did until 2026-09)."""
+        import ast
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        assert "pipeline/stock_pipeline.py" in senate_pipeline._NOT_ANALYSIS_PATHS
+        modules = {
+            node.module or ""
+            for node in ast.walk(ast.parse((app_dir / "pipeline/stock_pipeline.py").read_text()))
+            if isinstance(node, ast.ImportFrom)
+        }
+        assert not {m for m in modules if ".analyze" in m or ".transform" in m or m.endswith("config_definitions")}
+
     def test_exempt_coordination_modules_import_no_analysis_code(self):
         """Exempt because they classify and score nothing: an import of
         analysis code (or config_definitions, its constants) would mean an

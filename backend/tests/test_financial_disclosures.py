@@ -560,7 +560,7 @@ class TestHousePtrDownloadIsAPdf:
         with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock,
                           return_value=b"<html>maintenance</html>"), \
              patch.object(house_ptr, "parse_pdf_bytes") as parse:
-            assert await house_ptr.fetch_and_parse_ptr(None, db_session, filing) == []
+            assert await house_ptr.fetch_and_parse_ptr(None, db_session, filing) is None
         parse.assert_not_called()
 
     async def test_leading_bytes_before_the_pdf_header_are_allowed(self):

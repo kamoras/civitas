@@ -12,7 +12,6 @@ import pytest
 from app.models import LearnedClassification
 from app.pipeline.transform.industry_classifier import (
     INDUSTRY_DESCRIPTIONS,
-    classify_batch_with_learning,
     classify_industries_batch_scored,
     classify_industry,
     classify_industry_with_provenance,
@@ -128,37 +127,6 @@ class TestLearningStore:
         result, source = classify_with_learning("Xylophone Kumquat Zephyr", db_session)
         assert result == "OTHER"
         assert source == "unknown"
-
-
-@pytest.mark.slow
-class TestBatchClassification:
-    """Batch classification with learning store integration."""
-
-    def test_batch_returns_results_and_unknowns(self, db_session):
-        names = ["Goldman Sachs", "Pfizer Inc", "Xylophone Kumquat Zephyr"]
-        results, unknowns = classify_batch_with_learning(names, db_session)
-
-        assert results["Goldman Sachs"] == "FINANCE"
-        assert results["Pfizer Inc"] == "PHARMA"
-        assert results["Xylophone Kumquat Zephyr"] == "OTHER"
-        assert "Xylophone Kumquat Zephyr" in unknowns
-        assert "Goldman Sachs" not in unknowns
-
-    def test_batch_uses_learning_store(self, db_session):
-        db_session.add(LearnedClassification(
-            entity_name="MYSTERY CORP",
-            entity_type="industry",
-            value="RETAIL",
-            confidence=0.7,
-            source="llm",
-        ))
-        db_session.flush()
-
-        results, unknowns = classify_batch_with_learning(
-            ["MYSTERY CORP", "Goldman Sachs"], db_session
-        )
-        assert results["MYSTERY CORP"] == "RETAIL"
-        assert "MYSTERY CORP" not in unknowns
 
 
 @pytest.mark.slow
