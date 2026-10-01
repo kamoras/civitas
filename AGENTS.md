@@ -727,6 +727,13 @@ then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
 the IPv4 space is small enough to enumerate, so anyone holding the key could
 recover every stored IP. With the salt gone, nobody can.
 
+A visit is a browser opening a page: the middleware counts a request only
+with `Sec-Fetch-Dest: document` (`lib/pageLoad.ts`), which every current
+browser sends and crawlers and scripts don't, and `track_visit` drops
+headless Chrome (`HeadlessChrome`, the default for Playwright-driven
+agents). Counting clients that sent no fetch metadata made crawlers two
+thirds of the unique visitors on 2026-10-01.
+
 Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
 and deliberately carry even less: the browser reports one cold load's Navigation
 Timing, and the server keeps only a counter per (day, route template, metric,
