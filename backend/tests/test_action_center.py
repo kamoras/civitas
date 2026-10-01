@@ -3280,20 +3280,20 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         return db
 
     def test_a_story_naming_the_race_but_none_of_its_candidates_does_not_promote(self, db_session):
-        db = self._count(db_session, "2026-HOUSE-GA-2", "Leland D. Mason Jr.", "Dale Carver")
+        db = self._count(db_session, "2026-HOUSE-GA-2", "Leland D. Bishop Jr.", "Dale Carver")
         issue = self._flip_issue()
         assert self._match(issue, "Democrat leads in Georgia's 2nd Congressional District", db=db) is None
         assert self._match(issue, "GA-2 tightens", db=db) is None
-        assert self._match(issue, "Leland Mason leads in Georgia's 2nd Congressional District", db=db) is issue
+        assert self._match(issue, "Leland Bishop leads in Georgia's 2nd Congressional District", db=db) is issue
         assert self._match(issue, "Dale Carver pulls ahead in GA-02", db=db) is issue
 
     def test_the_issues_own_session_supplies_the_candidates(self, db_session):
-        self._count(db_session, "2026-HOUSE-GA-2", "Leland Mason", "Dale Carver")
+        self._count(db_session, "2026-HOUSE-GA-2", "Leland Bishop", "Dale Carver")
         issue = self._flip_issue()
         db_session.add(issue)
         db_session.commit()
         assert self._match(issue, "Democrat leads in Georgia's 2nd Congressional District") is None
-        assert self._match(issue, "Leland Mason leads in Georgia's 2nd Congressional District") is issue
+        assert self._match(issue, "Leland Bishop leads in Georgia's 2nd Congressional District") is issue
 
     @pytest.mark.parametrize("race_id,text", [
         # Round 6's low-realism phrases: each names other people, or none.
@@ -3379,68 +3379,68 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         "DALE CARVER LEADS IN GEORGIA'S 2ND DISTRICT",
         "D. Carver leads in Georgia's 2nd District",
         "Dale Carver's lead grows in GA-02",
-        "Leland D. Mason Jr. leads in Georgia's 2nd District",
-        "Leland D. Mason Leads In Georgia's 2nd District",
-        "Rep. Leland Mason trails in Georgia's 2nd District",
+        "Leland D. Bishop Jr. leads in Georgia's 2nd District",
+        "Leland D. Bishop Leads In Georgia's 2nd District",
+        "Rep. Leland Bishop trails in Georgia's 2nd District",
         "Georgia's 2nd District Republican Dale Carver leads",
         "Georgia's 2nd District House race: Dale Carver leads",
-        "Dale Carver Flips Georgia's 2nd District Seat From Mason",
+        "Dale Carver Flips Georgia's 2nd District Seat From Bishop",
         "Georgia's 2nd District flips the seat to Dale Carver",
         "Georgia's 2nd District heads to a recount; Dale Carver leads",
         "Georgia's 2nd District House of Representatives seat goes to Dale Carver",
         "Republican leads in Georgia's 2nd District\nDale Carver ahead with most precincts in",
     ])
     def test_the_race_is_named_by_a_candidates_full_name(self, db_session, text):
-        # The count prints "Leland D. Mason, Jr.": the comma sets off a
+        # The count prints "Leland D. Bishop, Jr.": the comma sets off a
         # suffix, not a given name.
-        db = self._count(db_session, "2026-HOUSE-GA-2", "Dale Carver", "Leland D. Mason, Jr.")
+        db = self._count(db_session, "2026-HOUSE-GA-2", "Dale Carver", "Leland D. Bishop, Jr.")
         issue = self._flip_issue()
         assert self._match(issue, text, db=db) is issue, text
 
     @pytest.mark.parametrize("race_id,names,text", [
         # A surname alone: the candidate, a namesake, or a word.
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"), "Mason concedes in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"), "Rep. Carver leads in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"), "CARVER LEADS IN GEORGIA'S 2ND DISTRICT"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"), "the mason of Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "Bishop concedes in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "Rep. Carver leads in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "CARVER LEADS IN GEORGIA'S 2ND DISTRICT"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "the bishop of Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Captain Carver Honored In Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
-         "The Mason Of Savannah Speaks In Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
-         "Mason Lamor Whitehead preaches in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "The Bishop Of Savannah Speaks In Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Bishop Lamor Whitehead preaches in Georgia's 2nd District"),
         ("2026-HOUSE-TX-9", ("Al Green", "Pat Quimby"), "Green energy booms in Texas's 9th District"),
         ("2026-HOUSE-HI-1", ("Ed Case", "Pat Quimby"), "Case counts climb in Hawaii's 1st District"),
         # Someone else of the same surname, whatever the initial or middle.
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"), "Alicia Carver wins in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "Alicia Carver wins in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Alicia M. Carver wins in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"), "A. Carver leads in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "A. Carver leads in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Alicia Carver, a school board member, spoke about Georgia's 2nd District.\nJohnson said turnout was high."),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Speaker Mike Carver hails Georgia's 2nd District result"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Dalton Carver wins in Georgia's 2nd District"),
         ("2026-HOUSE-NC-1", ("Don Davis", "Laurie Buckhout"), "Donna Davis wins in North Carolina's 1st District"),
         ("2026-HOUSE-NC-1", ("Don Davis", "Laurie Buckhout"), "Donald Davis wins in North Carolina's 1st District"),
         # A given name and surname split across lines, or a longer surname.
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"), "Dale\nJohnson in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "Dale\nJohnson in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Dale Carver-Smith wins Georgia's 2nd District"),
         # Round 7: a namesake, and another body's district.
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Alicia Carver wins Georgia's District 2 Public Service Commission seat"),
         ("2026-HOUSE-OH-2", ("Dave Taylor", "Lee Quimby"), "Judge Taylor of Ohio's 2nd District Court of Appeals rules"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Dale Carver flips Georgia's 2nd District Public Service Commission seat"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Dale Carver wins Georgia's 2nd District county commission seat"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Georgia's 2nd seat on the Public Service Commission"),
         ("2026-HOUSE-OH-2", ("Dave Taylor", "Lee Quimby"),
          "Ohio's 2nd District Court of Appeals: Taylor writes majority"),
-        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Mason"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Carver Wins Georgia's 2nd District School Board Race"),
         ("2026-HOUSE-CA-2", ("Jared Huffman", "Chris Price"),
          "Price Gouging Case: California's 2nd District Court of Appeal Rules"),
@@ -3524,9 +3524,9 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
     def test_a_suffix_after_a_comma_is_not_a_last_first_name(self, db_session):
         from app.pipeline.analyze.action_center import _race_people
 
-        db = self._count(db_session, "2026-HOUSE-GA-2", "Leland D. Mason, Jr.", "Dale Carver")
+        db = self._count(db_session, "2026-HOUSE-GA-2", "Leland D. Bishop, Jr.", "Dale Carver")
         people = sorted(_race_people(db, "2026-HOUSE-GA-2"))
-        assert [(p.surname, sorted(p.leads)) for p in people] == [("carver", ["dale"]), ("mason", ["leland"])]
+        assert [(p.surname, sorted(p.leads)) for p in people] == [("bishop", ["leland"]), ("carver", ["dale"])]
 
     def test_with_no_candidate_on_record_the_phrase_decides_alone(self, db_session):
         db = self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
@@ -3643,17 +3643,17 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         assert self._match(ar4, "Arkansas's 4th District flips; Congressman Smith concedes", db=db) is None
 
     @pytest.mark.parametrize("district,names,text,named", [
-        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "MASON, LELAND D JR"),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
          "Georgia's 2nd District: a Carver aide said turnout was high", False),
-        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "MASON, LELAND D JR"),
-         "Georgia's 2nd District: a Mason aide says a Carver win is unlikely", False),
-        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "MASON, LELAND D JR"),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
+         "Georgia's 2nd District: a Bishop aide says a Carver win is unlikely", False),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
          "A.J. Carver leads in Georgia's 2nd District", True),
-        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "MASON, LELAND D JR"),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
          "A. J. Carver leads in Georgia's 2nd District", True),
-        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "MASON, LELAND D JR"),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
          "AJ Carver leads in Georgia's 2nd District", True),
-        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "MASON, LELAND D JR"),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
          "A J Carver leads in Georgia's 2nd District", False),
         ("TX-9", ('SMITH, TERRENCE "T.J."', 'GREEN, ALEXANDER "AL"'),
          "Texas's 9th District sees J Smith Elementary reopen", False),
