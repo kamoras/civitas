@@ -389,6 +389,11 @@ links to its election office, never as a state where nothing has happened.
   TX, UT for 2026) has no known holder going in (`seat_holder_party` returns
   none: the district of the same number is a different district), so no flip
   is announced for it, on the page, in an issue or on Bluesky.
+- A holder is read from the member list only while the members going into
+  the election still sit: from Jan 3 (the new Congress's first day, which
+  the results window can still include) the list holds the winners, or —
+  until the House run refreshes it — members of other districts, so a
+  holder still unknown then stays unknown. A holder already read stands.
 - Events are diffed against what has already been announced
   (`announced_state`), not against the previous poll, so a change inside a
   held poll is still announced on the next one.

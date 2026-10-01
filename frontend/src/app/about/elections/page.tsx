@@ -310,7 +310,9 @@ export default async function ElectionsChapter() {
             party or ties: a count that dips below that bar with the same candidate ahead is not a
             reversal. A House seat in a state whose congressional map was redrawn for this election
             has no previous holder to compare against — the district with the same number is a
-            different district — so it is never described as changing party.
+            different district — so it is never described as changing party. Nor is a seat whose
+            previous holder was still unknown when the new Congress took office on January 3: from
+            then the member list shows the winners, not who held the seat going in.
           </P>
         </Sub>
         <Sub title="Developing stories and posts">

@@ -121,20 +121,31 @@ def _map_in(cycles: dict, cycle: int, state: str) -> str:
 
 
 def redrawn_states(cycle: int) -> set[str]:
-    """States voting in `cycle` on a map other than the one sitting members
+    """States voting in `cycle` on a map other than the one their members
     were elected on (app/data/redrawn_congressional_maps.json — the same
     list the district crosswalk and outlines are built from).
 
-    "Sitting" is settings.CURRENT_CONGRESS, so the answer moves with the
-    hand-over, not with the site's cycle: from the day the 2026 results
-    window closes until Jan 3, 2027, the site is on 2028 but the 119th
-    Congress, elected on the old lines, still sits — the nine redrawn
-    states are still redrawn against it. From Jan 3 the 120th sits on the
-    2026 lines and 2028 (listing no new map) has none."""
+    "Their members" is two Congresses at the hand-over, and a state counts
+    when its map differs from either:
+    - the members going into `cycle`'s election, elected in `cycle - 2` —
+      what a seat's holder is measured against, and what the election's
+      own pages describe even after the next Congress sits (the results
+      window runs to Jan 3 inclusive: that afternoon the 120th sits on the
+      2026 lines, yet the 2026 count's holders were elected on the old);
+    - the sitting Congress (settings.CURRENT_CONGRESS), so the answer
+      follows the hand-over, not the site's cycle: from the day the 2026
+      results window closes until Jan 3, 2027, the site is on 2028 but the
+      119th, elected on the old lines, still sits. From Jan 3 the 120th
+      sits on the 2026 lines, and 2028 (listing no new map) has none."""
     cycles = _maps()
     sitting_elected = congress_first_year(settings.CURRENT_CONGRESS) - 1
     states = {st for entries in cycles.values() for st in entries}
-    return {st for st in states if _map_in(cycles, cycle, st) != _map_in(cycles, sitting_elected, st)}
+    return {
+        st
+        for st in states
+        if _map_in(cycles, cycle, st) != _map_in(cycles, cycle - 2, st)
+        or _map_in(cycles, cycle, st) != _map_in(cycles, sitting_elected, st)
+    }
 
 
 def seat_holder_party(db: Session, race: Race) -> str | None:
@@ -147,7 +158,15 @@ def seat_holder_party(db: Session, race: Race) -> str | None:
     Senate: the senator the
     race's incumbent candidate is (a state has two, and nothing stored says
     which seat is up), else — an open seat — the state's senators' party
-    only when both share it."""
+    only when both share it.
+
+    Either way only while the stored members are the ones going into the
+    election: once the Congress it seated sits (Jan 3 can still be inside
+    the results window), the roster holds its winners — or, until the
+    House run refreshes it, members of other districts — so the holder is
+    unknowable from it and None."""
+    if congress_first_year(settings.CURRENT_CONGRESS) - 1 >= race.cycle_year:
+        return None
     if race.office == "H":
         if race.state in redrawn_states(race.cycle_year):
             return None  # the same number names a different district now

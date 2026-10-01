@@ -17,6 +17,16 @@ DAY = "2026-11-03"
 
 
 @pytest.fixture(autouse=True)
+def _the_119th_sits(monkeypatch):
+    """A 2026 count's seat holders are the 119th Congress's members, read
+    only while it sits (live_results.sync.seat_holder_party). Pin it so
+    these 2026 fixtures don't lose their holders on Jan 3, 2027."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
+
+
+@pytest.fixture(autouse=True)
 def _credentials(monkeypatch):
     monkeypatch.setattr(broadcast.settings, "BSKY_HANDLE", "civitas.test", raising=False)
     monkeypatch.setattr(broadcast.settings, "BSKY_APP_PASSWORD", "x", raising=False)

@@ -17,6 +17,16 @@ from app.time_utils import utcnow
 DAY = date(2026, 11, 3)
 
 
+@pytest.fixture(autouse=True)
+def _the_119th_sits(monkeypatch):
+    """A 2026 count's seat holders are the 119th Congress's members, read
+    only while it sits (live_results.sync.seat_holder_party). Pin it so
+    these 2026 fixtures don't lose their holders on Jan 3, 2027."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
+
+
 def _state(**kw):
     return StateCount(source_name=kw.pop("source_name", "Georgia Secretary of State"),
                       page_url="https://results.example/ga", official=kw.pop("official", False), **kw)
@@ -607,17 +617,43 @@ class TestRoundTwo:
         assert "MO" not in er.redrawn_states(2026)
         assert er.seat_holder_party(db_session, race) is None
 
-    def test_redrawn_is_measured_against_the_sitting_congress(self, monkeypatch):
-        """The 2026 redraws are redrawn against the 119th's lines — for the
-        2026 races and for 2028's until the 120th, elected on the new
-        lines, sits on Jan 3, 2027; then neither cycle is redrawn."""
+    def test_redrawn_is_measured_against_the_sitting_congress_and_the_one_going_in(self, monkeypatch):
+        """The 2026 redraws are redrawn for 2026's races whoever sits (their
+        holders were elected on the old lines), and for 2028's until the
+        120th, elected on the new lines, sits on Jan 3, 2027."""
         from app.config import settings
 
         monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
         assert "TX" in er.redrawn_states(2026) and "TX" in er.redrawn_states(2028)
         assert "MO" not in er.redrawn_states(2028)
         monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
-        assert er.redrawn_states(2026) == set() and er.redrawn_states(2028) == set()
+        assert "TX" in er.redrawn_states(2026)
+        assert er.redrawn_states(2028) == set()
+
+    def test_no_holder_is_read_once_the_congress_the_election_seated_sits(self, db_session, monkeypatch):
+        """Jan 3 can be inside the results window. That afternoon the 120th
+        sits, but the roster still holds the 119th's members until the House
+        run refreshes it: in a redrawn state the member of the same number
+        held a different district, and everywhere the roster soon holds the
+        winners. A holder still unknown stays unknown — no flip is raised
+        against either."""
+        from app.config import settings
+
+        race = Race(id="2026-HOUSE-UT-1", cycle_year=2026, office="H", state="UT", district=1)
+        db_session.add(race)
+        db_session.add(Candidate(id="H6UT01001", race_id=race.id, name="SMITH, DANA", party="DEM"))
+        db_session.add(Candidate(id="H6UT01002", race_id=race.id, name="JONES, RAY", party="REP"))
+        db_session.add(Representative(id="U1", name="Old Member", state="UT", district=1, party="R"))
+        ga = _setup(db_session)
+        db_session.flush()
+        kinds, result = _apply(db_session, race, _contest(90, 10, 100, district=1))
+        assert result.held_by_party is None and er.FLIP not in kinds
+
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
+        assert er.seat_holder_party(db_session, ga) is None
+        kinds, result = _apply(db_session, race, _contest(95, 10, 100, district=1))
+        assert result.held_by_party is None and er.FLIP not in kinds
+        assert _issues(db_session) == []
 
     def test_first_returns_that_are_already_a_flip_are_one_story(self, db_session):
         race = _setup(db_session)
