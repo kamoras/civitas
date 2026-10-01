@@ -161,8 +161,8 @@ def test_a_summary_claim_counts_toward_the_two_claim_gate(db_session, refresh, m
 def test_a_summary_claim_that_restates_a_headline_claim_is_one_fact(db_session, refresh, monkeypatch):
     """dedupe_claims keeps the longer of two nested claims. The headline's
     shorter one must go with it, or one fact counts twice at the gate."""
-    monkeypatch.setattr(action_center.claim_layer, "extract_claims", lambda c, l: ["X sues Y"])
-    monkeypatch.setattr(action_center.claim_layer, "extract_body_claims", lambda c, l: ["X sues Y for Z"])
+    monkeypatch.setattr(action_center.claim_layer, "extract_claims", lambda cluster, locate: ["X sues Y"])
+    monkeypatch.setattr(action_center.claim_layer, "extract_body_claims", lambda cluster, locate: ["X sues Y for Z"])
     monkeypatch.setattr(
         action_center.claim_layer, "dedupe_claims",
         lambda claims: [c for c in claims if not any(c != o and c in o for o in claims)],
