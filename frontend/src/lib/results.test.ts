@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AWAITING_FILL,
   AWAITING_MARK,
+  NO_COUNT_FILL,
   NO_COUNT_STRIPE,
   FEED_FAILED_MARK,
   POLLS_OPEN_MARK,
@@ -308,6 +309,44 @@ describe("stateFill", () => {
         true
       ).fill
     ).toMatch(/^rgba\(255,137,137, /);
+  });
+
+  it("calls a chamber the counting feed gives nothing for 'no count', not 'no votes yet'", () => {
+    // The feed counts the state's House races but gives no Senate row.
+    const house = [race({ office: "H", district: 1, raceId: "H1" })];
+    const senate = stateShade("GA", house, "S", true, true);
+    expect(senate.fill).toBe(NO_COUNT_FILL);
+    expect(senate.label).toBe("GA Senate: no count from the state's feed");
+    expect(senate.stale).toBe(false);
+    // ...whatever the feed's latest read: it did answer, for the House.
+    expect(stateShade("GA", house, "S", true, true, true).label).toBe(
+      "GA Senate: no count from the state's feed"
+    );
+    // The reverse: a Senate count and no House row.
+    const onlySenate = stateShade("GA", [race()], "H", true, true);
+    expect(onlySenate.fill).toBe(NO_COUNT_FILL);
+    expect(onlySenate.label).toBe("GA House: no count from the state's feed");
+    // A chamber the feed lists but whose count is zero is still "no votes yet".
+    expect(
+      stateShade(
+        "GA",
+        [race({ votesCounted: 0, candidates: [], leaderParty: null, flip: false })],
+        "S",
+        true,
+        true
+      ).label
+    ).toBe("GA Senate: no votes yet");
+    // No count from the feed at all: "no votes yet", as before.
+    expect(stateShade("GA", [], "S", true, true).fill).toBe(AWAITING_FILL);
+  });
+
+  it("keeps the no-count fill AWAITING_FILL's colour, spelt apart for its own texture", () => {
+    const rgb = (c: string) =>
+      c.startsWith("#")
+        ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16))
+        : c.match(/\d+/g)!.map(Number).slice(0, 3);
+    expect(NO_COUNT_FILL).not.toBe(AWAITING_FILL);
+    expect(rgb(NO_COUNT_FILL)).toEqual(rgb(AWAITING_FILL));
   });
 
   it("says each state's status in its accessible name, not in colour alone", () => {

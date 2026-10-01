@@ -790,4 +790,99 @@ describe("the state page in results mode", () => {
     act(() => map!.onPick("2026-HOUSE-OH-2"));
     expect(document.activeElement).toBe(rows[1]);
   });
+  it("stripes the House drawer's map too while this page's refresh fails", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T03:10:00Z"));
+    fetchLiveResults.mockResolvedValueOnce(live()).mockRejectedValue(new Error("502"));
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await screen.findByText("REFRESH FAILED");
+    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    within(screen.getByRole("dialog"));
+    // The drawer's map is the one handed showLean (the results section's
+    // never is): an older count there is not live either.
+    const drawerMaps = districtMapProps.filter((p) => p.showLean !== undefined && p.results);
+    expect(drawerMaps.length).toBeGreaterThan(0);
+    expect(drawerMaps.at(-1)?.stale).toBe(true);
+    const resultsMaps = districtMapProps.filter((p) => p.showLean === undefined && p.results);
+    expect(resultsMaps.at(-1)?.stale).toBe(true);
+  });
+
+  it("leaves the drawer's map live while refreshes succeed", async () => {
+    fetchLiveResults.mockResolvedValue(live());
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const drawerMaps = districtMapProps.filter((p) => p.showLean !== undefined && p.results);
+    expect(drawerMaps.at(-1)?.stale).toBe(false);
+  });
+
+  it("says a Senate race the counting feed gives nothing for has no count, not no votes", async () => {
+    const senateRace: RaceWithCandidates = {
+      ...houseRace(),
+      id: "2026-SEN-OH",
+      office: "S",
+      district: null,
+    };
+    // The feed counts the House race; the Senate race has no row.
+    fetchLiveResults.mockResolvedValue(live());
+    render(<StateBallotClient ballot={ballot({ senateRaces: [senateRace] })} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    const card = document.getElementById("result-2026-SEN-OH")!;
+    expect(card.tagName).toBe("ARTICLE");
+    expect(within(card).getByRole("heading", { level: 2 })).toHaveTextContent("U.S. Senate");
+    expect(card).toHaveTextContent("NO COUNT");
+    expect(card).toHaveTextContent(/No count from the state.s feed/);
+    expect(card).not.toHaveTextContent(/no votes/i);
+  });
+
+  it("says a House district has no count when the feed counts only the Senate race", async () => {
+    const senateRace: RaceWithCandidates = {
+      ...houseRace(),
+      id: "2026-SEN-OH",
+      office: "S",
+      district: null,
+    };
+    const senate = {
+      ...live().races[0],
+      raceId: "2026-SEN-OH",
+      office: "S" as const,
+      district: null,
+    };
+    fetchLiveResults.mockResolvedValue(live({ races: [senate] }));
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ senateRaces: [senateRace], houseRaces: two })} />);
+    const house = await screen.findByRole("region", { name: "U.S. House" });
+    const rows = within(house).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toHaveTextContent(/No count from the state.s feed/);
+      expect(row).not.toHaveTextContent(/no votes/i);
+    }
+    // The Senate race has its count, once.
+    expect(document.querySelectorAll("#result-2026-SEN-OH")).toHaveLength(1);
+    expect(screen.getByText("Eric Conroy")).toBeInTheDocument();
+    const map = districtMapProps.find((p) => p.showLean === undefined && p.results);
+    expect(map?.feedAnswered).toBe(true);
+  });
+
+  it("adds no Senate no-count card before the feed has given any count", async () => {
+    const senateRace: RaceWithCandidates = {
+      ...houseRace(),
+      id: "2026-SEN-OH",
+      office: "S",
+      district: null,
+    };
+    fetchLiveResults.mockResolvedValue(live({ races: [] }));
+    render(<StateBallotClient ballot={ballot({ senateRaces: [senateRace] })} />);
+    await screen.findByText(/count hasn.t started yet/);
+    expect(document.getElementById("result-2026-SEN-OH")).toBeNull();
+  });
 });

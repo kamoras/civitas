@@ -286,8 +286,8 @@ describe("DistrictMap", () => {
       name: "CT-3: no count from the state's feed",
     });
     expect(screen.getByRole("button", { name: "CT-2: independent leads, 90% in" })).toBeTruthy();
-    expect(other.getAttribute("style") ?? "").toMatch(/fill: url\("?#no-count-/);
-    expect(container.querySelector("pattern[id^='no-count-']")).not.toBeNull();
+    expect(other.getAttribute("style") ?? "").toMatch(/fill: url\("?#tex-[^"]*-nocount/);
+    expect(container.querySelector("pattern[id$='-nocount']")).not.toBeNull();
     expect(screen.getByText("no count from the state's feed")).toBeInTheDocument();
     expect(screen.getByText(/purple = other or unstated party leads/)).toBeInTheDocument();
     other.focus();

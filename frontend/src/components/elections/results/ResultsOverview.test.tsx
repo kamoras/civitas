@@ -342,3 +342,54 @@ describe("when this page's own refresh has failed", () => {
     expect(row("TX")).toHaveTextContent("FEED NOT READ");
   });
 });
+
+describe("a chamber the state's feed gives no count for while it counts the other", () => {
+  const row = (state: string) =>
+    within(screen.getByRole("region", { name: /By state/ })).getByRole("link", {
+      name: new RegExp(`^${state}`),
+    });
+
+  it("says the Senate has no count from the feed, not no votes yet, on the map and the row", () => {
+    // GA elects a senator; its feed counts a House race and no Senate one.
+    render(
+      <ResultsOverview now={NOW} results={results({ senateStates: ["GA"] })} states={["GA"]} />
+    );
+    const map = mapProps.current!;
+    expect(map.getStateLabel("GA")).toBe("GA Senate: no count from the state's feed");
+    expect(map.getStateLabel("GA")).not.toMatch(/no votes/);
+    // Hatched (a texture), not the dotted "no votes yet".
+    expect(map.getFillColor("GA")).toMatch(/-nocount\)$/);
+    expect(row("GA")).toHaveTextContent("Senate: no count from the state's feed");
+    expect(row("GA")).not.toHaveTextContent(/no votes/i);
+    expect(screen.getByText(/NO COUNT FROM THE STATE'S FEED/)).toBeInTheDocument();
+  });
+
+  it("says the House has no count from the feed when only the Senate race is counted", () => {
+    const senate = race({ raceId: "2026-SEN-GA", office: "S", district: null });
+    render(
+      <ResultsOverview
+        now={NOW}
+        results={results({ senateStates: ["GA"], races: [senate] })}
+        states={["GA"]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
+    const map = mapProps.current!;
+    expect(map.getStateLabel("GA")).toBe("GA House: no count from the state's feed");
+    expect(map.getFillColor("GA")).toMatch(/-nocount\)$/);
+    expect(row("GA")).toHaveTextContent("HOUSE: NO COUNT FROM THE STATE'S FEED");
+  });
+
+  it("keeps 'no votes yet' for a state whose feed has given no count at all", () => {
+    render(
+      <ResultsOverview
+        now={NOW}
+        results={results({ senateStates: ["GA"], races: [] })}
+        states={["GA"]}
+      />
+    );
+    expect(mapProps.current!.getStateLabel("GA")).toBe("GA Senate: no votes yet");
+    expect(row("GA")).toHaveTextContent("Senate: no votes yet");
+    expect(row("GA")).not.toHaveTextContent(/HOUSE:/);
+  });
+});

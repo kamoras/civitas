@@ -237,13 +237,16 @@ export default async function ElectionsChapter() {
           shows its Senate race or races, every House district and a district map shaded the same
           way, above the ballot research, and a live-updates feed tells each change as it happens:
           first returns, a new leader, every reporting area in, a count the state lists as official,
-          a seat changing party. A district the state&apos;s results feed gives no count for — a
-          contest it doesn&apos;t list, an uncontested seat — is listed and marked as exactly that,
-          not as &ldquo;no votes yet&rdquo;. While a state&apos;s polls are still open, its page
-          stays a ballot-research page and the national map marks its polls &ldquo;not yet
-          closed&rdquo;: nothing is said about a count until its last polls close. From election day
-          the elections pages show no partisan lean, on a map or beside a district, even where there
-          is no count to show: next to a live count, a lean reads as a prediction of it.
+          a seat changing party. A district or Senate race the state&apos;s results feed gives no
+          count for while it counts the state&apos;s other races — a contest it doesn&apos;t list or
+          that couldn&apos;t be matched, an uncontested seat — is listed and marked as exactly that,
+          not as &ldquo;no votes yet&rdquo;; so is a whole chamber on the national map, hatched and
+          named &ldquo;no count from the state&apos;s feed&rdquo;. While a state&apos;s polls are
+          still open, its page stays a ballot-research page and the national map marks its polls
+          &ldquo;not yet closed&rdquo;: nothing is said about a count until its last polls close.
+          From election day the elections pages show no partisan lean, on a map or beside a
+          district, even where there is no count to show: next to a live count, a lean reads as a
+          prediction of it.
         </P>
         <Sub title="Where the numbers come from">
           <P>

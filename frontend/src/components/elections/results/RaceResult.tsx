@@ -307,3 +307,45 @@ export function HouseNoCountRow({
     </li>
   );
 }
+
+/** A Senate race on the state's ballot that the state's feed, while
+ * counting its other races, gives no count for: both Senate contests left
+ * unpaired because neither is marked special, a contest dropped as an
+ * impossible count, or one not matched to the race. The Senate's
+ * counterpart of HouseNoCountRow, and worded as that absence — not "no
+ * votes yet", which says this race's count is under way. */
+export function SenateNoCountCard({
+  raceId,
+  isSpecial,
+  headingLevel = 3,
+}: {
+  raceId: string;
+  isSpecial: boolean;
+  headingLevel?: 2 | 3;
+}) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
+  return (
+    <article
+      id={`result-${raceId}`}
+      aria-labelledby={`result-${raceId}-title`}
+      tabIndex={-1}
+      className="scroll-mt-[var(--header-clearance)] border border-white/[0.09] bg-surface p-4 sm:p-5"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <Heading
+          id={`result-${raceId}-title`}
+          className="font-display text-xl font-extrabold text-ink-hi"
+        >
+          {`U.S. Senate${isSpecial ? " (special)" : ""}`}
+        </Heading>
+        <span className="border border-dashed border-white/25 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-min">
+          NO COUNT
+        </span>
+      </div>
+      <p className="mt-2 text-sm text-ink-min">
+        No count from the state&apos;s feed for this race, though it gives one for the state&apos;s
+        other races.
+      </p>
+    </article>
+  );
+}

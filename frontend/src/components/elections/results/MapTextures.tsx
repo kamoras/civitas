@@ -6,6 +6,8 @@ import {
   AWAITING_MARK,
   FEED_FAILED_FILL,
   FEED_FAILED_MARK,
+  NO_COUNT_FILL,
+  NO_COUNT_STRIPE,
   POLLS_OPEN_FILL,
   POLLS_OPEN_MARK,
   STALE_SHADOW,
@@ -33,6 +35,7 @@ export function useMapTextures(staleFills: readonly string[] = []): {
     polls: `${base}-polls`,
     awaiting: `${base}-awaiting`,
     feed: `${base}-feed`,
+    noCount: `${base}-nocount`,
   };
   const stale = [...new Set(staleFills)];
   const staleId = (fill: string) => `${base}-stale-${stale.indexOf(fill)}`;
@@ -57,6 +60,19 @@ export function useMapTextures(staleFills: readonly string[] = []): {
       >
         <rect width="6" height="6" fill={FEED_FAILED_FILL} />
         <rect width="2" height="6" fill={FEED_FAILED_MARK} />
+      </pattern>
+      {/* No count from the state's feed: a district (DistrictMap) or a
+          whole chamber (the national map) the feed, while counting others,
+          gives nothing for. Hatched the other way from the amber stripes. */}
+      <pattern
+        id={ids.noCount}
+        patternUnits="userSpaceOnUse"
+        width="6"
+        height="6"
+        patternTransform="rotate(45)"
+      >
+        <rect width="6" height="6" fill={AWAITING_FILL} />
+        <rect width="2" height="6" fill={NO_COUNT_STRIPE} />
       </pattern>
       <pattern id={ids.awaiting} patternUnits="userSpaceOnUse" width="5" height="5">
         <rect width="5" height="5" fill={AWAITING_FILL} />
@@ -88,8 +104,10 @@ export function useMapTextures(staleFills: readonly string[] = []): {
         ? `url(#${ids.polls})`
         : fill === AWAITING_FILL
           ? `url(#${ids.awaiting})`
-          : fill === FEED_FAILED_FILL
-            ? `url(#${ids.feed})`
-            : fill;
+          : fill === NO_COUNT_FILL
+            ? `url(#${ids.noCount})`
+            : fill === FEED_FAILED_FILL
+              ? `url(#${ids.feed})`
+              : fill;
   return { defs, paint };
 }

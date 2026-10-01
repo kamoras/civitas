@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import type { LiveRaceResult, RaceWithCandidates } from "@/types/election";
 import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
@@ -9,7 +9,8 @@ import { useMapTextures } from "@/components/elections/results/MapTextures";
 import {
   AWAITING_FILL,
   AWAITING_SWATCH,
-  NO_COUNT_STRIPE,
+  NO_COUNT_FILL,
+  NO_COUNT_TEXT,
   NO_COUNT_SWATCH,
   STALE_SWATCH,
   TIED_FILL,
@@ -161,7 +162,6 @@ export default function DistrictMap({
    * not "no votes yet". Defaults to any district having a count. */
   feedAnswered?: boolean;
 }) {
-  const hatchId = `no-count-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   // Every fill a counted district can take, for the stale pattern behind
   // each (useMapTextures); none unless the counts are stale.
   const staleFills = useMemo(
@@ -290,20 +290,6 @@ export default function DistrictMap({
         aria-label={`Congressional districts of ${state}`}
       >
         {results && textureDefs}
-        {results && (
-          <defs>
-            <pattern
-              id={hatchId}
-              patternUnits="userSpaceOnUse"
-              width="6"
-              height="6"
-              patternTransform="rotate(45)"
-            >
-              <rect width="6" height="6" fill={AWAITING_FILL} />
-              <rect width="2" height="6" fill={NO_COUNT_STRIPE} />
-            </pattern>
-          </defs>
-        )}
         {/* react-simple-maps' types admit only GeoJSON, but its runtime
             converts a Topology itself — it checks type === "Topology" and
             runs topojson's feature() on the first object (verified in the
@@ -319,7 +305,7 @@ export default function DistrictMap({
                 ? {
                     fill:
                       !counted && answered
-                        ? `url(#${hatchId})`
+                        ? paint(NO_COUNT_FILL)
                         : paint(resultFill(counted, true), stale && !!counted),
                     opacity: 1,
                   }
@@ -338,7 +324,7 @@ export default function DistrictMap({
                     counted
                       ? `${raceStatusText(counted)}${stale ? "; not live, the last count read" : ""}`
                       : answered
-                        ? "no count from the state's feed"
+                        ? NO_COUNT_TEXT
                         : "no votes yet"
                   }`
                 : name;

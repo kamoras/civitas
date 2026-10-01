@@ -11,6 +11,8 @@ import {
   AWAITING_SWATCH,
   FEED_FAILED_FILL,
   FEED_FAILED_SWATCH,
+  NO_COUNT_SWATCH,
+  NO_COUNT_TEXT,
   POLLS_OPEN_FILL,
   POLLS_OPEN_SWATCH,
   STALE_SWATCH,
@@ -294,6 +296,11 @@ export default function ResultsOverview({
                 <Swatch color={AWAITING_FILL} texture={AWAITING_SWATCH} /> NO VOTES YET
               </li>
               <li className="flex items-center gap-1.5">
+                {/* The state's feed counts its other chamber, not this one. */}
+                <Swatch color={AWAITING_FILL} texture={NO_COUNT_SWATCH} />{" "}
+                {NO_COUNT_TEXT.toUpperCase()}
+              </li>
+              <li className="flex items-center gap-1.5">
                 <Swatch color={FEED_FAILED_FILL} texture={FEED_FAILED_SWATCH} /> FEED NOT READ
               </li>
               <li className="flex items-center gap-1.5">
@@ -327,6 +334,8 @@ export default function ResultsOverview({
             {chamber === "H"
               ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
               : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in."}{" "}
+            Hatched grey means the state&apos;s feed gives a count for its other chamber&apos;s
+            races but none for this one&apos;s — not that no votes are in.{" "}
             {refreshFailed ? (
               <>
                 This page couldn&apos;t refresh the count, so none of it is live: stripes over a
@@ -465,6 +474,8 @@ export default function ResultsOverview({
                       {badge.text}
                     </span>
                   </span>
+                  {/* A chamber the feed gives nothing for while it counts
+                      the other: that absence, never "no votes yet". */}
                   {summary.senate.length > 0 ? (
                     // Every Senate race the state holds — a regular and a
                     // special election each get a line.
@@ -479,21 +490,30 @@ export default function ResultsOverview({
                         ? isLive
                           ? refreshFailed
                             ? "Senate: no count as this page last read it"
-                            : stillVoting
-                              ? "Senate: polls not yet closed"
-                              : failed
-                                ? behind(state)
-                                  ? "Senate: its feed hasn't been read lately"
-                                  : "Senate: couldn't read its feed"
-                                : "Senate: no votes yet"
+                            : hasCount
+                              ? `Senate: ${NO_COUNT_TEXT}`
+                              : stillVoting
+                                ? "Senate: polls not yet closed"
+                                : failed
+                                  ? behind(state)
+                                    ? "Senate: its feed hasn't been read lately"
+                                    : "Senate: couldn't read its feed"
+                                  : "Senate: no votes yet"
                           : "Senate race: check the state's count"
                         : "No Senate race this year"}
                     </span>
                   )}
-                  {summary.house.length > 0 && (
+                  {summary.house.length > 0 ? (
                     <span className="font-mono text-xs text-ink-min">
                       HOUSE {formatLed(summary.houseLeads)} LEADING
                     </span>
+                  ) : (
+                    isLive &&
+                    hasCount && (
+                      <span className="font-mono text-xs text-ink-min">
+                        HOUSE: {NO_COUNT_TEXT.toUpperCase()}
+                      </span>
+                    )
                   )}
                   {failed && hasCount && !stillVoting && (
                     <span className="font-mono text-xs text-signal-amber">{staleNote(state)}</span>

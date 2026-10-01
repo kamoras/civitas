@@ -977,8 +977,9 @@ function HouseDetail({
   lookupIsStateSpecific = false,
   resultsMode = false,
 }: {
-  /** The state's feed isn't being refreshed: the map marks its counts
-   * stale (DistrictMap's `stale`). */
+  /** The count isn't live — the state's feed isn't being refreshed, or
+   * this page's own refresh failed: the map marks its counts stale
+   * (DistrictMap's `stale`). */
   countStale?: boolean;
   ballot: StateBallot;
   pickedId: string | null;
@@ -1570,6 +1571,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // The feed has given this state a count for some race: a district with
   // none of its own is "no count from the feed", not "no votes yet".
   const feedAnswered = !!live && live.races.length > 0;
+  // The drawer's district map marks its counts not live exactly when the
+  // results section's map does: the state's feed isn't being refreshed, or
+  // this page's own refresh failed and what it shows is an older count
+  // (StateResults' `failed || error`). A solid fill in one map beside a
+  // striped one in the other would pass the older count off as live.
+  const countStale = (feedDown && !stillVoting) || (!!liveError && !!live);
 
   const contests = useMemo(
     () => buildBallotContests(ballot, towns.length > 0, { resultsMode }),
@@ -1659,7 +1666,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             onPick={(id) => openContest("house", id)}
             results={liveByDistrict}
             feedAnswered={feedAnswered}
-            countStale={feedDown && !stillVoting}
+            countStale={countStale}
             lookupHref={lookupHref}
             lookupIsStateSpecific={lookupIsStateSpecific}
             resultsMode={resultsMode}

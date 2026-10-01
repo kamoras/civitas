@@ -7,6 +7,7 @@ import {
   HouseNoCountRow,
   HouseResultRow,
   RaceResultCard,
+  SenateNoCountCard,
 } from "@/components/elections/results/RaceResult";
 import {
   countReadAt as readAtOf,
@@ -68,7 +69,23 @@ export default function StateResults({
   lookupIsStateSpecific: boolean;
 }) {
   const races = useMemo(() => results?.races ?? [], [results]);
-  const senate = races.filter((r) => r.office === "S");
+  // Every Senate race on the ballot, with its count or none: once the
+  // state's feed is answering, one it gives no count for (both contests
+  // unpaired, one dropped or unmatched) is a card saying so, as a House
+  // district with none is a row. A count for a race the ballot doesn't
+  // list is kept too.
+  const senateRows = useMemo(() => {
+    const counted = races.filter((r) => r.office === "S");
+    const byId = new Map(counted.map((r) => [r.raceId, r]));
+    const rows: { raceId: string; isSpecial: boolean; result?: LiveRaceResult }[] = [];
+    if (races.length > 0)
+      for (const r of ballot.senateRaces)
+        rows.push({ raceId: r.id, isSpecial: r.isSpecial, result: byId.get(r.id) });
+    const listed = new Set(rows.map((r) => r.raceId));
+    for (const r of counted)
+      if (!listed.has(r.raceId)) rows.push({ raceId: r.raceId, isSpecial: r.isSpecial, result: r });
+    return rows;
+  }, [races, ballot.senateRaces]);
   const house = useMemo(
     () =>
       races.filter((r) => r.office === "H").sort((a, b) => (a.district ?? 0) - (b.district ?? 0)),
@@ -323,9 +340,23 @@ export default function StateResults({
             : ""}
         </p>
       )}
-      {senate.map((r) => (
-        <RaceResultCard key={r.raceId} result={r} headingLevel={2} newLines={newLines} />
-      ))}
+      {senateRows.map((row) =>
+        row.result ? (
+          <RaceResultCard
+            key={row.raceId}
+            result={row.result}
+            headingLevel={2}
+            newLines={newLines}
+          />
+        ) : (
+          <SenateNoCountCard
+            key={row.raceId}
+            raceId={row.raceId}
+            isSpecial={row.isSpecial}
+            headingLevel={2}
+          />
+        )
+      )}
       {houseRows.length > 0 && races.length > 0 && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_26rem]">
           <section

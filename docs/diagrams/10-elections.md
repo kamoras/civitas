@@ -430,7 +430,7 @@ it failed (on the server's clock, like the times beside it) and when the
 counts on screen were read (oldest and newest), is the only statement: no
 feed is newly called behind for the page's own failure to ask, no state is
 marked LIVE (the national list says NOT REFRESHED), and every count on the
-national and district maps carries the not-live stripe. Polls closing is judged on the same clock. Only a change of
+national and district maps — the House research drawer's included — carries the not-live stripe. Polls closing is judged on the same clock. Only a change of
 state (live, stale, refresh failed, polls closed) is in the pages' polite
 live regions; the times beside it are not, so they aren't re-announced on
 every pass.
@@ -457,7 +457,14 @@ count section saying when they close; only then does it read "… results" and
 district with no row of its own (a contest the feed doesn't list or that
 couldn't be matched, an uncontested seat) is a row saying "no count from the
 state's feed" and is hatched on the district map, so it is neither drawn as
-"no votes yet" nor missing, and picking it lands on its row. A leader the
+"no votes yet" nor missing, and picking it lands on its row. The Senate is
+held to the same rule: a Senate race on the ballot that the answering feed
+gives no row for (two seats with neither marked special, a contest dropped
+as impossible or left unmatched) is a NO COUNT card, and on `/elections` a
+chamber the feed gives nothing for while counting the state's other one is
+hatched and named "no count from the state's feed" (`NO_COUNT_FILL`, its own
+legend entry), on the map and on the state's row. "No votes yet" is kept for
+a chamber the feed does list, with nothing counted. A leader the
 feed gives no party the vocabulary knows is drawn purple, keyed on both
 maps, named "(other)", and counted in the seats-led tallies.
 
