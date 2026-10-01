@@ -56,7 +56,7 @@ export const config = {
   // counted (app/photo/bioguide/[id]/route.ts). The feeds are polled by
   // readers and bots on a schedule, which is not anyone visiting. The icons
   // too: every feed entry names apple-icon.png, and a feed reader or chat
-  // bot fetching it sends no Sec-Fetch-Dest, so isPageLoad would count it
+  // bot fetching it would otherwise have to be told apart by isPageLoad
   // (middleware.test.ts checks every icon and public/ file is excluded).
   matcher: [
     "/((?!api|_next/static|_next/image|data/|photo/|admin|favicon.ico|icon.svg|apple-icon.png|sitemap.xml|sitemap-index.xml|sitemaps/|robots.txt|opengraph-image|feed\\.xml|feed/).*)",

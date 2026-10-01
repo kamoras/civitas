@@ -251,6 +251,16 @@ async def run_visit_consumer() -> None:
 # ambiguous real-world data). Order matters: Edge and Opera UAs also contain
 # "Chrome/" and "Safari/" boilerplate, so the more specific token must be
 # checked first.
+# Headless Chrome, as Playwright and Puppeteer drive it by default (the
+# cloud agents that test this site among them), says so in its own User-Agent
+# token, the way the parsers below read "Chrome/" or "Firefox/". It runs the
+# site's scripts and sends fetch metadata like a person's browser, so it
+# reaches both counting paths (the middleware's page loads and the in-app
+# navigation beacon); both arrive here, so this one check covers them. An
+# agent driving a real browser window can't be told apart, and is browsing.
+_AUTOMATED_BROWSER = "HeadlessChrome"
+
+
 def _parse_browser(ua: str) -> str:
     if re.search(r"Edg/", ua):
         return "Edge"
@@ -534,6 +544,8 @@ async def track_visit(request: Request, path: str = Query("/")) -> None:
     """
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
+    if _AUTOMATED_BROWSER in user_agent:
+        return
     date = _today()
 
     event = _VisitEvent(

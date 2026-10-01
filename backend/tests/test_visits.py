@@ -108,6 +108,19 @@ class TestKnownRoutesStayInSync:
 
 
 class TestTrackVisitPageViews:
+    async def test_a_headless_automation_browser_is_not_a_visitor(self, db_session):
+        """Playwright/Puppeteer's default headless Chrome (cloud agents testing
+        the site) runs scripts and sends fetch metadata, so only its own
+        User-Agent token tells it apart; it reaches both counting paths."""
+        headless = (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+            "HeadlessChrome/131.0.0.0 Safari/537.36"
+        )
+        await track_visit(_make_request(user_agent=headless), path="/")
+        assert _drain_queue_and_write(db_session) == 0
+        await track_visit(_make_request(user_agent="Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0 Safari/537.36"), path="/")
+        assert _drain_queue_and_write(db_session) == 1
+
     async def test_repeat_views_accumulate_not_dedupe(self, db_session):
         await track_visit(_make_request(), path="/politicians/chuck-grassley")
         await track_visit(_make_request(), path="/politicians/jane-doe")
