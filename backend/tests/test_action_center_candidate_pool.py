@@ -79,6 +79,8 @@ def refresh(monkeypatch):
         return ["claim a", "claim b"] if _cluster_number(cluster) in WITH_CLAIMS else []
 
     monkeypatch.setattr(ac.claim_layer, "extract_claims", extract)
+    monkeypatch.setattr(ac.claim_layer, "extract_body_claims", lambda cluster, locate: [])
+    monkeypatch.setattr(ac.claim_layer, "dedupe_claims", lambda claims: list(dict.fromkeys(claims)))
     monkeypatch.setattr(ac.claim_layer, "on_topic", lambda claims, cluster: claims)
     monkeypatch.setattr(ac.claim_layer, "build_lede", lambda claims: "A lede.")
     monkeypatch.setattr(ac.claim_layer, "build_facts", lambda claims: (["A fact."], ["Outlet 0"]))
@@ -126,3 +128,43 @@ def test_each_published_issue_gets_its_story_in_the_same_run(db_session, refresh
     issues = db_session.query(ActionIssue).order_by(ActionIssue.rank).all()
     assert built == [3, 5]
     assert [i.full_story for i in issues] == ["## Outlet\n\nStory for 3.", "## Outlet\n\nStory for 5."]
+
+
+def test_a_summary_claim_counts_toward_the_two_claim_gate(db_session, refresh, monkeypatch):
+    """With one claim per article a one- or two-article story could rarely
+    reach the two claims an issue needs (2026-10-01: 78 of 300 clusters in
+    three days skipped as too few facts). The summary's claim counts too,
+    after the headline's, so the headline still leads."""
+    ledes = []
+
+    def headline(cluster, locate):
+        return ["headline claim"] if _cluster_number(cluster) in WITH_CLAIMS else []
+
+    def body(cluster, locate):
+        # extract_body_claims re-yields the headline's claim too.
+        return headline(cluster, locate) + ["summary claim"]
+
+    def lede(claims):
+        ledes.append(claims)
+        return "A lede."
+
+    monkeypatch.setattr(action_center.claim_layer, "extract_claims", headline)
+    monkeypatch.setattr(action_center.claim_layer, "extract_body_claims", body)
+    monkeypatch.setattr(action_center.claim_layer, "build_lede", lede)
+    assert action_center._run_refresh(db_session) == action_center.MAX_ISSUES
+    assert ["headline claim", "summary claim"] in ledes
+    # A cluster whose only claim came from a summary still falls short.
+    issues = db_session.query(ActionIssue).order_by(ActionIssue.rank).all()
+    assert [_cluster_number([i]) for i in issues] == [3, 5]
+
+
+def test_a_summary_claim_that_restates_a_headline_claim_is_one_fact(db_session, refresh, monkeypatch):
+    """dedupe_claims keeps the longer of two nested claims. The headline's
+    shorter one must go with it, or one fact counts twice at the gate."""
+    monkeypatch.setattr(action_center.claim_layer, "extract_claims", lambda cluster, locate: ["X sues Y"])
+    monkeypatch.setattr(action_center.claim_layer, "extract_body_claims", lambda cluster, locate: ["X sues Y for Z"])
+    monkeypatch.setattr(
+        action_center.claim_layer, "dedupe_claims",
+        lambda claims: [c for c in claims if not any(c != o and c in o for o in claims)],
+    )
+    assert action_center._run_refresh(db_session) == 0

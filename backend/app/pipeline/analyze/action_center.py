@@ -5142,8 +5142,21 @@ def _run_refresh(db: Session) -> int:
         #
         # filtered_cluster still supplies the title and the source list —
         # those should come from the coherent core.
-        cluster_claims = claim_layer.extract_claims(cluster, _locate)
-        cluster_claims = claim_layer.on_topic(cluster_claims, filtered_cluster)
+        # Headline claims first: they lead (build_lede takes the first),
+        # and an earlier article is the better-sourced account. Then the
+        # second claim each article's summary holds (extract_body_claims,
+        # the same prompt and verification, and the call _build_full_story
+        # makes anyway, so the model's answer is cached for it). Since
+        # complete linkage, most clusters are one or two articles; with
+        # one claim per article, a one-article story could never reach the
+        # two-claim gate below however much it said (2026-10-01: 78 of 300
+        # clusters in three days skipped as too few facts).
+        # Deduped together, so a summary claim that only restates a
+        # headline one (or contains it) can't make one fact count as two.
+        headline_claims = claim_layer.extract_claims(cluster, _locate)
+        kept = claim_layer.dedupe_claims(headline_claims + claim_layer.extract_body_claims(cluster, _locate))
+        ordered = [c for c in headline_claims if c in kept] + [c for c in kept if c not in headline_claims]
+        cluster_claims = claim_layer.on_topic(ordered, filtered_cluster)
         if not cluster_claims:
             # A cluster with no attributable fact produces NO ISSUE.
             # Measured on a live run, roughly one top cluster in four is

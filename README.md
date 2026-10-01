@@ -453,6 +453,14 @@ Every hour at :15
        │         off, and 2026-09-27's measured yield was 5 claims from 40
        │         articles (14 with the break marked), so most clusters
        │         missed the two-claim bar and nothing published for days.
+       │         A predicate the model cut short ("sues", "grants review
+       │         of") is read on in the source to the clause's punctuation
+       │         — still verbatim, refused where it can't tell where the
+       │         clause ends ("Sens." might be an abbreviation). Each
+       │         article's summary contributes its claim too, after the
+       │         headlines: 2026-10-01, 78 of 300 clusters in three days
+       │         were dropped as too few facts, 7 of 10 sampled failures
+       │         were cut-short predicates.
        │         Title = the top article's real headline. Summary = the
        │         single best claim. Facts = the supporting claims, each
        │         carrying the outlet it came from, shown on the issue as
