@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.models import (
     Candidate, ElectionResultEvent, LiveResultRead, Race, RaceResult, Representative, Senator,
 )
+from app.config import settings
 from app.pipeline.candidate_dedup import normalized_surname
 from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.election_results import (
@@ -39,6 +40,7 @@ from app.pipeline.fetch.election_results import (
     fetch_state_count,
     live_results_states,
 )
+from app.pipeline.fetch.congress import congress_first_year
 from app.pipeline.fetch.poll_close import last_poll_close, polls_closed
 from app.pipeline.fetch.state_candidates import _match_candidate, _race_id_for, given_name_contradicts
 from app.pipeline.fetch.state_candidates_common import PARTY_CODE_MAP, fec_party, last_name_matches, surname
@@ -100,16 +102,39 @@ def _party_group(code: str | None) -> str | None:
 _redrawn_cache: dict | None = None
 
 
-def redrawn_states(cycle: int) -> set[str]:
-    """States voting in `cycle` on a map other than the one sitting members
-    were elected on (app/data/redrawn_congressional_maps.json — the same
-    list the district crosswalk and outlines are built from)."""
+def _maps() -> dict:
     global _redrawn_cache
     if _redrawn_cache is None:
         path = Path(__file__).resolve().parent.parent / "data" / "redrawn_congressional_maps.json"
         _redrawn_cache = json.loads(path.read_text())
-    entries = _redrawn_cache.get("cycles", {}).get(str(cycle), {})
-    return {st for st, e in entries.items() if e.get("map") != "CD119"}
+    return _redrawn_cache.get("cycles", {})
+
+
+def _map_in(cycles: dict, cycle: int, state: str) -> str:
+    """The map `state` votes on in `cycle`: the newest listed cycle at or
+    before it that names the state (a map stands until replaced), else the
+    CD119 lines every unlisted state is on."""
+    for year in sorted((int(y) for y in cycles), reverse=True):
+        if year <= cycle and state in cycles[str(year)]:
+            return cycles[str(year)][state].get("map", "CD119")
+    return "CD119"
+
+
+def redrawn_states(cycle: int) -> set[str]:
+    """States voting in `cycle` on a map other than the one sitting members
+    were elected on (app/data/redrawn_congressional_maps.json — the same
+    list the district crosswalk and outlines are built from).
+
+    "Sitting" is settings.CURRENT_CONGRESS, so the answer moves with the
+    hand-over, not with the site's cycle: from the day the 2026 results
+    window closes until Jan 3, 2027, the site is on 2028 but the 119th
+    Congress, elected on the old lines, still sits — the nine redrawn
+    states are still redrawn against it. From Jan 3 the 120th sits on the
+    2026 lines and 2028 (listing no new map) has none."""
+    cycles = _maps()
+    sitting_elected = congress_first_year(settings.CURRENT_CONGRESS) - 1
+    states = {st for entries in cycles.values() for st in entries}
+    return {st for st in states if _map_in(cycles, cycle, st) != _map_in(cycles, sitting_elected, st)}
 
 
 def seat_holder_party(db: Session, race: Race) -> str | None:

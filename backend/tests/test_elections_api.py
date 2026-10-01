@@ -31,6 +31,16 @@ def _in_the_2026_cycle(freeze_utcnow):
     freeze_utcnow(datetime(2026, 9, 30, 12, 0))
 
 
+@pytest.fixture(autouse=True)
+def _the_119th_sits(monkeypatch):
+    """Redrawn states are measured against the sitting Congress's lines
+    (live_results.sync.redrawn_states). Before Jan 3, 2027 that is the
+    119th, on the old map; pin it so these 2026 fixtures don't flip then."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
+
+
 def _body(response):
     return json.loads(response.body)
 

@@ -38,6 +38,16 @@ def _in_the_2026_cycle(freeze_utcnow):
     freeze_utcnow(datetime(2026, 9, 30, 12, 0))
 
 
+@pytest.fixture(autouse=True)
+def _the_119th_sits(monkeypatch):
+    """Redrawn states are measured against the sitting Congress's lines
+    (live_results.sync.redrawn_states). Before Jan 3, 2027 that is the
+    119th, on the old map; pin it so these 2026 fixtures don't flip then."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
+
+
 def _body(response):
     return json.loads(response.body)
 
@@ -326,6 +336,26 @@ def test_a_redrawn_state_says_its_district_lines_are_new(db_session):
 
     assert _body(elections.state_ballot("TX", db_session))["newDistrictLines"] is True
     assert _body(elections.state_ballot("GA", db_session))["newDistrictLines"] is False
+
+
+def test_new_lines_stay_new_until_the_members_elected_on_them_sit(db_session, monkeypatch):
+    """After the 2026 results window closes the site is on 2028, but until
+    Jan 3, 2027 the 119th Congress — elected on the old lines — still sits:
+    a redrawn state's districts are still not the ones its members hold."""
+    from datetime import date
+
+    from app.config import settings
+
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 11, 20))
+    tx = _body(elections.state_ballot("TX", db_session))
+    assert tx["cycleYear"] == 2028
+    assert tx["newDistrictLines"] is True
+    assert _body(elections.state_ballot("GA", db_session))["newDistrictLines"] is False
+
+    # From Jan 3 the 120th sits on the 2026 lines, and 2028 lists no new map.
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2027, 1, 10))
+    assert _body(elections.state_ballot("TX", db_session))["newDistrictLines"] is False
 
 
 def test_house_race_includes_its_district_counties(db_session):

@@ -594,7 +594,10 @@ class TestRoundTwo:
         assert kinds == []
         assert result.last_change_at == before
 
-    def test_a_redrawn_states_house_seat_has_no_holder(self, db_session):
+    def test_a_redrawn_states_house_seat_has_no_holder(self, db_session, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
         race = Race(id="2026-HOUSE-UT-3", cycle_year=2026, office="H", state="UT", district=3)
         db_session.add(race)
         db_session.add(Representative(id="U3", name="Holder", state="UT", district=3, party="R"))
@@ -603,6 +606,18 @@ class TestRoundTwo:
         # Listed, but on its old map (its redraw was stayed): its seats keep a holder.
         assert "MO" not in er.redrawn_states(2026)
         assert er.seat_holder_party(db_session, race) is None
+
+    def test_redrawn_is_measured_against_the_sitting_congress(self, monkeypatch):
+        """The 2026 redraws are redrawn against the 119th's lines — for the
+        2026 races and for 2028's until the 120th, elected on the new
+        lines, sits on Jan 3, 2027; then neither cycle is redrawn."""
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
+        assert "TX" in er.redrawn_states(2026) and "TX" in er.redrawn_states(2028)
+        assert "MO" not in er.redrawn_states(2028)
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
+        assert er.redrawn_states(2026) == set() and er.redrawn_states(2028) == set()
 
     def test_first_returns_that_are_already_a_flip_are_one_story(self, db_session):
         race = _setup(db_session)

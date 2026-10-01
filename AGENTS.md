@@ -344,7 +344,8 @@ The correct pattern, established by `_district_pvi()` /
    the lines the member was *elected on*; the elections pages use the
    lines of the Congress the election seats (`district_pvi_for_congress`),
    or — for a Congress nobody has pinned yet, which is every next cycle
-   from the day after an election — the newest pinned lines before it.
+   once an election's results window closes
+   (`election_phase.active_election`) — the newest pinned lines before it.
    Do not go back to scraping each district's live infobox: it did that
    until 2026-09, and when nine states redrew for 2026 editors swapped in
    new-map values district by district, leaving member scoring on a
