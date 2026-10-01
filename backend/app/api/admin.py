@@ -6,15 +6,21 @@ import logging
 import os
 import secrets
 import threading
-from datetime import datetime
+import time
 from collections.abc import Callable
+from datetime import UTC as _UTC
+from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app import background, database, net_stats, ops_alerts, pipeline_chain
+from app.api.elections import ballot_state_codes
+from app.api.pipeline import _is_pipeline_running
 from app.api.pipeline_runner import run_pipeline_in_thread
+from app.api.visits import LOAD_TIMING_BUCKETS_MS, LOAD_TIMING_METRICS
 from app.config import settings
 from app.database import get_db, get_visits_db, off_loop
 from app.http_client import make_async_client
@@ -25,7 +31,9 @@ from app.models import (
     ApiRequestCount,
     CampaignPromise,
     Donor,
+    ElectionPipelineRun,
     ExploreDocument,
+    HousePipelineRun,
     IndustryDonation,
     Justice,
     JusticeVote,
@@ -34,6 +42,7 @@ from app.models import (
     LobbyingMatch,
     MonitorUpdate,
     NationalMonitor,
+    PageLoadTiming,
     PageView,
     PipelinePhaseTiming,
     PipelineRateLimitStat,
@@ -45,14 +54,36 @@ from app.models import (
     RepIndustryDonation,
     RepKeyVote,
     RepLobbyingMatch,
-    RepSponsoredBill,
     Representative,
+    RepSponsoredBill,
     ScoreSnapshot,
     Senator,
     SiteVisit,
     SponsoredBill,
+    StockTradesPipelineRun,
+    SupplementaryPipelineRun,
     TimelineEntry,
 )
+from app.pipeline import (
+    election_pipeline,
+    house_pipeline,
+    lease,
+    lexical_index,
+    run_tracker,
+    senate_pipeline,
+    stock_pipeline,
+    supplementary_pipeline,
+    vector_store,
+)
+from app.pipeline.analyze import document_authority
+from app.pipeline.analyze.action_center import get_action_refresh_state
+from app.pipeline.analyze.bill_learning import get_health_metrics
+from app.pipeline.analyze.ollama_client import get_llm_stats
+from app.pipeline.analyze.score_calibration import generate_calibration_report
+from app.pipeline.fetch import ballot_measure_pdf_sources, district_pvi
+from app.pipeline_chain import chain_running
+from app.scheduler import get_next_run_time, triggered_chain
+from app.services import bill_service
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -254,10 +285,9 @@ def _read_system_stats() -> dict:
         # This container's counters (the pipeline's, under Swarm), and the
         # rate the API containers recorded (net_stats: a container sees only
         # its own interfaces). The dashboard adds the two rates.
-        from app.net_stats import api_rates, own_totals
 
-        stats["netRxBytes"], stats["netTxBytes"] = own_totals() or (None, None)
-        rates = api_rates()
+        stats["netRxBytes"], stats["netTxBytes"] = net_stats.own_totals() or (None, None)
+        rates = net_stats.api_rates()
         stats["apiNetRxRate"] = rates["rxRate"] if rates else None
         stats["apiNetTxRate"] = rates["txRate"] if rates else None
     except Exception:
@@ -273,18 +303,12 @@ def _collect_vector_db_stats(db: Session) -> dict:
     """Collect comprehensive vector DB and learning store metrics."""
     stats: dict = {}
     try:
-        from app.pipeline.vector_store import (
-            EMBEDDING_DIMENSIONS,
-            EMBEDDING_MODEL_NAME,
-            collection_stats,
-            get_model_version,
-        )
-        vec_stats = collection_stats()
+        vec_stats = vector_store.collection_stats()
         stats["status"] = "ok"
         stats.update(vec_stats)
-        stats["embeddingModel"] = EMBEDDING_MODEL_NAME
-        stats["embeddingModelVersion"] = get_model_version()
-        stats["embeddingDimensions"] = EMBEDDING_DIMENSIONS
+        stats["embeddingModel"] = vector_store.EMBEDDING_MODEL_NAME
+        stats["embeddingModelVersion"] = vector_store.get_model_version()
+        stats["embeddingDimensions"] = vector_store.EMBEDDING_DIMENSIONS
 
     except Exception:
         logger.exception("Vector DB stats collection failed")
@@ -340,7 +364,6 @@ async def admin_system_stats():
 
 def _window_dates(days: int) -> list[str]:
     """The last `days` UTC calendar dates, oldest first, ending today."""
-    from datetime import timedelta, UTC as _UTC
 
     today = datetime.now(_UTC).date()
     return [(today - timedelta(days=offset)).isoformat() for offset in range(days - 1, -1, -1)]
@@ -386,7 +409,6 @@ def _histogram_percentile(buckets: list[tuple[int, int]], q: float) -> float | N
     (LOAD_TIMING_BUCKETS_MS), not the previous *populated* bucket — a sparse
     day must not stretch one bucket across the empty ones below it.
     """
-    from app.api.visits import LOAD_TIMING_BUCKETS_MS
 
     total = sum(n for _, n in buckets)
     if total == 0:
@@ -418,8 +440,6 @@ def admin_load_times(
     from a page that loaded instantly. ``byPath`` ranks routes by p95 of the
     load event over the window, slowest first.
     """
-    from app.api.visits import LOAD_TIMING_METRICS
-    from app.models import PageLoadTiming
 
     dates = _window_dates(days)
     rows = (
@@ -523,7 +543,6 @@ def admin_visitor_breakdown(date: str | None = None, db: Session = Depends(get_v
     Aggregate counts only — never joined back to individual visitor_hash
     rows in the response, so this can't be used to profile a single visit.
     """
-    from datetime import UTC as _UTC
 
     day = date or datetime.now(_UTC).date().isoformat()
 
@@ -558,7 +577,6 @@ def admin_top_pages(days: int = 7, limit: int = 10, db: Session = Depends(get_vi
     models.py for why that's a separate table from SiteVisit) grouped by
     normalized route template (e.g. "/politicians/[id]").
     """
-    from datetime import timedelta, UTC as _UTC
 
     cutoff = (datetime.now(_UTC).date() - timedelta(days=days - 1)).isoformat()
     rows = (
@@ -673,10 +691,6 @@ def admin_accept_measure_absence(
     `note` is required: say what was checked (e.g. "SOS release 2026-10-02:
     Proposal 2026-2 removed by court order").
     """
-    from app.pipeline.election_pipeline import AbsenceRefused, accept_state_absence
-    from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
-
-    from app.api.elections import ballot_state_codes
 
     state = state.upper()
     if state not in ballot_state_codes():
@@ -685,13 +699,13 @@ def admin_accept_measure_absence(
         datetime.strptime(election_date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="election_date must be YYYY-MM-DD") from None
-    source = source_for_state(state)
+    source = ballot_measure_pdf_sources.source_for_state(state)
     if source is None:
         raise HTTPException(status_code=400, detail=f"{state} has no registered direct source")
     source_name = source["source_name"]
     try:
-        marked = accept_state_absence(db, state, election_date, source_name, note.strip(), force=force)
-    except AbsenceRefused as refused:
+        marked = election_pipeline.accept_state_absence(db, state, election_date, source_name, note.strip(), force=force)
+    except election_pipeline.AbsenceRefused as refused:
         raise HTTPException(status_code=409, detail=str(refused)) from None
     return {
         "state": state, "electionDate": election_date, "sourceName": source_name,
@@ -700,7 +714,7 @@ def admin_accept_measure_absence(
 
 
 @router.get("/dashboard", dependencies=[Depends(require_admin)])
-async def admin_dashboard(db: Session = Depends(get_db)):
+async def admin_dashboard(request: Request, db: Session = Depends(get_db)):
     """Comprehensive admin dashboard with system health, data stats, and pipeline info."""
 
     # --- System health ---
@@ -779,11 +793,9 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         .scalar() or 0
     )
 
-    from app.api.pipeline import _is_pipeline_running
     is_running = _is_pipeline_running(db)
 
     try:
-        from app.scheduler import get_next_run_time
         next_scheduled = get_next_run_time()
     except Exception:
         next_scheduled = None
@@ -835,12 +847,9 @@ async def admin_dashboard(db: Session = Depends(get_db)):
 
     # --- LLM stats ---
     try:
-        from app.pipeline.analyze.ollama_client import get_llm_stats
         llm_stats = get_llm_stats()
     except Exception:
         llm_stats = {}
-
-    from app.main import PROCESS_STARTED_AT
 
     first_run = (
         db.query(PipelineRun.started_at)
@@ -853,12 +862,10 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         # This process's start. /api/admin/ is served by the pipeline
         # process (nginx/civitas.conf), so it is that one's — which is what
         # the pipeline timeline needs (a restart ends a running pipeline).
-        "processStartedAt": PROCESS_STARTED_AT,
+        "processStartedAt": getattr(request.app.state, "process_started_at", None),
         "firstPipelineRun": first_run.isoformat() if first_run else None,
         "totalRestarts": total_runs,
     }
-
-    from app.ops_alerts import recent_alerts
 
     return {
         "system": {
@@ -874,7 +881,7 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         "data": data_counts,
         "pipeline": pipeline_info,
         "llm": llm_stats,
-        "opsAlerts": recent_alerts(),
+        "opsAlerts": ops_alerts.recent_alerts(),
     }
 
 
@@ -882,17 +889,6 @@ async def admin_dashboard(db: Session = Depends(get_db)):
 async def admin_pipeline_status(db: Session = Depends(get_db)):
     """Live pipeline status for polling during a run."""
     db.expire_all()
-
-    from app.pipeline.house_pipeline import is_house_pipeline_running
-    from app.pipeline.stock_pipeline import is_stock_pipeline_running
-    from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
-    from app.pipeline.election_pipeline import is_election_pipeline_running
-    from app.pipeline.vector_store import is_rebuilding as is_explore_index_rebuilding
-    from app.pipeline_chain import chain_running
-    from app.models import (
-        ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
-    )
-    from app.pipeline.run_tracker import senate_run_state
 
     # Whether each pipeline is going is read on both sides of its row, and
     # counts as running if either read says so. A run makes itself known
@@ -905,12 +901,12 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     # run ends, as ending without an outcome.
     def running_flags() -> tuple[bool, bool, bool, bool]:
         return (
-            is_house_pipeline_running(), is_stock_pipeline_running(),
-            is_supplementary_pipeline_running(), is_election_pipeline_running(),
+            house_pipeline.is_house_pipeline_running(), stock_pipeline.is_stock_pipeline_running(),
+            supplementary_pipeline.is_supplementary_pipeline_running(), election_pipeline.is_election_pipeline_running(),
         )
 
     flags_before = running_flags()
-    _row, senate_running_before, senate_clearable_before = senate_run_state(db)
+    _row, senate_running_before, senate_clearable_before = run_tracker.senate_run_state(db)
 
     last_run = (
         db.query(PipelineRun)
@@ -938,7 +934,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         .first()
     )
 
-    _row, senate_running_after, senate_clearable_after = senate_run_state(db)
+    _row, senate_running_after, senate_clearable_after = run_tracker.senate_run_state(db)
     house_running, stock_running, supplementary_running, election_running = (
         before or after for before, after in zip(flags_before, running_flags())
     )
@@ -963,7 +959,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         # A rebuild of the Explore vector index (at start, in an Explore
         # run, or an admin re-embed): twenty-odd minutes that a restart
         # would throw away, with semantic search off until the next one.
-        "exploreIndexIsRebuilding": is_explore_index_rebuilding(),
+        "exploreIndexIsRebuilding": vector_store.is_rebuilding(),
         # An Explore run in any process (its lease): a triggered or startup
         # run has no run row, and its top-up can take twenty-odd minutes a
         # restart would throw away mid-batch.
@@ -1058,7 +1054,6 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "progressSteps": _parse_progress_steps(last_run),
         }
 
-    from app.pipeline.analyze.action_center import get_action_refresh_state
     ac = get_action_refresh_state()
     result["actionRefresh"] = {
         "isRunning": ac["is_running"],
@@ -1082,9 +1077,6 @@ async def admin_pipeline_history(
     db: Session = Depends(get_db),
 ):
     """Return recent pipeline run history (Senate + supplementary + House + stock trades + election interleaved by date)."""
-    from app.models import (
-        ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
-    )
     senate_runs = (
         db.query(PipelineRun)
         .order_by(PipelineRun.started_at.desc())
@@ -1207,9 +1199,6 @@ async def admin_pipeline_trend(
     different spans, so a shared x-axis would show one pipeline's failures
     stopping three weeks before another's.
     """
-    from app.models import (
-        ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
-    )
 
     # From 00:00 UTC of the first calendar day, not "now minus N x 24h": the
     # dashboard buckets these by UTC date, and a rolling cutoff would count
@@ -1412,7 +1401,6 @@ def refuse_while_chain_runs() -> None:
     """409 while a pipeline chain (nightly or triggered) is running: what a
     trigger starts would run beside the chain's current link, and the chain
     runs that pipeline itself."""
-    from app.pipeline_chain import chain_running
 
     if chain_running():
         raise HTTPException(status_code=409, detail="A pipeline chain is already running")
@@ -1426,10 +1414,6 @@ def start_pipeline_trigger(db: Session, senator: str | None, fetch_only: bool, *
     the first. Refused while the Senate pipeline or a chain is running. A
     full trigger claims the chain slot here, before answering, so two of
     them can't both find it free."""
-    from app import pipeline_chain
-    from app.api.pipeline import _is_pipeline_running
-    from app.pipeline.senate_pipeline import run_senate_pipeline
-    from app.scheduler import triggered_chain
 
     if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")
@@ -1437,7 +1421,7 @@ def start_pipeline_trigger(db: Session, senator: str | None, fetch_only: bool, *
         refuse_while_chain_runs()
 
         async def senate_only() -> None:
-            await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
+            await senate_pipeline.run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
 
         run_pipeline_in_thread(senate_only, name="pipeline-run", error_label=error_label)
         return
@@ -1486,21 +1470,6 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     let go under writes still running. Its progress is in the logs, and the
     admin data dashboard shows the index rebuilding.
     """
-    from app.background import start_writer
-    from app.database import SessionLocal
-    from app.pipeline import lease
-    from app.pipeline.analyze.document_authority import update_document_authority
-    from app.pipeline.lexical_index import rebuild_index
-    from app.ops_alerts import resolve_ops_alert
-    import time
-
-    from app.pipeline.vector_store import (
-        RebuildFailed,
-        alert_rebuild_failed,
-        rebuild_explore_index,
-        rebuild_underway,
-        recalibrate_ranking,
-    )
 
     # One at a time: a second, while the first is queued or running, would
     # only be refused its lease in the background after a 202. A rebuild of
@@ -1531,7 +1500,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
 
     def _reembed() -> None:
         # A lease, so a reset or an explore ingest in another process sees
-        # it too; start_writer registers it for this process's data reset.
+        # it too; background.start_writer registers it for this process's data reset.
         # Underway as a rebuild once it holds the lease (not while it asks:
         # refused, it rebuilds nothing, and a start mustn't have left an
         # incomplete index to it), keyword and authority passes included:
@@ -1542,34 +1511,34 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         with lease.job(lease.EXPLORE, who="Explore re-embed") as held:
             if not held:
                 return  # logged as a skip by lease.job
-            with rebuild_underway():
+            with vector_store.rebuild_underway():
                 _reembed_held()
 
     def _reembed_held() -> None:
         try:
             # Waiting out a top-up, or a rebuild begun since it was asked
             # for — which did this work already (None), so it isn't redone.
-            count = rebuild_explore_index(SessionLocal, wait=True, unless_rebuilt_since=asked)
+            count = vector_store.rebuild_explore_index(database.SessionLocal, wait=True, unless_rebuilt_since=asked)
         except Exception as error:
-            if isinstance(error, RebuildFailed):  # the index is gone
+            if isinstance(error, vector_store.RebuildFailed):  # the index is gone
                 logger.exception("Explore re-embed failed — search's vector index is not ready until a "
                                  "rebuild completes (the next Explore run or start retries it)")
-                alert_rebuild_failed("admin re-embed", error)
+                vector_store.alert_rebuild_failed("admin re-embed", error)
             else:  # before the swap: the index is as it was
                 logger.exception("Explore re-embed not done — the index is unchanged")
             return
-        resolve_ops_alert("explore-index-rebuild")  # whole again
+        ops_alerts.resolve_ops_alert("explore-index-rebuild")  # whole again
         try:
             # Not _write_model_version: that records the classification
             # model's vectors as current, which this doesn't touch.
-            db = SessionLocal()
+            db = database.SessionLocal()
             try:
-                indexed = rebuild_index(db)
-                authority = update_document_authority(db)
+                indexed = lexical_index.rebuild_index(db)
+                authority = document_authority.update_document_authority(db)
             finally:
                 db.close()
             # Last, as in an Explore run: it measures the finished indexes.
-            recalibrate_ranking(SessionLocal)
+            vector_store.recalibrate_ranking(database.SessionLocal)
             logger.info("Explore re-embed complete: %s embedded, %d keyword-indexed, authority %s",
                         "none newly" if count is None else count, indexed, authority)
         except Exception:
@@ -1583,7 +1552,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
             _reembed_slot.release()
 
     try:
-        start_writer(_job, name="explore-reembed")
+        background.start_writer(_job, name="explore-reembed")
     except BaseException:
         _reembed_slot.release()
         raise
@@ -1614,28 +1583,25 @@ def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     instead of a silent skip. A plain def, since both checks are blocking
     database reads: FastAPI runs it on the threadpool, off the event loop.
     """
-    from app.models import HousePipelineRun
-    from app.pipeline import lease
-    from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines, waits_for
-    from app.pipeline.house_pipeline import run_house_pipeline
-    from app.pipeline.run_tracker import run_in_progress
 
     refuse_while_chain_runs()
-    if run_in_progress(db, HousePipelineRun):
+    if run_tracker.run_in_progress(db, HousePipelineRun):
         raise HTTPException(status_code=409, detail="House pipeline is already running")
     holder = lease.holder(db, lease.DISTRICT_LINES)
-    if holder is not None and not waits_for(holder):
+    if holder is not None and not district_pvi.waits_for(holder):
         raise HTTPException(
             status_code=409, detail=f"{lease.refusal_text(lease.REFUSED_HELD, who=holder)}; it holds the district lines",
         )
 
     async def _run():
-        return await run_house_on_sitting_lines(run_house_pipeline)
+        # Through the modules, as #791 does: a test patching
+        # house_pipeline.run_house_pipeline must reach the call.
+        return await district_pvi.run_house_on_sitting_lines(house_pipeline.run_house_pipeline)
 
     run_pipeline_in_thread(
         _run, name="house-pipeline-run", error_label="House pipeline run failed",
     )
-    if waits_for(holder):
+    if district_pvi.waits_for(holder):
         return {"message": f"House pipeline triggered — it starts when the {holder} holding the district lines finishes"}
     return {"message": "House pipeline triggered"}
 
@@ -1652,10 +1618,8 @@ async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
     Senate run marks it stale within about two hours of its last beat.
     Only the row checked is cleared (a run starting meanwhile keeps its own).
     """
-    from app.models import PipelineRun
-    from app.pipeline.run_tracker import senate_run_state
 
-    row_id, _running, clearable = senate_run_state(db)
+    row_id, _running, clearable = run_tracker.senate_run_state(db)
     if row_id is None:
         return {"cleared": 0, "message": "No stuck runs found"}
     if not clearable:
@@ -1684,10 +1648,8 @@ async def admin_clear_stuck_house(db: Session = Depends(get_db)):
     Use when the in-memory flag says idle but the DB record still shows running
     (e.g. after a container restart mid-run).
     """
-    from app.models import HousePipelineRun
-    from app.pipeline.house_pipeline import is_house_pipeline_running
 
-    return _clear_stuck_runs(db, HousePipelineRun, is_house_pipeline_running, "House")
+    return _clear_stuck_runs(db, HousePipelineRun, house_pipeline.is_house_pipeline_running, "House")
 
 
 @router.post("/pipeline/clear-stuck-stock-trades", dependencies=[Depends(require_admin)])
@@ -1697,10 +1659,8 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
     Use when the in-memory flag says idle but the DB record still shows
     running (e.g. after a container restart mid-run).
     """
-    from app.models import StockTradesPipelineRun
-    from app.pipeline.stock_pipeline import is_stock_pipeline_running
 
-    return _clear_stuck_runs(db, StockTradesPipelineRun, is_stock_pipeline_running, "Stock trades")
+    return _clear_stuck_runs(db, StockTradesPipelineRun, stock_pipeline.is_stock_pipeline_running, "Stock trades")
 
 
 @router.post("/pipeline/trigger-supplementary", dependencies=[Depends(require_admin)])
@@ -1710,11 +1670,10 @@ async def admin_trigger_supplementary_pipeline():
     Refused while a pipeline chain is running, like the house trigger above;
     otherwise the pipeline's own run lock refuses a duplicate.
     """
-    from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
 
     refuse_while_chain_runs()
     run_pipeline_in_thread(
-        run_supplementary_pipeline,
+        supplementary_pipeline.run_supplementary_pipeline,
         name="supplementary-pipeline-run",
         error_label="Supplementary pipeline run failed",
     )
@@ -1728,10 +1687,8 @@ async def admin_clear_stuck_supplementary(db: Session = Depends(get_db)):
     Use when the in-memory flag says idle but the DB record still shows
     running (e.g. after a container restart mid-run).
     """
-    from app.models import SupplementaryPipelineRun
-    from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
 
-    return _clear_stuck_runs(db, SupplementaryPipelineRun, is_supplementary_pipeline_running, "Supplementary")
+    return _clear_stuck_runs(db, SupplementaryPipelineRun, supplementary_pipeline.is_supplementary_pipeline_running, "Supplementary")
 
 
 @router.post("/pipeline/trigger-election", dependencies=[Depends(require_admin)])
@@ -1742,11 +1699,10 @@ async def admin_trigger_election_pipeline():
     Refused while a pipeline chain is running, like the house trigger above;
     otherwise the pipeline's own run lock refuses a duplicate.
     """
-    from app.pipeline.election_pipeline import run_election_pipeline
 
     refuse_while_chain_runs()
     run_pipeline_in_thread(
-        run_election_pipeline,
+        election_pipeline.run_election_pipeline,
         name="election-pipeline-run",
         error_label="Election pipeline run failed",
     )
@@ -1760,10 +1716,8 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     Use when the in-memory flag says idle but the DB record still shows
     running (e.g. after a container restart mid-run).
     """
-    from app.models import ElectionPipelineRun
-    from app.pipeline.election_pipeline import is_election_pipeline_running
 
-    return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running, "Election")
+    return _clear_stuck_runs(db, ElectionPipelineRun, election_pipeline.is_election_pipeline_running, "Election")
 
 
 def _explore_running(db: Session) -> bool:
@@ -1771,7 +1725,6 @@ def _explore_running(db: Session) -> bool:
     Unreadable counts as running: a deploy waits a poll rather than kill
     one mid-top-up, which is silent. A read that fails every time is not —
     each deferred poll logs why — and FORCE_DEPLOY=1 overrides it."""
-    from app.pipeline import lease
 
     try:
         return lease.holder(db, lease.EXPLORE) is not None
@@ -1781,13 +1734,11 @@ def _explore_running(db: Session) -> bool:
 
 
 def _data_reset_running(db: Session) -> bool:
-    from app.pipeline import lease
-
     return lease.held(db, lease.DATA_RESET)
 
 
 def _reset_holding_every_writer() -> dict:
-    """reset_all_data, with every writer held off from before it starts to
+    """database.reset_all_data, with every writer held off from before it starts to
     after it ends. One synchronous function, run in a worker thread: the
     request awaiting it can be cancelled (a client that disconnects), the
     thread can't, so the holds are released only when the wipe is done.
@@ -1800,27 +1751,23 @@ def _reset_holding_every_writer() -> dict:
       theirs, so between a pipeline or refresh and the reset one always sees
       the other.
 
-    Raises WritersBusy, naming them, if anything is writing already.
+    Raises background.WritersBusy, naming them, if anything is writing already.
     """
-    from app.background import WritersBusy, exclusive
-    from app.database import SessionLocal, reset_all_data
-    from app.pipeline import lease
-    from app.pipeline.run_tracker import run_in_progress, run_tables
 
-    with exclusive("Another data reset"):
-        db = SessionLocal()
+    with background.exclusive("Another data reset"):
+        db = database.SessionLocal()
         try:
             with lease.holding(db, lease.DATA_RESET) as token:
                 if token is None:
-                    raise WritersBusy(["Another data reset"])
-                busy = [f"{label} run" for label, model in run_tables().items() if run_in_progress(db, model)]
+                    raise background.WritersBusy(["Another data reset"])
+                busy = [f"{label} run" for label, model in run_tracker.run_tables().items() if run_tracker.run_in_progress(db, model)]
                 busy += [
                     who for who in (lease.holder(db, tier) for tier in lease.TIERS if tier != lease.DATA_RESET)
                     if who is not None and who not in busy
                 ]
                 if busy:
-                    raise WritersBusy(busy)
-                return reset_all_data()
+                    raise background.WritersBusy(busy)
+                return database.reset_all_data()
         finally:
             db.close()
 
@@ -1837,18 +1784,16 @@ async def admin_reset_data():
     Every writer is held off for the whole wipe (_reset_holding_every_writer);
     anything already writing refuses the reset (409, naming it).
     """
-    from app.background import WritersBusy
 
     try:
         summary = await asyncio.to_thread(_reset_holding_every_writer)
-    except WritersBusy as busy:
+    except background.WritersBusy as busy:
         raise HTTPException(status_code=409, detail=f"Cannot reset while running: {busy}") from None
     # Every API process holds a bills collection built from what was just
     # wiped: tell them (bill_service records the change for other processes).
     # A database write in the pipeline process: off the event loop.
-    from app.services.bill_service import warm_bill_collection_cache
 
-    await asyncio.to_thread(warm_bill_collection_cache)
+    await asyncio.to_thread(bill_service.warm_bill_collection_cache)
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",
@@ -1936,7 +1881,6 @@ async def admin_action_metrics(
     """
     query = db.query(ApiCache).filter(ApiCache.tier == "action-metrics")
     if since_hours is not None:
-        from datetime import timedelta
         query = query.filter(ApiCache.cached_at >= utcnow() - timedelta(hours=since_hours))
     rows = query.order_by(ApiCache.cached_at.desc()).limit(limit).all()
 
@@ -1993,7 +1937,6 @@ async def admin_action_metrics(
 @router.get("/classification/health", dependencies=[Depends(require_admin)])
 async def admin_classification_health(db: Session = Depends(get_db)):
     """Classification system health metrics for monitoring adaptive learning."""
-    from app.pipeline.analyze.bill_learning import get_health_metrics
     return get_health_metrics(db)
 
 
@@ -2008,7 +1951,6 @@ async def get_score_calibration(entity_type: str = "senator"):
     Query params:
       entity_type: ``senator`` (default) or ``representative``
     """
-    from app.pipeline.analyze.score_calibration import generate_calibration_report
 
     if entity_type not in ("senator", "representative"):
         raise HTTPException(

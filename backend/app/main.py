@@ -277,12 +277,11 @@ def _start_pipeline_side_startup_jobs() -> None:
     # other, so the two never contend for SQLite's write lock.
     import time
 
-    from app.database import SessionLocal as _rescore_session
     from app.pipeline.fetch.district_pvi import REFRESH_POLL_S, REFRESH_WAIT_S
 
     deadline = time.monotonic() + REFRESH_WAIT_S
     start_writer(
-        lambda: _run_startup_rescore(_rescore_session, deadline=deadline, poll_s=REFRESH_POLL_S),
+        lambda: _run_startup_rescore(SessionLocal, deadline=deadline, poll_s=REFRESH_POLL_S),
         name="startup-rescore",
     )
 
@@ -328,13 +327,12 @@ def _take_pipeline_role_lock() -> int:
     return fd
 
 
-PROCESS_STARTED_AT: str | None = None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global PROCESS_STARTED_AT
-    PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
+    # This process's start, for the admin dashboard's uptime (admin_dashboard
+    # reads it from app.state; a module global needed admin.py to import
+    # app.main, which imports admin.py).
+    app.state.process_started_at = datetime.now(timezone.utc).isoformat()
     role = settings.PROCESS_ROLE
     serves_reads = role in ("all", "api")
     runs_pipelines = role in ("all", "worker")
@@ -354,7 +352,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from app.pipeline.fetch.district_pvi import lines_congress
         lines_congress()
     except Exception:
-        logging.getLogger(__name__).exception("District PVI table load failed (non-fatal)")
+        logger.exception("District PVI table load failed (non-fatal)")
 
     if runs_pipelines:
         # Only the process that runs pipelines may sweep their rows: the

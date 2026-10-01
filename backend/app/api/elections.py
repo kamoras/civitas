@@ -218,8 +218,8 @@ def _iso_utc(dt) -> str | None:
     """Serialize a stored naive-UTC datetime with an explicit Z suffix —
     an offset-less ISO string gets parsed as LOCAL time by JS Date
     (2026-07 review: coverage timestamps displayed shifted by the
-    viewer's UTC offset). Same reasoning as main.py's PROCESS_STARTED_AT
-    keeping its explicit +00:00 in an exposed field."""
+    viewer's UTC offset). Same reasoning as main.py's process start time
+    (app.state.process_started_at) keeping its explicit +00:00 in an exposed field."""
     if dt is None:
         return None
     iso = dt.isoformat()
