@@ -473,6 +473,21 @@ _PUBLISHING_PATHS = {
     "pipeline/analyze/congress_bluesky.py",
     "pipeline/analyze/election_bluesky.py",
 }
+# The Action Center's hourly run: news clustering, the claim layer that
+# quotes sources, the developing-issue drafts and its engagement. It reads
+# scores and records and writes issues, and keeps nothing in the learning
+# store, the analysis cache or the reference corpus, which are all the
+# fingerprint protects. Hashed code imports none of these (tested), so an
+# edit here can't move a classification or a score, but each one used to
+# make the next nightly run cold.
+_ACTION_CENTER_PATHS = {
+    "pipeline/analyze/action_center.py",
+    "pipeline/analyze/action_thresholds.py",
+    "pipeline/analyze/bluesky_engagement.py",
+    "pipeline/analyze/claims.py",
+    "pipeline/analyze/early_signal.py",
+    "pipeline/analyze/post_composer.py",
+}
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",
     "pipeline/filer_matching.py",
@@ -493,6 +508,7 @@ _NOT_ANALYSIS_PATHS = {
     "pipeline/analyze/prompts.py",
     *_COORDINATION_PATHS,
     *_PUBLISHING_PATHS,
+    *_ACTION_CENTER_PATHS,
 }
 
 # Top-level names, per hashed file, that are display settings rather than
