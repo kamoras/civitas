@@ -262,13 +262,15 @@ class TestMeasurementLoop:
         monkeypatch.setattr(
             vector_store, "search_explore_documents", lambda *a, **k: None)
         asked = []
-        harness.measure = lambda session, probes, configs=None: (
+        # `harness` is module-scoped and calibrate_ranking a module: both
+        # outlive this test, so every replacement goes through monkeypatch.
+        monkeypatch.setattr(harness, "measure", lambda session, probes, configs=None: (
             asked.append(configs) or {"ALL": {"keyword": [1] * len(probes)}}
-        )
-        harness.build_probes = lambda d, df, total: [
+        ))
+        monkeypatch.setattr(harness, "build_probes", lambda d, df, total: [
             {"style": "title", "doc_id": x["id"], "query": x["title"]} for x in d
-        ]
-        calibrate_ranking._harness = lambda: harness
+        ])
+        monkeypatch.setattr(calibrate_ranking, "_harness", lambda: harness)
 
         calibrate_ranking.compute_calibration(db, samples=len(docs))
 

@@ -1,6 +1,7 @@
 # Research and calibration scripts only (backend/scripts/research_*.py,
 # calibrate_commemorative.py, audit_funding_components.py,
-# evaluate_embedding_models.py) — never installed into the backend image.
+# evaluate_embedding_models.py, frozen_clock_plugin.py) — never installed
+# into the backend image.
 #
 #     pip install -r requirements.txt -r scripts/requirements-research.txt
 #
@@ -8,7 +9,8 @@
 # install together; pinned exactly, like requirements.txt. Direct needs:
 # pandas (+ openpyxl, which its read_excel loads for .xlsx), statsmodels,
 # rdata and pyreadr (the R-format replication datasets), onnxruntime
-# (evaluate_embedding_models.py's ONNX comparison). The rest is
+# (evaluate_embedding_models.py's ONNX comparison), time-machine
+# (frozen_clock_plugin.py, the test suite run on another date). The rest is
 # what those pull in beyond requirements.txt.
 et-xmlfile==2.0.0
 flatbuffers==25.12.19
@@ -24,5 +26,6 @@ python-dateutil==2.9.0.post0
 rdata==1.1.0
 six==1.17.0
 statsmodels==0.15.0
+time-machine==3.5.1
 wrapt==2.5.0
 xarray==2026.7.0

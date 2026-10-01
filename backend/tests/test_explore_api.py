@@ -466,7 +466,7 @@ class TestEndings:
             refused = await _refused(other, db_session, _reader("198.51.100.4"))
         assert refused.status_code == 503 and 25 <= int(refused.headers["Retry-After"]) <= 30
 
-    async def test_an_unusable_text_answers_at_once_even_while_the_llm_is_busy(self, db_session):
+    async def test_an_unusable_text_answers_at_once_even_while_the_llm_is_busy(self, db_session, monkeypatch):
         # Its answer is known: no need to wait on the LLM to hear it.
         import time as _time
 
@@ -478,7 +478,7 @@ class TestEndings:
         patches, _ = _llm(_garbled)
         with patches[0], patches[1], patches[2]:
             await _events(doc, db_session)
-        explore_summary._llm_busy_until = _time.monotonic() + 30
+        monkeypatch.setattr(explore_summary, "_llm_busy_until", _time.monotonic() + 30)
         with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None):
             assert await _events(doc, db_session) == [_NONE]
 

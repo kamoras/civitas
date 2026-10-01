@@ -24,6 +24,9 @@ os.environ["THROTTLE_DB_PATH"] = os.path.join(os.environ["CIVITAS_RAM_DIR"], "ci
 # store's path is read once, at import: set before anything imports it.
 os.environ["VECTOR_DB_PATH"] = os.path.join(tempfile.mkdtemp(prefix="civitas-tests-vectors-"), "vectors.db")
 
+import importlib
+import importlib.abc
+import importlib.machinery
 import pathlib
 import sys
 
@@ -34,6 +37,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.visits import _visit_queue
 from app.database import Base, VisitsBase
+from app.time_utils import congress_in_session as _REAL_CONGRESS_IN_SESSION
+from app.time_utils import utcnow as _REAL_UTCNOW
 
 
 @pytest.fixture()
@@ -422,6 +427,70 @@ def bluesky_configured(monkeypatch, bluesky_outbox):
     return bluesky_outbox
 
 
+# The Congress the real clock puts in office, as every test sees it.
+# settings.CURRENT_CONGRESS defaults to the Congress in office when the
+# process starts, and app.config.advance_current_congress (every
+# start_writer/writing() job, the API's liveness loop, the staleness
+# alert) moves it to the one in office now: both read the real clock
+# (app.time_utils.congress_in_session), so every fixture written for the
+# 119th (2025-26 bills, roll calls, district lines) would change meaning at
+# noon ET on 2027-01-03, and again every two years after.
+TEST_CONGRESS = 119
+
+# The clock congress_in_session() reads: app.time_utils.utcnow, and every
+# module global the real utcnow reads in turn (today `datetime` and
+# `timezone` — a test can freeze the clock by swapping
+# app.time_utils.datetime for a subclass whose now() is fixed, as
+# test_explore_comment_submission does). Taken from the function's own
+# bytecode, so a change to how utcnow reads the time is followed here.
+_CLOCK_NAMES = ("utcnow",) + tuple(
+    name for name in _REAL_UTCNOW.__code__.co_names if name in vars(sys.modules[_REAL_UTCNOW.__module__]))
+_REAL_CLOCK = {name: vars(sys.modules[_REAL_UTCNOW.__module__])[name] for name in _CLOCK_NAMES}
+
+
+def _clock_patched(time_utils) -> bool:
+    """Whether the test replaced any part of the clock congress_in_session reads."""
+    current = vars(time_utils)
+    return any(current.get(name) is not real for name, real in _REAL_CLOCK.items())
+
+
+@pytest.fixture(autouse=True)
+def _sitting_congress_pinned(monkeypatch):
+    """Every test runs as if the 119th Congress were in office.
+
+    - The process's value (settings.CURRENT_CONGRESS, computed from the
+      real clock at import) starts each test at TEST_CONGRESS. A plain
+      assignment, as a job advancing it makes — never an environment pin
+      (settings.current_congress_pinned stays False) — undone at teardown.
+    - ``congress_in_session()`` with no ``now`` answers TEST_CONGRESS while
+      the test leaves the clock alone (``_clock_patched``), so a job a test
+      starts can't advance it to the real clock's, and a ``Settings()``
+      built in a test starts there too. Once the test sets a clock
+      (``freeze_utcnow``, patching ``app.time_utils.utcnow``, or patching
+      a name the real ``utcnow`` reads, such as ``app.time_utils.datetime``)
+      it reads that clock, as in production; an explicit ``now`` is always
+      honoured.
+
+    A test about another Congress sets it (``monkeypatch.setattr(settings,
+    "CURRENT_CONGRESS", N)``) or freezes the clock in it."""
+    from app import time_utils
+    from app.config import settings
+
+    real = _REAL_CONGRESS_IN_SESSION
+
+    def congress_in_session(now=None):
+        if now is None and not _clock_patched(time_utils):
+            return TEST_CONGRESS
+        return real(now)
+
+    for name, module in list(sys.modules.items()):
+        if not name.startswith(("app.", "tests.", "test_")):
+            continue
+        if (getattr(module, "__dict__", None) or {}).get("congress_in_session") is real:
+            monkeypatch.setattr(module, "congress_in_session", congress_in_session)
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", TEST_CONGRESS)
+
+
 @pytest.fixture(autouse=True)
 def _no_district_lines_under_recheck(monkeypatch):
     """Every test starts with no district-lines holder under re-check
@@ -582,9 +651,11 @@ os.mknod = _audited(os.mknod, "os.mknod")
 
 
 # Modules whose module-level constants name a file on /data (a "/data/…"
-# string or Path, or a tuple of them). Imported here so the sweep in
-# redirect_data_volume sees them before any test runs; the audit hook
-# catches one this list misses, as a read or write of /data.
+# string or Path, or a tuple of them), loaded before the run-wide redirect
+# below so its sweep moves them before any test module is collected. An
+# app module imported later is redirected as it loads (_RedirectOnImport),
+# so this list need not be complete; the audit hook catches a /data path
+# either one misses, as a read or write of /data.
 _DATA_PATH_MODULES = (
     "app.election_calendar",
     "app.pipeline.analyze.population_reference",
@@ -616,42 +687,129 @@ def _moved(value, data: pathlib.Path):
 # (module, name) -> the /data path it held before any redirect moved it.
 _DATA_PATH_ORIGINALS: dict[tuple[str, str], object] = {}
 
+from app import atomic_write as _atomic_write  # noqa: E402
+
+_REAL_RUNTIME_DATA_PATH = _atomic_write.runtime_data_path
+
+
+class _Redirects:
+    """The redirects in force, outermost first, as (monkeypatch, data,
+    runtime_data_path): the run-wide one, then any a wider fixture made,
+    then the test's own. Each redirect_data_volume adds itself with its own
+    monkeypatch, so undoing that monkeypatch takes it off again."""
+
+    active: tuple = ()
+
+
+def _redirect_module(monkeypatch, name: str, module, data: pathlib.Path, runtime_data_path) -> None:
+    """Move one app module's /data constants under `data`, and point a
+    runtime_data_path it bound by name at its import
+    (``from app.atomic_write import runtime_data_path``) at this redirect's."""
+    for attr, value in list(vars(module).items()):
+        if attr == "runtime_data_path" and (
+                value is _REAL_RUNTIME_DATA_PATH or getattr(value, "_redirects_data_volume", False)):
+            monkeypatch.setattr(module, attr, runtime_data_path)
+            continue
+        # The value as the module defined it: the run-wide redirect has
+        # already moved the ones found at import.
+        value = _DATA_PATH_ORIGINALS.get((name, attr), value)
+        if _data_literal(value):
+            moved = _moved(value, data)
+        elif isinstance(value, tuple) and value and any(map(_data_literal, value)) and all(
+                isinstance(v, (str, pathlib.PurePath)) for v in value):
+            moved = tuple(_moved(v, data) if _data_literal(v) else v for v in value)
+        else:
+            continue
+        _DATA_PATH_ORIGINALS[(name, attr)] = value
+        monkeypatch.setattr(module, attr, moved)
+
+
+def _redirecting_runtime_data_path(data: pathlib.Path):
+    def runtime_data_path(name: str) -> str:
+        return str(data / name)
+
+    runtime_data_path._redirects_data_volume = True
+    return runtime_data_path
+
 
 def redirect_data_volume(monkeypatch, data) -> None:
     """Point the runtime data paths (what production keeps on /data) into
     the directory `data`: runtime_data_path, and every module-level
-    constant of a loaded app module that names a path on /data (a string,
-    a Path, or a tuple of them), each moved to the same name under `data`.
+    constant of an app module that names a path on /data (a string, a
+    Path, or a tuple of them), each moved to the same name under `data` —
+    for the modules loaded now, and (through _RedirectOnImport) for any
+    imported later while `monkeypatch` is still in force.
     A fixture with a wider scope than a test — one that starts the real
     app's lifespan, whose scheduler writes its heartbeat — calls this with
     its own MonkeyPatch."""
     data = pathlib.Path(data)
     data.mkdir(parents=True, exist_ok=True)
-
-    def runtime_data_path(name: str) -> str:
-        return str(data / name)
-
-    monkeypatch.setattr("app.atomic_write.runtime_data_path", runtime_data_path)
+    runtime_data_path = _redirecting_runtime_data_path(data)
     for name, module in list(sys.modules.items()):
-        if not (name == "app" or name.startswith("app.")) or module is None:
+        if (name == "app" or name.startswith("app.")) and module is not None:
+            _redirect_module(monkeypatch, name, module, data, runtime_data_path)
+    monkeypatch.setattr(_Redirects, "active", _Redirects.active + ((monkeypatch, data, runtime_data_path),))
+
+
+# Names a module binds at its import (``from app.time_utils import utcnow``)
+# that a test may have replaced at their source by then: (source module,
+# name). A module first imported during the test binds the replacement,
+# and nothing undoes that at teardown — every later test would read a
+# frozen clock, or a pin of a test long gone.
+_BOUND_AT_IMPORT = (("app.time_utils", "utcnow"), ("app.time_utils", "congress_in_session"),
+                    ("app.election_phase", "election_today"))
+
+
+def _redirect_new_module(module) -> None:
+    """What an app module imported now needs from the redirects in force
+    (_Redirects.active): each one's /data redirect, in order, each with its
+    own monkeypatch; and a replaced clock it bound by name, set through the
+    innermost monkeypatch so it is undone with the test that replaced it."""
+    active = _Redirects.active
+    for monkeypatch, data, runtime_data_path in active:
+        _redirect_module(monkeypatch, module.__name__, module, data, runtime_data_path)
+    if not active:
+        return
+    innermost = active[-1][0]
+    for source_name, name in _BOUND_AT_IMPORT:
+        source = sys.modules.get(source_name)
+        if source is None or source is module or name not in vars(module):
             continue
-        for attr, value in list(vars(module).items()):
-            # The value as the module defined it: the run-wide redirect has
-            # already moved the ones found at import.
-            value = _DATA_PATH_ORIGINALS.get((name, attr), value)
-            if _data_literal(value):
-                moved = _moved(value, data)
-            elif isinstance(value, tuple) and value and any(map(_data_literal, value)) and all(
-                    isinstance(v, (str, pathlib.PurePath)) for v in value):
-                moved = tuple(_moved(v, data) if _data_literal(v) else v for v in value)
-            else:
+        bound, real = vars(module)[name], _REAL_BOUND_AT_IMPORT[(source_name, name)]
+        if bound is vars(source).get(name) and bound is not real:
+            setattr(module, name, real)  # what teardown restores
+            innermost.setattr(module, name, bound)
+
+
+class _RedirectingLoader(importlib.machinery.SourceFileLoader):
+    def exec_module(self, module):
+        super().exec_module(module)
+        _redirect_new_module(module)
+
+
+class _RedirectOnImport(importlib.abc.MetaPathFinder):
+    """Redirect an app module's /data paths as it is imported. One first
+    imported inside a test (app.pipeline.vector_store, which
+    invalidate_stale_analysis imports when a pipeline run starts) would
+    otherwise keep its /data path for that test: test_house_pipeline.py run
+    on its own failed on /data/classification_model_version, while the full
+    suite had imported the module earlier. Importing every such module up
+    front instead pulled torch into every run (conftest load 1s -> 9s)."""
+
+    def find_spec(self, fullname, path, target=None):
+        if not (fullname == "app" or fullname.startswith("app.")):
+            return None
+        for finder in sys.meta_path:
+            if finder is self or not hasattr(finder, "find_spec"):
                 continue
-            _DATA_PATH_ORIGINALS[(name, attr)] = value
-            monkeypatch.setattr(module, attr, moved)
-    # Bound by name at their import.
-    for module in ("app.pipeline.fetch.state_candidate_sources", "app.pipeline.fetch.state_election_dates"):
-        if module in sys.modules:
-            monkeypatch.setattr(f"{module}.runtime_data_path", runtime_data_path)
+            spec = finder.find_spec(fullname, path, target)
+            if spec is not None:
+                break
+        else:
+            return None
+        if type(spec.loader) is importlib.machinery.SourceFileLoader:
+            spec.loader = _RedirectingLoader(spec.loader.name, spec.loader.path)
+        return spec
 
 
 def use_app_database(monkeypatch, directory):
@@ -693,6 +851,11 @@ def use_app_database(monkeypatch, directory):
     monkeypatch.setitem(database.VisitsSessionLocal.kw, "bind", engines["visits_engine"])
     return list(engines.values())
 
+
+# Captured before any test can replace them.
+_REAL_BOUND_AT_IMPORT = {(source, name): getattr(importlib.import_module(source), name)
+                         for source, name in _BOUND_AT_IMPORT}
+sys.meta_path.insert(0, _RedirectOnImport())
 
 # For the whole run, from here: a test module reading a data file as it is
 # collected (test_election_calendar's senate_classes() at import) reads the

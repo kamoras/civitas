@@ -18,7 +18,9 @@ class TestDefaultCurrentCongress:
     the start of each pipeline job (scoring_congress)."""
 
     def test_is_the_congress_in_office(self):
-        assert _default_current_congress() == congress_in_session()
+        with patch("app.time_utils.utcnow", return_value=datetime(2027, 2, 1)):
+            assert _default_current_congress() == congress_in_session() == 120
+            assert config.Settings().CURRENT_CONGRESS == 120
 
     def test_follows_the_noon_et_hand_over_like_the_district_lines(self):
         """A process started between midnight and noon ET on Jan 3 used to
@@ -61,6 +63,38 @@ class TestCongressInSession:
     def test_accepts_aware_datetimes(self):
         assert congress_in_session(datetime(2027, 1, 3, 17, 0, tzinfo=timezone.utc)) == 120
 
+    def test_tests_run_on_the_pinned_congress_until_they_set_a_clock(self):
+        """conftest._sitting_congress_pinned: on the real clock every test
+        sees TEST_CONGRESS (process value, a job's advance, a new
+        Settings()); a clock the test sets is read as production reads it."""
+        from tests.conftest import TEST_CONGRESS
+
+        assert config.settings.CURRENT_CONGRESS == congress_in_session() == TEST_CONGRESS
+        assert advance_current_congress() == config.Settings().CURRENT_CONGRESS == TEST_CONGRESS
+        with patch("app.time_utils.utcnow", return_value=datetime(2031, 6, 1)):
+            assert congress_in_session() == 122
+            assert advance_current_congress() == 122
+
+    def test_a_clock_patched_through_datetime_is_read_too(self, monkeypatch):
+        """A test may set the clock without replacing utcnow: swapping
+        app.time_utils.datetime for a subclass with a fixed now(), as
+        test_explore_comment_submission does. utcnow() then reads 2027, and
+        the Congress must follow it rather than stay pinned at 119."""
+        from app import time_utils
+
+        class _Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                utc = datetime(2027, 6, 1, tzinfo=timezone.utc)
+                return utc.astimezone(tz) if tz else utc.replace(tzinfo=None)
+
+        monkeypatch.setattr(time_utils, "datetime", _Clock)
+        assert time_utils.utcnow().year == 2027
+        assert congress_in_session() == 120
+        with scoring_congress() as held:
+            assert held == config.settings.CURRENT_CONGRESS == 120
+        assert config.Settings().CURRENT_CONGRESS == 120
+
     def test_defaults_to_the_clock(self):
         with patch("app.time_utils.utcnow", return_value=datetime(2029, 1, 3, 17, 0)):
             assert congress_in_session() == 121
@@ -72,8 +106,11 @@ class TestScoringCongress:
     job starts (no restart), held for the job, frozen by an operator pin."""
 
     def _started_on(self, monkeypatch, when):
-        with patch("app.time_utils.utcnow", return_value=when):
-            s = config.Settings()
+        """A process started at ``when``, with the clock left there: a job
+        the test starts reads it (advance_current_congress), never the real
+        one, until the test moves it."""
+        monkeypatch.setattr("app.time_utils.utcnow", lambda: when)
+        s = config.Settings()
         monkeypatch.setattr(config, "settings", s)
         return s
 
@@ -138,9 +175,8 @@ class TestScoringCongress:
         """Pydantic adds an assigned field to model_fields_set; anything
         that sets CURRENT_CONGRESS after startup must not stop it
         advancing for the rest of the process."""
-        s = config.Settings()
+        s = self._started_on(monkeypatch, datetime(2026, 6, 1))
         s.CURRENT_CONGRESS = 119
         assert "CURRENT_CONGRESS" in s.model_fields_set and not s.current_congress_pinned
-        monkeypatch.setattr(config, "settings", s)
         with patch("app.time_utils.utcnow", return_value=datetime(2027, 6, 1)):
             assert advance_current_congress() == 120

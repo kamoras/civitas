@@ -68,6 +68,14 @@ class TestModuleLevelWrappers:
     """clear_reference_cache()/_load_reference_corpus() preserve the exact
     pre-refactor public API and delegate to the module-level cache instance."""
 
+    @pytest.fixture(autouse=True)
+    def _own_singleton(self, monkeypatch):
+        """A fresh module-level cache for each test, the process's own put
+        back at teardown: these tests fill it with fake vectors."""
+        from app.pipeline.analyze import bill_learning
+
+        monkeypatch.setattr(bill_learning, "_reference_corpus", _ReferenceCorpusCache())
+
     def test_clear_reference_cache_clears_module_singleton(self):
         from app.pipeline.analyze import bill_learning
         bill_learning._reference_corpus.embeddings = np.array([[1.0]])
