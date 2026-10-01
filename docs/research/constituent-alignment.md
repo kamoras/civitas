@@ -547,6 +547,30 @@ more from the flank. Collins (103 of 414), Murkowski (77 of 407),
 Fitzpatrick (91 of 298) and Fetterman (60 of 406) remain the heaviest
 breakers, as before; Thune's reconsider switches still don't count.
 
+### 13. The seat's expected position: partisan lean, not voters' self-placement (tested 2026-10)
+
+Position congruence compares a member's roll-call position with what a
+same-party member of a seat with that partisan lean typically holds. Partisan
+lean measures how a seat votes for president, not how liberal or conservative
+its voters say they are, and a state can sit further left or right than its
+presidential vote suggests. So the obvious alternative was tested: the state's
+mean self-placed ideology (Cooperative Election Study 2024, weighted,
+`ideo5`), as the expectation for senators.
+
+Leave-one-out error of per-party fits of the 119th Senate's Nokken-Poole
+positions:
+
+| Party | Partisan lean | Voters' ideology | Both |
+|---|---|---|---|
+| D (n=47) | 0.119 | 0.134 | 0.117 |
+| R (n=57) | 0.196 | 0.197 | 0.200 |
+
+Voters' self-placement predicts senators' positions no better than partisan
+lean, and adding it does not help. The limit is not the measure: two senators
+of one party from one state share an electorate, yet the 43 such pairs sit a
+median 0.093 apart and as much as 0.485, so much of where a senator sits is
+the senator, not the seat. Partisan lean stays the expectation.
+
 ## What the evidence does not settle
 
 - **The association fades over time.** Per election, the position coefficient

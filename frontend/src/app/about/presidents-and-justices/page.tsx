@@ -212,6 +212,16 @@ export default function PresidentsAndJusticesChapter() {
           about favoring the president who appointed them. When Oyez lists a justice twice in one
           decision, the vote counts once if the entries agree and is left out if they don&apos;t.
         </P>
+        <P>
+          Two refinements were tested and not adopted. Splitting &ldquo;other presidents&rdquo; into
+          the appointer&apos;s party and the other party: across 20,737 votes, justices sided with
+          other administrations of their appointer&apos;s party no more often than with the other
+          party&apos;s (−1.2 points, not significant), so the loyalty is to the one president, and
+          for four of today&apos;s nine justices no other president of their appointer&apos;s party
+          has served yet. Scoring how often a justice votes against their usual ideological side: in
+          divided decisions that rate tracks closeness to the Court&apos;s center (a −0.77
+          correlation with distance from the median), the same flaw that removed the old measures.
+        </P>
         <More label="Measures we removed">
           <P>
             Until September 2026 justices were scored on consistency and independence from the
