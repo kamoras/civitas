@@ -233,10 +233,11 @@ Each file is hashed as its docstring-stripped AST (`_normalized_source`), so
 editing a comment or docstring does not count as a code change — only code,
 string constants (prototypes, prompts) and thresholds do. A short, tested
 exemption list covers what cannot affect classification or scoring:
-`_NOT_ANALYSIS_PATHS` (the holdings ingest, filer matching, the run-coordination
+`_NOT_ANALYSIS_PATHS` (the holdings and trade ingests, filer matching, the run-coordination
 modules, the election run's orchestration, the LDA bill-name matcher
 `analyze/lobbying_records.py`, the Explore summary prompt `analyze/prompts.py`,
-the modules that word and publish posts) and
+the modules that word and publish posts, the Action Center's hourly run
+(`_ACTION_CENTER_PATHS`), which keeps no learned data) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
 both in `senate_pipeline.py`. This fingerprint is
 compared to the stored hash from the last pipeline run:
@@ -961,8 +962,12 @@ phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
 reports plus the sitting president's OGE Form 278-T filings (PDF, from OGE's
 public presidential disclosure index), matches filer to a known member (the
 president's filings are indexed under the office and need no matching),
-classifies trade industry (reusing the donor-industry embedding classifier),
-and computes disclosure timeliness. Best-effort per phase: one source being
+labels each trade with the industry of the SIC code the SEC assigned its
+issuer (`fetch/sec_tickers.py` — tier-1 structured metadata; the donor
+embedding classifier measured 30% agreement with it on trade names and is
+not used), and computes disclosure timeliness. Every stored trade's industry
+is recomputed each night (`_reclassify_stored_trades`); the SEC being
+unreachable raises rather than reading as "no industry". Best-effort per phase: one source being
 down does not discard the others' rows.
 
 No profit or gain figure is derived for any filer, and none can be: every one

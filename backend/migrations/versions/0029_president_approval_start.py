@@ -4,16 +4,16 @@ approval trend is judged against
 One nullable column, so the previous image runs unchanged against the
 migrated schema.
 
-Revision ID: 0028
-Revises: 0027
+Revision ID: 0029
+Revises: 0028
 Create Date: 2026-10-01
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0028'
-down_revision = '0027'
+revision = '0029'
+down_revision = '0028'
 branch_labels = None
 depends_on = None
 

@@ -168,6 +168,26 @@ class TestNormalizedSource:
                 elif isinstance(node, ast.Import):
                     assert all(a.name != "app.pipeline.analyze.prompts" for a in node.names), py
 
+    def test_stock_pipeline_imports_no_analysis_code(self):
+        """Exempt because trade industry is a lookup of the SEC's own code:
+        importing a classifier, the learning store or config_definitions
+        again would make an edit here able to change a result the hash no
+        longer notices (and would write trade names into the donor store,
+        as it did until 2026-09)."""
+        import ast
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        assert "pipeline/stock_pipeline.py" in senate_pipeline._NOT_ANALYSIS_PATHS
+        modules = {
+            node.module or ""
+            for node in ast.walk(ast.parse((app_dir / "pipeline/stock_pipeline.py").read_text()))
+            if isinstance(node, ast.ImportFrom)
+        }
+        assert not {m for m in modules if ".analyze" in m or ".transform" in m or m.endswith("config_definitions")}
+
     def test_exempt_coordination_modules_import_no_analysis_code(self):
         """Exempt because they classify and score nothing: an import of
         analysis code (or config_definitions, its constants) would mean an
@@ -223,6 +243,37 @@ class TestNormalizedSource:
                         for a in node.names:
                             assert a.name.startswith(("post_", "process_")), (py, a.name)
                     elif node.module == "app.pipeline.analyze":
+                        assert not any(f"app.pipeline.analyze.{a.name}" in modules for a in node.names), (
+                            py, ast.unparse(node))
+
+
+    def test_hashed_code_imports_none_of_the_action_center(self):
+        """The Action Center is exempt because nothing classified or scored
+        reads it. A hashed module importing any part of it would make an
+        Action Center edit a change the hash no longer notices."""
+        import ast
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        assert senate_pipeline._ACTION_CENTER_PATHS <= senate_pipeline._NOT_ANALYSIS_PATHS
+        modules = {
+            "app." + rel.removesuffix(".py").replace("/", ".")
+            for rel in senate_pipeline._ACTION_CENTER_PATHS
+        }
+        hashed = [
+            py for py in [*(app_dir / "pipeline").rglob("*.py"), app_dir / "config_definitions.py"]
+            if "/fetch/" not in str(py)
+            and py.relative_to(app_dir).as_posix() not in senate_pipeline._NOT_ANALYSIS_PATHS
+        ]
+        for py in hashed:
+            for node in ast.walk(ast.parse(py.read_text())):
+                if isinstance(node, ast.Import):
+                    assert not any(a.name in modules for a in node.names), (py, ast.unparse(node))
+                elif isinstance(node, ast.ImportFrom):
+                    assert node.module not in modules, (py, ast.unparse(node))
+                    if node.module == "app.pipeline.analyze":
                         assert not any(f"app.pipeline.analyze.{a.name}" in modules for a in node.names), (
                             py, ast.unparse(node))
 

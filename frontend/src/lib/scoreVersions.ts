@@ -45,6 +45,19 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     ],
   },
   {
+    version: "v6.25",
+    date: "2026-10-01",
+    title:
+      "Legislative Effectiveness: drawing support from the other party is compared within each party",
+    tldr: "Part of Legislative Effectiveness rewards members whose bills attract cosponsors from the other party. Democrats cosponsor across the aisle more readily than Republicans do, in either party's majority, so comparing everyone with one chamber-wide typical member handed Republicans an edge that came from the other party's habits. Each member is now compared with the typical member of their own party. Most members move about 2 points.",
+    changes: [
+      "Why: the median Democrat scored 29 (Senate) and 33 (House) on this component against 62 and 67 for Republicans, while the rest of Legislative Effectiveness was close to even by party.",
+      "The cause was measured, not assumed: in samples of bills from both the 117th Congress (Democratic majority) and the 119th (Republican majority), Republican-sponsored bills drew a larger share of cosponsors from the other party under both majorities. So it is party, not majority status, and comparing by majority status would not have fixed it.",
+      "Now: the median member of each party scores 50 on this component. The give-and-receive bipartisanship figure shown on profiles is unchanged.",
+      "Effect on October 2026 data: the median Senate Democrat moves from 49.0 to 52.7 on Legislative Effectiveness and the median Republican from 53.0 to 51.5; in the House, 50.0 to 51.8 and 55.0 to 51.6. The average member moves about 2 points, at most 6. docs/methodology/member-score/v6.25.md has the measurements.",
+    ],
+  },
+  {
     version: "v6.24",
     date: "2026-09-29",
     title: "Funding Independence: the Senate's small-donor baseline is measured every run",

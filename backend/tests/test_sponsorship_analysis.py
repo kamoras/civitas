@@ -528,3 +528,29 @@ class TestBipartisanship:
         bills, cos, parties = self._cohort()
         with pytest.raises(ValueError):
             compute_bipartisanship_scores(bills, cos, parties, direction="give")
+
+    def test_receive_is_scored_against_the_members_own_party(self):
+        """v6.25: Republican-sponsored bills drew the larger cross-party
+        share in a Democratic and a Republican majority alike (measured on
+        Congress.gov, 117th and 119th), so a pooled median scored the other
+        party's willingness to cosponsor. Here every Republican attracts
+        about twice the cross-party share of the matching Democrat; within
+        their own party, each party's median member scores 0.5."""
+        bills, cos, parties = [], {}, {}
+        for party, other, crosses in (("R", "D", range(3, 13)), ("D", "R", range(1, 11))):
+            for i, k in enumerate(crosses):
+                bio = f"{party}{i}"
+                parties[bio] = party
+                bills.append({"billId": f"B.{bio}", "sponsorBioguide": bio, "sponsorParty": party})
+                cos[f"B.{bio}"] = [
+                    {"bioguideId": f"X{bio}{j}", "party": other if j < k else party} for j in range(20)
+                ]
+        recv = compute_bipartisanship_scores(bills, cos, parties, min_interactions=5, direction="receive")
+        rates = {
+            p: sorted(v for b, v in recv.items() if parties[b] == p) for p in ("D", "R")
+        }
+        # Ten members a party: the median falls between the 5th and 6th,
+        # who straddle 0.5 symmetrically in both parties.
+        for p in ("D", "R"):
+            assert rates[p][4] < 0.5 < rates[p][5]
+            assert abs((rates[p][4] + rates[p][5]) / 2 - 0.5) < 1e-9

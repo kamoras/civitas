@@ -197,7 +197,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.24"
+ALGORITHM_VERSION = "v6.25"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -3095,8 +3095,8 @@ def _calc_legislative_effectiveness(
       3. Bipartisan coalition attraction (15%, when cosponsorship data
          exists — v6.11, moved here from Constituent Alignment): the
          share of cosponsors a member attracts to their OWN bills from
-         the other party, cohort-median-normalized
-         (compute_bipartisanship_scores(direction="receive")).
+         the other party, against the median of the member's own party
+         (compute_bipartisanship_scores(direction="receive"), v6.25).
          Harbridge-Yong, Volden & Wiseman (2023, "The Bipartisan Path to
          Effective Lawmaking," J. Politics 85:3, 93rd-114th Congresses)
          show attracting cross-party cosponsors robustly predicts
@@ -3208,9 +3208,11 @@ def _legislative_effectiveness_core(
         return {"score": 50, "components": [], "note": "No sponsored-bill or leadership data — neutral default."}
 
     # Bipartisan coalition attraction (v6.11 — see the docstring above for
-    # the HVW 2023 rationale and disclosed limits). Cohort-median-
-    # normalized like the leadership score: the chamber-median
-    # attractor of cross-party cosponsors scores 50. Missing data skips
+    # the HVW 2023 rationale and disclosed limits). The median attractor
+    # of cross-party cosponsors in the member's own party scores 50
+    # (v6.25, compute_bipartisanship_scores: the parties are not equally
+    # willing to cosponsor across the aisle, so a chamber median scored
+    # the other party's habits). Missing data skips
     # the component and reverts to the exact pre-v6.11 70/30 split —
     # never scored neutral, matching how this dimension's own
     # missing-data note above treats absent signals.
@@ -3238,9 +3240,8 @@ def _legislative_effectiveness_core(
             "weight": coalition_weight,
             "score": round(coalition_pct, 1),
             "detail": (
-                f"cross-party share of cosponsors attracted to own bills, "
-                f"chamber-median-normalized {attracted_bipartisanship:.0%} "
-                "(median attractor = 50)"
+                "cross-party share of cosponsors attracted to own bills, "
+                "against the median member of the same party (that median scores 50)"
             ),
         })
     return {"score": score, "components": components, "facts": {"billsByStage": _bills_by_stage(sponsored_bills)}}
