@@ -51,9 +51,11 @@ export interface Senator {
   };
   funding: {
     totalRaised: number;
-    /** Denominator for PAC / small-donor shares — see lib/funding.ts. */
+    /** The base PAC and small-donor shares are taken over (contributions). */
     totalContributions?: number | null;
-    totalFromPACs: number;
+    totalFromPacs: number;
+    /** Backend-computed PAC share of contributions, 0-100 unrounded — never re-derive. */
+    pacSharePct: number;
     smallDonorPercentage: number;
     topDonors: Donor[];
     industryBreakdown: IndustryDonation[];
@@ -299,6 +301,8 @@ export interface LeaderboardEntry {
   totalRaised: number;
   totalContributions?: number | null;
   totalFromPacs: number;
+  /** Backend-computed PAC share of contributions, 0-100 unrounded — never re-derive. */
+  pacSharePct: number;
   smallDonorPercentage: number;
   topIndustry: string | null;
   trend?: ScoreTrend;

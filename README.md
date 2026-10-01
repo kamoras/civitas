@@ -1123,29 +1123,49 @@ The layer surfaces the underlying `KeyVote`, `Donor`, `IndustryDonation` and `Sp
 
 ---
 
-## Public API
+## Public API and MCP server
 
-A rate-limited public read-only API is available without authentication at `/api/public/v1`:
+An open, read-only API at `/api/public/v1` — no key, no account, CORS open to
+every origin — documented at [`/developers`](https://civitas-research.org/developers).
+That page renders the OpenAPI spec at `/api/public/v1/openapi.json`, which
+FastAPI generates from the routes and their response schemas
+(`backend/app/api/public.py`, `app/schemas.py` "Public API v1"), so the
+reference always describes the running code. `tests/test_public_api_contract.py`
+validates every endpoint's real body against its documented schema (the
+schemas forbid extra fields), so the two cannot drift apart.
 
 ```
-GET /api/public/v1/senators                      All senators with scores
-GET /api/public/v1/senators/{id}                 Single senator
-GET /api/public/v1/senators/{id}/history         Score history over time
-GET /api/public/v1/representatives               All representatives with scores
-GET /api/public/v1/representatives/{id}          Single representative
-GET /api/public/v1/representatives/{id}/history  Score history over time
-GET /api/public/v1/states                        State metadata
-GET /api/public/v1/search                        Hybrid (semantic + keyword) search over
-                                                 floor speeches, presidential actions,
-                                                 Supreme Court opinions and Federal Register
-                                                 rulemaking (not bill text or politician names)
+GET /api/public/v1/senators                      Serving senators, ranked by score
+GET /api/public/v1/senators/{id}                 One senator's full record
+GET /api/public/v1/senators/{id}/history         A senator's scores over time
+GET /api/public/v1/representatives               Serving representatives, ranked by score
+GET /api/public/v1/representatives/{id}          One representative's full record
+GET /api/public/v1/representatives/{id}/history  A representative's scores over time
+GET /api/public/v1/search                        Floor speeches, presidential actions,
+                                                 Supreme Court opinions and federal rules
+GET /api/public/v1/states                        States and their member counts
+GET /api/public/v1/                              Index: every endpoint, weights, links
 ```
 
-Score weights, industry codes, and policy areas are available unauthenticated
-at `GET /api/config` (not under `/api/public/v1` — it's a separate, lighter-
-weight endpoint used by the frontend itself).
+Conventions: lists are pages (`entries`, `total`, `page`, `perPage`,
+`totalPages`); a member's `rank` is their place in the whole chamber whatever
+the filters; an unknown id is a 404 (history included); every record has a
+`siteUrl`; filter values (party, chamber, document type) are enumerated in
+the spec and a value outside them is a 422.
 
-Rate limit: 60 requests/minute per IP. Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
+The same API is an **MCP server** at `/api/public/v1/mcp` (streamable HTTP,
+stateless, JSON responses — `backend/app/api/public_mcp.py`). Its tools are
+generated from the same spec, one per endpoint, named by operation id
+(`list_senators`, `get_senator`, `search_documents`…), and a tool call runs
+the real route in-process from the caller's IP, so answers, errors and the
+rate limit are the API's own.
+
+Rate limit: 60 requests/minute per IP (`rate_limit.PUBLIC_READ_LIMIT`), shared
+by the API, MCP tool calls and the site's own Explore search. Headers:
+`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
+
+Score weights, industry codes and policy areas are also at `GET /api/config`,
+the lighter endpoint the frontend itself uses.
 
 ---
 

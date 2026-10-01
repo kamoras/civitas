@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { pacSharePct } from "@/lib/funding";
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -199,8 +198,8 @@ function ComparisonTable({
   const rightOverall = displayScore(right.representationScore.overall);
   const leftColorClass = getScoreColor(leftOverall);
   const rightColorClass = getScoreColor(rightOverall);
-  const leftPacPct = Math.round(pacSharePct(left.funding.totalFromPACs, left.funding));
-  const rightPacPct = Math.round(pacSharePct(right.funding.totalFromPACs, right.funding));
+  const leftPacPct = Math.round(left.funding.pacSharePct);
+  const rightPacPct = Math.round(right.funding.pacSharePct);
 
   function winner(a: number, b: number, higherIsBetter = true) {
     // No winner markers across chambers: calibration is chamber-specific,
@@ -327,8 +326,8 @@ function ComparisonTable({
           },
           {
             label: "PAC MONEY",
-            lv: formatCurrency(left.funding.totalFromPACs),
-            rv: formatCurrency(right.funding.totalFromPACs),
+            lv: formatCurrency(left.funding.totalFromPacs),
+            rv: formatCurrency(right.funding.totalFromPacs),
           },
           { label: "PAC %", lv: `${leftPacPct}%`, rv: `${rightPacPct}%` },
         ].map(({ label, lv, rv }) => (

@@ -2,7 +2,7 @@ import { FEED_PATH, absoluteUrl, pageMetadata } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
-import CopyFeedUrl from "@/components/feeds/CopyFeedUrl";
+import CopyText from "@/components/CopyText";
 import { Summary, Point, Section, P, List, Item, More, A } from "@/components/about/AboutPage";
 
 export const metadata = pageMetadata({
@@ -100,7 +100,7 @@ export default async function FeedsPage() {
                       </a>
                     </h3>
                     <P>{f.description}</P>
-                    <CopyFeedUrl url={absoluteUrl(f.path)} label={feedName(f)} />
+                    <CopyText text={absoluteUrl(f.path)} label={`${feedName(f)} feed address`} />
                   </li>
                 ))}
               </ul>

@@ -24,6 +24,26 @@ CACHE_TTL_CONFIG_S = 3600        # config/weights — changes only on a deploy
 # literal independently.
 PARTY_QUERY_PATTERN = r"^[DRI]$"
 
+# Canonical chamber metadata values as written by explore_pipeline, keyed by
+# the lowercase form callers send (Explore and the public API's search). The
+# sqlite-vec metadata filter is an exact string comparison, so a lowercase
+# "senate" matched nothing — user input is mapped through this before
+# querying. None of the four non-legislative chambers was reachable at all
+# before this map existed.
+EXPLORE_CHAMBERS: dict[str, str] = {
+    "senate": "Senate", "house": "House", "executive": "Executive",
+    "judicial": "Judicial", "regulatory": "Regulatory",
+}
+
+# Real doc_type values in the index (explore_pipeline). An unknown value is
+# an exact-match miss that returns zero results for a reason the caller
+# can't see, so both APIs reject it with 422 instead.
+EXPLORE_DOC_TYPES: tuple[str, ...] = (
+    "Senate Floor Speech", "House Floor Speech", "Executive Order",
+    "Proclamation", "Presidential Memorandum", "Supreme Court Opinion",
+    "Final Rule", "Proposed Rule", "Notice",
+)
+
 
 def cached_json(data, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
     """Wrap data in a JSONResponse with Cache-Control headers."""
