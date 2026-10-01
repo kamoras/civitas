@@ -17,7 +17,8 @@
         "http://localhost:3000/action",
         "http://localhost:3000/elections",
         "http://localhost:3000/elections/states/CT",
-        "http://localhost:3000/feeds"
+        "http://localhost:3000/feeds",
+        "http://localhost:3000/developers"
       ],
       "settings": {
         "onlyCategories": ["accessibility", "seo"],

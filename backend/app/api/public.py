@@ -1,77 +1,93 @@
 """
 Civitas Public API v1
 
-Open, rate-limited read-only API. No authentication required.
-Rate limit: 60 requests / minute per IP (headers: X-RateLimit-*).
-Docs: /docs
+Open, read-only, no key or account. Rate-limited per IP (rate_limit.
+PUBLIC_READ_LIMIT, reported in X-RateLimit-* headers).
+
+Documented at /developers, from the spec at /api/public/v1/openapi.json,
+which FastAPI generates from these routes and their response schemas
+(app/schemas.py, "Public API v1") — so the documentation describes
+whatever code is running, and tests/test_public_api_contract.py fails
+when a response stops matching it. The MCP server (api/public_mcp.py)
+turns the same spec into tools.
+
+Conventions every route keeps, so a caller learns them once:
+- Lists are pages: {entries, total, page, perPage, totalPages}.
+- A member list's `rank` is the member's place in their whole chamber,
+  whatever filters are applied.
+- An unknown id is a 404, including on /history (never an empty 200).
+- `siteUrl` links each record to its page on Civitas.
 """
 
-from typing import Annotated
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from app.api import throttle
-from app.api.rate_limit import client_ip, limit_client, retry_after
+from app.api.rate_limit import PUBLIC_READ_LIMIT, PublicReadLimit
 from app.api.response_helpers import (
     CACHE_TTL_CONFIG_S,
     CACHE_TTL_DETAIL_S,
     CACHE_TTL_LIST_S,
     CACHE_TTL_REFERENCE_S,
     CACHE_TTL_SEARCH_S,
+    EXPLORE_CHAMBERS,
+    EXPLORE_DOC_TYPES,
     FAILURE_RETRY_S,
-    PARTY_QUERY_PATTERN,
 )
+from app.broadcast import SITE_URL
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
-from app.models import ScoreSnapshot
-from app.pipeline.analyze.score_calculator import compute_overall_score
-from fastapi import Request
+from app.models import Representative, ScoreSnapshot, Senator
+from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
+from app.schemas import (
+    PublicApiIndexSchema,
+    PublicHistorySchema,
+    PublicRepresentativePageSchema,
+    PublicRepresentativeProfileSchema,
+    PublicSearchResponseSchema,
+    PublicSenatorPageSchema,
+    PublicSenatorProfileSchema,
+    PublicStateSchema,
+)
+from app.services.explore_search import hybrid_search
+from app.services.pagination import paginate_bounds
+from app.services.representative_service import (
+    get_rep_leaderboard,
+    get_rep_states_with_counts,
+    get_representative_by_id,
+)
+from app.services.senator_service import get_leaderboard, get_senator_by_id, get_states_with_counts
 
 router = APIRouter()
 
-# ---------------------------------------------------------------------------
-# Rate limiting — per client, counted in the throttle store every API worker
-# process shares (api/throttle.py)
-# ---------------------------------------------------------------------------
-
-_RATE_LIMIT = 60
-_RATE_PERIOD = 60.0
-
-
-async def _rate_limit_dep(request: Request) -> None:
-    decision = await throttle.run(
-        limit_client, client_ip(request), "public-api", limit=_RATE_LIMIT, period=_RATE_PERIOD,
-    )
-    request.state.rl_remaining = decision.remaining
-    request.state.rl_reset = decision.reset_at
-    request.state.rl_counted = decision.counted
-    if not decision.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Rate limit exceeded — {_RATE_LIMIT} requests per minute per IP.",
-            headers={
-                "X-RateLimit-Limit": str(_RATE_LIMIT),
-                "X-RateLimit-Remaining": "0",
-                "X-RateLimit-Reset": str(decision.reset_at),
-                "Retry-After": retry_after(decision.reset_at),
-                "Access-Control-Allow-Origin": "*",
-            },
-        )
-
-
-RateLimit = Annotated[None, Depends(_rate_limit_dep)]
+# Where api/router.py mounts this router.
+PREFIX = "/api/public/v1"
 
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Accept, Mcp-Session-Id, Mcp-Protocol-Version",
 }
+
+_NOT_FOUND = {404: {"description": "No member with that id"}}
+
+# A page size larger than any chamber, for reading one whole.
+_WHOLE_CHAMBER = 10_000
+
+Party = Literal["D", "R", "I"]
+Chamber = Literal[tuple(EXPLORE_CHAMBERS)]  # type: ignore[valid-type]
+DocType = Literal[EXPLORE_DOC_TYPES]  # type: ignore[valid-type]
+
+_PAGE = Query(1, ge=1, description="Page number, from 1")
+_PER_PAGE = Query(50, ge=1, le=100, description="Results per page")
+_PARTY = Query(None, description="Only this party")
+_STATE = Query(None, pattern="^[A-Za-z]{2}$", description="Only this state (two-letter code, e.g. GA)")
 
 
 def _rl_headers(request: Request) -> dict:
-    headers = {"X-RateLimit-Limit": str(_RATE_LIMIT)}
+    headers = {"X-RateLimit-Limit": str(PUBLIC_READ_LIMIT)}
     # Uncounted (the limiter's store couldn't answer): no count to report,
     # rather than a full quota that describes nothing.
     if getattr(request.state, "rl_counted", True):
@@ -94,11 +110,60 @@ def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONRe
     )
 
 
-# ---------------------------------------------------------------------------
-# CORS preflight — must appear before other routes
-# ---------------------------------------------------------------------------
+def _member_url(member_id: str) -> str:
+    return f"{SITE_URL}/politicians/{member_id}"
 
-@router.options("/{path:path}")
+
+def _page(rows: list[dict], party: str | None, state: str | None, page: int, per_page: int) -> dict:
+    """Filter ranked rows, then paginate; `rank` stays the chamber-wide one."""
+    if party:
+        rows = [r for r in rows if r["party"] == party]
+    if state:
+        rows = [r for r in rows if r["state"] == state.upper()]
+    total_pages, page = paginate_bounds(len(rows), page, per_page)
+    entries = rows[(page - 1) * per_page : page * per_page]
+    for row in entries:
+        row["siteUrl"] = _member_url(row["id"])
+    return {
+        "entries": entries,
+        "total": len(rows),
+        "page": page,
+        "perPage": per_page,
+        "totalPages": total_pages,
+    }
+
+
+def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
+    if db.get(model, member_id) is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
+    snapshots = (
+        db.query(ScoreSnapshot)
+        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
+        .order_by(ScoreSnapshot.date)
+        .all()
+    )
+    return _pub_json(
+        {
+            "id": member_id,
+            "snapshots": [
+                {
+                    "date": s.date,
+                    "overall": round(s.overall_score, 1),
+                    "fundingIndependence": round(s.score_1, 1),
+                    "promisePersistence": round(s.score_2, 1),
+                    "constituentAlignment": round(s.score_3, 1),
+                    "fundingDiversity": round(s.score_4, 1),
+                    "legislativeEffectiveness": round(s.score_5, 1),
+                }
+                for s in snapshots
+            ],
+        },
+        request,
+        max_age=CACHE_TTL_CONFIG_S,
+    )
+
+
+@router.options("/{path:path}", include_in_schema=False)
 def preflight(path: str) -> Response:
     return Response(
         status_code=204,
@@ -107,73 +172,100 @@ def preflight(path: str) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# Score helper
+# Spec and index
 # ---------------------------------------------------------------------------
 
-def _overall(scores: dict) -> int:
-    # int, not compute_overall_score's 2-decimal float — this is a stable
-    # public API response field (api/public/v1/*), so the response shape
-    # stays exactly as it was before this delegated to the shared helper.
-    return round(compute_overall_score(scores))
+_spec: dict | None = None
 
 
-# ---------------------------------------------------------------------------
-# API index
-# ---------------------------------------------------------------------------
+def openapi_spec_dict() -> dict:
+    """OpenAPI 3 description of this API alone — none of the site's internal
+    endpoints, which change with the pages they serve. Built once per process
+    from the running routes, so it changes exactly when the code does."""
+    global _spec
+    if _spec is None:
+        # A throwaway app holding only this router: FastAPI's own generator,
+        # scoped to the public routes, without walking the real app's tree.
+        spec_app = FastAPI(
+            title="Civitas Public API",
+            version="v1",
+            # Operation ids are the route functions' names (list_senators,
+            # get_senator...): the MCP tool names, and readable method names
+            # for any client generated from the spec.
+            generate_unique_id_function=lambda route: route.name,
+            # Group order and introductions for /developers and generated clients.
+            openapi_tags=[
+                {"name": "Senators", "description": "The 100 serving senators: rankings, full records and score history."},
+                {"name": "Representatives", "description": "The serving House members: rankings, full records and score history."},
+                {"name": "Search", "description": "The government documents behind the records, searched the way the site's Explore page does."},
+                {"name": "Reference", "description": "What the API offers, and the states it covers."},
+            ],
+            summary="Open, read-only access to Civitas's scores, member records and document search.",
+            description=(
+                f"No key or account. {PUBLIC_READ_LIMIT} requests per minute per IP, reported in the "
+                "X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset headers; over it, "
+                "429 with Retry-After. CORS is open to every origin. Scores run 0-100, higher is a "
+                f"better representative; how each is computed: {SITE_URL}/about/scores."
+            ),
+        )
+        spec_app.include_router(router, prefix=PREFIX)
+        _spec = spec_app.openapi()
+        # Machine-readable, for /developers to state rather than repeat.
+        _spec["info"]["x-rate-limit-per-minute"] = PUBLIC_READ_LIMIT
+    return _spec
 
-@router.get("/")
-def api_index(request: Request) -> JSONResponse:
-    """Civitas Public API — index of available endpoints."""
+
+@router.get("/openapi.json", include_in_schema=False)
+def openapi_spec() -> JSONResponse:
+    return JSONResponse(
+        openapi_spec_dict(),
+        headers={"Cache-Control": f"public, max-age={CACHE_TTL_CONFIG_S}", **_CORS_HEADERS},
+    )
+
+
+@router.get("/", response_model=PublicApiIndexSchema, tags=["Reference"], summary="What this API offers")
+def api_index() -> JSONResponse:
+    """Every endpoint with a one-line summary, the rate limit and where the
+    documentation is. Built from the same spec, so it lists what exists."""
+    endpoints = {
+        f"{method.upper()} {path}": op.get("summary", "")
+        for path, ops in openapi_spec_dict()["paths"].items()
+        for method, op in ops.items()
+    }
     return JSONResponse(
         content={
             "name": "Civitas Public API",
             "version": "v1",
-            "rateLimit": f"{_RATE_LIMIT} requests per minute per IP",
-            "rateLimitHeaders": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
+            "rateLimit": f"{PUBLIC_READ_LIMIT} requests per minute per IP",
             "scoreWeights": SCORE_WEIGHTS,
-            "endpoints": {
-                "GET /api/public/v1/states": "States with senator and representative counts",
-                "GET /api/public/v1/senators": "Senators ranked by score — ?party=D|R|I &state=XX &page=N &per_page=N",
-                "GET /api/public/v1/senators/{id}": "Full senator profile",
-                "GET /api/public/v1/senators/{id}/history": "Historical score snapshots",
-                "GET /api/public/v1/representatives": "Representatives — ?party=D|R|I &state=XX &page=N &per_page=N",
-                "GET /api/public/v1/representatives/{id}": "Full representative profile",
-                "GET /api/public/v1/representatives/{id}/history": "Historical score snapshots",
-                "GET /api/public/v1/search": "Hybrid (semantic + keyword) search over government documents — ?q=text &chamber=senate|house &doc_type=X &politician_id=X &limit=N",
-            },
-            "docs": "/docs",
+            "endpoints": endpoints,
+            "docs": f"{SITE_URL}/developers",
+            "openapi": f"{SITE_URL}{PREFIX}/openapi.json",
+            "mcp": f"{SITE_URL}{PREFIX}/mcp",
             "source": "https://github.com/kamoras/civitas",
         },
         headers=_CORS_HEADERS,
     )
 
 
-# ---------------------------------------------------------------------------
-# States
-# ---------------------------------------------------------------------------
-
-@router.get("/states")
+@router.get("/states", response_model=list[PublicStateSchema], tags=["Reference"],
+            summary="States and how many members each has")
 def list_states(
-    _rl: RateLimit,
+    _rl: PublicReadLimit,
     request: Request,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """All US states with senator and representative counts."""
-    from app.services.senator_service import get_states_with_counts
-    from app.services.representative_service import get_rep_states_with_counts
-
-    sen_map = {s["code"]: s for s in [s.model_dump(by_alias=True) for s in get_states_with_counts(db)]}
-    rep_map = {s["code"]: s for s in get_rep_states_with_counts(db)}
-
-    all_codes = sorted(set(list(sen_map.keys()) + list(rep_map.keys())))
+    """Every state with senators or representatives, with its member counts."""
+    senate = {s.code: s for s in get_states_with_counts(db)}
+    house = {s["code"]: s for s in get_rep_states_with_counts(db)}
     result = [
         {
             "code": code,
-            "name": (sen_map.get(code) or rep_map.get(code) or {}).get("name", code),
-            "senatorCount": sen_map.get(code, {}).get("senatorCount", 0),
-            "representativeCount": rep_map.get(code, {}).get("repCount", 0),
+            "name": senate[code].name if code in senate else house[code]["name"],
+            "senatorCount": senate[code].senator_count if code in senate else 0,
+            "representativeCount": house[code]["repCount"] if code in house else 0,
         }
-        for code in all_codes
+        for code in sorted(senate.keys() | house.keys())
     ]
     return _pub_json(result, request, max_age=CACHE_TTL_REFERENCE_S)
 
@@ -182,260 +274,153 @@ def list_states(
 # Senators
 # ---------------------------------------------------------------------------
 
-@router.get("/senators")
+def _senate_rows(db: Session) -> list[dict]:
+    """Every serving senator, best score first, with a competition rank."""
+    rows = [e.model_dump(by_alias=True) for e in get_leaderboard(db)]
+    for i, row in enumerate(rows):
+        tied = i and row["representationScore"]["overall"] == rows[i - 1]["representationScore"]["overall"]
+        row["rank"] = rows[i - 1]["rank"] if tied else i + 1
+    return rows
+
+
+@router.get("/senators", response_model=PublicSenatorPageSchema, tags=["Senators"],
+            summary="Serving senators, ranked by score")
 def list_senators(
-    _rl: RateLimit,
+    _rl: PublicReadLimit,
     request: Request,
-    page: int = Query(1, ge=1, description="Page number (1-based)"),
-    per_page: int = Query(50, ge=1, le=100, description="Results per page"),
-    party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN, description="Party filter: D, R, or I"),
-    state: str | None = Query(None, min_length=2, max_length=2, description="Two-letter state code"),
+    page: int = _PAGE,
+    per_page: int = _PER_PAGE,
+    party: Party | None = _PARTY,
+    state: str | None = _STATE,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """US Senators ranked by overall representation score.
+    """Serving senators, best representation score first.
 
-    Scores are the weighted sum defined by ``config_definitions.SCORE_WEIGHTS``:
-    funding independence (33%), constituent alignment (33%), and legislative
-    effectiveness (34%).
-    """
-    from app.services.senator_service import get_leaderboard
-
-    all_entries = [e.model_dump(by_alias=True) for e in get_leaderboard(db)]
-
-    if party:
-        all_entries = [e for e in all_entries if e.get("party") == party.upper()]
-    if state:
-        all_entries = [e for e in all_entries if e.get("state", "").upper() == state.upper()]
-
-    total = len(all_entries)
-    total_pages = max(1, -(-total // per_page))
-    page = max(1, min(page, total_pages))
-    page_entries = all_entries[(page - 1) * per_page : page * per_page]
-
-    for entry in page_entries:
-        entry["overallScore"] = _overall(entry.get("representationScore", {}))
-
-    return _pub_json(
-        {
-            "entries": page_entries,
-            "total": total,
-            "page": page,
-            "perPage": per_page,
-            "totalPages": total_pages,
-        },
-        request,
-        max_age=CACHE_TTL_LIST_S,
-    )
+    `representationScore.overall` is the weighted score (weights in the
+    index's `scoreWeights`); `rank` is the senator's place among all 100,
+    whatever the filters."""
+    return _pub_json(_page(_senate_rows(db), party, state, page, per_page), request)
 
 
-@router.get("/senators/{senator_id}/history")
-def get_senator_history(
-    senator_id: str,
-    _rl: RateLimit,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> JSONResponse:
-    """Historical score snapshots for a senator (oldest → newest)."""
-    snapshots = (
-        db.query(ScoreSnapshot)
-        .filter(ScoreSnapshot.entity_type == "senator", ScoreSnapshot.entity_id == senator_id)
-        .order_by(ScoreSnapshot.date)
-        .all()
-    )
-    return _pub_json(
-        {
-            "senatorId": senator_id,
-            "snapshots": [
-                {
-                    "date": s.date,
-                    "overallScore": round(s.overall_score, 1),
-                    "scores": {
-                        "fundingIndependence": round(s.score_1, 1),
-                        "promisePersistence": round(s.score_2, 1),
-                        "constituentAlignment": round(s.score_3, 1),
-                        "fundingDiversity": round(s.score_4, 1),
-                        "legislativeEffectiveness": round(s.score_5, 1),
-                    },
-                }
-                for s in snapshots
-            ],
-        },
-        request,
-        max_age=CACHE_TTL_CONFIG_S,
-    )
-
-
-@router.get("/senators/{senator_id}")
+@router.get("/senators/{senator_id}", response_model=PublicSenatorProfileSchema, responses=_NOT_FOUND,
+            tags=["Senators"], summary="One senator's full record")
 def get_senator(
-    senator_id: str,
-    _rl: RateLimit,
+    _rl: PublicReadLimit,
     request: Request,
+    senator_id: str = Path(description="The senator's id, as in their Civitas URL (e.g. jon-ossoff)"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Full senator profile: funding, voting record, campaign promises, sponsored bills."""
-    from app.services.senator_service import get_senator_by_id
+    """Scores, funding and top donors, voting record, lobbying matches,
+    sponsored bills and contact details."""
+    senator = get_senator_by_id(db, senator_id)
+    if senator is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
+    return _pub_json(
+        {**senator.model_dump(by_alias=True), "siteUrl": _member_url(senator_id)},
+        request, max_age=CACHE_TTL_DETAIL_S,
+    )
 
-    result = get_senator_by_id(db, senator_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Senator not found")
 
-    data = result.model_dump(by_alias=True)
-    data["overallScore"] = _overall(data.get("representationScore", {}))
-    return _pub_json(data, request, max_age=CACHE_TTL_DETAIL_S)
+@router.get("/senators/{senator_id}/history", response_model=PublicHistorySchema, responses=_NOT_FOUND,
+            tags=["Senators"], summary="A senator's scores over time")
+def get_senator_history(
+    _rl: PublicReadLimit,
+    request: Request,
+    senator_id: str = Path(description="The senator's id"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """One snapshot per scoring run, oldest first."""
+    return _history(db, "senator", Senator, senator_id, request)
 
 
 # ---------------------------------------------------------------------------
 # Representatives
 # ---------------------------------------------------------------------------
 
-@router.get("/representatives")
+@router.get("/representatives", response_model=PublicRepresentativePageSchema, tags=["Representatives"],
+            summary="Serving representatives, ranked by score")
 def list_representatives(
-    _rl: RateLimit,
+    _rl: PublicReadLimit,
     request: Request,
-    page: int = Query(1, ge=1, description="Page number (1-based)"),
-    per_page: int = Query(50, ge=1, le=100, description="Results per page"),
-    party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN, description="Party filter: D, R, or I"),
-    state: str | None = Query(None, min_length=2, max_length=2, description="Two-letter state code"),
+    page: int = _PAGE,
+    per_page: int = _PER_PAGE,
+    party: Party | None = _PARTY,
+    state: str | None = _STATE,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """House Representatives.
+    """Serving representatives, best representation score first.
 
-    When `state` is provided, returns representatives for that state ordered by district.
-    Otherwise returns all representatives ranked by score (leaderboard view).
-    """
-    if state:
-        from app.services.representative_service import get_representatives_by_state
-        # party is pushed into the query so filtering happens BEFORE
-        # pagination — post-filtering the page made entry counts vary per
-        # page while total/totalPages described the unfiltered set.
-        data = get_representatives_by_state(
-            db, state, page=page, per_page=per_page, party=party,
-        ).model_dump(by_alias=True)
-    else:
-        from app.services.representative_service import get_rep_leaderboard
-        data = get_rep_leaderboard(db, page=page, per_page=per_page, party=party)
-
-    for entry in data["entries"]:
-        entry["overallScore"] = _overall(entry.get("representationScore", {}))
-
-    return _pub_json(data, request, max_age=CACHE_TTL_LIST_S)
+    `rank` is the member's place in the whole House, whatever the filters.
+    Filter by `state` for a delegation; `district` is 0 for an at-large
+    seat."""
+    rows = get_rep_leaderboard(db, page=1, per_page=_WHOLE_CHAMBER)["entries"]
+    return _pub_json(_page(rows, party, state, page, per_page), request)
 
 
-@router.get("/representatives/{rep_id}/history")
-def get_representative_history(
-    rep_id: str,
-    _rl: RateLimit,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> JSONResponse:
-    """Historical score snapshots for a representative (oldest → newest)."""
-    snapshots = (
-        db.query(ScoreSnapshot)
-        .filter(ScoreSnapshot.entity_type == "representative", ScoreSnapshot.entity_id == rep_id)
-        .order_by(ScoreSnapshot.date)
-        .all()
-    )
-    return _pub_json(
-        {
-            "representativeId": rep_id,
-            "snapshots": [
-                {
-                    "date": s.date,
-                    "overallScore": round(s.overall_score, 1),
-                    "scores": {
-                        "fundingIndependence": round(s.score_1, 1),
-                        "promisePersistence": round(s.score_2, 1),
-                        "constituentAlignment": round(s.score_3, 1),
-                        "fundingDiversity": round(s.score_4, 1),
-                        "legislativeEffectiveness": round(s.score_5, 1),
-                    },
-                }
-                for s in snapshots
-            ],
-        },
-        request,
-        max_age=CACHE_TTL_CONFIG_S,
-    )
-
-
-@router.get("/representatives/{rep_id}")
+@router.get("/representatives/{rep_id}", response_model=PublicRepresentativeProfileSchema,
+            responses=_NOT_FOUND, tags=["Representatives"], summary="One representative's full record")
 def get_representative(
-    rep_id: str,
-    _rl: RateLimit,
+    _rl: PublicReadLimit,
     request: Request,
+    rep_id: str = Path(description="The representative's id, as in their Civitas URL (e.g. joe-neguse)"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Full representative profile: funding, voting record, campaign promises, sponsored bills."""
-    from app.services.representative_service import get_representative_by_id
-
+    """Scores, funding and top donors, voting record, lobbying matches,
+    sponsored bills and contact details."""
     rep = get_representative_by_id(db, rep_id)
     if rep is None:
-        raise HTTPException(status_code=404, detail="Representative not found")
+        raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
+    return _pub_json(
+        {**rep.model_dump(by_alias=True), "siteUrl": _member_url(rep_id)},
+        request, max_age=CACHE_TTL_DETAIL_S,
+    )
 
-    result = rep.model_dump(by_alias=True)
-    result["overallScore"] = _overall(result.get("representationScore", {}))
-    return _pub_json(result, request, max_age=CACHE_TTL_DETAIL_S)
+
+@router.get("/representatives/{rep_id}/history", response_model=PublicHistorySchema, responses=_NOT_FOUND,
+            tags=["Representatives"], summary="A representative's scores over time")
+def get_representative_history(
+    _rl: PublicReadLimit,
+    request: Request,
+    rep_id: str = Path(description="The representative's id"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """One snapshot per scoring run, oldest first."""
+    return _history(db, "representative", Representative, rep_id, request)
 
 
 # ---------------------------------------------------------------------------
 # Search
 # ---------------------------------------------------------------------------
 
-@router.get("/search")
-async def search(
-    _rl: RateLimit,
+@router.get("/search", response_model=PublicSearchResponseSchema, tags=["Search"],
+            summary="Search floor speeches, presidential actions, opinions and rules")
+async def search_documents(
+    _rl: PublicReadLimit,
     request: Request,
-    q: str = Query(..., min_length=2, max_length=200, description="Search query"),
-    chamber: str | None = Query(
-        None,
-        pattern="^(?:[Ss]enate|[Hh]ouse|[Ee]xecutive|[Jj]udicial|[Rr]egulatory)$",
-        description="Filter by chamber: senate, house, executive, judicial, or regulatory",
-    ),
-    doc_type: str | None = Query(
-        None,
-        description=(
-            "Document type filter. Valid values: 'Senate Floor Speech', "
-            "'House Floor Speech', 'Executive Order', 'Proclamation', "
-            "'Presidential Memorandum', 'Supreme Court Opinion', 'Final Rule', "
-            "'Proposed Rule', 'Notice'."
-        ),
-    ),
-    politician_id: str | None = Query(None, description="Filter by politician ID (exact match)"),
-    limit: int = Query(20, ge=1, le=50, description="Max results"),
+    q: str = Query(min_length=2, max_length=200, description="What to look for: words, a topic or an "
+                   "identifier such as \"Executive Order 14110\""),
+    chamber: Chamber | None = Query(None, description="Only documents from this branch"),
+    doc_type: DocType | None = Query(None, description="Only this kind of document"),
+    politician_id: str | None = Query(None, description="Only documents by this member (their id)"),
+    limit: int = Query(20, ge=1, le=50, description="How many results"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Search over government activity documents — floor speeches,
-    presidential actions, Supreme Court opinions, and Federal Register
-    rulemaking (not bill text or lobbying records).
+    """Floor speeches, presidential actions, Supreme Court opinions and
+    Federal Register rules (not bill text or lobbying records), best match
+    first.
 
-    The same hybrid engine as the site's Explore page (semantic kNN + BM25F
-    keyword, fused with recency and citation authority), so a query for an
-    identifier — "Executive Order 14110", a docket number — finds it here
-    too; the embedding alone can't tell two such numbers apart."""
-    from app.api.explore import VALID_DOC_TYPES, _CHAMBER_CANONICAL
-    from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
-    from app.services.explore_search import hybrid_search
-
-    if doc_type is not None and doc_type not in VALID_DOC_TYPES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown doc_type. Valid values: {sorted(VALID_DOC_TYPES)}",
-        )
-    # Normalize chamber to the stored casing so a lowercase filter matches.
-    canonical_chamber = _CHAMBER_CANONICAL.get(chamber.lower()) if chamber else None
-
+    The same engine as the site's Explore page: meaning and exact words
+    together, weighed with recency and how often other documents cite
+    each one — so an identifier or docket number is found too."""
     # Off the loop on a session of its own (database.off_loop).
     outcome = await off_loop(db, lambda session: hybrid_search(
-        session,
-        q,
-        limit=limit,
-        doc_type=doc_type,
-        chamber=canonical_chamber,
+        session, q, limit=limit, doc_type=doc_type,
+        chamber=EXPLORE_CHAMBERS[chamber] if chamber else None,
         politician_id=politician_id,
     ))
     if not outcome["indexReady"]:
         return _pub_json(
-            {"query": q, "results": [], "count": 0, "indexEmpty": True},
+            {"query": q, "results": [], "count": 0, "partial": False, "indexBuilding": True},
             request, max_age=0,
         )
 
@@ -444,12 +429,11 @@ async def search(
         # The keyword channel marks matched terms with control characters
         # for the site's renderer; a public client gets plain text.
         result["snippet"] = (result.get("snippet") or "").replace(HIGHLIGHT_START, "").replace(HIGHLIGHT_END, "")
+        result["siteUrl"] = f"{SITE_URL}/explore/{result['id']}"
     # Keyword channel only (the vector index missing or mid-rebuild): a
     # partial answer, kept no longer than a failed fetch is.
-    max_age = FAILURE_RETRY_S if outcome["semanticUnavailable"] else CACHE_TTL_SEARCH_S
-    return _pub_json({
-        "query": q, "results": results, "count": len(results),
-        # True when the keyword channel alone answered: a partial ranking,
-        # said so rather than presented as the whole one.
-        "semanticUnavailable": bool(outcome["semanticUnavailable"]),
-    }, request, max_age=max_age)
+    partial = bool(outcome["semanticUnavailable"])
+    return _pub_json(
+        {"query": q, "results": results, "count": len(results), "partial": partial, "indexBuilding": False},
+        request, max_age=FAILURE_RETRY_S if partial else CACHE_TTL_SEARCH_S,
+    )

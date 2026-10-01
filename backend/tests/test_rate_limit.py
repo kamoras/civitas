@@ -17,13 +17,16 @@ TEST-NET documentation ranges (198.51.100/24, 203.0.113/24) as private,
 so those are not valid stand-ins for a public peer here.
 """
 
+import sqlite3
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 
-from app.api import throttle
-from app.api.rate_limit import client_ip, write_rate_limit
+from app.api import rate_limit, throttle
+from app.api.public import _rl_headers
+from app.api.rate_limit import PUBLIC_READ_LIMIT, client_ip, public_read_limit, write_rate_limit
 
 
 def _make_request(peer_ip: str, forwarded_for: str | None = None) -> MagicMock:
@@ -89,8 +92,6 @@ class TestWriteRateLimit:
                     await write_rate_limit(req)
 
     async def test_the_ip_itself_is_never_stored(self, throttle_store):
-        import sqlite3
-
         await write_rate_limit(_make_request("8.8.4.7"))
         conn = sqlite3.connect(throttle_store)
         keys = [row[0] for row in conn.execute("SELECT key FROM windows")]
@@ -102,20 +103,16 @@ class TestWriteRateLimit:
 @pytest.mark.usefixtures("throttle_store")
 class TestPublicApiRateLimit:
     async def test_counts_down_then_refuses_with_headers(self):
-        from types import SimpleNamespace
-
-        from app.api.public import _RATE_LIMIT, _rate_limit_dep
-
         req = _make_request("8.8.4.8")
         req.state = SimpleNamespace()
-        await _rate_limit_dep(req)
-        assert req.state.rl_remaining == _RATE_LIMIT - 1
+        await public_read_limit(req)
+        assert req.state.rl_remaining == PUBLIC_READ_LIMIT - 1
         assert req.state.rl_reset > 0
-        for _ in range(_RATE_LIMIT - 1):
-            await _rate_limit_dep(req)
+        for _ in range(PUBLIC_READ_LIMIT - 1):
+            await public_read_limit(req)
         assert req.state.rl_remaining == 0
         with pytest.raises(HTTPException) as exc:
-            await _rate_limit_dep(req)
+            await public_read_limit(req)
         assert exc.value.status_code == 429
         assert exc.value.headers["X-RateLimit-Remaining"] == "0"
         assert exc.value.headers["X-RateLimit-Reset"] == str(req.state.rl_reset)
@@ -123,15 +120,11 @@ class TestPublicApiRateLimit:
         assert 1 <= int(exc.value.headers["Retry-After"]) <= 120
 
     async def test_writes_do_not_use_up_the_read_limit(self):
-        from types import SimpleNamespace
-
-        from app.api.public import _rate_limit_dep
-
         req = _make_request("8.8.4.9")
         req.state = SimpleNamespace()
         for _ in range(20):
             await write_rate_limit(req)
-        await _rate_limit_dep(req)  # a separate bucket
+        await public_read_limit(req)  # a separate bucket
 
 
 @pytest.mark.usefixtures("throttle_store")
@@ -154,10 +147,6 @@ async def test_a_write_refusal_says_when_to_retry(monkeypatch):
 def test_an_uncounted_public_request_reports_no_remaining_quota():
     """A limiter that couldn't count (its store unavailable) must not
     advertise a full quota."""
-    from types import SimpleNamespace
-
-    from app.api.public import _rl_headers
-
     counted = SimpleNamespace(state=SimpleNamespace(rl_remaining=5, rl_reset=100, rl_counted=True))
     uncounted = SimpleNamespace(state=SimpleNamespace(rl_remaining=60, rl_reset=100, rl_counted=False))
     assert _rl_headers(counted)["X-RateLimit-Remaining"] == "5"
@@ -166,11 +155,6 @@ def test_an_uncounted_public_request_reports_no_remaining_quota():
 
 
 async def test_the_upstream_budget_is_charged_asynchronously_and_refuses_when_spent(monkeypatch):
-    import pytest
-    from fastapi import HTTPException
-
-    from app.api import rate_limit
-
     monkeypatch.setattr(rate_limit, "_UPSTREAM_CALLS_PER_HOUR", 3)
     rate_limit.reset_upstream_budget()
     await rate_limit.spend_upstream(2)

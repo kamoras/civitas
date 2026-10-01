@@ -29,7 +29,7 @@ from app.schemas import (
     StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
-from app.services._scorecard_common import score_breakdown
+from app.services._scorecard_common import pac_share_pct, score_breakdown
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -115,6 +115,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
             "totalRaised": rep.total_raised,
             "totalContributions": rep.total_contributions,
             "totalFromPACs": rep.total_from_pacs,
+            "pacSharePct": pac_share_pct(rep),
             "smallDonorPercentage": rep.small_donor_percentage,
             "topDonors": [
                 {
@@ -322,8 +323,7 @@ def _rep_sort_value(r, sort: str) -> float | None:
     if sort == "pac_dollars":
         return float(r.total_from_pacs or 0)
     if sort == "pac_pct":
-        base = r.total_contributions or r.total_raised or 0
-        return _half_up((r.total_from_pacs or 0) / base * 100) if base > 0 else 0.0
+        return _half_up(pac_share_pct(r))
     if sort == "ideology":
         return r.ideology_score
     return r.leadership_score
@@ -412,6 +412,7 @@ def get_rep_leaderboard(
             "totalRaised": r.total_raised,
             "totalContributions": r.total_contributions,
             "totalFromPacs": r.total_from_pacs,
+            "pacSharePct": pac_share_pct(r),
             "smallDonorPercentage": r.small_donor_percentage,
             "topIndustry": top_industry_map.get(r.id),
             "trend": trend_map.get(r.id, {"direction": "new", "change": 0.0, "previousScore": None}),

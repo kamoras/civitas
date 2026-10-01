@@ -13,10 +13,20 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.pipeline.analyze.party_line_record import load_record
-from app.pipeline.analyze.score_calculator import explain_scores
+from app.pipeline.analyze.score_calculator import explain_scores, funding_share_base
 from app.pipeline.transform.normalize_votes import stored_vote
 from app.services.bill_record import roll_call_summaries
 
+
+
+def pac_share_pct(entity: Any) -> float:
+    """PAC money as a percentage of contributions (0-100, unrounded), over
+    the same base every funding share uses (score_calculator.
+    funding_share_base); 0 when nothing was raised. The one place this is
+    worked out for display: the site shows it and sorts by it, rather than
+    each page dividing for itself."""
+    base = funding_share_base({"totalContributions": entity.total_contributions, "totalRaised": entity.total_raised})
+    return (entity.total_from_pacs or 0) / base * 100 if base > 0 else 0.0
 
 def _vote_dict(v: Any) -> dict:
     return stored_vote(v.id, v.bill_id, v.voted_with_party)

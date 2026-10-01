@@ -17,7 +17,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
 )
-from app.services._scorecard_common import score_breakdown
+from app.services._scorecard_common import pac_share_pct, score_breakdown
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -255,6 +255,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             total_raised=senator.total_raised,
             total_contributions=senator.total_contributions,
             total_from_pacs=senator.total_from_pacs,
+            pac_share_pct=pac_share_pct(senator),
             small_donor_percentage=senator.small_donor_percentage,
             top_donors=[
                 DonorSchema(
@@ -460,6 +461,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             total_raised=s.total_raised,
             total_contributions=s.total_contributions,
             total_from_pacs=s.total_from_pacs,
+            pac_share_pct=pac_share_pct(s),
             small_donor_percentage=s.small_donor_percentage,
             top_industry=top_industry_map.get(s.id),
             trend=trend_map.get(s.id, ScoreTrendSchema()),

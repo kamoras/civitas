@@ -8,12 +8,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
-from app.api.public import RateLimit
+
 from app.api import throttle
 from app.api.rate_limit import (
-    UpstreamRouteLimit, WriteRateLimit, client_ip, limit_client, retry_after, spend_upstream,
+    PublicReadLimit, UpstreamRouteLimit, WriteRateLimit, client_ip, limit_client, retry_after, spend_upstream,
 )
-from app.api.response_helpers import RETRY_SOON_CACHE_CONTROL, retry_soon_json
+from app.api.response_helpers import (
+    EXPLORE_CHAMBERS,
+    EXPLORE_DOC_TYPES,
+    RETRY_SOON_CACHE_CONTROL,
+    retry_soon_json,
+)
 from app.database import get_db, off_loop
 from app.models import ExploreDocument
 from app.services.explore_search import browse_documents, hybrid_search
@@ -23,31 +28,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/explore")
 
-# Canonical chamber metadata values as written by explore_pipeline. The
-# sqlite-vec metadata filter is an exact string comparison, so a lowercase
-# "senate" matched nothing — user input is mapped through this before
-# querying. None of the four non-legislative chambers was reachable at all
-# before this map existed.
-_CHAMBER_CANONICAL = {
-    "senate": "Senate", "house": "House", "executive": "Executive",
-    "judicial": "Judicial", "regulatory": "Regulatory",
-}
-
-# Real doc_type values in the index (explore_pipeline). An unknown value is
-# an exact-match miss that returns zero results for a reason the caller
-# can't see, so it is rejected with 422 instead.
-VALID_DOC_TYPES = {
-    "Senate Floor Speech", "House Floor Speech", "Executive Order",
-    "Proclamation", "Presidential Memorandum", "Supreme Court Opinion",
-    "Final Rule", "Proposed Rule", "Notice",
-}
+# Shared with the public API's search (api/response_helpers.py).
+_CHAMBER_CANONICAL = EXPLORE_CHAMBERS
+VALID_DOC_TYPES = frozenset(EXPLORE_DOC_TYPES)
 
 VALID_SORTS = {"relevance", "date"}
 
 
 @router.get("")
 async def search_explore(
-    _rl: RateLimit,
+    _rl: PublicReadLimit,
     q: str | None = Query(
         None, min_length=2, max_length=200,
         description="Search query. Optional with politician_id: that member's documents, newest first",
