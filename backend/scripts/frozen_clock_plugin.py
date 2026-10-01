@@ -28,7 +28,12 @@ Needs time-machine (scripts/requirements-research.txt):
   needs at least that much margin (2027-01-03T15:00Z, not 16:59Z, for
   noon ET).
 - FREEZE_TICK=0: stop the clock at FREEZE_AT instead of letting it run on
-  from there (the default — a suite with timeouts needs a moving clock).
+  from there. Running on is the default because on a stopped clock the
+  tests that need wall time to pass between two reads fail as expected —
+  a lease's beat, rows ordered by time, a changed ingest time, a
+  heartbeat's age (six at 2027-01-03T16:00Z); they are not clock
+  dependence. Timeouts are unaffected either way: time-machine leaves
+  time.monotonic and time.perf_counter alone.
   File times (below) still move with real time then, so a file written
   during the run stats as that far ahead of the stopped clock.
 
