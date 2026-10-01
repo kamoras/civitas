@@ -30,12 +30,14 @@ Needs time-machine (scripts/requirements-research.txt):
 - FREEZE_TICK=0: stop the clock at FREEZE_AT instead of letting it run on
   from there. Running on is the default because on a stopped clock the
   tests that need wall time to pass between two reads fail as expected —
-  a lease's beat, rows ordered by time, a changed ingest time, a
-  heartbeat's age (six at 2027-01-03T16:00Z); they are not clock
-  dependence. Timeouts are unaffected either way: time-machine leaves
-  time.monotonic and time.perf_counter alone.
+  a lease's beat, rows ordered by time, a changed ingest time (five at
+  2027-01-03T16:00Z); they are not clock dependence. Timeouts are
+  unaffected either way: time-machine leaves time.monotonic and
+  time.perf_counter alone.
   File times (below) still move with real time then, so a file written
-  during the run stats as that far ahead of the stopped clock.
+  during the run stats as that far ahead of the stopped clock — the
+  sixth failure there: a heartbeat read from its file's mtime never goes
+  stale.
 
 The kernel stamps files with the real time, so code that compares a file's
 age with the clock (cache freshness, heartbeats) would see every fresh file
