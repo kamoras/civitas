@@ -166,9 +166,9 @@ def test_an_entry_carries_the_pages_card_like_the_bluesky_post(client, db_sessio
     """The picture, description and links a Bluesky link card shows."""
     _post(
         db_session, "race", title="Georgia's Senate race",
-        text="Ossoff leads in new polling.\nThe race is rated a toss-up.",
+        text="Brennan leads in new polling.\nThe race is rated a toss-up.",
         url="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA",
-        source_url="https://www.ajc.com/politics/poll-ossoff/",
+        source_url="https://www.ajc.com/politics/poll-brennan/",
         card_image="https://civitas-research.org/api/og?state=GA",
         card_image_alt="Georgia Ballot 2026", card_description="What's on the 2026 Georgia ballot.",
     )
@@ -178,13 +178,13 @@ def test_an_entry_carries_the_pages_card_like_the_bluesky_post(client, db_sessio
     assert html == (
         '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">'
         '<img src="https://civitas-research.org/api/og?state=GA" alt="Georgia Ballot 2026"></a></p>'
-        "<p>Ossoff leads in new polling.</p><p>The race is rated a toss-up.</p>"
+        "<p>Brennan leads in new polling.</p><p>The race is rated a toss-up.</p>"
         '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">Read on Civitas</a></p>'
-        '<p>Source: <a href="https://www.ajc.com/politics/poll-ossoff/">ajc.com</a></p>'
+        '<p>Source: <a href="https://www.ajc.com/politics/poll-brennan/">ajc.com</a></p>'
     )
     links = {link.get("rel"): link.get("href") for link in entry.findall(f"{A}link")}
     assert links["enclosure"] == "https://civitas-research.org/api/og?state=GA"
-    assert links["related"] == "https://www.ajc.com/politics/poll-ossoff/"
+    assert links["related"] == "https://www.ajc.com/politics/poll-brennan/"
     assert entry.find(f"{M}thumbnail").get("url") == "https://civitas-research.org/api/og?state=GA"
     media = entry.find(f"{M}content")
     assert (media.get("url"), media.get("medium")) == ("https://civitas-research.org/api/og?state=GA", "image")

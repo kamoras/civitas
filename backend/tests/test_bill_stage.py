@@ -148,7 +148,7 @@ class TestReferredVsInCommitteeRealData:
     same audit) to confirm the two are now distinguishable."""
 
     def test_real_senate_bill_with_only_automatic_referral(self):
-        # Real action history for a Blackburn-sponsored bill stuck with
+        # Real action history for a senator's bill stuck with
         # zero engagement beyond the automatic first step.
         actions = [
             {"actionCode": None, "type": "IntroReferral",

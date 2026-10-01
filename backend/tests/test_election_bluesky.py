@@ -394,7 +394,7 @@ class TestOnlyVettedSourcesArePosted:
     source, not in the wording."""
 
     @pytest.mark.parametrize("source_type, source_name, title, posted", [
-        pytest.param("bluesky", "@kaseylz.bsky.social", "VOTE VERONICA FERNANDEZ!", [],
+        pytest.param("bluesky", "@kaseylz.bsky.social", "VOTE JANE DOE!", [],
                      id="an_arbitrary_social_post_is_never_eligible"),
         pytest.param("news", "Roll Call", "A real article about the race", ["some sentence."],
                      id="a_news_item_still_posts"),

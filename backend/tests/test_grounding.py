@@ -16,7 +16,7 @@ from app.pipeline.analyze.grounding import (
 )
 
 SOURCE = (
-    "Senate votes 68-32 to pass the funding bill. Susan Collins said the "
+    "Senate votes 68-32 to pass the funding bill. Ruth Pryor said the "
     "$1.2 trillion package includes 120,000 new housing vouchers. The vote "
     "happened on 2026-07-09. Factory fire kills at least 28."
 )
@@ -42,37 +42,37 @@ class TestUngroundedNumbers:
 
 class TestUngroundedTitledNames:
     @pytest.mark.parametrize("text, source, expected", [
-        # "Sen. Collins" is fine when source says "Susan Collins" without title
-        pytest.param("Sen. Collins praised the vote", SOURCE, [], id="titled_name_grounded_by_untitled_source"),
+        # "Sen. Pryor" is fine when source says "Ruth Pryor" without title
+        pytest.param("Sen. Pryor praised the vote", SOURCE, [], id="titled_name_grounded_by_untitled_source"),
         pytest.param("Senator Whitfield objected", SOURCE, ["Senator Whitfield"], id="invented_official_flagged"),
         # Bare names aren't titled-official claims; other validators own those.
         pytest.param("Whitfield objected", SOURCE, [], id="untitled_names_not_checked"),
-        # The name pattern accepts apostrophes so O'Rourke stays one token,
-        # which also swallowed the possessive: "Sen. Collins's" yielded the
-        # surname "collins's", which no source saying "Collins" can match, so
+        # The name pattern accepts apostrophes so O'Dwyer stays one token,
+        # which also swallowed the possessive: "Sen. Pryor's" yielded the
+        # surname "pryor's", which no source saying "Pryor" can match, so
         # every possessive reference to a real official read as fabricated.
-        pytest.param("Sen. Collins's amendment advanced", SOURCE, [], id="possessive_of_sourced_official_grounded"),
-        pytest.param("Sen. Collins' amendment advanced", SOURCE, [], id="bare_apostrophe_possessive_grounded"),
+        pytest.param("Sen. Pryor's amendment advanced", SOURCE, [], id="possessive_of_sourced_official_grounded"),
+        pytest.param("Sen. Pryor' amendment advanced", SOURCE, [], id="bare_apostrophe_possessive_grounded"),
         pytest.param("Senator Whitfield's objection", SOURCE, ["Senator Whitfield's"],
                      id="possessive_does_not_ground_an_invented_official"),
         # Apostrophe surnames survive possessive stripping.
-        pytest.param("Rep. O'Rourke filed it", "Rep. O'Rourke filed the amendment.", [],
+        pytest.param("Rep. O'Dwyer filed it", "Rep. O'Dwyer filed the amendment.", [],
                      id="apostrophe_surname_grounded"),
-        pytest.param("Rep. O'Rourke's filing", "Rep. O'Rourke filed the amendment.", [],
+        pytest.param("Rep. O'Dwyer's filing", "Rep. O'Dwyer filed the amendment.", [],
                      id="apostrophe_surname_possessive_grounded"),
-        pytest.param("Rep. O'Rourke filed it", "A bill passed.", ["Rep. O'Rourke"],
+        pytest.param("Rep. O'Dwyer filed it", "A bill passed.", ["Rep. O'Dwyer"],
                      id="apostrophe_surname_ungrounded_flagged"),
         # The exact production failure: a role description set off by
         # commas, not a title word directly prefixing the name — the form
         # ungrounded_titled_names didn't cover until this was found.
         pytest.param(
-            "The Senate Republican leader, Chuck Schumer, has said Graham's "
+            "The Senate Republican leader, Glen Abbott, has said Whitfield's "
             "death has made a hard month harder for the Senate agenda.",
-            SOURCE, ["Chuck Schumer"], id="appositive_role_fabrication_flagged",
+            SOURCE, ["Glen Abbott"], id="appositive_role_fabrication_flagged",
         ),
         pytest.param(
-            "The Senate Majority Leader, John Thune, praised the vote.",
-            SOURCE + " Senate Majority Leader John Thune spoke afterward.",
+            "The Senate Majority Leader, Ray Holloway, praised the vote.",
+            SOURCE + " Senate Majority Leader Ray Holloway spoke afterward.",
             [], id="appositive_role_grounded_by_source",
         ),
         # Guards against over-matching an ordinary sentence start following
@@ -204,12 +204,12 @@ class TestLogIntensifierUsage:
 class TestUngroundedElectoralClaims:
     # A source with no electoral vocabulary at all — a senator's death.
     NON_ELECTORAL = (
-        "Senator Lindsey Graham died Thursday at 70. Colleagues including "
-        "Susan Collins issued statements. Flags were lowered at the Capitol."
+        "Senator Lowell Whitfield died Thursday at 70. Colleagues including "
+        "Ruth Pryor issued statements. Flags were lowered at the Capitol."
     )
     # A source that genuinely covers an election.
     ELECTORAL = (
-        "Susan Collins faces a competitive re-election campaign. Her "
+        "Ruth Pryor faces a competitive re-election campaign. Her "
         "challenger leads in recent polls ahead of the November race."
     )
 
@@ -217,11 +217,11 @@ class TestUngroundedElectoralClaims:
         "text",
         [
             pytest.param(
-                "Graham was facing competition from Susan Collins for his senate race.",
-                id="the_reported_graham_collins_bug",
+                "Whitfield was facing competition from Ruth Pryor for his senate race.",
+                id="the_reported_whitfield_pryor_bug",
             ),
-            pytest.param("Collins launched a re-election bid this week.", id="reelection_bid"),
-            pytest.param("Graham is running against Collins for the seat.", id="running_against"),
+            pytest.param("Pryor launched a re-election bid this week.", id="reelection_bid"),
+            pytest.param("Whitfield is running against Pryor for the seat.", id="running_against"),
             pytest.param("A primary challenger emerged to unseat the senator.", id="unseat"),
             pytest.param("The senate race between the two tightened.", id="senate_race"),
         ],
@@ -234,7 +234,7 @@ class TestUngroundedElectoralClaims:
         "text",
         [
             pytest.param(
-                "Collins faces competition from a challenger in her senate race.",
+                "Pryor faces competition from a challenger in her senate race.",
                 id="race_post_grounded_by_race_source",
             ),
             pytest.param("Her re-election campaign drew a new opponent.", id="reelection_grounded"),
@@ -249,7 +249,7 @@ class TestUngroundedElectoralClaims:
         [
             pytest.param("Opponents of the bill delayed the vote.", id="bill_opponents_not_electoral"),
             pytest.param("The senator issued a statement on the ruling.", id="no_electoral_language"),
-            pytest.param("Collins voted for the funding package.", id="floor_vote_not_electoral"),
+            pytest.param("Pryor voted for the funding package.", id="floor_vote_not_electoral"),
         ],
     )
     def test_non_electoral_text_not_flagged(self, text):
@@ -258,7 +258,7 @@ class TestUngroundedElectoralClaims:
 
 class TestGroundingViolations:
     def test_clean_text_no_violations(self):
-        assert grounding_violations("Collins backed the 68-32 vote.", SOURCE) == []
+        assert grounding_violations("Pryor backed the 68-32 vote.", SOURCE) == []
 
     def test_reports_both_kinds(self):
         problems = grounding_violations(
@@ -270,8 +270,8 @@ class TestGroundingViolations:
 
     def test_reports_fabricated_electoral_contest(self):
         problems = grounding_violations(
-            "Graham was facing competition from Collins for his senate race.",
-            "Senator Graham died Thursday. Collins issued a statement.",
+            "Whitfield was facing competition from Pryor for his senate race.",
+            "Senator Whitfield died Thursday. Pryor issued a statement.",
         )
         assert any("electoral contest" in p for p in problems)
 
@@ -325,26 +325,26 @@ class TestGroundingLexicalTightening:
         # "elected officials" and "constituents" are civic boilerplate, not
         # electoral-contest coverage; a fabricated race must still be caught.
         out = ungrounded_electoral_claims(
-            "Collins is facing a primary challenge in her senate race.",
+            "Pryor is facing a primary challenge in her senate race.",
             "Elected officials heard from constituents about the highway bill.",
         )
         assert out
 
     def test_real_election_coverage_still_disarms(self):
         assert ungrounded_electoral_claims(
-            "Collins is facing a primary challenge in her senate race.",
+            "Pryor is facing a primary challenge in her senate race.",
             "The senate race in Maine tightened as voters weighed the candidates.",
         ) == []
 
 
 class TestPlaceholderTokens:
-    """2026-07 audit: a published fact read "Thune announced the tribute
+    """2026-07 audit: a published fact read "Holloway announced the tribute
     details on [date]." and the Bluesky post shipped with the literal
     "[date]" — every other check in the module is digit- or name-based,
     so nothing fired."""
 
     @pytest.mark.parametrize("text, expected", [
-        pytest.param("Thune announced the tribute details on [date].", ["[date]"], id="live_date_placeholder_case"),
+        pytest.param("Holloway announced the tribute details on [date].", ["[date]"], id="live_date_placeholder_case"),
         pytest.param("The ceremony took place on [specific date] at the cathedral.", ["[specific date]"],
                      id="multiword_placeholder"),
         pytest.param("The Senate voted 68-32 on Thursday.", [], id="clean_text_passes"),
@@ -369,13 +369,13 @@ class TestUngroundedRelationshipClaims:
     def test_live_brother_case_flagged_without_source_basis(self):
         from app.pipeline.analyze.grounding import ungrounded_relationship_claims
         generated = "She announced her candidacy for the seat left by her brother."
-        source = "Graham announced a Senate campaign after the incumbent's death."
+        source = "Whitfield announced a Senate campaign after the incumbent's death."
         assert ungrounded_relationship_claims(generated, source) == ["her brother"]
 
     def test_grounded_when_source_mentions_family(self):
         from app.pipeline.analyze.grounding import ungrounded_relationship_claims
         generated = "She announced her candidacy for the seat left by her brother."
-        source = "Darline Graham, sister of the late senator, announced her campaign."
+        source = "Delia Whitfield, sister of the late senator, announced her campaign."
         assert ungrounded_relationship_claims(generated, source) == []
 
     def test_included_in_grounding_violations_bundle(self):
@@ -388,25 +388,25 @@ class TestUngroundedRelationshipClaims:
 
 class TestUngroundedFormerOfficialClaims:
     """2026-07 live case: a Bluesky post described "former President Donald
-    Trump" while the source material said "President Trump" — the model's
+    Varga" while the source material said "President Varga" — the model's
     stale training data demoting a sitting official. No fabricated number,
     grounded surname, no electoral/family claim, and "President" isn't a
     _TITLED_NAME_RE title, so nothing fired."""
 
     @pytest.mark.parametrize("generated, source, expected", [
         pytest.param(
-            "Former President Donald Trump announced new tariffs on Tuesday.",
-            "President Trump announced tariffs targeting steel imports.",
+            "Former President Victor Varga announced new tariffs on Tuesday.",
+            "President Varga announced tariffs targeting steel imports.",
             ["Former President"], id="live_former_president_case_flagged",
         ),
         pytest.param(
-            "Trump, the former president, signed the order.",
-            "President Trump signed the executive order Friday.",
+            "Varga, the former president, signed the order.",
+            "President Varga signed the executive order Friday.",
             ["former president"], id="lowercase_and_appositive_forms_flagged",
         ),
         pytest.param(
-            "Former President Obama criticized the ruling.",
-            "Former President Barack Obama criticized the court's ruling.",
+            "Former President Ferrante criticized the ruling.",
+            "Former President Luca Ferrante criticized the court's ruling.",
             [], id="grounded_when_source_says_former",
         ),
         # "former Sen. Smith" in the source grounds "former Senator Smith"
@@ -417,17 +417,17 @@ class TestUngroundedFormerOfficialClaims:
         ),
         pytest.param(
             "The former vice president spoke at the event.",
-            "Kamala Harris, the former U.S. vice president, spoke Monday.",
+            "Nadia Rowe, the former U.S. vice president, spoke Monday.",
             [], id="intervening_words_still_ground",
         ),
         pytest.param(
-            "Former Senator Collins praised the vote.",
-            "Susan Collins praised the 68-32 vote on the funding bill.",
+            "Former Senator Pryor praised the vote.",
+            "Ruth Pryor praised the 68-32 vote on the funding bill.",
             ["Former Senator"], id="ungrounded_former_senator_flagged",
         ),
         pytest.param(
-            "President Trump announced tariffs. Senator Collins objected.",
-            "Trump tariff order draws objection from Collins.",
+            "President Varga announced tariffs. Senator Pryor objected.",
+            "Varga tariff order draws objection from Pryor.",
             [], id="current_title_not_flagged",
         ),
         # "former aide" isn't an office this check can verify — out of scope.
@@ -443,8 +443,8 @@ class TestUngroundedFormerOfficialClaims:
     def test_included_in_grounding_violations_bundle(self):
         from app.pipeline.analyze.grounding import grounding_violations
         reasons = grounding_violations(
-            "Former President Trump signed the bill.",
-            "President Trump signed the bill Thursday.",
+            "Former President Varga signed the bill.",
+            "President Varga signed the bill Thursday.",
         )
         assert any("former" in r.lower() for r in reasons)
 
@@ -455,40 +455,40 @@ class TestUngroundedPartyClaims:
 
     @pytest.mark.parametrize("generated, source, expected", [
         pytest.param(
-            "Republican Senator Collins praised the vote.",
-            "Susan Collins praised the 68-32 vote on the funding bill.",
+            "Republican Senator Pryor praised the vote.",
+            "Ruth Pryor praised the 68-32 vote on the funding bill.",
             ["Republican Senator"], id="republican_senator_flagged",
         ),
         pytest.param(
-            "Sen. Collins (R-ME) praised the vote.",
-            "Susan Collins praised the funding bill vote.",
+            "Sen. Pryor (R-ME) praised the vote.",
+            "Ruth Pryor praised the funding bill vote.",
             ["(R-ME)"], id="party_state_abbreviation_flagged",
         ),
         pytest.param(
-            "Republican Senator Collins praised the vote.",
-            "Republican Susan Collins praised the funding bill vote.",
+            "Republican Senator Pryor praised the vote.",
+            "Republican Ruth Pryor praised the funding bill vote.",
             [], id="grounded_when_source_states_party",
         ),
         pytest.param(
-            "Senator Collins praised the vote.",
-            "Susan Collins praised the funding bill vote.",
+            "Senator Pryor praised the vote.",
+            "Ruth Pryor praised the funding bill vote.",
             [], id="no_party_vocabulary_in_either_not_flagged",
         ),
         # "Senate Republicans agreed" / "Democrats withheld support" is how
         # civic prose overwhelmingly names a party. The singular-only context
         # pattern read those sources as having no party vocabulary at all.
         pytest.param(
-            "Republican Senator Collins praised the vote.",
+            "Republican Senator Pryor praised the vote.",
             "Senate Republicans agreed to drop three riders.",
             [], id="plural_republicans_grounds_the_claim",
         ),
         pytest.param(
-            "Sen. Booker (D-NJ) introduced the bill.",
+            "Sen. Rivera (D-NJ) introduced the bill.",
             "Democrats withheld support for the measure.",
             [], id="plural_democrats_grounds_the_claim",
         ),
         pytest.param(
-            "Republican Senator Collins praised the vote.",
+            "Republican Senator Pryor praised the vote.",
             "Senators agreed to drop three riders.",
             ["Republican Senator"], id="plurals_do_not_ground_a_claim_with_no_party_source",
         ),
@@ -499,8 +499,8 @@ class TestUngroundedPartyClaims:
     def test_included_in_grounding_violations_bundle(self):
         from app.pipeline.analyze.grounding import grounding_violations
         reasons = grounding_violations(
-            "Democratic Senator Booker introduced the bill.",
-            "Cory Booker introduced a bill Thursday.",
+            "Democratic Senator Rivera introduced the bill.",
+            "Alex Rivera introduced a bill Thursday.",
         )
         assert any("party" in r.lower() for r in reasons)
 
@@ -542,7 +542,7 @@ class TestAuditHedgeAndEditorializingAdditions:
                 id="may_influence_how",
             ),
             pytest.param(
-                "President Trump's statements shaped the tone of the race.",
+                "President Varga's statements shaped the tone of the race.",
                 id="shaped_the_tone",
             ),
             pytest.param(
@@ -561,7 +561,7 @@ class TestAuditHedgeAndEditorializingAdditions:
 
     def test_plain_factual_reporting_still_clean(self):
         text = (
-            "The Senate passed the bill 68-32 on Thursday. Sen. Collins "
+            "The Senate passed the bill 68-32 on Thursday. Sen. Pryor "
             "voted against it. The measure funds the Pentagon through March."
         )
         assert hedge_language(text) == []
@@ -570,7 +570,7 @@ class TestAuditHedgeAndEditorializingAdditions:
 
 class TestVagueSingularOfficeReferences:
     """2026-07 live case: a Bluesky post read "a U.S. president stated
-    fines... should be fully reversed" when the source title was "Trump
+    fines... should be fully reversed" when the source title was "Varga
     calls for EU investigation into tech fines" — the name was right
     there, but nothing caught the vague indefinite-article phrasing.
     Offices held by exactly one person at a time read as wrong with "a"/
@@ -589,7 +589,7 @@ class TestVagueSingularOfficeReferences:
         # Legitimately indefinite — 100 senators, 435 representatives.
         pytest.param("A senator introduced the bill.", [], id="senator_not_flagged"),
         pytest.param("A representative from Ohio voted no.", [], id="representative_not_flagged"),
-        pytest.param("President Trump signed the order.", [], id="named_president_not_flagged"),
+        pytest.param("President Varga signed the order.", [], id="named_president_not_flagged"),
         pytest.param("The president signed the order.", [], id="definite_president_not_flagged"),
     ])
     def test_vague_singular_office_references(self, text, expected):
@@ -605,8 +605,8 @@ class TestVagueSingularOfficeReferences:
 
 class TestVaguePersonReferences:
     """Live case (issue 522, reported via Bluesky 2026-08-06): a title
-    naming Trump was followed by a summary that never named him, instead
-    calling him "A political figure from Wayne County, Michigan" (that
+    naming Varga was followed by a summary that never named him, instead
+    calling him "A political figure from Dale County, Michigan" (that
     location actually describes El-Sayed) and "The individual referenced
     El-Sayed's decision..." — a vague stand-in for a person the piece
     could have just named, the same failure class as
@@ -615,7 +615,7 @@ class TestVaguePersonReferences:
 
     @pytest.mark.parametrize("text, expected", [
         pytest.param(
-            "A political figure from Wayne County, Michigan, has voiced "
+            "A political figure from Dale County, Michigan, has voiced "
             "concerns about voting integrity following a recent election "
             "outcome.",
             ["A political figure"], id="live_political_figure_case_flagged",
@@ -641,7 +641,7 @@ class TestVaguePersonReferences:
         pytest.param("The individual was detained pending an immigration hearing.", [],
                      id="individual_detained_not_flagged"),
         pytest.param("The individual was charged with wire fraud.", [], id="individual_charged_not_flagged"),
-        pytest.param("Trump commented on the race.", [], id="named_person_not_flagged"),
+        pytest.param("Varga commented on the race.", [], id="named_person_not_flagged"),
         pytest.param("El-Sayed ran for the first time in seven years.", [], id="hyphenated_name_not_flagged"),
     ])
     def test_vague_person_references(self, text, expected):
@@ -650,14 +650,14 @@ class TestVaguePersonReferences:
     def test_included_in_hedge_and_editorializing_bundle(self):
         from app.pipeline.analyze.grounding import hedge_and_editorializing_violations
         reasons = hedge_and_editorializing_violations(
-            "A political figure from Wayne County, Michigan, voiced concerns."
+            "A political figure from Dale County, Michigan, voiced concerns."
         )
         assert any("vague anaphoric reference to a person" in r for r in reasons)
 
 
 class TestElectioneeringLanguage:
-    """2026-09-23 incident. This platform posted "VOTE VERONICA FERNANDEZ!
-    ... She's better for Jersey than Booker!" about the NJ Senate race.
+    """2026-09-23 incident. This platform posted "VOTE JANE DOE!
+    ... She's better for Jersey than Rivera!" about the NJ Senate race.
     Every existing guard passed it CORRECTLY: the source was a member of
     the public's campaign post, so the endorsement was perfectly grounded,
     and ungrounded_electoral_claims is silent by design whenever the
@@ -666,21 +666,21 @@ class TestElectioneeringLanguage:
 
     def test_the_post_that_caused_this(self):
         assert grounding.electioneering_language(
-            "VOTE VERONICA FERNANDEZ! I didn't know a thing about her until I saw "
-            "her on the ballot. She's better for Jersey than Booker!"
+            "VOTE JANE DOE! I didn't know a thing about her until I saw "
+            "her on the ballot. She's better for Jersey than Rivera!"
         )
 
     def test_a_perfectly_grounded_endorsement_is_still_refused(self):
         """The whole point: source support is not a defence here."""
-        source = "VOTE VERONICA FERNANDEZ! She's better for Jersey than Booker!"
-        post = "Vote for Veronica Fernandez."
+        source = "VOTE JANE DOE! She's better for Jersey than Rivera!"
+        post = "Vote for Jane Doe."
         assert grounding.ungrounded_electoral_claims(post, source) == []
         assert grounding.grounding_violations(post, source)
 
     @pytest.mark.parametrize("text", [
-        "Vote for Veronica Fernandez in November.",
-        "Don't vote for Booker.",
-        "Re-elect Susan Collins to the Senate.",
+        "Vote for Jane Doe in November.",
+        "Don't vote for Rivera.",
+        "Re-elect Ruth Pryor to the Senate.",
         "Elect Jane Smith this November.",
         "Cast your ballot for Smith.",
         "She is the better choice for New Jersey.",
@@ -692,15 +692,15 @@ class TestElectioneeringLanguage:
     @pytest.mark.parametrize("text", [
         # The legislative floor-vote sense dominates this domain and must survive.
         "The Senate will vote for the third time on the funding bill.",
-        "Collins said she would vote against the nomination.",
+        "Pryor said she would vote against the nomination.",
         "The committee voted 12-9 to advance the bill.",
         "The House will vote for passage on Thursday.",
         "Republicans hope to elect a new speaker this week.",
         # Reporting on someone else's endorsement is not endorsing.
         "Smith endorsed Jones in the Senate race.",
-        "Booker leads Fernandez by six points in a new poll.",
+        "Rivera leads Doe by six points in a new poll.",
         # A real headline in this database — "Vote" mid-title, not imperative.
-        "Twice the House Came One Vote From Telling Trump to End the Iran War",
+        "Twice the House Came One Vote From Telling Varga to End the Iran War",
         "FEC filings list CHRIS COONS as a candidate in the DE Senate race.",
     ])
     def test_leaves_ordinary_reporting_alone(self, text):

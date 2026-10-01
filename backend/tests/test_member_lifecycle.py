@@ -382,18 +382,18 @@ def test_purge_rejects_branches_it_must_not_touch(db_session):
 def test_purging_a_house_row_leaves_the_same_person_serving_in_the_senate(db_session):
     # Ids are "last-first" in both chambers: a representative who became a
     # senator leaves a departed House row under the senator's own id.
-    _rep(db_session, "schiff-adam", "S001150", is_current=False, left=LONG_AGO)
-    _senator(db_session, "schiff-adam", "S001150")
+    _rep(db_session, "hartley-adam", "S001150", is_current=False, left=LONG_AGO)
+    _senator(db_session, "hartley-adam", "S001150")
     for chamber, doc_type in (("House", "House Floor Speech"), ("Senate", "Senate Floor Speech")):
         db_session.add(ExploreDocument(
             doc_type=doc_type, source="GovInfo", title=f"{chamber} speech", date=LONG_AGO,
-            politician_id="schiff-adam", politician_name="Schiff", chamber=chamber,
+            politician_id="hartley-adam", politician_name="Hartley", chamber=chamber,
         ))
     db_session.add(ActionIssue(
         date=TODAY, rank=1, title="An issue",
         related_senators=json.dumps([
-            {"id": "schiff-adam", "name": "Adam Schiff", "chamber": "senate"},
-            {"id": "schiff-adam", "name": "Adam Schiff", "chamber": "house"},
+            {"id": "hartley-adam", "name": "Owen Hartley", "chamber": "senate"},
+            {"id": "hartley-adam", "name": "Owen Hartley", "chamber": "house"},
         ]),
     ))
     db_session.flush()
@@ -401,9 +401,9 @@ def test_purging_a_house_row_leaves_the_same_person_serving_in_the_senate(db_ses
     purge_departed_members(db_session, CHAMBER_HOUSE, today=TODAY)
     db_session.flush()
 
-    assert db_session.get(Senator, "schiff-adam") is not None
+    assert db_session.get(Senator, "hartley-adam") is not None
     # Both speeches still reach the one profile he has.
-    assert {d.politician_id for d in db_session.query(ExploreDocument)} == {"schiff-adam"}
+    assert {d.politician_id for d in db_session.query(ExploreDocument)} == {"hartley-adam"}
     related = json.loads(db_session.query(ActionIssue).one().related_senators)
     assert [e["chamber"] for e in related] == ["senate"]
 

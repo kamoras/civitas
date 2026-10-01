@@ -330,22 +330,22 @@ class TestSurnameMustLookLikeAName:
         rule report a 18.8% recall cost instead of 6.3%.
         """
         _race(db_session, "2026-SEN-KY", "KY")
-        _candidate(db_session, "S6KY001", "2026-SEN-KY", "MCCONNELL, MITCH")
+        _candidate(db_session, "S6KY001", "2026-SEN-KY", "MCALLISTER, HAL")
         db_session.commit()
 
         resolved = election_coverage.resolve_item_race(
             self._matchers(db_session),
-            "McConnell to remain in rehab, will skip the Kentucky picnic.")
+            "McAllister to remain in rehab, will skip the Kentucky picnic.")
         assert resolved is not None
         assert resolved[0].race_id == "2026-SEN-KY"
 
     def test_all_caps_headlines_still_match(self, db_session):
         _race(db_session, "2026-SEN-KY", "KY")
-        _candidate(db_session, "S6KY001", "2026-SEN-KY", "MCCONNELL, MITCH")
+        _candidate(db_session, "S6KY001", "2026-SEN-KY", "MCALLISTER, HAL")
         db_session.commit()
 
         resolved = election_coverage.resolve_item_race(
-            self._matchers(db_session), "MCCONNELL SKIPS KENTUCKY PICNIC")
+            self._matchers(db_session), "MCALLISTER SKIPS KENTUCKY PICNIC")
         assert resolved is not None
 
 
@@ -639,7 +639,7 @@ class TestFullNameMustAppearTogether:
     @pytest.mark.parametrize("text", [
         "The Hill reports that Congress needs a bill on fixed recesses.",
         "I'm just a bill, sittin here on Capitol Hill.",
-        "Stopgap funding bill seeks delay of Trump's science funding plan",
+        "Stopgap funding bill seeks delay of Varga's science funding plan",
     ])
     def test_incidental_words_are_not_a_full_name(self, text):
         assert not self._basis("BILL", "HILL", text)
@@ -649,10 +649,10 @@ class TestFullNameMustAppearTogether:
                      id="the_real_candidate"),
         pytest.param("BILL", "HILL", "Hill, Bill filed with the FEC this week.", id="the_real_candidate_surname_first"),
         # The trap this module already documents: building "Mcconnell" to
-        # compare case-sensitively rejects every real "McConnell".
-        pytest.param("MITCH", "MCCONNELL", "Mitch McConnell's absence looms large over the picnic.",
+        # compare case-sensitively rejects every real "McAllister".
+        pytest.param("HAL", "MCALLISTER", "Hal McAllister's absence looms large over the picnic.",
                      id="intercaps_surname"),
-        pytest.param("BETO", "O'ROURKE", "Beto O'Rourke campaigned in El Paso.", id="apostrophe_surname"),
+        pytest.param("KIP", "O'DWYER", "Kip O'Dwyer campaigned in El Paso.", id="apostrophe_surname"),
         pytest.param("ROBERT", "KENNEDY", "Robert F. Kennedy Jr. spoke on Tuesday.",
                      id="a_middle_name_or_initial_does_not_break_the_match"),
     ])

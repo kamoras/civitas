@@ -16,7 +16,7 @@ class TestSelfDonorDetection:
         ("King, Angus Stanley Jr", "Angus S., Jr. King"),
         ("Lummis, Cynthia Mrs.", "Cynthia M. Lummis"),
         ("Whitehouse, Sheldon", "Sheldon Whitehouse"),
-        ("Johnson, Ron H Mr", "Ron Johnson"),
+        ("Carver, Ron H Mr", "Ron Carver"),
         ("Ricketts, Pete", "Pete Ricketts"),
         ("Moreno, Bernie", "Bernie Moreno"),
     ])
@@ -25,7 +25,7 @@ class TestSelfDonorDetection:
 
     @pytest.mark.parametrize("donor,candidate", [
         ("Pinnacle Bank", "Bill Hagerty"),
-        ("Charles Schwab & CO INC", "John Thune"),
+        ("Charles Schwab & CO INC", "Ray Holloway"),
         ("Janney Montgomery Scott, LLC", "Rick Scott"),
         ("Andy Kim For Congress", "Andy Kim"),          # committee, not the person
         ("Scott, Ann", "Rick Scott"),                    # different first name

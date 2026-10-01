@@ -41,8 +41,8 @@ def test_surname_must_be_a_whole_word(db_session):
 
 
 def test_multiword_surname(db_session):
-    _senators(db_session, "Catherine Cortez Masto")
-    assert match_senator(current_senators(db_session), "Cortez Masto", "Catherine").name == "Catherine Cortez Masto"
+    _senators(db_session, "Elena Ruiz Ortega")
+    assert match_senator(current_senators(db_session), "Ruiz Ortega", "Elena").name == "Elena Ruiz Ortega"
 
 
 def test_representative_accent_and_district(db_session):

@@ -29,20 +29,20 @@ def _row(state_fips="23", pid3="1", house=None, sen1=None, weight="1.0", cd="2")
 class TestEstimator:
     def test_weighted_approval_among_those_with_an_opinion(self):
         rows = [
-            _row(sen1=("Susan Collins", "Republican", "1"), weight="2.0"),
-            _row(sen1=("Susan Collins", "Republican", "4"), weight="1.0"),
-            _row(sen1=("Susan Collins", "Republican", "5"), weight="9.0"),  # not sure
+            _row(sen1=("Ruth Pryor", "Republican", "1"), weight="2.0"),
+            _row(sen1=("Ruth Pryor", "Republican", "4"), weight="1.0"),
+            _row(sen1=("Ruth Pryor", "Republican", "5"), weight="9.0"),  # not sure
         ]
         cells = ces.tally(rows)
-        est = ces._estimate(cells[("ME", "senate", "", "Susan Collins", "R")]["D"])
+        est = ces._estimate(cells[("ME", "senate", "", "Ruth Pryor", "R")]["D"])
         assert est["rate"] == pytest.approx(2 / 3)
         assert est["n"] == 2 and est["not_sure"] == 1
         # Kish: (2 + 1)^2 / (4 + 1)
         assert est["n_eff"] == pytest.approx(9 / 5)
 
     def test_state_comes_from_the_fips_code(self):
-        cells = ces.tally([_row(state_fips="6", house=("Nancy Pelosi", "Democratic", "2"), cd="11")])
-        assert ("CA", "house", "11", "Nancy Pelosi", "D") in cells
+        cells = ces.tally([_row(state_fips="6", house=("Irene Castellano", "Democratic", "2"), cd="11")])
+        assert ("CA", "house", "11", "Irene Castellano", "D") in cells
 
     def _members(self, rates, n=100):
         """Members of one cell with the given approval rates."""
@@ -140,13 +140,13 @@ def survey(monkeypatch):
     data = {
         "survey": "CES 2024", "fielded": "2024-10/2024-11", "fielded_year": utcnow().year - 2,
         "members": [
-            member("ME", "senate", "Susan Collins", "R"),
+            member("ME", "senate", "Ruth Pryor", "R"),
             member("IL", "senate", "Dick Durbin", "D"),
             member("AZ", "house", "Raul Grijalva", "D", "7"),
             member("GA", "house", "Buddy Carter", "R", "1"),
             member("TX", "house", "Al Green", "D", "9"),
-            member("TX", "house", "Mark Green", "R", "7"),
-            member("TN", "house", "Mark Green", "R", "7"),
+            member("TX", "house", "Mark Brown", "R", "7"),
+            member("TN", "house", "Mark Brown", "R", "7"),
         ],
     }
     monkeypatch.setattr(constituent_survey, "_survey_cache", data)
@@ -155,13 +155,13 @@ def survey(monkeypatch):
 
 class TestJoin:
     def test_a_member_is_found_by_state_chamber_and_name(self, survey):
-        got = constituent_survey.constituent_approval("senate", "ME", "Susan M. Collins", "R", 28)
-        assert got["surveyed_as"] == "Susan Collins"
+        got = constituent_survey.constituent_approval("senate", "ME", "Susan M. Pryor", "R", 28)
+        assert got["surveyed_as"] == "Ruth Pryor"
         assert [g["party"] for g in got["by_party"]] == ["D", "R", "I"]
         assert got["by_party"][0]["approve"] == 0.2
 
     def test_an_unmeasurable_group_carries_no_figure(self, survey):
-        got = constituent_survey.constituent_approval("senate", "ME", "Susan Collins", "R", 28)
+        got = constituent_survey.constituent_approval("senate", "ME", "Ruth Pryor", "R", 28)
         assert got["by_party"][2]["approve"] is None and got["by_party"][2]["respondents"] == 12
 
     def test_a_quoted_nickname_counts_as_the_first_name(self, survey):
@@ -190,15 +190,15 @@ class TestJoin:
 
     def test_same_surname_in_the_state_is_told_apart_by_party_and_district(self, survey):
         assert constituent_survey.constituent_approval("house", "TX", "Al Green", "D", 20, 9)["surveyed_as"] == "Al Green"
-        assert constituent_survey.constituent_approval("house", "TX", "Mark Green", "R", 8, 7)["surveyed_as"] == "Mark Green"
+        assert constituent_survey.constituent_approval("house", "TX", "Mark Brown", "R", 8, 7)["surveyed_as"] == "Mark Brown"
 
     def test_another_chamber_or_state_is_never_matched(self, survey):
-        assert constituent_survey.constituent_approval("house", "ME", "Susan Collins", "R", 28, 2) is None
-        assert constituent_survey.constituent_approval("senate", "NH", "Susan Collins", "R", 28) is None
+        assert constituent_survey.constituent_approval("house", "ME", "Ruth Pryor", "R", 28, 2) is None
+        assert constituent_survey.constituent_approval("senate", "NH", "Ruth Pryor", "R", 28) is None
 
     def test_no_survey_data_means_no_reading(self, monkeypatch):
         monkeypatch.setattr(constituent_survey, "_survey_cache", {})
-        assert constituent_survey.constituent_approval("senate", "ME", "Susan Collins", "R", 28) is None
+        assert constituent_survey.constituent_approval("senate", "ME", "Ruth Pryor", "R", 28) is None
 
 
 def test_the_bundled_data_joins_to_its_own_members(monkeypatch):

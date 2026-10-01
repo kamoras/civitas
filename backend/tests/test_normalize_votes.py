@@ -73,16 +73,16 @@ class TestExtractSenatorVote:
     def test_match_by_name_and_state(self):
         data = {
             "members": [
-                {"lastName": "CRUZ", "state": "TX", "voteCast": "Yea"},
-                {"lastName": "WARREN", "state": "MA", "voteCast": "Nay"},
+                {"lastName": "DELGADO", "state": "TX", "voteCast": "Yea"},
+                {"lastName": "FAIRLEY", "state": "MA", "voteCast": "Nay"},
             ]
         }
-        assert extract_senator_vote(data, "Cruz", "TX") == "Yea"
-        assert extract_senator_vote(data, "Warren", "MA") == "Nay"
+        assert extract_senator_vote(data, "Delgado", "TX") == "Yea"
+        assert extract_senator_vote(data, "Fairley", "MA") == "Nay"
 
     def test_case_insensitive(self):
-        data = {"members": [{"lastName": "cruz", "state": "tx", "voteCast": "Nay"}]}
-        assert extract_senator_vote(data, "CRUZ", "TX") == "Nay"
+        data = {"members": [{"lastName": "delgado", "state": "tx", "voteCast": "Nay"}]}
+        assert extract_senator_vote(data, "DELGADO", "TX") == "Nay"
 
     def test_not_found_returns_none(self):
         data = {"members": [{"lastName": "SMITH", "state": "OH", "voteCast": "Yea"}]}
@@ -94,16 +94,16 @@ class TestExtractSenatorVote:
         assert extract_senator_vote({"members": []}) is None
 
     def test_multi_word_last_name(self):
-        """Multi-word last names like 'Cortez Masto' and 'Van Hollen' must match."""
+        """Multi-word last names like 'Ruiz Ortega' and 'Van Dorn' must match."""
         data = {
             "members": [
-                {"lastName": "Cortez Masto", "state": "NV", "voteCast": "Yea"},
-                {"lastName": "Van Hollen", "state": "MD", "voteCast": "Nay"},
+                {"lastName": "Ruiz Ortega", "state": "NV", "voteCast": "Yea"},
+                {"lastName": "Van Dorn", "state": "MD", "voteCast": "Nay"},
                 {"lastName": "Blunt Rochester", "state": "DE", "voteCast": "Yea"},
             ]
         }
-        assert extract_senator_vote(data, "Cortez Masto", "NV") == "Yea"
-        assert extract_senator_vote(data, "Van Hollen", "MD") == "Nay"
+        assert extract_senator_vote(data, "Ruiz Ortega", "NV") == "Yea"
+        assert extract_senator_vote(data, "Van Dorn", "MD") == "Nay"
         assert extract_senator_vote(data, "Blunt Rochester", "DE") == "Yea"
 
     def test_unicode_accent_normalization(self):
@@ -295,7 +295,7 @@ class TestInferCaucusPartyCombined:
         assert _infer_caucus_party(bills, votes, None) == "D"
 
     def test_cosponsorship_reinforces_votes(self):
-        """When both signals agree, result is the agreed party (the Sanders
+        """When both signals agree, result is the agreed party (the
         pattern: an Independent who caucuses with Democrats)."""
         bills = self._make_party_bills(7, 3)
         votes = {f"d{i}": "Yea" for i in range(7)}
