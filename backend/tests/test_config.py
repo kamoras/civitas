@@ -75,6 +75,26 @@ class TestCongressInSession:
             assert congress_in_session() == 122
             assert advance_current_congress() == 122
 
+    def test_a_clock_patched_through_datetime_is_read_too(self, monkeypatch):
+        """A test may set the clock without replacing utcnow: swapping
+        app.time_utils.datetime for a subclass with a fixed now(), as
+        test_explore_comment_submission does. utcnow() then reads 2027, and
+        the Congress must follow it rather than stay pinned at 119."""
+        from app import time_utils
+
+        class _Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                utc = datetime(2027, 6, 1, tzinfo=timezone.utc)
+                return utc.astimezone(tz) if tz else utc.replace(tzinfo=None)
+
+        monkeypatch.setattr(time_utils, "datetime", _Clock)
+        assert time_utils.utcnow().year == 2027
+        assert congress_in_session() == 120
+        with scoring_congress() as held:
+            assert held == config.settings.CURRENT_CONGRESS == 120
+        assert config.Settings().CURRENT_CONGRESS == 120
+
     def test_defaults_to_the_clock(self):
         with patch("app.time_utils.utcnow", return_value=datetime(2029, 1, 3, 17, 0)):
             assert congress_in_session() == 121

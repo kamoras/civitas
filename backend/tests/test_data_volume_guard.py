@@ -113,6 +113,47 @@ def test_every_module_constant_naming_a_data_file_points_into_tmp_path(tmp_path)
         assert str(path).startswith(str(tmp_path)), path
 
 
+def _first_import(monkeypatch, name):
+    """Import `name` afresh, as a test that is the first to import it
+    would; the module already loaded is put back at teardown."""
+    import importlib
+
+    parent, _, child = name.rpartition(".")
+    monkeypatch.setattr(sys.modules[parent], child, getattr(sys.modules[parent], child))
+    monkeypatch.delitem(sys.modules, name)
+    return importlib.import_module(name)
+
+
+def test_a_module_first_imported_inside_a_test_is_redirected(tmp_path, monkeypatch):
+    """conftest._RedirectOnImport: a module the run has not loaded yet
+    (app.pipeline.vector_store, imported when a pipeline run starts) gets
+    the test's redirect as it loads, not the /data path it names."""
+    module = _first_import(monkeypatch, "app.pipeline.fetch.senate_classes")
+    assert module._PERSISTENT_PATH == str(tmp_path / "data-volume" / "senate_classes.json")
+
+
+def test_a_redirect_made_on_import_is_undone_with_its_monkeypatch(tmp_path, monkeypatch):
+    """...and taken off with the monkeypatch that made it, as is a clock
+    the module bound by name while a test had replaced it — not left
+    frozen for every later test."""
+    from app import time_utils
+
+    real = time_utils.utcnow
+    inner = pytest.MonkeyPatch()
+    conftest.redirect_data_volume(inner, tmp_path / "inner")
+
+    def frozen():
+        return None
+
+    inner.setattr(time_utils, "utcnow", frozen)
+    module = _first_import(monkeypatch, "app.pipeline.fetch.senate_classes")
+    assert module.utcnow is frozen
+    assert module._PERSISTENT_PATH == str(tmp_path / "inner" / "senate_classes.json")
+    inner.undo()
+    assert module.utcnow is real
+    assert module._PERSISTENT_PATH == str(tmp_path / "data-volume" / "senate_classes.json")
+
+
 _SITE_ENV = {
     "DATABASE_URL": "sqlite:////data/civitas.db", "VECTOR_DB_PATH": "/data/vectors.db",
     "CIVITAS_RAM_DIR": "/dev/shm", "THROTTLE_DB_PATH": "/dev/shm/civitas_throttle.db",

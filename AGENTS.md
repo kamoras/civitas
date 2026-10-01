@@ -1382,24 +1382,35 @@ state in the query string is exposed to them.
   the runtime paths into each test's `tmp_path` and refuses (and fails the
   test on) any read or write that still reaches `/data` — a read would make
   a result depend on the host's live data. A new runtime file under `/data`
-  needs its path redirected there. Every app module whose source names a
-  `/data` path is imported before the redirect, so one a test imports
-  lazily is redirected too.
+  needs its path redirected there. An app module a test imports lazily is
+  redirected as it loads (`_RedirectOnImport`, an import hook in
+  `conftest.py`), with the redirect undone with the test.
 - Tests never depend on the real clock. Pin the instant a test reads with
   `freeze_utcnow` (it also pins `election_phase.election_today`) or by
   patching `app.time_utils.utcnow`, and use fixed dates in fixtures. The
   Congress is pinned for you: the autouse `_sitting_congress_pinned`
   (`conftest.py`) starts every test with `settings.CURRENT_CONGRESS` at
   `TEST_CONGRESS` (119) and makes `congress_in_session()` answer it while
-  the test leaves `app.time_utils.utcnow` alone — so a job a test starts
+  the test leaves the clock alone — so a job a test starts
   (`start_writer`, `writing()`, `scoring_congress`) or a `Settings()` it
   builds doesn't move to whatever Congress the real clock has in office.
-  Once a test patches the clock, the Congress follows that clock, as in
-  production. A test about another Congress sets it explicitly
-  (`monkeypatch.setattr(settings, "CURRENT_CONGRESS", N)`) or freezes the
-  clock inside it. To check a change, run the fast suite under a frozen
-  clock (time-machine started from a plugin loaded before `conftest.py`)
-  on both sides of noon ET on an odd year's Jan 3 and on election day.
+  Once a test patches the clock (`app.time_utils.utcnow`, or a name it
+  reads such as `app.time_utils.datetime`), the Congress follows that
+  clock, as in production. A test about another Congress sets it
+  explicitly (`monkeypatch.setattr(settings, "CURRENT_CONGRESS", N)`) or
+  freezes the clock inside it. To check a change, run the fast suite with
+  the whole process on another date — `scripts/frozen_clock_plugin.py`
+  (time-machine, from `scripts/requirements-research.txt`; its docstring
+  has the details) — on both sides of noon ET on an odd year's Jan 3 and
+  on election night:
+
+  ```bash
+  cd backend
+  for at in 2027-01-03T16:59Z 2027-01-03T17:01Z 2026-11-04T02:00Z; do
+    FREEZE_AT=$at PYTHONPATH="$PWD" PYTEST_PLUGINS=scripts.frozen_clock_plugin \
+      .venv/bin/python -m pytest tests/ -m "not slow" -q -p no:cacheprovider
+  done
+  ```
 - Code that opens its own sessions from several threads (`asyncio.to_thread`,
   a `threading.Timer`) gets `file_sessionmaker` (a file-backed database, a
   connection per session) as its `SessionLocal`, never the test's one
