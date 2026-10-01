@@ -34,6 +34,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.visits import _visit_queue
 from app.database import Base, VisitsBase
+from app.time_utils import congress_in_session as _REAL_CONGRESS_IN_SESSION
+from app.time_utils import utcnow as _REAL_UTCNOW
 
 
 @pytest.fixture()
@@ -422,6 +424,53 @@ def bluesky_configured(monkeypatch, bluesky_outbox):
     return bluesky_outbox
 
 
+# The Congress the real clock puts in office, as every test sees it.
+# settings.CURRENT_CONGRESS defaults to the Congress in office when the
+# process starts, and app.config.advance_current_congress (every
+# start_writer/writing() job, the API's liveness loop, the staleness
+# alert) moves it to the one in office now: both read the real clock
+# (app.time_utils.congress_in_session), so every fixture written for the
+# 119th (2025-26 bills, roll calls, district lines) would change meaning at
+# noon ET on 2027-01-03, and again every two years after.
+TEST_CONGRESS = 119
+
+
+@pytest.fixture(autouse=True)
+def _sitting_congress_pinned(monkeypatch):
+    """Every test runs as if the 119th Congress were in office.
+
+    - The process's value (settings.CURRENT_CONGRESS, computed from the
+      real clock at import) starts each test at TEST_CONGRESS. A plain
+      assignment, as a job advancing it makes — never an environment pin
+      (settings.current_congress_pinned stays False) — undone at teardown.
+    - ``congress_in_session()`` with no ``now`` answers TEST_CONGRESS while
+      the test leaves the clock alone (``app.time_utils.utcnow`` is the real
+      one), so a job a test starts can't advance it to the real clock's,
+      and a ``Settings()`` built in a test starts there too. Once the test
+      sets a clock (``freeze_utcnow``, or patching ``app.time_utils.utcnow``)
+      it reads that clock, as in production; an explicit ``now`` is always
+      honoured.
+
+    A test about another Congress sets it (``monkeypatch.setattr(settings,
+    "CURRENT_CONGRESS", N)``) or freezes the clock in it."""
+    from app import time_utils
+    from app.config import settings
+
+    real = _REAL_CONGRESS_IN_SESSION
+
+    def congress_in_session(now=None):
+        if now is None and time_utils.utcnow is _REAL_UTCNOW:
+            return TEST_CONGRESS
+        return real(now)
+
+    for name, module in list(sys.modules.items()):
+        if not name.startswith(("app.", "tests.", "test_")):
+            continue
+        if (getattr(module, "__dict__", None) or {}).get("congress_in_session") is real:
+            monkeypatch.setattr(module, "congress_in_session", congress_in_session)
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", TEST_CONGRESS)
+
+
 @pytest.fixture(autouse=True)
 def _no_district_lines_under_recheck(monkeypatch):
     """Every test starts with no district-lines holder under re-check
@@ -693,6 +742,27 @@ def use_app_database(monkeypatch, directory):
     monkeypatch.setitem(database.VisitsSessionLocal.kw, "bind", engines["visits_engine"])
     return list(engines.values())
 
+
+def _import_modules_naming_the_data_volume() -> None:
+    """Import every app module whose source names a path on /data, so the
+    redirects below find its constants. One first imported inside a test
+    (app.pipeline.vector_store, imported by invalidate_stale_analysis when a
+    pipeline run starts) would otherwise keep its /data path for that test:
+    test_house_pipeline.py run on its own failed on
+    /data/classification_model_version, while the full suite had imported
+    the module earlier."""
+    import importlib
+    import re
+
+    app_dir = pathlib.Path(__file__).resolve().parents[1] / "app"
+    names_data = re.compile(r"""["']/data(?:/|["'])""")
+    for path in sorted(app_dir.rglob("*.py")):
+        if names_data.search(path.read_text(encoding="utf-8")):
+            parts = path.relative_to(app_dir.parent).with_suffix("").parts
+            importlib.import_module(".".join(parts[:-1] if parts[-1] == "__init__" else parts))
+
+
+_import_modules_naming_the_data_volume()
 
 # For the whole run, from here: a test module reading a data file as it is
 # collected (test_election_calendar's senate_classes() at import) reads the

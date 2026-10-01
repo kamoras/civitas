@@ -131,6 +131,9 @@ class TestRecentRollCallsFollowTheHeldCongress:
             patch("app.pipeline.house_pipeline.fetch_recent_house_roll_calls", new_callable=AsyncMock, return_value=recent) as mock_rcs,
             patch("app.pipeline.analyze.bill_analyzer.classify_all_bills", classify),
             patch("app.pipeline.house_pipeline.utcnow", return_value=datetime(2027, 1, 3, 18)),
+            # The job started at 11:00 ET, before the 120th took office:
+            # scoring_congress reads this clock, not the real one.
+            patch("app.time_utils.utcnow", return_value=datetime(2027, 1, 3, 16)),
             patch.object(settings, "CURRENT_CONGRESS", 119),
         ):
             with scoring_congress():
