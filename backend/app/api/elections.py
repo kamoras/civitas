@@ -44,7 +44,7 @@ from app.pipeline.analyze.score_calculator import (
     get_pvi_meta,
     get_state_pvi_map,
 )
-from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
+from app.pipeline.candidate_dedup import dedupe_candidates, dedupe_merge_map, normalized_surname
 from app.pipeline.fetch.state_candidates_common import last_name_matches
 from app.election_phase import ActiveElection, active_election, election_today
 from app.live_results.sync import elected_congress_sits, redrawn_states
@@ -562,6 +562,26 @@ def _seat_label(state: str, district: int | None) -> str:
     return f"{state}-{district}" if district else f"{state} at-large"
 
 
+def _has_namesake(cand: Candidate, last_name: str, field: list[Candidate]) -> bool:
+    """Whether another person in the race's whole field (deduplicated,
+    not only the confirmed nominees) has a surname the roster match could
+    take for `cand`'s. Decided with the roster match's own trailing-token
+    rule, both ways round: "cruz" and "de la cruz" both match a roster row
+    "Dana De La Cruz", so an incumbent Pat Cruz beside a challenger Dana
+    De La Cruz has a namesake. FEC's duplicate records of `cand` are the
+    same person, not a namesake — they share a surname by construction
+    (dedupe_merge_map only merges same-surname records)."""
+    merge_map = dedupe_merge_map(field)
+    me = merge_map.get(cand.id, cand.id)
+    for other in field:
+        if merge_map.get(other.id, other.id) == me:
+            continue
+        theirs = normalized_surname(other.name)
+        if theirs and (last_name_matches(last_name, theirs) or last_name_matches(theirs, last_name)):
+            return True
+    return False
+
+
 def _incumbent_link(
     cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
     stale_incumbent_ids: frozenset[str] = frozenset(),
@@ -588,7 +608,8 @@ def _incumbent_link(
     member run refreshes them, the winners after — and nothing stored says
     which. A match is then still the candidate's own scorecard only on the
     race's own seat (its district, or the state's senators) and only when
-    no other candidate in the race shares the surname: on a refreshed table
+    no one else in the race has a surname the roster match could take
+    for theirs (_has_namesake): on a refreshed table
     the seat holder is this race's winner, who may be that namesake. The
     redrawn-map match across the delegation stops (a newly elected
     namesake elsewhere in the state would pass its uniqueness check), and
@@ -607,9 +628,7 @@ def _incumbent_link(
     if not last_name:
         return None
     seated = elected_congress_sits(race.cycle_year)
-    if seated and any(
-        other.id != cand.id and normalized_surname(other.name) == last_name for other in race.candidates
-    ):
+    if seated and _has_namesake(cand, last_name, race.candidates):
         return None
 
     if race.office == "H":
@@ -627,8 +646,8 @@ def _incumbent_link(
             if len(same) == 1:
                 # The district they held going into the election, which on
                 # a redrawn map is not this race's number: the page says
-                # "sitting member, TX-35" ("member going in" from election
-                # day on), never "incumbent" of a seat they don't hold.
+                # "sitting member, TX-35" ("member before this election"
+                # from election day on), never "incumbent" of a seat they don't hold.
                 return {"id": same[0].id, "score": compute_overall_score(same[0]), "district": same[0].district,
                         "seat": _seat_label(race.state, same[0].district)}
         return None

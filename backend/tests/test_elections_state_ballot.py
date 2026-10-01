@@ -690,6 +690,54 @@ class TestIncumbentRecordOnceTheElectedCongressSits:
         record = next(c for c in data["senateRaces"][0]["candidates"] if c["id"] == "S1")["incumbentRecord"]
         assert (record is not None and record["id"] == "SEN-OSSOFF") if linked else record is None
 
+    def test_a_multiword_namesake_winner_is_never_linked_to_the_member_going_in(
+        self, db_session, monkeypatch,
+    ):
+        """The roster match takes "cruz" for "Dana De La Cruz" (trailing
+        tokens), so the namesake check must too: otherwise Pat Cruz's card
+        links to the winner's scorecard on a refreshed roster."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "CRUZ, PAT", incumbent_challenge="I")
+        _candidate(db_session, "H2", "2026-HOUSE-GA-6", "DE LA CRUZ, DANA", incumbent_challenge="C", party="REP")
+        _representative(db_session, "R-DANA", "Dana De La Cruz", "GA", 6, party="R")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        assert all(c["incumbentRecord"] is None for c in data["houseRaces"][0]["candidates"])
+
+    def test_a_multiword_senate_namesake_is_never_linked_to_the_member_going_in(
+        self, db_session, monkeypatch,
+    ):
+        """The same rule the other way round: the incumbent's surname is
+        the longer one, and a rival's is its trailing token."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S1", "2026-SEN-GA", "VAN HOLLEN, CHRIS", incumbent_challenge="I")
+        _candidate(db_session, "S2", "2026-SEN-GA", "HOLLEN, DANA", incumbent_challenge="C", party="REP")
+        _senator(db_session, "SEN-VH", "Chris Van Hollen", "GA")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        assert all(c["incumbentRecord"] is None for c in data["senateRaces"][0]["candidates"])
+
+    def test_an_fec_duplicate_of_the_member_going_in_is_not_a_namesake(self, db_session, monkeypatch):
+        """FEC's duplicate record of the same person (same money, same
+        surname) is merged into one card, and must not suppress its link."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I",
+                   contributions=100.0, cash_on_hand=50.0, confirmed_general=True)
+        _candidate(db_session, "H1B", "2026-HOUSE-GA-6", "MCBATH, LUCY K", incumbent_challenge="I",
+                   contributions=100.0, cash_on_hand=50.0)
+        _representative(db_session, "R-MCBATH", "Lucy McBath", "GA", 6)
+        candidates = self._on_jan_3(db_session, monkeypatch, 120)["houseRaces"][0]["candidates"]
+        assert [c["id"] for c in candidates] == ["H1"]
+        assert candidates[0]["incumbentRecord"]["id"] == "R-MCBATH"
+
+    def test_a_namesake_who_is_not_a_confirmed_nominee_still_counts(self, db_session, monkeypatch):
+        """The roster can hold any winner the page doesn't show as a
+        confirmed nominee, so the check covers the whole deduplicated field."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "SMITH, PAT", incumbent_challenge="I", confirmed_general=True)
+        _candidate(db_session, "H2", "2026-HOUSE-GA-6", "SMITH, DANA", incumbent_challenge="C", party="REP")
+        _representative(db_session, "R-DANA", "Dana Smith", "GA", 6, party="R")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        assert all(c["incumbentRecord"] is None for c in data["houseRaces"][0]["candidates"])
+
 
 class TestStaleIncumbentFlag:
     """Real MI 2026 Senate shape, live-verified 2026-09: Sen. Gary Peters
