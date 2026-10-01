@@ -1402,11 +1402,14 @@ state in the query string is exposed to them.
   the whole process on another date — `scripts/frozen_clock_plugin.py`
   (time-machine, from `scripts/requirements-research.txt`; its docstring
   has the details) — on both sides of noon ET on an odd year's Jan 3 and
-  on election night:
+  on election night. The clock runs on from `FREEZE_AT` while the suite
+  runs (about ten minutes), so an instant meant to be *before* a hand-over
+  needs more margin than that: 15:00Z is 10:00 ET, after the old midnight
+  trap and two hours short of noon:
 
   ```bash
   cd backend
-  for at in 2027-01-03T16:59Z 2027-01-03T17:01Z 2026-11-04T02:00Z; do
+  for at in 2027-01-03T15:00Z 2027-01-03T17:01Z 2026-11-04T02:00Z; do
     FREEZE_AT=$at PYTHONPATH="$PWD" PYTEST_PLUGINS=scripts.frozen_clock_plugin \
       .venv/bin/python -m pytest tests/ -m "not slow" -q -p no:cacheprovider
   done

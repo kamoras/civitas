@@ -23,13 +23,20 @@ Needs time-machine (scripts/requirements-research.txt):
     pip install -r requirements.txt -r scripts/requirements-research.txt
 
 - FREEZE_AT: an ISO 8601 instant (required; a ``Z`` or offset, else UTC).
+  The clock runs on from it, so the full fast suite (about ten minutes)
+  ends that much later: an instant meant to fall *before* a hand-over
+  needs at least that much margin (2027-01-03T15:00Z, not 16:59Z, for
+  noon ET).
 - FREEZE_TICK=0: stop the clock at FREEZE_AT instead of letting it run on
   from there (the default — a suite with timeouts needs a moving clock).
+  File times (below) still move with real time then, so a file written
+  during the run stats as that far ahead of the stopped clock.
 
 The kernel stamps files with the real time, so code that compares a file's
 age with the clock (cache freshness, heartbeats) would see every fresh file
 as months or years off. os.stat, os.lstat and os.fstat therefore report
-times shifted by the same constant as the clock, and os.utime takes
+times shifted by one constant (the clock's offset when the plugin
+installed, which equals the clock's own while it ticks), and os.utime takes
 travelled times and stores real ones, so a utime then a stat round-trips as
 it does on the real clock. Not shifted: os.DirEntry.stat (os.scandir) and
 anything reading timestamps outside these functions (importlib reads
