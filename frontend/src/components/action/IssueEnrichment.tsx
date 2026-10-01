@@ -94,7 +94,7 @@ export function IssueImage({
       {(issue.imageAlt || issue.imageCredit) && (
         <figcaption className="mt-1.5 font-mono text-xs tracking-wide text-ink-min">
           {issue.imageAlt}
-          {issue.imageAlt && issue.imageCredit && " — "}
+          {issue.imageAlt && issue.imageCredit && " · "}
           {issue.imageCredit && `Photo: ${issue.imageCredit}`}
         </figcaption>
       )}

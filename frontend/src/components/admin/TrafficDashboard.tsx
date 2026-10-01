@@ -28,7 +28,7 @@ const METRIC_OPTIONS: { value: LoadTimeMetric; label: string; blurb: string }[] 
   {
     value: "load",
     label: "PAGE LOAD",
-    blurb: "Navigation start to the end of the load event — the whole cold visit.",
+    blurb: "Navigation start to the end of the load event: the whole cold visit.",
   },
   {
     value: "fcp",
@@ -38,7 +38,7 @@ const METRIC_OPTIONS: { value: LoadTimeMetric; label: string; blurb: string }[] 
   {
     value: "ttfb",
     label: "SERVER RESPONSE",
-    blurb: "Until the first byte of the page arrived (TTFB) — the part this host controls.",
+    blurb: "Until the first byte of the page arrived (TTFB): the part this host controls.",
   },
 ];
 
@@ -183,7 +183,7 @@ export function TrafficDashboard({ token }: { token: string }) {
           <p className="mt-2 text-xs font-mono text-ink-min">{metricInfo.blurb}</p>
         </div>
         <LineChart
-          title={`${metricInfo.label} — P50 / P75 / P95 PER DAY`}
+          title={`${metricInfo.label}: P50 / P75 / P95 PER DAY`}
           subtitle={`${ltSamples.toLocaleString()} cold page loads measured in ${range}d; days with none are gaps`}
           xLabels={ltDays.map((d) => formatDay(d.date))}
           series={[
@@ -218,14 +218,14 @@ export function TrafficDashboard({ token }: { token: string }) {
           }
           emptyMessage={
             data
-              ? "No load timings yet — browsers report them after each cold page load."
+              ? "No load timings yet: browsers report them after each cold page load."
               : "Loading…"
           }
         />
         {lt && lt.byPath.length > 0 && (
           <div className="mt-6">
             <div className="text-ink-lo text-xs font-mono tracking-wider mb-1.5">
-              SLOWEST ROUTES — PAGE LOAD, LAST {range} DAYS
+              SLOWEST ROUTES: PAGE LOAD, LAST {range} DAYS
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono">
@@ -278,7 +278,7 @@ export function TrafficDashboard({ token }: { token: string }) {
             <p className="text-xs font-mono text-ink-min">No page views in this range.</p>
           ) : (
             <RankBars
-              title={`MOST VIEWED — LAST ${range} DAYS`}
+              title={`MOST VIEWED: LAST ${range} DAYS`}
               entries={(data?.topPages ?? []).map((p) => ({ name: p.path, count: p.views }))}
               unit="views"
               labelWidth="w-36"
@@ -302,7 +302,7 @@ export function TrafficDashboard({ token }: { token: string }) {
       </div>
 
       <p className="text-ink-min text-xs font-mono">
-        Visitors are counted by a hash under a random salt that is deleted when its day ends — no IP
+        Visitors are counted by a hash under a random salt that is deleted when its day ends: no IP
         addresses are stored, and past days&apos; hashes can&apos;t be traced back to one.
         Browser/OS/device are coarse categories only, never the raw User-Agent string. Page views
         are raw counts grouped by route (all politician profiles count as one row). Load times are

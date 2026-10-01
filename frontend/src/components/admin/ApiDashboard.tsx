@@ -153,7 +153,7 @@ export function ApiDashboard({ token }: { token: string }) {
       </Panel>
 
       <p className="text-ink-min text-xs font-mono">
-        Counted per day, endpoint, channel and status only — nothing about the caller (no IP, no
+        Counted per day, endpoint, channel and status only: nothing about the caller (no IP, no
         hash, no User-Agent). None of this is in the visitor figures on the Traffic tab.
       </p>
     </div>

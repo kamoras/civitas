@@ -343,8 +343,8 @@ export default function ElectionsPage() {
             {stillVoting && results ? (
               <>
                 It&apos;s election day. Counts appear here as each state&apos;s last polls close, as
-                the state&apos;s own election office publishes them — nothing of a state&apos;s
-                count is shown before then. Every state&apos;s ballot research is one click away.
+                the state&apos;s own election office publishes them: nothing of a state&apos;s count
+                is shown before then. Every state&apos;s ballot research is one click away.
               </>
             ) : resultsMode && results ? (
               <>

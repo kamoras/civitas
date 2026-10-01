@@ -307,7 +307,7 @@ export function SystemDashboard({
 
   return (
     <div className="space-y-6">
-      <Panel title="Host — live" live>
+      <Panel title="Host: live" live>
         {stats ? (
           <HostMeters stats={stats} net={latest} />
         ) : (

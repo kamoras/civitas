@@ -773,7 +773,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
         events.append({
             "date": election_day.isoformat(),
             "title": f"{label} Election Day",
-            "description": f"Federal election day — {_series(seats)} are on the ballot.",
+            "description": f"Federal election day: {_series(seats)} are on the ballot.",
             "category": "election",
             "link": "/elections",
             "linkLabel": "View races & state info",

@@ -97,7 +97,7 @@ function BillsPageContent() {
                 as a bug next to a "Referred to Committee" count in the
                 tens of thousands sitting directly below it. */}
             <p className="mt-1 font-sans text-xs text-ink-min">
-              Excludes bills only introduced or automatically referred to committee — nearly every
+              Excludes bills only introduced or automatically referred to committee: nearly every
               bill clears that step within days; this counts what&apos;s moved further.
             </p>
           </PageMasthead>

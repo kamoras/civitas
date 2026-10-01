@@ -190,7 +190,7 @@ export default function PlatformTracker({ partisanDepth, senatorParty }: Platfor
   return (
     <CollapsibleSection
       title="POSITIONS vs. VOTES"
-      summary={summaryParts.join(" — ")}
+      summary={summaryParts.join(" · ")}
       source="Derived from roll-call votes"
     >
       {hasPartisan && <PartisanDepthPanel depth={partisanDepth} senatorParty={senatorParty} />}

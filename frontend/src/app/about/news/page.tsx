@@ -27,7 +27,7 @@ export default function NewsChapter() {
       lede={
         <p>
           The Action Center shows the day&apos;s most important civic stories; the Congress pages
-          show what each chamber did. Neither is written by us or by a model — both quote their
+          show what each chamber did. Neither is written by us or by a model: both quote their
           sources.
         </p>
       }
@@ -35,7 +35,7 @@ export default function NewsChapter() {
       <Summary>
         <Point>
           News comes from seven newsrooms, checked hourly. The mix runs from center to lean-left,
-          with no right-of-center outlet at present — a limitation, stated.
+          with no right-of-center outlet at present: a limitation, stated.
         </Point>
         <Point>
           A model is used to find a claim in an article, not to write one. Every news sentence you
@@ -56,8 +56,8 @@ export default function NewsChapter() {
 
       <Section id="action-center" title="How the Action Center picks stories">
         <P>
-          Eight feeds from seven newsrooms — AP News, NPR (Politics and World, counted as one), PBS
-          NewsHour, BBC World, The Hill, Politico and Roll Call — are read every hour, with opinion
+          Eight feeds from seven newsrooms are read every hour: AP News, NPR (Politics and World,
+          counted as one), PBS NewsHour, BBC World, The Hill, Politico and Roll Call, with opinion
           sections filtered out. Articles are kept if they&apos;re about U.S. policy, and grouped
           into stories by headline similarity.
         </P>
@@ -76,7 +76,7 @@ export default function NewsChapter() {
             theme: on 27 September 2026 an issue titled for floods in Bangkok led with a hurricane
             near Hawaii and listed facts about a nor&apos;easter and an epidemic in Fiji. Headline
             similarity can&apos;t reliably tell the same event from the same kind of event, so
-            grouping errs toward keeping stories apart — an issue may cite fewer sources, which is a
+            grouping errs toward keeping stories apart: an issue may cite fewer sources, which is a
             smaller error than one built from unrelated stories.
           </P>
           <P>
@@ -90,15 +90,15 @@ export default function NewsChapter() {
           </P>
           <P>
             Reddit was a trending source until September 2026, when it began requiring a login this
-            site doesn&apos;t have. It was retired rather than left returning nothing — a dead
-            source that looks like a quiet one is worse than none.
+            site doesn&apos;t have. It was retired rather than left returning nothing: a dead source
+            that looks like a quiet one is worse than none.
           </P>
         </More>
       </Section>
 
       <Section id="quoted" title="The model doesn’t write the sentence">
         <P>
-          A model is asked only to locate an assertion in one article — who did something, and what
+          A model is asked only to locate an assertion in one article: who did something, and what
           they did. The site then checks that both parts appear in the article word for word, that
           the article asserts one of the other rather than merely containing both, and that the span
           runs to the end of its clause. Where the model stops short (&ldquo;Senator sues&rdquo;),
@@ -141,7 +141,7 @@ export default function NewsChapter() {
             Only one refresh runs at a time, even while a deploy briefly runs two copies of the
             site. The run holding that turn renews its claim every minute, and a claim unrenewed for
             ten minutes is released. A claim used to last four hours whether or not its run was
-            alive, so a deploy that stopped a refresh silenced the next four — on 26 September 2026,
+            alive, so a deploy that stopped a refresh silenced the next four: on 26 September 2026,
             a day of steady deploys, no issue was published at all. Deploys now wait for a refresh
             under way, up to a limit, and each write is saved before the next model call so the
             renewal always gets its turn.
@@ -177,7 +177,7 @@ export default function NewsChapter() {
       <Section id="congress-reports" title="Congress reports">
         <P>
           The Congress pages answer what the Senate and House did on a given day, week or month,
-          from the Congressional Record&apos;s Daily Digest — the Record&apos;s own summary of each
+          from the Congressional Record&apos;s Daily Digest: the Record&apos;s own summary of each
           day, published by the Government Publishing Office the next day. Until it appears, the
           page shows each chamber&apos;s floor log: the House writes its log through the day, the
           Senate posts its log after the session ends. Record votes come from each chamber&apos;s
@@ -188,14 +188,13 @@ export default function NewsChapter() {
           from counts by a fixed template (&ldquo;The Senate passed 3 bills, agreed to 4 resolutions
           and took 3 record votes&rdquo;) and never describes what a bill does. A chamber that
           didn&apos;t meet shows as not in session; a source that couldn&apos;t be read shows as
-          unavailable, never as an empty day. Every bill named links to its page — summary,
-          sponsors, full history, text and every recorded vote — including bills whose sponsors have
-          left.
+          unavailable, never as an empty day. Every bill named links to its page (summary, sponsors,
+          full history, text and every recorded vote), including bills whose sponsors have left.
         </P>
         <P>
           Once a day&apos;s Record is final, Civitas posts that day&apos;s count summary and the
-          numbers of bills passed — never their titles, since an official short title can read as
-          advocacy — and each week, the bills that became law. Posts go to the{" "}
+          numbers of bills passed, never their titles, since an official short title can read as
+          advocacy, and each week, the bills that became law. Posts go to the{" "}
           <A href="/feeds">feeds</A> and the Bluesky account.
         </P>
       </Section>

@@ -11,7 +11,7 @@ export const revalidate = 300;
 export const metadata = pageMetadata({
   title: "Known Limitations of Civitas Scores",
   description:
-    "What Civitas's scores and pages can't tell you, stated plainly — campaign size and funding windows, partisan lean as a stand-in for opinion, ballot coverage, news sources — with the reason each gap is still open.",
+    "What Civitas's scores and pages can't tell you, stated plainly (campaign size and funding windows, partisan lean as a stand-in for opinion, ballot coverage, news sources), with the reason each gap is still open.",
   path: "/about/limitations",
 });
 
@@ -86,10 +86,10 @@ export default async function LimitationsChapter() {
           </P>
           <More label="Why we haven’t replaced it">
             <P>
-              The best free alternative found — survey-based ideology estimates by state and
-              district (Tausanovitch and Warshaw) — is still a single left–right score, the same
-              kind of stand-in, and several years stale. Real issue-by-issue opinion at this scale
-              would mean building multilevel regression and poststratification over raw survey data
+              The best free alternative found, survey-based ideology estimates by state and district
+              (Tausanovitch and Warshaw), is still a single left–right score, the same kind of
+              stand-in, and several years stale. Real issue-by-issue opinion at this scale would
+              mean building multilevel regression and poststratification over raw survey data
               in-house: a statistics pipeline, and a black box next to every other formula on these
               pages. We chose not to trade auditability for a partial fix. Issue-level opinion data
               remains the named next step for the score itself. For the position half of the score,
@@ -114,7 +114,7 @@ export default async function LimitationsChapter() {
         <Limitation title="Heavy breaking reads the same whether it builds a coalition or burns one">
           <P>
             The score peaks at the seat&apos;s norm, the pattern a member&apos;s own party&apos;s
-            primary voters reward. The wider electorate leans the other way — in Senate general
+            primary voters reward. The wider electorate leans the other way: in Senate general
             elections from 1990 to 2024, members who broke more than their seat&apos;s norm did
             somewhat better, and some heavy breakers keep winning by appealing to both sides. A
             roll-call record can&apos;t tell them apart from members whose breaks cost them their
@@ -170,8 +170,8 @@ export default async function LimitationsChapter() {
         <Limitation title="A state ballot page is the statewide slice">
           <P>
             Ballots are printed per precinct, so there&apos;s no single &ldquo;ballot&rdquo; for a
-            whole state. Pages show federal contests, statewide measures and — where a state&apos;s
-            own results or candidate list name them — statewide offices, state legislative seats and
+            whole state. Pages show federal contests, statewide measures and (where a state&apos;s
+            own results or candidate list name them) statewide offices, state legislative seats and
             judgeships. County and city offices and local measures are shown only for a small,
             hand-picked list of towns (looked up from each town hall&apos;s address); anywhere else,
             showing them would mean taking a home address to a lookup service, and we won&apos;t do
@@ -205,7 +205,7 @@ export default async function LimitationsChapter() {
             publish no official list of what they have certified, and the rest aren&apos;t read
             automatically yet. Those pages say the state isn&apos;t covered and which of the two
             reasons applies, as do pages where an update failed, rather than showing an empty
-            section — which would read as &ldquo;no measures&rdquo;, a different and potentially
+            section, which would read as &ldquo;no measures&rdquo;, a different and potentially
             damaging claim. There, the official link on every page is the complete answer.
           </P>
         </Limitation>

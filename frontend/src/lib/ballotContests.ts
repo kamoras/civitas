@@ -222,7 +222,7 @@ export function buildBallotContests(
       kind: "stateNone",
       column: "state",
       title: "State offices",
-      subtitle: "Not loaded yet — check the official lookup",
+      subtitle: "Not loaded yet: check the official lookup",
       instruction: null,
       summary: "Not loaded yet",
     });
@@ -257,7 +257,7 @@ export function buildBallotContests(
         ? plural(measures, "measure")
         : none
           ? noneLine
-          : `${noneLine} — check the official lookup`,
+          : `${noneLine}: check the official lookup`,
     instruction: measures > 0 ? "Yes or no on each" : null,
     summary: measures > 0 ? plural(measures, "measure") : noneLine,
   });

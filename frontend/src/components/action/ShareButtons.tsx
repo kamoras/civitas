@@ -27,15 +27,15 @@ interface ShareButtonsProps {
 }
 
 function buildShareText(title: string, shareUrl: string): string {
-  const full = `${title} — the record and what you can do: ${shareUrl} via @civitasvote #CivicTransparency`;
+  const full = `${title}. The record and what you can do: ${shareUrl} via @civitasvote #CivicTransparency`;
   if (full.length <= 240) return full;
 
   // Try without hashtag first
-  const noHashtag = `${title} — the record and what you can do: ${shareUrl} via @civitasvote`;
+  const noHashtag = `${title}. The record and what you can do: ${shareUrl} via @civitasvote`;
   if (noHashtag.length <= 240) return noHashtag;
 
   // Try without handle either
-  const noHandle = `${title} — the record and what you can do: ${shareUrl}`;
+  const noHandle = `${title}. The record and what you can do: ${shareUrl}`;
   if (noHandle.length <= 240) return noHandle;
 
   // Hard trim as last resort

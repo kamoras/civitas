@@ -30,10 +30,10 @@ const SOURCE_LABEL = {
 } as const;
 
 const MEMBER_ABOUT_TEXT =
-  "Every asset listed on this member's most recent financial disclosure report — held by the member, their spouse, or a dependent child at the end of the year for an annual report, or on the date it states for a newly seated senator's new-filer report. The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Informational only — not part of the overall score.";
+  "Every asset listed on this member's most recent financial disclosure report: held by the member, their spouse, or a dependent child at the end of the year for an annual report, or on the date it states for a newly seated senator's new-filer report. The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Informational only, not part of the overall score.";
 
 const PRESIDENT_ABOUT_TEXT =
-  "Every asset with a stated value on the president's latest annual financial disclosure report (OGE Form 278e): the business entities of Schedule 1, the spouse's assets, and the investment accounts. Values are reported in ranges, never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range, which on this report is \"Over $50,000,000\"). The form has no asset-type column: a business entity's category comes from the underlying assets it states (real estate, a bank account, cryptocurrency), a fund is one the form marks as an excepted investment fund, and every other security is 'type not stated' rather than guessed from its name. Informational only — not part of the score.";
+  "Every asset with a stated value on the president's latest annual financial disclosure report (OGE Form 278e): the business entities of Schedule 1, the spouse's assets, and the investment accounts. Values are reported in ranges, never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range, which on this report is \"Over $50,000,000\"). The form has no asset-type column: a business entity's category comes from the underlying assets it states (real estate, a bank account, cryptocurrency), a fund is one the form marks as an excepted investment fund, and every other security is 'type not stated' rather than guessed from its name. Informational only, not part of the score.";
 
 const ABOUT_TEXT = {
   senate: MEMBER_ABOUT_TEXT,
@@ -204,7 +204,7 @@ function CategoryLegend({
   return (
     <ul
       className="flex-1 min-w-0 space-y-1"
-      aria-label="Holdings by asset type — select one to list only those assets"
+      aria-label="Holdings by asset type: select one to list only those assets"
     >
       {categories.map((c) => {
         const isSelected = selected === c.category;

@@ -298,7 +298,7 @@ function CurrentPresidentSpotlight({
           CURRENTLY SERVING
         </span>
         <p className="text-ink-min text-xs">
-          Shown separately, not ranked — an in-progress term is missing data (e.g. no completed-term
+          Shown separately, not ranked: an in-progress term is missing data (e.g. no completed-term
           Historical Legacy rating yet) that every ranked president below has, so comparing them
           under one ordinal position isn&apos;t a fair fight.
         </p>
@@ -382,7 +382,7 @@ function PresidentLeaderboard({
                         {entry.avgApproval == null && entry.gdpGrowthAvg == null && (
                           <span
                             className="text-xs font-mono tracking-wide text-signal-amber border border-signal-amber/40 px-1 shrink-0"
-                            title="Score uses historical/expert consensus estimates — live API data not available for this era"
+                            title="Score uses historical/expert consensus estimates: live API data not available for this era"
                           >
                             HIST
                           </span>
@@ -467,8 +467,8 @@ function PresidentLeaderboard({
           score uses historical/expert consensus estimates; live API data unavailable for that era
         </p>
         <p className="text-ink-min text-xs">
-          The currently-serving president is shown separately above, not ranked here — an
-          in-progress term is always missing data a completed one has.
+          The currently-serving president is shown separately above, not ranked here: an in-progress
+          term is always missing data a completed one has.
         </p>
       </div>
     </>
@@ -1029,7 +1029,7 @@ function LeaderboardContent() {
                           </th>
                           <th scope="col" className="px-3 py-3 text-left w-36">
                             {sortKey === "ideology" ? (
-                              <MetricTooltip text="Derived from cosponsorship patterns (who a member legislates with), not roll-call votes — a separate signal from the PARTISAN metric on a member's own profile, which is primarily vote-based. The two can genuinely disagree: broad cross-party cosponsorship can coexist with strict party-line voting.">
+                              <MetricTooltip text="Derived from cosponsorship patterns (who a member legislates with), not roll-call votes: a separate signal from the PARTISAN metric on a member's own profile, which is primarily vote-based. The two can genuinely disagree: broad cross-party cosponsorship can coexist with strict party-line voting.">
                                 IDEOLOGY
                               </MetricTooltip>
                             ) : sortKey === "leadership" ? (
@@ -1228,9 +1228,9 @@ function LeaderboardContent() {
                     <WeightedFrom />. Click any row to view full profile.
                   </p>
                   <p className="font-sans text-xs text-ink-min">
-                    Scores are shrunk toward a neutral value when data is thin — members with
-                    limited public data are not penalized or rewarded for it (the About page says
-                    how each score does this)
+                    Scores are shrunk toward a neutral value when data is thin: members with limited
+                    public data are not penalized or rewarded for it (the About page says how each
+                    score does this)
                   </p>
                 </div>
               )}

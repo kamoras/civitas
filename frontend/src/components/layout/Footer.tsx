@@ -111,7 +111,7 @@ export default function Footer() {
               Clerk; ideal points from Voteview; Lobbying Disclosure Act filings (lda.gov); the
               Federal Register and GovInfo; and state election offices. Donor industries are
               classified by Civitas from FEC filings, not taken from a third party. The
-              Representation Scorecard is a weighted composite metric — not a measure of illegality
+              Representation Scorecard is a weighted composite metric, not a measure of illegality
               or wrongdoing. Correlation between donations and votes does not prove causation.
               Verify all data at the original sources. Draw your own conclusions.
             </p>

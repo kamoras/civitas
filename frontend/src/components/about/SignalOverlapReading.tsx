@@ -12,7 +12,7 @@ const CHAMBERS = [
 const BAND_TEXT = {
   ok: "distinct",
   watch: "worth watching",
-  action: "overlapping — flagged for a fix",
+  action: "overlapping: flagged for a fix",
   none: "not measurable",
 } as const;
 
