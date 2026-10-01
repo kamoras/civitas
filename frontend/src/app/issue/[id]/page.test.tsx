@@ -1,0 +1,135 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import type { ActionIssue } from "@/types/action";
+
+vi.mock("next/navigation", () => ({
+  notFound: vi.fn(() => {
+    throw new Error("NOT_FOUND");
+  }),
+}));
+vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
+vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
+vi.mock("@/components/BackToTop", () => ({ default: () => null }));
+
+import IssuePage from "./page";
+
+const COUNT_FACTS = [
+  "Jane Doe (D): 101,234 votes, 50.4%",
+  "John Roe (R): 99,876 votes, 49.6%",
+  "412 of 800 precincts reporting (52%)",
+  "The seat is held by a Republican going into this election",
+];
+
+function issue(over: Partial<ActionIssue> = {}): ActionIssue {
+  return {
+    id: 7,
+    publicId: "abc123",
+    date: "2026-11-03",
+    firstSurfaced: "2026-11-03",
+    rank: 999,
+    title: "Democrat leads Utah's 1st Congressional District count in a seat Republicans hold",
+    summary: "Utah Lieutenant Governor's count shows Jane Doe (D) ahead of John Roe (R).",
+    facts: COUNT_FACTS,
+    factSources: [],
+    newFacts: [],
+    actions: [],
+    sourceUrls: [],
+    sourceNames: [],
+    policyAreas: [],
+    relatedBills: [],
+    relatedExploreDocs: [],
+    relatedSenators: [],
+    concernedCount: 0,
+    notPriorityCount: 0,
+    isTrending: false,
+    status: "developing",
+    sourceType: "election_results",
+    ...over,
+  } as ActionIssue;
+}
+
+async function renderIssue(data: ActionIssue) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => data })
+  );
+  render(await IssuePage({ params: Promise.resolve({ id: data.publicId }) }));
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  // 9:41 PM Eastern on election night.
+  vi.setSystemTime(new Date("2026-11-04T02:41:00Z"));
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+/** The shared facts block: the element carrying its anchor and share id,
+ *  around the Coverage section. */
+function factsSection() {
+  return screen
+    .getByRole("heading", { name: /from the count|in the coverage/i })
+    .closest<HTMLElement>("[data-share-section]")!;
+}
+
+describe("an issue's facts section", () => {
+  it("is anchored and shared as #from-the-count for a count", async () => {
+    await renderIssue(issue());
+    const section = factsSection();
+    expect(section.id).toBe("from-the-count");
+    expect(section.getAttribute("data-share-section")).toBe("from-the-count");
+  });
+
+  it("keeps #media-coverage for a news issue, so existing links still land", async () => {
+    await renderIssue(issue({ sourceType: null, status: "confirmed", facts: ["A quote."] }));
+    const section = factsSection();
+    expect(section.id).toBe("media-coverage");
+    expect(section.getAttribute("data-share-section")).toBe("media-coverage");
+  });
+
+  it("says, inside the shared section, that the count is not final — naming no time it doesn't have", async () => {
+    // No countAsOf (an older backend): the render time is not when the
+    // count was read — the issue is written at sync time and served from
+    // caches — so no time is named at all.
+    await renderIssue(issue());
+    const section = factsSection();
+    expect(section.textContent).toMatch(/NOT FINAL · The state's own results site/);
+    expect(section.textContent).not.toMatch(/count as of|9:41/);
+  });
+
+  it("says when Civitas read the figures, from the backend's own time", async () => {
+    await renderIssue(issue({ countAsOf: "2026-11-04T01:15:00Z", countOfficial: false }));
+    const section = factsSection();
+    expect(section.textContent).toMatch(/the count as of Nov 3, 8:15 PM ET, when Civitas read it/);
+  });
+
+  it("takes the backend's official flag over the title", async () => {
+    await renderIssue(issue({ countAsOf: "2026-11-04T01:15:00Z", countOfficial: true }));
+    expect(factsSection().textContent).toMatch(/OFFICIAL COUNT/);
+  });
+
+  it("calls an official count official, not 'not final'", async () => {
+    await renderIssue(
+      issue({
+        title:
+          "Democrat leads Utah's 1st Congressional District in the count the state lists as official, in a seat Republicans hold",
+      })
+    );
+    const section = factsSection();
+    expect(section.textContent).toMatch(/OFFICIAL COUNT/);
+    expect(section.textContent).not.toMatch(/NOT FINAL/);
+  });
+
+  it("adds no count line to a news issue, nor to a count issue confirmed by coverage", async () => {
+    await renderIssue(
+      issue({ sourceType: "election_results", status: "confirmed", facts: ["A quote."] })
+    );
+    const section = factsSection();
+    expect(section.id).toBe("media-coverage");
+    expect(section.textContent).not.toMatch(/NOT FINAL|OFFICIAL COUNT|count as of/);
+  });
+});

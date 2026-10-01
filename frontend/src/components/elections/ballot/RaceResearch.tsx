@@ -11,18 +11,27 @@ import type { RaceCoverageItem, RaceWithCandidates } from "@/types/election";
 
 type Tab = "money" | "record" | "news";
 
-/** Voting records for the candidates who have one: a sitting member's
- * Representation Score, linked to their full scorecard. Everyone else is
- * listed too, marked "no scorecard" — not "no record", since the API links
- * a scorecard only on an unambiguous match and never guesses. */
+/** Voting records for the candidates the API links one for: a member
+ * running for re-election, matched to their own record, with their
+ * Representation Score and a link to their full scorecard. Everyone else is
+ * listed too, marked "not linked" — never "no scorecard" or "no record":
+ * the API links only an FEC incumbent it matches unambiguously and never
+ * guesses, so a member of Congress running for another office (a House
+ * member running for the Senate), or one it stops linking once the new
+ * Congress sits, has a scorecard this panel doesn't link. */
 function RecordPanel({ race }: { race: RaceWithCandidates }) {
   const active = race.candidates.filter(isActiveCandidate);
   const withRecord = active.filter((c) => c.incumbentRecord);
   return (
     <div>
       <p className="mb-3 text-[13px] text-ink-lo">
-        A sitting member of Congress has a Representation Score from their voting record, linked to
-        their full scorecard.
+        A member of Congress running for re-election is linked to their Representation Score and
+        full scorecard when the match to their record is certain. Others who serve in Congress, such
+        as a House member running for the Senate, aren&apos;t linked here; find them under{" "}
+        <Link href="/politicians" className="underline hover:text-phos">
+          Politicians
+        </Link>
+        .
       </p>
       <ul>
         {active.map((c) => (
@@ -48,13 +57,15 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
                 · scorecard →
               </Link>
             ) : (
-              <span className="shrink-0 font-mono text-xs text-ink-min">no scorecard</span>
+              <span className="shrink-0 font-mono text-xs text-ink-min">not linked</span>
             )}
           </li>
         ))}
       </ul>
       {withRecord.length === 0 && (
-        <p className="mt-3 text-[13px] text-ink-lo">No one in this race has a Civitas scorecard.</p>
+        <p className="mt-3 text-[13px] text-ink-lo">
+          No one in this race is linked to a Civitas scorecard.
+        </p>
       )}
     </div>
   );
@@ -68,10 +79,16 @@ export default function RaceResearch({
   race,
   coverage,
   supersededByPrimary = false,
+  newLines = false,
+  resultsMode = false,
 }: {
   race: RaceWithCandidates;
   coverage: RaceCoverageItem[];
   supersededByPrimary?: boolean;
+  /** StateBallot.newDistrictLines — how incumbency is worded. */
+  newLines?: boolean;
+  /** From election day on — how incumbency is worded (incumbencyLabel). */
+  resultsMode?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("money");
   const base = useId();
@@ -148,7 +165,12 @@ export default function RaceResearch({
           className="mt-4"
         >
           {t.id === "money" && (
-            <RaceFullDetail race={race} supersededByPrimary={supersededByPrimary} />
+            <RaceFullDetail
+              race={race}
+              supersededByPrimary={supersededByPrimary}
+              newLines={newLines}
+              resultsMode={resultsMode}
+            />
           )}
           {t.id === "record" && <RecordPanel race={race} />}
           {t.id === "news" && <CoverageFeed items={coverage} />}

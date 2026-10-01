@@ -36,9 +36,9 @@ from app.config import settings
 from app.database import SessionLocal
 from app.election_calendar import (
     federal_states,
-    next_election_day,
     seats_up_for_year,
 )
+from app.election_phase import active_election, election_is_held
 from app.http_client import make_async_client
 from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
@@ -56,12 +56,15 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-def current_election_cycle() -> int:
-    """The election cycle currently in progress, e.g. 2026 up through
-    election night, then 2028 — computed from the calendar (reusing
-    next_election_day, the same statutory rule the roster's special-
-    election detection relies on) so a new cycle needs no code change."""
-    return next_election_day(utcnow().date()).year
+def current_election_cycle(db: Session | None = None) -> int:
+    """The election cycle the site is about: 2026 up through election
+    night AND while its results are still coming in and on show, then
+    2028 (election_phase.active_election). Computed from the calendar and
+    the count, so a new cycle needs no code change. Keyed to the next
+    election day alone, this flipped to 2028 the morning after — the
+    pipeline would have started building a two-years-off roster while
+    this one's ballots were still being counted."""
+    return active_election(db).cycle
 
 ELECTION_PIPELINE_STEPS = [
     ("roster_sync",          "roster",              "Sync candidate roster"),
@@ -111,6 +114,13 @@ def election_pipeline_age():
 _ballot_tracker = PipelineRunTracker()
 
 
+ELECTION_HELD = "election held; its ballot stands as read"
+
+
+class _ElectionHeld(Exception):
+    """Leaves a ballot phase's try block once it is marked skipped."""
+
+
 def ballot_tracker() -> PipelineRunTracker:
     return _ballot_tracker
 
@@ -133,9 +143,15 @@ async def run_ballot_sync(cycle: int | None = None) -> dict:
     after Senate, House and stock trades, hours into the night. Reads only
     state election offices' published lists, a handful of requests each at
     one per second; the roster and financial refresh stay nightly."""
-    cycle = cycle if cycle is not None else current_election_cycle()
     db = SessionLocal()
     try:
+        if election_is_held(active_election(db)):
+            # The held election's ballot stands as read (election_is_held).
+            return {
+                "status": "skipped", "reason": ELECTION_HELD,
+                "confirmed": 0, "statesOk": [], "statesFailed": [], "filings": {},
+            }
+        cycle = cycle if cycle is not None else current_election_cycle(db)
         async with make_async_client() as client:
             confirm_result, filing_result = await _sync_ballots(db, client, cycle)
     finally:
@@ -170,6 +186,25 @@ def _on_ballot_in(raw: dict, cycle: int) -> bool:
     """
     years = raw.get("election_years") or []
     return raw.get("candidate_election_year") == cycle or cycle in years
+
+
+def _district_in(raw: dict, cycle: int) -> int | None:
+    """The House district a candidate record names for `cycle`. FEC's
+    `district_number` is the candidate's LATEST election's (H2TX35144:
+    districts 35, 35, 37 for 2022, 2024, 2026 -- `district_number` 37), so
+    a member who files for the next cycle in a new district would read as
+    running there this cycle. `election_districts` pairs with
+    `election_years`; the year's own entry is used when it is there."""
+    years = raw.get("election_years") or []
+    districts = raw.get("election_districts") or []
+    if cycle in years and len(districts) == len(years):
+        # Listed as zero-padded strings ("05", "00"); district_number is
+        # the int the rest of the roster keys on.
+        try:
+            return int(districts[years.index(cycle)])
+        except (TypeError, ValueError):
+            pass
+    return raw.get("district_number")
 
 
 def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
@@ -237,7 +272,7 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
             if not _on_ballot_in(raw, cycle):
                 skipped_off_ballot += 1
                 continue
-            district = raw.get("district_number") if office == "H" else None
+            district = _district_in(raw, cycle) if office == "H" else None
             if office == "H" and f"{state}-{district}" not in real_districts:
                 skipped_bad_district += 1
                 continue
@@ -1138,10 +1173,18 @@ def _prune_past_measures(db: Session) -> int:
     """Delete measures whose election is more than the removal grace
     window in the past. The state page shows only its current election
     (api/elections.state_ballot), and nothing else reads them; leaving
-    them would let every past cycle's rows pile up under the state."""
+    them would let every past cycle's rows pile up under the state.
+
+    Never the election the site is still on: after election day the state
+    page stays on the election just held while its count is moving, up to
+    January 3 (election_phase.active_election) — longer than the grace
+    window in a slow count."""
     from app.models import BallotMeasure
 
-    cutoff = (utcnow().date() - timedelta(days=MEASURE_REMOVAL_GRACE_DAYS)).isoformat()
+    cutoff = min(
+        (utcnow().date() - timedelta(days=MEASURE_REMOVAL_GRACE_DAYS)).isoformat(),
+        active_election(db).election_day.isoformat(),
+    )
     deleted = (
         db.query(BallotMeasure)
         .filter(BallotMeasure.election_date < cutoff)
@@ -1254,7 +1297,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     """
     from app.pipeline.fetch.ballot_measure_pdf_sources import configured_states
 
-    election_day = next_election_day(utcnow().date()).isoformat()
+    election_day = active_election(db).election_day.isoformat()
     _prune_past_measures(db)
     _purge_retired_source(db)
 
@@ -1345,8 +1388,12 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     """Sync candidate rosters, refresh a prioritized batch of financials,
     ingest race coverage, post grounded Bluesky updates, and snapshot
     fundraising. Returns a summary dict with counts."""
-    cycle = cycle if cycle is not None else current_election_cycle()
     db = SessionLocal()
+    try:
+        cycle = cycle if cycle is not None else current_election_cycle(db)
+    except Exception:
+        db.close()
+        raise
     _run_token = None  # no run of ours for the finally to stop until start() below
 
     run, _run_token, refused = acquire_tracked_run(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
@@ -1362,6 +1409,16 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
         logger.info("=== ELECTION PIPELINE START (cycle %d) ===", cycle)
 
         async with make_async_client() as client:
+            # After election day the held election's ballot is final
+            # (election_is_held): no phase that places candidates on it
+            # re-reads its sources, which have moved on and would unwrite
+            # what was certified. FEC's roster in particular gives each
+            # candidate's LATEST district and incumbency, so a nominee who
+            # files for the next cycle elsewhere would move races.
+            # Financials still refresh: post-general reports are this
+            # election's money.
+            election_held = election_is_held(active_election(db))
+
             run.current_phase = "roster"
             db.commit()
             logger.info("--- Election: ROSTER SYNC ---")
@@ -1372,12 +1429,17 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             from app.pipeline.fetch.senate_classes import refresh_senate_classes
             await refresh_senate_classes(client)
             try:
+                if election_held:
+                    progress.skip("roster_sync", detail=f"skipped: {ELECTION_HELD}")
+                    raise _ElectionHeld
                 house_raw = await fetch_all_candidates(client, db, cycle, "H")
                 senate_raw = await fetch_all_candidates(client, db, cycle, "S")
                 synced = _sync_roster(db, cycle, house_raw + senate_raw)
                 run.candidates_synced = synced
                 logger.info("Synced %d candidates", synced)
                 progress.complete("roster_sync", detail=f"{synced} candidates")
+            except _ElectionHeld:
+                pass
             except Exception:
                 db.rollback()
                 logger.exception("Roster sync failed — continuing")
@@ -1403,6 +1465,10 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             progress.begin("confirmed_candidates")
             confirmed_open = True  # until the phase is marked done or skipped
             try:
+                if election_held:
+                    progress.skip("confirmed_candidates", detail=f"skipped: {ELECTION_HELD}")
+                    confirmed_open = False
+                    raise _ElectionHeld
                 # Each state is crawled weekly — what the crawl looks for,
                 # a state standing up a results portal or a new cycle's file
                 # appearing, moves on the scale of weeks — but the crawl
@@ -1439,6 +1505,8 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         detail = await _confirmed_candidates_phase(db, client, cycle)
                         progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
                     confirmed_open = False
+            except _ElectionHeld:
+                pass
             except lease.CutOff as cut:
                 db.rollback()
                 logger.warning("Confirmed-candidate phase: %s — continuing", cut)
@@ -1455,6 +1523,11 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             logger.info("--- Election: BALLOT MEASURES ---")
             progress.begin("ballot_measures")
             try:
+                if election_held:
+                    # Earlier elections' rows still age out.
+                    _prune_past_measures(db)
+                    progress.skip("ballot_measures", detail=f"skipped: {ELECTION_HELD}")
+                    raise _ElectionHeld
                 measure_result = await _sync_ballot_measures(db, client, cycle)
                 if measure_result.get("skipped"):
                     progress.complete("ballot_measures", detail="skipped (no API key)")
@@ -1465,6 +1538,8 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                     )
                     logger.info("Ballot measures: %s", detail)
                     progress.complete("ballot_measures", detail=detail)
+            except _ElectionHeld:
+                pass
             except Exception:
                 db.rollback()
                 logger.exception("Ballot measure sync failed — continuing")
@@ -1546,9 +1621,16 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             race_relevance.calibrate_and_store(db)
 
                             from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
-                            posted = post_race_coverage_updates(db, deadline=coverage_deadline)
-                            logger.info("Posted %d race coverage updates", posted)
-                            progress.complete("bluesky_posting", detail=f"{posted} posted")
+                            from app.live_results.bluesky import counting_is_live
+
+                            if counting_is_live(db):
+                                # Election night: the live count's own posts
+                                # have the account while totals move.
+                                progress.complete("bluesky_posting", detail="stood down: the live count is posting")
+                            else:
+                                posted = post_race_coverage_updates(db, deadline=coverage_deadline)
+                                logger.info("Posted %d race coverage updates", posted)
+                                progress.complete("bluesky_posting", detail=f"{posted} posted")
                         except lease.CutOff as cut:
                             logger.warning("%s — its items wait for the next run", cut)
                             progress.skip("bluesky_posting", detail="skipped: reached its deadline")

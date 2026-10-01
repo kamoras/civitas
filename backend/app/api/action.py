@@ -3,8 +3,10 @@
 import asyncio
 import json
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import or_
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,7 +16,8 @@ from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTI
 from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
 from app.database import get_db, get_visits_db
-from app.election_calendar import next_election_day, seats_up_for_year
+from app.election_calendar import next_election_day, previous_election_day, seats_up_for_year
+from app.election_phase import election_today
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
@@ -24,7 +27,7 @@ from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
 from app.models import (
-    ActionIssue, ApiCache, ExploreDocument, IssueView, MonitorStatus,
+    ActionIssue, ActionIssueStatus, ApiCache, ExploreDocument, IssueView, MonitorStatus,
     NationalMonitor, RepSponsoredBill, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
@@ -85,6 +88,58 @@ def _renumber_for_display(issues: list[ActionIssue]) -> list[ActionIssue]:
     return ordered
 
 
+_NOT_DEVELOPING = or_(ActionIssue.status.is_(None), ActionIssue.status != ActionIssueStatus.DEVELOPING)
+
+
+def _latest_issue_date(db: Session) -> str | None:
+    """The newest day of CONFIRMED current issues (any current issue's, if
+    there is none). Keyed to the newest date of any current row, a draft
+    dated before midnight Eastern dropped off the list at the first refresh
+    after it -- and one dated just after (a seat flip restamped by the
+    five-minute count sync) hid every confirmed story until that refresh
+    ran."""
+    return (
+        db.query(ActionIssue.date)
+        .filter(ActionIssue.is_current == True, _NOT_DEVELOPING)  # noqa: E712
+        .order_by(ActionIssue.date.desc())
+        .limit(1)
+        .scalar()
+    ) or (
+        db.query(ActionIssue.date)
+        .filter(ActionIssue.is_current == True)  # noqa: E712
+        .order_by(ActionIssue.date.desc())
+        .limit(1)
+        .scalar()
+    )
+
+
+def _is_iso_day(text: str) -> bool:
+    """A real calendar day written YYYY-MM-DD: not "2026-1-2", not
+    "2026-02-30", not a date with a trailing newline (which `$` lets
+    through)."""
+    if len(text) != 10 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return False
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _pager_dates(db: Session) -> list[str]:
+    """Every day that holds confirmed issues, newest first: the pager's days
+    and the Archive's openable ones. Not capped at the newest few: the
+    Archive offers a listed day to open, and a capped list made an older day
+    openable only while Today showed a day beside it. (About a year's worth
+    of dates is a few kilobytes; issues are kept 14 days unless posted.)
+    Confirmed issues only: a developing draft is listed beside the newest
+    day, not on a day of its own, so a day holding nothing but a draft (a
+    seat flip restamped past midnight before the next refresh) would page
+    to a view the landing view already shows."""
+    return [row[0] for row in
+            db.query(ActionIssue.date).filter(_NOT_DEVELOPING).distinct().order_by(ActionIssue.date.desc())]
+
+
 def _latest_current_issues(db: Session, for_date: str | None = None) -> list[ActionIssue]:
     """Return the most recent day's action issues, tolerating a wedged refresh.
 
@@ -99,7 +154,8 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
     blank. Fall back to the most recent date with ANY rows, is_current or
     not, only when the strict query comes up empty.
     """
-    if for_date:
+    latest_date = _latest_issue_date(db)
+    if for_date and for_date != latest_date:
         issues = (
             db.query(ActionIssue)
             .filter(ActionIssue.date == for_date, ActionIssue.is_current == True)  # noqa: E712
@@ -117,17 +173,16 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
             .all()
         )
 
-    latest_date = (
-        db.query(ActionIssue.date)
-        .filter(ActionIssue.is_current == True)  # noqa: E712
-        .order_by(ActionIssue.date.desc())
-        .limit(1)
-        .scalar()
-    )
+    # The newest day (_latest_issue_date) lists every current DEVELOPING
+    # draft beside it whatever its own date (it still ranks last) -- asked
+    # for by date or not, so the pager's newest day is the landing view.
     if latest_date:
         return (
             db.query(ActionIssue)
-            .filter(ActionIssue.date == latest_date, ActionIssue.is_current == True)  # noqa: E712
+            .filter(
+                ActionIssue.is_current == True,  # noqa: E712
+                or_(ActionIssue.date == latest_date, ActionIssue.status == ActionIssueStatus.DEVELOPING),
+            )
             .order_by(ActionIssue.rank)
             .all()
         )
@@ -280,6 +335,16 @@ def _build_issue_response(
     # meaningless (of course they are, the issue just appeared).
     new_facts = new_facts_since(current_facts, previous_facts) if previous_facts else []
 
+    # Stamped on the issue with its facts (live_results/signals.py), never
+    # read from the live count row: a held poll moves that row's time and
+    # official flag without rewriting the issue's figures.
+    count_as_of = count_official = None
+    if (getattr(issue, "source_type", None) == _ELECTION_RESULTS_SOURCE
+            and (getattr(issue, "status", None) or "confirmed") == ActionIssueStatus.DEVELOPING
+            and getattr(issue, "count_as_of", None) is not None):
+        count_as_of = issue.count_as_of.isoformat() + "Z"
+        count_official = bool(issue.count_official)
+
     return ActionIssueSchema(
         id=issue.id,
         public_id=to_public_id(issue.id),
@@ -302,6 +367,9 @@ def _build_issue_response(
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
+        source_type=getattr(issue, "source_type", None),
+        count_as_of=count_as_of,
+        count_official=count_official,
         image_url=getattr(issue, "image_url", None),
         image_alt=getattr(issue, "image_alt", "") or "",
         image_credit=getattr(issue, "image_credit", "") or "",
@@ -376,16 +444,6 @@ async def get_action_issues(
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
     issues = _latest_current_issues(db, for_date=date)
 
-    # Computed before the empty-day return: a reader paging onto a day with
-    # nothing left on it still needs the pager's way back.
-    available_dates = [
-        row[0] for row in
-        db.query(ActionIssue.date)
-        .distinct()
-        .order_by(ActionIssue.date.desc())
-        .limit(14)
-        .all()
-    ]
     # When the live view was last refreshed: the newest run that wrote
     # issues. Every run leaves an action-metrics row (action_metrics.py),
     # aborted ones included, so the newest row alone would read "updated
@@ -394,12 +452,17 @@ async def get_action_issues(
     generated_at = _last_refresh_with_issues(db) if date is None else None
 
     if not issues:
+        # A day whose issues all moved on (a re-matched issue is restamped
+        # to the day that matched it) still gets a pager, so a reader who
+        # followed a link to it can page to the days either side.
         return {
-            "date": date, "issues": [], "availableDates": available_dates,
+            "date": date, "issues": [],
+            "availableDates": _pager_dates(db) if date and _is_iso_day(date) else [],
             "generatedAt": generated_at,
         }
 
-    issue_date = issues[0].date
+    issue_date = date or _latest_issue_date(db) or issues[0].date
+    available_dates = _pager_dates(db)
 
     all_explore_ids: list[int] = []
     for i in issues:
@@ -479,8 +542,31 @@ async def get_recent_action_issues(
         .limit(RECENT_FEED_MAX_LIMIT * RECENT_FEED_POOL_MULTIPLIER)
         .all()
     )
-    issues = [i for i in pool if i.duplicate_of_id is None][:limit]
+    by_id = {p.id: p for p in pool}
+    issues = [i for i in pool if not _hidden_as_duplicate(i, by_id)][:limit]
     return {"issues": [_build_issue_response(i, db) for i in issues]}
+
+
+# ActionIssue.source_type of an election-night seat-flip issue
+# (live_results/signals.SOURCE_TYPE; not imported, to keep this module's
+# import graph clear of the live-results package's).
+_ELECTION_RESULTS_SOURCE = "election_results"
+
+
+def _hidden_as_duplicate(issue: ActionIssue, pool_by_id: dict[int, ActionIssue]) -> bool:
+    """Whether the homepage leaves a row out as a duplicate. Seat-flip
+    issues are exempt from being hidden behind ANOTHER seat-flip issue: one
+    race's count each, their titles differ only by the district ("…
+    Georgia's 2nd …" / "… Georgia's 6th …") and they share the state's
+    results page as their source, so the refresh's duplicate pass reads
+    every flip in a state as one story and kept only the newest. Behind a
+    news story about the same flip, one still gives way."""
+    if issue.duplicate_of_id is None:
+        return False
+    if issue.source_type != _ELECTION_RESULTS_SOURCE:
+        return True
+    kept = pool_by_id.get(issue.duplicate_of_id)
+    return kept is not None and kept.source_type != _ELECTION_RESULTS_SOURCE
 
 
 @router.get("/issues/{issue_id}")
@@ -668,7 +754,9 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
     """Return known upcoming civic events for the given year."""
     events: list[dict] = []
 
-    election_day = next_election_day(today)
+    # On the day itself too: next_election_day is strictly after `today`,
+    # which dropped election day from the calendar on election day.
+    election_day = today if previous_election_day(today) == today else next_election_day(today)
     if election_day.year == year and election_day >= today:
         is_presidential = year % 4 == 0
         label = "Presidential & Congressional" if is_presidential else "Midterm Congressional"
@@ -868,7 +956,10 @@ async def get_timeline(
         for m in monitors
     ]
 
-    civic_events = _upcoming_civic_events(year, today)
+    # The civic calendar's day is the Eastern one: from 7 PM ET on
+    # election day the UTC date is already tomorrow, which dropped the
+    # election from the calendar for the whole of election night.
+    civic_events = _upcoming_civic_events(year, election_today())
 
     return {
         "year": year,

@@ -9,6 +9,9 @@ import {
   parseUtc,
   raceBadgeLabel,
   tierCandidates,
+  incumbencyLabel,
+  redrawnMemberWords,
+  isRedrawnSeat,
 } from "./elections";
 import type { BallotCandidate, CandidateSummary } from "@/types/election";
 
@@ -455,5 +458,47 @@ describe("candidateName", () => {
       candidates: [{ name: "COOPER, ROY", ballotName: "Roy Cooper" }],
     };
     expect(matchesDistrictQuery(race, "roy cooper")).toBe(true);
+  });
+});
+
+describe("incumbencyLabel", () => {
+  it("words FEC's codes on a seat whose lines did not change", () => {
+    expect(incumbencyLabel("I", false)).toBe("INCUMBENT");
+    expect(incumbencyLabel("C", false)).toBe("CHALLENGER");
+    expect(incumbencyLabel("O", false)).toBe("OPEN SEAT");
+    expect(incumbencyLabel(null, false)).toBeNull();
+  });
+
+  it("calls a sitting member on a redrawn seat a sitting member, and says nothing of the old seat", () => {
+    // Casar holds TX-35 and runs in the new TX-37: not TX-37's incumbent.
+    expect(incumbencyLabel("I", true)).toBe("SITTING MEMBER");
+    expect(incumbencyLabel("C", true)).toBeNull();
+    expect(incumbencyLabel("O", true)).toBeNull();
+  });
+
+  it("names the seat a sitting member holds today when the payload carries it", () => {
+    expect(incumbencyLabel("I", true, "TX-35")).toBe("SITTING MEMBER, TX-35");
+    // Unchanged lines: still the incumbent of this seat, whatever is passed.
+    expect(incumbencyLabel("I", false, "GA-6")).toBe("INCUMBENT");
+  });
+
+  it("says who the member was going in, not that they sit, from election day on", () => {
+    // The results window runs to Jan 3, when the Congress the election
+    // seated takes office: from noon that day a defeated member no longer
+    // sits, and a re-elected one sits for the new seat.
+    expect(incumbencyLabel("I", true, null, true)).toBe("MEMBER BEFORE THIS ELECTION");
+    expect(incumbencyLabel("I", true, "TX-35", true)).toBe("MEMBER BEFORE THIS ELECTION, TX-35");
+    expect(incumbencyLabel("C", true, null, true)).toBeNull();
+    // FEC's code for the seat itself is about the election, true either way.
+    expect(incumbencyLabel("I", false, "GA-6", true)).toBe("INCUMBENT");
+    expect(redrawnMemberWords(false)).toBe("SITTING MEMBER");
+    expect(redrawnMemberWords(true)).toBe("MEMBER BEFORE THIS ELECTION");
+  });
+
+  it("treats only House seats in a state on new lines as redrawn", () => {
+    expect(isRedrawnSeat({ office: "H" }, true)).toBe(true);
+    expect(isRedrawnSeat({ office: "S" }, true)).toBe(false);
+    expect(isRedrawnSeat({ office: "H" }, false)).toBe(false);
+    expect(isRedrawnSeat({ office: "H" }, undefined)).toBe(false);
   });
 });

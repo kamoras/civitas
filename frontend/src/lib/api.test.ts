@@ -9,6 +9,7 @@ import {
   fetchBillsInFlight,
   fetchJusticeLeaderboard,
   fetchLeaderboard,
+  fetchLiveResults,
   fetchMonitors,
   fetchOpenComments,
   fetchPoliticianDirectory,
@@ -18,6 +19,7 @@ import {
   fetchSenatorsByState,
   fetchStates,
   fetchTimeline,
+  fetchTownsForState,
   parseExploreSummaryText,
   splitHighlights,
   abortableSleep,
@@ -224,6 +226,24 @@ describe("API shape guarantees", () => {
     );
   });
 
+  it("fetchLiveResults asks past the browser's HTTP cache, and keeps the answer's Date", async () => {
+    // The response is public, max-age=30: without "no-cache" the browser
+    // could answer a refetch with its copy's old Date, received now — and
+    // the page's clock ran backwards.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ phase: { phase: "results" } }),
+      headers: { get: (h: string) => (h === "date" ? "Wed, 04 Nov 2026 03:02:00 GMT" : null) },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await fetchLiveResults("GA");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/elections/results?state=GA"),
+      expect.objectContaining({ cache: "no-cache" })
+    );
+    expect(result.clock?.serverDate).toBe(Date.parse("2026-11-04T03:02:00Z"));
+  });
+
   it("fetchTimeline always exposes its four lists", async () => {
     vi.stubGlobal("fetch", mockJson({ year: 2026, totalDays: 4 }));
     const result = await fetchTimeline();
@@ -253,6 +273,26 @@ describe("API shape guarantees", () => {
     // The elections map indexes these by state/district code on every render.
     expect(pvi.states).toEqual({});
     expect(pvi.districts).toEqual({});
+  });
+
+  it("fetchTownsForState is no towns, not a crash, when the answer is malformed", async () => {
+    // A towns response without a list once took down the whole state page
+    // ("Cannot read properties of undefined (reading 'length')").
+    for (const body of [{}, null, { towns: null }, { towns: {} }, []]) {
+      __resetApiCache();
+      vi.stubGlobal("fetch", mockJson(body));
+      expect(await fetchTownsForState("MA")).toEqual([]);
+    }
+    __resetApiCache();
+    vi.stubGlobal(
+      "fetch",
+      mockJson({
+        towns: [{ name: "Cambridge", sourceName: "City of Cambridge" }, null, { name: 3 }],
+      })
+    );
+    expect(await fetchTownsForState("MA")).toEqual([
+      { name: "Cambridge", sourceName: "City of Cambridge" },
+    ]);
   });
 
   it("keeps real data intact — normalizing is not filtering", async () => {

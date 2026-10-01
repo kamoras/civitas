@@ -370,12 +370,13 @@ class TestElectionCoverageRefresh:
 
     def _run(
         self, in_season: bool, pipeline_running: bool = False, pipeline_age=None,
-        coverage_running: bool = False, coverage_age=None,
+        coverage_running: bool = False, coverage_age=None, counting_live: bool = False,
     ):
         from app import scheduler
 
         with patch("app.background.threading.Thread", _SyncThread), \
              patch("app.election_calendar.is_election_season", return_value=in_season), \
+             patch("app.live_results.bluesky.counting_is_live", return_value=counting_live), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
              _tracker_running(coverage_tracker(), coverage_running, coverage_age), \
@@ -415,6 +416,11 @@ class TestElectionCoverageRefresh:
     def test_guards(self, kwargs, runs):
         ingest, post = self._run(**kwargs)
         assert (ingest.call_count, post.call_count) == ((1, 1) if runs else (0, 0))
+
+    def test_posting_stands_down_while_the_live_count_is_moving(self):
+        ingest, post = self._run(in_season=True, counting_live=True)
+        ingest.assert_called_once()
+        post.assert_not_called()
 
 
 class TestElectionCoverageRefreshExceptionHandling:
@@ -669,3 +675,51 @@ def test_the_bill_refresh_waits_for_a_senate_run_only_while_it_may_be_live(db_se
          patch("app.pipeline.bill_refresh.refresh_bill_statuses", refresh):
         scheduler._hourly_bill_status_refresh()
     assert refresh.called is not waits
+
+
+class TestElectionResultsSync:
+    """The five-minute live-results job: only inside the results window,
+    and hourly once no race's totals have moved for a day."""
+
+    @staticmethod
+    def _election(phase, last_change=None):
+        from datetime import date
+
+        from app.election_phase import ActiveElection
+
+        return ActiveElection(date(2026, 11, 3), phase, date(2026, 11, 20), last_change)
+
+    def _run(self, election, minute=12):
+        from app import scheduler
+        from app.time_utils import utcnow
+
+        calls = []
+
+        async def fake_sync(db, client, day):
+            calls.append(day)
+            return {}
+
+        now = utcnow().replace(minute=minute)
+        with patch("app.background.threading.Thread", _SyncThread), \
+             patch("app.election_phase.active_election", return_value=election), \
+             patch("app.scheduler.utcnow", return_value=now), \
+             patch("app.live_results.sync.sync_live_results", fake_sync), \
+             patch("app.scheduler.SessionLocal", return_value=MagicMock()), \
+             patch("app.scheduler.lease.run_tracked", side_effect=lambda tier, tracker, work, who=None: __import__("asyncio").run(work())):
+            scheduler._election_results_sync()
+        return calls
+
+    def test_campaign_is_a_no_op(self):
+        assert self._run(self._election("campaign")) == []
+
+    def test_runs_while_counting(self):
+        from app.time_utils import utcnow
+
+        assert len(self._run(self._election("results", utcnow() - timedelta(minutes=10)))) == 1
+
+    def test_settled_count_is_polled_hourly(self):
+        from app.time_utils import utcnow
+
+        settled = self._election("results", utcnow() - timedelta(days=2))
+        assert self._run(settled, minute=12) == []
+        assert len(self._run(settled, minute=0)) == 1

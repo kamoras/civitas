@@ -4,7 +4,7 @@ prioritization/snapshot helper functions directly."""
 
 import asyncio
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -164,15 +164,22 @@ class TestCurrentElectionCycle:
     """current_election_cycle() replaces what used to be a frozen
     CURRENT_ELECTION_CYCLE = 2026 constant, so the pipeline (and the
     /elections/races filter) point at the next cycle automatically once
-    an election passes, with no code change."""
+    an election is over, with no code change — "over" meaning its results
+    have stopped moving and had their grace period (election_phase), not
+    the morning after polls close."""
 
-    def test_during_2026_cycle_returns_2026(self):
-        with patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 7, 25)):
-            assert election_pipeline.current_election_cycle() == 2026
+    def test_during_2026_cycle_returns_2026(self, db_session):
+        with patch("app.election_phase.election_today", return_value=date(2026, 7, 25)):
+            assert election_pipeline.current_election_cycle(db_session) == 2026
 
-    def test_after_2026_election_day_returns_2028(self):
-        with patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 11, 4)):
-            assert election_pipeline.current_election_cycle() == 2028
+    def test_morning_after_2026_election_day_is_still_2026(self, db_session):
+        """Counting is still going on: this used to say 2028."""
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 4)):
+            assert election_pipeline.current_election_cycle(db_session) == 2026
+
+    def test_after_the_results_window_returns_2028(self, db_session):
+        with patch("app.election_phase.election_today", return_value=date(2026, 12, 1)):
+            assert election_pipeline.current_election_cycle(db_session) == 2028
 
     def test_run_election_pipeline_defaults_to_current_cycle(self, db_session):
         seen_cycles = []
@@ -183,7 +190,7 @@ class TestCurrentElectionCycle:
 
         with (
             patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
-            patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 11, 4)),
+            patch("app.election_phase.election_today", return_value=date(2027, 2, 1)),
             patch(
                 "app.pipeline.election_pipeline.fetch_all_candidates",
                 side_effect=_fake_fetch_all_candidates,
@@ -228,6 +235,27 @@ class TestSyncRoster:
         cand = db_session.query(Candidate).filter(Candidate.id == "S6GA001").one()
         assert cand.name == "OSSOFF, JON"
         assert cand.race_id == "2026-SEN-GA"
+
+    def test_a_house_candidate_is_placed_in_this_cycles_district(self, db_session):
+        """FEC's district_number is the candidate's LATEST election's (a
+        real record, H2TX35144, reads 35, 35, 37 for 2022, 2024, 2026, with
+        district_number 37): the year's own election_districts entry
+        decides. A made-up candidate who files for 2028 in a new district."""
+        raw = self._raw(
+            candidate_id="H0TX99001", state="TX", office="H", name="EXAMPLE, PAT",
+            district_number=37,
+            election_years=[2022, 2024, 2026, 2028], election_districts=["35", "35", "35", "37"],
+        )
+        assert election_pipeline._sync_roster(db_session, 2026, [raw]) == 1
+        assert db_session.query(Candidate).filter(Candidate.id == "H0TX99001").one().race_id == "2026-HOUSE-TX-35"
+
+    def test_an_at_large_district_reads_as_zero(self, db_session):
+        raw = self._raw(
+            candidate_id="H6WY001", state="WY", office="H", name="SMITH, A",
+            district_number=0, election_years=[2026], election_districts=["00"],
+        )
+        assert election_pipeline._sync_roster(db_session, 2026, [raw]) == 1
+        assert db_session.query(Candidate).filter(Candidate.id == "H6WY001").one().race_id == "2026-HOUSE-WY-0"
 
     def test_election_years_list_alone_confirms_the_ballot(self, db_session):
         # Some FEC records carry the cycle only in election_years, not in
@@ -548,6 +576,12 @@ class TestPruneStaleCoverage:
 
 
 class TestBallotSync:
+    @pytest.fixture(autouse=True)
+    def _campaign_clock(self, monkeypatch):
+        """A campaign date unless a test says otherwise: after election day
+        the ballot is final and every ballot step stands aside."""
+        monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 10, 1))
+
     def test_summarises_which_states_answered(self, db_session):
         confirm = {
             "AK": {"status": "ok", "confirmed": 6},
@@ -563,6 +597,48 @@ class TestBallotSync:
             "status": "ok", "confirmed": 6, "statesOk": ["AK"], "statesFailed": ["NY"],
             "filings": {"NC": 3},
         }
+
+    def test_a_held_elections_ballot_is_not_re_read(self, db_session):
+        """After election day the site stays on the election just held, but
+        its ballot sources move on: Oklahoma's one "next election" page and
+        a candidate list past its election answer "not published yet",
+        which would unwrite a certified ballot. The ballot stands as read."""
+        with (
+            patch("app.election_phase.election_today", return_value=date(2026, 11, 10)),
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as confirm,
+            patch("app.pipeline.election_pipeline.sync_ballot_filings") as filings,
+        ):
+            result = asyncio.run(election_pipeline.run_ballot_sync())
+        confirm.assert_not_called()
+        filings.assert_not_called()
+        assert result["status"] == "skipped"
+        assert result["reason"] == election_pipeline.ELECTION_HELD
+
+    def test_the_nightly_run_skips_a_held_elections_ballot_but_still_prunes(self, db_session):
+        import json
+
+        with (
+            patch("app.election_phase.election_today", return_value=date(2026, 11, 10)),
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]) as roster,
+            _mock_downstream_pipeline_phases(),
+            patch("app.pipeline.election_pipeline.crawl_for_new_sources") as crawl,
+            patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as confirm,
+            patch("app.pipeline.election_pipeline._sync_ballot_measures") as measures,
+            patch("app.pipeline.election_pipeline._prune_past_measures", return_value=0) as prune,
+        ):
+            asyncio.run(election_pipeline.run_election_pipeline(2026))
+        roster.assert_not_called()
+        crawl.assert_not_called()
+        confirm.assert_not_called()
+        measures.assert_not_called()
+        prune.assert_called_once()
+        run = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
+        steps = {s["key"]: s for s in json.loads(run.progress_detail)}
+        for key in ("roster_sync", "confirmed_candidates", "ballot_measures"):
+            assert steps[key]["status"] == "skipped"
+            assert steps[key]["detail"] == f"skipped: {election_pipeline.ELECTION_HELD}"
 
     def test_the_nightly_ballot_and_coverage_steps_yield_their_leases(self, db_session):
         """A ballot sync or coverage refresh in another process holds its

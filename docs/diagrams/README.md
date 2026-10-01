@@ -21,7 +21,7 @@ and an entity-relationship view of the schema.
 | [07 — Data model](07-data-model.md) | Entity relationships in SQLite |
 | [08 — Deployment](08-deployment.md) | Swarm topology and the rolling-update sequence |
 | [09 — Explore search](09-explore-search.md) | Indexing and query paths for hybrid search: semantic + BM25F, fused with recency and citation-graph authority |
-| [10 — Elections](10-elections.md) | Where each state's "who is on the ballot" comes from, how it is matched to FEC records, what a race page may show, and how readers find their district without an address |
+| [10 — Elections](10-elections.md) | Where each state's "who is on the ballot" comes from, how it is matched to FEC records, what a race page may show, how readers find their district without an address, and election night: the live count, its trust rules, seat-flip issues and posts |
 | [11 — Congress record](11-congress.md) | Each chamber's day from the Daily Digest and the live floor logs, and every roll call with each member's position |
 
 ## Keeping these honest

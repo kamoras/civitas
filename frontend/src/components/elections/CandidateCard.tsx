@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
-import { DEM_AFFILIATE_PARTIES, candidateName } from "@/lib/elections";
+import { DEM_AFFILIATE_PARTIES, candidateName, incumbencyLabel } from "@/lib/elections";
 import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 
@@ -46,25 +46,33 @@ export function getPartyMeta(c: { party: string; partyGroup?: string | null }) {
   );
 }
 
-const INCUMBENT_LABELS: Record<string, string> = {
-  I: "INCUMBENT",
-  C: "CHALLENGER",
-  O: "OPEN SEAT",
-};
-
 /** `showUnconfirmed` is off by default because in a "filers"/"primary"
  * race NOBODY is confirmed — the race-level note already says so, and a
  * badge on every card would be noise. It's switched on only for a race
  * whose list is otherwise state-verified, where an unconfirmed entry is
- * the exception worth marking. */
+ * the exception worth marking.
+ *
+ * `redrawnSeat`: the race is a House seat on new district lines, where the
+ * FEC's incumbency code is worded by incumbencyLabel — differently from
+ * election day on (`resultsMode`). */
 export default function CandidateCard({
   candidate,
   showUnconfirmed = false,
+  redrawnSeat = false,
+  resultsMode = false,
 }: {
   candidate: BallotCandidate;
   showUnconfirmed?: boolean;
+  redrawnSeat?: boolean;
+  resultsMode?: boolean;
 }) {
   const pm = getPartyMeta(candidate);
+  const incumbency = incumbencyLabel(
+    candidate.incumbentChallenge,
+    redrawnSeat,
+    candidate.incumbentRecord?.seat,
+    resultsMode
+  );
   const cash = cashOnHandDisplay(candidate.cashOnHand);
   // UTC date only, sliced from the ISO string — deterministic across
   // server and client renders, so no locale/hydration hazard.
@@ -108,9 +116,9 @@ export default function CandidateCard({
               UNCONFIRMED
             </span>
           )}
-          {candidate.incumbentChallenge && (
-            <span className="border border-white/15 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-lo">
-              {INCUMBENT_LABELS[candidate.incumbentChallenge] ?? candidate.incumbentChallenge}
+          {incumbency && (
+            <span className="whitespace-nowrap border border-white/15 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-lo">
+              {incumbency}
             </span>
           )}
           {candidate.incumbentRecord && (

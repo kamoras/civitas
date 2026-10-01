@@ -5,7 +5,7 @@
  * "This filter is on" / "this tab is showing" was expressed three different
  * ways across the app before this: a solid `bg-phos` pill with dark text
  * (BranchSelector, the leaderboard's ALL pill and its pagination), a cyan
- * tint (bills, compare, politicians, ShareButtons, ElectionsTab), and a
+ * tint (bills, compare, politicians, ShareButtons), and a
  * phosphor bottom rule (the Action Center's tab bar). Same meaning, three
  * answers, so a reader learning one page learned nothing about the next.
  *

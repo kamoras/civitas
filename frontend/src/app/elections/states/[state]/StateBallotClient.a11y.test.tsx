@@ -10,9 +10,11 @@ import type { RaceWithCandidates, StateBallot } from "@/types/election";
  * structural — dialog and tab roles, names, labels, ids that aria points
  * at — is checked here, on every CI run. */
 
+const fetchLiveResults = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api", () => ({
   fetchTownsForState: vi.fn().mockResolvedValue([]),
   fetchTownBallot: vi.fn(),
+  fetchLiveResults,
 }));
 vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
 vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
@@ -144,6 +146,74 @@ describe("ballot page accessibility", () => {
     const box = screen.getByTestId("ballot-columns");
     await userEvent.keyboard("{Escape}");
     await userEvent.click(within(box).getByRole("button", { name: "District 2" }));
+    expect(await violations()).toEqual([]);
+  });
+});
+
+describe("results mode accessibility", () => {
+  it("has no structural violations with the live count on the page", async () => {
+    const phase = {
+      phase: "results" as const,
+      electionDate: "2026-11-03",
+      resultsUntil: "2026-11-20",
+      lastResultChange: "2026-11-04T02:42:00Z",
+    };
+    const result = (raceId: string, office: "S" | "H", district: number | null) => ({
+      raceId,
+      state: "NC",
+      office,
+      district,
+      isSpecial: false,
+      heldBy: "REP",
+      official: false,
+      votesCounted: 1000,
+      reportingUnits: 60,
+      totalUnits: 100,
+      unitLabel: "precincts",
+      sourceName: "NC SBE",
+      sourceUrl: "https://example.org/r",
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: "DEM",
+      flip: true,
+      candidates: [
+        { name: "A Democrat", party: "DEM", votes: 560, pct: 56, candidateId: null },
+        { name: "A Republican", party: "REP", votes: 440, pct: 44, candidateId: null },
+      ],
+    });
+    fetchLiveResults.mockResolvedValue({
+      cycleYear: 2026,
+      phase,
+      liveStates: ["NC"],
+      senateStates: ["NC"],
+      pollsClose: {},
+      races: [
+        result("2026-SEN-NC", "S", null),
+        result("2026-HOUSE-NC-1", "H", 1),
+        result("2026-HOUSE-NC-2", "H", 2),
+      ],
+      updates: [
+        {
+          id: 1,
+          raceId: "2026-SEN-NC",
+          state: "NC",
+          office: "S",
+          district: null,
+          isSpecial: false,
+          kind: "flip",
+          at: "2026-11-04T02:42:00Z",
+          detail: {
+            leader: { name: "A Democrat", party: "DEM", votes: 560, pct: 56 },
+            heldBy: "REP",
+            reportingUnits: 60,
+            totalUnits: 100,
+            unitLabel: "precincts",
+          },
+        },
+      ],
+    });
+    render(<StateBallotClient ballot={{ ...ballot, phase }} />);
+    await screen.findByRole("region", { name: "U.S. House" });
     expect(await violations()).toEqual([]);
   });
 });

@@ -5,7 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
-import CoverageFeed, { useMounted } from "@/components/elections/CoverageFeed";
+import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
@@ -16,6 +16,17 @@ import ContestBox from "@/components/elections/ballot/ContestBox";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
+import StateResults from "@/components/elections/results/StateResults";
+import { electionIsNear, msUntilNear, useLiveResults } from "@/hooks/useLiveResults";
+import { useHashAt } from "@/hooks/useHashAt";
+import { useResultsNow } from "@/hooks/useResultsNow";
+import {
+  feedFailed,
+  pollsClosed,
+  pollsStillOpen,
+  showsResults,
+  stateFeedBehind,
+} from "@/lib/results";
 import {
   buildBallotContests,
   contestForHash,
@@ -29,9 +40,11 @@ import {
   districtAreaLabel,
   formatPvi,
   isActiveCandidate,
+  isRedrawnSeat,
   majorPartyOf,
   matchesDistrictQuery,
   pviColor,
+  redrawnMemberWords,
   stateBallotHref,
   termPhrase,
   tierCandidates,
@@ -42,6 +55,7 @@ import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type {
+  LiveRaceResult,
   RaceWithCandidates,
   StateBallot,
   StateLegChamber,
@@ -178,8 +192,8 @@ function StateLegislatureDetail({ ballot }: { ballot: StateBallot }) {
   return (
     <div>
       <p className="text-xs text-ink-min mb-3">
-        You vote in exactly one seat per chamber. Each is listed with the towns it covers — filter
-        by yours to find it.
+        Each voter votes in exactly one seat per chamber. Each is listed with the towns it covers —
+        filter by yours to find it.
       </p>
       {ballot.stateLegRaces.map((chamber) => (
         <StateLegChamberSection key={chamber.chamber} chamber={chamber} />
@@ -846,11 +860,45 @@ function TownDetail({
   );
 }
 
+/** Text colour for a House race's lean. A statewide stand-in says nothing
+ * about the district (every Texas seat on the new map reads the state's
+ * R+6, Dallas's included), so it is never coloured as that district's
+ * lean. */
+function leanTextClass(race: {
+  pvi: number | null;
+  pviLevel: "district" | "state" | null;
+}): string {
+  return race.pviLevel === "state" ? "text-ink-lo" : pviColor(race.pvi);
+}
+
 /** One district in the House picker: number, area, lean, and — reusing
  * the tierCandidates split — the leading D/R names, so a reader can find
- * their district by the names they know as well as by county. */
-function HouseDistrictOption({ race, onPick }: { race: RaceWithCandidates; onPick: () => void }) {
+ * their district by the names they know as well as by county.
+ *
+ * On new lines the member going into the election is marked "(sitting
+ * member)" — "(member before this election)" from election day on, since
+ * the results window can run to January 3, when the new Congress sits —
+ * never "(I)": they
+ * are not this district's incumbent (incumbencyLabel). From election day
+ * the lean is left out, as it is from the page header: beside a live count
+ * it reads as a prediction of it. */
+function HouseDistrictOption({
+  race,
+  onPick,
+  newLines,
+  resultsMode,
+}: {
+  race: RaceWithCandidates;
+  onPick: () => void;
+  newLines: boolean;
+  resultsMode: boolean;
+}) {
   const { leaders } = tierCandidates(race.candidates.filter(isActiveCandidate));
+  const redrawn = isRedrawnSeat(race, newLines);
+  const incumbentMark = (c: { incumbentRecord?: { seat?: string | null } | null }) =>
+    redrawn
+      ? ` (${redrawnMemberWords(resultsMode).toLowerCase()}${c.incumbentRecord?.seat ? `, ${c.incumbentRecord.seat}` : ""})`
+      : " (I)";
   const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c) === "REP");
   const countiesLabel = districtAreaLabel(race.counties);
@@ -872,7 +920,7 @@ function HouseDistrictOption({ race, onPick }: { race: RaceWithCandidates; onPic
           {dem ? (
             <span className="text-dem-blue">
               {candidateName(dem)}
-              {dem.incumbentChallenge === "I" ? " (I)" : ""}
+              {dem.incumbentChallenge === "I" ? incumbentMark(dem) : ""}
             </span>
           ) : (
             <span className="text-ink-min">no funded Democrat</span>
@@ -881,41 +929,82 @@ function HouseDistrictOption({ race, onPick }: { race: RaceWithCandidates; onPic
           {rep ? (
             <span className="text-rep-red">
               {candidateName(rep)}
-              {rep.incumbentChallenge === "I" ? " (I)" : ""}
+              {rep.incumbentChallenge === "I" ? incumbentMark(rep) : ""}
             </span>
           ) : (
             <span className="text-ink-min">no funded Republican</span>
           )}
         </span>
       </span>
-      <span className="flex flex-col items-end gap-0.5 whitespace-nowrap">
-        <span className={`font-mono text-xs ${pviColor(race.pvi)}`}>
-          {formatPvi(race.pvi)}
-          {/* No district-level PVI crosswalk data for this district yet —
-              the number shown is this whole state's lean, not this
-              district's. */}
-          {race.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
+      {!resultsMode && (
+        <span className="flex flex-col items-end gap-0.5 whitespace-nowrap">
+          <span className={`font-mono text-xs ${leanTextClass(race)}`}>
+            {formatPvi(race.pvi)}
+            {/* No district-level PVI crosswalk data for this district yet —
+                the number shown is this whole state's lean, not this
+                district's. */}
+            {race.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
+          </span>
         </span>
-      </span>
+      )}
     </button>
   );
 }
+
+/** Campaign wording, and the wording from election day on (resultsMode):
+ * neutral, not past tense — results mode starts on election day, while
+ * polls are still open, and runs for weeks after. */
+const HOUSE_ONE_EACH = "You vote in exactly one of these.";
+const HOUSE_ONE_EACH_RESULTS = "Each voter has exactly one of these on the ballot.";
 
 /** The U.S. Representative contest: pick your district, then research it.
  *
  * Civitas never asks a visitor for their address, so finding "your"
  * district is a navigation problem: point at the map, pick your county,
- * or filter by a county, a representative's name or a district number. */
+ * or filter by a county, a candidate's name or a district number.
+ *
+ * In a state whose lines were redrawn after its members were elected —
+ * the members going into this election, or the ones sitting now
+ * (ballot.newDistrictLines) — every
+ * representative-based route answers for lines other than this ballot's:
+ * house.gov's lookup and "your representative's name" both lead to the
+ * district that member was elected in, and on the new map that number is
+ * a different place (a Hays County, Texas reader was in TX-35 going into
+ * 2026; the 2026 TX-35 is Bexar, Guadalupe, Karnes and Wilson). There the
+ * copy offers only the map, the counties and the state's own lookup. */
 function HouseDetail({
   ballot,
   pickedId,
   onPick,
+  results,
+  feedAnswered,
+  countStale = false,
+  lookupHref,
+  lookupIsStateSpecific = false,
+  resultsMode = false,
 }: {
+  /** The count isn't live — the state's feed isn't being refreshed, or
+   * this page's own refresh failed: the map marks its counts stale
+   * (DistrictMap's `stale`). */
+  countStale?: boolean;
   ballot: StateBallot;
   pickedId: string | null;
   onPick: (id: string | null) => void;
+  /** From election day: no lean readouts beside the count (see the header). */
+  resultsMode?: boolean;
+  /** The state's official ballot/voter lookup, or the generic election-
+   * office finder when there is no state-specific one. */
+  lookupHref: string;
+  /** lookupHref is the state's own lookup, not the national directory. */
+  lookupIsStateSpecific?: boolean;
+  /** Live counts by district, from election day — the map shades by them. */
+  results?: Map<number, LiveRaceResult>;
+  /** The state's feed has given a count for some race (DistrictMap). */
+  feedAnswered?: boolean;
 }) {
   const houseRaces = ballot.houseRaces;
+  const newLines = ballot.newDistrictLines ?? false;
+  const stateName = ballot.stateName ?? ballot.state;
   const [filter, setFilter] = useState("");
   const picked =
     houseRaces.find((r) => r.id === pickedId) ?? (houseRaces.length === 1 ? houseRaces[0] : null);
@@ -928,10 +1017,14 @@ function HouseDetail({
           <div className="min-w-0">
             <p className="text-[15px] font-bold text-ink-hi">
               {picked.district === 0 ? "At-large seat" : `District ${picked.district}`}
-              <span className={`ml-2 font-mono text-xs font-normal ${pviColor(picked.pvi)}`}>
-                {formatPvi(picked.pvi)}
-                {picked.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
-              </span>
+              {!resultsMode && (
+                <span className={`ml-2 font-mono text-xs font-normal ${leanTextClass(picked)}`}>
+                  {formatPvi(picked.pvi)}
+                  {picked.pviLevel === "state" && (
+                    <span className="text-ink-min"> (statewide)</span>
+                  )}
+                </span>
+              )}
             </p>
             {picked.counties && picked.counties.length > 0 && (
               <p className="mt-0.5 font-mono text-xs text-ink-min">
@@ -953,6 +1046,8 @@ function HouseDetail({
           race={picked}
           coverage={stories}
           supersededByPrimary={ballot.ballotBasis?.supersededByPrimary ?? false}
+          newLines={newLines}
+          resultsMode={resultsMode}
         />
       </div>
     );
@@ -961,25 +1056,81 @@ function HouseDetail({
   const shown = houseRaces.filter((r) => matchesDistrictQuery({ ...r, areas: r.counties }, filter));
   return (
     <div>
-      <p className="mb-3 text-[13px] text-ink-lo">
-        You vote in exactly one of these. Point at the map, pick your county, or filter by a county,
-        a representative&apos;s name or a district number — or{" "}
-        <a
-          href="https://www.house.gov/representatives/find-your-representative"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Find your representative at house.gov (opens in new tab)"
-          className="text-signal-cyan hover:text-phos"
-        >
-          look it up at house.gov ↗
-        </a>
-        .
-      </p>
+      {newLines ? (
+        <p className="mb-3 text-[13px] text-ink-lo">
+          {resultsMode ? (
+            <>
+              {/* "is", not "was held": results mode starts at midnight on
+                  election day, polls still open. "Going into this
+                  election", not "current": from noon on Jan 3 (still
+                  inside the results window) the members sitting were
+                  elected on these very lines. */}
+              {HOUSE_ONE_EACH_RESULTS} This election in {stateName} is on{" "}
+              <strong className="font-semibold text-ink-hi">
+                new congressional district lines
+              </strong>
+              , so your district may not be the one your representative going into this election was
+              elected in
+            </>
+          ) : (
+            // Worded around the sitting member, not "this year": the flag
+            // stays set after the election until the members elected on
+            // the new lines take their seats (Jan 3), while the page is
+            // already on the next cycle's ballot.
+            <>
+              {HOUSE_ONE_EACH} {stateName} has drawn{" "}
+              <strong className="font-semibold text-ink-hi">
+                new congressional district lines
+              </strong>{" "}
+              since your current representative was elected, so your district may not be the one
+              they were elected in
+            </>
+          )}
+          , and lookups by representative can answer for the old map, not these lines. Point at the
+          map, pick your county, or filter by a county or district number
+          {lookupIsStateSpecific ? (
+            <>
+              {" "}
+              — or check{" "}
+              <a
+                href={lookupHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${ballot.officialLookup.label} (opens in new tab)`}
+                className="text-signal-cyan hover:text-phos"
+              >
+                {stateName}&apos;s own ballot lookup ↗
+              </a>
+            </>
+          ) : null}
+          .
+        </p>
+      ) : (
+        <p className="mb-3 text-[13px] text-ink-lo">
+          {resultsMode ? HOUSE_ONE_EACH_RESULTS : HOUSE_ONE_EACH} Point at the map, pick your
+          county, or filter by a county, a candidate&apos;s name or a district number — or{" "}
+          <a
+            href="https://www.house.gov/representatives/find-your-representative"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Find your representative at house.gov (opens in new tab)"
+            className="text-signal-cyan hover:text-phos"
+          >
+            look it up at house.gov ↗
+          </a>
+          .
+        </p>
+      )}
       <DistrictMap
         state={ballot.state}
+        newLines={newLines}
         races={houseRaces}
         picked={null}
         onPick={(id) => onPick(id)}
+        results={results}
+        feedAnswered={feedAnswered}
+        stale={countStale}
+        showLean={!resultsMode}
       />
       {houseRaces.length > 3 && <DistrictFinder races={houseRaces} picked={null} onPick={onPick} />}
       {houseRaces.length > 3 && (
@@ -988,8 +1139,16 @@ function HouseDetail({
             type="search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by county, representative, or district number"
-            aria-label="Filter districts by county, representative, or district number"
+            placeholder={
+              newLines
+                ? "Filter by county or district number"
+                : "Filter by county, candidate, or district number"
+            }
+            aria-label={
+              newLines
+                ? "Filter districts by county or district number"
+                : "Filter districts by county, candidate, or district number"
+            }
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
           <p className="mt-1.5 text-[10px] text-ink-min">
@@ -1006,12 +1165,20 @@ function HouseDetail({
         </div>
       )}
       {shown.map((r) => (
-        <HouseDistrictOption key={r.id} race={r} onPick={() => onPick(r.id)} />
+        <HouseDistrictOption
+          key={r.id}
+          race={r}
+          onPick={() => onPick(r.id)}
+          newLines={newLines}
+          resultsMode={resultsMode}
+        />
       ))}
       {shown.length === 0 && (
         <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
-          No district matches “{filter}”. Try a county name, your representative&apos;s surname, or
-          a district number — or pick a county above.
+          No district matches “{filter}”.{" "}
+          {newLines
+            ? "Try a county name or a district number — or pick a county above."
+            : "Try a county name, a candidate’s surname, or a district number — or pick a county above."}
         </p>
       )}
     </div>
@@ -1037,10 +1204,13 @@ function ContestOverview({
   contest,
   ballot,
   onOpen,
+  resultsMode,
 }: {
   contest: BallotContest;
   ballot: StateBallot;
   onOpen: (key: string, houseRaceId?: string | null) => void;
+  /** From election day on — how incumbency is worded (incumbencyLabel). */
+  resultsMode: boolean;
 }) {
   // Shared as an image unless the box is only controls (the House district
   // picker), linking to the fragment that opens this contest.
@@ -1062,7 +1232,11 @@ function ContestOverview({
       const stories = ballot.coverage.filter((c) => c.race?.id === race.id).length;
       return box(
         <>
-          <BallotRaceRows race={race} />
+          <BallotRaceRows
+            race={race}
+            newLines={ballot.newDistrictLines}
+            resultsMode={resultsMode}
+          />
           <OpenButton
             label={`RESEARCH THIS RACE${stories ? ` · ${stories} ${stories === 1 ? "STORY" : "STORIES"}` : ""}`}
             onClick={() => onOpen(contest.key)}
@@ -1074,7 +1248,11 @@ function ContestOverview({
       if (ballot.houseRaces.length === 1) {
         return box(
           <>
-            <BallotRaceRows race={ballot.houseRaces[0]} />
+            <BallotRaceRows
+              race={ballot.houseRaces[0]}
+              newLines={ballot.newDistrictLines}
+              resultsMode={resultsMode}
+            />
             <OpenButton
               label="RESEARCH THIS RACE"
               onClick={() => onOpen("house", ballot.houseRaces[0].id)}
@@ -1153,7 +1331,7 @@ function ContestOverview({
                     </span>
                     {g.seats![0].electedBy === "district" && (
                       <span className="block text-[12px] text-ink-lo">
-                        You vote in your district&apos;s seat only
+                        Each voter votes in their district&apos;s seat only
                       </span>
                     )}
                     {g.seats![0].electedBy === "statewide" && (
@@ -1333,6 +1511,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // visitor" (election_pipeline.py), so on a malformed/unsafe URL this
   // falls back to the same USAGov default the backend itself falls back to.
   const lookupHref = safeHref(officialLookup.url) || "https://www.usa.gov/election-office";
+  // A rejected URL falls back to the national directory, so it isn't the
+  // state's own site whatever the flag says.
+  const lookupIsStateSpecific = officialLookup.isStateSpecific && !!safeHref(officialLookup.url);
   const stateName = ballot.stateName ?? ballot.state;
 
   const [towns, setTowns] = useState<TownEntry[]>([]);
@@ -1350,9 +1531,84 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     };
   }, [ballot.state]);
 
+  // From election day the page leads with the count (backend election_phase).
+  // The server render (ISR) says which, so a campaign-season page asks
+  // nothing — except near election day, when it keeps asking (slowly) so a
+  // page left open switches to the count by itself. A page opened before
+  // then wakes itself when the day comes near (msUntilNear): nothing else
+  // re-renders an idle campaign page. An open page follows the live phase
+  // into results; one rendered in results mode stays there after the window
+  // closes, and StateResults says the count has ended.
+  const [nearNow, setNearNow] = useState(() => electionIsNear(ballot.phase, Date.now()));
+  useEffect(() => {
+    if (nearNow) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      const wait = msUntilNear(ballot.phase, Date.now());
+      if (wait != null) timer = setTimeout(arm, wait);
+      else if (electionIsNear(ballot.phase, Date.now())) setNearNow(true);
+    };
+    timer = setTimeout(arm, 0);
+    return () => clearTimeout(timer);
+  }, [ballot.phase, nearNow]);
+  const askForResults = showsResults(ballot.phase) || nearNow;
+  const {
+    data: live,
+    error: liveError,
+    retryMs: liveRetryMs,
+    failedAt: liveFailedAt,
+  } = useLiveResults(ballot.state, askForResults);
+  const resultsMode = showsResults(ballot.phase) || (!!live && showsResults(live.phase));
+  // From election day the page reads the count — but it only talks about
+  // this state's results in the past tense ("results", "who was on the
+  // ballot") once its polls have closed. Until then people are voting, so
+  // the page keeps the research framing, present tense, with the count
+  // section saying when the polls close. Unknown is "not closed".
+  // Subscribed only while the live phase shows results (poll close is the
+  // one time-dependent switch); otherwise the page would re-render its whole
+  // tree once a second all year.
+  // The server's clock as of the last answer, stopped where it stood while
+  // refreshes fail and never run backwards (useResultsNow) — not the
+  // browser's, which can be hours off either way. StateResults is handed
+  // the same clock.
+  const now = useResultsNow(live, liveFailedAt, !!live && showsResults(live.phase));
+  const resultsFraming =
+    resultsMode &&
+    (ballot.phase?.phase === "results" ||
+      (!!live && showsResults(live.phase) && pollsClosed(live, ballot.state, now)));
+  // Before the polls close no district is drawn by the count — not even as
+  // "no votes yet", which is a statement about the count.
+  const stillVoting = !!live && pollsStillOpen(live, ballot.state, now);
+  // The state's feed isn't being read (its latest read failed, or the sync
+  // hasn't read it for well over a pass: stateFeedBehind).
+  const feedDown =
+    !!live && (feedFailed(live.feeds?.[ballot.state]) || stateFeedBehind(live, ballot.state, now));
+  // Only a state read live gets a count-shaded map: for any other, an
+  // empty map would draw every district as "no votes yet" — a state with
+  // no feed shown as one where nothing has happened. Likewise a state whose
+  // feed couldn't be read and has no count to show: that says nothing
+  // about whether counting has started.
+  const liveByDistrict = useMemo(() => {
+    if (!live || !showsResults(live.phase) || !live.liveStates.includes(ballot.state))
+      return undefined;
+    if (live.races.length === 0 && (stillVoting || feedDown)) return undefined;
+    const m = new Map<number, LiveRaceResult>();
+    for (const r of live.races) if (r.office === "H") m.set(r.district ?? 0, r);
+    return m;
+  }, [live, ballot.state, stillVoting, feedDown]);
+  // The feed has given this state a count for some race: a district with
+  // none of its own is "no count shown here", not "no votes yet".
+  const feedAnswered = !!live && live.races.length > 0;
+  // The drawer's district map marks its counts not live exactly when the
+  // results section's map does: the state's feed isn't being refreshed, or
+  // this page's own refresh failed and what it shows is an older count
+  // (StateResults' `failed || error`). A solid fill in one map beside a
+  // striped one in the other would pass the older count off as live.
+  const countStale = (feedDown && !stillVoting) || (!!liveError && !!live);
+
   const contests = useMemo(
-    () => buildBallotContests(ballot, towns.length > 0),
-    [ballot, towns.length]
+    () => buildBallotContests(ballot, towns.length > 0, { resultsMode }),
+    [ballot, towns.length, resultsMode]
   );
   // undefined = no choice made yet, so defer to the URL; null = closed.
   // Collapsing the two meant a contest opened by a link could never be
@@ -1360,12 +1616,39 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const [chosen, setChosen] = useState<
     { key: string; houseRaceId: string | null } | null | undefined
   >(undefined);
-  // A #race-{id} link (old /elections/{raceId} redirects, Bluesky posts)
-  // or a #ballot-{key} link opens that contest. The server render has no
-  // hash, so it is read only once mounted — the useMounted idiom avoids a
-  // hydration mismatch without setting state in an effect.
-  const mounted = useMounted();
-  const fromHash = mounted ? contestForHash(window.location.hash, contests, ballot) : null;
+  // A #race-{id} link (old /elections/{raceId} redirects, Bluesky posts,
+  // the live-updates feed, the Action Center's follow-the-count links) or a
+  // #ballot-{key} link opens that contest. The server render has no hash,
+  // and a soft navigation's first render still sees the page the reader
+  // came from, so the hash is read only once the browser's URL is this
+  // page's (useHashAt: null until then).
+  const arrivalHash = useHashAt(`/elections/states/${ballot.state}`);
+  // In results mode a #race- link to a race with a count lands on the
+  // count (StateResults scrolls to it); to one without — no feed for the
+  // state, nothing counted yet, a campaign-era link — it opens research as
+  // it always has. Decided ONCE, when the count first loads (or fails to):
+  // re-deciding on every poll closed the research drawer by itself and
+  // scroll-jumped the page the moment first returns landed for the race.
+  // Until then nothing opens, so the drawer doesn't open and then vanish.
+  // Only the arrival matters: once the reader picks a contest, `chosen`
+  // owns what is open. Latched with the render-time state update React
+  // documents for "information from previous renders", not an effect.
+  const [arrival, setArrival] = useState<{ hash: string; toCount: string | null } | undefined>(
+    undefined
+  );
+  if (arrivalHash !== null && arrival === undefined) {
+    const hash = arrivalHash;
+    const race = /^#race-(.+)$/.exec(hash)?.[1];
+    if (!race || (!askForResults && !resultsMode)) setArrival({ hash, toCount: null });
+    else if (live) {
+      const id = decodeURIComponent(race);
+      const counted = showsResults(live.phase) && live.races.some((r) => r.raceId === id);
+      setArrival({ hash, toCount: counted ? id : null });
+    } else if (liveError) setArrival({ hash, toCount: null });
+    // else: the count is still loading — wait for it.
+  }
+  const fromHash =
+    arrival && !arrival.toCount ? contestForHash(arrival.hash, contests, ballot) : null;
   const open = chosen !== undefined ? chosen : fromHash;
 
   const openContest = useCallback(
@@ -1390,6 +1673,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const federalCandidates = federalRaces.flatMap((r) => r.candidates.filter(isActiveCandidate));
   const thirdParty = federalCandidates.filter((c) => majorPartyOf(c) === null).length;
   const withRecords = federalCandidates.filter((c) => c.incumbentRecord).length;
+  const contestCount = countBallotContests(contests, ballot);
 
   function detailFor(contest: BallotContest) {
     switch (contest.kind) {
@@ -1399,6 +1683,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             race={contest.race!}
             coverage={ballot.coverage.filter((c) => c.race?.id === contest.race!.id)}
             supersededByPrimary={ballot.ballotBasis?.supersededByPrimary ?? false}
+            newLines={ballot.newDistrictLines}
+            resultsMode={resultsMode}
           />
         );
       case "house":
@@ -1407,6 +1693,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             ballot={ballot}
             pickedId={open?.houseRaceId ?? null}
             onPick={(id) => openContest("house", id)}
+            results={liveByDistrict}
+            feedAnswered={feedAnswered}
+            countStale={countStale}
+            lookupHref={lookupHref}
+            lookupIsStateSpecific={lookupIsStateSpecific}
+            resultsMode={resultsMode}
           />
         );
       case "statewide":
@@ -1459,18 +1751,23 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             <header className="mb-5 flex flex-col gap-4 border-b border-white/[0.14] pb-5 font-sans lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
                 <p className="font-mono text-xs tracking-[0.14em] text-phos">
-                  BALLOT RESEARCH · {stateName.toUpperCase()} ·{" "}
+                  {resultsFraming ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
                   <span className="whitespace-nowrap">{ballot.electionDate.toUpperCase()}</span>
                 </p>
                 <h1 className="mt-1 font-display text-2xl font-extrabold text-ink-hi sm:text-[28px]">
-                  Everyone on {stateName}&apos;s ballot, and who is behind them
+                  {resultsFraming ? (
+                    `${stateName} results`
+                  ) : (
+                    <>Everyone on {stateName}&apos;s ballot, and who is behind them</>
+                  )}
                 </h1>
                 <p className="mt-1.5 text-sm text-ink-lo">
-                  {countBallotContests(contests, ballot)} contests · {federalCandidates.length}{" "}
-                  federal candidates
+                  {contestCount} {contestCount === 1 ? "contest" : "contests"} ·{" "}
+                  {federalCandidates.length} federal{" "}
+                  {federalCandidates.length === 1 ? "candidate" : "candidates"}
                   {thirdParty > 0 && `, ${thirdParty} outside the two major parties`}
                   {withRecords > 0 && ` · ${withRecords} with a congressional voting record`}
-                  {ballot.statePvi !== null && (
+                  {ballot.statePvi !== null && !resultsMode && (
                     <>
                       {" · "}
                       <span className={`font-mono ${pviColor(ballot.statePvi)}`}>
@@ -1485,7 +1782,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                     PRIMARY: {ballot.primaryDate}
                   </p>
                 )}
-                {ballot.statePvi !== null && (
+                {/* From election day the page is about the count; a lean
+                  readout beside live results reads as a prediction of them. */}
+                {ballot.statePvi !== null && !resultsMode && (
                   <div className="mt-1 max-w-2xl">
                     <PviMethodologyNote />
                   </div>
@@ -1508,6 +1807,27 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 </a>
               </div>
             </header>
+
+            {resultsMode && (
+              <>
+                <StateResults
+                  ballot={ballot}
+                  results={live}
+                  error={liveError}
+                  retryMs={liveRetryMs}
+                  failedAt={liveFailedAt}
+                  now={now}
+                  arrivalRace={arrival?.toCount ?? null}
+                  lookupHref={lookupHref}
+                  lookupIsStateSpecific={lookupIsStateSpecific}
+                />
+                {resultsFraming && (
+                  <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs tracking-[0.16em] text-ink-min">
+                    BALLOT RESEARCH · WHO WAS ON THE BALLOT, AND WHO WAS BEHIND THEM
+                  </h2>
+                )}
+              </>
+            )}
 
             {/* What the candidate lists on this page actually ARE — above the
               ballot, not under it: in a state still on FEC filers after its
@@ -1541,6 +1861,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                         contest={c}
                         ballot={ballot}
                         onOpen={openContest}
+                        resultsMode={resultsMode}
                       />
                     ))}
                   {col === "local" && (

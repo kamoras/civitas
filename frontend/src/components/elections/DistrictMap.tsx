@@ -3,8 +3,27 @@
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
-import type { RaceWithCandidates } from "@/types/election";
+import type { LiveRaceResult, RaceWithCandidates } from "@/types/election";
 import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
+import { useMapTextures } from "@/components/elections/results/MapTextures";
+import {
+  AWAITING_FILL,
+  AWAITING_SWATCH,
+  NO_COUNT_FILL,
+  NO_COUNT_TEXT,
+  NO_COUNT_SWATCH,
+  STALE_SWATCH,
+  TIED_FILL,
+  flipNotShownText,
+  flipShown,
+  heldByPhrase,
+  isTied,
+  partyTag,
+  partyTextClass,
+  raceStatusText,
+  reportingText,
+  resultFill,
+} from "@/lib/results";
 
 /**
  * Point at your neighbourhood; the page narrows to its district.
@@ -20,23 +39,64 @@ import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
  * wander the state seeing which seats are close without declaring where
  * they live — which is both more fun and strictly less data than asking.
  *
- * Geometry is the Census cartographic boundary file for the 119th
- * Congress, split per state and vendored under public/data/cd/ by
- * backend/scripts/build_district_topology.py. Each file carries its own
+ * Geometry is the lines each state votes on this cycle — the Census
+ * cartographic file for the 119th Congress, and for the nine states that
+ * redrew for 2026 (backend/app/data/redrawn_congressional_maps.json) their
+ * new lines, dissolved from Census blocks — split per state and vendored
+ * under public/data/cd/ by backend/scripts/build_district_topology.py.
+ * Each file carries its own
  * bbox, so fitting the projection is the few lines of Mercator arithmetic
  * below rather than another geo library in the bundle.
  *
  * Colour follows the SAME rule as the district list (pviColor: R red,
  * D blue), with intensity for distance from even, so a close seat reads
- * pale and a safe one saturated. Deliberately not a new "toss-up"
+ * faint and a safe one saturated. (Faint, not pale: the fill's opacity
+ * drops over a near-black page, so a close seat is dimmer, not lighter —
+ * every legend says "fainter".) Deliberately not a new "toss-up"
  * category: a second classification on the same page would eventually
  * disagree with the first.
+ *
+ * A state voting on new lines (`newLines`) is shaded by the lean of the
+ * district on the ballot — the API serves the table for the lines the
+ * cycle is fought on (district_pvi_for_congress), not the sitting
+ * members'. A race whose lean is only the statewide stand-in (pviLevel
+ * "state" — no table for its lines is on file yet) is left
+ * unshaded, in a light neutral: the state's colour on every seat would
+ * claim Dallas leans like the Panhandle. When no drawn district has a
+ * lean of its own the lean legend is replaced by a line saying so, and
+ * the borders are drawn light, since with one fill everywhere they are
+ * the only thing left to point at.
+ *
+ * From election day, given `results`, it shades by who LEADS each
+ * district's count instead (lib/results resultFill — the same fill the
+ * national map uses), and the preview shows the count. Lean says how a
+ * seat usually votes; on the night itself, the count is the news — so
+ * with `showLean` off (the page is in results mode) a map with no count to
+ * shade by is drawn unshaded rather than by lean, and its preview names no
+ * lean: beside the count, a lean reads as a prediction of it. A
+ * district with no count shown while the state has counts for others
+ * (`feedAnswered`) is hatched and says so — never "no votes yet".
+ *
+ * A shape with no race on the ballot still previews: "no race on file"
+ * by lean, and its count (if the state gave one) by results. Whether it
+ * can be picked is the caller's: the state's results section lists such a
+ * count as a row of its own and opts in with `pickCounts`, while the
+ * ballot's district picker has no race to open for it and leaves it a
+ * plain image, out of the tab order.
  */
 
 const DEM = "#82acff";
 const REP = "#ff8989";
 const EVEN = "#cdc7bc";
 const UNKNOWN = "#3a352f";
+/** A district with only a statewide lean: lighter than UNKNOWN so a state
+ * of them is not one dark mass at phone width. */
+const UNSHADED = "#6f685f";
+const UNSHADED_OPACITY = 0.6;
+const BORDER = "#0e0c0a";
+/** Border when every district is UNSHADED: light, or at 390px the lines
+ * between thirty-eight same-coloured districts do not read. */
+const UNSHADED_BORDER = "#d9d3c7";
 const WIDTH = 800;
 
 type Bbox = [number, number, number, number];
@@ -74,7 +134,7 @@ export function leanFill(pvi: number | null): { fill: string; opacity: number } 
 interface Topo {
   type: "Topology";
   bbox: Bbox;
-  objects: { districts: unknown };
+  objects: { districts: { geometries?: { properties?: { district?: number } }[] } };
 }
 
 type GeographyProp = Parameters<typeof Geographies>[0]["geography"];
@@ -84,12 +144,48 @@ export default function DistrictMap({
   races,
   picked,
   onPick,
+  results,
+  feedAnswered,
+  newLines = false,
+  showLean = true,
+  stale = false,
+  pickCounts = false,
 }: {
+  /** With `results`, a district with a count but no race on the ballot is
+   * pickable too, as the count's `raceId` — for a caller whose onPick lands
+   * on the count (StateResults' rows), not on a ballot race. Off, such a
+   * shape previews its count but is not a button. */
+  pickCounts?: boolean;
+  /** The state's feed isn't being refreshed (its latest read failed, or
+   * the backend has stopped reading it): every count is drawn with the
+   * stale stripe and named "not live", as the national map does. */
+  stale?: boolean;
   state: string;
+  /** Off from election day (results mode): no lean is shown, shaded or
+   * written, even where there is no count to shade by. */
+  showLean?: boolean;
+  /** The state votes this cycle on new congressional lines
+   * (StateBallot.newDistrictLines): the caption names them as the new
+   * districts. Their leans are the new lines' (pviLevel says when one is
+   * only the statewide stand-in). */
+  newLines?: boolean;
   races: RaceWithCandidates[];
   picked: string | null;
   onPick: (raceId: string) => void;
+  /** Live counts by district; when given, the map shades by the count. */
+  results?: Map<number, LiveRaceResult>;
+  /** The state's feed has given a count for some race (Senate or House):
+   * a district without one of its own is then "no count shown here",
+   * not "no votes yet". Defaults to any district having a count. */
+  feedAnswered?: boolean;
 }) {
+  // Every fill a counted district can take, for the stale pattern behind
+  // each (useMapTextures); none unless the counts are stale.
+  const staleFills = useMemo(
+    () => (stale && results ? [...results.values()].map((r) => resultFill(r, true)) : []),
+    [stale, results]
+  );
+  const { defs: textureDefs, paint } = useMapTextures(staleFills);
   const [topo, setTopo] = useState<Topo | null>(null);
   const [failed, setFailed] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -123,20 +219,101 @@ export default function DistrictMap({
   }, [races]);
 
   const fit = useMemo(() => (topo?.bbox ? fitMercator(topo.bbox, WIDTH) : null), [topo]);
+  const shapes = useMemo(
+    () =>
+      (topo?.objects.districts.geometries ?? [])
+        .map((g) => g.properties?.district)
+        .filter((d): d is number => typeof d === "number"),
+    [topo]
+  );
 
   if (!multiDistrict || failed || !topo || !fit) return null;
 
   const pickedDistrict = picked ? (races.find((r) => r.id === picked)?.district ?? null) : null;
   const focus = hovered ?? pickedDistrict;
   const focusRace = focus != null ? byDistrict.get(focus) : undefined;
+  const focusName = focus == null ? "" : focus === 0 ? `${state} at-large` : `${state}-${focus}`;
+  const answered = feedAnswered ?? (!!results && results.size > 0);
+  const drawn = races.filter((r) => r.district != null);
+  const stateLevel = drawn.filter((r) => r.pviLevel === "state").length;
+  // No drawn district has a lean of its own: nothing to key red/blue by.
+  const unshaded = !results && (!showLean || (drawn.length > 0 && stateLevel === drawn.length));
+  // A shape leanFill paints UNKNOWN: no race on the ballot for it, or a race
+  // with no lean at all. The legend has to name that dark fill when it shows.
+  const unknownShown =
+    !results &&
+    !unshaded &&
+    shapes.some((d) => {
+      const r = byDistrict.get(d);
+      return !r || (r.pviLevel !== "state" && r.pvi == null);
+    });
 
   return (
     <div className="mb-4 border border-white/15">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/10 px-3 py-2">
-        <p className="font-mono text-xs tracking-[0.1em] text-phos">POINT AT WHERE YOU LIVE</p>
-        <p className="font-mono text-[10px] text-ink-min">
-          redder = safer R · bluer = safer D · paler = closer
+        <p className="font-mono text-xs tracking-[0.1em] text-phos">
+          {results ? "WHO LEADS EACH DISTRICT" : "POINT AT WHERE YOU LIVE"}
         </p>
+        {results ? (
+          // Every fill a district can get here: resultFill's (including
+          // purple for a leader outside the two major parties and the dark
+          // "no votes yet"), plus the hatch for a district Civitas shows no
+          // count for.
+          <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-ink-min">
+            <li>red = R leads · blue = D leads · purple = other or unstated party leads</li>
+            <li>fainter = under half in · solid = count listed as official, still not called</li>
+            <li className="flex items-center gap-1">
+              <span
+                aria-hidden="true"
+                className="inline-block h-2 w-3"
+                style={{ backgroundColor: TIED_FILL }}
+              />
+              tied
+            </li>
+            <li className="flex items-center gap-1">
+              <span
+                aria-hidden="true"
+                className="inline-block h-2 w-3 border border-white/30"
+                style={{ background: `${AWAITING_SWATCH}, ${AWAITING_FILL}` }}
+              />
+              no votes yet
+            </li>
+            {answered && (
+              <li className="flex items-center gap-1">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-2 w-3 border border-white/30"
+                  style={{ background: `${NO_COUNT_SWATCH}, ${AWAITING_FILL}` }}
+                />
+                no count shown here
+              </li>
+            )}
+            {stale && (
+              <li className="flex items-center gap-1">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-2 w-3 border border-white/30"
+                  style={{ background: `${STALE_SWATCH}, rgba(255,137,137,0.6)` }}
+                />
+                stale: the last count read, not live
+              </li>
+            )}
+          </ul>
+        ) : unshaded ? (
+          <p className="font-mono text-[10px] text-ink-min">
+            {newLines ? "the new 2026 districts · " : ""}
+            {showLean
+              ? "no per-district lean published here yet"
+              : "no lean shown from election day"}
+          </p>
+        ) : (
+          <p className="font-mono text-[10px] text-ink-min">
+            {newLines ? "the new 2026 districts · " : ""}
+            redder = safer R · bluer = safer D · fainter = closer
+            {stateLevel > 0 && " · grey = no district lean yet"}
+            {unknownShown && " · dark = no lean on file"}
+          </p>
+        )}
       </div>
 
       <ComposableMap
@@ -147,6 +324,7 @@ export default function DistrictMap({
         style={{ width: "100%", height: "auto" }}
         aria-label={`Congressional districts of ${state}`}
       >
+        {results && textureDefs}
         {/* react-simple-maps' types admit only GeoJSON, but its runtime
             converts a Topology itself — it checks type === "Topology" and
             runs topojson's feature() on the first object (verified in the
@@ -157,35 +335,68 @@ export default function DistrictMap({
             geographies.map((geo) => {
               const district = geo.properties?.district as number;
               const race = byDistrict.get(district);
-              const { fill, opacity } = leanFill(race?.pvi ?? null);
+              const counted = results?.get(district);
+              // What a click opens: the ballot race, or — only where the
+              // caller lands picks on counts — the count's own race.
+              const pickId = race?.id ?? (pickCounts && counted ? counted.raceId : null);
+              const { fill, opacity } = results
+                ? {
+                    fill:
+                      !counted && answered
+                        ? paint(NO_COUNT_FILL)
+                        : paint(resultFill(counted, true), stale && !!counted),
+                    opacity: 1,
+                  }
+                : // A statewide stand-in says nothing about one district:
+                  // painting every seat the state's colour would.
+                  unshaded || race?.pviLevel === "state"
+                  ? { fill: UNSHADED, opacity: UNSHADED_OPACITY }
+                  : leanFill(race?.pvi ?? null);
               const isPicked = district === pickedDistrict;
               const isHovered = district === hovered;
-              const label = district === 0 ? `${state} at-large` : `${state}-${district}`;
+              const name = district === 0 ? `${state} at-large` : `${state}-${district}`;
+              // Shaded by the count, the district's standing is in its
+              // name too: the fill is never the only way to read it.
+              const label =
+                !race && !counted
+                  ? `${name}: no race on file`
+                  : results
+                    ? `${name}: ${
+                        counted
+                          ? `${raceStatusText(counted)}${stale ? "; not live, the last count read" : ""}`
+                          : answered
+                            ? NO_COUNT_TEXT
+                            : "no votes yet"
+                      }`
+                    : name;
               return (
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  role="button"
+                  // A shape with nothing to open is not a button, and is out
+                  // of the tab order; hovering it still previews it.
+                  role={pickId ? "button" : "img"}
+                  tabIndex={pickId ? 0 : -1}
                   aria-label={label}
-                  aria-pressed={isPicked}
+                  aria-pressed={pickId ? isPicked : undefined}
                   onMouseEnter={() => setHovered(district)}
                   onMouseLeave={() => setHovered(null)}
                   onFocus={() => setHovered(district)}
                   onBlur={() => setHovered(null)}
-                  onClick={() => race && onPick(race.id)}
+                  onClick={() => pickId && onPick(pickId)}
                   onKeyDown={(e: KeyboardEvent) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      if (e.key === " ") e.preventDefault();
-                      if (race) onPick(race.id);
+                    if (pickId && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      onPick(pickId);
                     }
                   }}
                   style={{
                     fill,
                     fillOpacity: opacity,
-                    stroke: isPicked || isHovered ? "#00ff41" : "#0e0c0a",
-                    strokeWidth: isPicked ? 2 : isHovered ? 1.2 : 0.6,
+                    stroke: isPicked || isHovered ? "#00ff41" : unshaded ? UNSHADED_BORDER : BORDER,
+                    strokeWidth: isPicked ? 2 : isHovered ? 1.2 : unshaded ? 0.8 : 0.6,
                     outline: "none",
-                    cursor: race ? "pointer" : "default",
+                    cursor: pickId ? "pointer" : "default",
                   }}
                 />
               );
@@ -198,8 +409,22 @@ export default function DistrictMap({
         aria-live="polite"
         className="min-h-[3.25rem] border-t border-white/10 px-3 py-2 font-mono text-xs"
       >
-        {focusRace ? (
-          <DistrictPreview state={state} race={focusRace} />
+        {focus != null && results && (focusRace || results.has(focus)) ? (
+          // By results, a count with no ballot race previews like any other.
+          <DistrictResultPreview
+            state={state}
+            district={focus}
+            result={results.get(focus)}
+            feedAnswered={answered}
+            stale={stale}
+          />
+        ) : focusRace ? (
+          <DistrictPreview state={state} race={focusRace} showLean={showLean} />
+        ) : focus != null ? (
+          <span>
+            <span className="text-ink-hi">{focusName}</span>
+            <span className="text-ink-min"> · no race on file</span>
+          </span>
         ) : (
           <span className="text-ink-min">
             Hover or tab to a district to preview its race. Nothing is sent or stored.
@@ -210,7 +435,15 @@ export default function DistrictMap({
   );
 }
 
-function DistrictPreview({ state, race }: { state: string; race: RaceWithCandidates }) {
+function DistrictPreview({
+  state,
+  race,
+  showLean,
+}: {
+  state: string;
+  race: RaceWithCandidates;
+  showLean: boolean;
+}) {
   const top = [...race.candidates]
     .sort((a, b) => (b.contributions ?? 0) - (a.contributions ?? 0))
     .slice(0, 2);
@@ -219,7 +452,12 @@ function DistrictPreview({ state, race }: { state: string; race: RaceWithCandida
       <span className="text-ink-hi">
         {race.district === 0 ? `${state} at-large` : `${state}-${race.district}`}
       </span>
-      <span className="text-ink-min">{formatPvi(race.pvi)}</span>
+      {showLean && (
+        <span className="text-ink-min">
+          {formatPvi(race.pvi)}
+          {race.pviLevel === "state" && " (statewide)"}
+        </span>
+      )}
       {top.map((c) => {
         const major = majorPartyOf(c);
         return (
@@ -234,6 +472,73 @@ function DistrictPreview({ state, race }: { state: string; race: RaceWithCandida
         );
       })}
       <span className="text-phos">click to show this race →</span>
+    </div>
+  );
+}
+
+function DistrictResultPreview({
+  state,
+  district,
+  result,
+  feedAnswered,
+  stale = false,
+}: {
+  state: string;
+  district: number;
+  result: LiveRaceResult | undefined;
+  feedAnswered: boolean;
+  stale?: boolean;
+}) {
+  const [first, second] = result?.candidates ?? [];
+  // An exact tie names both without either in a lead colour.
+  const tied = !!result && isTied(result);
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className="text-ink-hi">
+        {district === 0 ? `${state} at-large` : `${state}-${district}`}
+      </span>
+      {tied && <span className="text-ink-hi">TIED</span>}
+      {!result && feedAnswered ? (
+        <span className="text-ink-min">no count shown here</span>
+      ) : !result || !result.votesCounted ? (
+        <span className="text-ink-min">
+          {result && flipNotShownText(result)
+            ? "no votes in the latest count · change of party announced earlier"
+            : "no votes counted yet"}
+        </span>
+      ) : (
+        <>
+          {[first, second].filter(Boolean).map((c) => (
+            <span
+              key={c.candidateId ?? c.name}
+              className={tied ? "text-ink-hi" : partyTextClass(c.party)}
+            >
+              {c.name} ({partyTag(c.party)}) {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
+            </span>
+          ))}
+          <span className="text-ink-min">{reportingText(result)}</span>
+          <span className="text-ink-lo">
+            {/* Never a bare "official" beside the names: that reads as a
+                result. An official count still only leads. A seat changing
+                party says so only while the figures show it (flipShown);
+                one announced earlier that this count doesn't show says
+                that instead, never "leader from another party". */}
+            {[
+              tied ? "tied" : result.official ? "leads" : "leading",
+              result.official ? "official count" : null,
+              "not called",
+              flipShown(result)
+                ? `held by ${heldByPhrase(result.heldBy)}, leader from another party`
+                : flipNotShownText(result)
+                  ? `change of party announced earlier, ${flipNotShownText(result)}`
+                  : null,
+              stale ? "not live" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </>
+      )}
     </div>
   );
 }

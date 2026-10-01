@@ -1,0 +1,245 @@
+{
+ "Contests": [
+  {
+   "C": "United States Senator",
+   "K": "20",
+   "VF": 1,
+   "TP": 64,
+   "PR": 64,
+   "BC": 1870217,
+   "CH": [
+    "Michael Bennet",
+    "Joe O'Dea",
+    "T.J. Cole",
+    "Brian Peotter",
+    "Frank Atwood"
+   ],
+   "P": [
+    "DEM",
+    "REP",
+    "UNI",
+    "LBR",
+    "APV"
+   ],
+   "PCT": [
+    55.88389403751,
+    41.2655741901421,
+    0.655125933451461,
+    1.74126945398839,
+    0.454136384907985
+   ],
+   "V": [
+    1397170,
+    1031693,
+    16379,
+    43534,
+    11354
+   ],
+   "W": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "C": "Representative to the 118th United States Congress - District 1",
+   "K": "110",
+   "VF": 1,
+   "TP": 2,
+   "PR": 2,
+   "BC": 287219,
+   "CH": [
+    "Diana DeGette",
+    "Jennifer Qualteri",
+    "John C Kittleson"
+   ],
+   "P": [
+    "DEM",
+    "REP",
+    "LBR"
+   ],
+   "PCT": [
+    80.2961626240645,
+    17.5252552058454,
+    2.17858217009005
+   ],
+   "V": [
+    226929,
+    49529,
+    6157
+   ],
+   "W": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "C": "Representative to the 118th United States Congress - District 8",
+   "K": "180",
+   "VF": 1,
+   "TP": 3,
+   "PR": 3,
+   "BC": 250259,
+   "CH": [
+    "Yadira Caraveo",
+    "Barbara Kirkmeyer",
+    "Richard Ward"
+   ],
+   "P": [
+    "DEM",
+    "REP",
+    "LBR"
+   ],
+   "PCT": [
+    48.3824163924163,
+    47.6920669029873,
+    3.92551670459641
+   ],
+   "V": [
+    114377,
+    112745,
+    9280
+   ],
+   "W": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "C": "Governor/Lieutenant Governor",
+   "K": "210",
+   "VF": 1,
+   "TP": 64,
+   "PR": 64,
+   "BC": 1870217,
+   "CH": [
+    "Heidi Ganahl / Danny Moore",
+    "Jared Polis / Dianne Primavera",
+    "Paul No\u00ebl Fiorino / Cynthia Munhos de Aquino Sirianni",
+    "Danielle Neuschwanger / Darryl Gibbs",
+    "Kevin Ruskusky / Michele Poague"
+   ],
+   "P": [
+    "REP",
+    "DEM",
+    "UNI",
+    "ACN",
+    "LBR"
+   ],
+   "PCT": [
+    39.1841420297596,
+    58.5339030680373,
+    0.26654496027934,
+    0.861896467193087,
+    1.15351347473064
+   ],
+   "V": [
+    983040,
+    1468481,
+    6687,
+    21623,
+    28939
+   ],
+   "W": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "C": "State Board of Education Member - Congressional District 8",
+   "K": "380",
+   "VF": 1,
+   "TP": 3,
+   "PR": 3,
+   "BC": 250259,
+   "CH": [
+    "Peggy Propst",
+    "Rhonda Solis",
+    "James K Treibert"
+   ],
+   "P": [
+    "REP",
+    "DEM",
+    "ACN"
+   ],
+   "PCT": [
+    48.464437394034,
+    49.2832082724816,
+    2.25235433348441
+   ],
+   "V": [
+    115483,
+    117434,
+    5367
+   ],
+   "W": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "C": "Regent of the University of Colorado - Congressional District 1",
+   "K": "410",
+   "VF": 1,
+   "TP": 2,
+   "PR": 2,
+   "BC": 287219,
+   "CH": [
+    "Amy Naes",
+    "Wanda L. James"
+   ],
+   "P": [
+    "REP",
+    "DEM"
+   ],
+   "PCT": [
+    21.3859223121831,
+    78.6140776878169
+   ],
+   "V": [
+    57952,
+    213030
+   ],
+   "W": [
+    0,
+    0
+   ]
+  },
+  {
+   "C": "Regent of the University of Colorado - Congressional District 8",
+   "K": "480",
+   "VF": 1,
+   "TP": 3,
+   "PR": 3,
+   "BC": 250259,
+   "CH": [
+    "Mark VanDriel",
+    "Yolanda Ortega"
+   ],
+   "P": [
+    "REP",
+    "DEM"
+   ],
+   "PCT": [
+    51.6825175607259,
+    48.3174824392741
+   ],
+   "V": [
+    120151,
+    112328
+   ],
+   "W": [
+    0,
+    0
+   ]
+  }
+ ]
+}

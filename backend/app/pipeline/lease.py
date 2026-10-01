@@ -52,6 +52,7 @@ BILL_REFRESH = "bill-refresh-lock"
 BALLOT_SYNC = "ballot-sync-lock"
 COVERAGE_REFRESH = "coverage-refresh-lock"
 CONGRESS_SYNC = "congress-sync-lock"
+RESULTS_SYNC = "results-sync-lock"
 # /data/district_pvi.json's writers, and every House run: a House run holds
 # it from settling the sitting Congress's district lines until its scoring
 # is done (fetch/district_pvi.run_house_on_sitting_lines), so the lines can
@@ -71,6 +72,7 @@ TIERS = {
     BALLOT_SYNC: "Ballot sync",
     COVERAGE_REFRESH: "Election coverage refresh",
     CONGRESS_SYNC: "Congress record sync",
+    RESULTS_SYNC: "Live results sync",
     DISTRICT_LINES: "House run or district PVI refresh",
 }
 
@@ -128,6 +130,9 @@ HUNG_AFTER = {
     BALLOT_SYNC: timedelta(hours=2),
     COVERAGE_REFRESH: timedelta(hours=2),
     CONGRESS_SYNC: timedelta(hours=2),
+    # A pass is a few requests per covered state; one still going after
+    # half an hour has hung, and the next five-minute tick should proceed.
+    RESULTS_SYNC: timedelta(minutes=30),
     # Held for a whole House run, whose run lock goes stale at this too.
     DISTRICT_LINES: _pipeline_timeout(),
 }

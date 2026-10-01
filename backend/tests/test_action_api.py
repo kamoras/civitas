@@ -8,7 +8,7 @@ import pytest
 
 from app.api.action import _latest_current_issues
 from app.issue_ids import to_public_id
-from app.models import ActionIssue
+from app.models import ActionIssue, ActionIssueStatus
 
 
 def _make_issue(date: str, rank: int, title: str, is_current: bool) -> ActionIssue:
@@ -96,6 +96,38 @@ class TestLatestCurrentIssues:
 
         assert sorted(i.rank for i in issues) == [1, 2]
 
+
+    def test_a_developing_draft_from_before_midnight_stays_listed(self, db_session):
+        """An election-night flip drafted at 11:50 PM ET must not drop off
+        the list when the first confirmed story of the next day lands."""
+        db_session.add(_make_issue("2026-11-04", 1, "Morning story", is_current=True))
+        draft = _make_issue("2026-11-03", 999, "Leads in a seat", is_current=True)
+        draft.status = ActionIssueStatus.DEVELOPING
+        db_session.add(draft)
+        db_session.commit()
+
+        issues = _latest_current_issues(db_session)
+
+        assert [i.title for i in issues] == ["Morning story", "Leads in a seat"]
+
+    def test_a_developing_draft_dated_ahead_does_not_hide_the_confirmed_day(self, db_session):
+        db_session.add(_make_issue("2026-11-03", 1, "Evening story", is_current=True))
+        draft = _make_issue("2026-11-04", 999, "Leads in a seat", is_current=True)
+        draft.status = ActionIssueStatus.DEVELOPING
+        db_session.add(draft)
+        db_session.commit()
+
+        issues = _latest_current_issues(db_session)
+
+        assert [i.title for i in issues] == ["Evening story", "Leads in a seat"]
+
+    def test_only_developing_drafts_are_still_listed(self, db_session):
+        draft = _make_issue("2026-11-04", 999, "Leads in a seat", is_current=True)
+        draft.status = ActionIssueStatus.DEVELOPING
+        db_session.add(draft)
+        db_session.commit()
+
+        assert [i.title for i in _latest_current_issues(db_session)] == ["Leads in a seat"]
 
 class TestRenumberForDisplay:
     def test_breaks_a_rank_tie_by_most_recently_touched_first(self, db_session):
@@ -296,6 +328,20 @@ class TestTimelineRoutesUseCanonicalClock:
         with patch("app.api.action.utcnow", return_value=datetime(2026, 3, 15)):
             result = await get_timeline(Response(), year=None, db=db_session)
         assert result["year"] == 2026
+
+    async def test_election_night_keeps_election_day_on_the_calendar(self, db_session):
+        """9 PM ET on election day is already the 4th in UTC."""
+        from datetime import date, datetime
+        from unittest.mock import patch
+
+        from fastapi import Response
+
+        from app.api.action import get_timeline
+
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 11, 4, 2)), \
+                patch("app.api.action.election_today", return_value=date(2026, 11, 3)):
+            result = await get_timeline(Response(), year=2026, db=db_session)
+        assert any(e["date"] == "2026-11-03" for e in result["upcomingEvents"])
 
 
 class TestSingleIssueEnrichment:
@@ -727,6 +773,170 @@ class TestRecentActionIssues:
         assert paths == ["/action/issues/recent", "/action/issues/{issue_id}"]
 
 
+def test_a_developing_issue_names_what_it_was_drafted_from(db_session):
+    """The page's disclosure words the source ("a Federal Register rule",
+    "the state's own election-night count") instead of calling every
+    developing issue a vote record."""
+    from app.api.action import _build_issue_response
+    from app.models import ActionIssue
+
+    issue = ActionIssue(date="2026-11-04", rank=999, title="t", status="developing", source_type="election_results")
+    db_session.add(issue)
+    db_session.flush()
+    resp = _build_issue_response(issue, db_session)
+    assert resp["status"] == "developing" and resp["sourceType"] == "election_results"
+
+
+class TestElectionNightPager:
+    """A seat flip is restamped with the Eastern date on every five-minute
+    count sync, so past midnight it carries a day no confirmed issue has
+    reached yet. The pager must not offer that day as a view of its own."""
+
+    def _seed(self, db_session):
+        confirmed = ActionIssue(date="2026-11-03", rank=1, title="Polls close across the East", is_current=True,
+                                source_type="rss")
+        flip = ActionIssue(date="2026-11-04", rank=999, title="Republican leads Georgia's 2nd", is_current=True,
+                           source_type="election_results", status=ActionIssueStatus.DEVELOPING)
+        db_session.add_all([confirmed, flip])
+        db_session.commit()
+
+    async def test_the_landing_day_is_the_newest_day_the_pager_offers(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        self._seed(db_session)
+        resp = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        assert resp["date"] == "2026-11-03"
+        assert resp["availableDates"][0] == "2026-11-03"
+        assert {i["title"] for i in resp["issues"]} == {"Polls close across the East", "Republican leads Georgia's 2nd"}
+
+    async def test_asking_for_the_newest_day_by_date_shows_the_same_view(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        self._seed(db_session)
+        by_date = await get_action_issues(Response(), date="2026-11-03", db=db_session, db_visits=db_session)
+        assert {i["title"] for i in by_date["issues"]} == {"Polls close across the East", "Republican leads Georgia's 2nd"}
+
+
+class TestPagerAroundAnOlderDay:
+    async def test_an_older_deep_link_pages_to_its_neighbours(self, db_session):
+        """The timeline's year-in-review links open a day older than the 14
+        newest: the pager still lists it and the days either side."""
+        from datetime import date, timedelta
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        days = [(date(2026, 10, 1) + timedelta(days=i)).isoformat() for i in range(20)]
+        for i, d in enumerate(days):
+            db_session.add(ActionIssue(date=d, rank=1, title=f"Issue {i}", is_current=(d == days[-1])))
+        db_session.commit()
+
+        resp = await get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
+        dates = resp["availableDates"]
+        assert resp["date"] == "2026-10-02"
+        i = dates.index("2026-10-02")
+        assert dates[i + 1] == "2026-10-01" and dates[i - 1] == "2026-10-03"
+        assert dates[0] == days[-1]
+
+
+class TestEmptyDayPager:
+    async def test_a_day_with_no_issues_left_still_pages_to_its_neighbours(self, db_session):
+        """A re-matched issue is restamped to the day that matched it, so a
+        day can end up with no rows; the timeline still links to it."""
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        db_session.add(ActionIssue(date="2026-10-01", rank=1, title="Old", is_current=False))
+        db_session.add(ActionIssue(date="2026-10-03", rank=1, title="Moved on", is_current=True))
+        db_session.commit()
+        resp = await get_action_issues(Response(), date="2026-10-02", db=db_session, db_visits=db_session)
+        assert resp["issues"] == []
+        # Its neighbours, not the empty day itself: the timeline offers
+        # every listed day as one to open.
+        assert resp["availableDates"] == ["2026-10-03", "2026-10-01"]
+
+    async def test_a_malformed_date_is_not_offered_as_a_day(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        for bad in ("not-a-day", "2026-1-2", "2026-02-30", "2026-09-26\n"):
+            resp = await get_action_issues(Response(), date=bad, db=db_session, db_visits=db_session)
+            assert resp == {"date": bad, "issues": [], "availableDates": [], "generatedAt": None}, bad
+
+
+class TestRecentFeedAndSeatFlips:
+    """The refresh's duplicate pass reads every seat flip in a state as one
+    story (their titles differ only by the district, their source is the
+    state's results page); the homepage keeps each race's own."""
+
+    async def test_a_flip_is_never_hidden_behind_another_races_flip(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+
+        ga2 = ActionIssue(date="2026-11-04", rank=999, title="Republican leads Georgia's 2nd", is_current=True,
+                          source_type="election_results")
+        db_session.add(ga2)
+        db_session.flush()
+        ga6 = ActionIssue(date="2026-11-04", rank=999, title="Republican leads Georgia's 6th", is_current=True,
+                          source_type="election_results", duplicate_of_id=ga2.id)
+        news = ActionIssue(date="2026-11-04", rank=1, title="Republican flips Georgia's 2nd", is_current=True,
+                           source_type="rss")
+        db_session.add_all([ga6, news])
+        db_session.flush()
+        copy = ActionIssue(date="2026-11-04", rank=2, title="Copy of the news story", is_current=True,
+                           source_type="rss", duplicate_of_id=news.id)
+        db_session.add(copy)
+        db_session.commit()
+
+        titles = {i["title"] for i in (await get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
+        assert "Republican leads Georgia's 6th" in titles
+        assert "Copy of the news story" not in titles
+
+    async def test_a_flip_still_gives_way_to_a_news_story_of_the_same_flip(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+
+        news = ActionIssue(date="2026-11-04", rank=1, title="Republican flips Georgia's 2nd", is_current=True,
+                           source_type="rss")
+        db_session.add(news)
+        db_session.flush()
+        db_session.add(ActionIssue(date="2026-11-04", rank=999, title="Republican leads Georgia's 2nd",
+                                   is_current=True, source_type="election_results", duplicate_of_id=news.id))
+        db_session.commit()
+
+        titles = {i["title"] for i in (await get_recent_action_issues(Response(), limit=10, db=db_session))["issues"]}
+        assert titles == {"Republican flips Georgia's 2nd"}
+
+
+class TestCountIssuePayload:
+    def test_a_count_issue_says_when_its_figures_were_read_and_whether_official(self, db_session):
+        from datetime import datetime
+
+        from app.api.action import _build_issue_response
+
+        issue = ActionIssue(date="2026-11-04", rank=999, title="Republican leads", is_current=True,
+                            source_type="election_results", status=ActionIssueStatus.DEVELOPING,
+                            count_as_of=datetime(2026, 11, 4, 2, 44), count_official=True)
+        news = ActionIssue(date="2026-11-04", rank=1, title="News", is_current=True)
+        db_session.add_all([issue, news])
+        db_session.commit()
+
+        data = _build_issue_response(issue, db_session)
+        assert data["countAsOf"] == "2026-11-04T02:44:00Z"
+        assert data["countOfficial"] is True
+        other = _build_issue_response(news, db_session)
+        assert other["countAsOf"] is None and other["countOfficial"] is None
+
+
 def test_timeline_refuses_a_year_it_cannot_build_dates_for(db_session):
     # year=0 reached date(0, 10, 1) and answered 500; out-of-range input is a 422.
     from fastapi import FastAPI
@@ -811,3 +1021,21 @@ class TestIssuesListPagerFields:
 
         live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
         assert live["generatedAt"] is None
+
+
+async def test_every_kept_day_is_openable_whatever_day_is_shown(db_session):
+    """The Archive offers a listed day to open; capped at the newest 14, an
+    older day was openable only while Today showed a day beside it."""
+    from datetime import date, timedelta
+
+    from fastapi import Response
+
+    from app.api.action import get_action_issues
+
+    days = [(date(2026, 9, 1) + timedelta(days=i)).isoformat() for i in range(20)]
+    for d in days:
+        db_session.add(ActionIssue(date=d, rank=1, title=f"t{d}", summary="s", is_current=True))
+    db_session.commit()
+    for shown in (None, days[10], days[0]):
+        resp = await get_action_issues(Response(), date=shown, db=db_session, db_visits=db_session)
+        assert resp["availableDates"] == sorted(days, reverse=True), shown

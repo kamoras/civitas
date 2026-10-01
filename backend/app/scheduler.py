@@ -529,7 +529,12 @@ def _election_coverage_refresh() -> None:
             db = SessionLocal()
             try:
                 ingested = await ingest_race_coverage(db)
-                posted = post_race_coverage_updates(db, deadline=deadline)
+                # Election night: the live count's own posts
+                # (live_results/bluesky.py) have the account while any
+                # race's totals are still moving.
+                from app.live_results.bluesky import counting_is_live
+
+                posted = 0 if counting_is_live(db) else post_race_coverage_updates(db, deadline=deadline)
                 logger.info(
                     "Election-season coverage refresh: %d ingested, %d posted",
                     ingested, posted,
@@ -585,6 +590,9 @@ def _election_ballot_sync() -> None:
             result = lease.run_tracked(lease.BALLOT_SYNC, ballot_tracker(), run_ballot_sync, who="Ballot sync")
             if result is None:
                 return
+            if result.get("status") == "skipped":
+                logger.info("Election-season ballot sync skipped: %s", result["reason"])
+                return
             logger.info(
                 "Election-season ballot sync: %d confirmed, %d states ok, failed: %s",
                 result["confirmed"], len(result["statesOk"]), result["statesFailed"] or "none",
@@ -593,6 +601,45 @@ def _election_ballot_sync() -> None:
             logger.exception("Election-season ballot sync failed")
 
     _start_job(_run, name="election-ballot-sync")
+
+
+def _election_results_sync() -> None:
+    """Every covered state's live count, from election day until the
+    results window closes (election_phase) — a no-op the rest of the year.
+
+    Every five minutes while the count is moving; once no race's totals
+    have changed for a day, hourly, since the page then only waits out its
+    grace period and a late amendment is all there is left to catch.
+    """
+    from app.election_phase import active_election
+
+    election = active_election()
+    if not election.shows_results:
+        return
+    last = election.last_result_change
+    if last is not None and utcnow() - last > timedelta(days=1) and utcnow().minute >= 5:
+        return
+
+    def _run():
+        from app.http_client import make_async_client
+        from app.live_results.sync import results_tracker, sync_live_results
+
+        async def _sync():
+            db = SessionLocal()
+            try:
+                async with make_async_client() as client:
+                    return await sync_live_results(db, client, election.election_day)
+            finally:
+                db.close()
+
+        try:
+            summary = lease.run_tracked(lease.RESULTS_SYNC, results_tracker(), _sync, who="Live results sync")
+            if summary:
+                logger.info("Live results sync: %s", summary)
+        except Exception:
+            logger.exception("Live results sync failed")
+
+    _start_job(_run, name="election-results-sync")
 
 
 def _congress_activity_sync() -> None:
@@ -705,6 +752,15 @@ def start_scheduler() -> None:
         _election_ballot_sync,
         CronTrigger(hour="*/6", minute="50", timezone="UTC"),
         id="election_ballot_sync",
+        replace_existing=True,
+    )
+
+    # Live election results — every five minutes, a no-op outside the
+    # results window (checked inside the job, like the season jobs above).
+    scheduler.add_job(
+        _election_results_sync,
+        CronTrigger(minute="*/5", timezone="UTC"),
+        id="election_results_sync",
         replace_existing=True,
     )
 

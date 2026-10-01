@@ -27,6 +27,7 @@ import {
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
 import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
+import { countIsOfficial } from "@/lib/developing";
 import { tabControl } from "@/lib/controlStyles";
 import { issuesUrl } from "@/lib/routes";
 
@@ -106,7 +107,12 @@ function IssueBody({
       <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
         {issue.summary}
       </p>
-      {issue.status === "developing" && <DevelopingDisclosure />}
+      {issue.status === "developing" && (
+        <DevelopingDisclosure
+          sourceType={issue.sourceType}
+          countOfficial={countIsOfficial(issue)}
+        />
+      )}
       <IssueTags issue={issue} onMonitor={onMonitor} />
 
       <WhatYouCanDo issue={issue} today={today} headingLevel={headingLevel} />
@@ -356,7 +362,13 @@ function IssuesTab({
       {secondaryIssues.length > 0 && (
         <section aria-labelledby="more-issues-heading" className="mt-12">
           <h2 id="more-issues-heading" className={SECTION_HEADING}>
-            <span>More issues this day</span>
+            <span>
+              {/* A developing seat flip is listed beside the newest day
+                  whatever its own date (backend _latest_current_issues). */}
+              {secondaryIssues.every((i) => i.date === heroIssue?.date)
+                ? "More issues this day"
+                : "More issues"}
+            </span>
             <span aria-hidden="true">{secondaryIssues.length}</span>
           </h2>
           <ul>

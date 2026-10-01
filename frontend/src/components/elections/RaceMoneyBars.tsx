@@ -3,7 +3,7 @@ import type { BallotCandidate } from "@/types/election";
 import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
-import { candidateName } from "@/lib/elections";
+import { candidateName, incumbencyLabel } from "@/lib/elections";
 
 /**
  * A race as a comparison, not a list.
@@ -24,13 +24,22 @@ import { candidateName } from "@/lib/elections";
  * filers that ordering is doing real work — a 25-filer race puts the
  * people running actual campaigns first instead of leaving them in
  * whatever order the roster returned.
+ *
+ * `redrawnSeat`: a House seat on new district lines, where the member
+ * going into the election is not this district's incumbent
+ * (incumbencyLabel); `resultsMode` (from election day on) words them
+ * without claiming they still sit.
  */
 export default function RaceMoneyBars({
   candidates,
   showUnconfirmed = false,
+  redrawnSeat = false,
+  resultsMode = false,
 }: {
   candidates: BallotCandidate[];
   showUnconfirmed?: boolean;
+  redrawnSeat?: boolean;
+  resultsMode?: boolean;
 }) {
   const ranked = [...candidates].sort((a, b) => (b.contributions ?? 0) - (a.contributions ?? 0));
   const leader = ranked[0]?.contributions ?? 0;
@@ -44,7 +53,10 @@ export default function RaceMoneyBars({
         // must not divide — every bar is simply empty, which is the
         // truthful picture of a race where no money exists yet.
         const pct = leader > 0 ? Math.round((raised / leader) * 100) : 0;
-        const incumbent = c.incumbentChallenge === "I";
+        const incumbent =
+          c.incumbentChallenge === "I"
+            ? incumbencyLabel("I", redrawnSeat, c.incumbentRecord?.seat, resultsMode)
+            : null;
         const cash = cashOnHandDisplay(c.cashOnHand);
 
         return (
@@ -55,8 +67,8 @@ export default function RaceMoneyBars({
                 <span className="mx-1.5 text-ink-min">·</span>
                 <span className="break-words">{candidateName(c)}</span>
                 {incumbent && (
-                  <span className="ml-2 bg-ink-hi/90 px-1.5 py-0.5 font-mono text-[10px] text-surface-base">
-                    INCUMBENT
+                  <span className="ml-2 inline-block whitespace-nowrap bg-ink-hi/90 px-1.5 py-0.5 font-mono text-[10px] text-surface-base">
+                    {incumbent}
                   </span>
                 )}
                 {showUnconfirmed && !c.confirmed && (

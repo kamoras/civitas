@@ -1030,6 +1030,26 @@ RESET_KEEPS = frozenset({
 })
 
 
+# Tables a reset also leaves alone while an election's results are on show
+# (election_phase: from election day until the results window closes) —
+# the held election's ballot and its count. Once the day has passed nothing
+# rebuilds them: the roster, ballot and measure syncs stand down
+# (election_pipeline's election_is_held), because their sources have moved
+# on — FEC gives each filer's LATEST district, a state's "next election"
+# page lists the next one — and re-reading them would unwrite a certified
+# ballot. Wiped, every contest in the live count found no race to belong
+# to for the rest of the window, the state pages emptied, and the count's
+# own history (what it had announced, when it last moved — which is what
+# holds the window open) went with it. The api_cache coverage markers those
+# rows' pages read (state_candidates_common.HELD_BALLOT_MARKER_TIERS) are
+# kept with them. Outside the window they are ordinary derived data.
+RESET_KEEPS_WHILE_RESULTS = frozenset({
+    "races", "candidates", "race_coverage_items", "race_results", "election_result_events",
+    "live_result_reads", "ballot_measures", "measure_coverage",
+    "statewide_nominees", "state_leg_nominees", "judicial_nominees",
+})
+
+
 # api_cache tiers a reset leaves alone, besides the leases: the markers that
 # recorded Congress posts made before broadcast_posts existed. Wiped, a reset
 # in the days after that deploy would post those days again
@@ -1040,15 +1060,30 @@ RESET_KEEPS_CACHE_TIERS = ("bsky-congress", "bsky-congress-week")
 def reset_all_data() -> dict:
     """Drop all pipeline-generated data and start fresh.
 
-    Truncates every table except RESET_KEEPS and resets the vector store's
-    collections. Presidents come back with the next president pipeline run.
-    Returns a summary of what was cleared.
+    Truncates every table except RESET_KEEPS (and, while an election's
+    results are on show, RESET_KEEPS_WHILE_RESULTS) and resets the vector
+    store's collections. Presidents come back with the next president
+    pipeline run. Returns a summary of what was cleared.
     """
     from app import models  # noqa: F401
+    from app.election_phase import active_election
 
-    summary: dict[str, int] = {}
+    summary: dict = {}
     db = SessionLocal()
     try:
+        keeps = RESET_KEEPS
+        kept_tiers: list[str] = [*RESET_KEEPS_CACHE_TIERS]
+        if active_election(db).shows_results:
+            from app.pipeline.fetch.state_candidates_common import HELD_BALLOT_MARKER_TIERS
+
+            keeps = RESET_KEEPS | RESET_KEEPS_WHILE_RESULTS
+            # The coverage markers the held ballot's pages read beside those
+            # rows (statewide, judicial, ballot basis): written by the same
+            # syncs, so equally unrebuildable until the window closes.
+            kept_tiers += HELD_BALLOT_MARKER_TIERS
+            summary["kept_for_election_results"] = sorted(RESET_KEEPS_WHILE_RESULTS)
+            logger.info("Data reset during an election's results window: its ballot and count are kept (%s)",
+                        ", ".join(sorted(RESET_KEEPS_WHILE_RESULTS)))
         # Every table, children before parents (the bulk deletes skip the
         # ORM cascade and SQLite doesn't enforce foreign keys, so a child
         # left behind would reattach to a recreated member). Derived from the
@@ -1056,7 +1091,7 @@ def reset_all_data() -> dict:
         # missed the election tables (#215), and later the nominee and
         # holdings tables.
         for table in reversed(Base.metadata.sorted_tables):
-            if table.name in RESET_KEEPS:
+            if table.name in keeps:
                 continue
             wipe = table.delete()
             if table.name == "api_cache":
@@ -1065,7 +1100,7 @@ def reset_all_data() -> dict:
                 # any other that may be live.
                 from app.pipeline import lease
 
-                wipe = wipe.where(table.c.tier.notin_([*lease.TIERS, *RESET_KEEPS_CACHE_TIERS]))
+                wipe = wipe.where(table.c.tier.notin_([*lease.TIERS, *kept_tiers]))
             summary[table.name] = db.execute(wipe).rowcount
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the

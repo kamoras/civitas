@@ -1739,9 +1739,10 @@ def _district_pvi_for_congress(congress: int, data: dict, sources: dict) -> tupl
     reads the sitting Congress's table via score_calculator._district_pvi().
 
     A Congress with no pinned table of its own gets the newest one before
-    it — the latest lines known. From the day after a November election
-    the elections pages ask for the NEXT cycle's Congress (2028's 121st on
-    2026-11-04), which nobody has pinned yet; its races are on the lines
+    it — the latest lines known. Once a November election's results window
+    closes (app.election_phase.active_election: 2026-11-18 at the earliest)
+    the elections pages ask for the NEXT cycle's Congress (2028's 121st),
+    which nobody has pinned yet; its races are on the lines
     just used unless a state redraws again, and falling back to the
     sitting Congress's table instead would put the nine states that redrew
     for 2026 back on their old lines. Any state the sources file lists as

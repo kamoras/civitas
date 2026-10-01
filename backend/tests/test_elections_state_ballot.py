@@ -14,10 +14,22 @@ from app.models import (
     Candidate,
     MeasureCoverage,
     Race,
+    RaceResult,
     RaceCoverageItem,
     Representative,
     Senator,
 )
+
+
+@pytest.fixture(autouse=True)
+def _campaign_clock(monkeypatch):
+    """These tests build a 2026-cycle roster. Pinned inside the 2026
+    campaign: on the real clock, once the results window closes (Nov 18,
+    2026) the site's cycle is 2028 and they read an empty roster. A test
+    that needs another date patches election_today itself."""
+    from datetime import date
+
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 10, 1))
 
 
 # Every fixture here is a 2026 race; pin the clock inside that cycle so the
@@ -25,6 +37,16 @@ from app.models import (
 @pytest.fixture(autouse=True)
 def _in_the_2026_cycle(freeze_utcnow):
     freeze_utcnow(datetime(2026, 9, 30, 12, 0))
+
+
+@pytest.fixture(autouse=True)
+def _the_119th_sits(monkeypatch):
+    """Redrawn states are measured against the sitting Congress's lines
+    (live_results.sync.redrawn_states). Before Jan 3, 2027 that is the
+    119th, on the old map; pin it so these 2026 fixtures don't flip then."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
 
 
 def _body(response):
@@ -291,15 +313,13 @@ def test_pvi_fallback_matches_race_detail_behavior(db_session):
     assert house["pviLevel"] == "district"
 
 
-def test_election_date_and_cycle_year_agree():
+def test_election_date_and_cycle_year_agree(db_session):
     """electionDate and cycleYear must come from the same source of
-    truth (next_election_day) — a mismatch would mean the header's date
-    and the year label on the page disagree."""
-    from app.pipeline.election_pipeline import current_election_cycle
-
-    assert current_election_cycle() == int(
-        elections.next_election_day(elections.utcnow().date()).year
-    )
+    truth (election_phase.active_election) — a mismatch would mean the
+    header's date and the year label on the page disagree."""
+    _race(db_session, "2026-SEN-GA", "GA")
+    data = _body(elections.state_ballot("GA", db_session))
+    assert int(data["electionDate"][:4]) == data["cycleYear"]
 
 
 def test_state_pvi_is_included_at_top_level(db_session):
@@ -308,6 +328,35 @@ def test_state_pvi_is_included_at_top_level(db_session):
 
     data = _body(elections.state_ballot("GA", db_session))
     assert isinstance(data["statePvi"], int)
+
+
+def test_a_redrawn_state_says_its_district_lines_are_new(db_session):
+    _race(db_session, "2026-SEN-TX", "TX")
+    _race(db_session, "2026-SEN-GA", "GA")
+    db_session.commit()
+
+    assert _body(elections.state_ballot("TX", db_session))["newDistrictLines"] is True
+    assert _body(elections.state_ballot("GA", db_session))["newDistrictLines"] is False
+
+
+def test_new_lines_stay_new_until_the_members_elected_on_them_sit(db_session, monkeypatch):
+    """After the 2026 results window closes the site is on 2028, but until
+    Jan 3, 2027 the 119th Congress — elected on the old lines — still sits:
+    a redrawn state's districts are still not the ones its members hold."""
+    from datetime import date
+
+    from app.config import settings
+
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 11, 20))
+    tx = _body(elections.state_ballot("TX", db_session))
+    assert tx["cycleYear"] == 2028
+    assert tx["newDistrictLines"] is True
+    assert _body(elections.state_ballot("GA", db_session))["newDistrictLines"] is False
+
+    # From Jan 3 the 120th sits on the 2026 lines, and 2028 lists no new map.
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2027, 1, 10))
+    assert _body(elections.state_ballot("TX", db_session))["newDistrictLines"] is False
 
 
 def test_house_race_includes_its_district_counties(db_session):
@@ -375,6 +424,43 @@ class TestIncumbentRecordLink:
 
         data = _body(elections.state_ballot("MO", db_session))
         assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-ONDER"
+
+    def test_an_incumbent_renumbered_by_a_redrawn_map_still_links(self, db_session):
+        """Utah's 2026 map renumbers seats; an incumbent running in a
+        district another member holds today is matched across the state's
+        delegation — uniquely, or not at all."""
+        _race(db_session, "2026-HOUSE-UT-3", "UT", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-UT-3", "MOVER, PAT", incumbent_challenge="I")
+        _representative(db_session, "R-MOVER", "Pat Mover", "UT", 1)
+        _representative(db_session, "R-OTHER", "Sam Other", "UT", 3)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("UT", db_session))
+        record = data["houseRaces"][0]["candidates"][0]["incumbentRecord"]
+        assert record["id"] == "R-MOVER"
+        assert record["district"] == 1  # the seat held today, not this race's number
+        assert record["seat"] == "UT-1"
+
+    def test_a_departed_member_sharing_the_district_number_is_never_linked(self, db_session):
+        """A member within the retirement grace period shares the district
+        number with their successor; only current members are matched."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I")
+        _representative(db_session, "R-NEW", "Lucy McBath", "GA", 6)
+        _representative(db_session, "R-OLD", "Old McBath", "GA", 6, is_current=False)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-NEW"
+
+    def test_an_unchanged_map_never_links_across_districts(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-3", "GA", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-3", "MOVER, PAT", incumbent_challenge="I")
+        _representative(db_session, "R-MOVER", "Pat Mover", "GA", 1)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"] is None
 
     def test_house_non_incumbent_gets_no_link(self, db_session):
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
@@ -523,6 +609,194 @@ class TestIncumbentRecordLink:
         )
 
 
+class TestIncumbentRecordOnceTheElectedCongressSits:
+    """The 2026 results window can include January 3, 2027. From noon that
+    day the 120th sits, and until a member run refreshes the roster it may
+    hold either Congress: the members going in, or the winners. A link
+    then is only ever the candidate's own scorecard, and says no seat."""
+
+    @staticmethod
+    def _on_jan_3(db, monkeypatch, congress):
+        """The page on Jan 3, still on the 2026 results (the count moved on
+        Dec 28), with `congress` sitting."""
+        from datetime import date
+
+        from app.config import settings
+
+        db.commit()
+        db.add(RaceResult(race_id=db.query(Race).first().id, election_date="2026-11-03", source_name="x",
+                          tallies="[]", votes_counted=0, first_reported_at=datetime(2026, 11, 4),
+                          last_change_at=datetime(2026, 12, 28), fetched_at=datetime(2026, 12, 28)))
+        db.commit()
+        monkeypatch.setattr("app.election_phase.election_today", lambda: date(2027, 1, 3))
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", congress)
+        data = _body(elections.state_ballot(db.query(Race).first().state, db))
+        assert data["cycleYear"] == 2026 and data["phase"]["phase"] == "results"
+        return data
+
+    @pytest.mark.parametrize("congress,linked", [(119, True), (120, False)])
+    def test_a_renumbered_member_is_matched_across_the_delegation_only_while_the_119th_sits(
+        self, db_session, monkeypatch, congress, linked,
+    ):
+        """On a refreshed roster a unique surname across the delegation can
+        be a newly elected namesake elsewhere in the state."""
+        _race(db_session, "2026-HOUSE-UT-3", "UT", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-UT-3", "MOVER, PAT", incumbent_challenge="I")
+        _representative(db_session, "R-MOVER", "Pat Mover", "UT", 1)
+        _representative(db_session, "R-OTHER", "Sam Other", "UT", 3)
+        record = self._on_jan_3(db_session, monkeypatch, congress)["houseRaces"][0]["candidates"][0]["incumbentRecord"]
+        if linked:
+            assert record == {"id": "R-MOVER", "score": record["score"], "district": 1, "seat": "UT-1"}
+        else:
+            assert record is None
+
+    @pytest.mark.parametrize("congress", [119, 120])
+    def test_the_races_own_seat_still_links_but_names_no_seat_once_the_120th_sits(
+        self, db_session, monkeypatch, congress,
+    ):
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I")
+        _representative(db_session, "R-MCBATH", "Lucy McBath", "GA", 6)
+        record = self._on_jan_3(db_session, monkeypatch, congress)["houseRaces"][0]["candidates"][0]["incumbentRecord"]
+        assert record["id"] == "R-MCBATH"
+        if congress == 119:
+            assert record["seat"] == "GA-6"
+        else:
+            assert "seat" not in record and "district" not in record
+
+    def test_a_namesake_winner_on_a_refreshed_roster_is_never_linked_to_the_member_going_in(
+        self, db_session, monkeypatch,
+    ):
+        """The member going in lost to a challenger with the same surname,
+        and the roster now holds the winner: the seat's holder matches the
+        member's surname, but is the other candidate."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "SMITH, PAT", incumbent_challenge="I")
+        _candidate(db_session, "H2", "2026-HOUSE-GA-6", "SMITH, DANA", incumbent_challenge="C", party="REP")
+        _representative(db_session, "R-DANA", "Dana Smith", "GA", 6, party="R")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        assert all(c["incumbentRecord"] is None for c in data["houseRaces"][0]["candidates"])
+
+    @pytest.mark.parametrize("namesake,linked", [(False, True), (True, False)])
+    def test_a_senator_links_once_the_120th_sits_unless_a_rival_shares_the_surname(
+        self, db_session, monkeypatch, namesake, linked,
+    ):
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S1", "2026-SEN-GA", "OSSOFF, JON", incumbent_challenge="I")
+        if namesake:
+            _candidate(db_session, "S2", "2026-SEN-GA", "OSSOFF, DANA", incumbent_challenge="C", party="REP")
+        _senator(db_session, "SEN-OSSOFF", "Jon Ossoff", "GA")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        record = next(c for c in data["senateRaces"][0]["candidates"] if c["id"] == "S1")["incumbentRecord"]
+        assert (record is not None and record["id"] == "SEN-OSSOFF") if linked else record is None
+
+    def test_a_multiword_namesake_winner_is_never_linked_to_the_member_going_in(
+        self, db_session, monkeypatch,
+    ):
+        """The roster match takes "cruz" for "Dana De La Cruz" (trailing
+        tokens), so the namesake check must too: otherwise Pat Cruz's card
+        links to the winner's scorecard on a refreshed roster."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "CRUZ, PAT", incumbent_challenge="I")
+        _candidate(db_session, "H2", "2026-HOUSE-GA-6", "DE LA CRUZ, DANA", incumbent_challenge="C", party="REP")
+        _representative(db_session, "R-DANA", "Dana De La Cruz", "GA", 6, party="R")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        assert all(c["incumbentRecord"] is None for c in data["houseRaces"][0]["candidates"])
+
+    def test_a_multiword_senate_namesake_is_never_linked_to_the_member_going_in(
+        self, db_session, monkeypatch,
+    ):
+        """The same rule the other way round: the incumbent's surname is
+        the longer one, and a rival's is its trailing token."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S1", "2026-SEN-GA", "VAN HOLLEN, CHRIS", incumbent_challenge="I")
+        _candidate(db_session, "S2", "2026-SEN-GA", "HOLLEN, DANA", incumbent_challenge="C", party="REP")
+        _senator(db_session, "SEN-VH", "Chris Van Hollen", "GA")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        assert all(c["incumbentRecord"] is None for c in data["senateRaces"][0]["candidates"])
+
+    def test_an_fec_duplicate_of_the_member_going_in_is_not_a_namesake(self, db_session, monkeypatch):
+        """FEC's duplicate record of the same person (same money, same
+        surname) is merged into one card, and must not suppress its link."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I",
+                   contributions=100.0, cash_on_hand=50.0, confirmed_general=True)
+        _candidate(db_session, "H1B", "2026-HOUSE-GA-6", "MCBATH, LUCY K", incumbent_challenge="I",
+                   contributions=100.0, cash_on_hand=50.0)
+        _representative(db_session, "R-MCBATH", "Lucy McBath", "GA", 6)
+        candidates = self._on_jan_3(db_session, monkeypatch, 120)["houseRaces"][0]["candidates"]
+        assert [c["id"] for c in candidates] == ["H1"]
+        assert candidates[0]["incumbentRecord"]["id"] == "R-MCBATH"
+
+    def test_a_namesake_who_is_not_a_confirmed_nominee_still_counts(self, db_session, monkeypatch):
+        """The roster can hold any winner the page doesn't show as a
+        confirmed nominee, so the check covers the whole deduplicated field."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "SMITH, PAT", incumbent_challenge="I", confirmed_general=True)
+        _candidate(db_session, "H2", "2026-HOUSE-GA-6", "SMITH, DANA", incumbent_challenge="C", party="REP")
+        _representative(db_session, "R-DANA", "Dana Smith", "GA", 6, party="R")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        assert all(c["incumbentRecord"] is None for c in data["houseRaces"][0]["candidates"])
+
+    @pytest.mark.parametrize("congress", [119, 120])
+    @pytest.mark.parametrize("namesake_elsewhere", [False, True])
+    def test_a_redrawn_states_seat_number_links_only_a_unique_surname_in_the_delegation(
+        self, db_session, monkeypatch, congress, namesake_elsewhere,
+    ):
+        """On a redrawn map the race's number names a different district
+        than the member holding that number was elected in. Pat Smith
+        (holding UT-1) runs in the new UT-3, whose holder going in is Dana
+        Smith: the direct hit on UT-3 is Dana, not Pat, and must not link —
+        while the members going in sit and after the 120th sits on a roster
+        not yet refreshed. Without a namesake in the delegation the hit is
+        the candidate's own seat and still links."""
+        _race(db_session, "2026-HOUSE-UT-3", "UT", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-UT-3", "SMITH, PAT", incumbent_challenge="I")
+        if namesake_elsewhere:
+            _representative(db_session, "R-PAT", "Pat Smith", "UT", 1)
+            _representative(db_session, "R-DANA", "Dana Smith", "UT", 3)
+        else:
+            _representative(db_session, "R-PAT", "Pat Smith", "UT", 3)
+        record = self._on_jan_3(db_session, monkeypatch, congress)["houseRaces"][0]["candidates"][0]["incumbentRecord"]
+        if namesake_elsewhere:
+            assert record is None
+        else:
+            assert record["id"] == "R-PAT"
+
+    def test_a_redrawn_states_namesake_blocks_the_seat_number_during_the_campaign(self, db_session):
+        """The same as above on an ordinary campaign day (the 119th sits)."""
+        _race(db_session, "2026-HOUSE-UT-3", "UT", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-UT-3", "SMITH, PAT", incumbent_challenge="I")
+        _representative(db_session, "R-PAT", "Pat Smith", "UT", 1)
+        _representative(db_session, "R-DANA", "Dana Smith", "UT", 3)
+        db_session.commit()
+        data = _body(elections.state_ballot("UT", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"] is None
+
+    @pytest.mark.parametrize("congress,linked", [(119, True), (120, False)])
+    def test_a_namesake_in_the_states_other_senate_race_blocks_the_link_once_the_120th_sits(
+        self, db_session, monkeypatch, congress, linked,
+    ):
+        """A regular and a special Senate race in one state and cycle: the
+        senators are matched across the whole state, so the special's
+        winner sharing the regular incumbent's surname can be the row a
+        refreshed roster holds. The namesake check spans both races."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.add(Race(id="2026-SEN-GA-SPECIAL", cycle_year=2026, office="S", state="GA", is_special=True))
+        _candidate(db_session, "S1", "2026-SEN-GA", "OSSOFF, JON", incumbent_challenge="I")
+        _candidate(db_session, "S2", "2026-SEN-GA-SPECIAL", "OSSOFF, DANA", incumbent_challenge="O", party="REP")
+        if linked:
+            _senator(db_session, "SEN-JON", "Jon Ossoff", "GA")
+        else:
+            _senator(db_session, "SEN-DANA", "Dana Ossoff", "GA", party="R")
+        data = self._on_jan_3(db_session, monkeypatch, congress)
+        records = [c["incumbentRecord"] for r in data["senateRaces"] for c in r["candidates"]]
+        if linked:
+            assert [rec["id"] for rec in records if rec] == ["SEN-JON"]
+        else:
+            assert records == [None, None]
+
+
 class TestStaleIncumbentFlag:
     """Real MI 2026 Senate shape, live-verified 2026-09: Sen. Gary Peters
     stayed FEC-coded incumbent_challenge="I" months after announcing he
@@ -657,13 +931,13 @@ class TestBallotMeasures:
     officialLookup, omits."""
 
     @staticmethod
-    def _election_day():
-        return elections.next_election_day(elections.utcnow().date()).isoformat()
+    def _election_day(db):
+        return elections.active_election(db).election_day.isoformat()
 
     def test_measures_are_included_verbatim(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA")
         db_session.add(BallotMeasure(
-            id="ga-measure-1", state="GA", election_date=self._election_day(),
+            id="ga-measure-1", state="GA", election_date=self._election_day(db_session),
             number="Amendment 1", title="Property tax exemption",
             official_title="An act relating to property tax exemptions.",
             source_name="Georgia Secretary of State",
@@ -690,7 +964,7 @@ class TestBallotMeasures:
         state Civitas simply hasn't ingested yet."""
         _race(db_session, "2026-SEN-GA", "GA")
         db_session.add(MeasureCoverage(
-            state="GA", election_date=self._election_day(),
+            state="GA", election_date=self._election_day(db_session),
             status=MeasureCoverage.CONFIRMED_NONE, source_name="Georgia Secretary of State",
         ))
         db_session.commit()
@@ -817,3 +1091,48 @@ class TestJudicialConfirmedNone:
         assert "Judicial contests and retention questions" not in data["omits"]
         # The unchecked counterpart (GA, full omission kept) is
         # TestJudicialOmitShrinks.test_uncovered_state_names_contests_and_retention_together.
+
+
+def test_a_redrawn_states_house_race_takes_the_new_lines_lean(db_session):
+    """district_pvi.json's sitting (119th) table describes today's seats;
+    on Utah's 2026 map UT-1 is a different district (R+10 on the old lines,
+    D+12 on the new). The race carries the new lines' number from the
+    120th Congress's pinned table, flagged as a district figure — never
+    the old seat's, and no longer the statewide stand-in."""
+    from app.pipeline.analyze import score_calculator
+
+    _race(db_session, "2026-HOUSE-UT-1", "UT", office="H", district=1)
+    db_session.commit()
+    house = _body(elections.state_ballot("UT", db_session))["houseRaces"][0]
+    assert (house["pvi"], house["pviLevel"]) == (-12, "district")
+    assert score_calculator.get_district_pvi_map()["UT-1"] == 10
+
+
+def test_a_redrawn_state_with_no_table_for_its_lines_takes_the_flagged_statewide_lean():
+    """When the table served is older than the redraw, district_pvi_for_congress
+    drops the redrawn state, and _pvi_for_race falls back to the statewide
+    number, flagged — never an old-map district's value."""
+    from app.api.elections import _pvi_for_race
+    from app.pipeline.fetch.district_pvi import _district_pvi_for_congress
+
+    data = {"congresses": {"119": {"districts": {"UT-1": 10, "GA-1": 9}}}}
+    sources = {"120": {"redrawn_states": ["UT"]}}
+    table, meta = _district_pvi_for_congress(120, data, sources)
+    assert meta["omittedRedrawnStates"] == ["UT"]
+    race = Race(id="2026-HOUSE-UT-1", cycle_year=2026, office="H", state="UT", district=1)
+    assert _pvi_for_race(race, {"UT": 11}, table) == (11, "state")
+    kept = Race(id="2026-HOUSE-GA-1", cycle_year=2026, office="H", state="GA", district=1)
+    assert _pvi_for_race(kept, {"GA": 3}, table) == (9, "district")
+
+
+def test_redrawn_maps_and_pinned_pvi_sources_name_the_same_states():
+    """Two data files say which states redrew for 2026: the map/crosswalk
+    list (redrawn_congressional_maps.json, read by redrawn_states) and the
+    pinned-PVI sources (district_pvi_sources.json). If they disagree, the
+    page would call a district new while serving an old-map lean, or the
+    reverse."""
+    from app.live_results.sync import redrawn_states
+    from app.pipeline.fetch.district_pvi import congress_for_election, load_sources
+
+    pinned = load_sources()["congresses"][str(congress_for_election(2026))]
+    assert redrawn_states(2026) == set(pinned["redrawn_states"])

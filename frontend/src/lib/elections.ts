@@ -82,8 +82,11 @@ export function districtAreaLabel(
  *
  * Deliberately matches on the three things a reader plausibly knows
  * about themselves without being asked for an address: the county they
- * live in, their sitting representative's name (or any candidate's), and
- * the district number if they happen to know it. Civitas never asks for
+ * live in, a candidate's name (their representative's, when that member
+ * is running again — a retiring member is on no row, and in a state that
+ * redrew for this cycle the member's name finds the candidate's NEW
+ * district, not necessarily the reader's), and the district number if
+ * they happen to know it. Civitas never asks for
  * a street address, so the filter has to work from what a person can
  * recall unprompted — see the House section's own copy.
  *
@@ -180,6 +183,66 @@ export function isActiveCandidate(c: CandidateSummary): boolean {
   return (
     c.confirmed || c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I"
   );
+}
+
+/** FEC's incumbency codes, in words. */
+const FEC_INCUMBENCY: Record<string, string> = {
+  I: "INCUMBENT",
+  C: "CHALLENGER",
+  O: "OPEN SEAT",
+};
+
+/** Whether `race` is a House seat on lines other than the ones its
+ * members were elected on — the members going into this election, or the
+ * ones sitting now (StateBallot.newDistrictLines). Senate seats are
+ * statewide and never redrawn. */
+export function isRedrawnSeat(
+  race: { office: string },
+  newDistrictLines: boolean | undefined
+): boolean {
+  return !!newDistrictLines && race.office === "H";
+}
+
+/** A candidate's FEC incumbency code as the page says it, or null to say
+ * nothing.
+ *
+ * On a redrawn seat (isRedrawnSeat) a district number names a different
+ * place than the one the member going into the election was elected in:
+ * Greg Casar held TX-35 and runs in the new TX-37. "Incumbent" there
+ * claims a seat nobody holds — the page itself says no seat on the new
+ * lines has a previous holder — so "I" names the person, not the
+ * district, and CHALLENGER / OPEN SEAT, which describe the old seat, are
+ * not said at all. Where the payload names the seat the member held going
+ * in (incumbentRecord.seat), it is said too.
+ *
+ * How "I" is worded depends on `resultsMode` (from election day on):
+ * before it the member is sitting — SITTING MEMBER, TX-35 — but the
+ * results window can run to January 3, when the Congress this election
+ * seated takes office, and from noon that day a defeated member no longer
+ * sits and a re-elected one sits for the new seat. So in results mode it
+ * reads MEMBER BEFORE THIS ELECTION, TX-35, true on any day of the
+ * window, the same framing as the district drawer's "your representative
+ * going into this election". It names a time, not a direction: "member
+ * going in" beside a live count read as headed into the seat, which is a
+ * step from calling the race. redrawnMemberWords is that wording alone, for a page that
+ * sets it in its own case. */
+export function redrawnMemberWords(resultsMode: boolean): string {
+  return resultsMode ? "MEMBER BEFORE THIS ELECTION" : "SITTING MEMBER";
+}
+
+export function incumbencyLabel(
+  code: string | null,
+  redrawnSeat: boolean,
+  heldSeat?: string | null,
+  resultsMode = false
+): string | null {
+  if (!code) return null;
+  if (redrawnSeat) {
+    if (code !== "I") return null;
+    const member = redrawnMemberWords(resultsMode);
+    return heldSeat ? `${member}, ${heldSeat}` : member;
+  }
+  return FEC_INCUMBENCY[code] ?? code;
 }
 
 /** Display suffixes for FEC codes that are a Democratic state affiliate —

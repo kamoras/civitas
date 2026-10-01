@@ -8,6 +8,7 @@ import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
 import { commentPeriodToday, formatUtcDate } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { countIsOfficial, factsHeading, factsSectionId, factsShareLabel } from "@/lib/developing";
 import {
   Coverage,
   DevelopingDisclosure,
@@ -147,6 +148,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
   // the same day the Action Center and the backend count comment periods in.
   const today = commentPeriodToday();
   const shareUrl = absoluteUrl(`/issue/${issue.publicId}`);
+  const factsId = factsSectionId(issue);
 
   return (
     <ShareSubjectProvider
@@ -188,7 +190,10 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </p>
             {issue.status === "developing" && (
               <div className="mt-3">
-                <DevelopingDisclosure />
+                <DevelopingDisclosure
+                  sourceType={issue.sourceType}
+                  countOfficial={countIsOfficial(issue)}
+                />
               </div>
             )}
             <IssueTags issue={issue} className="mt-4" />
@@ -221,11 +226,12 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </article>
           ) : null}
 
-          {/* Media coverage: lines quoted from the sources, each with its outlet */}
+          {/* Media coverage: lines quoted from the sources, each with its
+              outlet — or, for an election-results issue, the count. */}
           {issue.facts?.length > 0 && (
             <div
-              id="media-coverage"
-              {...{ [SHARE_SECTION_ATTR]: "media-coverage" }}
+              id={factsId}
+              {...{ [SHARE_SECTION_ATTR]: factsId }}
               className="scroll-mt-[var(--header-clearance)]"
             >
               <Coverage
@@ -233,8 +239,8 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                 className="mt-10"
                 heading={
                   <div className={SECTION_HEADING}>
-                    <h2>In the coverage</h2>
-                    <ShareSectionButton label="Media coverage" />
+                    <h2>{factsHeading(issue)}</h2>
+                    <ShareSectionButton label={factsShareLabel(issue)} />
                   </div>
                 }
               />

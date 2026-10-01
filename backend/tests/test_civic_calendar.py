@@ -34,6 +34,13 @@ def test_election_day_links_to_the_elections_page():
     assert election["link"] == "/elections"
 
 
+def test_election_day_is_on_the_calendar_on_election_day():
+    """next_election_day is strictly after its argument; the event must not
+    vanish on the day it happens."""
+    events = _upcoming_civic_events(2026, date(2026, 11, 3))
+    assert any(e["date"] == "2026-11-03" and e["category"] == "election" for e in events)
+
+
 def test_election_day_counts_its_seats_from_the_data(monkeypatch):
     """The seat counts come from the House's apportionment and the Senate
     class up that year, never a typed "435" or "33-34"."""

@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, act, cleanup } from "@testing-library/react";
 import { useNow, __resetNowTicker } from "./useNow";
 
-function Clock({ label = "now" }: { label?: string }) {
-  return <span data-testid={label}>{useNow()}</span>;
+function Clock({ label = "now", enabled }: { label?: string; enabled?: boolean }) {
+  return <span data-testid={label}>{useNow(enabled)}</span>;
 }
 
 describe("useNow", () => {
@@ -28,6 +28,17 @@ describe("useNow", () => {
       vi.advanceTimersByTime(1000);
     });
     expect(Number(screen.getByTestId("now").textContent)).toBe(start + 1000);
+  });
+
+  it("follows a clock that stepped back while no ticker ran", () => {
+    vi.setSystemTime(new Date("2026-11-04T03:20:00Z"));
+    const first = render(<Clock />);
+    first.unmount();
+    // The system clock is corrected back; the next reader must not see the
+    // later time the stopped ticker left behind.
+    vi.setSystemTime(new Date("2026-11-04T03:02:00Z"));
+    render(<Clock enabled={false} />);
+    expect(Number(screen.getByTestId("now").textContent)).toBe(Date.now());
   });
 
   it("gives every subscriber the same instant", () => {
@@ -61,5 +72,40 @@ describe("useNow", () => {
     expect(vi.getTimerCount()).toBe(1);
     unmount();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not re-render or start a timer when disabled", () => {
+    const rendered = vi.fn();
+    function Counted() {
+      rendered();
+      return <span>{useNow(false)}</span>;
+    }
+    render(<Counted />);
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(rendered).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts ticking when a disabled reader is enabled", () => {
+    vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+    const { rerender } = render(<Clock enabled={false} />);
+    vi.setSystemTime(new Date("2026-11-04T01:00:00Z"));
+    rerender(<Clock enabled />);
+    expect(Number(screen.getByTestId("now").textContent)).toBe(Date.parse("2026-11-04T01:00:00Z"));
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(Number(screen.getByTestId("now").textContent)).toBe(Date.parse("2026-11-04T01:00:01Z"));
+  });
+
+  it("gives a fresh time to a reader after the ticker stopped long ago", () => {
+    vi.setSystemTime(new Date("2026-11-03T15:00:00Z"));
+    const { unmount } = render(<Clock />);
+    unmount();
+    vi.setSystemTime(new Date("2026-11-04T01:00:00Z"));
+    render(<Clock enabled={false} />);
+    expect(Number(screen.getByTestId("now").textContent)).toBe(Date.parse("2026-11-04T01:00:00Z"));
   });
 });

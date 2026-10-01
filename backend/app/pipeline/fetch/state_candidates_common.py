@@ -567,6 +567,16 @@ def judicial_marker_key(state: str, cycle: int) -> str:
     return f"judicial-synced-{state}-{cycle}"
 
 
+# The coverage records above describe the ballot rows beside them, and are
+# written by the same syncs — which stand down once election day has passed
+# (election_pipeline's election_is_held). A data reset in the results window
+# keeps those rows (database.RESET_KEEPS_WHILE_RESULTS), so it keeps these
+# too: wiped, a state page would say "not yet covered" (and list the §7
+# omission) above sections whose rows still show, and nothing could write
+# them again until the window closed.
+HELD_BALLOT_MARKER_TIERS = (STATEWIDE_MARKER_TIER, JUDICIAL_MARKER_TIER, BALLOT_BASIS_TIER)
+
+
 STATEWIDE_OFFICE_LABELS = {
     "governor": "Governor",
     "lt_governor": "Lieutenant Governor",
@@ -614,7 +624,8 @@ def ballot_final(held: str, today: date | None = None) -> bool:
     """True once the general election on `held` is within the UOCAVA
     transmission window (BALLOT_FINAL_DAYS_BEFORE), i.e. the ballot has
     been mailed and is what voters will see. An unparseable date is never
-    final."""
+    final. (Not election_phase.election_is_held, the day after the
+    election, from which nothing re-reads the ballot at all.)"""
     try:
         election_day = date.fromisoformat(str(held or "")[:10])
     except ValueError:
@@ -1349,6 +1360,61 @@ async def discover_certification_link(
         logger.info("%s certification page links %d %d certifications", label, len(links), year)
         return None
     return urljoin(page_url, links.pop())
+
+
+# What a results file prints IN PLACE OF a candidate's name: the aggregate
+# rows every vendor's results carry beside the real choices. The WHOLE
+# label has to be one of these (fullmatch, see is_not_a_person) -- never a
+# word found inside a label. A search for "blank" drops a real candidate
+# surnamed Blank, and a search for "withdrawn" drops "Jane Doe
+# (Withdrawn)", a candidate who left the race too late to leave the ballot
+# and whose votes are still votes; both were live bugs in the live-count
+# readers before this was anchored. Each arm is a vendor's own printed
+# convention (Washington/Idaho's "Write-in: Not Certified", Vermont's
+# "OTHER WRITE-INS", Maine's "BLANK", Louisiana's "Write-In Scattering"),
+# a data-format vocabulary like FEC's "SELF-EMPLOYED", not a guess about
+# who a person is.
+NOT_A_PERSON_RE = re.compile(
+    r"""
+    (?:(?:other|total|unresolved|unassigned|unqualified|uncertified|non[\s-]*certified|qualified|certified)\s+)?
+        write[\s-]*ins?
+        (?:\s+(?:votes?|totals?|scatter(?:ing|ed)))?
+        (?:\s*[:(\-]\s*(?:not\s+(?:assigned|certified|qualified)|unassigned|unresolved|unqualified
+                          |uncertified|scatter(?:ing|ed))\s*\)?)?
+    | scatter(?:ing|ed)
+    | (?:over|under)\s*-?\s*votes?
+    | blank(?:\s+(?:votes?|ballots?))?
+    | none\s+of\s+(?:these|the\s+above)(?:\s+candidates)?
+    | uncommitted
+    | withdrawn
+    | total\s+votes(?:\s+cast)?
+    | ballots\s+cast
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def is_not_a_person(label: str) -> bool:
+    """True when the whole of `label` is an aggregate row (NOT_A_PERSON_RE),
+    not a candidate. Surrounding whitespace and a trailing period are the
+    only slack: "Write-In " and "Blank." are the row, "John Blank" and
+    "Jane Doe (Withdrawn)" are people."""
+    return bool(NOT_A_PERSON_RE.fullmatch((label or "").strip().rstrip(".").strip()))
+
+
+def last_name_matches(last_name: str, full_name: str) -> bool:
+    """True if `last_name` (FEC's — possibly multi-word, e.g. "van
+    hollen") exactly matches the TRAILING tokens of `full_name`.
+    Deliberately token-exact rather than a raw substring check: a
+    substring match would let "lee" match "leeman" by coincidence,
+    which is exactly the kind of wrong-person attribution
+    api/elections._incumbent_link's docstring warns against. Token-trailing (not
+    single-last-token) so multi-word surnames like "Van Hollen" still
+    match against a full name of "Chris Van Hollen". Shared by that
+    scorecard link and the live-results sync's seat-holder lookup."""
+    cand_tokens = last_name.split()
+    name_tokens = full_name.lower().split()
+    return bool(cand_tokens) and name_tokens[-len(cand_tokens):] == cand_tokens
 
 
 def federal_record(

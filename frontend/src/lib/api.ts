@@ -10,7 +10,7 @@ import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
-import type { PviMap, TownBallot, TownEntry } from "@/types/election";
+import type { LiveResults, PviMap, TownBallot, TownEntry } from "@/types/election";
 import type { SignalOverlap } from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -147,7 +147,7 @@ function withShape<T extends object>(
   return out as T;
 }
 
-const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
+const _fetchCache = new Map<string, { entry: FetchedAt<unknown>; expiry: number }>();
 // In-flight requests keyed by URL. Concurrent callers of the same URL (e.g.
 // the home preview, the Action Center parent, and IssuesTab all requesting
 // /action/issues on mount) share a single network request instead of each
@@ -155,7 +155,7 @@ const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
 // they start before any of them has populated it. Entries are removed as soon
 // as the request settles so a later call re-fetches once the TTL lapses, and a
 // rejected request isn't cached (retries work).
-const _inflight = new Map<string, Promise<unknown>>();
+const _inflight = new Map<string, Promise<FetchedAt<unknown>>>();
 
 /** Test seam: drops both caches so one suite's stubbed fetch can't answer another's. */
 export function __resetApiCache(): void {
@@ -163,34 +163,58 @@ export function __resetApiCache(): void {
   _inflight.clear();
 }
 
-async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
+/** A response body with the clock it arrived by: the server's `Date`
+ * header (ms since epoch; null when absent or unreadable) and this
+ * browser's clock when it arrived. A copy served from the client cache
+ * keeps the clock of the response it came from. */
+interface FetchedAt<T> {
+  data: T;
+  serverDate: number | null;
+  receivedAt: number;
+}
+
+async function cachedFetchAt<T>(
+  url: string,
+  ttlMs: number,
+  init?: RequestInit
+): Promise<FetchedAt<T>> {
   const now = Date.now();
   const hit = _fetchCache.get(url);
-  if (hit && hit.expiry > now) return hit.data as T;
+  if (hit && hit.expiry > now) return hit.entry as FetchedAt<T>;
 
   const pending = _inflight.get(url);
-  if (pending) return pending as Promise<T>;
+  if (pending) return pending as Promise<FetchedAt<T>>;
 
   const request = (async () => {
-    const res = await fetch(url);
+    const res = await (init ? fetch(url, init) : fetch(url));
     if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const data: T = await res.json();
-    _fetchCache.set(url, { data, expiry: Date.now() + ttlMs });
+    const date = Date.parse(res.headers?.get?.("date") ?? "");
+    const entry: FetchedAt<T> = {
+      data,
+      serverDate: Number.isNaN(date) ? null : date,
+      receivedAt: Date.now(),
+    };
+    _fetchCache.set(url, { entry, expiry: Date.now() + ttlMs });
     if (_fetchCache.size > 100) {
       const cutoff = Date.now();
-      _fetchCache.forEach((entry, key) => {
-        if (entry.expiry <= cutoff) _fetchCache.delete(key);
+      _fetchCache.forEach((cached, key) => {
+        if (cached.expiry <= cutoff) _fetchCache.delete(key);
       });
     }
-    return data;
+    return entry;
   })();
 
   _inflight.set(url, request);
   try {
-    return (await request) as T;
+    return (await request) as FetchedAt<T>;
   } finally {
     _inflight.delete(url);
   }
+}
+
+async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
+  return (await cachedFetchAt<T>(url, ttlMs)).data;
 }
 
 export async function fetchSenatorsByState(state: string): Promise<Senator[]> {
@@ -1780,6 +1804,35 @@ export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
 // See backend/app/api/elections.py. Race detail is fetched server-side by
 // app/elections/[raceId]/page.tsx, not through this client.
 
+/** The live count (GET /elections/results), optionally for one state.
+ * VOLATILE, matching the backend's 30s Cache-Control: results pages poll
+ * this, and a longer client cache would hold every poll to a stale copy. */
+export async function fetchLiveResults(state?: string): Promise<LiveResults> {
+  const url = `${API_BASE}/elections/results${state ? `?state=${encodeURIComponent(state)}` : ""}`;
+  // "no-cache": the browser's HTTP cache must ask again every time (nginx
+  // still answers from its own cache, so the backend load is unchanged).
+  // The response is public, max-age=30, stale-while-revalidate=30, and
+  // without this a refetch could be answered from the browser's copy with
+  // that copy's original Date while it is received now — the page's clock
+  // (resultsNow) then ran backwards by up to a minute.
+  const { data, serverDate, receivedAt } = await cachedFetchAt(url, TTL.VOLATILE, {
+    cache: "no-cache",
+  });
+  const results = withShape<LiveResults>(
+    data,
+    { lists: ["liveStates", "senateStates", "races", "updates"], records: ["phase"] },
+    url
+  );
+  // The clock the page judges this count by (lib/results resultsNow): the
+  // server's, from the Date header of the response this page last got from
+  // nginx — never the browser's alone, which can be minutes or hours off.
+  // A stale body nginx serves from its cache still carries a fresh Date, so
+  // old read times in it read as old. (A copy from this module's own 30 s
+  // cache keeps the Date and arrival time it came with, and so runs on from
+  // where it stood.)
+  return { ...results, clock: { serverDate, receivedAt } };
+}
+
 export async function fetchPviMap(): Promise<PviMap> {
   // `states` and `districts` are maps, not lists, and callers index into them
   // directly — an absent one has to arrive as {} rather than undefined.
@@ -1796,11 +1849,19 @@ export async function fetchPviMap(): Promise<PviMap> {
  * is a normal, expected response, not an error; the UI hides the town
  * selector rather than showing one with nothing in it. */
 export async function fetchTownsForState(state: string): Promise<TownEntry[]> {
-  const data = await cachedFetch<{ towns: TownEntry[] }>(
-    `${API_BASE}/elections/states/${encodeURIComponent(state)}/towns`,
-    TTL.LONG
+  const url = `${API_BASE}/elections/states/${encodeURIComponent(state)}/towns`;
+  // Checked, not cast: a malformed answer (no `towns`, a non-list, an entry
+  // without a name) once crashed the whole state page at `towns.length`.
+  // Anything unusable is no towns, and the page hides the town selector.
+  const { towns } = withShape<{ towns: TownEntry[] }>(
+    await cachedFetch(url, TTL.LONG),
+    { lists: ["towns"] },
+    url
   );
-  return data.towns;
+  return towns.filter(
+    (t): t is TownEntry =>
+      !!t && typeof t === "object" && typeof t.name === "string" && t.name.length > 0
+  );
 }
 
 /** One curated town's local ballot content — see TownBallot's docstring

@@ -13,11 +13,32 @@ from app.api import elections
 from app.models import Candidate, Race, RaceCoverageItem
 
 
+@pytest.fixture(autouse=True)
+def _campaign_clock(monkeypatch):
+    """These tests build a 2026-cycle roster. Pinned inside the 2026
+    campaign: on the real clock, once the results window closes (Nov 18,
+    2026) the site's cycle is 2028 and they read an empty roster. A test
+    that needs another date patches election_today itself."""
+    from datetime import date
+
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 10, 1))
+
+
 # Every fixture here is a 2026 race; pin the clock inside that cycle so the
 # tests don't all fail on election night (conftest.freeze_utcnow).
 @pytest.fixture(autouse=True)
 def _in_the_2026_cycle(freeze_utcnow):
     freeze_utcnow(datetime(2026, 9, 30, 12, 0))
+
+
+@pytest.fixture(autouse=True)
+def _the_119th_sits(monkeypatch):
+    """Redrawn states are measured against the sitting Congress's lines
+    (live_results.sync.redrawn_states). Before Jan 3, 2027 that is the
+    119th, on the old map; pin it so these 2026 fixtures don't flip then."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
 
 
 def _body(response):
@@ -45,6 +66,14 @@ def on_date(monkeypatch, tmp_path):
     monkeypatch.setattr(district_pvi, "_file_stamp", None)
 
     def set_clock(dt):
+        # The cycle is the active election's (election_phase), read on the
+        # Eastern calendar.
+        from datetime import timezone
+
+        from app.election_phase import ELECTION_TZ
+
+        today = dt.replace(tzinfo=timezone.utc).astimezone(ELECTION_TZ).date()
+        monkeypatch.setattr("app.election_phase.election_today", lambda: today)
         monkeypatch.setattr("app.pipeline.election_pipeline.utcnow", lambda: dt)
 
     return set_clock
@@ -115,9 +144,9 @@ class TestListRaces:
         assert data[0]["pvi"] == 9
         assert score_calculator.get_district_pvi_map()["TN-9"] == -23
 
-    def test_pvi_map_serves_and_labels_the_election_lines(self, on_date):
+    def test_pvi_map_serves_and_labels_the_election_lines(self, db_session, on_date):
         on_date(datetime(2026, 10, 1))
-        body = _body(elections.pvi_map())
+        body = _body(elections.pvi_map(db_session))
         assert body["cycleYear"] == 2026
         assert body["districts"]["TX-35"] == 4
         meta = body["meta"]["districts"]
@@ -129,13 +158,20 @@ class TestListRaces:
         assert (meta["congress"], meta["forCongress"]) == (120, 120)
 
     def test_after_election_day_the_next_cycle_keeps_the_new_lines(self, db_session, on_date):
-        """Regression: from the day after the 2026 election the cycle is
-        2028 (121st Congress), which has no pinned table yet. The pages
-        must stay on the lines just voted on — the 120th's — not fall back
-        to the sitting 119th's, which put TX-35 back at D+19 on a map
-        where it is R+4."""
+        """Regression: once the 2026 results window closes (Nov 18 with no
+        count moving — election_phase) the cycle is 2028 (121st Congress),
+        which has no pinned table yet. The pages must stay on the lines
+        just voted on — the 120th's — not fall back to the sitting 119th's,
+        which put TX-35 back at D+19 on a map where it is R+4."""
+        # Inside the results window the site is still on 2026 and its lines.
         on_date(datetime(2026, 11, 10, 15))
-        body = _body(elections.pvi_map())
+        body = _body(elections.pvi_map(db_session))
+        assert body["cycleYear"] == 2026
+        assert body["districts"]["TX-35"] == 4
+        assert (body["meta"]["districts"]["congress"], body["meta"]["districts"]["forCongress"]) == (120, 120)
+
+        on_date(datetime(2026, 11, 20, 15))
+        body = _body(elections.pvi_map(db_session))
         assert body["cycleYear"] == 2028
         assert (body["districts"]["TX-35"], body["districts"]["TN-9"]) == (4, 9)
         meta = body["meta"]["districts"]
@@ -269,38 +305,46 @@ class TestRaceDetail:
 
 
 class TestPviMap:
-    def test_returns_both_state_and_district_maps(self):
-        data = _body(elections.pvi_map())
+    def test_returns_both_state_and_district_maps(self, db_session):
+        data = _body(elections.pvi_map(db_session))
         assert "AK" in data["states"]
         assert "AK-0" in data["districts"]
 
-    def test_includes_provenance_metadata(self):
+    def test_includes_provenance_metadata(self, db_session):
         """The bare numbers over-claim without provenance (2026-07 review
         F7) — the payload must carry per-map source metadata plus the
         lean-is-not-a-forecast note for the frontend to label."""
-        data = _body(elections.pvi_map())
+        data = _body(elections.pvi_map(db_session))
         meta = data["meta"]
         assert "states" in meta
         assert "districts" in meta
         assert "not" in meta["note"]  # the "measures lean, not who will win" caveat
 
-    def test_includes_cycle_year(self):
+    def test_includes_cycle_year(self, db_session):
         """Lets /elections's directory page get its header year from the
         same fetch it already makes for map coloring, instead of a
         second fetch of every race."""
         from app.pipeline.election_pipeline import current_election_cycle
 
-        data = _body(elections.pvi_map())
-        assert data["cycleYear"] == current_election_cycle()
+        data = _body(elections.pvi_map(db_session))
+        assert data["cycleYear"] == current_election_cycle(db_session)
 
-    def test_includes_next_election_day(self):
+    def test_includes_next_election_day(self, db_session, monkeypatch):
         """The /elections masthead's countdown. A date, not a day count:
         the response is cached, and a count would go stale with it."""
-        from datetime import datetime
-        from unittest.mock import patch
+        from datetime import date
 
-        with patch("app.api.elections.utcnow", return_value=datetime(2026, 9, 29)):
-            data = _body(elections.pvi_map())
+        monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 9, 29))
+        data = _body(elections.pvi_map(db_session))
+        assert data["electionDay"] == "2026-11-03"
+
+    def test_election_day_stays_on_the_election_just_held(self, db_session, monkeypatch):
+        """While its results are on show the page is about the election just
+        held (election_phase), not already the next one two years out."""
+        from datetime import date
+
+        monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 11, 6))
+        data = _body(elections.pvi_map(db_session))
         assert data["electionDay"] == "2026-11-03"
 
 
@@ -489,3 +533,206 @@ class TestCoverageFeedShowsOnlyVettedSources:
         data = _body(elections.state_ballot(state, db_session))
         assert data["coverage"] == []
 
+
+
+class TestLiveResults:
+    """GET /elections/results — the count, the updates feed, coverage."""
+
+    @staticmethod
+    def _results_window():
+        from datetime import date
+        from unittest.mock import patch
+
+        return patch("app.election_phase.election_today", return_value=date(2026, 11, 4))
+
+    def _seed(self, db_session):
+        import json as _json
+        from datetime import datetime
+
+        from app.models import ElectionResultEvent, RaceResult
+
+        # Election night, not the real clock's now: the count's stamps are
+        # what the results window is measured from.
+        counted = datetime(2026, 11, 4, 3)
+        _race(db_session, "2026-HOUSE-GA-2", "GA", "H", 2)
+        _race(db_session, "2026-SEN-CO", "CO", "S", None)
+        db_session.add(RaceResult(
+            race_id="2026-HOUSE-GA-2", election_date="2026-11-03", source_name="GA SOS",
+            source_url="https://results.example/ga",
+            tallies=_json.dumps([{"name": "Ray Jones", "party": "REP", "votes": 600, "candidateId": None},
+                                 {"name": "Dana Smith", "party": "DEM", "votes": 400, "candidateId": "H1"}]),
+            votes_counted=1000, reporting_units=70, total_units=100, held_by_party="DEM",
+            flip_announced=True, first_reported_at=counted, last_change_at=counted, fetched_at=counted,
+        ))
+        db_session.add(ElectionResultEvent(race_id="2026-HOUSE-GA-2", election_date="2026-11-03",
+                                           kind="flip", detail="{}", created_at=counted))
+        db_session.flush()
+
+    def test_campaign_phase_is_empty(self, db_session):
+        from datetime import date
+        from unittest.mock import patch
+
+        self._seed(db_session)
+        with patch("app.election_phase.election_today", return_value=date(2026, 10, 1)):
+            data = _body(elections.live_results(None, db_session))
+        assert data["phase"]["phase"] == "campaign"
+        assert data["races"] == [] and data["updates"] == []
+
+    def test_results_phase_returns_the_count(self, db_session):
+        self._seed(db_session)
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+        assert data["phase"]["phase"] == "results"
+        [race] = data["races"]
+        assert race["leaderParty"] == "REP" and race["flip"] is True
+        assert race["candidates"][0] == {"name": "Ray Jones", "party": "REP", "votes": 600, "pct": 60.0, "candidateId": None}
+        assert data["updates"][0]["kind"] == "flip"
+        assert "GA" in data["liveStates"] and "TX" not in data["liveStates"]
+        assert data["senateStates"] == ["CO"]
+        assert "UT" in data["redrawnStates"] and "MO" not in data["redrawnStates"]
+        assert data["pollsClose"]["GA"] == "2026-11-04T00:00:00Z"  # 7 PM ET
+
+    def test_senate_races_lists_each_seat_a_state_elects(self, db_session):
+        """A state electing both its senators lists both races, counted or
+        not, so the map can say the uncounted one has no count — and the
+        list is the cycle's, outside the results window too."""
+        from datetime import date
+        from unittest.mock import patch
+
+        self._seed(db_session)
+        special = _race(db_session, "2026-SEN-OH-SPECIAL", "OH", "S")
+        special.is_special = True
+        _race(db_session, "2026-SEN-OH", "OH", "S")
+        _race(db_session, "2024-SEN-TX", "TX", "S", cycle_year=2024)
+        db_session.flush()
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+        assert data["senateRaces"] == {
+            "CO": [{"raceId": "2026-SEN-CO", "isSpecial": False}],
+            "OH": [{"raceId": "2026-SEN-OH", "isSpecial": False},
+                   {"raceId": "2026-SEN-OH-SPECIAL", "isSpecial": True}],
+        }
+        assert data["senateStates"] == ["CO", "OH"]
+        with patch("app.election_phase.election_today", return_value=date(2026, 10, 1)):
+            data = _body(elections.live_results("CO", db_session))
+        assert set(data["senateRaces"]) == {"CO", "OH"}
+
+    def test_flip_is_what_the_sync_announced_not_the_bar_right_now(self, db_session):
+        """An announced flip whose count lost its reporting figures stays
+        marked (the issue and posts keep it too); a count that clears the
+        bar but hasn't been announced yet isn't marked."""
+        from app.models import RaceResult
+
+        self._seed(db_session)
+        row = db_session.get(RaceResult, "2026-HOUSE-GA-2")
+        row.reporting_units = row.total_units = None  # no longer qualifies
+        db_session.flush()
+        with self._results_window():
+            [race] = _body(elections.live_results(None, db_session))["races"]
+        assert race["flip"] is True
+        row.reporting_units, row.total_units, row.flip_announced = 100, 100, None  # qualifies, never said
+        db_session.flush()
+        with self._results_window():
+            [race] = _body(elections.live_results(None, db_session))["races"]
+        assert race["flip"] is False
+
+    def test_an_announced_flip_stays_marked_through_a_held_poll(self, db_session):
+        """A poll whose votes-counted fell is stored but announces nothing —
+        no FLIP_REVERSED, and the Action Center issue isn't touched — so the
+        page keeps saying what the issue and the feed say until the next
+        poll reverts all three together (test_election_results_sync's
+        TestHeldPollAgreement runs that through the sync)."""
+        import json as _json
+
+        from app.models import RaceResult
+
+        self._seed(db_session)
+        row = db_session.get(RaceResult, "2026-HOUSE-GA-2")
+        row.tallies = _json.dumps([{"name": "Dana Smith", "party": "DEM", "votes": 500, "candidateId": "H1"},
+                                   {"name": "Ray Jones", "party": "REP", "votes": 450, "candidateId": None}])
+        row.votes_counted = 950
+        db_session.flush()
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+        [race] = data["races"]
+        assert race["leaderParty"] == race["heldBy"] == "DEM"
+        assert race["flip"] is True
+        assert data["updates"][0]["kind"] == "flip"
+        row.flip_announced = False  # the next poll's FLIP_REVERSED
+        db_session.flush()
+        with self._results_window():
+            [race] = _body(elections.live_results(None, db_session))["races"]
+        assert race["flip"] is False
+
+    def test_says_how_each_feed_read_went(self, db_session):
+        from datetime import datetime
+
+        from app.models import LiveResultRead
+
+        db_session.add(LiveResultRead(state="CO", election_date="2026-11-03", status="untrusted",
+                                      checked_at=datetime(2026, 11, 4, 3)))
+        db_session.add(LiveResultRead(state="GA", election_date="2026-11-03", status="ok",
+                                      checked_at=datetime(2026, 11, 4, 3), last_ok_at=datetime(2026, 11, 4, 3)))
+        db_session.flush()
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+            only_co = _body(elections.live_results("CO", db_session))
+        assert data["feeds"]["CO"] == {"status": "untrusted", "checkedAt": "2026-11-04T03:00:00Z", "lastOkAt": None}
+        assert data["feeds"]["GA"]["lastOkAt"] == "2026-11-04T03:00:00Z"
+        assert set(only_co["feeds"]) == {"CO"}
+
+    def test_filters_by_state(self, db_session):
+        self._seed(db_session)
+        with self._results_window():
+            assert _body(elections.live_results("co", db_session))["races"] == []
+            assert len(_body(elections.live_results("GA", db_session))["races"]) == 1
+
+    def test_short_cache(self, db_session):
+        with self._results_window():
+            response = elections.live_results(None, db_session)
+        assert "max-age=30" in response.headers["Cache-Control"]
+
+
+class TestPhaseCacheLifetime:
+    """Responses carrying the election's phase or date (the state ballot's
+    `phase`, the PVI map's `electionDay`) are cached for the live count's
+    lifetime around election day, so the switch to election-day mode
+    doesn't reach readers ten minutes late."""
+
+    def test_short_from_the_day_before_through_the_results_window(self):
+        from datetime import date
+
+        from app.election_phase import resolve_active_election
+
+        def at(day):
+            election = resolve_active_election(day, lambda _: None)
+            return elections.phase_cache_s(election, day)
+
+        assert at(date(2026, 10, 1)) == elections.CACHE_TTL_LIST_S
+        assert at(date(2026, 11, 1)) == elections.CACHE_TTL_LIST_S
+        assert at(date(2026, 11, 2)) == elections.CACHE_TTL_RESULTS_S  # the day before
+        assert at(date(2026, 11, 3)) == elections.CACHE_TTL_RESULTS_S
+        assert at(date(2026, 11, 17)) == elections.CACHE_TTL_RESULTS_S  # the window's last day
+        assert at(date(2026, 11, 18)) == elections.CACHE_TTL_LIST_S
+
+    def test_the_pvi_map_uses_it(self, db_session):
+        from datetime import date
+        from unittest.mock import patch
+
+        with patch("app.election_phase.election_today", return_value=date(2026, 11, 3)), \
+                patch("app.api.elections.election_today", return_value=date(2026, 11, 3)):
+            response = elections.pvi_map(db_session)
+        assert f"max-age={elections.CACHE_TTL_RESULTS_S}," in response.headers["Cache-Control"]
+
+    def test_the_race_list_uses_it(self, db_session):
+        """Its cycle turns over when the results window closes: the long
+        list lifetime kept serving the held election's races after."""
+        from datetime import date
+        from unittest.mock import patch
+
+        for day, ttl in ((date(2026, 11, 10), elections.CACHE_TTL_RESULTS_S),
+                         (date(2026, 10, 1), elections.CACHE_TTL_LIST_S)):
+            with patch("app.election_phase.election_today", return_value=day), \
+                    patch("app.api.elections.election_today", return_value=day):
+                response = elections.list_races(db_session)
+            assert f"max-age={ttl}," in response.headers["Cache-Control"]

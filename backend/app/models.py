@@ -867,6 +867,12 @@ class Race(Base):
     coverage_items: Mapped[list["RaceCoverageItem"]] = relationship(
         back_populates="race", cascade="all, delete-orphan",
     )
+    result: Mapped["RaceResult | None"] = relationship(
+        back_populates="race", cascade="all, delete-orphan", uselist=False,
+    )
+    result_events: Mapped[list["ElectionResultEvent"]] = relationship(
+        back_populates="race", cascade="all, delete-orphan",
+    )
 
 
 # Prefix of a Candidate id that is NOT an FEC candidate_id. FEC ids are a
@@ -1013,6 +1019,117 @@ class RaceCoverageItem(Base):
     has_advocacy: Mapped[bool] = mapped_column(Boolean, default=False)
 
     race: Mapped["Race"] = relationship(back_populates="coverage_items")
+
+
+class RaceResult(Base):
+    """The count a state's own election-night reporting system shows for
+    one Race, as of the last read (live_results/sync.py).
+
+    Every figure is the source's, copied — nothing here is a projection
+    or a call. `official` is True only where the source itself says its
+    count is official; a race is otherwise only ever *leading*, however
+    far ahead, because no feed this reads says how many ballots are still
+    uncounted, and "all precincts reporting" is not that (Colorado's
+    counties all report on election night and keep counting for days).
+    """
+    __tablename__ = "race_results"
+
+    race_id: Mapped[str] = mapped_column(
+        String, ForeignKey("races.id", ondelete="CASCADE"), primary_key=True,
+    )
+    # ISO date of the election these are results of; the race's cycle
+    # alone would not separate a November count from a later runoff's.
+    election_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    source_name: Mapped[str] = mapped_column(String, nullable=False)
+    # The page a reader can check the count on, not the API it came from.
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # JSON list, most votes first: {name, party, votes, candidateId}.
+    # `name` is the source's printing; candidateId is set only for a
+    # unique match to one of the race's Candidate rows.
+    tallies: Mapped[str] = mapped_column(Text, default="[]")
+    votes_counted: Mapped[int] = mapped_column(Integer, default=0)
+    # What the source counts reporting in (precincts, or counties where a
+    # state aggregates by county) — NULL where it states no such figure.
+    reporting_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unit_label: Mapped[str] = mapped_column(String(20), default="precincts")
+    official: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The party (as a partyGroup: DEM/REP/IND/...) that held this seat
+    # going into the election, fixed at the first read so a member-table
+    # refresh mid-count cannot redraw what a "flip" is measured against.
+    # NULL when no single party held it knowably (an open Senate seat in a
+    # state whose two senators differ).
+    held_by_party: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # The Action Center DEVELOPING issue this race's flip opened, if any.
+    developing_issue_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Whether a change of party is announced for this count as it stands:
+    # set by apply_count when it raises FLIP, cleared when it raises
+    # FLIP_REVERSED, the same state the issue and the posts keep. What the
+    # results page marks as a flip — not sync.is_flip, which also asks
+    # whether enough of the count is in right now and so can lapse (a poll
+    # dropping its reporting figures, units added, an official flag
+    # switched off) with the same challenger ahead, or turn true by the
+    # clock (COUNTY_FLIP_SETTLE) before the sync has said anything. NULL
+    # (never announced) reads as False.
+    flip_announced: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # The source's own update time and version for the count stored here;
+    # a later read claiming an OLDER one is a rolled-back feed and refused.
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # When votes were first counted (the row's creation until then): the
+    # clock a county-unit flip waits on (sync.COUNTY_FLIP_SETTLE).
+    first_reported_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # When the vote totals last moved. The results page stays up until a
+    # grace period after the latest of these (election_phase.py).
+    last_change_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+    fetched_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    race: Mapped["Race"] = relationship(back_populates="result")
+
+
+class ElectionResultEvent(Base):
+    """One thing that happened in a race's count — first returns, a change
+    of leader, every unit reporting, the source calling its count official.
+    `detail` is structured data (JSON), not prose: the page words it from a
+    template, so no generated sentence ever describes a result."""
+    __tablename__ = "election_result_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    race_id: Mapped[str] = mapped_column(
+        String, ForeignKey("races.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    election_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+    # Same pair as RaceCoverageItem's: considered for a Bluesky post
+    # (live_results/bluesky.py), and actually published — the
+    # hourly and election-wide budgets count only the second.
+    bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    bsky_posted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    race: Mapped["Race"] = relationship(back_populates="result_events")
+
+
+class LiveResultRead(Base):
+    """How the last read of a state's live-results feed went, per election:
+    what lets the page tell "the count hasn't started" from "Civitas
+    couldn't read the state's feed" — the same null-is-not-zero rule
+    MeasureCoverage applies to ballot measures. One row per state, updated
+    every sync pass (live_results/sync.py)."""
+    __tablename__ = "live_result_reads"
+
+    state: Mapped[str] = mapped_column(String(2), primary_key=True)
+    election_date: Mapped[str] = mapped_column(String(10), primary_key=True)
+    # ok / polls_open / untrusted / unavailable / stale / failed
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # The last read that was stored — NULL until one is.
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # For a refused read: which kind of refusal (sync.refusal_kind), so an
+    # alert fires on the same refusal twice in a row, not on two different
+    # one-off ones.
+    reason_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
 
 class Justice(Base):
@@ -1256,6 +1373,13 @@ class ActionIssue(Base):
     # _expire_stale_developing_issues retires the row unconfirmed — never
     # deletes it (see ActionIssueStatus docstring).
     confirmation_deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    # A seat-flip issue (source_type "election_results"): when the count
+    # its facts quote was read, and whether the state called that count
+    # official — stamped by live_results/signals.py in the same write as
+    # the facts, so the page never pairs one poll's figures with another
+    # poll's time or flag. NULL for every other issue.
+    count_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    count_official: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
     # Set only by _promote_developing_issue. confirmed_at - created_at is
     # the real per-row lead time (how long the signal ran before press
     # coverage matched it) — durable, queryable success-metric data, not

@@ -25,12 +25,12 @@ STRATEGIES-dispatch shape as ballot_measures_pdf.py.
 
 Matching a state's reported (office, district, party, last_name) against
 Civitas's own FEC-derived Candidate rows compares surname to surname
-directly — NOT elections.py's _last_name_matches, which matches a surname
+directly — NOT state_candidates_common.last_name_matches, which matches a surname
 against the TRAILING tokens of a "First Last"-formatted name (that's the
 right shape for _incumbent_link's target, Representative/Senator.name, but
 Candidate.name is FEC's own "LAST, FIRST MIDDLE" format, so the surname is
 the LEADING part before the comma — the same extraction _incumbent_link
-itself does to `cand.name` before calling _last_name_matches on someone
+itself does to `cand.name` before calling last_name_matches on someone
 else's name). Exact string equality on the extracted, lowercased surname
 (not substring) for the same "lee" != "leeman" reason. A record that
 matches zero or more than one candidate (after a party-based tiebreak
@@ -88,6 +88,7 @@ from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
     fec_party,
     ballot_basis_key,
+    is_not_a_person,
     clean_display_name,
     JUDICIAL_COURT_LABELS,
     JUDICIAL_MARKER_TIER,
@@ -208,6 +209,18 @@ def is_configured(state: str) -> bool:
     return source is not None and source.get("strategy") in STRATEGIES
 
 
+def senate_race_ids(db: Session, cycle: int, state: str) -> list[str]:
+    """Every Senate race `state` holds in `cycle` — one in almost every
+    state, none in a third of them, and two (a regular race and a special
+    one) only when a vacancy falls in a year the other seat is up. Shared
+    by _race_id_for and the Action Center's race matcher
+    (action_center._results_race_named), which both need to know whether
+    "the Senate race" in a state is one race or has to be told apart."""
+    return sorted(rid for (rid,) in db.query(Race.id).filter(
+        Race.cycle_year == cycle, Race.state == state, Race.office == "S",
+    ))
+
+
 def _race_id_for(db: Session, cycle: int, state: str, office: str, district: int | None) -> str:
     """The race a state's record belongs to, by election_pipeline._race_id's
     convention. A Senate record goes to the state's one Senate race this
@@ -218,9 +231,7 @@ def _race_id_for(db: Session, cycle: int, state: str, office: str, district: int
     and a special race in one state (Georgia, 2020) a record carries
     nothing to choose between them, so it stays with the regular race."""
     if office == "S":
-        senate = [rid for (rid,) in db.query(Race.id).filter(
-            Race.cycle_year == cycle, Race.state == state, Race.office == "S",
-        )]
+        senate = senate_race_ids(db, cycle, state)
         if len(senate) == 1:
             return senate[0]
         return f"{cycle}-SEN-{state}"
@@ -392,6 +403,13 @@ def _contradicts(
     # says nothing either way.
     if not expected or theirs not in _KNOWN_PARTIES or theirs == expected:
         return False
+    return given_name_contradicts(cand, display_name, last_name)
+
+
+def given_name_contradicts(cand: Candidate, display_name: str | None, last_name: str = "") -> bool:
+    """_contradicts' given-name half on its own: the record states a given
+    name that fits none of the candidate's. Asked alone where the record
+    states no party to compare (a live-results feed's independent)."""
     wanted, initial = _record_given(display_name, last_name)
     theirs_initial = _given_initial(cand.name or "")
     if initial and initial == theirs_initial:
@@ -500,11 +518,20 @@ def _fec_candidates(race: Race) -> list[Candidate]:
     return [c for c in race.candidates if c.fec_filed]
 
 
-# What a results file can print where a candidate's name goes. None of it
-# is a person, and a ballot-only row makes whatever it is visible.
-_NOT_A_PERSON_RE = re.compile(
-    r"write[\s-]*ins?\b|scattering|\b(over|under)\s*votes?\b|\bblank\b|"
-    r"none of (these|the above)|uncommitted|withdrawn",
+
+
+# A ballot-only row claims a PERSON printed on the November ballot. A
+# name the source itself marks as a write-in or withdrawn is not that
+# claim ("Redkey, David (Write-In)", "Write-In - David Fey"), even though a
+# live count keeps their votes -- is_not_a_person only refuses aggregate
+# rows, so this is the narrower question asked on top of it.
+_NOT_ON_THE_BALLOT_RE = re.compile(
+    r"\bwrite[\s-]*ins?\b|\bwithdrawn\b|\bscattering\b|\buncommitted\b|\b(?:over|under)[\s/-]*votes?\b"
+    # Summary rows the old substring filter caught and is_not_a_person's
+    # whole-label match doesn't: ES&S's "Times Blank Voted", "Blank/Void",
+    # "Over Votes (Not Counted)". A person surnamed Blank is still a
+    # person: "blank" counts only beside a ballot word.
+    r"|\btimes\s+blank\b|\bblank\s*(?:/|votes?\b|ballots?\b)|\bvoid(?:ed)?\s+(?:ballots?|votes?)\b",
     re.IGNORECASE,
 )
 
@@ -550,7 +577,7 @@ def _keep_ballot_only(
     results file's non-candidate rows must never become one."""
     display = (record.get("display_name") or "").strip()
     words = [w for w in re.split(r"[\s,]+", display) if any(ch.isalpha() for ch in w)]
-    if len(words) < 2 or _NOT_A_PERSON_RE.search(display):
+    if len(words) < 2 or is_not_a_person(display) or _NOT_ON_THE_BALLOT_RE.search(display):
         return None
     slug = re.sub(r"[^a-z0-9]+", "-", _fold(display)).strip("-")
     cid = f"{BALLOT_ONLY_ID_PREFIX}{race.id}:{slug}"
@@ -1340,7 +1367,7 @@ def _sync_statewide_nominees(
         office, party = record["office"], record["party"]
         district = record["district"]
         name = record["last_name"]
-        if _NOT_A_PERSON_RE.search(name or ""):
+        if is_not_a_person(name or "") or _NOT_ON_THE_BALLOT_RE.search(name or ""):
             # A results file's bucket won the contest ("Write-in" took
             # Illinois's 2026 Republican primary for Treasurer, where no
             # Republican filed): the seat has no nominee to name.
@@ -1444,7 +1471,7 @@ def _sync_state_leg_nominees(
         chamber, district, party = record["office"], record["district"], record["party"]
         seat = record.get("seat")
         name = record["last_name"]
-        if _NOT_A_PERSON_RE.search(name or ""):
+        if is_not_a_person(name or "") or _NOT_ON_THE_BALLOT_RE.search(name or ""):
             # A results file's bucket won the contest ("Write-in" took
             # Illinois's 2026 Republican primary for Treasurer, where no
             # Republican filed): the seat has no nominee to name.
@@ -1524,7 +1551,7 @@ def _sync_judicial_nominees(
         court, party = record["office"], record["party"]
         district, seat = record["district"], record.get("seat")
         name = record["last_name"]
-        if _NOT_A_PERSON_RE.search(name or ""):
+        if is_not_a_person(name or "") or _NOT_ON_THE_BALLOT_RE.search(name or ""):
             # A results file's bucket won the contest ("Write-in" took
             # Illinois's 2026 Republican primary for Treasurer, where no
             # Republican filed): the seat has no nominee to name.

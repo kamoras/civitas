@@ -180,7 +180,7 @@ def test_state_ballot_defaults_to_not_yet_covered(db_session):
 
 def test_state_ballot_distinguishes_confirmed_none(db_session):
     election_pipeline._set_coverage(
-        db_session, "GA", elections.next_election_day(elections.utcnow().date()).isoformat(),
+        db_session, "GA", elections.active_election(db_session).election_day.isoformat(),
         MeasureCoverage.CONFIRMED_NONE, 0, source_name="Earlier Source",
     )
     db_session.commit()
@@ -194,11 +194,11 @@ def test_state_ballot_distinguishes_confirmed_none(db_session):
 def test_state_ballot_returns_measures_and_races(db_session, freeze_utcnow):
     freeze_utcnow(datetime(2026, 9, 30, 12, 0))  # a 2026-cycle fixture
     db_session.add(Race(
-        id="2026-SEN-GA", cycle_year=election_pipeline.current_election_cycle(),
+        id="2026-SEN-GA", cycle_year=election_pipeline.current_election_cycle(db_session),
         office="S", state="GA", district=None,
     ))
     db_session.add(Race(
-        id="2026-HOUSE-GA-7", cycle_year=election_pipeline.current_election_cycle(),
+        id="2026-HOUSE-GA-7", cycle_year=election_pipeline.current_election_cycle(db_session),
         office="H", state="GA", district=7,
     ))
     _measure(db_session, "old-1", official_title="Official title",
@@ -859,7 +859,11 @@ def test_the_expected_by_cutoff_counts_back_from_election_day(monkeypatch):
 
 
 def _page_election():
-    return elections.next_election_day(elections.utcnow().date()).isoformat()
+    # The page's election (api/elections -> active_election); the test
+    # database holds no counts, so no results window keeps an earlier one.
+    from app.election_phase import election_today, resolve_active_election
+
+    return resolve_active_election(election_today(), lambda day: None).election_day.isoformat()
 
 
 def test_state_ballot_shows_only_the_pages_own_election(db_session):
@@ -908,6 +912,32 @@ def test_past_elections_measures_are_pruned(db_session):
     assert election_pipeline._prune_past_measures(db_session) == 1
     assert [m.id for m in db_session.query(BallotMeasure).all()] == ["old-now"]
 
+
+
+def test_the_election_still_on_the_page_is_never_pruned(db_session, monkeypatch):
+    """A slow count keeps the state page on the election just held for up
+    to two months (election_phase.active_election) -- past the 45-day
+    grace window. Its measures stay while the page still shows it."""
+    from datetime import date as _date
+
+    from app.election_phase import ActiveElection
+
+    held = _date(2026, 11, 3)
+    monkeypatch.setattr(
+        election_pipeline, "utcnow",
+        lambda: utcnow().replace(year=2026, month=12, day=28),
+    )
+    monkeypatch.setattr(
+        election_pipeline, "active_election",
+        lambda db=None: ActiveElection(
+            election_day=held, phase="results", results_until=_date(2027, 1, 3), last_result_change=None,
+        ),
+    )
+    _measure(db_session, "held", date=held.isoformat(), number="Amendment 1")
+    _measure(db_session, "older", date="2024-11-05", number="Amendment 1")
+    db_session.commit()
+    assert election_pipeline._prune_past_measures(db_session) == 1
+    assert [m.id for m in db_session.query(BallotMeasure).all()] == ["held"]
 
 # ── round 3 ──────────────────────────────────────────────────────────
 

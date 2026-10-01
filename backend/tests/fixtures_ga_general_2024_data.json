@@ -1,0 +1,152 @@
+{
+ "election": {
+  "isOfficialResults": true,
+  "electionDate": "2024-11-05",
+  "lastUpdated": "2025-01-07T16:55:00.6358836Z",
+  "isProduction": true,
+  "asOf": "2025-01-30T13:59:22.4956582Z"
+ },
+ "ballotItems": [
+  {
+   "name": [
+    {
+     "languageId": "en",
+     "text": "US House of Representatives - District 1"
+    }
+   ],
+   "contestType": "Candidate",
+   "reportingStatus": {
+    "reportingUnits": 15,
+    "totalUnits": 15,
+    "asOf": "2025-01-30T13:59:22.4956582Z",
+    "reportingStatusDetails": null
+   },
+   "voteTotal": 355857,
+   "summaryResults": {
+    "ballotOptions": [
+     {
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Earl L. \"Buddy\" Carter (I) (Rep)"
+       }
+      ],
+      "voteCount": 220576,
+      "party": {
+       "abbreviation": "Rep"
+      },
+      "isWriteIn": false,
+      "isQualifiedWriteIn": false
+     },
+     {
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Patti Hewitt (Dem)"
+       }
+      ],
+      "voteCount": 135281,
+      "party": {
+       "abbreviation": "Dem"
+      },
+      "isWriteIn": false,
+      "isQualifiedWriteIn": false
+     }
+    ]
+   }
+  },
+  {
+   "name": [
+    {
+     "languageId": "en",
+     "text": "US House of Representatives - District 2"
+    }
+   ],
+   "contestType": "Candidate",
+   "reportingStatus": {
+    "reportingUnits": 30,
+    "totalUnits": 30,
+    "asOf": "2025-01-30T13:59:22.4956582Z",
+    "reportingStatusDetails": null
+   },
+   "voteTotal": 312501,
+   "summaryResults": {
+    "ballotOptions": [
+     {
+      "name": [
+       {
+        "languageId": "en",
+        "text": "A. Wayne Johnson (Rep)"
+       }
+      ],
+      "voteCount": 136473,
+      "party": {
+       "abbreviation": "Rep"
+      },
+      "isWriteIn": false,
+      "isQualifiedWriteIn": false
+     },
+     {
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Sanford Bishop (I) (Dem)"
+       }
+      ],
+      "voteCount": 176028,
+      "party": {
+       "abbreviation": "Dem"
+      },
+      "isWriteIn": false,
+      "isQualifiedWriteIn": false
+     }
+    ]
+   }
+  },
+  {
+   "name": [
+    {
+     "languageId": "en",
+     "text": "State Senate - District 1"
+    }
+   ],
+   "contestType": "Candidate",
+   "reportingStatus": {
+    "reportingUnits": 3,
+    "totalUnits": 3,
+    "asOf": "2025-01-30T13:59:22.4956582Z",
+    "reportingStatusDetails": null
+   },
+   "voteTotal": 76992,
+   "summaryResults": {
+    "ballotOptions": [
+     {
+      "name": [
+       {
+        "languageId": "en",
+        "text": "Ben Watson (I) (Rep)"
+       }
+      ],
+      "voteCount": 76992,
+      "party": {
+       "abbreviation": "Rep"
+      },
+      "isWriteIn": false,
+      "isQualifiedWriteIn": false
+     }
+    ]
+   }
+  }
+ ],
+ "localityElections": [
+  {
+   "isProduction": true
+  },
+  {
+   "isProduction": true
+  },
+  {
+   "isProduction": true
+  }
+ ]
+}

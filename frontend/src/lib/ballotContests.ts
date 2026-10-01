@@ -112,7 +112,14 @@ export function countStatewideContests(races: StatewideRace[]): number {
   );
 }
 
-export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): BallotContest[] {
+/** `resultsMode`: the page is showing the count (election day on). "You
+ * vote in one" is campaign wording; from election day the House line is
+ * worded to hold both before polls close and after ("one per voter"). */
+export function buildBallotContests(
+  ballot: StateBallot,
+  hasTowns: boolean,
+  { resultsMode = false }: { resultsMode?: boolean } = {}
+): BallotContest[] {
   const contests: BallotContest[] = [];
 
   for (const race of ballot.senateRaces) {
@@ -142,7 +149,7 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
       subtitle:
         n === 1
           ? `One statewide seat · ${HOUSE_TERM}`
-          : `${n} districts · you vote in one · ${HOUSE_TERM}`,
+          : `${n} districts · ${resultsMode ? "one per voter" : "you vote in one"} · ${HOUSE_TERM}`,
       instruction: "Vote for one",
       summary:
         n === 1

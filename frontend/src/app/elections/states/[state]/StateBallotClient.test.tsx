@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
 import type { RaceWithCandidates, StateBallot } from "@/types/election";
@@ -172,6 +172,15 @@ describe("the ballot page", () => {
     ).toBeInTheDocument();
   });
 
+  it("says 1 contest and 1 candidate, not 1 contests", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({ houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })] })}
+      />
+    );
+    expect(screen.getByText(/^1 contest · 1 federal candidate/)).toBeInTheDocument();
+  });
+
   it("shows a candidate the state certified even with no FEC activity", () => {
     // North Carolina's Libertarian Senate nominee: on the certified
     // ballot, no funds, not a statutory candidate — once filed away under
@@ -245,26 +254,64 @@ describe("the contest drawer", () => {
     drawer.getByRole("tab", { name: "Money" }).focus();
     await userEvent.keyboard("{ArrowRight}");
     expect(drawer.getByRole("tab", { name: "Record" })).toHaveAttribute("aria-selected", "true");
-    expect(drawer.getAllByText("no scorecard")).toHaveLength(2);
+    // "Not linked", never "no scorecard": the API links only an
+    // unambiguously matched incumbent, so an unlinked candidate can still
+    // be a member of Congress with one.
+    expect(drawer.getAllByText("not linked")).toHaveLength(2);
+    expect(drawer.queryByText(/no scorecard|has a Civitas scorecard/i)).toBeNull();
+    expect(
+      drawer.getByText("No one in this race is linked to a Civitas scorecard.")
+    ).toBeInTheDocument();
   });
 
   it("opens the race a #race-{id} link names, and can still be closed", async () => {
     // The bug this guards against: "nothing chosen yet" (defer to the
     // URL) and "closed" were once the same value, so a contest a link had
     // opened could never be closed.
-    window.location.hash = "#race-2026-HOUSE-OH-1";
+    window.history.replaceState(null, "", "/elections/states/OH#race-2026-HOUSE-OH-1");
     render(<StateBallotClient ballot={ballot()} />);
     const drawer = within(screen.getByRole("dialog"));
     expect(drawer.getByRole("heading", { name: "U.S. Representative" })).toBeInTheDocument();
     await userEvent.click(drawer.getByRole("button", { name: "ALL CONTESTS" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    window.location.hash = "";
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("opens a #race- link reached by in-app navigation, once the URL is this page's", async () => {
+    // A soft navigation renders the new page BEFORE Next commits its URL:
+    // the first render still sees the page the reader came from.
+    window.history.replaceState(null, "", "/elections");
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Next commits the URL (pushState: no event of its own); the page picks
+    // it up on its next look.
+    await act(async () => {
+      window.history.pushState(null, "", "/elections/states/OH#race-2026-HOUSE-OH-1");
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    const drawer = within(await screen.findByRole("dialog"));
+    expect(drawer.getByRole("heading", { name: "U.S. Representative" })).toBeInTheDocument();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("latches the page's own URL, not the hash of the page it came from", async () => {
+    // Came from another page that had a #race- hash of its own.
+    window.history.replaceState(null, "", "/elections/states/GA#race-2026-HOUSE-OH-1");
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await act(async () => {
+      window.history.pushState(null, "", "/elections/states/OH");
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    window.history.replaceState(null, "", "/");
   });
 });
 
 describe("U.S. Representative", () => {
-  const twoDistricts = () =>
+  const twoDistricts = (overrides: Partial<StateBallot> = {}) =>
     ballot({
+      ...overrides,
       houseRaces: [
         houseRace({ id: "d1", district: 1 }),
         houseRace({
@@ -300,6 +347,40 @@ describe("U.S. Representative", () => {
     expect(drawer.getByText("Second District Dem")).toBeInTheDocument();
   });
 
+  it("shows a district's lean in the picker and on a picked district during the campaign", async () => {
+    render(<StateBallotClient ballot={twoDistricts()} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.getAllByText("D+3").length).toBe(2);
+    await userEvent.click(drawer.getByRole("button", { name: /Second District Dem/ }));
+    expect(within(screen.getByRole("dialog")).getByText("D+3")).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
+  it("marks a sitting member on new lines as a sitting member, never the new district's incumbent", async () => {
+    render(<StateBallotClient ballot={twoDistricts({ newDistrictLines: true })} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.getByText("Greg Landsman (sitting member)")).toBeInTheDocument();
+    expect(drawer.queryByText(/\(I\)/)).not.toBeInTheDocument();
+    await userEvent.click(drawer.getByRole("button", { name: /Greg Landsman/ }));
+    const research = within(screen.getByRole("dialog"));
+    expect(research.getByText("SITTING MEMBER")).toBeInTheDocument();
+    expect(research.queryByText("INCUMBENT")).not.toBeInTheDocument();
+    window.location.hash = "";
+  });
+
+  it("marks a sitting member on a single new-lines seat's ballot box the same way", () => {
+    render(<StateBallotClient ballot={ballot({ newDistrictLines: true })} />);
+    const box = screen.getByTestId("ballot-columns");
+    expect(within(box).getByText("SITTING MEMBER")).toBeInTheDocument();
+    expect(within(box).queryByText("INCUMBENT")).not.toBeInTheDocument();
+  });
+
+  it("keeps INCUMBENT on a state's old lines", () => {
+    render(<StateBallotClient ballot={ballot()} />);
+    const box = screen.getByTestId("ballot-columns");
+    expect(within(box).getByText("INCUMBENT")).toBeInTheDocument();
+  });
+
   it("opens a picked district's research with its full county list", async () => {
     render(<StateBallotClient ballot={twoDistricts()} />);
     const box = screen.getByTestId("ballot-columns");
@@ -328,6 +409,133 @@ describe("U.S. Representative", () => {
     render(<StateBallotClient ballot={ballot()} />);
     const drawer = await openContest(/U\.S\. Representative/);
     expect(drawer.queryByText("(statewide)")).not.toBeInTheDocument();
+  });
+
+  it("never colours a statewide stand-in as the district's own lean", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({ houseRaces: [houseRace({ pvi: 6, pviLevel: "state" })] })}
+      />
+    );
+    const drawer = await openContest(/U\.S\. Representative/);
+    const lean = drawer.getByText("R+6");
+    expect(lean).not.toHaveClass("text-signal-red");
+    expect(lean).toHaveClass("text-ink-lo");
+  });
+
+  it("colours a district's own lean", async () => {
+    render(<StateBallotClient ballot={ballot({ houseRaces: [houseRace({ pvi: 6 })] })} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.getByText("R+6")).toHaveClass("text-signal-red");
+  });
+
+  const fourDistricts = (overrides: Partial<StateBallot> = {}) =>
+    ballot({
+      houseRaces: [1, 2, 3, 4].map((d) =>
+        houseRace({
+          id: `d${d}`,
+          district: d,
+          counties: [`County ${d}`],
+          pvi: 6,
+          pviLevel: "state",
+        })
+      ),
+      ...overrides,
+    });
+
+  it("offers house.gov and a candidate's name where the lines are unchanged", async () => {
+    render(<StateBallotClient ballot={fourDistricts()} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(drawer.getByRole("link", { name: /house\.gov/ })).toBeInTheDocument();
+    expect(
+      drawer.getByLabelText("Filter districts by county, candidate, or district number")
+    ).toBeInTheDocument();
+  });
+
+  it("never sends a reader on new lines to a lookup by representative", async () => {
+    render(
+      <StateBallotClient
+        ballot={fourDistricts({
+          state: "TX",
+          stateName: "Texas",
+          newDistrictLines: true,
+          officialLookup: {
+            url: "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do",
+            label: "Texas voter portal",
+            sourceName: "Texas Secretary of State",
+            isStateSpecific: true,
+            verifiedAt: null,
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/U\.S\. Representative/);
+    // house.gov answers for the district today's member holds.
+    expect(drawer.queryByRole("link", { name: /house\.gov/ })).not.toBeInTheDocument();
+    expect(drawer.getByText(/new congressional district lines/)).toBeInTheDocument();
+    // Campaign wording, addressed to someone who is about to vote.
+    expect(drawer.getByText(/new congressional district lines/).closest("p")).toHaveTextContent(
+      /^You vote in exactly one of these\. Texas has drawn new congressional district lines since your current representative was elected, so your district may not be the one they were elected in, and lookups/
+    );
+    expect(drawer.getByText(/new congressional district lines/).closest("p")).not.toHaveTextContent(
+      /this year/
+    );
+    expect(
+      drawer.getByText(/lookups by representative can answer for the old map, not these lines/)
+    ).toBeInTheDocument();
+    // The state's own lookup does know the new lines.
+    expect(
+      drawer.getByRole("link", { name: "Texas voter portal (opens in new tab)" })
+    ).toHaveAttribute("href", "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do");
+    const input = drawer.getByLabelText("Filter districts by county or district number");
+    await userEvent.type(input, "zzz");
+    expect(drawer.getByText(/Try a county name or a district number/)).toBeInTheDocument();
+    expect(drawer.queryByText(/surname/)).not.toBeInTheDocument();
+    // Never an address field.
+    expect(drawer.queryByLabelText(/address|zip/i)).not.toBeInTheDocument();
+  });
+
+  it("words new lines around the sitting member on the next cycle's ballot, before Jan 3", async () => {
+    // From Nov 18 to Jan 3 the page is on 2028's ballot while the members
+    // elected on the old lines still sit: the backend keeps the flag set.
+    // "votes on new lines this year" would be false there.
+    render(
+      <StateBallotClient
+        ballot={fourDistricts({
+          state: "TX",
+          stateName: "Texas",
+          cycleYear: 2028,
+          electionDate: "2028-11-07",
+          newDistrictLines: true,
+          houseRaces: [1, 2, 3, 4].map((d) =>
+            houseRace({
+              id: `2028-HOUSE-TX-${d}`,
+              cycleYear: 2028,
+              state: "TX",
+              district: d,
+              counties: [`County ${d}`],
+              pvi: 6,
+              pviLevel: "district",
+            })
+          ),
+        })}
+      />
+    );
+    const drawer = await openContest(/U\.S\. Representative/);
+    const intro = drawer.getByText(/new congressional district lines/).closest("p");
+    expect(intro).toHaveTextContent(
+      /Texas has drawn new congressional district lines since your current representative was elected, so your district may not be the one they were elected in, and lookups/
+    );
+    expect(intro).not.toHaveTextContent(/this year/);
+    expect(drawer.queryByRole("link", { name: /house\.gov/ })).not.toBeInTheDocument();
+  });
+
+  it("links no lookup at all on new lines when the state has none of its own", async () => {
+    render(<StateBallotClient ballot={fourDistricts({ newDistrictLines: true })} />);
+    const drawer = await openContest(/U\.S\. Representative/);
+    expect(
+      drawer.queryByRole("link", { name: /house\.gov|election office/i })
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -460,7 +668,7 @@ describe("statewide executive offices", () => {
     // Governor, Secretary of State and the Council: three offices, not four rows.
     expect(box.getByText(/^3 offices · from primary results$/)).toBeInTheDocument();
     expect(box.getByText(/Executive Council/)).toBeInTheDocument();
-    expect(box.getByText(/You vote in your district's seat only/)).toBeInTheDocument();
+    expect(box.getByText(/Each voter votes in their district's seat only/)).toBeInTheDocument();
     expect(box.getByText("District 2")).toBeInTheDocument();
     expect(box.getByText("Tobin Menard")).toBeInTheDocument();
   });

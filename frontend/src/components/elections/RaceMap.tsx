@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useState } from "react";
 import { FIPS_TO_STATE } from "@/lib/stateCodes";
 import { ComposableMap, Geographies, Geography, useMapContext } from "react-simple-maps";
@@ -36,6 +36,12 @@ interface RaceMapProps {
   getFillColor: (state: string, isSelected: boolean) => string;
   /** Fill color for a state on hover. */
   getHoverFillColor: (state: string, isSelected: boolean) => string;
+  /** Each state's accessible name. Defaults to its code; a map whose fill
+   * means something (the results map) says it here too, so colour is
+   * never the only way to read it. */
+  getStateLabel?: (state: string) => string;
+  /** SVG <defs> (patterns) the fills may reference. */
+  defs?: ReactNode;
 }
 
 export default function RaceMap({
@@ -43,6 +49,8 @@ export default function RaceMap({
   onStateClick,
   getFillColor,
   getHoverFillColor,
+  getStateLabel = (state) => state,
+  defs,
 }: RaceMapProps) {
   // react-simple-maps v5 dropped Geography's built-in default/hover/pressed
   // style object in favor of a plain `style` prop, same as any other SVG
@@ -64,6 +72,7 @@ export default function RaceMap({
       height={600}
       style={{ width: "100%", height: "auto" }}
     >
+      {defs}
       <Geographies geography={GEO_URL}>
         {({ geographies }) => [
           ...geographies.map((geo) => {
@@ -84,7 +93,7 @@ export default function RaceMap({
                 // SVG paths don't fire onClick from Enter/Space — wire up
                 // button semantics + keyboard activation ourselves.
                 role="button"
-                aria-label={stateCode}
+                aria-label={getStateLabel(stateCode)}
                 onKeyDown={(e: KeyboardEvent) => activate(e, stateCode)}
                 style={{
                   fill: isSelected
@@ -110,6 +119,7 @@ export default function RaceMap({
             activate={activate}
             getFillColor={getFillColor}
             getHoverFillColor={getHoverFillColor}
+            getStateLabel={getStateLabel}
           />,
         ]}
       </Geographies>
@@ -126,6 +136,7 @@ function SmallStateCallouts({
   activate,
   getFillColor,
   getHoverFillColor,
+  getStateLabel,
 }: {
   geographies: { id?: string | number; rsmKey: string }[];
   selectedState: string | null;
@@ -135,6 +146,7 @@ function SmallStateCallouts({
   activate: (e: KeyboardEvent, state: string) => void;
   getFillColor: RaceMapProps["getFillColor"];
   getHoverFillColor: RaceMapProps["getHoverFillColor"];
+  getStateLabel: (state: string) => string;
 }) {
   // The map's own path generator, so each leader line starts at the
   // state as drawn — no second projection to keep in step with this one.
@@ -160,7 +172,7 @@ function SmallStateCallouts({
             key={stateCode}
             role="button"
             tabIndex={0}
-            aria-label={stateCode}
+            aria-label={getStateLabel(stateCode)}
             onClick={() => onStateClick(stateCode)}
             onKeyDown={(e) => activate(e, stateCode)}
             onMouseEnter={() => setHoveredFips(fips)}

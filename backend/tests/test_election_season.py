@@ -25,6 +25,13 @@ class TestDaysUntilNextElection:
         assert days_until_next_election(ten_days_before) == 10
 
 
+    def test_zero_on_election_day_itself(self):
+        """next_election_day is strictly after its argument; this used to
+        return ~730 on the day, so the teaser's ELECTION DAY never showed."""
+        election_day = next_election_day(date(2026, 1, 1))
+        assert days_until_next_election(election_day) == 0
+
+
 class TestIsElectionSeason:
     def test_true_within_window(self):
         election_day = next_election_day(date(2026, 1, 1))
@@ -35,3 +42,11 @@ class TestIsElectionSeason:
         election_day = next_election_day(date(2026, 1, 1))
         just_outside = election_day - timedelta(days=ELECTION_SEASON_WINDOW_DAYS + 1)
         assert is_election_season(just_outside) is False
+
+    def test_true_while_results_are_on_show(self, db_session):
+        """The count after election day is when coverage moves fastest."""
+        from unittest.mock import patch
+
+        election_day = next_election_day(date(2026, 1, 1))
+        with patch("app.database.SessionLocal", return_value=db_session):
+            assert is_election_season(election_day + timedelta(days=3)) is True

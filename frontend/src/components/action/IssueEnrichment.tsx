@@ -20,6 +20,13 @@
 
 import Link from "next/link";
 import { formatUtcDate, isNewFact, issueDateLabel, issueRef, safeHref } from "@/lib/formatting";
+import {
+  countIsOfficial,
+  developingSource,
+  factsAreTheCount,
+  factsHeading,
+} from "@/lib/developing";
+import { formatEasternTime } from "@/lib/results";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { monitorHref } from "@/lib/routes";
 import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
@@ -136,11 +143,20 @@ export function IssueMeta({
 }
 
 /** One-line disclosure paired with the "Developing" flag — explains what it
- *  means rather than leaving readers to guess. */
-export function DevelopingDisclosure() {
+ *  means, and names what the story was drafted from, rather than leaving
+ *  readers to guess. */
+export function DevelopingDisclosure({
+  sourceType,
+  countOfficial = false,
+}: {
+  sourceType?: string | null;
+  /** countIsOfficial(issue) — an official count must not read "not final". */
+  countOfficial?: boolean;
+}) {
+  const source = developingSource(sourceType, { countOfficial });
   return (
     <p className="mb-4 font-mono text-xs leading-relaxed text-ink-min">
-      Based on a primary-source vote record; broader news coverage has not yet confirmed this story.
+      Based on {source}; broader news coverage has not yet confirmed this story.
     </p>
   );
 }
@@ -231,6 +247,16 @@ export function trackableActions(issue: ActionIssue): ActionItem[] {
   return (issue.actions ?? []).filter((a) => a.type === "track_legislation" && a.url);
 }
 
+/** A seat-flip issue's link to the live count (backend
+ * live_results/signals.py). Same-site paths only: the backend writes
+ * these, and anything else is not one of them. */
+export function followResultsActions(issue: ActionIssue): ActionItem[] {
+  return (issue.actions ?? []).filter(
+    (a) =>
+      a.type === "follow_results" && typeof a.url === "string" && a.url.startsWith("/elections/")
+  );
+}
+
 interface ActionRow {
   key: string;
   verb: string;
@@ -258,6 +284,19 @@ interface ActionRow {
  */
 function actionRows(issue: ActionIssue, today: string): ActionRow[] {
   const rows: ActionRow[] = [];
+
+  // A seat-flip issue's first row: the count itself, on its state's page.
+  followResultsActions(issue).forEach((action, i) => {
+    rows.push({
+      key: `results-${i}`,
+      verb: "Follow",
+      what: action.text,
+      detail: "The state's own count, as it comes in",
+      href: action.url!,
+      internal: true,
+      label: "Live count →",
+    });
+  });
 
   const members = issue.relatedSenators ?? [];
   for (const m of members) {
@@ -287,7 +326,10 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       label: url ? "Contact ↗" : "Scorecard →",
     });
   }
-  if (members.length === 0) {
+  // No member to contact: point at the directory — except on a count issue
+  // (a seat changing party on election night), where there is no coverage
+  // to have named anyone and the useful action is the count itself.
+  if (members.length === 0 && followResultsActions(issue).length === 0) {
     rows.push({
       key: "directory",
       verb: "Contact",
@@ -417,7 +459,7 @@ export function Coverage({
   const Heading = headingLevel;
   return (
     <section className={className}>
-      {heading ?? <Heading className={SECTION_HEADING}>In the coverage</Heading>}
+      {heading ?? <Heading className={SECTION_HEADING}>{factsHeading(issue)}</Heading>}
       <ol className="mt-1">
         {facts.map((fact, i) => (
           <li key={i} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 py-2">
@@ -436,7 +478,31 @@ export function Coverage({
           </li>
         ))}
       </ol>
+      <CountAsOf issue={issue} />
     </section>
+  );
+}
+
+/** A count issue's facts are the count as Civitas read it: say when —
+ *  the backend's own read time (countAsOf), the only time that describes
+ *  the figures — and whether the state lists it as official, inside the facts
+ *  section, so a shared image of it (card or page) says so too. With no
+ *  countAsOf (an older backend) it names no time: the time a page happened
+ *  to be rendered is not when the count was read (the issue is written at
+ *  sync time and served from caches), and would overstate how fresh it is. */
+function CountAsOf({ issue }: { issue: ActionIssue }) {
+  if (!factsAreTheCount(issue)) return null;
+  const when = issue.countAsOf ? formatEasternTime(issue.countAsOf) : "";
+  return (
+    <p className="mt-4 text-xs text-ink-min">
+      {countIsOfficial(issue) ? (
+        <span className="text-ink-hi">OFFICIAL COUNT</span>
+      ) : (
+        <span className="text-signal-amber">NOT FINAL</span>
+      )}{" "}
+      · {when ? `the count as of ${when}, when Civitas read it. ` : ""}
+      The state&apos;s own results site has the current count.
+    </p>
   );
 }
 

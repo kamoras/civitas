@@ -8,7 +8,7 @@ import { Summary, Point, Section, P, List, Item, More, A } from "@/components/ab
 export const metadata = pageMetadata({
   title: "Feeds",
   description:
-    "Everything Civitas publishes, as Atom feeds: Action Center issues, Congress's day and week, the daily member spotlight and race news, by topic or by state. No sign-up.",
+    "Everything Civitas publishes, as Atom feeds: Action Center issues, Congress's day and week, the daily member spotlight, race news and election-night counts, by topic or by state. No sign-up.",
   path: "/feeds",
 });
 
@@ -73,8 +73,9 @@ export default async function FeedsPage() {
             <Summary>
               <Point>
                 Every post Civitas publishes goes into these feeds first: Action Center issues, what
-                Congress did each day and week, the daily member spotlight and news about races on
-                the ballot. The Bluesky account posts the same posts, when Bluesky accepts them.
+                Congress did each day and week, the daily member spotlight, news about races on the
+                ballot and, on election night, the count as each state reports it. The Bluesky
+                account posts the same posts, when Bluesky accepts them.
               </Point>
               <Point>
                 Follow everything, one topic or one state. Choosing a feed is your filter, so there
@@ -175,8 +176,11 @@ export default async function FeedsPage() {
                 never their titles. A member spotlight is their scores and rank as numbers. A race
                 update names who did what, both parts copied word for word from a news report about
                 that race; posts by members of the public are never restated, and there are at most
-                four a day. Each links to the page with the full record. More on how the news is
-                handled is in <A href="/about/news">News &amp; Congress reports</A>.
+                four a day. An election-night post is a state&apos;s own count (who leads, their
+                share and how much is in) in a fixed sentence, saying &ldquo;leads&rdquo; until the
+                state lists its count as official; Civitas never calls a race. Each links to the
+                page with the full record. More on how the news is handled is in{" "}
+                <A href="/about/news">News &amp; Congress reports</A>.
               </P>
             </Section>
           </div>

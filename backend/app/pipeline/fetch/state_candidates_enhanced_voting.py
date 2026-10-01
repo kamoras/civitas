@@ -112,6 +112,7 @@ from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     runoff_threshold,
     clean_display_name,
+    is_not_a_person,
     normalize_party,
     STATEWIDE_OFFICE_LABELS,
     parse_office,
@@ -121,6 +122,14 @@ from app.pipeline.fetch.state_candidates_common import (
     surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
+from app.pipeline.fetch.election_results import (
+    ContestCount,
+    StateCount,
+    UntrustedCount,
+    is_special_contest,
+    parse_utc,
+    pick_general,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -303,4 +312,220 @@ async def fetch_confirmed_candidates(
         statewide_by_seat, threshold, name_transform=clean_display_name,
     ) + resolve_confirmed_nominees(
         state_leg_by_seat, threshold, name_transform=clean_display_name,
+    )
+
+
+# --- Live general-election counts (fetch/election_results.py) -------------
+
+def _endpoints(source: dict) -> tuple[str, str, str] | None:
+    """(index url, data url template with {id}, public page template with
+    {id}) for either way a state's entry names this vendor's portal: Rhode
+    Island's base_url + jurisdiction, or the jurisdiction_url/election_url
+    pair GA/WA/VA/UT/ID's tabular entries carry for the same API."""
+    base_url = str(source.get("base_url") or "").rstrip("/")
+    jurisdiction = source.get("jurisdiction")
+    if base_url and jurisdiction:
+        return (
+            f"{base_url}/api/jurisdictions/{jurisdiction}",
+            f"{base_url}/api/elections/{jurisdiction}/{{id}}/data",
+            f"{base_url}/{jurisdiction}/elections/{{id}}",
+        )
+    discovery = source.get("discovery") or {}
+    index_url, election_url = discovery.get("jurisdiction_url"), discovery.get("election_url")
+    if not index_url or not election_url or "/api/jurisdictions/" not in index_url:
+        return None
+    public_base, jurisdiction = index_url.split("/api/jurisdictions/", 1)
+    return (
+        index_url,
+        election_url.replace("{election_id}", "{id}") + "/data",
+        f"{public_base}/{jurisdiction}/elections/{{id}}",
+    )
+
+
+def _house_patterns(source: dict) -> list[re.Pattern]:
+    """The state's own election-night House label formats, from its entry's
+    `house_label_regex` (one pattern or a list, each with a `district`
+    group). parse_office is the shared gate and stays conservative; these
+    are the labels it cannot read, and each is one state's printed format,
+    verified against that state's own general-election payload:
+
+      UT  "U.S. House 1 "   parse_office reads it as House but finds no
+          district, so every seat would collapse onto one at-large race
+      VA  "Member, House of Representatives (2nd District)"   no "U.S.";
+          refused outright, exactly as the primary's house_from_columns
+          entry documents
+      GA  "US House Dist 3"   2022's short form, printed beside the long
+          "US House of Representatives - District 1" on the same ballot
+
+    Configured per state rather than added to parse_office, because the
+    bare forms are only unambiguous inside that one state's federal
+    ballot: "House 1" or "House of Representatives (2nd District)" is a
+    state legislative seat's label somewhere else."""
+    raw = source.get("house_label_regex")
+    if not raw:
+        return []
+    patterns = []
+    for text in [raw] if isinstance(raw, str) else raw:
+        try:
+            pattern = re.compile(text, re.IGNORECASE)
+        except re.error:
+            logger.error("house_label_regex %r does not compile", text)
+            continue
+        if "district" not in pattern.groupindex:
+            logger.error("house_label_regex %r has no (?P<district>...) group", text)
+            continue
+        patterns.append(pattern)
+    return patterns
+
+
+def _office(label: str, house_patterns: list[re.Pattern]) -> tuple[str, int | None] | None:
+    """A contest's federal seat: the state's own House formats first (a
+    label they match is that district, whatever parse_office would make
+    of it), then the shared gate."""
+    for pattern in house_patterns:
+        m = pattern.fullmatch(label.strip())
+        if m:
+            return "H", int(m.group("district"))
+    return parse_office(label)
+
+
+def _general_options(item: dict) -> list[tuple[str, str | None, int]]:
+    """Every candidate's (name, party, votes) in one contest of a live count.
+
+    Write-ins are told apart on the vendor's own two flags. A QUALIFIED
+    write-in is a real, named candidate the state certified to receive
+    write-in votes (Utah's 2024 general lists them with isWriteIn AND
+    isQualifiedWriteIn true -- "STEVE M. JOHNSON", verified 2026-09-28),
+    so their votes are theirs and they stay a candidate. Only an
+    UNqualified write-in line is dropped -- Virginia's single aggregate
+    "Write-In" row per contest (isWriteIn true, isQualifiedWriteIn false)
+    -- and its votes still reach the contest's voteTotal. Washington also
+    prints a "Write-In" row with BOTH flags false, which is why the
+    aggregate-label check stays as well."""
+    candidates = []
+    for option in (item.get("summaryResults") or {}).get("ballotOptions") or []:
+        if not isinstance(option, dict):
+            continue
+        if option.get("isWriteIn") and not option.get("isQualifiedWriteIn"):
+            continue
+        label, votes = _text(option.get("name")), option.get("voteCount")
+        if not label or is_not_a_person(label) or not isinstance(votes, int):
+            continue
+        party = normalize_party(str((option.get("party") or {}).get("abbreviation") or ""))
+        candidates.append((clean_display_name(label), party, votes))
+    return candidates
+
+
+def general_contests(payload: dict, house_patterns: list[re.Pattern] | None = None) -> list[ContestCount]:
+    out = []
+    for item in payload.get("ballotItems") or []:
+        if not isinstance(item, dict) or item.get("contestType") != "Candidate":
+            continue
+        name = _text(item.get("name"))
+        parsed = _office(name, house_patterns or [])
+        if parsed is None:
+            continue
+        status = item.get("reportingStatus") or {}
+        reporting, total = status.get("reportingUnits"), status.get("totalUnits")
+        vote_total = item.get("voteTotal")
+        out.append(ContestCount(
+            office=parsed[0], district=parsed[1], candidates=_general_options(item),
+            total_votes=vote_total if isinstance(vote_total, int) else None,
+            reporting_units=reporting if isinstance(reporting, int) else None,
+            total_units=total if isinstance(total, int) and total > 0 else None,
+            is_special=is_special_contest(name),
+        ))
+    return out
+
+
+def _unit_label(payload: dict, source: dict | None = None) -> str:
+    """What this election's reporting units are. Every Enhanced Voting
+    state verified so far reports by LOCALITY -- a county, or Virginia's
+    counties and independent cities, or Rhode Island's cities and towns --
+    not by precinct: a statewide contest's totalUnits is exactly the number
+    of localityElections (UT 29/29, VA 133/133, GA 159/159, ID 44/44,
+    WA 39/39, RI 40/40; verified 2026-09-28). Said as the state's own
+    localities where that holds (its `locality_label`, default counties:
+    Rhode Island has five counties, not forty), since "29 of 29 precincts"
+    would claim a precinct-level completeness the source never stated;
+    anything else stays precincts.
+
+    A statewide item isn't always on the ballot (Utah elects no senator in
+    2026), and a House contest counts only the localities it covers (UT's
+    districts: 8, 13, 11 and 4 of 29). So a ballot whose every contest
+    counts no more units than the state has localities is locality-counted
+    too; any contest counting more is by precinct."""
+    localities = len([loc for loc in payload.get("localityElections") or [] if isinstance(loc, dict)])
+    if not localities:
+        return "precincts"
+    totals = [
+        t for item in payload.get("ballotItems") or [] if isinstance(item, dict)
+        for t in [(item.get("reportingStatus") or {}).get("totalUnits")]
+        if isinstance(t, int) and not isinstance(t, bool) and t > 0
+    ]
+    if localities not in totals and not (totals and max(totals) <= localities):
+        return "precincts"
+    return (source or {}).get("locality_label") or "counties"
+
+
+# This vendor's own marker for a practice copy of an election, carried in
+# the id rather than the display name: Utah's index lists
+# "primary09052023_Demo" as a plain "2023 Primary Election" (verified
+# 2026-09-28). A demo is never the count, whatever it is dated.
+_DEMO_ID_RE = re.compile(r"(?:^|[_\-\s])(?:demo|test|preview)(?:$|[_\-\s])", re.IGNORECASE)
+
+
+async def fetch_general_results(
+    client: httpx.AsyncClient, election_day, state: str, source: dict,
+) -> StateCount | None:
+    endpoints = _endpoints(source)
+    if endpoints is None:
+        return None
+    index_url, data_url, page_url = endpoints
+    envelope = await fetch_json_with_retry(client, _rate_limiter, index_url, f"{state} Enhanced Voting index")
+    elections = envelope.get("elections") if isinstance(envelope, dict) else None
+    if not isinstance(elections, list):
+        return None
+    day = election_day.isoformat()
+    held = [
+        e for e in elections
+        if isinstance(e, dict) and str(e.get("electionDate") or "").startswith(day) and e.get("publicElectionId")
+    ]
+    demos = [e for e in held if _DEMO_ID_RE.search(str(e["publicElectionId"]))]
+    if demos:
+        logger.info("%s Enhanced Voting: ignoring demo election(s) %s", state, [e["publicElectionId"] for e in demos])
+    election = pick_general(
+        [(_text(e.get("name")), e) for e in held if not _DEMO_ID_RE.search(str(e["publicElectionId"]))], state,
+    )
+    if election is None:
+        return None
+    eid = election["publicElectionId"]
+    payload = await fetch_json_with_retry(
+        client, _rate_limiter, data_url.format(id=eid), f"{state} Enhanced Voting general results",
+    )
+    if not isinstance(payload, dict):
+        return None
+    meta = payload.get("election") or {}
+    # The vendor's own page stamps "TEST" across any election whose
+    # isProduction is false (its public bundle, verified 2026-09-28), and a
+    # county's locality election carries its own flag: a count with any
+    # non-production part in it is not the count.
+    if meta.get("isProduction") is not True or any(
+        isinstance(loc, dict) and loc.get("isProduction") is False for loc in payload.get("localityElections") or []
+    ):
+        raise UntrustedCount(f"{state} Enhanced Voting election {eid} is not production data")
+    if not str(meta.get("electionDate") or "").startswith(day):
+        raise UntrustedCount(f"{state} Enhanced Voting answered for {meta.get('electionDate')!r}, not {day}")
+    return StateCount(
+        source_name=source.get("source_name") or f"{state} election results",
+        page_url=page_url.format(id=eid),
+        official=bool(meta.get("isOfficialResults")),
+        unit_label=_unit_label(payload, source),
+        contests=general_contests(payload, _house_patterns(source)),
+        # lastUpdated only — when the count last changed. asOf is when the
+        # payload was rendered (a year past lastUpdated in Utah's 2024
+        # file), and falling back to it for one poll stored a stamp every
+        # later lastUpdated was "older" than, refusing the state's count as
+        # gone back for as long as that gap. No lastUpdated: no time guard.
+        source_updated=parse_utc(meta.get("lastUpdated")),
     )

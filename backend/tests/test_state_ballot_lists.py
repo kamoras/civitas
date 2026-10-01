@@ -331,6 +331,25 @@ async def test_a_non_candidate_row_never_becomes_a_person(db_session, only):
 
 
 @pytest.mark.asyncio
+async def test_a_person_named_blank_is_a_person_but_a_write_in_is_not_on_the_ballot(db_session, only):
+    """The aggregate-row filter matches whole labels: a candidate surnamed
+    Blank is shown, while a name the source marks as a write-in is still
+    not a person printed on the November ballot."""
+    _race(db_session, "2026-HOUSE-LA-2", "LA", office="H", district=2)
+    db_session.commit()
+    only("LA", [_rec("H", 2, "D", "Blank", "Mary Blank"),
+                _rec("H", 2, None, "Redkey", "Redkey, David (Write-In)"),
+                _rec("H", 2, None, "Blank", "Blank Votes"),
+                _rec("H", 2, None, "Voted", "Times Blank Voted"),
+                _rec("H", 2, None, "Delegates", "Uncommitted Delegates"),
+                _rec("H", 2, None, "Votes", "Over/Under Votes")])
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert [c.name for c in db_session.query(Candidate)] == ["BLANK, MARY"]
+
+
+@pytest.mark.asyncio
 async def test_primary_results_never_unconfirm_anyone(db_session, only):
     # Pennsylvania reads primary results: a later fetch that doesn't list a
     # nominee is not evidence they left the ballot.

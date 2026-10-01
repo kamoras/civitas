@@ -245,6 +245,7 @@ def real_client(tmp_path_factory):
     per-test.
     """
     from app.main import app
+    from app.scheduler import scheduler
     from tests.conftest import pin_population_references, redirect_data_volume, use_app_database
 
     # Its scheduler beats the heartbeat file, and its startup rescore reads
@@ -258,6 +259,12 @@ def real_client(tmp_path_factory):
         engines = use_app_database(mp, tmp_path_factory.mktemp("app-database"))
         try:
             with TestClient(app) as client:
+                # The lifespan started the real scheduler; pause it so a cron
+                # boundary on the wall clock (every job, every five minutes
+                # for the live-results sync) can't run a job mid-test.
+                # Starting it still ran.
+                if scheduler.running:
+                    scheduler.pause()
                 yield client
         finally:
             for engine in engines:

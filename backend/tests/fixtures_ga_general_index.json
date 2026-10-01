@@ -1,0 +1,44 @@
+{
+ "elections": [
+  {
+   "publicElectionId": "08252026SpecialElectionRunoff",
+   "electionDate": "2026-08-25",
+   "name": [
+    {
+     "languageId": "en",
+     "text": "August 25th, 2026 Special Election Runoff"
+    }
+   ]
+  },
+  {
+   "publicElectionId": "2024MarPPP",
+   "electionDate": "2024-03-12",
+   "name": [
+    {
+     "languageId": "en",
+     "text": "March 12, 2024 Presidential Preference Primary "
+    }
+   ]
+  },
+  {
+   "publicElectionId": "2024NovGen",
+   "electionDate": "2024-11-05",
+   "name": [
+    {
+     "languageId": "en",
+     "text": "November General Election"
+    }
+   ]
+  },
+  {
+   "publicElectionId": "2022NovGen",
+   "electionDate": "2022-11-08",
+   "name": [
+    {
+     "languageId": "en",
+     "text": "November 8, 2022 - General/Special Election"
+    }
+   ]
+  }
+ ]
+}

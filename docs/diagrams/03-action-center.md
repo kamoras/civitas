@@ -178,6 +178,22 @@ stage per run below the floor. A fit needs 30 pairs per class, otherwise the
 previous value stays. The bundled `app/data/action_thresholds.json` covers the
 time before the first fit.
 
+## Issues drafted before the press has them
+
+Four kinds of primary record open a DEVELOPING issue, ranked below every
+confirmed issue and promoted when news coverage matches it. `early_signal.py`
+drafts three: a Senate roll call (`senate_roll_call_vote`), a House roll call
+(`house_roll_call_vote`), both final-passage votes only, and a Federal
+Register significant rule (`federal_register_significant_rule`). The fourth
+is election night's: a seat whose live count shows it changing party
+(`live_results/signals.py`, source type `election_results`, a fixed template
+around the state's own figures, no model text; see
+[Elections](10-elections.md#election-night-the-live-count)). The issue page
+names which record each was drafted from (`frontend/src/lib/developing.ts`).
+The issues list shows a current DEVELOPING issue beside the newest day's
+confirmed ones whatever its own date, so a flip drafted just before midnight
+Eastern doesn't drop off the list at the next refresh.
+
 ## Known limitation, disclosed on the methodology page
 
 Under common media-bias ratings the source diet spans centre to lean-left, with
@@ -194,3 +210,4 @@ list, not a neutral sample of all coverage.
 | Feed list | `backend/app/pipeline/fetch/news_feeds.py::NEWS_FEEDS` |
 | Trending | `backend/app/pipeline/fetch/trending.py` |
 | Bluesky | `analyze/bluesky_{poster,spotlight,engagement,utils}.py` |
+| Election-night flips | `backend/app/live_results/signals.py` |

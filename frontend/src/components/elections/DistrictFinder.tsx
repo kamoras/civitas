@@ -17,8 +17,8 @@ import type { RaceWithCandidates } from "@/types/election";
  * its county list), so this needs no new data, no lookup service and no
  * network call.
  *
- * Nationally 13% of counties span more than one district (409 of
- * 3,142), so a county cannot always answer on its own — those offer the
+ * Nationally 13% of counties span more than one district (414 of
+ * 3,142 on the 2026 lines), so a county cannot always answer on its own — those offer the
  * two or three districts as a second tap rather than sending the reader
  * away. Nothing is typed, sent or stored either way.
  */
