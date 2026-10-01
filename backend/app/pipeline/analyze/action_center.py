@@ -4024,7 +4024,22 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 # - The surname is whole: a multi-word or hyphenated one as a unit
 #   ("Catherine Cortez Masto", "Mariannette Miller-Meeks"); accents and
 #   curly apostrophes folded ("Linda Sánchez", "Beto O’Rourke"); a suffix
-#   ("Jr.") may follow. Case is ignored — "WAYNE JOHNSON LEADS …" names him.
+#   ("Jr.") may follow.
+# - It is written as a name (_name_cased): every word before the surname,
+#   and the surname's last word, capitalised. "WAYNE JOHNSON LEADS …"
+#   names him; "voters will mark green ribbons" is not Mark Green.
+# - A feed's printing is read against the person's FEC filing (_printed_given_start):
+#   Arkansas's feed prints "Congressman Steve Womack", and "Congressman"
+#   is not a word he filed or one with his first filed initial, so the
+#   given name is Steve and "Congressman Womack" is a surname alone.
+# - Initials count only together: a quoted "A.J." is one name ("A.J.",
+#   "A. J.", "AJ"), as is a record of initials alone ("VANCE, J. D.");
+#   one bare letter is never a given name, and a quoted single letter
+#   ("(I)", incumbent) is a ballot annotation.
+#
+# Two people sharing a full name are not told apart: a namesake named in
+# full beside the seat's phrase promotes it. Nothing on record separates
+# them, and the phrase must name this very seat too.
 #
 # A surname alone never names a candidate. Every round that graded surname
 # mentions ("Johnson", "Rep. Bishop") found another: a title or article in
@@ -4040,9 +4055,11 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 # stored), the phrase alone decides, as before.
 #
 # In a state with two Senate races, a phrase that says neither "special"
-# nor "regular" is told apart by whose full names the story uses: the race
-# whose candidate is named, and none of the other race's, is the one; both
-# races' candidates named is a story about the two, which names neither.
+# nor "regular" is told apart by whose names the story uses: the race
+# whose candidate is named in full, and none of the other race's by any
+# mention — a capitalised surname alone included, since holding back can
+# only cost a miss — is the one; both races' candidates named is a story
+# about the two, which names neither.
 
 
 class _Person(NamedTuple):
@@ -4067,19 +4084,29 @@ def _strip_accents(text: str) -> str:
 _QUOTED_NICKNAME = re.compile(r"[\"“”(]\s*([^\"“”()]+?)\s*[\"“”)]|(?<!\S)'([^'\s]+)'(?!\S)")
 
 
-def _record_name(name: str | None) -> tuple[str, list[str], list[str]]:
-    """(surname, given names in order, quoted nicknames) of one recorded
-    name, FEC's "LAST, FIRST MIDDLE" or a printed "First Middle Last", all
-    folded. Honorifics and suffixes are dropped; initials are kept as one
-    letter."""
+class _RecordName(NamedTuple):
+    surname: str
+    given: list[str]  # in order; an initial is one letter
+    nicknames: list[str]  # quoted; an initials nickname ("A.J.") as one "a.j"
+    filed: bool  # FEC's "LAST, FIRST": a filing, not a printing
+
+
+def _record_name(name: str | None) -> _RecordName:
+    """The surname, given names in order and quoted nicknames of one
+    recorded name, FEC's "LAST, FIRST MIDDLE" or a printed "First Middle
+    Last", all folded. Honorifics and suffixes are dropped; initials are
+    kept as one letter. A quoted nickname of initials ("A.J.", "T.J.") is
+    kept whole, as "a.j"; a single quoted letter is a ballot annotation
+    ("(I)" for incumbent), not a name, and is dropped."""
     from app.pipeline.candidate_dedup import normalized_surname
     from app.pipeline.fetch.state_candidates import _NOT_A_NAME, _without_trailing_suffix
     from app.pipeline.fetch.state_candidates_common import surname
 
     text = _strip_accents(name or "").lower()
-    nicknames = [a or b for a, b in _QUOTED_NICKNAME.findall(text)]
+    quoted = [a or b for a, b in _QUOTED_NICKNAME.findall(text)]
     text = _without_trailing_suffix(_QUOTED_NICKNAME.sub(" ", text))
-    if "," in text:
+    filed = "," in text
+    if filed:
         last = normalized_surname(text)
         given_part = text.split(",", 1)[1]
     else:
@@ -4093,33 +4120,111 @@ def _record_name(name: str | None) -> tuple[str, list[str], list[str]]:
                   for t in part.replace(".", " ").split())
         return [t for t in tokens if t and t not in _NOT_A_NAME]
 
-    return last.strip(), names(given_part), [n for nick in nicknames for n in names(nick)]
+    nicknames: list[str] = []
+    for nick in quoted:
+        tokens = names(nick)
+        if len(tokens) > 1 and all(len(t) == 1 for t in tokens):
+            nicknames.append(".".join(tokens))  # "a.j": initials, one name
+        else:
+            nicknames += [t for t in tokens if len(t) > 1]
+    return _RecordName(last.strip(), names(given_part), nicknames, filed)
 
 
-def _person(names: list[str | None]) -> _Person | None:
+def _given_fits(token: str, filings: list[_RecordName]) -> bool:
+    """Whether a printed given-name token can be the filed person's: a
+    given name or nickname they filed, or the initial of their first filed
+    given name or of a nickname ("Steve" for STEPHEN, "S." for it too).
+    "Congressman" in Arkansas's "Congressman Steve Womack" is neither, so
+    it is not read as his given name — the filing decides what a name is,
+    not a list of titles."""
+    for filing in filings:
+        if token in filing.given or token in filing.nicknames:
+            return True
+        if filing.given and token[0] == filing.given[0][0]:
+            return True
+        if any(token[0] == n[0] for n in filing.nicknames):
+            return True
+    return False
+
+
+def _printed_given_start(given: list[str], filings: list[_RecordName]) -> int | None:
+    """Where a printing's given names start: the first token that fits the
+    filing (_given_fits), passing over one followed by another fitting
+    full word that the filing doesn't state as a middle name ("Senator
+    Steve Womack" for STEPHEN: "Steve" fits by its initial as well, and
+    is the name). An exact first filed name or nickname always stands."""
+    exact = {f.given[0] for f in filings if f.given} | {n for f in filings for n in f.nicknames}
+    filed_middles = {g for f in filings for g in f.given[1:]}
+    fits = [_given_fits(g, filings) for g in given]
+    for i, g in enumerate(given):
+        if not fits[i]:
+            continue
+        if g in exact:
+            return i
+        after = given[i + 1] if i + 1 < len(given) else None
+        if after is not None and fits[i + 1] and len(after) > 1 and after not in filed_middles:
+            continue
+        return i
+    return None
+
+
+def _person(names: list[str | None], count_printing: str | None = None,
+            reference: list[str | None] = ()) -> _Person | None:
     """One candidate from every name on record for them (FEC's, the
     count's printing, the ballot's), or None when none states a surname.
     A printing that reads only the last word of a multi-word surname as
     the surname ("Catherine Cortez Masto" read as "Masto", beside FEC's
     "CORTEZ MASTO, CATHERINE") is the same person, with the whole
-    surname."""
-    records = [r for r in map(_record_name, filter(None, names)) if r[0]]
+    surname.
+
+    `count_printing`, the name as a results feed prints it (one of
+    `names`), is read against the person's FEC filing: a feed can print an
+    honorific the ballot doesn't (Arkansas: "Congressman Steve Womack").
+    The first printed token that fits the filing (_printed_given_start) is
+    where its given names start, and words before it are not names; none
+    fitting, it states no given name. With no filing among `names`, the
+    race's own filings of that surname (`reference`) are checked the same
+    way, except that a printing none of whose tokens fits them stands as
+    printed (it may be someone else of that surname); with neither, it
+    stands as printed. A ballot's printing is the state's official one and
+    stands as printed."""
+    records = [r for r in map(_record_name, filter(None, names)) if r.surname]
     if not records:
         return None
-    last = max((r[0] for r in records), key=lambda s: len(s.split()))
+    last = max((r.surname for r in records), key=lambda s: len(s.split()))
+
+    def mine(r: _RecordName) -> bool:
+        return r.surname == last or last.endswith(" " + r.surname)
+
+    checked = _record_name(count_printing) if count_printing else None
+    filings = [r for r in records if r.filed and mine(r)]
+    strict = bool(filings)
+    if not filings:
+        filings = [r for r in map(_record_name, filter(None, reference)) if r.filed and mine(r)]
     leads, initials, middles = set(), set(), set()
-    for surname, given, nicknames in records:
-        if surname != last and not last.endswith(" " + surname):
+    for record in records:
+        if not mine(record):
             continue  # a record of someone else (it can't be this person's)
+        surname, given, nicknames, filed = record
         extra = last.split()[:-len(surname.split())] if surname != last else []
         if extra and given[-len(extra):] == extra:
             given = given[:-len(extra)]  # "catherine cortez" + "masto"
+        if record == checked and not filed and filings:
+            at = _printed_given_start(given, filings)
+            given = given[at:] if at is not None else ([] if strict else given)
         leads.update(nicknames)
-        middles.update(nicknames)
+        middles.update(n for n in nicknames if "." not in n)
         if not given:
             continue
+        if len(given) > 1 and all(len(g) == 1 for g in given):
+            # All initials ("VANCE, J. D."): together they are the name.
+            leads.add(".".join(given))
+            initials.add(given[0])
+            middles.update(given[1:])
+            continue
         # The first given name, or the name after a leading initial ("J.
-        # Robert Smith" goes by Robert); its initial stands for it.
+        # Robert Smith" goes by Robert); its initial stands for it. A
+        # single letter is never a lead.
         first = given[0] if len(given[0]) > 1 or len(given) == 1 else given[1]
         if len(first) > 1:
             leads.add(first)
@@ -4155,15 +4260,24 @@ def _race_people(db, race_id: str) -> list[_Person] | None:
             continue
         names = [str(tally.get("name") or "")]
         cand = db.get(Candidate, tally["candidateId"]) if tally.get("candidateId") else None
-        if cand is not None and cand.race_id == race_id:
+        linked = cand is not None and cand.race_id == race_id
+        # The feed's own printing, unless sync already put the ballot's in its place.
+        printed = names[0] if not (linked and names[0] == cand.ballot_name) else None
+        if linked:
             names += [cand.name, cand.ballot_name]
-        person = _person(names)
+        person = _person(names, printed)
         if person is not None and not person.leads and not person.initials:
             # A count that prints only a surname ("JOHNSON"): the race's own
             # Candidate rows of that surname state the given name.
-            names += [n for c in race_rows() if _record_name(c.name)[0] == person.surname
+            names += [n for c in race_rows() if _record_name(c.name).surname == person.surname
                       for n in (c.name, c.ballot_name)]
-            person = _person(names)
+            person = _person(names, printed)
+        elif person is not None and not linked:
+            # A count row matched to no Candidate: its printed given names
+            # are still checked against the race's filings of that surname
+            # (an honorific the feed prints is not a given name).
+            person = _person(names, printed, [c.name for c in race_rows()
+                                              if _record_name(c.name).surname == person.surname])
         if person is not None:
             people.append(person)
     if not people:
@@ -4172,33 +4286,75 @@ def _race_people(db, race_id: str) -> list[_Person] | None:
     return people or None
 
 
+def _surname_pattern(person: _Person) -> str:
+    """The regular expression for `person`'s whole surname: its words
+    joined by a space or a hyphen, an apostrophe optional."""
+    return r"(?:[^\S\n]*-[^\S\n]*|[^\S\n]+)".join(
+        re.escape(t).replace("'", "'?") for t in re.split(r"[\s-]+", person.surname) if t
+    )
+
+
+def _lead_pattern(lead: str) -> str:
+    """A lead given name; an initials one ("a.j") matches "A.J.", "A. J."
+    and "AJ", never two bare letters ("A J")."""
+    if "." not in lead:
+        return re.escape(lead)
+    return r"(?:\.[^\S\n]*)?".join(re.escape(ch) for ch in lead.split(".")) + r"\.?"
+
+
 @lru_cache(maxsize=1024)
 def _candidate_name_pattern(person: _Person) -> re.Pattern | None:
     """The regular expression a story's (accent-folded) text must match to
     name `person` by full name (see the rule above); None when the records
-    state no given name to name them by."""
+    state no given name to name them by. Case is ignored here and checked
+    by _name_cased, on the matched span."""
     leads = sorted(person.leads, key=len, reverse=True)
-    starts = [re.escape(g) for g in leads] + [rf"{re.escape(i)}\." for i in sorted(person.initials)]
+    starts = [_lead_pattern(g) for g in leads] + [rf"{re.escape(i)}\." for i in sorted(person.initials)]
     if not starts:
         return None
     middle_names = sorted((m for m in person.middles if len(m) > 1), key=len, reverse=True)
     middle_initials = {m[0] for m in person.middles}
     initial = rf"[{''.join(sorted(middle_initials))}]\.?" if middle_initials else r"[a-z]\.?"
     middle = "|".join([initial, *(rf"[\"“”']?{re.escape(m)}[\"“”']?" for m in middle_names)])
-    surname = r"(?:[^\S\n]*-[^\S\n]*|[^\S\n]+)".join(
-        re.escape(t).replace("'", "'?") for t in re.split(r"[\s-]+", person.surname) if t
-    )
     # [^\S\n]: a name never runs across a line break (title, summary and
     # facts are separate lines: _may_match).
     return re.compile(
-        rf"(?<![\w'.-])(?:{'|'.join(starts)})[^\S\n]+(?:(?:{middle})[^\S\n]+){{0,2}}(?:{surname})(?![\w]|-\w)",
+        rf"(?<![\w'.-])(?:{'|'.join(starts)})[^\S\n]+(?:(?:{middle})[^\S\n]+){{0,2}}"
+        rf"(?P<surname>{_surname_pattern(person)})(?![\w]|-\w)",
         re.IGNORECASE,
     )
 
 
-def _names_a_candidate(text: str, people: list[_Person]) -> bool:
+@lru_cache(maxsize=1024)
+def _surname_alone_pattern(person: _Person) -> re.Pattern:
+    """`person`'s surname as a whole word (case checked by _name_cased)."""
+    return re.compile(rf"(?<![\w'-])(?P<surname>{_surname_pattern(person)})(?![\w]|-\w)", re.IGNORECASE)
+
+
+def _starts_upper(word: str) -> bool:
+    """Whether a word's first letter is a capital ("O'Rourke", "A.J.")."""
+    return next((ch.isupper() for ch in word if ch.isalpha()), False)
+
+
+def _name_cased(match: re.Match) -> bool:
+    """Whether a matched name is written as a name: every word before the
+    surname, and the surname's last word, capitalised ("Mark Green", "Beto
+    O'Rourke", "Chris van Hollen", "WAYNE JOHNSON"). The patterns ignore
+    case so that an all-capitals headline still names; this is what keeps
+    prose from doing so — "will mark green ribbons" is not Mark Green. A
+    surname's inner words may be lower case ("van", "de la"): no list of
+    particles is needed when only its last word is checked."""
+    before = match.string[match.start():match.start("surname")]
+    last = re.split(r"[\s-]+", match.group("surname"))[-1]
+    return all(_starts_upper(w) for w in before.split()) and _starts_upper(last)
+
+
+def _names_a_candidate(text: str, people: list[_Person], surname_alone: bool = False) -> bool:
     """Whether `text` names one of `people` (from _race_people) by full
-    name."""
+    name, written as a name (_name_cased). With `surname_alone`, a
+    capitalised surname on its own counts too — only for holding a story
+    back (_other_senate_race_named), where reading too much into a
+    surname can cost a miss and never a wrong promotion."""
     folded = _strip_accents(text)
     lower = folded.lower()
     for person in people:
@@ -4206,8 +4362,8 @@ def _names_a_candidate(text: str, people: list[_Person]) -> bool:
         # leading lookbehind defeats the regex engine's own literal scan.
         if max(re.split(r"['\s-]+", person.surname), key=len) not in lower:
             continue
-        pattern = _candidate_name_pattern(person)
-        if pattern is not None and pattern.search(folded):
+        pattern = _surname_alone_pattern(person) if surname_alone else _candidate_name_pattern(person)
+        if pattern is not None and any(_name_cased(m) for m in pattern.finditer(folded)):
             return True
     return False
 
@@ -4424,8 +4580,8 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
 
 def _other_senate_race_named(db, cycle: int, state: str, race_id: str, story_text: str) -> bool | None:
     """Whether the story names a candidate of the state's OTHER Senate race
-    this cycle (Georgia 2020's regular race, for its special) by full name.
-    None when that can't be known: no session, no other race found, or no
+    this cycle (Georgia 2020's regular race, for its special) by any
+    mention: full name or capitalised surname. None when that can't be known: no session, no other race found, or no
     candidate on record for it."""
     if db is None:
         return None
@@ -4435,7 +4591,10 @@ def _other_senate_race_named(db, cycle: int, state: str, race_id: str, story_tex
     known = [theirs for rid in others if (theirs := _race_people(db, rid)) is not None]
     if not others or len(known) != len(others):
         return None
-    return any(_names_a_candidate(story_text, theirs) for theirs in known)
+    # Leniently: a capitalised surname of theirs is enough to hold back
+    # ("Raphael Warnock leads as Perdue concedes to Ossoff" is about both
+    # races). Holding back can only cost a miss.
+    return any(_names_a_candidate(story_text, theirs, surname_alone=True) for theirs in known)
 
 
 def _may_match(candidate, title: str, facts: list, summary: str, db=None) -> bool:

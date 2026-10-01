@@ -3534,3 +3534,117 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         db = self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
         issue = self._flip_issue("2026-SEN-OH-SPECIAL", "the U.S. Senate race")
         assert self._match(issue, "Ohio's special U.S. Senate election tightens", db=db) is issue
+
+    @pytest.mark.parametrize("race_id,text", [
+        # One race's candidate by full name, the other's by surname: about both.
+        ("2020-SEN-GA-SPECIAL", "Georgia Senate runoff: Raphael Warnock leads as Perdue concedes to Ossoff"),
+        ("2020-SEN-GA-SPECIAL",
+         "Ossoff, Perdue trade leads in Georgia Senate runoff\nRaphael Warnock declared he would wait for every vote."),
+        ("2020-SEN-GA", "Georgia Senate runoff: Jon Ossoff leads; Warnock and Loeffler too close to call"),
+    ])
+    def test_any_mention_of_the_other_races_candidate_holds_a_story_back(self, db_session, race_id, text):
+        db = self._two_georgia_senate_races(db_session)
+        issue = self._flip_issue(race_id, "Georgia's U.S. Senate")
+        assert self._match(issue, text, db=db) is None, text
+
+    def test_a_count_printing_an_honorific_is_read_against_the_filing(self, db_session):
+        """Arkansas's feed prints "Congressman Steve Womack"; FEC files
+        WOMACK, STEPHEN ALLEN. The title is not his given name."""
+        from app.models import Candidate, RaceResult
+        from app.pipeline.analyze.action_center import _race_people
+
+        db = db_session
+        db.add(Candidate(id="H0AR03001", race_id="2026-HOUSE-AR-3", name="WOMACK, STEPHEN ALLEN", party="REP"))
+        db.add(Candidate(id="H0AR04001", race_id="2026-HOUSE-AR-4", name="WESTERMAN, BRUCE", party="REP"))
+        db.commit()
+        db.add(RaceResult(race_id="2026-HOUSE-AR-3", election_date="2026-11-03", source_name="State results",
+                          tallies=json.dumps([
+                              {"name": "Pat Quimby", "votes": 12},
+                              {"name": "Congressman Steve Womack", "votes": 10, "candidateId": "H0AR03001"},
+                          ])))
+        # Not linked to a Candidate row: the race's filing of that surname is the check.
+        db.add(RaceResult(race_id="2026-HOUSE-AR-4", election_date="2026-11-03", source_name="State results",
+                          tallies=json.dumps([
+                              {"name": "Pat Quimby", "votes": 12}, {"name": "Congressman Bruce Westerman", "votes": 10},
+                          ])))
+        db.commit()
+        womack = [p for p in _race_people(db, "2026-HOUSE-AR-3") if p.surname == "womack"][0]
+        assert womack.leads == {"steve", "stephen"} and womack.initials == {"s"}
+        ar3 = self._flip_issue("2026-HOUSE-AR-3", "Arkansas's 3rd")
+        assert self._match(ar3, "Congressman Womack concedes in Arkansas's 3rd District", db=db) is None
+        assert self._match(ar3, "Steve Womack concedes in Arkansas's 3rd District", db=db) is ar3
+        assert self._match(ar3, "Stephen Womack concedes in Arkansas's 3rd District", db=db) is ar3
+        ar4 = self._flip_issue("2026-HOUSE-AR-4", "Arkansas's 4th")
+        assert self._match(ar4, "Congressman Westerman wins Arkansas's 4th District", db=db) is None
+        assert self._match(ar4, "Bruce Westerman wins Arkansas's 4th District", db=db) is ar4
+
+    def test_a_printed_name_with_no_filing_stands_as_printed(self):
+        from app.pipeline.analyze.action_center import _person
+
+        assert _person(["Pat Quimby"], "Pat Quimby").leads == {"pat"}
+        # A filing of the person decides which word of a feed's printing is
+        # the given name ...
+        assert _person(["Senator Steve Womack", "WOMACK, STEPHEN"], "Senator Steve Womack").leads == {
+            "steve", "stephen"}
+        assert _person(["Congressman Womack", "WOMACK, STEPHEN"], "Congressman Womack").leads == {"stephen"}
+        # ... but the ballot's printing is the state's own, and stands: a
+        # nickname FEC doesn't quote ("Bob" for ROBERT) still names him.
+        assert _person(["Bob Casey", "CASEY, ROBERT P JR", "Bob Casey"], None).leads == {"bob", "robert"}
+
+    @pytest.mark.parametrize("district,names,text,named", [
+        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
+         "Georgia's 2nd District: a Johnson aide said turnout was high", False),
+        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
+         "Georgia's 2nd District: a Bishop aide says a Johnson win is unlikely", False),
+        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
+         "A.J. Johnson leads in Georgia's 2nd District", True),
+        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
+         "A. J. Johnson leads in Georgia's 2nd District", True),
+        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
+         "AJ Johnson leads in Georgia's 2nd District", True),
+        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
+         "A J Johnson leads in Georgia's 2nd District", False),
+        ("TX-9", ('SMITH, TERRENCE "T.J."', 'GREEN, ALEXANDER "AL"'),
+         "Texas's 9th District sees J Smith Elementary reopen", False),
+        ("TX-9", ('SMITH, TERRENCE "T.J."', 'GREEN, ALEXANDER "AL"'),
+         "T.J. Smith leads in Texas's 9th District", True),
+        # A record that is all initials is named by them, together.
+        ("OH-2", ("VANCE, J. D.", "QUIMBY, PAT"),
+         "J.D. Vance leads in Ohio's 2nd District", True),
+        ("OH-2", ("VANCE, J. D.", "QUIMBY, PAT"),
+         "J. D. Vance leads in Ohio's 2nd District", True),
+        ("OH-2", ("VANCE, J. D.", "QUIMBY, PAT"),
+         "JD Vance leads in Ohio's 2nd District", True),
+        ("OH-2", ("VANCE, J. D.", "QUIMBY, PAT"),
+         "D. Vance leads in Ohio's 2nd District", False),
+    ])
+    def test_initials_are_a_name_only_together(self, db_session, district, names, text, named):
+        from app.models import Candidate
+
+        race_id = f"2026-HOUSE-{district}"
+        for i, name in enumerate(names):
+            db_session.add(Candidate(id=f"H{i}", race_id=race_id, name=name, party="DEM", confirmed_general=True))
+        db_session.commit()
+        issue = self._flip_issue(race_id, "the race")
+        assert (self._match(issue, text, db=db_session) is issue) is named, text
+
+    def test_a_single_quoted_letter_is_an_annotation_not_a_name(self):
+        from app.pipeline.analyze.action_center import _person
+
+        person = _person(["Wayne Johnson (I)"])
+        assert person.leads == {"wayne"} and person.middles == frozenset()
+
+    @pytest.mark.parametrize("names,text,named", [
+        (("Mark Green", "Pat Quimby"),
+         "Voters in Tennessee's 7th District will mark green ribbons on their ballots", False),
+        (("Mark Green", "Pat Quimby"), "Mark green ribbons in Tennessee's 7th District", False),
+        (("Mark Green", "Pat Quimby"), "Mark Green wins Tennessee's 7th District", True),
+        (("Mark Green", "Pat Quimby"), "MARK GREEN WINS TENNESSEE'S 7TH DISTRICT", True),
+        (("VAN HOLLEN, CHRIS", "Pat Quimby"), "Chris van Hollen leads in Tennessee's 7th District", True),
+        (("Beto O'Rourke", "Pat Quimby"), "Beto O'Rourke leads in Tennessee's 7th District", True),
+        (("Beto O'Rourke", "Pat Quimby"), "beto o'rourke leads in Tennessee's 7th District", False),
+    ])
+    def test_a_name_is_written_as_a_name(self, db_session, names, text, named):
+        db = self._count(db_session, "2026-HOUSE-TN-7", *names)
+        issue = self._flip_issue("2026-HOUSE-TN-7", "Tennessee's 7th")
+        assert (self._match(issue, text, db=db) is issue) is named, text

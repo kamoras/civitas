@@ -514,7 +514,17 @@ printed first name, or its initial with a period), matched exactly — no
 prefix fit, so "Donna Davis" is not Don Davis — then optionally a middle
 name or initial that doesn't contradict the record, then the whole surname
 (multi-word or hyphenated as a unit, accents and curly apostrophes folded,
-a suffix allowed after), case ignored. A surname alone never counts
+a suffix allowed after). A results feed's printed name (not the ballot's,
+which stands) is read against the person's FEC filing: its given name starts at the first word that is a filed name or
+shares the initial of the first filed name or nickname, so "Congressman
+Steve Womack" (filed STEPHEN) is Steve, and "Congressman Womack" is a
+surname alone. Initials count only together ("A.J.", "A. J.", "AJ"; "J.D.
+Vance" for a record of initials alone), never as one bare letter; a quoted
+single letter ("(I)") is an annotation. The name must be written as one:
+every word before the surname and the surname's last word capitalised
+("WAYNE JOHNSON" counts, "mark green ribbons" is not Mark Green). Two
+people sharing a full name aren't told apart — an accepted limit. A
+surname alone never counts
 ("Johnson", "Rep. Bishop", "Sen. Warnock"): graded surname evidence went
 through eight review rounds, and each found a new namesake, title or
 common word it let through. A legislature or commission story names other
@@ -522,7 +532,9 @@ people, so no prose regex has to foresee it.
 Where a state holds two Senate races, a phrase saying neither "special" nor
 "regular" is told apart by whose candidates it names ("Raphael Warnock
 defeats Kelly Loeffler in Georgia Senate runoff" is the 2020 special;
-naming both races' candidates names neither). With no candidate on record the phrase decides
+naming both races' candidates names neither, and any mention of the other
+race's candidate — a capitalised surname alone included — holds it back:
+"Raphael Warnock leads as Perdue concedes to Ossoff" is about both). With no candidate on record the phrase decides
 alone. A story naming the race but no candidate leaves the issue
 DEVELOPING — a miss the next story can fix, where a wrong promotion can't
 be undone. Once promoted it is the news story's, matching later coverage
