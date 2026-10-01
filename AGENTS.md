@@ -324,15 +324,118 @@ The correct pattern, established by `_district_pvi()` /
    drift) — this is normal, expected maintenance, not a one-time setup
    step to forget about.
 
-   Exception (2026-07): `_district_pvi()` / `district_pvi.json` no longer
-   needs this step — `app/pipeline/fetch/district_pvi.py` refreshes it
-   automatically inside the Supplementary pipeline, since it just scrapes
-   whatever Cook PVI value Wikipedia's infoboxes currently show (no
-   election-year window is hardcoded in the fetch itself, unlike
-   state_pvi.json — see `ops_alerts.check_state_pvi_staleness` for why
-   that one's sources are deliberately pinned and can't self-advance the
-   same way). `scripts/fetch_district_pvi.py` still exists only to
-   regenerate the bundled pre-first-ingest fallback.
+   `district_pvi.json` is fetched by the pipeline, not only by the
+   script, but from **pinned** sources (2026-09):
+   `app/data/district_pvi_sources.json` names, per Congress, one
+   immutable revision of Wikipedia's "Cook Partisan Voting Index"
+   article whose citation states the Cook release and the map it
+   describes. `app/pipeline/fetch/district_pvi.py` fetches exactly those
+   revisions (Supplementary, weekly; before a House run when the file is
+   missing, predates pinning, or is not at the current pins), gates them — every seat of the House
+   Clerk's apportionment exactly once, the revision's own prose
+   counts must match its table and its stated median must be the table's
+   exactly (a pin may declare a `median_tolerance` only with a written
+   `_why_median_tolerance`); a redrawn Congress must be identical to its
+   base outside the redrawn states, and in each redrawn state differ
+   somewhere while keeping the state's mean district lean (a redraw moves
+   voters between a state's districts, not out of it) — and writes every
+   Congress's table under `congresses`, with the sitting Congress's as
+   the top-level `districts` member scoring reads. Member scoring must use
+   the lines the member was *elected on*; the elections pages use the
+   lines of the Congress the election seats (`district_pvi_for_congress`),
+   or — for a Congress nobody has pinned yet, which is every next cycle
+   from the day after an election — the newest pinned lines before it.
+   Do not go back to scraping each district's live infobox: it did that
+   until 2026-09, and when nine states redrew for 2026 editors swapped in
+   new-map values district by district, leaving member scoring on a
+   silent mix of two maps (TN-9 read R+9 for a member elected in a D+23
+   seat). The Supplementary run compares the live article with the newest
+   pin and raises an ops alert on a difference (once per distinct
+   difference); it never ingests it.
+
+   "Sitting" is `settings.CURRENT_CONGRESS` — the same value the scored
+   windows read (roll-call sessions, bills, Voteview ideal points), so a
+   House run can never score one Congress's votes on another's lines. It
+   starts as the Congress in office when the process starts (noon ET on
+   Jan 3 of an odd year, the 20th Amendment's hand-over — not midnight,
+   which gave a process started that morning the new windows on the old
+   lines), and `app.config.scoring_congress` advances it to the Congress
+   in office at the start of every background job and holds it for that
+   job — `app.background.start_writer` (every scheduled job, every trigger,
+   the startup rescore) and `writing()` take the hold themselves, so no
+   writer can start without one. The hold is a ContextVar that every read
+   of the setting in the job's context answers (including asyncio tasks,
+   work handed to `asyncio.to_thread` and `contextvars.copy_context().run`;
+   a plain `threading.Thread`, `loop.run_in_executor` or
+   `ThreadPoolExecutor.submit` does not inherit it and reads the
+   process-wide value — hand such work over with `asyncio.to_thread`) — so a process
+   running across Jan 3 moves at its next job with no restart, and a job
+   running across noon stays on one Congress. The read-only API process
+   runs no jobs; it advances the value on its liveness loop. An environment pin is the one thing that stops the switch: it
+   freezes the district lines as well as the windows, and
+   `check_current_congress_staleness` alerts once it falls behind. It exists only for re-running an archived
+   database; **the production `.env` must not set `CURRENT_CONGRESS`**
+   (`.env.example` leaves it commented out, and a test keeps it that
+   way). Every House run — the nightly
+   chain's and each triggered one (`/api/admin/pipeline/trigger`,
+   `/trigger-house`, the token trigger) — goes through
+   `run_house_on_sitting_lines`, which takes the `DISTRICT_LINES` lease,
+   settles the lines (`_ensure_sitting_lines`), and holds the lease until
+   the House run returns; the weekly refresh takes the same lease, so the
+   lines never change under a House run and a second House trigger is
+   refused rather than refreshing twice (a House run that finds a refresh
+   holding the lease waits for it, up to `REFRESH_WAIT_S`, rather than
+   skipping — and past that, the House link is reported skipped naming the
+   refresh (`run_tracker.LINES_HELD_TOO_LONG`), which the chain does not
+   wait out and retry as it does another run's hold, so the skip alert
+   comes after one `REFRESH_WAIT_S`, not two (`app/pipeline_chain.py`); main's startup Constituent Alignment rescore takes
+   the same lease for its House part and waits for a refresh the same
+   way, between passes that hold nothing — no lease, no writer — so an
+   admin data reset is never refused for the wait). The pipeline process
+   releases a lease a killed holder left (`district_pvi.
+   release_orphaned_holds`, beside the startup run-row sweep) once it has
+   gone `ORPHAN_RECHECK_S` (ten minutes, `lease.STALE_S`) without a beat, so
+   a deploy mid-run doesn't block House runs for the lease's hour (a House run, trigger or
+   the startup rescore refused by a lease still being checked waits for
+   the check, `district_pvi.waits_for`, through its retries while the
+   database is locked, `ORPHAN_RETRY_S` × `ORPHAN_ATTEMPTS`, then an ops
+   alert — from the startup pass's first failed delete, and only for the
+   leases that pass read, so a lease a live House run takes later is never
+   waited on); that a leftover holder is
+   dead rests on the pipeline service's stop-first update order
+   (`docker-compose.swarm.yml`); the missed-beat check is a second guard,
+   its window long enough that a live holder whose beats stall behind
+   another writer for minutes keeps its lease. A job still holding the outgoing Congress after a
+   newer job has moved to the new one (the process value, or the file's
+   lines while that Congress is in office by the clock — a file ahead of
+   the clock is a removed pin's, and is settled over) neither
+   refreshes nor settles the lines, and its House step is skipped
+   (`district_pvi._superseded`, `run_tracker.SUPERSEDED`) — otherwise it
+   would switch the site back to the old map until the next job. Each stored House score records the Congress
+   whose lines it used (`Representative.district_lines_congress`), and the
+   score breakdown is recomputed on the same district lines
+   (`district_pvi.lines_of`) — while a run is part-way through a switch,
+   after one that failed, and for members who left when the lines changed.
+   That settles the district table and nothing else: the breakdown still
+   reads the Constituent Alignment reference
+   (`/data/constituent_reference.json`) and
+   `/data/member_ideal_points.json` as they are now, and a House run
+   rewrites both before its scoring loop, so for a member it hasn't
+   rescored yet (mid-run, after a failed run, or departed) the breakdown
+   can still differ from the stored score. That drift predates the
+   per-Congress lines and is not fixed by them. So the first House run in a
+   job that starts after that noon (with the default 03:00 UTC schedule,
+   the nightly chain that starts that evening; a trigger before it would
+   be first) switches member scoring to the new Congress's table from what is
+   already on disk — no fetch, no restart — *if* the sources file has an
+   entry for it, and a pin advanced or a Congress added in the sources
+   file (a correction, a court ruling) is fetched by the next House run,
+   since the check compares each table's pinned `revid` with the file.
+   Without an entry for the sitting Congress, scoring stays on the newest
+   pinned lines, nothing is fetched for it, and one ops alert per
+   Congress asks for the entry. `scripts/fetch_district_pvi.py --congress N`
+   regenerates the bundled pre-first-ingest fallback through the same
+   code.
 
    Better still, when the population a value describes is the one the
    pipeline is scoring, measure it in the run itself. Legislative
@@ -961,6 +1064,7 @@ See `.env.example` for all options. Key variables:
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
+| `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
 "CI/CD" below for why — no GitHub Actions job ever touches the Pi
@@ -968,7 +1072,11 @@ anymore, so there's no automated sync). To change a value: SSH in, edit
 `.env` directly, then redeploy. `.env.example` stays the source of truth
 for which variables exist and what they do; local development
 (`docker compose up -d`) uses its own real `.env` file the same way it
-always has.
+always has. **The production `.env` must not set `CURRENT_CONGRESS`**:
+an `.env` copied from a template that once set it (`CURRENT_CONGRESS=119`,
+before 2026-09) pins the scored windows and the district lines on the
+119th Congress for good — check for the line and delete it
+(`check_current_congress_staleness` alerts once it has gone stale).
 
 ### Database
 
@@ -1269,6 +1377,15 @@ state in the query string is exposed to them.
 - Use `SimpleNamespace` or dicts for mock data in unit tests
 - Test scoring, classification, and validation logic — not LLM output
 - When changing scoring logic or classification, update corresponding tests to reflect the new expected behavior
+- Tests never read or write the data volume (`/data`): `conftest.py` points
+  the runtime paths into each test's `tmp_path` and refuses (and fails the
+  test on) any read or write that still reaches `/data` — a read would make
+  a result depend on the host's live data. A new runtime file under `/data`
+  needs its path redirected there.
+- Code that opens its own sessions from several threads (`asyncio.to_thread`,
+  a `threading.Timer`) gets `file_sessionmaker` (a file-backed database, a
+  connection per session) as its `SessionLocal`, never the test's one
+  `db_session` handed to every thread — two threads in one Session race.
 
 ### Deployment
 

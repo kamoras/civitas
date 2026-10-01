@@ -252,6 +252,12 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
     skipped_no_senate_race = 0
     regular_senate_states = seats_up_for_year(cycle)
     states = federal_states()
+    # Which seats exist, not their leans: the sitting lines' keys. Not the
+    # cycle's table (district_pvi_for_congress), which leaves out a state
+    # that redrew without a pinned table yet — every real filer there would
+    # be dropped as a phantom district. The keys are the apportionment, the
+    # same for every cycle up to the 2030 census; the 2032 cycle seats a new
+    # one, and this check needs that cycle's apportionment then.
     real_districts = set(get_district_pvi_map())
     for raw in candidates_raw:
         try:

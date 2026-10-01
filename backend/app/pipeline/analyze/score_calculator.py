@@ -505,12 +505,16 @@ def _state_population() -> dict[str, float]:
     return _state_population_cache
 
 
+# A fetch/district_pvi.SeatLines (a dict of the sitting table that also
+# carries its Congress and every pinned table, from one read) — never a plain
+# dict outside tests, or district_pvi.lines_of/current_lines couldn't steer it.
 _district_pvi_cache: dict[str, int] | None = None
 # The stamp (file_cache.files_stamp) of the live file when _district_pvi_cache
-# was loaded. The Supplementary run rewrites /data/district_pvi.json in the
-# pipeline process, and the elections API reads it in the API processes
-# (settings.PROCESS_ROLE) — the writer's reset of _district_pvi_cache only
-# reaches its own process, so the readers notice the new file by its mtime.
+# was loaded. The Supplementary and House runs rewrite /data/district_pvi.json
+# (new pins, the sitting-Congress switch) in the pipeline process, and the
+# API processes read it for breakdowns and elections (settings.PROCESS_ROLE)
+# — the writer's reload only reaches its own process, so the readers notice
+# the new file by its stamp.
 _district_pvi_stamp: Stamp = None
 _district_pvi_lock = new_reload_lock()
 
@@ -518,12 +522,19 @@ _district_pvi_lock = new_reload_lock()
 def _district_pvi() -> dict[str, int]:
     """Per-district Cook PVI ("ST-N" -> signed int, positive = R lean).
 
-    Ingested from each district's Wikipedia infobox — refreshed
-    automatically (weekly, or immediately if missing) by
-    app/pipeline/fetch/district_pvi.py to /data/district_pvi.json; the
-    bundled app/data/district_pvi.json is only the pre-first-ingest
-    fallback (all 435 seats incl. vacancies; ingestion gates documented in
-    the fetch module). State PVI is the wrong seat expectation for House
+    The SITTING Congress's lines — the districts members were elected on,
+    not whatever map the next election uses. Ingested from a pinned
+    per-Congress source (app/data/district_pvi_sources.json) by
+    app/pipeline/fetch/district_pvi.py to /data/district_pvi.json, which
+    puts the sitting Congress's table in "districts" (settings.
+    CURRENT_CONGRESS, the Congress the scored windows read too — advanced to
+    the one in office, from noon ET on Jan 3 of an odd year, at the start of
+    each pipeline job unless an operator pins it (app.config.
+    scoring_congress); with no pinned table for it, the newest one before
+    it — switched before each House run scores); the bundled
+    app/data/district_pvi.json is only the pre-first-ingest fallback (all
+    435 seats incl. vacancies; ingestion gates documented in the fetch
+    module). State PVI is the wrong seat expectation for House
     members in split states — a D+19 urban district in a red state was
     scored as an "opposed seat" whose member should cross party lines
     ~20% of the time, when the seat actually elected exactly that
@@ -532,26 +543,31 @@ def _district_pvi() -> dict[str, int]:
     import pathlib
 
     from app.file_cache import Uncached, reload_if_moved
+    from app.pipeline.fetch.district_pvi import seat_lines
 
     global _district_pvi_cache, _district_pvi_stamp
 
-    def parse(raw: dict) -> dict[str, int]:
-        if raw.get("districts"):
-            return {k: int(v) for k, v in raw["districts"].items()}
-        logger.warning("district_pvi.json unavailable — falling back to state PVI")
-        return {}
-
     def read() -> dict[str, int]:
         try:
-            return parse(_read_pvi_json("district_pvi.json", report_unreadable=True))
+            return seat_lines(_read_pvi_json("district_pvi.json", report_unreadable=True))
         except Uncached as unreadable:
-            raise Uncached(parse(unreadable.value)) from None
+            raise Uncached(seat_lines(unreadable.value)) from None
 
     with _district_pvi_lock:
         _district_pvi_cache, _district_pvi_stamp = reload_if_moved(
             [pathlib.Path(_PVI_PERSISTENT_DIR) / "district_pvi.json"], _district_pvi_cache, _district_pvi_stamp, read,
         )
         return _district_pvi_cache
+
+
+def _reload_district_pvi() -> dict[str, int]:
+    """_district_pvi() read from the file now, whatever the stamp says — for
+    a House run about to score, which must score on what the file holds as
+    it starts. Under the cache's lock, so no reader sees the gap."""
+    global _district_pvi_cache
+    with _district_pvi_lock:
+        _district_pvi_cache = None
+        return _district_pvi()
 
 
 def get_state_pvi_map() -> dict[str, int]:
@@ -569,6 +585,14 @@ def get_district_pvi_map() -> dict[str, int]:
     return dict(_district_pvi())
 
 
+_pvi_meta_cache: dict | None = None
+# The persistent copies' stamp when _pvi_meta_cache was built: the elections
+# API serves it on every /pvi request, and the pipeline process rewrites
+# /data/district_pvi.json (see _district_pvi_stamp).
+_pvi_meta_stamp: Stamp = None
+_pvi_meta_lock = new_reload_lock()
+
+
 def get_pvi_meta() -> dict:
     """Provenance metadata from the two PVI data files (their _source/
     _method/_window/_as_of keys), for public labeling (2026-07 review F7:
@@ -576,10 +600,33 @@ def get_pvi_meta() -> dict:
     lean-is-not-a-forecast caveat over-claims what PVI measures — the
     files carry this metadata precisely so an exposure surface can show
     it). Values are None when a file lacks a key or is unavailable; the
-    API/frontend degrade to generic wording rather than invent provenance."""
+    API/frontend degrade to generic wording rather than invent provenance.
+
+    Built once per version of the two files (file_cache.reload_if_moved);
+    each call gets its own top-level dict, since callers replace entries."""
+    import pathlib
+
+    from app.file_cache import reload_if_moved
+
+    global _pvi_meta_cache, _pvi_meta_stamp
+    with _pvi_meta_lock:
+        _pvi_meta_cache, _pvi_meta_stamp = reload_if_moved(
+            [pathlib.Path(_PVI_PERSISTENT_DIR) / name for name in ("state_pvi.json", "district_pvi.json")],
+            _pvi_meta_cache, _pvi_meta_stamp, _load_pvi_meta,
+        )
+        return dict(_pvi_meta_cache)
+
+
+def _load_pvi_meta() -> dict:
+    from app.file_cache import Uncached
+
     meta: dict = {}
+    unreadable = False
     for key, fname in (("states", "state_pvi.json"), ("districts", "district_pvi.json")):
-        raw = _read_pvi_json(fname)
+        try:
+            raw = _read_pvi_json(fname, report_unreadable=True)
+        except Uncached as fallback:
+            raw, unreadable = fallback.value, True
         meta[key] = {
             "source": raw.get("_source"),
             "method": raw.get("_method"),
@@ -592,6 +639,8 @@ def get_pvi_meta() -> dict:
         "specific race — incumbency, candidate quality, and open seats are "
         "not part of this number."
     )
+    if unreadable:
+        raise Uncached(meta)
     return meta
 
 

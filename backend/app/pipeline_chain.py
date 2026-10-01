@@ -127,7 +127,10 @@ def ends_chain(outcome: Outcome) -> bool:
 def held_off(outcome: Outcome) -> bool:
     """Skipped because another run holds the machine: another run of the same
     pipeline (its run lock, ALREADY_RUNNING, or its job's lease,
-    REFUSED_HELD), or a member pipeline holding Stock trades off."""
+    REFUSED_HELD), or a member pipeline holding Stock trades off. Not a
+    House run that already waited out a refresh holding the district lines
+    (run_tracker.LINES_HELD_TOO_LONG): that wait was the link's, and this
+    chain's (no pipeline running) wouldn't see the refresh anyway."""
     from app.pipeline import lease
 
     return _skip_reason(outcome) in (ALREADY_RUNNING, lease.REFUSED_HELD, MEMBER_PIPELINE_RUNNING)

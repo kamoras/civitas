@@ -37,6 +37,10 @@ def run_pipeline_in_thread(
     def _run() -> None:
         loop = asyncio.new_event_loop()
         try:
+            # start_writer holds one Congress for this thread
+            # (app.config.scoring_congress); the task below copies this
+            # context, so every read of settings.CURRENT_CONGRESS in the run
+            # answers it.
             loop.run_until_complete(coro_factory())
         except BaseException:
             logger.exception(error_label)

@@ -41,6 +41,7 @@ def seats(monkeypatch):
     opposed for an R). No ideal-point data unless a test adds it."""
     monkeypatch.setattr(score_calculator, "_state_pvi_cache", {"SW": 0, "DS": -15, "AL": 15})
     monkeypatch.setattr(score_calculator, "_district_pvi_cache", {"AL-7": -13})
+    monkeypatch.setattr(score_calculator, "_district_pvi_stamp", None)
     monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", {})
 
 

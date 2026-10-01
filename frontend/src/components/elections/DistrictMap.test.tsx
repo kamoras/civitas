@@ -337,9 +337,27 @@ describe("DistrictMap", () => {
     expect(screen.queryByText("no votes counted yet")).not.toBeInTheDocument();
   });
 
-  it("leaves new-map districts unshaded and says why, not red/blue", async () => {
+  it("shades new-map districts by the new lines' own leans", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
-    // A redrawn state: every race carries the flagged statewide lean.
+    // A redrawn state whose new lines have a table on file: the API serves
+    // each race the lean of the district on the ballot.
+    const races = [1, 2, 3, 4, 5].map((d) => race(d, d === 2 ? -15 : 6));
+    render(<DistrictMap state="CT" newLines races={races} picked={null} onPick={vi.fn()} />);
+
+    const shape = await screen.findByRole("button", { name: "CT-2" });
+    expect(
+      screen.getByText(/the new 2026 districts · redder = safer R · bluer = safer D/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/no per-district lean published/)).not.toBeInTheDocument();
+    expect(shape.getAttribute("style")).not.toBe(
+      screen.getByRole("button", { name: "CT-4" }).getAttribute("style")
+    );
+  });
+
+  it("leaves new-map districts unshaded and says why when only the statewide lean is known", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    // A redrawn state with no table for its new lines on file: every race
+    // carries the flagged statewide lean.
     const statewide = [1, 2, 3, 4, 5].map((d) => ({ ...race(d, 6), pviLevel: "state" as const }));
     render(<DistrictMap state="CT" newLines races={statewide} picked={null} onPick={vi.fn()} />);
 

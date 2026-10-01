@@ -80,7 +80,7 @@ from app.pipeline.analyze.action_center import get_action_refresh_state
 from app.pipeline.analyze.bill_learning import get_health_metrics
 from app.pipeline.analyze.ollama_client import get_llm_stats
 from app.pipeline.analyze.score_calibration import generate_calibration_report
-from app.pipeline.fetch import ballot_measure_pdf_sources
+from app.pipeline.fetch import ballot_measure_pdf_sources, district_pvi
 from app.pipeline_chain import chain_running
 from app.scheduler import get_next_run_time, triggered_chain
 from app.services import bill_service
@@ -1437,12 +1437,14 @@ def start_pipeline_trigger(db: Session, senator: str | None, fetch_only: bool, *
 
 
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
-async def admin_trigger_pipeline(
+def admin_trigger_pipeline(
     senator: str | None = Query(default=None),
     fetch_only: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
-    """Trigger a pipeline run from the admin panel."""
+    """Trigger a pipeline run from the admin panel. A plain def: its
+    run-in-progress check is a blocking database read, so FastAPI runs it
+    on the threadpool rather than the event loop."""
     start_pipeline_trigger(db, senator, fetch_only, error_label="Admin-triggered pipeline run failed")
     return {
         "message": "Pipeline triggered",
@@ -1563,18 +1565,44 @@ _reembed_slot = threading.Lock()
 
 
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])
-async def admin_trigger_house_pipeline():
+def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     """Trigger a House representative pipeline run.
 
-    Refused (409) while a pipeline chain is running (refuse_while_chain_runs:
-    it would run beside the chain's current link, and the chain runs House
-    itself); otherwise house_pipeline.run_house_pipeline's own DB lock refuses a duplicate.
+    409 while a pipeline chain is running (refuse_while_chain_runs: it
+    would run beside the chain's current link, and the chain runs House
+    itself), or when a House run is already going (or holds the
+    district-lines lease every House run takes), like /pipeline/trigger's
+    Senate check, naming what holds it. A District PVI refresh or the
+    startup rescore holding that lease (district_pvi.waits_for — so is a
+    lease a killed holder left, while the startup release re-checks it) is
+    not a refusal: the run waits for it (run_house_on_sitting_lines), and
+    the answer says so. Neither check is the lock — the run's own lease and
+    run lock are (fetch/district_pvi.run_house_on_sitting_lines,
+    run_house_pipeline), and a trigger that slips past both checks is
+    refused by them — but they turn the common double click into an answer
+    instead of a silent skip. A plain def, since both checks are blocking
+    database reads: FastAPI runs it on the threadpool, off the event loop.
     """
 
     refuse_while_chain_runs()
+    if run_tracker.run_in_progress(db, HousePipelineRun):
+        raise HTTPException(status_code=409, detail="House pipeline is already running")
+    holder = lease.holder(db, lease.DISTRICT_LINES)
+    if holder is not None and not district_pvi.waits_for(holder):
+        raise HTTPException(
+            status_code=409, detail=f"{lease.refusal_text(lease.REFUSED_HELD, who=holder)}; it holds the district lines",
+        )
+
+    async def _run():
+        # Through the modules, as #791 does: a test patching
+        # house_pipeline.run_house_pipeline must reach the call.
+        return await district_pvi.run_house_on_sitting_lines(house_pipeline.run_house_pipeline)
+
     run_pipeline_in_thread(
-        house_pipeline.run_house_pipeline, name="house-pipeline-run", error_label="House pipeline run failed",
+        _run, name="house-pipeline-run", error_label="House pipeline run failed",
     )
+    if district_pvi.waits_for(holder):
+        return {"message": f"House pipeline triggered — it starts when the {holder} holding the district lines finishes"}
     return {"message": "House pipeline triggered"}
 
 

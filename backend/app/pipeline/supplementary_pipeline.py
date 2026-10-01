@@ -192,12 +192,15 @@ async def run_supplementary_pipeline() -> dict:
         db.commit()
         logger.info("--- Supplementary: DISTRICT PVI ---")
         progress.begin("district_pvi")
-        # Same weekly-or-missing cadence as the phases above. Unlike
-        # state_pvi.json (see ops_alerts.check_state_pvi_staleness), this
-        # scrapes whatever Cook PVI Wikipedia's infoboxes currently show —
-        # no election-year window is hardcoded here, so a weekly re-pull
-        # naturally tracks Cook's next publication with no code change ever
-        # required.
+        # Same weekly-or-missing cadence as the phases above. Re-fetches the
+        # per-Congress PINNED revisions named in app/data/
+        # district_pvi_sources.json (idempotent — a pin can't drift) and
+        # alerts if the live article has moved away from the newest pin.
+        # A new Congress's lines or an advanced pin is a data-file edit;
+        # the sitting-Congress switch, and fetching a pin that changed,
+        # happen before each House run scores
+        # (fetch/district_pvi.run_house_on_sitting_lines). Writes nothing
+        # while a House run holds the lines (the DISTRICT_LINES lease).
         from app.pipeline.analyze.score_calculator import _district_pvi
         district_pvi_missing = not _district_pvi()
         run_district_pvi = district_pvi_missing or utcnow().weekday() == 6

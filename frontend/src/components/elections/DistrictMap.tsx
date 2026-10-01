@@ -56,8 +56,11 @@ import {
  * category: a second classification on the same page would eventually
  * disagree with the first.
  *
- * A race whose lean is only the statewide stand-in (pviLevel "state" —
- * every House race in a state voting on new lines, `newLines`) is left
+ * A state voting on new lines (`newLines`) is shaded by the lean of the
+ * district on the ballot — the API serves the table for the lines the
+ * cycle is fought on (district_pvi_for_congress), not the sitting
+ * members'. A race whose lean is only the statewide stand-in (pviLevel
+ * "state" — no table for its lines is on file yet) is left
  * unshaded, in a light neutral: the state's colour on every seat would
  * claim Dallas leans like the Panhandle. When no drawn district has a
  * lean of its own the lean legend is replaced by a line saying so, and
@@ -149,8 +152,9 @@ export default function DistrictMap({
    * written, even where there is no count to shade by. */
   showLean?: boolean;
   /** The state votes this cycle on new congressional lines
-   * (StateBallot.newDistrictLines): no district here has a lean of its
-   * own yet, and the caption says why. */
+   * (StateBallot.newDistrictLines): the caption names them as the new
+   * districts. Their leans are the new lines' (pviLevel says when one is
+   * only the statewide stand-in). */
   newLines?: boolean;
   races: RaceWithCandidates[];
   picked: string | null;
@@ -212,8 +216,7 @@ export default function DistrictMap({
   const drawn = races.filter((r) => r.district != null);
   const stateLevel = drawn.filter((r) => r.pviLevel === "state").length;
   // No drawn district has a lean of its own: nothing to key red/blue by.
-  const unshaded =
-    !results && (!showLean || newLines || (drawn.length > 0 && stateLevel === drawn.length));
+  const unshaded = !results && (!showLean || (drawn.length > 0 && stateLevel === drawn.length));
 
   return (
     <div className="mb-4 border border-white/15">
@@ -275,6 +278,7 @@ export default function DistrictMap({
           </p>
         ) : (
           <p className="font-mono text-[10px] text-ink-min">
+            {newLines ? "the new 2026 districts · " : ""}
             redder = safer R · bluer = safer D · fainter = closer
             {stateLevel > 0 && " · grey = no district lean yet"}
           </p>

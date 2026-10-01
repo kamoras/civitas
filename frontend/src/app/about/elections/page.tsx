@@ -111,11 +111,12 @@ export default async function ElectionsChapter() {
           isn&apos;t enough, a map of the districts lets you click yours. It draws the lines each
           state votes on this year: the Census Bureau&apos;s 119th-Congress boundaries, and for the
           nine states that redrew for 2026 their new lines, built from Census blocks. Districts are
-          shaded by partisan lean where the district has one of its own; the redrawn states&apos;
-          new districts are left unshaded, because no per-district lean is published here for them
-          yet. A text filter over county names, candidates&apos; names and district numbers works
-          too. All of it runs on data already on the page: nothing is typed into a lookup, sent or
-          stored.
+          shaded by partisan lean, and in the redrawn states that is the lean of the new district on
+          the ballot (Cook&apos;s 2026 figures for the new lines), not of the old seat with the same
+          number. A district with no lean of its own on file is left unshaded rather than given its
+          state&apos;s colour. A text filter over county names, candidates&apos; names and district
+          numbers works too. All of it runs on data already on the page: nothing is typed into a
+          lookup, sent or stored.
         </P>
         <P>
           In a state voting on new lines, a lookup by representative — house.gov&apos;s, or your

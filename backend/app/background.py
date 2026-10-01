@@ -17,6 +17,12 @@ reaches the API process anyway (a route nginx wasn't told about) is refused
 here, loudly, rather than quietly running a pipeline beside page requests —
 and outside the pipeline process's registry, where the data reset would not
 see it.
+
+And it is where every writer gets its Congress: start_writer's thread and
+writing()'s block run inside app.config.scoring_congress, so each background
+job — scheduled or triggered — reads one settings.CURRENT_CONGRESS for the
+whole job (the scored windows and House members' district lines alike),
+advanced to the Congress in office as it starts.
 """
 
 import itertools
@@ -73,26 +79,35 @@ def _unregister(token: int) -> None:
 
 @contextmanager
 def writing(name: str) -> Iterator[None]:
-    """Registers the enclosed work as a database writer while it runs.
+    """Registers the enclosed work as a database writer while it runs,
+    inside app.config.scoring_congress (one Congress for the work).
     Raises WritesHeld, before the work starts, while exclusive() is held."""
+    from app.config import scoring_congress
+
     token = _register(name)
     try:
-        yield
+        with scoring_congress():
+            yield
     finally:
         _unregister(token)
 
 
 def start_writer(target: Callable[..., object], *, name: str, args: tuple = ()) -> threading.Thread:
     """Start a daemon thread running `target(*args)`, registered as a
-    database writer from before it starts until it returns. Raises
+    database writer from before it starts until it returns, inside
+    app.config.scoring_congress (one Congress for the job). Raises
     WritesHeld, starting nothing, while exclusive() is held — which an
     endpoint answers with a 409 (main's handler) and the scheduler logs,
     or alerts on (scheduler._start_job)."""
+    from app.config import scoring_congress
+
     token = _register(name)
 
     def _run() -> None:
         try:
-            target(*args)
+            # One Congress for the whole job (see the module docstring).
+            with scoring_congress():
+                target(*args)
         finally:
             _unregister(token)
 

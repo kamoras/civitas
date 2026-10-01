@@ -360,6 +360,18 @@ class Representative(Base):
     # special election) by the share of the Congress served (v6.23). Null
     # when the Clerk lists no date.
     sworn_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # The Congress whose district lines the stored scores were computed on
+    # (fetch/district_pvi.lines_congress, recorded by upsert_representative,
+    # or by the startup Constituent Alignment rescore from current_lines()).
+    # The API's breakdown recomputes Constituent Alignment on these same
+    # district lines (district_pvi.lines_of) — while a House run is part-way
+    # through switching Congresses, after one that failed, and for a member
+    # who left when the lines changed. Only the district table: the
+    # Constituent Alignment reference and member ideal points it also reads
+    # are the current files, which a House run rewrites before scoring, so
+    # a member not yet rescored can still differ. Null: scored before this
+    # was recorded, or on a pre-pinning table.
+    district_lines_congress: Mapped[int | None] = mapped_column(Integer, nullable=True)
     initials: Mapped[str] = mapped_column(String(4), default="")
 
     # See Senator.leadership_title/committees for the rationale and source.

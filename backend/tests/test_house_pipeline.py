@@ -95,6 +95,54 @@ class TestHousePipelineRecentRollCallYearWindow:
         assert 2025 in years_requested
 
 
+class TestRecentRollCallsFollowTheHeldCongress:
+    """run_house_pipeline reads recent roll calls for the Congress the job
+    holds: the Clerk year clamped to it (roll_call_year) and any roll call
+    whose XML names another Congress dropped (in_congress). A job holding
+    the 119th whose House step runs on Jan 3 2027 after the 120th's first
+    votes must not score them."""
+
+    async def test_the_year_is_clamped_and_other_congresses_dropped(self, db_session):
+        from datetime import datetime
+        from unittest.mock import AsyncMock, patch
+
+        from app.config import scoring_congress, settings
+
+        recent = [
+            {"year": 2026, "rollNumber": n, "congress": 119, "voteTitle": f"v{n}"} for n in range(1, 4)
+        ] + [{"year": 2026, "rollNumber": 99, "congress": 120, "voteTitle": "stray"}]
+        classified = []
+
+        class _Stop(Exception):
+            pass
+
+        async def classify(bills, db):
+            classified.append([b["billId"] for b in bills])
+            if len(classified) == 2:  # the recent roll calls — all this test needs
+                raise _Stop
+            return []
+
+        with (
+            patch("app.pipeline.house_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.house_pipeline.fetch_representatives", new_callable=AsyncMock, return_value=[{"bioguideId": "R000001"}]),
+            patch("app.pipeline.house_pipeline.fetch_member_detail", new_callable=AsyncMock, return_value={}),
+            patch("app.pipeline.house_pipeline.normalize_house_members", return_value=[{"bioguideId": "R000001"}]),
+            patch("app.pipeline.house_pipeline.fetch_significant_bills", new_callable=AsyncMock, return_value=[]),
+            patch("app.pipeline.house_pipeline.fetch_recent_house_roll_calls", new_callable=AsyncMock, return_value=recent) as mock_rcs,
+            patch("app.pipeline.analyze.bill_analyzer.classify_all_bills", classify),
+            patch("app.pipeline.house_pipeline.utcnow", return_value=datetime(2027, 1, 3, 18)),
+            patch.object(settings, "CURRENT_CONGRESS", 119),
+        ):
+            with scoring_congress():
+                try:
+                    await house_pipeline.run_house_pipeline()
+                except Exception:
+                    pass
+
+        assert [call.kwargs.get("year") for call in mock_rcs.call_args_list] == [2026]
+        assert classified[1] == ["HouseRC-2026-1", "HouseRC-2026-2", "HouseRC-2026-3"]
+
+
 def test_a_house_run_invalidates_stale_analysis_like_a_senate_one(db_session):
     """It may be the first member pipeline to run after a deploy — it no
     longer waits on a Senate run succeeding (app.pipeline_chain) — so it

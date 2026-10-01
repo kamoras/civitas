@@ -216,21 +216,39 @@ def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelt
 # A refusal because the lock's own holder is live (acquire_pipeline_lock_why);
 # the others are lease.refusal_code's.
 ALREADY_RUNNING = "already_running"
+# A House run in a job that holds an older Congress than one the process (or
+# the district-lines file) has already moved to (fetch/district_pvi._superseded).
+SUPERSEDED = "superseded_congress"
 # The stock pipeline's own: it waits for the member pipelines.
 MEMBER_PIPELINE_RUNNING = "member_pipeline_running"
+# A House run that waited its whole wait (fetch/district_pvi.REFRESH_WAIT_S)
+# for a refresh, the startup rescore, or a leftover lease under re-check that
+# held the district lines throughout: that holder is stuck. Not "held off" —
+# the wait already was the House link's wait, and the nightly chain doesn't
+# wait again (pipeline_chain.held_off).
+LINES_HELD_TOO_LONG = "district_lines_held_too_long"
 
 
-def skip_reason_text(reason: str | None, tier: str | None = None) -> str:
+def skip_reason_text(reason: str | None, tier: str | None = None, who: str | None = None) -> str:
     """A pipeline skip's reason code, as its log and the nightly alert say
-    it — a lease refusal in lease.refusal_text's words, naming `tier`'s job
-    when it holds the lease."""
+    it — a lease refusal in lease.refusal_text's words, naming the holder:
+    `who` when the skip recorded it (lease.Granted.holder), else `tier`'s
+    job."""
     from app.pipeline import lease
 
     if reason in (lease.REFUSED_BY_RESET, lease.REFUSED_BUSY, lease.REFUSED_HELD):
-        return lease.refusal_text(reason, tier)
+        return lease.refusal_text(reason, tier, who)
     return {
         ALREADY_RUNNING: "a previous run of it was still active",
+        SUPERSEDED: (
+            "its job still held the outgoing Congress after a newer one had taken office "
+            "and been scored — the next job scores the House on the new Congress"
+        ),
         MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",
+        LINES_HELD_TOO_LONG: (
+            f"the {who or 'lease holder'} held the district lines through the House run's whole wait "
+            "— likely stuck"
+        ),
     }.get(reason or "", f"it was skipped ({reason or 'no reason given'})")
 
 

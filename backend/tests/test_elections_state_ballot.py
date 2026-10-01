@@ -293,12 +293,12 @@ def test_pvi_fallback_matches_race_detail_behavior(db_session):
     back to statewide, flagged 'state' — same contract race_detail
     already has, verified consistent rather than reimplemented
     differently here."""
-    _race(db_session, "2026-HOUSE-IL-7", "IL", office="H", district=7)
+    _race(db_session, "2026-HOUSE-CA-12", "CA", office="H", district=12)
     db_session.commit()
 
-    data = _body(elections.state_ballot("IL", db_session))
+    data = _body(elections.state_ballot("CA", db_session))
     house = data["houseRaces"][0]
-    assert house["pvi"] == elections.get_district_pvi_map()["IL-7"]
+    assert house["pvi"] == elections._election_district_pvi(2026)[0]["CA-12"]
     assert house["pviLevel"] == "district"
 
 
@@ -874,13 +874,46 @@ class TestJudicialConfirmedNone:
         # TestJudicialOmitShrinks.test_uncovered_state_names_contests_and_retention_together.
 
 
-def test_a_redrawn_states_house_race_takes_the_flagged_statewide_lean(db_session):
-    """district_pvi.json describes today's seats; on Utah's 2026 map UT-1
-    is a different district, so its race carries the statewide number,
-    flagged, never the old seat's."""
-    from app.api.elections import _pvi_for_race
+def test_a_redrawn_states_house_race_takes_the_new_lines_lean(db_session):
+    """district_pvi.json's sitting (119th) table describes today's seats;
+    on Utah's 2026 map UT-1 is a different district (R+10 on the old lines,
+    D+12 on the new). The race carries the new lines' number from the
+    120th Congress's pinned table, flagged as a district figure — never
+    the old seat's, and no longer the statewide stand-in."""
+    from app.pipeline.analyze import score_calculator
 
+    _race(db_session, "2026-HOUSE-UT-1", "UT", office="H", district=1)
+    db_session.commit()
+    house = _body(elections.state_ballot("UT", db_session))["houseRaces"][0]
+    assert (house["pvi"], house["pviLevel"]) == (-12, "district")
+    assert score_calculator.get_district_pvi_map()["UT-1"] == 10
+
+
+def test_a_redrawn_state_with_no_table_for_its_lines_takes_the_flagged_statewide_lean():
+    """When the table served is older than the redraw, district_pvi_for_congress
+    drops the redrawn state, and _pvi_for_race falls back to the statewide
+    number, flagged — never an old-map district's value."""
+    from app.api.elections import _pvi_for_race
+    from app.pipeline.fetch.district_pvi import _district_pvi_for_congress
+
+    data = {"congresses": {"119": {"districts": {"UT-1": 10, "GA-1": 9}}}}
+    sources = {"120": {"redrawn_states": ["UT"]}}
+    table, meta = _district_pvi_for_congress(120, data, sources)
+    assert meta["omittedRedrawnStates"] == ["UT"]
     race = Race(id="2026-HOUSE-UT-1", cycle_year=2026, office="H", state="UT", district=1)
-    assert _pvi_for_race(race, {"UT": 11}, {"UT-1": 10}) == (11, "state")
+    assert _pvi_for_race(race, {"UT": 11}, table) == (11, "state")
     kept = Race(id="2026-HOUSE-GA-1", cycle_year=2026, office="H", state="GA", district=1)
-    assert _pvi_for_race(kept, {"GA": 3}, {"GA-1": 9}) == (9, "district")
+    assert _pvi_for_race(kept, {"GA": 3}, table) == (9, "district")
+
+
+def test_redrawn_maps_and_pinned_pvi_sources_name_the_same_states():
+    """Two data files say which states redrew for 2026: the map/crosswalk
+    list (redrawn_congressional_maps.json, read by redrawn_states) and the
+    pinned-PVI sources (district_pvi_sources.json). If they disagree, the
+    page would call a district new while serving an old-map lean, or the
+    reverse."""
+    from app.live_results.sync import redrawn_states
+    from app.pipeline.fetch.district_pvi import congress_for_election, load_sources
+
+    pinned = load_sources()["congresses"][str(congress_for_election(2026))]
+    assert redrawn_states(2026) == set(pinned["redrawn_states"])

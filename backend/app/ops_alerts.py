@@ -315,34 +315,47 @@ def _send_ntfy(subject: str, body: str) -> None:
 
 
 def check_current_congress_staleness() -> None:
-    """Alert if CURRENT_CONGRESS has fallen behind the calendar.
+    """Alert if CURRENT_CONGRESS has fallen behind the Congress in office.
 
-    CURRENT_CONGRESS defaults to a value computed from the wall clock
-    (see app.config._default_current_congress), so under normal operation
-    this should never fire — the round-4 audit's original "silent time
-    bomb" finding was that the config default was a hardcoded literal
-    nobody would remember to bump after a new Congress convened (Jan 3 of
-    each odd year). This check remains as a defensive backstop for the one
-    case that can still go stale: an operator explicitly pinning
-    CURRENT_CONGRESS via env (for an archived-DB re-run's reproducibility)
-    and then leaving that pin in place past the next Congress.
+    Unpinned, it can't: the pipeline process advances it to the Congress in
+    office (noon ET on Jan 3 of an odd year, the 20th Amendment's
+    hand-over) at the start of every job (app.config.scoring_congress), and
+    this check advances it first too, so a process that was already running
+    when a new Congress convened scores the new one from its next job, with
+    no restart. What can go stale is an operator's pin: CURRENT_CONGRESS
+    set in the environment (an archived-DB re-run's reproducibility) and
+    left in place past the next Congress — or copied from an old
+    .env.example that set it. Only editing the environment fixes that. The
+    pin holds both chambers' scored windows and House members' district
+    lines (fetch/district_pvi reads the same value), and the alert says so.
+
+    The round-4 audit's original "silent time bomb" finding was that the
+    default was a hardcoded literal nobody would remember to bump.
     """
+    from app.config import advance_current_congress
+    from app.ordinals import ordinal
     from app.pipeline.fetch.congress import expected_current_congress
 
-    configured = settings.CURRENT_CONGRESS
+    from app.config import settings as current
+
+    configured = advance_current_congress()
     expected = expected_current_congress()
-    if expected <= configured:
+    # Unpinned, advance_current_congress just brought it up to the clock;
+    # it can only read as behind across the instant of the hand-over
+    # between the two reads, and the next call advances it.
+    if expected <= configured or not current.current_congress_pinned:
         resolve_ops_alert("stale-congress")
         return
     send_ops_alert(
         "CURRENT_CONGRESS is stale",
-        f"CURRENT_CONGRESS is set to {configured}, but the {expected}th "
-        f"Congress is now in session. The Senate pipeline pins its "
-        f"roll-call window to CURRENT_CONGRESS while the House derives "
-        f"its window from the calendar year, so they are now scoring "
-        f"different Congresses and the Senate is scoring a dead one. "
-        f"Bump CURRENT_CONGRESS to {expected} (env or config) and re-run "
-        f"the pipeline.",
+        f"CURRENT_CONGRESS is pinned in the environment (.env or the container's environment) "
+        f"to {configured}, but the {ordinal(expected)} Congress is now in session. Both chambers' "
+        f"scored windows (roll-call sessions, bills, Voteview ideal points) and House members' "
+        f"district lines stay on the {ordinal(configured)} Congress while the pin is in place "
+        f"(fetch/district_pvi reads the same setting), so the {ordinal(expected)} Congress's "
+        f"members are scored on a dead Congress's record and on districts they were not elected "
+        f"in. Remove the pin so it follows the clock — production should never set it; a pin is "
+        f"only for re-running an archived database — and restart the backend.",
         dedupe_key=f"stale-congress-{expected}",
         condition="stale-congress",
     )
@@ -406,9 +419,11 @@ def check_state_pvi_staleness() -> None:
     """Alert once a newer presidential election's data should be available
     for state_pvi.json's two-cycle window than what's currently baked in.
 
-    Unlike CURRENT_CONGRESS or the committee-leadership/district-PVI data
-    (app/pipeline/fetch/committee_leadership.py, district_pvi.py), this is
-    NOT something a scheduled refetch can advance automatically:
+    Unlike CURRENT_CONGRESS or the committee-leadership data
+    (app/pipeline/fetch/committee_leadership.py), this is NOT something a
+    scheduled refetch can advance automatically (district PVI is pinned
+    too, per Congress, in app/data/district_pvi_sources.json — see
+    fetch/district_pvi.py):
     scripts/fetch_state_pvi.py deliberately pins its data sources to
     specific immutable GitHub-mirrored commits — "so a regeneration years
     from now fetches the exact same file" — so re-running it forever
@@ -442,8 +457,8 @@ def check_state_pvi_staleness() -> None:
             f"should be available now. Update scripts/fetch_state_pvi.py's "
             f"CYCLES/source URLs to the new cycle, verify the fidelity "
             f"gates pass, and regenerate the file. (district_pvi.json "
-            f"needs no such update — it refreshes automatically from "
-            f"Wikipedia's current Cook PVI figures.)",
+            f"is separate: its sources are pinned per Congress in "
+            f"app/data/district_pvi_sources.json.)",
             dedupe_key=f"stale-state-pvi-{next_cycle}",
             condition="stale-state-pvi",
         )

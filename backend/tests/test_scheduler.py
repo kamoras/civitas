@@ -172,6 +172,11 @@ class TestSupplementaryOverlapGuard:
         mock_refresh.assert_called_once()
 
 
+async def _passthrough(run_house):
+    """run_house_on_sitting_lines without its lease and lines check."""
+    return await run_house()
+
+
 class TestNightlyPipelineIndependentLinks:
     """_nightly_pipeline's chain (Senate -> Supplementary -> House ->
     Stock trades -> Election) runs every link whatever the one before it
@@ -192,6 +197,7 @@ class TestNightlyPipelineIndependentLinks:
              patch("app.ops_alerts.check_feedback_token_expiration"), \
              patch("app.ops_alerts.check_state_pvi_staleness"), \
              patch("app.scheduler.pipelines_running", return_value=False), \
+             patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", _passthrough), \
              patch("app.services.bill_service.warm_bill_collection_cache") as mock_warm:
             patches = []
             for key, name in (("senate", "run_senate_pipeline"), ("supplementary", "run_supplementary_pipeline"),
@@ -214,6 +220,71 @@ class TestNightlyPipelineIndependentLinks:
     def _all_ran(self, mocks):
         for mock in mocks.values():
             mock.assert_called_once()
+
+    def test_the_house_run_goes_through_the_sitting_lines_check(self):
+        """The nightly House run settles the district lines under the lease
+        it holds for the run (fetch/district_pvi.run_house_on_sitting_lines)
+        — after the Senate and Supplementary runs, which don't score on
+        them — and a skip from it is alerted like any House skip."""
+        from app import scheduler
+
+        order = []
+
+        async def wrapper(run_house):
+            order.append("pvi")
+            return await run_house()
+
+        with patch("app.background.threading.Thread", _SyncThread), \
+             patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("senate") or {"status": "completed"}), \
+             patch("app.scheduler.run_supplementary_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("supplementary") or {"status": "completed"}), \
+             patch("app.scheduler.run_house_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("house") or {"status": "skipped", "reason": "busy"}), \
+             patch("app.scheduler.run_stock_trades_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("stock") or {"status": "completed"}), \
+             patch("app.scheduler.run_election_pipeline", new_callable=AsyncMock,
+                   side_effect=lambda: order.append("election") or {"status": "completed"}), \
+             patch("app.scheduler.pipelines_running", return_value=False), \
+             patch("app.ops_alerts.send_ops_alert") as alert, \
+             patch("app.ops_alerts.resolve_ops_alert"), \
+             patch("app.ops_alerts.check_current_congress_staleness"), \
+             patch("app.ops_alerts.check_feedback_token_expiration"), \
+             patch("app.ops_alerts.check_state_pvi_staleness"), \
+             patch("app.services.bill_service.warm_bill_collection_cache"), \
+             patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", wrapper):
+            scheduler._nightly_pipeline()
+        assert order == ["senate", "supplementary", "pvi", "house", "stock", "election"]
+        assert "Nightly House run skipped" in alert.call_args.args[0]
+
+    def test_a_house_skip_behind_a_stuck_district_pvi_refresh_names_it(self):
+        """run_house_on_sitting_lines waits for a refresh holding the lines;
+        one that outlasts the wait costs the House scores, not Stock trades
+        and Election. The alert names the refresh — not "another run of
+        it"."""
+        from app.pipeline.run_tracker import LINES_HELD_TOO_LONG
+
+        mocks, alert, _resolve, _warm = self._run_chain(
+            house={"status": "skipped", "reason": LINES_HELD_TOO_LONG, "holder": "District PVI refresh"},
+        )
+        self._all_ran({k: v for k, v in mocks.items() if k != "house"})
+        assert mocks["house"].await_count == 1  # the wait was the House run's own: not waited again
+        subject, body = alert.call_args[0][0], alert.call_args[0][1]
+        assert "House" in subject
+        assert "the District PVI refresh held the district lines through the House run's whole wait" in body
+        assert "another run of it" not in body
+
+    def test_a_superseded_house_step_is_not_alerted_and_clears_an_old_skip(self):
+        """A chain that started before noon ET on Jan 3, whose House step
+        finds a newer job already on the new Congress (district_pvi.
+        _superseded): nothing is wrong — no ops alert, a House-skip alert
+        left from before is resolved, and the rest still runs."""
+        from app.pipeline.run_tracker import SUPERSEDED
+
+        mocks, alert, resolve, _warm = self._run_chain(house={"status": "skipped", "reason": SUPERSEDED})
+        self._all_ran(mocks)
+        alert.assert_not_called()
+        assert "nightly-skipped-house" in {c.args[0] for c in resolve.call_args_list}
 
     def test_all_five_run_when_nothing_skips(self):
         mocks, alert, _resolve, warm = self._run_chain()
