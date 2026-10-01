@@ -255,12 +255,13 @@ def real_client(tmp_path_factory):
         pin_population_references(mp, tmp_path_factory.mktemp("references"))
         # A database of its own, one for every thread (see use_app_database):
         # the run's in-memory one is a separate database per thread.
-        engine = use_app_database(mp, tmp_path_factory.mktemp("app-database"))
+        engines = use_app_database(mp, tmp_path_factory.mktemp("app-database"))
         try:
             with TestClient(app) as client:
                 yield client
         finally:
-            engine.dispose()
+            for engine in engines:
+                engine.dispose()
 
 
 def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client):

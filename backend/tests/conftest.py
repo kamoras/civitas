@@ -647,8 +647,9 @@ def redirect_data_volume(monkeypatch, data) -> None:
 def use_app_database(monkeypatch, directory):
     """Point the app's own database (app.database: engine, visits_engine,
     SessionLocal, VisitsSessionLocal, and the URLs init_db's lock reads)
-    at fresh files in `directory`, configured as production's; returns the
-    main engine. For a fixture that starts the real app's lifespan.
+    at fresh files in `directory`, configured as production's; returns both
+    engines, for the caller to dispose (each holds a file open until it is).
+    For a fixture that starts the real app's lifespan.
 
     The run's DATABASE_URL is `sqlite:///:memory:`, whose default pool
     (SingletonThreadPool) gives every thread its own connection — so its
@@ -680,7 +681,7 @@ def use_app_database(monkeypatch, directory):
     # Imported by name all over the app: rebind the sessionmakers themselves.
     monkeypatch.setitem(database.SessionLocal.kw, "bind", engines["engine"])
     monkeypatch.setitem(database.VisitsSessionLocal.kw, "bind", engines["visits_engine"])
-    return engines["engine"]
+    return list(engines.values())
 
 
 # For the whole run, from here: a test module reading a data file as it is
