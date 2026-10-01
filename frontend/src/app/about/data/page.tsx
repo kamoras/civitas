@@ -331,6 +331,18 @@ export default function DataChapter() {
             A tally of how long pages take to load, in broad ranges — with nothing about who loaded
             them.
           </Item>
+          <Item label="API use">
+            A count per day of requests to the <A href="/developers">public API and MCP server</A>,
+            by endpoint and outcome — with nothing about who made them. Programs calling the API are
+            not counted as visitors.
+          </Item>
+          <Item label="Rate limits">
+            To hold each address to its share of requests, the server counts them against a
+            scrambled form of the address, made like the daily visit count but with a separate
+            random key. The counts live only in the server&apos;s memory, never on disk, and each
+            day&apos;s key is deleted at the end of the next day (so a limit doesn&apos;t restart at
+            midnight).
+          </Item>
         </List>
         <P>
           None of it is shared or sold. Requests this server makes go only to the public sources

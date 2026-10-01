@@ -23,6 +23,7 @@ import { finishedSince, type FinishedRun, type WatchedPipeline } from "@/compone
 import { OverviewDashboard } from "@/components/admin/OverviewDashboard";
 import { PipelinesDashboard } from "@/components/admin/PipelinesDashboard";
 import { SystemDashboard } from "@/components/admin/SystemDashboard";
+import { ApiDashboard } from "@/components/admin/ApiDashboard";
 import { TrafficDashboard } from "@/components/admin/TrafficDashboard";
 import { useHostHistory } from "@/components/admin/useHostHistory";
 import { VacancyControl } from "@/components/admin/VacancyControl";
@@ -38,6 +39,7 @@ const TOKEN_KEY = "civitas_admin_token";
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "traffic", label: "Traffic" },
+  { id: "api", label: "API" },
   { id: "pipelines", label: "Pipelines" },
   { id: "action", label: "Action Center" },
   { id: "data", label: "Data & ML" },
@@ -442,6 +444,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
             />
           )}
           {tab === "traffic" && <TrafficDashboard token={token} />}
+          {tab === "api" && <ApiDashboard token={token} />}
           {tab === "pipelines" && (
             <PipelinesDashboard
               token={token}

@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
-from app.models import IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
+from app.models import ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ router = APIRouter()
 # guaranteed" contract this table already had.
 _VISIT_QUEUE_MAXSIZE = 1000
 _VISIT_BATCH_MAX = 50
-_visit_queue: "asyncio.Queue[_VisitEvent | _TimingEvent]" = asyncio.Queue(maxsize=_VISIT_QUEUE_MAXSIZE)
+_visit_queue: "asyncio.Queue[_VisitEvent | _TimingEvent | _ApiEvent]" = asyncio.Queue(maxsize=_VISIT_QUEUE_MAXSIZE)
 
 # Upper bounds (ms) of the page-load histogram buckets PageLoadTiming counts
 # into. Roughly geometric, so the relative precision of an interpolated
@@ -108,6 +108,26 @@ class _TimingEvent:
     buckets: tuple[tuple[str, int], ...]
 
 
+@dataclass(frozen=True)
+class _ApiEvent:
+    """One public API request — see ApiRequestCount."""
+    date: str
+    endpoint: str
+    channel: str
+    status: int
+
+
+def record_api_request(endpoint: str, channel: str, status: int) -> None:
+    """Count one public API or MCP request (ApiRequestCount). Takes nothing
+    about the caller. Queued for the same consumer as visits, so it never
+    writes on the request path; must be called on the event loop (the
+    queue is an asyncio one)."""
+    try:
+        _visit_queue.put_nowait(_ApiEvent(date=_today(), endpoint=endpoint, channel=channel, status=status))
+    except asyncio.QueueFull:
+        logger.warning("Visit queue full (%d) — dropping API request count", _VISIT_QUEUE_MAXSIZE)
+
+
 def _bucket_for(ms: float) -> int | None:
     """The LOAD_TIMING_BUCKETS_MS bound `ms` falls under, or None when it is
     out of range (negative, NaN, or past the last bucket — see the ladder)."""
@@ -119,7 +139,7 @@ def _bucket_for(ms: float) -> int | None:
     return None
 
 
-def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent"], db: Session) -> None:
+def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"], db: Session) -> None:
     """Write a batch of queued visit events in one transaction.
 
     Called by run_visit_consumer (via asyncio.to_thread, with a fresh
@@ -141,6 +161,17 @@ def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent"], db: Session) -
                             set_={"count": PageLoadTiming.count + 1},
                         )
                     )
+                continue
+            if isinstance(event, _ApiEvent):
+                db.execute(
+                    sqlite_insert(ApiRequestCount).values(
+                        date=event.date, endpoint=event.endpoint,
+                        channel=event.channel, status=event.status, count=1,
+                    ).on_conflict_do_update(
+                        index_elements=["date", "endpoint", "channel", "status"],
+                        set_={"count": ApiRequestCount.count + 1},
+                    )
+                )
                 continue
 
             stmt = sqlite_insert(SiteVisit).values(
@@ -177,7 +208,7 @@ def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent"], db: Session) -
         db.rollback()
 
 
-def _write_visit_batch_with_own_session(batch: list["_VisitEvent | _TimingEvent"]) -> None:
+def _write_visit_batch_with_own_session(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"]) -> None:
     """Entry point for asyncio.to_thread — owns the session lifecycle
     since, unlike _write_visit_batch, there's no request-scoped session
     to inject here."""
