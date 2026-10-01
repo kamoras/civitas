@@ -52,14 +52,16 @@ Discovery: sos.ga.gov/page/proposed-georgia-constitution-amendments, the
 one PDF link naming `year` and "const" (the 2026 file is
 .../2026-09/2026 Constitutional Summaries booklet FINAL.pdf; 2024's was
 .../2024-09/Statewide_Const_Amendments_and_Ballot_Questions_Booklet.pdf,
-so no filename pattern is assumed). NOT VERIFIED FROM THE DEVELOPMENT
-ENVIRONMENT: sos.ga.gov answered every request there with a Cloudflare
-challenge (403), web.archive.org was refused by its egress policy, and
-the landing page's markup could not be seen. The booklet itself is real:
-the fixture is the Secretary's file as republished by Augusta-Richmond
-County (see its _source). A failed or challenged fetch is None; the real
-page with no such link is NotYetPublished, with no deadline (the
-booklet exists only in a year with an amendment).
+so no filename pattern is assumed). sos.ga.gov answers every request
+with a Cloudflare challenge (403) — from the production host too,
+checked 2026-10-01 — so the landing page's markup has never been seen. A
+challenge page, or a page that can't be fetched, is SourceBlocked, and
+ballot_measures_pdf then reads the Secretary's booklet from a county
+board's republication of it (fetch_republished; Augusta-Richmond's, in
+the registry's `republished_by`, the same 152,039-byte file), with every
+check above applied to that copy. The fixture is that copy. The real page
+with no booklet link is NotYetPublished, with no deadline (the booklet
+exists only in a year with an amendment).
 """
 
 import logging
@@ -69,8 +71,14 @@ from urllib.parse import unquote, urljoin
 import httpx
 from lxml import html as lxml_html
 
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
-from app.pipeline.fetch.ballot_measures_state_common import election_day, get_bytes, get_text, long_date
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked, join_lines
+from app.pipeline.fetch.ballot_measures_state_common import (
+    election_day,
+    get_bytes,
+    get_text,
+    long_date,
+    republished_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +331,7 @@ def pdf_words(raw: bytes) -> list[dict]:
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     page_html = await get_text(client, LANDING_URL, "GA proposed constitutional amendments")
     if page_html is None:
-        return None
+        raise SourceBlocked("the Georgia Secretary of State's amendments page could not be fetched")
     try:
         url, page_ok = find_booklet_url(page_html, year)
     except Exception:
@@ -335,7 +343,9 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if url is None:
         if "Constitution" not in page_html:
             # A challenge or error page, not the Secretary's page.
-            return None
+            raise SourceBlocked(
+                "the Georgia Secretary of State's amendments page answered with something other than that page"
+            )
         # The booklet exists only in a year with an amendment on the
         # ballot, so its absence can be the answer: no deadline.
         raise NotYetPublished(
@@ -352,3 +362,46 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if parsed is None:
         return None
     return [(m, url) for m in parsed]
+
+
+async def fetch_republished(client: httpx.AsyncClient, year: int, page_url: str) -> list[tuple[dict, str]] | None:
+    """The Secretary's booklet as a county election office republishes it
+    (Augusta-Richmond: under a news item, at a /DocumentCenter/View/
+    address). Every same-year "const..." document the county page or the
+    year's pages it links offers is read as a booklet with parse_booklet's
+    own checks — its cover names the election and "Constitutional
+    Amendments 1-N", N amendments read, none missing a part, a cover that
+    names a referendum refused. Every copy that passes must read the same,
+    or the state is refused rather than one picked. None when nothing
+    verifies: a county page without the booklet says nothing about the
+    state's ballot.
+
+    What the Secretary's own page could add is lost while it's blocked: a
+    referendum question published there as a separate document (see
+    REFERENDUM_WORDS) isn't visible from a county copy of the booklet. The
+    booklet's cover still names one when the Secretary prints them
+    together, as 2024's did."""
+    urls = await republished_candidates(client, page_url, year, ("const",))
+    if not urls:
+        return None
+    readings: dict[str, list[dict]] = {}
+    for url in urls:
+        raw = await get_bytes(client, url, "GA constitutional amendments booklet (county copy)")
+        if raw is None or not raw.startswith(b"%PDF"):
+            continue
+        try:
+            parsed = parse_booklet(pdf_words(raw), year)
+        except Exception:
+            logger.exception("GA county copy %s was not parseable", url)
+            continue
+        if parsed:
+            readings[url] = parsed
+    if not readings:
+        logger.warning("GA: no document on %s reads as the %d amendments booklet", page_url, year)
+        return None
+    first_url, first = next(iter(readings.items()))
+    if any(parsed != first for parsed in readings.values()):
+        logger.warning("GA: %d documents on %s read as different %d booklets — refusing", len(readings), page_url, year)
+        return None
+    return [(m, first_url) for m in first]
+

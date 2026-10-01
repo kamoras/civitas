@@ -1201,6 +1201,7 @@ describe("ballot measures", () => {
     fiscalAuthority: null,
     sourceName: "Ohio SoS",
     sourceUrl: null,
+    republishedBy: null,
     asOf: null,
   };
 

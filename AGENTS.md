@@ -646,6 +646,15 @@ Corollaries that follow from the same rule, all enforced in code:
   research" — the same null-is-not-zero discipline `Candidate.last_financials_sync`
   applies per field, applied at the collection level.
 - Removed measures are rendered as removed for a grace window, not deleted.
+- The source is the state's own document, but not always the state's own
+  server. Where a state's whole site sits behind a bot wall (Georgia's
+  Cloudflare, Nevada's Imperva), the reader raises `SourceBlocked` and the
+  document is read from a county election office's republication of it
+  (`republished_by` in the registry). That copy gets every check the
+  state's own would; a state page that was read and refused never falls
+  back to one, since that would publish past the refusal; and the card
+  names both ("as republished by Eureka County Clerk-Recorder"). Getting
+  past the wall itself is not an option: it is the state saying no.
 - Scope is stated as content, not as a footnote: the API enumerates what a
   statewide page omits (`omits`) and the page renders it above the measures.
 - **`omits` is a live description, not a fixed disclaimer.** Each entry is

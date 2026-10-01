@@ -478,11 +478,11 @@ class TestEachAlertResolves:
         resolve.assert_called_once_with("lda-down-house")
         send.assert_not_called()
 
-    def test_a_night_with_no_failing_state_resolves_the_ingest_alert(self):
+    def test_a_night_with_no_failing_state_resolves_the_ingest_alert(self, db_session):
         from app.pipeline.election_pipeline import _alert_ingest_failures
 
         with patch("app.ops_alerts.resolve_ops_alert") as resolve:
-            _alert_ingest_failures([], "2026-11-03")
+            _alert_ingest_failures(db_session, [], "2026-11-03")
         resolve.assert_called_once_with("ballot-measure-ingest-2026-11-03")
 
     def test_a_clean_ground_truth_gate_resolves_its_chamber(self):

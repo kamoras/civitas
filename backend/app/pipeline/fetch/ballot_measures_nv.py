@@ -39,22 +39,23 @@ Discovery: www.nvsos.gov/elections/{year}-petitions ("{year} Petitions &
 General Election Ballot Questions"): every PDF link whose text or
 address names `year` and "ballot question" is read, and the one whose
 cover is the English statewide booklet's (is_statewide_booklet) is used,
-so a Spanish edition or county summary beside it changes nothing. NOT VERIFIED FROM THE
-DEVELOPMENT ENVIRONMENT: nvsos.gov (and the Secretary's
-silverstateelection.nv.gov) answered every request from there with an
-Imperva JavaScript challenge, and web.archive.org was refused by that
-environment's egress policy, so neither the page's markup nor the
-booklet's address on it could be seen. The booklet itself is real — the
-copy the fixture was made from is the Secretary's document as republished
-by Eureka County's clerk (see the fixture's _source). A challenge page,
-a page that isn't the year's petitions page, a document that can't be
-fetched, two documents with the booklet's cover, or a document that
-looks like the statewide booklet (names the year, "Statewide" and
-"Question", or has no text at all) but lacks its verified cover, is a
-failure (None) —
-never "not yet" and never "none"; a real page none of whose documents
-even looks like the booklet is NotYetPublished, with no deadline (a general with no
-statewide question may have no booklet).
+so a Spanish edition or county summary beside it changes nothing.
+nvsos.gov (and the Secretary's silverstateelection.nv.gov) answers every
+request with an Imperva JavaScript challenge — from the production host
+too, checked 2026-10-01 — so the petitions page has never been seen. A
+challenge page, or a page that can't be fetched, is SourceBlocked: the
+state's site can't be read at all, and ballot_measures_pdf then reads the
+Secretary's booklet from a county clerk's republication of it
+(fetch_republished; Eureka County's, in the registry's `republished_by`),
+with every check below applied to that copy. The fixture is that copy.
+A document that can't be fetched, two documents with the booklet's
+cover, or a document that looks like the statewide booklet (names the
+year, "Statewide" and "Question", or has no text at all) but lacks its
+verified cover, is a failure (None) — never "not yet" and never "none";
+a real page none of whose documents even looks like the booklet is
+NotYetPublished, with no deadline (a general with no statewide question
+may have no booklet). A county page without the booklet is a failure,
+never NotYetPublished: it says nothing about the state's ballot.
 """
 
 import logging
@@ -64,13 +65,14 @@ from urllib.parse import urljoin
 import httpx
 from lxml import html as lxml_html
 
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked, join_lines
 from app.pipeline.fetch.ballot_measures_state_common import (
     election_day,
     get_bytes,
     get_text,
     long_date,
     pdf_pages,
+    republished_candidates,
 )
 
 logger = logging.getLogger(__name__)
@@ -236,19 +238,13 @@ def parse_booklet(pages: list[str], year: int) -> list[dict] | None:
     return results
 
 
-async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
-    page_url = PETITIONS_URL.format(year=year)
-    page_html = await get_text(client, page_url, f"NV {year} petitions")
-    if page_html is None:
-        return None
-    try:
-        urls = booklet_urls(page_html, year)
-    except Exception:
-        logger.exception("NV petitions page was not parseable")
-        return None
-    if urls is None:
-        logger.warning("NV %d petitions page is not the page this reader knows (bot challenge?)", year)
-        return None
+async def _choose_booklet(
+    client: httpx.AsyncClient, urls: list[str], year: int,
+) -> tuple[str, list[str]] | None:
+    """The one candidate whose cover is the English statewide booklet's,
+    read from each candidate itself. None (a failure) when a candidate
+    can't be fetched or read, when one looks like the booklet without its
+    verified cover, or when two carry it. NotYetPublished when none does."""
     booklets = []
     for url in urls:
         raw = await get_bytes(client, url, "NV ballot questions document")
@@ -277,7 +273,10 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if len(booklets) > 1:
         logger.warning("NV: %d documents carry the %d statewide booklet's cover — refusing", len(booklets), year)
         return None
-    url, pages = booklets[0]
+    return booklets[0]
+
+
+def _read(url: str, pages: list[str], year: int) -> list[tuple[dict, str]] | None:
     try:
         parsed = parse_booklet(pages, year)
     except Exception:
@@ -286,3 +285,40 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if parsed is None:
         return None
     return [(m, url) for m in parsed]
+
+
+async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
+    page_url = PETITIONS_URL.format(year=year)
+    page_html = await get_text(client, page_url, f"NV {year} petitions")
+    if page_html is None:
+        raise SourceBlocked(f"the Nevada Secretary of State's {year} petitions page could not be fetched")
+    try:
+        urls = booklet_urls(page_html, year)
+    except Exception:
+        logger.exception("NV petitions page was not parseable")
+        return None
+    if urls is None:
+        raise SourceBlocked(
+            f"the Nevada Secretary of State's {year} petitions page answered with something other than that "
+            "page (a bot challenge)"
+        )
+    chosen = await _choose_booklet(client, urls, year)
+    return _read(*chosen, year) if chosen else None
+
+
+async def fetch_republished(client: httpx.AsyncClient, year: int, page_url: str) -> list[tuple[dict, str]] | None:
+    """The Secretary's booklet as a county election office republishes it:
+    the same checks as the Secretary's own copy (is_statewide_booklet, the
+    CONTENTS list, every section complete), on whichever of the county
+    page's same-year "ballot question" documents carries the verified
+    cover. None when the page can't be read or no copy verifies — a county
+    that hasn't posted the booklet is no word on the state's ballot."""
+    urls = await republished_candidates(client, page_url, year, ("ballot question",))
+    if not urls:
+        return None
+    try:
+        chosen = await _choose_booklet(client, urls, year)
+    except NotYetPublished:
+        logger.warning("NV: no document on %s carries the %d statewide booklet's cover", page_url, year)
+        return None
+    return _read(*chosen, year) if chosen else None

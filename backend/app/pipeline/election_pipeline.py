@@ -24,14 +24,20 @@ senate_pipeline.py. Phases:
      via the same shared ScoreSnapshot table senators/reps/presidents use.
 """
 
+import hashlib
+import json
 import logging
+import threading
 import time
-from datetime import timedelta
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta
 
 import httpx
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
+from app import ops_alerts
 from app.config import settings
 from app.database import SessionLocal
 from app.election_calendar import (
@@ -40,7 +46,19 @@ from app.election_calendar import (
 )
 from app.election_phase import active_election, election_is_held
 from app.http_client import make_async_client
-from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
+from app.live_results import bluesky as live_bluesky
+from app.models import (
+    BALLOT_ONLY_ID_PREFIX,
+    BallotMeasure,
+    Candidate,
+    ElectionPipelineRun,
+    MeasureCoverage,
+    PipelineStatus,
+    Race,
+    RaceCoverageItem,
+    ScoreSnapshot,
+)
+from app.pipeline.analyze import election_bluesky, election_coverage, race_relevance
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
 from app.pipeline.fetch.state_candidates import (
@@ -51,6 +69,13 @@ from app.pipeline.fetch.state_candidates import (
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline import lease
+from app.pipeline.fetch import (
+    ballot_lookup,
+    ballot_measure_pdf_sources,
+    ballot_measures_pdf,
+    senate_classes,
+)
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
 
@@ -516,7 +541,6 @@ def _iso_election_date(value) -> str | None:
     (optionally with a time after it) and US "MM/DD/YYYY" — every reader
     writes ISO today, and anything else is refused rather than stored under
     a date string no query would match."""
-    from datetime import datetime
 
     if not isinstance(value, str) or not value.strip():
         return None
@@ -531,7 +555,6 @@ def _iso_election_date(value) -> str | None:
 
 def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: str) -> None:
     """Insert or update one measure. Every text field is verbatim source."""
-    from app.models import BallotMeasure
 
     detail = detail or {}
     given = detail.get("election_date") or raw.get("election_date")
@@ -567,6 +590,7 @@ def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: st
     measure.title_authority = detail.get("title_authority")
     measure.fiscal_authority = detail.get("fiscal_authority")
     measure.source_url = detail.get("source_url")
+    measure.republished_by = detail.get("republished_by")
     measure.source_name = source_name
     # A measure that had been marked removed and is now back in the feed
     # is certified again — the reconciliation below is the only writer of
@@ -580,7 +604,6 @@ def _reconcile_state_measures(
     db: Session, state: str, election_dates: set[str], seen_ids: set[str],
 ) -> int:
     """Mark measures we no longer see as removed; delete long-gone ones."""
-    from app.models import BallotMeasure
 
     stale = (
         db.query(BallotMeasure)
@@ -608,7 +631,6 @@ def _set_coverage(
     db: Session, state: str, election_date: str, status: str,
     count: int = 0, source_name: str | None = None, error: str | None = None,
 ) -> None:
-    from app.models import MeasureCoverage
 
     row = (
         db.query(MeasureCoverage)
@@ -646,7 +668,6 @@ def _set_coverage(
 
 
 def _coverage_row(db: Session, state: str, election_date: str):
-    from app.models import MeasureCoverage
 
     return (
         db.query(MeasureCoverage)
@@ -675,7 +696,6 @@ def _supersede_rows(db: Session, state: str, election_date: str, source_name: st
     roll back together, so a failed insert can never leave the state with
     neither its old rows nor its new ones.
     """
-    from app.models import BallotMeasure
 
     ids = {i["id"] for i in items}
     numbers = {i["number"] for i in items if i.get("number")}
@@ -702,7 +722,6 @@ def _live_measure_count(db: Session, state: str, source_name: str, election_date
     MEASURE_SHRINK_FLOOR compares against. Scoped to the elections the
     read covers: an earlier cycle's rows would inflate it and hold a real,
     shorter list back."""
-    from app.models import BallotMeasure
 
     return (
         db.query(BallotMeasure)
@@ -736,7 +755,6 @@ def _shrink_held_back(
     it is one truncated read, not three. The caller also drops a held-back
     list's cache entry, so the next night asks the state again.
     """
-    import json
 
     row = _coverage_row(db, state, election_day)
     if not existing or listed + explained >= existing * MEASURE_SHRINK_FLOOR:
@@ -747,7 +765,6 @@ def _shrink_held_back(
     if row is None:
         # Just somewhere to keep the streak: no status claim, and no
         # last_success_at — nothing has been read successfully.
-        from app.models import MeasureCoverage
 
         row = MeasureCoverage(state=state, election_date=election_day)
         db.add(row)
@@ -771,7 +788,6 @@ def _shrink_held_back(
 def _live_ids(db: Session, state: str, source_name: str, election_dates: set[str]) -> set[str]:
     """Ids of the measures shown as on the ballot for these elections from
     `source_name`."""
-    from app.models import BallotMeasure
 
     return {
         mid for (mid,) in db.query(BallotMeasure.id).filter(
@@ -784,15 +800,13 @@ def _live_ids(db: Session, state: str, source_name: str, election_dates: set[str
 
 
 def _struck_ids(state: str, election_day: str, removed: list[dict]) -> set[str]:
-    from app.pipeline.fetch.ballot_measures_pdf import _to_measure
 
-    return {_to_measure(state, parsed, election_day, "")["id"] for parsed in removed or []}
+    return {ballot_measures_pdf._to_measure(state, parsed, election_day, "")["id"] for parsed in removed or []}
 
 
 def _mark_removed(db: Session, state: str, election_day: str, source_name: str, ids: set[str]) -> int:
     """Mark these of `source_name`'s rows for the election removed (they
     render as removed through the grace window). Returns rows marked."""
-    from app.models import BallotMeasure
 
     marked = 0
     for row in db.query(BallotMeasure).filter(
@@ -830,9 +844,7 @@ def accept_state_absence(
     election. Every action is logged at WARNING and appended to
     operator_actions, which nothing clears.
     """
-    import json
 
-    from app.models import BallotMeasure, MeasureCoverage
 
     prior = _coverage_row(db, state, election_day)
     if (
@@ -890,8 +902,7 @@ def _late_cycle_notice(state: str, election_day: str, source_name: str, awaited)
     a reader that broke before it ever read anything this cycle would
     otherwise sit there silently until election day."""
     try:
-        from app.ops_alerts import send_ops_alert
-        send_ops_alert(
+        ops_alerts.send_ops_alert(
             f"[notice] {state} ballot measures still not published",
             f"{source_name}: {awaited} — still not published {DEFAULT_EXPECTED_BY_DAYS_BEFORE} days "
             f"before {election_day}. That can be the real answer (the document exists only in a year "
@@ -907,11 +918,59 @@ def _past_expected_by(source: dict, election_day: str) -> bool:
     """Whether today is on or after the date this state's awaited document
     should exist by (see DEFAULT_EXPECTED_BY_DAYS_BEFORE and each registry
     entry's expected_by_days_before)."""
-    from datetime import date
 
     days = source.get("expected_by_days_before", DEFAULT_EXPECTED_BY_DAYS_BEFORE)
     due = date.fromisoformat(election_day) - timedelta(days=days)
     return utcnow().date() >= due
+
+
+class _ReaderReasons(logging.Handler):
+    """What a state's reader said about why it failed, in its own log lines.
+
+    A reader returns None for "could not read it" (36 of them, each for
+    its own reasons, each logging why), and the coverage row used to say
+    only "fetch failed" — the 403, the unrecognized page, the PDF that
+    wasn't found were in the log and nowhere an operator looks. This
+    keeps the reader's WARNING-and-above lines from app.pipeline.fetch
+    while one state is being read, on this thread only: the hourly jobs
+    log under the same loggers from threads of their own.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.thread = threading.get_ident()
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.thread == self.thread:
+            self.messages.append(record.getMessage().splitlines()[0][:300])
+
+
+@contextmanager
+def _reader_reasons() -> Iterator[list[str]]:
+    handler = _ReaderReasons()
+    fetch_logger = logging.getLogger("app.pipeline.fetch")
+    fetch_logger.addHandler(handler)
+    try:
+        yield handler.messages
+    finally:
+        fetch_logger.removeHandler(handler)
+
+
+async def _fetch_with_reasons(
+    client: httpx.AsyncClient, db: Session, state: str, year: int, election_day: str,
+) -> tuple[list[dict] | None, list[str]]:
+    """fetch_state_measures_pdf, and the reasons its reader gave for a
+    failure (_ReaderReasons). NotYetPublished propagates: that is an
+    answer, not a failure."""
+    with _reader_reasons() as reasons:
+        try:
+            return await ballot_measures_pdf.fetch_state_measures_pdf(client, db, state, year, election_day), reasons
+        except NotYetPublished:
+            raise
+        except Exception as exc:
+            logger.exception("PDF measure fetch raised for %s", state)
+            return None, [*reasons, f"{type(exc).__name__}: {exc}"]
 
 
 async def _sync_pdf_measures(
@@ -936,28 +995,17 @@ async def _sync_pdf_measures(
       removed, coverage set. A failure anywhere in it rolls the whole
       state back and reads as ingest_failed.
     """
-    from app.models import BallotMeasure, MeasureCoverage
-    from app.pipeline.fetch.ballot_measure_pdf_sources import (
-        configured_states,
-        source_for_state,
-    )
-    from app.pipeline.fetch.ballot_measures_pdf import (
-        cached_answer,
-        fetch_state_measures_pdf,
-        forget_cached,
-    )
-    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
     year = int(election_day[:4])
     synced = failed = marked_removed = 0
     if failing is None:
         failing = []
-    for state in sorted(configured_states()):
-        source = source_for_state(state)
+    for state in sorted(ballot_measure_pdf_sources.configured_states()):
+        source = ballot_measure_pdf_sources.source_for_state(state)
         source_name = source["source_name"]
-        fresh = cached_answer(db, state, year) is None
+        fresh = ballot_measures_pdf.cached_answer(db, state, year) is None
         try:
-            listed = await fetch_state_measures_pdf(client, db, state, year, election_day)
+            listed, reasons = await _fetch_with_reasons(client, db, state, year, election_day)
         except NotYetPublished as awaited:
             prior = _coverage_row(db, state, election_day)
             # Measures the source itself reports as no longer on this
@@ -1031,14 +1079,12 @@ async def _sync_pdf_measures(
             failing.append(state)
             db.commit()
             continue
-        except Exception:
-            logger.exception("PDF measure fetch raised for %s", state)
-            listed = None
 
         if listed is None:
             _set_coverage(
                 db, state, election_day, MeasureCoverage.INGEST_FAILED,
-                source_name=source_name, error="fetch failed",
+                source_name=source_name,
+                error="; ".join(dict.fromkeys(reasons)) or "fetch failed (the reader logged no reason)",
             )
             failed += 1
             failing.append(state)
@@ -1057,7 +1103,7 @@ async def _sync_pdf_measures(
             fresh=fresh,
         ):
             # The next night must ask the state again, not replay this.
-            forget_cached(db, state, year)
+            ballot_measures_pdf.forget_cached(db, state, year)
             # Implausible shrink — keep what we have, say so loudly, and do
             # NOT reconcile. See MEASURE_SHRINK_FLOOR.
             logger.warning(
@@ -1100,7 +1146,6 @@ def _write_direct_answer(
     deleted, measures upserted, unseen rows reconciled, coverage set, then
     one commit. Raises (the caller rolls back) on any failure, so nothing
     is counted as synced or seen unless it was actually written."""
-    from app.models import MeasureCoverage
 
     retired = _supersede_rows(db, state, election_day, source_name, active)
     if retired:
@@ -1125,43 +1170,46 @@ def _resolve_answered_notices(db: Session, election_day: str) -> None:
     """Close each late-cycle notice whose state has now answered (measures
     covered, or confirmed none). Run after the sync commits: the alert
     store writes through its own session."""
-    from app.models import MeasureCoverage
-    from app.ops_alerts import resolve_ops_alert
 
     answered = db.query(MeasureCoverage.state).filter(
         MeasureCoverage.election_date == election_day,
         MeasureCoverage.status.in_((MeasureCoverage.COVERED, MeasureCoverage.CONFIRMED_NONE)),
     ).all()
     for (state,) in answered:
-        resolve_ops_alert(f"ballot-measure-late-{state}-{election_day}")
+        ops_alerts.resolve_ops_alert(f"ballot-measure-late-{state}-{election_day}")
 
 
-def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
+def _alert_ingest_failures(db: Session, failing: list[str], election_day: str) -> None:
     """One ops alert per night per set of failing states. The dedupe key
     carries the date and a digest of the states: send_ops_alert dedupes
     for as long as the key is remembered, so a constant key would make the
     first failure ever the last one anyone hears about — every later lost
     document, missed cutoff, held-back shrink or write failure silent.
     Same shape as state_candidates' recurring alerts."""
-    import hashlib
 
-    from app.ops_alerts import resolve_ops_alert
 
     if not failing:
-        resolve_ops_alert(f"ballot-measure-ingest-{election_day}")
+        ops_alerts.resolve_ops_alert(f"ballot-measure-ingest-{election_day}")
         return
     states = sorted(set(failing))
     digest = hashlib.sha1("|".join(states).encode()).hexdigest()[:12]
+    # Each state's own reason, as its coverage row recorded it — what the
+    # reader said, so the alert answers "why" as well as "which".
+    reasons = dict(
+        db.query(MeasureCoverage.state, MeasureCoverage.error_detail)
+        .filter(MeasureCoverage.election_date == election_day, MeasureCoverage.state.in_(states))
+        .all()
+    )
+    why = "\n".join(f"- {state}: {reasons.get(state) or 'no reason recorded'}" for state in states)
     # Fail loud: a silently-broken adapter and a quiet week look identical
     # from the outside, and this is the one dataset where that ambiguity
     # costs a vote.
     try:
-        from app.ops_alerts import send_ops_alert
-        send_ops_alert(
+        ops_alerts.send_ops_alert(
             "Ballot measure ingest failed",
             f"{len(states)} state(s) failed to ingest statewide ballot measures "
             f"for {election_day}: {', '.join(states)}. Those states render as 'not yet covered' "
-            f"rather than 'no measures' until this clears.",
+            f"rather than 'no measures' until this clears.\n{why}",
             dedupe_key=f"ballot-measure-ingest-{election_day}-{utcnow().date().isoformat()}-{digest}",
             condition=f"ballot-measure-ingest-{election_day}",
         )
@@ -1179,7 +1227,6 @@ def _prune_past_measures(db: Session) -> int:
     page stays on the election just held while its count is moving, up to
     January 3 (election_phase.active_election) — longer than the grace
     window in a slow count."""
-    from app.models import BallotMeasure
 
     cutoff = min(
         (utcnow().date() - timedelta(days=MEASURE_REMOVAL_GRACE_DAYS)).isoformat(),
@@ -1208,7 +1255,6 @@ def _purge_retired_source(db: Session) -> int:
     integration. Idempotent (a no-op once they're gone). Such a row was
     never re-checked against the state and must not render as current —
     or as "removed", which would claim the state struck it."""
-    from app.models import BallotMeasure, MeasureCoverage
 
     deleted = (
         db.query(BallotMeasure)
@@ -1250,11 +1296,9 @@ def _record_unread_state(db: Session, state: str, election_day: str) -> None:
     retired source's rows are purged) it would date a check this site no
     longer makes, beside a status saying nothing was checked.
     """
-    from app.models import BallotMeasure, MeasureCoverage
 
-    from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 
-    reason = unread_reason(state) or "Civitas does not read this state's official measure list automatically yet."
+    reason = ballot_measure_pdf_sources.unread_reason(state) or "Civitas does not read this state's official measure list automatically yet."
     prior = _coverage_row(db, state, election_day)
     prior_source = prior.source_name if prior is not None else None
     _set_coverage(
@@ -1295,7 +1339,6 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     was checked), and raises no alert (nothing broke): its page says so and
     links the official lookup.
     """
-    from app.pipeline.fetch.ballot_measure_pdf_sources import configured_states
 
     election_day = active_election(db).election_day.isoformat()
     _prune_past_measures(db)
@@ -1304,12 +1347,12 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     failing: list[str] = []
     synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day, failing)
 
-    unread = sorted((federal_states() | {"DC"}) - configured_states())
+    unread = sorted((federal_states() | {"DC"}) - ballot_measure_pdf_sources.configured_states())
     for state in unread:
         _record_unread_state(db, state, election_day)
     db.commit()
 
-    _alert_ingest_failures(failing, election_day)
+    _alert_ingest_failures(db, failing, election_day)
     _resolve_answered_notices(db, election_day)
 
     return {
@@ -1426,8 +1469,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             # Which states hold which Senate class, from the Senate's own
             # list, before the roster is filtered by it. Best-effort: a
             # failed read keeps what is stored (senate_classes.py).
-            from app.pipeline.fetch.senate_classes import refresh_senate_classes
-            await refresh_senate_classes(client)
+            await senate_classes.refresh_senate_classes(client)
             try:
                 if election_held:
                     progress.skip("roster_sync", detail=f"skipped: {ELECTION_HELD}")
@@ -1548,8 +1590,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             # Verify the official-ballot links we hand users. Cheap, and
             # the one link on the page whose failure strands the visitor.
             try:
-                from app.pipeline.fetch.ballot_lookup import refresh_link_verification
-                link_result = await refresh_link_verification(client)
+                link_result = await ballot_lookup.refresh_link_verification(client)
                 if link_result["failed"]:
                     logger.warning(
                         "%d state ballot-lookup links failed verification and are "
@@ -1568,15 +1609,11 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             # minutes. A failure here (taking the guards included) fails
             # whichever of these phases hadn't finished, not the rest of
             # the run.
-            from app.pipeline.analyze.election_coverage import (
-                coverage_tracker,
-                ingest_race_coverage,
-            )
 
             coverage_open = ["coverage_ingestion", "bluesky_posting"]  # phases not yet finished
             try:
                 async with lease.tracked_job_async(
-                    lease.COVERAGE_REFRESH, coverage_tracker(), who="Election pipeline's coverage/posting phases",
+                    lease.COVERAGE_REFRESH, election_coverage.coverage_tracker(), who="Election pipeline's coverage/posting phases",
                 ) as granted:
                     if not granted:
                         for phase in coverage_open:
@@ -1591,7 +1628,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         logger.info("--- Election: COVERAGE INGESTION ---")
                         progress.begin("coverage_ingestion")
                         try:
-                            ingested = await ingest_race_coverage(db)
+                            ingested = await election_coverage.ingest_race_coverage(db)
                             run.coverage_items_ingested = ingested
                             logger.info("Ingested %d coverage items", ingested)
                             progress.complete("coverage_ingestion", detail=f"{ingested} items")
@@ -1617,18 +1654,15 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             # run just ingested, before it gates that corpus —
                             # same order and same stale-beats-nothing failure
                             # mode as explore_ranking.calibrate_and_store.
-                            from app.pipeline.analyze import race_relevance
                             race_relevance.calibrate_and_store(db)
 
-                            from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
-                            from app.live_results.bluesky import counting_is_live
 
-                            if counting_is_live(db):
+                            if live_bluesky.counting_is_live(db):
                                 # Election night: the live count's own posts
                                 # have the account while totals move.
                                 progress.complete("bluesky_posting", detail="stood down: the live count is posting")
                             else:
-                                posted = post_race_coverage_updates(db, deadline=coverage_deadline)
+                                posted = election_bluesky.post_race_coverage_updates(db, deadline=coverage_deadline)
                                 logger.info("Posted %d race coverage updates", posted)
                                 progress.complete("bluesky_posting", detail=f"{posted} posted")
                         except lease.CutOff as cut:

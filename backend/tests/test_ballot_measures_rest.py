@@ -28,7 +28,8 @@ from app.pipeline.fetch import (
     ballot_measures_oh as oh,
     ballot_measures_ut as ut,
 )
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+from app.pipeline.fetch import ballot_measures_state_common as common
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked
 
 HERE = Path(__file__).parent
 
@@ -686,3 +687,164 @@ def test_nv_registry_description_names_the_other_documents_risk():
     sources.invalidate_cache()
     desc = sources.source_for_state("NV")["description"]
     assert "arguments" in desc and "errs closed" in desc
+
+
+# ── Behind a bot wall: the state's document from a county's copy ─────
+#
+# Georgia's and Nevada's Secretaries of State answer every request with a
+# Cloudflare / Imperva challenge (checked from the production host,
+# 2026-10-01). The county pages below are SYNTHETIC; the documents are the
+# real booklets (the fixtures are the counties' copies).
+
+_NV_COUNTY = "https://www.eurekacountynv.gov/departments/clerk-recorder/elections/"
+_GA_COUNTY = "https://www.augustaga.gov/3171/Board-of-Elections"
+
+
+class TestBlockedStateSites:
+    nv_fx = _json("fixtures_nv_ballot_questions_2026.json")
+    ga_fx = _json("fixtures_ga_amendments_booklet_2026.json")
+    ga_pages = [_unpack(p, ("text", "x0", "x1", "top", "bold")) for p in ga_fx["pages"]]
+
+    @pytest.mark.asyncio
+    async def test_a_challenge_page_is_a_blocked_source_not_a_plain_failure(self, monkeypatch):
+        async def challenge(client, u, label, **kw):
+            return "<html><head><title>Just a moment...</title></head></html>"
+
+        monkeypatch.setattr(nv, "get_text", challenge)
+        with pytest.raises(SourceBlocked):
+            await nv.fetch_measures(None, 2026)
+        monkeypatch.setattr(ga, "get_text", challenge)
+        with pytest.raises(SourceBlocked):
+            await ga.fetch_measures(None, 2026)
+
+    @pytest.mark.asyncio
+    async def test_an_unfetchable_state_page_is_a_blocked_source(self, monkeypatch):
+        async def nothing(client, u, label, **kw):
+            return None
+
+        monkeypatch.setattr(ga, "get_text", nothing)
+        with pytest.raises(SourceBlocked):
+            await ga.fetch_measures(None, 2026)
+
+    @pytest.mark.asyncio
+    async def test_nevadas_booklet_is_read_from_the_county_copy_with_every_check(self, monkeypatch):
+        booklet = "https://www.eurekacountynv.gov/media/1b5le0ag/2026-ballot-question-booklet-vfinal.pdf"
+        sample = "https://www.eurekacountynv.gov/media/lmzhiyra/2026-ballot-question-sample.pdf"
+
+        async def candidates(client, page, year, words):
+            assert (page, year, words) == (_NV_COUNTY, 2026, ("ballot question",))
+            return [booklet, sample]
+
+        async def get_bytes(client, u, label, **kw):
+            return u
+
+        docs = {booklet: self.nv_fx["pages"], sample: ["2026 County & City Ballot Questions Summary"]}
+        monkeypatch.setattr(nv, "republished_candidates", candidates)
+        monkeypatch.setattr(nv, "get_bytes", get_bytes)
+        monkeypatch.setattr(nv, "pdf_pages", lambda raw: docs[raw])
+        result = await nv.fetch_republished(None, 2026, _NV_COUNTY)
+        assert [m["number"] for m, _ in result] == ["6", "7"]
+        assert {u for _, u in result} == {booklet}
+
+    @pytest.mark.asyncio
+    async def test_a_county_copy_without_the_verified_cover_is_refused(self, monkeypatch):
+        reworded = list(self.nv_fx["pages"])
+        reworded[0] = reworded[0].replace("To Appear on the November 3, 2026, General Election Ballot", "2026 questions")
+
+        async def candidates(client, page, year, words):
+            return ["copy"]
+
+        async def get_bytes(client, u, label, **kw):
+            return u
+
+        monkeypatch.setattr(nv, "republished_candidates", candidates)
+        monkeypatch.setattr(nv, "get_bytes", get_bytes)
+        monkeypatch.setattr(nv, "pdf_pages", lambda raw: reworded)
+        assert await nv.fetch_republished(None, 2026, _NV_COUNTY) is None
+
+    @pytest.mark.asyncio
+    async def test_a_county_page_without_the_booklet_is_no_answer(self, monkeypatch):
+        """Not NotYetPublished: a county that hasn't posted it says nothing
+        about the state's ballot."""
+        async def candidates(client, page, year, words):
+            return ["notice"]
+
+        async def get_bytes(client, u, label, **kw):
+            return u
+
+        monkeypatch.setattr(nv, "republished_candidates", candidates)
+        monkeypatch.setattr(nv, "get_bytes", get_bytes)
+        monkeypatch.setattr(nv, "pdf_pages", lambda raw: ["Notice of 2026 General Election"])
+        assert await nv.fetch_republished(None, 2026, _NV_COUNTY) is None
+
+    @pytest.mark.asyncio
+    async def test_georgias_booklet_is_read_from_a_county_document_center_address(self, monkeypatch):
+        booklet = "https://www.augustaga.gov/DocumentCenter/View/21852/2026-Constitutional-Summaries-booklet-FINAL"
+        news = "https://www.augustaga.gov/CivicAlerts.aspx?AID=4245"
+
+        async def candidates(client, page, year, words):
+            assert words == ("const",)
+            return [news, booklet]
+
+        async def get_bytes(client, u, label, **kw):
+            return b"%PDF-booklet" if u == booklet else b"<html>news item</html>"
+
+        monkeypatch.setattr(ga, "republished_candidates", candidates)
+        monkeypatch.setattr(ga, "get_bytes", get_bytes)
+        monkeypatch.setattr(ga, "pdf_words", lambda raw: self.ga_pages)
+        result = await ga.fetch_republished(None, 2026, _GA_COUNTY)
+        assert [m["number"] for m, _ in result] == ["1", "2", "3"]
+        assert {u for _, u in result} == {booklet}
+
+    @pytest.mark.asyncio
+    async def test_two_county_documents_that_read_differently_refuse_georgia(self, monkeypatch):
+        read = ga.parse_booklet(self.ga_pages, 2026)
+        readings = iter([read, [{**m, "number": str(int(m["number"]) + 1)} for m in read]])
+
+        async def candidates(client, page, year, words):
+            return ["a", "b"]
+
+        async def get_bytes(client, u, label, **kw):
+            return b"%PDF-" + u.encode()
+
+        monkeypatch.setattr(ga, "republished_candidates", candidates)
+        monkeypatch.setattr(ga, "get_bytes", get_bytes)
+        monkeypatch.setattr(ga, "pdf_words", lambda raw: self.ga_pages)
+        monkeypatch.setattr(ga, "parse_booklet", lambda pages, year: next(readings))
+        assert await ga.fetch_republished(None, 2026, _GA_COUNTY) is None
+
+
+class TestRepublishedCandidates:
+    @pytest.mark.asyncio
+    async def test_links_on_the_page_and_one_same_site_hop_naming_the_year(self, monkeypatch):
+        pages = {
+            _GA_COUNTY: (
+                '<a href="/CivicAlerts.aspx?AID=4245">2026 Constitutional Amendment Summaries</a>'
+                '<a href="https://www.mvp.sos.ga.gov/MVP/">Get My Sample Ballot</a>'
+                '<a href="https://elsewhere.org/2026-constitutional.pdf">2026 constitutional explainer</a>'
+            ),
+            "https://www.augustaga.gov/CivicAlerts.aspx?AID=4245": (
+                '<a href="/DocumentCenter/View/21852/2026-Constitutional-Summaries-booklet-FINAL">Constitutional Summary</a>'
+            ),
+        }
+        fetched = []
+
+        async def get_text(client, u, label, **kw):
+            fetched.append(u)
+            return pages.get(u)
+
+        monkeypatch.setattr(common, "get_text", get_text)
+        found = await common.republished_candidates(None, _GA_COUNTY, 2026, ("const",))
+        assert "https://www.augustaga.gov/DocumentCenter/View/21852/2026-Constitutional-Summaries-booklet-FINAL" in found
+        # The outside link can be a candidate (the reader then verifies it),
+        # but the search never opens a page off the county's site.
+        assert all("elsewhere.org" not in u and "sos.ga.gov" not in u for u in fetched)
+
+    @pytest.mark.asyncio
+    async def test_an_unfetchable_county_page_is_none(self, monkeypatch):
+        async def nothing(client, u, label, **kw):
+            return None
+
+        monkeypatch.setattr(common, "get_text", nothing)
+        assert await common.republished_candidates(None, _GA_COUNTY, 2026, ("const",)) is None
+

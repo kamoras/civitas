@@ -23,12 +23,34 @@ function measure(overrides: Partial<BallotMeasure>): BallotMeasure {
     fiscalAuthority: null,
     sourceName: "Texas Legislative Reference Library",
     sourceUrl: "https://lrl.texas.gov/",
+    republishedBy: null,
     asOf: "2026-09-28T00:00:00Z",
     ...overrides,
   };
 }
 
 describe("BallotMeasureCard", () => {
+  it("names the county that republished the state's document, beside the state", () => {
+    render(
+      <BallotMeasureCard
+        measure={measure({
+          sourceName: "Nevada Secretary of State",
+          republishedBy: "Eureka County Clerk-Recorder",
+        })}
+      />
+    );
+    expect(
+      screen.getByText(
+        /Quoted verbatim from Nevada Secretary of State, as republished by Eureka County Clerk-Recorder/
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("names only the state when its own copy was read", () => {
+    render(<BallotMeasureCard measure={measure({})} />);
+    expect(screen.queryByText(/republished/)).not.toBeInTheDocument();
+  });
+
   it("never presents the display label as an official ballot title", () => {
     render(<BallotMeasureCard measure={measure({})} />);
     // The label still shows, as the card's heading line...

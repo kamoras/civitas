@@ -117,6 +117,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
       <footer className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-white/[0.07]">
         <p className="text-[10px] text-ink-min">
           Quoted verbatim from {measure.sourceName || "the source"}
+          {measure.republishedBy ? `, as republished by ${measure.republishedBy}` : ""}
           {measure.asOf ? ` · as of ${measure.asOf.slice(0, 10)}` : ""}
         </p>
         {sourceHref && (

@@ -10,7 +10,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.pipeline.fetch import ballot_measure_pdf_sources as sources
 from app.pipeline.fetch import ballot_measures_pdf as pdf
+from app.pipeline.fetch.ballot_measure_text import SourceBlocked
+from app.pipeline.fetch.ballot_measures_state_common import same_site
 
 
 def _fake_source(strategy="fake_strategy", **overrides):
@@ -193,6 +196,43 @@ async def test_discover_pdf_url_follows_a_link_to_find_the_pdf():
     client = SimpleNamespace(get=fake_get)
     url = await pdf.discover_pdf_url(client, "https://example.com/", 2024, keyword="blue")
     assert url == "https://content.leg.colorado.gov/sites/default/files/2024-blue-book-english-accessible.pdf"
+
+
+@pytest.mark.asyncio
+async def test_discover_pdf_url_follows_the_start_hosts_own_subdomains():
+    """Colorado's Legislature lists the 2026 Blue Book on leg.colorado.gov
+    but publishes it from a page on content.leg.colorado.gov, the shape of
+    the real 2025 and 2026 listings. A subdomain of the start is the same
+    publisher; a parent or sibling host (colorado.gov, sos.state.co.us)
+    is not, and is never followed."""
+    pages = {
+        "https://leg.colorado.gov/bluebook": (
+            '<a href="https://content.leg.colorado.gov/publications/2026-blue-book">'
+            "2026 State Ballot Information Booklet</a>"
+            '<a href="https://colorado.gov/ballot-info">2026 Ballot information</a>'
+        ),
+        "https://content.leg.colorado.gov/publications/2026-blue-book": (
+            '<a href="/sites/default/files/2026-blue-book-en-accessible.pdf">English</a>'
+        ),
+    }
+    requested = []
+
+    async def fake_get(url, timeout=None):
+        requested.append(url)
+        return SimpleNamespace(text=pages[url], raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=fake_get)
+    url = await pdf.discover_pdf_url(client, "https://leg.colorado.gov/bluebook", 2026, keyword="blue")
+    assert url == "https://content.leg.colorado.gov/sites/default/files/2026-blue-book-en-accessible.pdf"
+    assert "https://colorado.gov/ballot-info" not in requested
+
+
+def test_same_site_is_the_start_host_or_its_subdomains_only():
+    assert same_site("content.leg.colorado.gov", "leg.colorado.gov")
+    assert same_site("leg.colorado.gov", "www.leg.colorado.gov")
+    assert not same_site("colorado.gov", "leg.colorado.gov")
+    assert not same_site("sos.state.co.us", "leg.colorado.gov")
+    assert not same_site("evilleg.colorado.gov", "leg.colorado.gov")
 
 
 @pytest.mark.asyncio
@@ -617,3 +657,71 @@ def test_the_late_posting_sources_are_flagged():
     # expected-by cutoff.
     can_be_none = {st for st in flagged if sources.source_for_state(st).get("absence_can_mean_none")}
     assert can_be_none == {"VT", "WY"}
+
+
+# ── a blocked state site: the county's copy of its document ─────────
+
+_PARSED = {"number": "6", "title": "T", "origin": None, "official_summary": "S",
+           "fiscal_impact": None, "yes_means": None, "no_means": None}
+_COUNTY = {"name": "Example County Clerk", "url": "https://county.example.gov/elections"}
+
+
+def _blocked_state(monkeypatch, county_reader, **source):
+    async def blocked(client, year):
+        raise SourceBlocked("the state's page answered with a bot challenge")
+
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi", **source))
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", blocked)
+    monkeypatch.setitem(pdf.REPUBLISHED_STRATEGIES, "fake_multi", county_reader)
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_state_is_read_from_the_county_copy_and_says_so(monkeypatch, db_session):
+    seen = []
+
+    async def county_reader(client, year, page_url):
+        seen.append(page_url)
+        return [(dict(_PARSED), "https://county.example.gov/2026-booklet.pdf")]
+
+    _blocked_state(monkeypatch, county_reader, republished_by=[_COUNTY])
+    (measure,) = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
+    assert seen == [_COUNTY["url"]]
+    assert measure["republished_by"] == "Example County Clerk"
+    assert measure["source_url"] == "https://county.example.gov/2026-booklet.pdf"
+
+
+@pytest.mark.asyncio
+async def test_a_state_page_that_was_read_and_refused_never_falls_back(monkeypatch, db_session):
+    """Only a page the reader couldn't see may fall back: one it read and
+    refused (two booklets, a referendum document beside the amendments)
+    would be published past its own refusal."""
+    async def refused(client, year):
+        return None
+
+    async def county_reader(client, year, page_url):
+        raise AssertionError("must not read a county copy after the state page refused")
+
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi", republished_by=[_COUNTY]))
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", refused)
+    monkeypatch.setitem(pdf.REPUBLISHED_STRATEGIES, "fake_multi", county_reader)
+    assert await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03") is None
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_state_with_no_verified_copy_is_a_failure_with_its_reason(monkeypatch, db_session, caplog):
+    async def county_reader(client, year, page_url):
+        return None
+
+    _blocked_state(monkeypatch, county_reader, republished_by=[_COUNTY])
+    with caplog.at_level("WARNING"):
+        assert await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03") is None
+    assert "bot challenge, and no county republication of its document verified" in caplog.text
+
+
+def test_every_registered_county_copy_has_a_reader_that_can_read_it():
+    for state in sources.configured_states():
+        source = sources.source_for_state(state)
+        for office in source.get("republished_by", []):
+            assert office.get("name") and office.get("url", "").startswith("https://"), state
+            assert source["strategy"] in pdf.REPUBLISHED_STRATEGIES, state
+
