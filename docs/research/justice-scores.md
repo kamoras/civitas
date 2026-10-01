@@ -176,6 +176,46 @@ Court's median is 0.28 (p = 0.09), where the old measures ran −0.75 and
 most loyalty; Thomas, far out, and Kavanaugh, at the median, show almost
 none.
 
+**Not party alignment either.** "Under other presidents" mixes presidents
+of the appointer's party with presidents of the other party, so the gap could
+in principle be a lean toward same-party administrations rather than toward
+the one president. Epstein & Posner code that split themselves
+(`same_partyExcludeInOffice`; from 2015 the research script derives it from
+the presidents' parties). Pooled over the 20,737 votes coded both ways, with
+justice fixed effects and petitioner or respondent controlled, against
+presidents of the other party:
+
+| Under | Points more often with the government | t |
+|---|---|---|
+| The appointing president | +8.4 | 3.3 |
+| Other presidents of the appointer's party | −1.2 | −0.5 |
+
+Justices side with same-party administrations no more often than with the
+other party's; the loyalty is to the appointing president. Against same-party
+presidents alone the appointing president's edge is +9.7 points (t = 2.0), so
+comparing with every other president, as the score does, if anything
+understates it. Per justice the same-party effect is not distinguishable
+from zero for any sitting justice except one, and that one leans the other
+way (fewer votes for other same-party administrations). For four of the nine
+it can't be measured at all: no other president of their appointer's party
+has held office since they joined the Court. A score split
+into appointing president, same party and other party was considered on this
+evidence (2026-10-01) and not adopted: its middle term measures nothing on
+average and is undefined for nearly half the current Court.
+
+**Voting against one's own side is not a fairness measure.** The intuition
+is that a principled justice should sometimes vote against their usual side.
+Measured on divided decisions in the Supreme Court Database (each justice's
+own vote direction, against the side of the Court's median their Martin-Quinn
+position puts them on), the rate tracks distance from the median at Spearman
+−0.77 (p = 2e-7, 32 justices with 300+ divided votes): the justice nearest
+the median votes against their side about twice as often as those furthest out. It would
+rank justices by how centrist they are, the artifact that removed
+Consistency and Independence, so Martin-Quinn positions stay context, not
+score. A justice near the median is pivotal in close cases by construction,
+so "voting both ways" there is where the median is, not evidence of
+impartiality.
+
 **Limits.**
 - Epstein & Posner's hand coding follows the Solicitor General; after 2014
   the lead parties stand in, which misses about a quarter of the government's
