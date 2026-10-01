@@ -33,7 +33,7 @@ rows now).
 """
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
@@ -44,6 +44,7 @@ from app.pipeline.analyze.president_scorer import (
     compute_president_overall_score,
     compute_president_reference,
     recalculate_president_scores,
+    sitting_window_reference,
 )
 from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_survey
 from app.pipeline.fetch.economic_data import fetch_jobs_for_president
@@ -52,6 +53,7 @@ from app.pipeline.fetch.historical_executive_orders import eo_entry, fetch_histo
 from app.pipeline.fetch.historical_gdp import compute_term_gdp_growth, fetch_historical_real_gdp
 from app.pipeline.fetch.presidential_approval import (
     approval_slugs,
+    dated_approvals,
     fetch_president_approval_history,
     recent_polls,
 )
@@ -185,6 +187,10 @@ async def run_president_pipeline(db: Session) -> dict:
         logger.info("Fetching approval-poll history from UCSB American Presidency Project...")
         approval_avg_data: dict[str, float] = {}
         approval_trend_data: dict[str, float] = {}
+        approval_start_data: dict[str, float] = {}
+        # (poll date, approve %) in date order, per presidency: the sitting
+        # president's elapsed-time comparison reads predecessors' polls.
+        approval_series: dict[str, list[tuple[date, float]]] = {}
         recent_avg_approval_data: dict[str, float] = {}
         slugs = await approval_slugs(db, presidents)
         for pid, slug in slugs.items():
@@ -199,7 +205,9 @@ async def run_president_pipeline(db: Session) -> dict:
                 # linear regression slope) and why it's compared against
                 # the population's own average trend rather than zero.
                 q = max(1, len(values) // 4)
-                approval_trend_data[pid] = (sum(values[-q:]) / q) - (sum(values[:q]) / q)
+                approval_start_data[pid] = sum(values[:q]) / q
+                approval_trend_data[pid] = (sum(values[-q:]) / q) - approval_start_data[pid]
+            approval_series[pid] = dated_approvals(polls)
 
             recent = recent_polls(polls)
             recent_values = [poll.approving for poll in recent if poll.approving is not None]
@@ -268,6 +276,7 @@ async def run_president_pipeline(db: Session) -> dict:
             if president.id in approval_avg_data:
                 president.avg_approval = approval_avg_data[president.id]
                 president.approval_trend = approval_trend_data.get(president.id)
+                president.approval_start = approval_start_data.get(president.id)
             elif president.id not in slugs and president.id in election_margin_data:
                 # Election margin is only ever the Public Mandate basis for
                 # a president with no approval-polling source at all
@@ -280,6 +289,8 @@ async def run_president_pipeline(db: Session) -> dict:
             if president.avg_approval is not None:
                 live["avg_approval"] = president.avg_approval
                 live["approval_trend"] = president.approval_trend
+                live["approval_start"] = president.approval_start
+                live["is_current"] = president.is_current
             elif president.election_margin is not None:
                 live["election_margin"] = president.election_margin
 
@@ -311,6 +322,8 @@ async def run_president_pipeline(db: Session) -> dict:
         {
             "id": p.id, "name": p.name, "avg_approval": p.avg_approval,
             "approval_trend": p.approval_trend,
+            "approval_start": p.approval_start,
+            "is_current": p.is_current,
             "election_margin": election_margin_data.get(p.id),
             "historical_legacy_score": p.historical_legacy_score,
             "gdp_growth_avg": p.gdp_growth_avg,
@@ -321,6 +334,14 @@ async def run_president_pipeline(db: Session) -> dict:
         }
         for p in presidents
     ])
+    sitting = [p.id for p in presidents if p.is_current and approval_series.get(p.id)]
+    if sitting:
+        window = sitting_window_reference(
+            approval_series[sitting[0]],
+            [approval_series[p.id] for p in presidents if not p.is_current and approval_series.get(p.id)],
+        )
+        if window:
+            measured["sitting_window"] = window
     previous = PRESIDENT_REFERENCE.load().get("presidents") or {}
     reference = PRESIDENT_REFERENCE.with_live("presidents", {**previous, **measured}).get("presidents")
     logger.info("President reference: %s", reference)

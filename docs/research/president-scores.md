@@ -77,6 +77,42 @@ rules, scored against the administrations since 1994. It is measured from as
 few as five administrations, because that is the whole population with
 machine-readable data.
 
+## Approval trend: judged against where the term started (President v6)
+
+Public Mandate's trend component (30%) is the last quarter's average approval
+minus the first quarter's. Until v6 it was z-scored against the average trend
+of every president with polling, -14.2 points. Two things made that unfair.
+
+**The starting level sets the room to move.** Approval is bounded, and the
+honeymoon fades from wherever it began. Across the 14 completed polling-era
+presidencies (UCSB American Presidency Project, 2026-10-01), the starting
+level (first-quarter average) explains 45% of the trend's variance:
+trend = 44.0 - 0.99 x start (r = -0.67, residual SD 11.9): a president who
+started 10 points higher went on to fall about 10 points further. Scored against the flat average, a
+president who began near the floor looked steady for having nowhere to fall.
+The trend is now scored against the fitted expectation for the president's
+own start, with the residual SD as the scale (`fit_trend_on_start`), refitted
+every run. With 14 presidencies the fit is noisy, but the relationship is
+strong (p < 0.01) and its sign is what bounded measures predict.
+
+**The sitting president's term is partial.** It was compared with whole
+terms. Approval falls as a term goes on: the completed presidencies averaged
+57.5% over their first 598 days and 51.9% over their full terms. So a short
+window flattered the sitting president on both components, and the partial
+term also sat inside the population everyone else was scored against. Now
+the population is completed presidencies only, and the sitting president is
+compared with each predecessor over the same number of days from their first
+poll (`sitting_window_reference`; a presidency shorter than the window is
+left out). Within that window the start still explains much of the change
+(r = -0.52).
+
+**Effect** (live data, 2026-10-01): the sitting president's Public Mandate
+falls by about half, since a modest decline from a low start had been read as
+better than average; completed presidencies that started high and held their
+approval rise by 5 to 11 points; most others move down a few points, because the
+sitting president's partial-term average no longer lowers the comparison
+average.
+
 ## Also fixed
 
 The score breakdown preferred a stored `gdp_growth_adjusted` column that

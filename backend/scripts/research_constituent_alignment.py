@@ -77,6 +77,9 @@ SOURCES = {
     "senate_1976_2024.csv": f"{DATAVERSE}/13887039?format=original",
     "president_1976_2024.csv": f"{DATAVERSE}/13887042",
     "house_primaries.dta": f"{DATAVERSE}/4271583?format=original",
+    # Cooperative Election Study 2024 Common Content (doi:10.7910/DVN/X11EP6):
+    # respondents' self-placed ideology by state, for section 13.
+    "ces24.csv": f"{DATAVERSE}/12050325",
 }
 SENATES, HOUSES = range(101, 120), range(101, 112)  # the 119th Senate: party means only (no election yet)
 for _c in SENATES:
@@ -793,6 +796,50 @@ def house_primary_test(p, centerward=False, once_per_measure=False):
                      lambda f, D=D: smf.ols(f, D).fit(cov_type="cluster", cov_kwds={"groups": D.gid}), D.fe)
 
 
+_FIPS_STATE = {
+    1: "AL", 2: "AK", 4: "AZ", 5: "AR", 6: "CA", 8: "CO", 9: "CT", 10: "DE", 12: "FL", 13: "GA", 15: "HI",
+    16: "ID", 17: "IL", 18: "IN", 19: "IA", 20: "KS", 21: "KY", 22: "LA", 23: "ME", 24: "MD", 25: "MA",
+    26: "MI", 27: "MN", 28: "MS", 29: "MO", 30: "MT", 31: "NE", 32: "NV", 33: "NH", 34: "NJ", 35: "NM",
+    36: "NY", 37: "NC", 38: "ND", 39: "OH", 40: "OK", 41: "OR", 42: "PA", 44: "RI", 45: "SC", 46: "SD",
+    47: "TN", 48: "TX", 49: "UT", 50: "VT", 51: "VA", 53: "WA", 54: "WV", 55: "WI", 56: "WY",
+}
+
+
+def seat_expectation_test(p):
+    """Section 13: should a senator's expected position come from how the
+    state's voters place themselves rather than how it votes for president?
+    Leave-one-out error of each per-party fit of the newest Senate's
+    Nokken-Poole positions."""
+    print("\n== 13. The seat's expected position: partisan lean or voters' ideology ==")
+    ces = pd.read_csv(p["ces24.csv"], usecols=["inputstate", "ideo5", "commonweight"], low_memory=False)
+    ces = ces[ces.ideo5.between(1, 5) & (ces.commonweight > 0)]
+    ces["state"] = ces.inputstate.map(_FIPS_STATE)
+    ideology = ces.dropna(subset=["state"]).groupby("state").apply(
+        lambda g: np.average(g.ideo5, weights=g.commonweight))
+    m = pd.read_csv(p["S119_members.csv"])
+    m = m[(m.chamber == "Senate") & m.nokken_poole_dim1.notna()].copy()
+    m["party"] = m.party_code.map({100: "D", 200: "R", 328: "D"})  # Independents caucus with Democrats
+    m["pvi"] = m.state_abbrev.map(score_calculator._state_pvi())
+    m["ideology"] = m.state_abbrev.map(ideology)
+    m = m.dropna(subset=["party", "pvi", "ideology"])
+    for party, g in m.groupby("party"):
+        for label, formula in (("partisan lean", "nokken_poole_dim1 ~ pvi"),
+                               ("voters' ideology", "nokken_poole_dim1 ~ ideology"),
+                               ("both", "nokken_poole_dim1 ~ pvi + ideology")):
+            preds = []
+            for i in g.index:
+                fit = smf.ols(formula, g.drop(i)).fit()
+                preds.append(float(fit.predict(g.loc[[i]]).iloc[0]))
+            rmse = float(np.sqrt(np.mean((g.nokken_poole_dim1 - np.array(preds)) ** 2)))
+            print(f"  {party} (n={len(g)}) {label:17} leave-one-out RMSE {rmse:.3f}")
+    # Two senators of one party from one state share an electorate; how far
+    # apart they sit is the spread no seat-level expectation can explain.
+    pairs = m.groupby(["state_abbrev", "party"]).nokken_poole_dim1.agg(["count", "max", "min"])
+    pairs = pairs[pairs["count"] == 2]
+    print(f"  same-state, same-party pairs: {len(pairs)}, median gap {float((pairs['max'] - pairs['min']).median()):.3f}, "
+          f"largest {float((pairs['max'] - pairs['min']).max()):.3f}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cache", default=".research-cache/constituent-alignment", type=pathlib.Path)
@@ -810,6 +857,8 @@ def main():
     # Section 12: every stage of one measure (cloture, then confirmation) counted once.
     senate_general_test(paths, centerward=True, once_per_measure=True)
     house_primary_test(paths, centerward=True, once_per_measure=True)
+    # Section 13: the seat's expected position from voters' own ideology.
+    seat_expectation_test(paths)
 
 
 if __name__ == "__main__":

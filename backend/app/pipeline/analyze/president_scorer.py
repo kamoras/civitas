@@ -44,6 +44,7 @@ Metrics that can be dynamically computed:
 import logging
 import math
 import statistics
+from datetime import date
 
 from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
 from app.pipeline.analyze.score_bounds import clamp
@@ -228,8 +229,11 @@ def dimensions_available(entity) -> int:
 # docstring); v5 = the z-score population statistics (approval, trend,
 # election margin, C-SPAN) and the electoral->popular margin rescale are
 # measured each run instead of hand-typed (compute_president_reference,
-# presidential_elections._fit_scales).
-PRESIDENT_ALGORITHM_VERSION = "v5"
+# presidential_elections._fit_scales); v6 = the approval trend is judged
+# against what presidents starting at the same level went on to do
+# (fit_trend_on_start), and the sitting president's approval against
+# predecessors over the same elapsed time (sitting_window_reference).
+PRESIDENT_ALGORITHM_VERSION = "v6"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -482,9 +486,23 @@ def compute_president_reference(presidents: list[dict]) -> dict:
         if p.get("jobs_created_millions") is not None and (p.get("term_years") or 0) > 0:
             jobs.append(jobs_per_attributed_year(float(p["jobs_created_millions"]), float(p["term_years"])))
 
+    # A sitting president's approval covers part of a term; the full-term
+    # population is completed presidencies only (the sitting president is
+    # compared with predecessors over the same elapsed time instead,
+    # sitting_window_reference).
+    completed = [p for p in presidents if not p.get("is_current")]
+
+    def completed_values(field: str) -> list[float]:
+        return [float(p[field]) for p in completed if p.get(field) is not None]
+
     stats = {
-        "avg_approval": _mean_stdev(values("avg_approval")),
-        "approval_trend": _mean_stdev(values("approval_trend")),
+        "avg_approval": _mean_stdev(completed_values("avg_approval")),
+        "approval_trend": _mean_stdev(completed_values("approval_trend")),
+        "approval_trend_fit": fit_trend_on_start([
+            (float(p["approval_start"]), float(p["approval_trend"]))
+            for p in completed
+            if p.get("approval_start") is not None and p.get("approval_trend") is not None
+        ]),
         "election_margin": _mean_stdev(values("election_margin")),
         "historical_legacy": _mean_stdev(list(legacy_by_person.values())),
         **{key: _mean_stdev(vals) for key, vals in gdp.items()},
@@ -494,6 +512,86 @@ def compute_president_reference(presidents: list[dict]) -> dict:
         ),
     }
     return {k: v for k, v in stats.items() if v is not None}
+
+
+def approval_window(series: list[tuple[date, float]], days: int | None = None) -> dict | None:
+    """{"avg", "start", "trend"} over the polls in a term's first `days`
+    days (every poll when None), from (poll date, approve %) pairs in date
+    order: the average, the first quartile's average (where the term
+    started) and the last quartile's average minus the first's. The same
+    quartile trend the pipeline stores for a whole term."""
+    if not series:
+        return None
+    first = series[0][0]
+    values = [approve for day, approve in series if days is None or (day - first).days <= days]
+    q = max(1, len(values) // 4)
+    start = sum(values[:q]) / q
+    return {
+        "avg": statistics.mean(values),
+        "start": start,
+        "trend": sum(values[-q:]) / q - start,
+    }
+
+
+def fit_trend_on_start(points: list[tuple[float, float]]) -> dict | None:
+    """Least-squares fit of approval trend on starting approval over
+    (start, trend) pairs, with the residual standard deviation the trend
+    is z-scored by. None below _MIN_PRESIDENT_REFERENCE_N presidencies.
+
+    Approval is bounded, and a president who starts high has far further
+    to fall: across the 14 completed polling-era presidencies, the starting
+    level explains 45% of the trend's variance (r = -0.67, 2026-10-01,
+    UCSB American Presidency Project polls). Scored against the population
+    average instead, a president who began near the floor looked steady
+    for having nowhere to go. Comparing each president with what the
+    record predicts from their starting point is regression adjustment
+    for that baseline, the standard treatment of a change score whose
+    room to move depends on where it starts."""
+    if len(points) < _MIN_PRESIDENT_REFERENCE_N:
+        return None
+    xs = [x for x, _ in points]
+    ys = [y for _, y in points]
+    mx, my = statistics.mean(xs), statistics.mean(ys)
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if sxx == 0:
+        return None
+    slope = sum((x - mx) * (y - my) for x, y in points) / sxx
+    intercept = my - slope * mx
+    residuals = [y - (intercept + slope * x) for x, y in points]
+    resid_sd = math.sqrt(sum(r * r for r in residuals) / (len(points) - 2))
+    return {
+        "intercept": round(intercept, 4),
+        "slope": round(slope, 4),
+        "resid_sd": round(resid_sd, 4),
+        "n": len(points),
+    }
+
+
+def sitting_window_reference(
+    current: list[tuple[date, float]], completed: list[list[tuple[date, float]]],
+) -> dict | None:
+    """The sitting president's comparison population: every completed
+    presidency over the same number of days from its first poll as the
+    sitting president has had. A term's approval falls as it goes on (the
+    completed presidencies averaged 57.5% over their first 598 days and
+    51.9% over their full terms), so comparing part of one term with
+    whole terms flatters whoever is in office. A presidency shorter than
+    the window is left out rather than compared over less time."""
+    if len(current) < 2:
+        return None
+    days = (current[-1][0] - current[0][0]).days
+    windows = [
+        approval_window(series, days)
+        for series in completed
+        if series and (series[-1][0] - series[0][0]).days >= days
+    ]
+    windows = [w for w in windows if w]
+    block = {
+        "days": days,
+        "avg_approval": _mean_stdev([w["avg"] for w in windows]),
+        "approval_trend_fit": fit_trend_on_start([(w["start"], w["trend"]) for w in windows]),
+    }
+    return {k: v for k, v in block.items() if v is not None} if len(block) > 1 else None
 
 
 def _president_stat(reference: dict | None, key: str) -> tuple[float, float] | None:
@@ -508,6 +606,8 @@ def calc_public_mandate(
     approval_trend: float | None,
     election_margin: float | None,
     reference: dict | None = None,
+    approval_start: float | None = None,
+    is_current: bool = False,
 ) -> int | None:
     """Calculate Public Mandate score from real data only — approval
     polling where it exists, election margin as the pre-polling-era
@@ -518,7 +618,25 @@ def calc_public_mandate(
     thin wrapper kept for the same reuse contract as calc_effectiveness/
     calc_agency_alignment.
     """
-    return _public_mandate_core(avg_approval, approval_trend, election_margin, reference)["score"]
+    return _public_mandate_core(
+        avg_approval, approval_trend, election_margin, reference, approval_start, is_current,
+    )["score"]
+
+
+def _approval_reference(reference: dict | None, is_current: bool) -> dict:
+    """The approval population a president is compared with: for the
+    sitting president, predecessors over the same elapsed time
+    (sitting_window_reference); otherwise completed presidencies' full
+    terms. Each key falls back to the persisted/bundled reference."""
+    persisted = PRESIDENT_REFERENCE.load().get("presidents") or {}
+    if is_current:
+        window = (reference or {}).get("sitting_window") or persisted.get("sitting_window")
+        if window:
+            return window
+    return {
+        key: (reference or {}).get(key) or persisted.get(key)
+        for key in ("avg_approval", "approval_trend", "approval_trend_fit")
+    }
 
 
 def _public_mandate_core(
@@ -526,6 +644,8 @@ def _public_mandate_core(
     approval_trend: float | None,
     election_margin: float | None,
     reference: dict | None = None,
+    approval_start: float | None = None,
+    is_current: bool = False,
 ) -> dict:
     """Same math as calc_public_mandate, returning every intermediate
     value alongside the final score.
@@ -547,22 +667,41 @@ def _public_mandate_core(
         apply to them, full stop, not "we don't know so it's neutral."
     """
     components: list[dict] = []
-    approval = _president_stat(reference, "avg_approval")
-    trend = _president_stat(reference, "approval_trend")
+    population = _approval_reference(reference, is_current)
+    approval_stat = population.get("avg_approval")
+    approval = (approval_stat["mean"], approval_stat["stdev"]) if approval_stat else None
+    trend_stat = population.get("approval_trend")
+    trend = (trend_stat["mean"], trend_stat["stdev"]) if trend_stat else None
+    fit = population.get("approval_trend_fit")
+    window_days = population.get("days")
     margin = _president_stat(reference, "election_margin")
     facts = {
         "approval": avg_approval, "approvalMean": approval[0] if approval else None,
         "approvalTrend": approval_trend, "trendMean": trend[0] if trend else None,
+        "approvalStart": approval_start, "comparedOverDays": window_days,
         "electionMargin": election_margin, "marginMean": margin[0] if margin else None,
     }
 
     if avg_approval is not None and approval:
+        over = (
+            f"predecessors' first {window_days} days" if window_days is not None
+            else "completed presidencies"
+        )
         components.append(_population_zscore_component(
             "Average approval", 0.70, avg_approval, approval[0], approval[1],
-            f"{avg_approval:.1f}% average approval over the term vs. "
-            f"population mean {approval[0]:.1f}%",
+            f"{avg_approval:.1f}% average approval vs. {approval[0]:.1f}% across {over}",
         ))
-        if approval_trend is not None and trend:
+        if approval_trend is not None and fit and approval_start is not None:
+            expected = fit["intercept"] + fit["slope"] * approval_start
+            facts["trendExpected"] = round(expected, 1)
+            components.append(_population_zscore_component(
+                "Approval trend", 0.30, approval_trend, expected, fit["resid_sd"],
+                f"{approval_trend:+.1f}pt change from a start of {approval_start:.0f}% vs. "
+                f"{expected:+.1f}pt expected for presidents starting there, across {over}",
+            ))
+        elif approval_trend is not None and trend and window_days is None:
+            # No fit yet (the persisted reference predates it): against the
+            # population average, as before v6.
             components.append(_population_zscore_component(
                 "Approval trend", 0.30, approval_trend, trend[0], trend[1],
                 f"{approval_trend:+.1f}pt change from term-start to term-end vs. "
@@ -675,6 +814,8 @@ def recalculate_president_scores(
             approval_trend=live_data.get("approval_trend"),
             election_margin=live_data.get("election_margin"),
             reference=reference,
+            approval_start=live_data.get("approval_start"),
+            is_current=bool(live_data.get("is_current")),
         ),
         "score_effectiveness": calc_effectiveness(
             jobs_created_millions=live_data.get("jobs_created_millions"),

@@ -75,13 +75,17 @@ export default function PresidentsAndJusticesChapter() {
         <Sub title="Public Mandate (21.67%)">
           <P>
             Approval over the term: 70% the average, 30% the trend from start to finish, each scored
-            against every president&apos;s actual polling history. Data comes from the American
-            Presidency Project at UC Santa Barbara, which aggregates AP-NORC, CNN-SSRS, Marist, Pew
-            and Verasight: Gallup, the original source, stopped tracking presidential approval in
-            February 2026. Presidents before Truman, from before polling, are scored on their
-            average margin of victory instead. The four who have neither (Tyler, Fillmore, Arthur
-            and Andrew Johnson, who never won a presidential election and served before polling)
-            read N/A.
+            against every completed presidency&apos;s actual polling history. The trend is compared
+            with what presidents who started at the same level went on to do, because approval is
+            bounded: across the 14 completed presidencies with polling, the higher the start, the
+            further it fell. The sitting president is compared with predecessors over the same
+            number of days from the start of their terms, since approval falls as a term goes on.
+            Data comes from the American Presidency Project at UC Santa Barbara, which aggregates
+            AP-NORC, CNN-SSRS, Marist, Pew and Verasight. Gallup, the original source, stopped
+            tracking presidential approval in February 2026. Presidents before Truman, from before
+            polling, are scored on their average margin of victory instead. The four who have
+            neither (Tyler, Fillmore, Arthur and Andrew Johnson, who never won a presidential
+            election and served before polling) read N/A.
           </P>
         </Sub>
         <Sub title="Effectiveness (21.67%)">
@@ -207,6 +211,16 @@ export default function PresidentsAndJusticesChapter() {
           Oyez Project are shown beside the score and not scored: where a justice sits says nothing
           about favoring the president who appointed them. When Oyez lists a justice twice in one
           decision, the vote counts once if the entries agree and is left out if they don&apos;t.
+        </P>
+        <P>
+          Two refinements were tested and not adopted. Splitting &ldquo;other presidents&rdquo; into
+          the appointer&apos;s party and the other party: across 20,737 votes, justices sided with
+          other administrations of their appointer&apos;s party no more often than with the other
+          party&apos;s (−1.2 points, not significant), so the loyalty is to the one president, and
+          for four of today&apos;s nine justices no other president of their appointer&apos;s party
+          has served yet. Scoring how often a justice votes against their usual ideological side: in
+          divided decisions that rate tracks closeness to the Court&apos;s center (a −0.77
+          correlation with distance from the median), the same flaw that removed the old measures.
         </P>
         <More label="Measures we removed">
           <P>

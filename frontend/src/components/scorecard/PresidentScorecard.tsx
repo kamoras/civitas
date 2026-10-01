@@ -86,16 +86,23 @@ function MandateColumn({
   weight?: number;
 }) {
   const f = dim?.facts as PublicMandateFacts | undefined;
+  // The sitting president is compared with predecessors over the same
+  // stretch of their terms; everyone else with completed terms.
+  const months = f?.comparedOverDays != null ? Math.round(f.comparedOverDays / 30.44) : null;
+  const over = months != null ? `over their first ${months} months` : "over their terms";
+  const rose = (n: number) => (n >= 0 ? "rose" : "fell");
   return (
     <ScoreColumn title="Public Mandate" shareId="public-mandate" weight={weight} score={score}>
       {f?.approval != null && f.approvalMean != null ? (
         <>
           <Lede>
-            Averaged {one(f.approval)}% approval over the term; presidents average{" "}
-            {one(f.approvalMean)}%.
-            {f.approvalTrend != null &&
-              f.trendMean != null &&
-              ` Approval ${f.approvalTrend >= 0 ? "rose" : "fell"} ${one(Math.abs(f.approvalTrend))} points over the term, against a typical ${f.trendMean >= 0 ? "rise" : "fall"} of ${one(Math.abs(f.trendMean))}.`}
+            Averaged {one(f.approval)}% approval {months != null ? "so far" : "over the term"};
+            presidents averaged {one(f.approvalMean)}% {over}.
+            {f.approvalTrend != null && f.trendExpected != null && f.approvalStart != null
+              ? ` Approval ${rose(f.approvalTrend)} ${one(Math.abs(f.approvalTrend))} points from a start of ${one(f.approvalStart)}%; presidents who started there ${rose(f.trendExpected)} about ${one(Math.abs(f.trendExpected))}.`
+              : f.approvalTrend != null &&
+                f.trendMean != null &&
+                ` Approval ${rose(f.approvalTrend)} ${one(Math.abs(f.approvalTrend))} points over the term, against a typical ${f.trendMean >= 0 ? "rise" : "fall"} of ${one(Math.abs(f.trendMean))}.`}
           </Lede>
           <ComparisonScale
             value={f.approval}
@@ -104,7 +111,11 @@ function MandateColumn({
             max={100}
             axis={["0%", "100%"]}
             valueLabel={`This term ${one(f.approval)}%`}
-            normLabel={`all presidents ${one(f.approvalMean)}%`}
+            normLabel={
+              months != null
+                ? `predecessors' first ${months} months ${one(f.approvalMean)}%`
+                : `all presidents ${one(f.approvalMean)}%`
+            }
             tone={tone(score)}
           />
         </>

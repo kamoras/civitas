@@ -50,7 +50,7 @@ crosstabs) is the only piece of that exploration that survived.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
@@ -236,6 +236,21 @@ async def fetch_president_approval_history(
         ],
     })
     return polls
+
+
+def dated_approvals(polls: list[ApprovalPoll]) -> list[tuple[date, float]]:
+    """(start date, approve %) for every poll with both, in date order. A
+    poll with an unparseable date is left out rather than guessed into
+    place."""
+    out = []
+    for p in polls:
+        if p.approving is None:
+            continue
+        try:
+            out.append((datetime.strptime(p.start_date, "%m/%d/%Y").date(), p.approving))
+        except ValueError:
+            continue
+    return sorted(out)
 
 
 def recent_polls(polls: list[ApprovalPoll], days: int = 90, as_of: datetime | None = None) -> list[ApprovalPoll]:
