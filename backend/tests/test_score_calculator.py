@@ -122,37 +122,19 @@ class TestFundingIndependence:
         score = _calc_funding_independence(funding)
         assert score < 50
 
-    def test_pac_volume_penalizes_diluted_pac_money(self):
-        """$5M of PAC money must not vanish inside a $100M campaign.
-
-        Share alone gave mega-fundraisers near-perfect PAC scores because
-        capped PAC checks shrink as a fraction of unbounded individual
-        money (FI vs log campaign size r=+0.58 Senate, 2026-09-28). Against
-        the chamber's size fit (here: PAC dollars flat with size, as the
-        Senate measured), the same 5% share is ten times the typical share
-        at $100M and only the typical one at $10M.
-        """
-        small_campaign = {
-            "totalRaised": 10_000_000,
-            "totalFromPACs": 500_000,   # 5% share, $0.5M volume
-            "smallDonorPercentage": 15,
-            "topDonors": [],
-        }
-        mega_campaign = {
-            "totalRaised": 100_000_000,
-            "totalFromPACs": 5_000_000,  # same 5% share, $5M volume
-            "smallDonorPercentage": 15,
-            "topDonors": [],
-        }
-        # Flat PAC dollars ($500K) across sizes: log share slope -1.
-        ref = {"senate": {
-            "pac_ratio_median": 0.05, "pac_size_slope": -1.0,
-            "pac_size_intercept": math.log(500_000), "pac_size_log_lo": math.log(1e6),
-            "pac_size_log_hi": math.log(2e8),
-        }}
+    def test_pac_dependency_reads_the_share_not_the_campaign_size(self):
+        """v6.26: the same share of a larger campaign is the same
+        dependence. v6.22 scored a $100M campaign's 5% as ten times the
+        typical share because PAC dollars barely grow with size, which
+        turned a share into a dollar count."""
+        small_campaign = {"totalRaised": 10_000_000, "totalFromPACs": 500_000,
+                          "smallDonorPercentage": 15, "topDonors": []}
+        mega_campaign = {"totalRaised": 100_000_000, "totalFromPACs": 5_000_000,
+                         "smallDonorPercentage": 15, "topDonors": []}
+        ref = {"senate": {"pac_ratio_median": 0.15, "pac_ratio_p10": 0.03, "pac_ratio_p90": 0.4}}
         assert (
             _calc_funding_independence(mega_campaign, reference=ref)
-            < _calc_funding_independence(small_campaign, reference=ref)
+            == _calc_funding_independence(small_campaign, reference=ref)
         )
 
     def test_own_committees_excluded_from_concentration(self):
@@ -212,35 +194,34 @@ class TestFundingIndependence:
         assert score_low > score_high
         assert score_low - score_high >= 10
 
-    def test_concentration_is_scored_against_the_chamber_median(self, pinned_funding_reference):
-        """v6.13: the anchors used to be hand-typed (0.15 -> 100, 0.40 -> 0,
-        fitted to a 2026-07 snapshot; an earlier set had drifted until the
-        typical member scored ~90 regardless of real concentration). Now the
-        chamber's measured median scores 50 and one p10-p90 spread above or
-        below saturates at 0 / 100 (compute_funding_reference)."""
+    def test_concentration_is_ranked_within_the_chamber(self, pinned_funding_reference):
+        """v6.26: the top 10 donors' share of all outside contributions,
+        ranked within the chamber (_rank_score): no big donors scores 100,
+        the chamber's median member 50, all money from ten donors 0. The
+        anchors used to be hand-typed (v6.13 measured them instead), then a
+        median-and-spread scale that a skewed share capped near 65."""
         ref = pinned_funding_reference["senate"]
-        median = ref["concentration_median"]
-        spread = ref["concentration_p90"] - ref["concentration_p10"]
+        median = ref["top10_share_median"]
 
         def _concentration_score(share: float) -> float:
             pool_total = 1_000_000
             top10_total = round(share * pool_total)
-            n_others = 100
+            # Enough smaller donors that none outgives the top ten.
+            n_others = 10_000
             funding = {
                 "totalRaised": pool_total,
                 "totalFromPACs": 0,
                 "topDonors": (
-                    [{"total": top10_total // 10} for _ in range(10)]
-                    + [{"total": max(1, (pool_total - top10_total) // n_others)} for _ in range(n_others)]
+                    [{"total": top10_total / 10} for _ in range(10)]
+                    + [{"total": (pool_total - top10_total) / n_others} for _ in range(n_others)]
                 ),
             }
             return _funding_independence_core(funding)["components"][2]["score"]
 
         assert abs(_concentration_score(median) - 50.0) < 0.5
-        assert _concentration_score(median + spread) == 0.0
-        assert _concentration_score(median - spread) == 100.0
-        assert _concentration_score(0.95) == 0.0  # never negative
-        assert _concentration_score(median - 0.05) > _concentration_score(median + 0.05)
+        assert _concentration_score(0.0011) > 95  # ten donors at 0.1% of the money
+        assert _concentration_score(1.0) == 0.0
+        assert _concentration_score(median / 2) > _concentration_score(median) > _concentration_score(median * 2)
 
     def test_small_state_not_penalized_for_identical_raw_percentage(self):
         """The core regression test: WY (population 0.6M, one of the

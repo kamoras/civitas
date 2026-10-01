@@ -1,8 +1,10 @@
 """Fetch modules for the FEC (Federal Election Commission) API."""
 
 from datetime import date, timedelta
+import io
 import logging
 import re
+import zipfile
 from urllib.parse import quote
 
 import httpx
@@ -632,6 +634,180 @@ async def fetch_pac_receipts(
     return results
 
 
+# Completed elections' itemized totals barely move once the reports are in,
+# so the per-committee aggregates are kept for a month rather than the
+# pipeline's 72 hours: the first run spends ~2 requests a member and later
+# runs almost none (the key allows 1,000 an hour).
+CONTRIBUTION_TOTALS_CACHE_TTL_HOURS = 24 * 30
+# Pages of a committee's occupation totals read per cycle, at most. The FEC
+# sorts them largest first, and reading stops once a page adds under 1% of
+# what came before it (Cortez Masto's 2022 election: 4 pages hold 94% of
+# itemized money, 10 pages 97%).
+OCCUPATION_PAGES = 4
+_OCCUPATION_PAGE_FLOOR = 0.01
+
+
+async def _committee_totals(
+    client: httpx.AsyncClient, db: Session, endpoint: str, field: str,
+    committee_id: str, cycles: list[int] | None, pages: int,
+) -> list[dict] | None:
+    """{field, total} rows from one of the FEC's per-committee aggregates of
+    itemized individual contributions (by_occupation, by_employer), summed
+    over `cycles`, largest first. None when a page could not be fetched: an
+    outage is not a committee with no donors."""
+    cache_key = f"{endpoint}-v1-{committee_id}-{_cycle_tag(cycles)}"
+    cached = api_cache_get(db, "fec", cache_key, max_age_hours=CONTRIBUTION_TOTALS_CACHE_TTL_HOURS)
+    if cached is not None:
+        return cached
+    totals: dict[str, float] = {}
+    for cycle in cycles or []:
+        read = 0.0
+        for page in range(1, pages + 1):
+            data = await _fetch_with_retry(
+                client,
+                f"{FEC_API_BASE}/schedules/schedule_a/{endpoint}/?committee_id={committee_id}"
+                f"&cycle={cycle}&sort=-total&per_page=100&page={page}",
+            )
+            if data is None:
+                return None
+            results = data.get("results") or []
+            added = sum(r.get("total") or 0 for r in results)
+            for r in results:
+                key = (r.get(field) or "").strip().upper()
+                totals[key] = totals.get(key, 0.0) + (r.get("total") or 0)
+            read += added
+            if not results or page >= (data.get("pagination") or {}).get("pages", 0) or added < _OCCUPATION_PAGE_FLOOR * read:
+                break
+    rows = sorted(({field: k, "total": v} for k, v in totals.items()), key=lambda r: -r["total"])
+    api_cache_set(db, "fec", cache_key, rows, normal_ttl_hours=CONTRIBUTION_TOTALS_CACHE_TTL_HOURS)
+    return rows
+
+
+async def fetch_occupation_totals(
+    client: httpx.AsyncClient, db: Session, committee_id: str, cycles: list[int] | None,
+) -> list[dict] | None:
+    """A committee's itemized individual money by the donor's stated
+    occupation (transform/occupation_industry classifies it). A few pages
+    cover most of the money, where the 100 largest receipts covered under 1%
+    of a large campaign's (2026-10-01)."""
+    return await _committee_totals(client, db, "by_occupation", "occupation", committee_id, cycles, OCCUPATION_PAGES)
+
+
+async def fetch_employer_totals(
+    client: httpx.AsyncClient, db: Session, committee_id: str, cycles: list[int] | None,
+) -> list[dict] | None:
+    """A committee's itemized individual money by the donor's employer, the
+    100 largest per cycle: the employee side of each top donor. A
+    committee's largest employers come first, so one page holds every one
+    that can rank among its top donors."""
+    return await _committee_totals(client, db, "by_employer", "employer", committee_id, cycles, 1)
+
+
+# The FEC's "contributions from committees to candidates" bulk file, one per
+# cycle: every PAC, party and candidate committee contribution to a
+# candidate, with the giving committee's id. The API's PAC receipts were read
+# 100 rows at a time and covered none of Cortez Masto's $3.4M; this file
+# holds all of it ($3.55M across her election's three cycles, within 3% of
+# the FEC's own total, 2026-10-01).
+COMMITTEE_CONTRIBUTIONS_URL = "https://www.fec.gov/files/bulk-downloads/{year}/pas2{yy}.zip"
+# Transaction types that are contributions to the candidate: 24K a
+# contribution, 24Z an in-kind one. Independent expenditures (24A/24E) and
+# communication costs (24F) are not money the campaign received; Funding
+# Independence leaves them out on purpose (score_calculator v6.13).
+_DIRECT_CONTRIBUTION_TYPES = frozenset({"24K", "24Z"})
+_PAS2_CMTE, _PAS2_TYPE, _PAS2_AMOUNT, _PAS2_CAND = 0, 5, 14, 16
+
+
+def parse_committee_contributions(lines) -> dict[str, dict[str, float]]:
+    """pas2 lines -> {candidate_id: {giving committee_id: dollars}}, direct
+    and in-kind contributions only (refunds come through as negative
+    amounts and net out)."""
+    out: dict[str, dict[str, float]] = {}
+    for line in lines:
+        cols = line.rstrip("\n").split("|")
+        if len(cols) <= _PAS2_CAND or cols[_PAS2_TYPE] not in _DIRECT_CONTRIBUTION_TYPES or not cols[_PAS2_CAND]:
+            continue
+        try:
+            amount = float(cols[_PAS2_AMOUNT] or 0)
+        except ValueError:
+            continue
+        given = out.setdefault(cols[_PAS2_CAND], {})
+        given[cols[_PAS2_CMTE]] = given.get(cols[_PAS2_CMTE], 0.0) + amount
+    return out
+
+
+async def fetch_committee_contributions(
+    client: httpx.AsyncClient, db: Session, cycles: list[int],
+) -> dict[int, dict[str, dict[str, float]]] | None:
+    """{cycle: {candidate_id: {committee_id: dollars}}} for `cycles`, from the
+    bulk files, cached a week like the committee master. A cycle whose file
+    can't be read is left out (logged); None when none could be, so callers
+    can tell an outage from an election with no PAC money."""
+    out: dict[int, dict[str, dict[str, float]]] = {}
+    for cycle in sorted(set(cycles)):
+        cache_key = f"committee-contributions-v1-{cycle}"
+        cached = api_cache_get(db, "fec", cache_key, max_age_hours=COMMITTEE_MASTER_CACHE_TTL_HOURS)
+        if cached is None:
+            url = COMMITTEE_CONTRIBUTIONS_URL.format(year=cycle, yy=f"{cycle % 100:02d}")
+            try:
+                resp = await client.get(url, timeout=DEFAULT_FETCH_TIMEOUT_S * 8, follow_redirects=True)
+                resp.raise_for_status()
+                with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+                    name = next(n for n in zf.namelist() if n.lower().endswith(".txt"))
+                    with zf.open(name) as raw:
+                        cached = parse_committee_contributions(io.TextIOWrapper(raw, encoding="latin-1"))
+            except Exception as exc:
+                logger.warning("FEC committee contributions %d unavailable: %s", cycle, exc)
+                continue
+            api_cache_set(db, "fec", cache_key, cached, normal_ttl_hours=COMMITTEE_MASTER_CACHE_TTL_HOURS)
+        out[cycle] = cached
+    return out or None
+
+
+def candidate_committee_contributions(
+    contributions: dict[int, dict[str, dict[str, float]]] | None, candidate_id: str, cycles: list[int] | None,
+) -> dict[str, float] | None:
+    """{giving committee_id: dollars} to one candidate over `cycles`; None
+    when any of those cycles' files is missing (unknown, not zero)."""
+    if contributions is None or not cycles or any(c not in contributions for c in cycles):
+        return None
+    given: dict[str, float] = {}
+    for cycle in cycles:
+        for cid, amount in contributions[cycle].get(candidate_id, {}).items():
+            given[cid] = given.get(cid, 0.0) + amount
+    return {cid: amount for cid, amount in given.items() if amount > 0}
+
+
+async def _merged_totals(fetch, client, db, committee_ids: list[str], cycles, field: str) -> list[dict] | None:
+    merged: dict[str, float] = {}
+    for cid in committee_ids:
+        rows = await fetch(client, db, cid, cycles)
+        if rows is None:
+            return None
+        for r in rows:
+            merged[r[field]] = merged.get(r[field], 0.0) + r["total"]
+    return sorted(({field: k, "total": v} for k, v in merged.items()), key=lambda r: -r["total"])
+
+
+async def fetch_contribution_detail(
+    client: httpx.AsyncClient, db: Session, candidate_id: str, committee_ids: list[str],
+    cycles: list[int] | None, contributions: dict | None, master: dict[str, dict],
+) -> dict:
+    """The complete detail normalize_finance builds top donors and the
+    industry breakdown from: every committee that gave to the candidate over
+    `cycles` (the bulk file, with each giver's registration) and the
+    itemized individual money of the candidate's committees by occupation
+    and by employer. A part whose source couldn't be read is None, so the
+    sampled receipts stand in for it rather than it reading as zero."""
+    pacs = candidate_committee_contributions(contributions, candidate_id, cycles)
+    return {
+        "pacs": pacs,
+        "committees": await resolve_committee_meta(client, db, set(pacs or ()), master),
+        "occupations": await _merged_totals(fetch_occupation_totals, client, db, committee_ids, cycles, "occupation"),
+        "employers": await _merged_totals(fetch_employer_totals, client, db, committee_ids, cycles, "employer"),
+    }
+
+
 # TTL for cached committee-type lookups. A PAC's multicandidate status
 # (committee_type "Q" vs "N") is effectively permanent — it's a qualification
 # earned once (6+ months registered, 50+ contributors, contributed to 5+
@@ -754,7 +930,7 @@ def resolve_connected_orgs(
     names: dict[str, set[str]] | None = None,
     last_cycle: dict[str, int] | None = None,
 ) -> dict[str, dict]:
-    """{committee_id: {"type", "designation", "connectedOrg"}} from
+    """{committee_id: {"name", "type", "designation", "connectedOrg"}} from
     parse_committee_rows output. `names` adds every earlier name a committee
     has registered under, since a sponsor can cite a PAC by an old one.
     `last_cycle` is the latest cycle each committee is registered in: a
@@ -816,7 +992,10 @@ def resolve_connected_orgs(
                 return None
 
     return {
-        cid: {"type": row["type"], "designation": row["designation"], "connectedOrg": resolve(cid)}
+        cid: {
+            "name": row["name"], "type": row["type"], "designation": row["designation"],
+            "connectedOrg": resolve(cid),
+        }
         for cid, row in rows.items()
     }
 
@@ -834,9 +1013,6 @@ async def fetch_committee_master(
     rather than failing the run, and callers fall back to the per-committee
     API for anything missing. A failure is not cached.
     """
-    import io
-    import zipfile
-
     merged: dict[str, dict] = {}
     names: dict[str, set[str]] = {}
     last_cycle: dict[str, int] = {}

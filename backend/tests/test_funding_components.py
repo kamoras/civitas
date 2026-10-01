@@ -8,7 +8,8 @@ Measured on FEC bulk data for 2020-2024 incumbents
 - Source breadth was a second copy of the small-donor share (R^2 0.79-0.86)
   and was removed.
 - The industry-concentration fallback toward "50 + 50 x small-donor share"
-  was a third copy; Funding Independence now falls back to a neutral 50.
+  was a third copy; Funding Independence now falls back to a neutral 50,
+  and only when too little money is classified to measure a mix (v6.26).
 """
 
 from app.pipeline.analyze.score_calculator import (
@@ -49,10 +50,17 @@ def test_unmeasurable_industry_concentration_is_neutral():
     assert c["score"] == 50.0 and "neutral 50" in c["detail"]
 
 
-def test_partially_classified_money_shrinks_toward_neutral():
-    one_industry = [{"industry": "HEALTH", "total": 100_000}]  # 10% classified, HHI 1.0
-    c = components(funding(industries=one_industry))["Industry concentration"]
-    assert c["score"] == 37.5  # raw 0, a quarter of the way from 50
+def test_measurable_industry_money_is_scored_on_its_mix_alone():
+    """v6.26: a measurable mix is scored on the mix, not pulled toward 50
+    by how small a share of all funding it is. That pull read a small-gift
+    campaign's industry money as unreliable however much of it there was."""
+    one_industry = [{"industry": "HEALTHCARE", "total": 300_000}]
+    assert components(funding(industries=one_industry))["Industry concentration"]["score"] == 0.0
+    # Sanders' shape: mostly small gifts, the itemized rest spread wide.
+    spread_wide = [{"industry": ind, "total": 60_000} for ind in
+                   ("EDUCATION", "HEALTHCARE", "LAWYERS", "MEDIA", "TECH", "REAL_ESTATE", "FINANCE", "CONSTRUCTION")]
+    c = components(funding(small=68, industries=spread_wide))["Industry concentration"]
+    assert c["score"] > 80  # HHI 0.125, near the bottom of the chamber (median 0.18 scores 50)
 
 
 def test_outside_spending_does_not_move_the_score():

@@ -12,7 +12,7 @@ export const SCORE_TERMS: Record<ScoreKey, ScoreTerm> = {
     label: "Funding Independence",
     shortLabel: "FUNDING",
     description:
-      "How free is this member from PAC and mega-donor influence? Blends PAC dependency (the PAC share against what campaigns of the same size typically take in the chamber), state-relative small-donor share, top-donor concentration, and industry concentration. Outside spending by super PACs is not counted: the member can't direct it, and it tracks how competitive the race is rather than how dependent the member is.",
+      "How free is this member from PAC and mega-donor influence? Blends PAC dependency (the PAC share against what the seat predicts: a state's size for senators, the House median for representatives), state-relative small-donor share, how much money the top ten donors gave, and how concentrated the money is in one industry. Outside spending by super PACs is not counted: the member can't direct it, and it tracks how competitive the race is rather than how dependent the member is.",
   },
   constituentAlignment: {
     label: "Constituent Alignment",

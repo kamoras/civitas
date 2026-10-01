@@ -1,11 +1,11 @@
 """Regenerate app/data/funding_reference.json — Funding Independence's
 bundled pre-first-run PAC-share reference.
 
-The PAC-dependency component scores a member's PAC share against the share
-campaigns of the same size typically take in their chamber (v6.22,
-score_calculator._pac_size_fit), and against the chamber median before a
-chamber has a fit.
-The pipeline measures that median from the members it is about to score on
+The PAC-dependency component scores a member's PAC share against what the
+seat predicts (v6.26, score_calculator._pac_expectation: the Senate's share
+by state population, the House median), and the concentration components
+rank members within the chamber.
+The pipeline measures these from the members it is about to score on
 every run (score_calculator.compute_funding_reference) and writes
 /data/funding_reference.json, which takes precedence; this bundled file
 only matters before a deployment's first run. It uses the SAME

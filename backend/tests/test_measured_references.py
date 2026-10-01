@@ -42,12 +42,14 @@ class TestFundingReferenceStats:
         ]
         ref = compute_funding_reference(fundings)
         assert ref["small_donor_p10"] < ref["small_donor_median"] < ref["small_donor_p90"]
-        assert ref["concentration_n"] == 40
-        assert ref["concentration_p10"] < ref["concentration_median"] < ref["concentration_p90"]
+        assert ref["top10_share_n"] == 40
+        deciles = ref["top10_share_deciles"]
+        assert len(deciles) == 9 and deciles == sorted(deciles)
+        assert deciles[0] < ref["top10_share_median"] < deciles[-1]
 
     def test_concentration_omitted_when_too_few_pools_are_measurable(self):
         ref = compute_funding_reference([_funding(pac=1) for _ in range(40)])
-        assert "concentration_median" not in ref and "pac_ratio_median" in ref
+        assert "top10_share_median" not in ref and "pac_ratio_median" in ref
 
     def test_house_small_donor_share_is_relative_to_the_house_median(self):
         ref = {"small_donor_p10": 10.0, "small_donor_median": 20.0, "small_donor_p90": 30.0}
@@ -124,11 +126,11 @@ class TestPipelineKeepsUnmeasurableStats:
         from app.pipeline.analyze.population_reference import FUNDING_REFERENCE
         from app.pipeline.live_references import live_funding_reference
 
-        FUNDING_REFERENCE.write("senate", {"pac_ratio_median": 0.1, "concentration_median": 0.33,
-                                           "concentration_p10": 0.2, "concentration_p90": 0.4})
+        FUNDING_REFERENCE.write("senate", {"pac_ratio_median": 0.1, "top10_share_median": 0.33,
+                                           "top10_share_deciles": [0.2] * 9})
         merged = live_funding_reference("senate", [_funding(pac=200_000) for _ in range(40)])
         assert merged["senate"]["pac_ratio_median"] == 0.2  # measured this run
-        assert merged["senate"]["concentration_median"] == 0.33  # kept
+        assert merged["senate"]["top10_share_median"] == 0.33  # kept
 
 
 def test_nothing_hand_typed_remains_for_these_constants():

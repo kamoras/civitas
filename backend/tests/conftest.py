@@ -266,12 +266,20 @@ TEST_LES_REFERENCE = {
 TEST_FUNDING_REFERENCE = {
     "senate": {
         "n": 100, "pac_ratio_median": 0.157,
-        "concentration_p10": 0.212, "concentration_median": 0.305, "concentration_p90": 0.383,
+        # Top-10 donors' share of outside contributions and the HHI of the
+        # industry mix (v6.26 scales).
+        "top10_share_deciles": [0.004, 0.006, 0.008, 0.01, 0.012, 0.016, 0.02, 0.028, 0.04],
+        "top10_share_median": 0.012,
+        "industry_hhi_deciles": [0.12, 0.13, 0.15, 0.16, 0.18, 0.2, 0.22, 0.25, 0.3],
+        "industry_hhi_median": 0.18,
         "small_donor_p10": 8.0, "small_donor_median": 18.62, "small_donor_p90": 29.2,
     },
     "house": {
         "n": 435, "pac_ratio_median": 0.371,
-        "concentration_p10": 0.212, "concentration_median": 0.275, "concentration_p90": 0.383,
+        "top10_share_deciles": [0.02, 0.03, 0.035, 0.045, 0.05, 0.06, 0.07, 0.09, 0.12],
+        "top10_share_median": 0.05,
+        "industry_hhi_deciles": [0.12, 0.13, 0.15, 0.16, 0.18, 0.2, 0.22, 0.25, 0.3],
+        "industry_hhi_median": 0.18,
         "small_donor_p10": 8.0, "small_donor_median": 18.62, "small_donor_p90": 29.2,
     },
 }
