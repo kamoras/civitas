@@ -305,9 +305,19 @@ stops naming it once that Congress sits (`_incumbent_link`, the same
 `congress_first_year(CURRENT_CONGRESS) - 1 >= cycle` guard as
 `seat_holder_party`): the member table may hold either Congress until the
 member runs refresh it, so it links only a scorecard it can match without
-guessing — the race's own district or a senator, and only when no other
-candidate in the race shares the surname — and no longer matches a member
-across a redrawn state's delegation.
+guessing — the race's own district or a senator, and only when no one else
+whose win could put them on that seat has a surname the roster matcher
+could take for the incumbent's (its trailing-token rule, either way round:
+"Cruz" and "De La Cruz" count; the candidate's own merged FEC duplicates
+don't). For a House seat that is anyone in the race's whole field, not only
+the confirmed nominees; for the Senate, anyone in any of the state's Senate
+races this cycle, since a special's winner sits beside the regular race's.
+It no longer matches a member across a redrawn state's delegation. And in a
+redrawn state, at any time, the race's own district number links only when
+its holder is the one member of the delegation with that surname: the
+number names a different district than the one its holder was elected in,
+so Pat Smith (holding UT-1) running in the new UT-3 is never linked to Dana
+Smith's scorecard because Dana holds UT-3 today.
 
 On the national map (`RaceMap.tsx`), the eight states too small to tap —
 Rhode Island draws at 4×5 pixels on a phone — also get a labelled box off

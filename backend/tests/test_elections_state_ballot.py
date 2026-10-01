@@ -738,6 +738,64 @@ class TestIncumbentRecordOnceTheElectedCongressSits:
         data = self._on_jan_3(db_session, monkeypatch, 120)
         assert all(c["incumbentRecord"] is None for c in data["houseRaces"][0]["candidates"])
 
+    @pytest.mark.parametrize("congress", [119, 120])
+    @pytest.mark.parametrize("namesake_elsewhere", [False, True])
+    def test_a_redrawn_states_seat_number_links_only_a_unique_surname_in_the_delegation(
+        self, db_session, monkeypatch, congress, namesake_elsewhere,
+    ):
+        """On a redrawn map the race's number names a different district
+        than the member holding that number was elected in. Pat Smith
+        (holding UT-1) runs in the new UT-3, whose holder going in is Dana
+        Smith: the direct hit on UT-3 is Dana, not Pat, and must not link —
+        while the members going in sit and after the 120th sits on a roster
+        not yet refreshed. Without a namesake in the delegation the hit is
+        the candidate's own seat and still links."""
+        _race(db_session, "2026-HOUSE-UT-3", "UT", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-UT-3", "SMITH, PAT", incumbent_challenge="I")
+        if namesake_elsewhere:
+            _representative(db_session, "R-PAT", "Pat Smith", "UT", 1)
+            _representative(db_session, "R-DANA", "Dana Smith", "UT", 3)
+        else:
+            _representative(db_session, "R-PAT", "Pat Smith", "UT", 3)
+        record = self._on_jan_3(db_session, monkeypatch, congress)["houseRaces"][0]["candidates"][0]["incumbentRecord"]
+        if namesake_elsewhere:
+            assert record is None
+        else:
+            assert record["id"] == "R-PAT"
+
+    def test_a_redrawn_states_namesake_blocks_the_seat_number_during_the_campaign(self, db_session):
+        """The same as above on an ordinary campaign day (the 119th sits)."""
+        _race(db_session, "2026-HOUSE-UT-3", "UT", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-UT-3", "SMITH, PAT", incumbent_challenge="I")
+        _representative(db_session, "R-PAT", "Pat Smith", "UT", 1)
+        _representative(db_session, "R-DANA", "Dana Smith", "UT", 3)
+        db_session.commit()
+        data = _body(elections.state_ballot("UT", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"] is None
+
+    @pytest.mark.parametrize("congress,linked", [(119, True), (120, False)])
+    def test_a_namesake_in_the_states_other_senate_race_blocks_the_link_once_the_120th_sits(
+        self, db_session, monkeypatch, congress, linked,
+    ):
+        """A regular and a special Senate race in one state and cycle: the
+        senators are matched across the whole state, so the special's
+        winner sharing the regular incumbent's surname can be the row a
+        refreshed roster holds. The namesake check spans both races."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.add(Race(id="2026-SEN-GA-SPECIAL", cycle_year=2026, office="S", state="GA", is_special=True))
+        _candidate(db_session, "S1", "2026-SEN-GA", "OSSOFF, JON", incumbent_challenge="I")
+        _candidate(db_session, "S2", "2026-SEN-GA-SPECIAL", "OSSOFF, DANA", incumbent_challenge="O", party="REP")
+        if linked:
+            _senator(db_session, "SEN-JON", "Jon Ossoff", "GA")
+        else:
+            _senator(db_session, "SEN-DANA", "Dana Ossoff", "GA", party="R")
+        data = self._on_jan_3(db_session, monkeypatch, congress)
+        records = [c["incumbentRecord"] for r in data["senateRaces"] for c in r["candidates"]]
+        if linked:
+            assert [rec["id"] for rec in records if rec] == ["SEN-JON"]
+        else:
+            assert records == [None, None]
+
 
 class TestStaleIncumbentFlag:
     """Real MI 2026 Senate shape, live-verified 2026-09: Sen. Gary Peters

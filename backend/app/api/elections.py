@@ -562,29 +562,33 @@ def _seat_label(state: str, district: int | None) -> str:
     return f"{state}-{district}" if district else f"{state} at-large"
 
 
-def _has_namesake(cand: Candidate, last_name: str, field: list[Candidate]) -> bool:
-    """Whether another person in the race's whole field (deduplicated,
-    not only the confirmed nominees) has a surname the roster match could
-    take for `cand`'s. Decided with the roster match's own trailing-token
-    rule, both ways round: "cruz" and "de la cruz" both match a roster row
-    "Dana De La Cruz", so an incumbent Pat Cruz beside a challenger Dana
-    De La Cruz has a namesake. FEC's duplicate records of `cand` are the
-    same person, not a namesake — they share a surname by construction
-    (dedupe_merge_map only merges same-surname records)."""
-    merge_map = dedupe_merge_map(field)
-    me = merge_map.get(cand.id, cand.id)
-    for other in field:
-        if merge_map.get(other.id, other.id) == me:
-            continue
-        theirs = normalized_surname(other.name)
-        if theirs and (last_name_matches(last_name, theirs) or last_name_matches(theirs, last_name)):
-            return True
+def _has_namesake(cand: Candidate, last_name: str, fields: list[list[Candidate]]) -> bool:
+    """Whether another person in `fields` — the whole field (deduplicated,
+    not only the confirmed nominees) of each race whose winner the roster
+    match could reach: the candidate's own race, and for the Senate every
+    Senate race in the state this cycle — has a surname the roster match
+    could take for `cand`'s. Decided with the roster match's own
+    trailing-token rule, both ways round: "cruz" and "de la cruz" both
+    match a roster row "Dana De La Cruz", so an incumbent Pat Cruz beside
+    a challenger Dana De La Cruz has a namesake. FEC's duplicate records
+    of `cand` in its own race are the same person, not a namesake — they
+    share a surname by construction (dedupe_merge_map only merges
+    same-surname records, and only within one race's field)."""
+    for field in fields:
+        merge_map = dedupe_merge_map(field)
+        me = merge_map.get(cand.id, cand.id)
+        for other in field:
+            if merge_map.get(other.id, other.id) == me:
+                continue
+            theirs = normalized_surname(other.name)
+            if theirs and (last_name_matches(last_name, theirs) or last_name_matches(theirs, last_name)):
+                return True
     return False
 
 
 def _incumbent_link(
     cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
-    stale_incumbent_ids: frozenset[str] = frozenset(),
+    namesake_fields: list[list[Candidate]], stale_incumbent_ids: frozenset[str] = frozenset(),
 ) -> dict | None:
     """{id, score} for this candidate's matching Senator/Representative
     scorecard row, or None — only ever populated for a real, uniquely-
@@ -592,8 +596,13 @@ def _incumbent_link(
     one member's voting record to a different person on the ballot).
 
     House matches on the exact (state, district) key via `reps_by_district`
-    — no ambiguity possible, since a district has exactly one
-    representative. Senate has no seat-class field to key on (Senator only
+    — a district has exactly one representative. In a redrawn state
+    (redrawn_states) the race's number can name a different district than
+    the one its holder was elected in, so that hit counts only when the
+    holder is the one member of the state's delegation the surname
+    matches; otherwise an incumbent Pat Smith (holding UT-1) running in a
+    new UT-3 whose holder going in is Dana Smith would get Dana's
+    scorecard. Senate has no seat-class field to key on (Senator only
     stores `state`, and a state has two), so it matches on state + last
     name against `senators` (pre-filtered to this race's state), checked
     UNIQUE before trusting it — the only real disambiguator available
@@ -608,9 +617,12 @@ def _incumbent_link(
     member run refreshes them, the winners after — and nothing stored says
     which. A match is then still the candidate's own scorecard only on the
     race's own seat (its district, or the state's senators) and only when
-    no one else in the race has a surname the roster match could take
-    for theirs (_has_namesake): on a refreshed table
-    the seat holder is this race's winner, who may be that namesake. The
+    no one else whose win could put them on that seat has a surname the
+    roster match could take for theirs (_has_namesake over
+    `namesake_fields`: this race's field, and for the Senate every Senate
+    race in the state this cycle — a special's winner sits beside the
+    regular race's): on a refreshed table the seat holder is a winner,
+    who may be that namesake. The
     redrawn-map match across the delegation stops (a newly elected
     namesake elsewhere in the state would pass its uniqueness check), and
     no `district`/`seat` is said, since the table no longer tells the seat
@@ -628,21 +640,25 @@ def _incumbent_link(
     if not last_name:
         return None
     seated = elected_congress_sits(race.cycle_year)
-    if seated and _has_namesake(cand, last_name, race.candidates):
+    if seated and _has_namesake(cand, last_name, namesake_fields):
         return None
 
     if race.office == "H":
+        redrawn = race.state in redrawn_states(race.cycle_year)
+        same = [r for r in reps_by_district.values() if last_name_matches(last_name, r.name)]
         rep = reps_by_district.get(race.district or 0)
-        if rep and last_name_matches(last_name, rep.name):
+        # On a redrawn map this number's holder was elected in another
+        # district: they are the candidate only when no one else in the
+        # delegation shares the surname.
+        if rep and last_name_matches(last_name, rep.name) and (not redrawn or same == [rep]):
             if seated:
                 return {"id": rep.id, "score": compute_overall_score(rep)}
             return {"id": rep.id, "score": compute_overall_score(rep), "district": rep.district,
                     "seat": _seat_label(race.state, rep.district)}
-        if not seated and race.state in redrawn_states(race.cycle_year):
+        if not seated and redrawn:
             # A redrawn map renumbers seats: an incumbent can run in a
             # district whose number another member holds. Matched across
             # the state's delegation, and only when unique.
-            same = [r for r in reps_by_district.values() if last_name_matches(last_name, r.name)]
             if len(same) == 1:
                 # The district they held going into the election, which on
                 # a redrawn map is not this race's number: the page says
@@ -662,7 +678,7 @@ def _incumbent_link(
 def _race_full(
     race: Race, state_pvi: dict, district_pvi: dict,
     reps_by_district: dict[int, Representative], senators: list[Senator],
-    complete: bool,
+    namesake_fields: list[list[Candidate]], complete: bool,
 ) -> dict:
     """Same shape as race_detail's response, minus coverage — this backs
     the per-state ballot view, which needs every candidate (not just the
@@ -691,7 +707,8 @@ def _race_full(
         "candidates": [
             {
                 **_candidate_summary(c, stale_incumbent_ids),
-                "incumbentRecord": _incumbent_link(c, race, reps_by_district, senators, stale_incumbent_ids),
+                "incumbentRecord": _incumbent_link(
+                    c, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids),
             }
             for c in candidates
         ],
@@ -1182,8 +1199,14 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     }
     senators = db.query(Senator).filter(Senator.state == state, Senator.is_current).all()
     marker = _ballot_marker(db, state, cycle)
+    # Whose win could put a namesake on the seat an incumbent is matched
+    # to (_incumbent_link): a House race's own field; for the Senate,
+    # matched across the state's senators, every Senate race here this
+    # cycle (a regular and a special).
+    senate_fields = [r.candidates for r in races if r.office == "S"]
     full = [
-        _race_full(r, state_pvi, district_pvi, reps_by_district, senators, _race_complete(marker, state, r.id))
+        _race_full(r, state_pvi, district_pvi, reps_by_district, senators,
+                   senate_fields if r.office == "S" else [r.candidates], _race_complete(marker, state, r.id))
         for r in races
     ]
     senate_races = [r for r in full if r["office"] == "S"]
