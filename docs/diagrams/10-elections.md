@@ -286,8 +286,8 @@ none of which sends anything anywhere:
   race already lists; a county split between districts offers them.
 - **Text filter** (`matchesDistrictQuery`) — county names, any
   candidate's name (the representative's only when they are running
-  again), or a district number. In a state voting on new lines
-  (`newDistrictLines`) the page offers counties and numbers only, and
+  again), or a district number. In a state whose lines were
+  redrawn after its sitting members were elected (`newDistrictLines`) the page offers counties and numbers only, and
   drops the house.gov link: both answer by representative, i.e. for the
   old map.
 

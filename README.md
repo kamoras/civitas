@@ -690,7 +690,11 @@ it serves, and those races carry the flagged statewide lean: the map leaves
 them unshaded, in one light neutral (with a caption saying no per-district
 lean is published yet when none in the state has one), and the district
 list shows that statewide figure in neutral ink, marked "(statewide)". Hovering or
-tabbing to a district previews its race, and clicking narrows the page to it.
+tabbing to a district previews its race, and clicking narrows the page to it; a
+district with no race on the ballot previews as "no race on file" and is not a
+button. From election day the preview is the district's count, and on the state's
+results section a count the ballot has no race for is still pickable, landing on
+its own row.
 The outlines are the lines each state votes on this cycle, split per
 state and vendored under `frontend/public/data/cd/` (all 50 states, 435
 districts, ~206KB total; a page loads only its own state) by

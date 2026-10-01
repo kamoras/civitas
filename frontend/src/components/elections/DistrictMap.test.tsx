@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DistrictMap, { fitMercator, leanFill } from "./DistrictMap";
@@ -436,5 +436,111 @@ describe("DistrictMap", () => {
     expect(three.getAttribute("style")).not.toBe(
       screen.getByRole("button", { name: "CT-4" }).getAttribute("style")
     );
+  });
+  it("previews a shape with no race as having none, not the generic prompt", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    const onPick = vi.fn();
+    const races = [1, 2, 3, 4].map((d) => race(d, 6));
+    render(<DistrictMap state="CT" races={races} picked={null} onPick={onPick} />);
+
+    await screen.findByRole("button", { name: "CT-2" });
+    const five = screen.getByRole("img", { name: "CT-5: no race on file" });
+    const preview = screen.getByText(/Hover or tab to a district/).closest("[aria-live]")!;
+    await userEvent.hover(five);
+    expect(preview).toHaveTextContent(/^CT-5 · no race on file$/);
+    await userEvent.click(five);
+    expect(onPick).not.toHaveBeenCalled();
+    await userEvent.unhover(five);
+    expect(preview).toHaveTextContent(/Hover or tab to a district/);
+    fireEvent.focus(five);
+    expect(preview).toHaveTextContent(/^CT-5 · no race on file$/);
+  });
+
+  describe("a count for a district with no ballot race", () => {
+    const counted = {
+      raceId: "2026-HOUSE-CT-5",
+      state: "CT",
+      office: "H",
+      district: 5,
+      isSpecial: false,
+      heldBy: "DEM",
+      official: false,
+      votesCounted: 1000,
+      reportingUnits: 30,
+      totalUnits: 100,
+      unitLabel: "towns",
+      sourceName: "CT SOTS",
+      sourceUrl: null,
+      fetchedAt: "2026-11-04T02:44:00Z",
+      lastChangeAt: "2026-11-04T02:42:00Z",
+      leaderParty: "DEM",
+      flip: false,
+      candidates: [
+        { name: "Cy Dem", party: "DEM", votes: 600, pct: 60, candidateId: null },
+        { name: "Di Rep", party: "REP", votes: 400, pct: 40, candidateId: null },
+      ],
+    } as LiveRaceResult;
+    const four = [1, 2, 3, 4].map((d) => race(d, 6));
+
+    it("previews the count, but is not pickable unless the caller opts in", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+      const onPick = vi.fn();
+      render(
+        <DistrictMap
+          state="CT"
+          races={four}
+          picked={null}
+          onPick={onPick}
+          results={new Map([[5, counted]])}
+          feedAnswered
+        />
+      );
+      await screen.findByRole("button", { name: /^CT-2/ });
+      expect(screen.queryByRole("button", { name: /^CT-5/ })).not.toBeInTheDocument();
+      const five = screen.getByRole("img", { name: /^CT-5: / });
+      expect(five.getAttribute("tabindex")).toBe("-1");
+      expect(five).not.toHaveAttribute("aria-pressed");
+      expect(five.getAttribute("style")).toContain("cursor: default");
+      await userEvent.hover(five);
+      const preview = screen.getByText(/Cy Dem/).closest("[aria-live]")!;
+      expect(preview).toHaveTextContent(/CT-5/);
+      expect(preview).toHaveTextContent(/Cy Dem \(D\) 60\.0%/);
+      expect(preview).toHaveTextContent(/not called/);
+      await userEvent.click(five);
+      expect(onPick).not.toHaveBeenCalled();
+    });
+
+    it("is a button that picks the count's race with pickCounts", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+      const onPick = vi.fn();
+      render(
+        <DistrictMap
+          state="CT"
+          races={[1, 2, 3].map((d) => race(d, 6))}
+          picked={null}
+          onPick={onPick}
+          results={new Map([[5, counted]])}
+          feedAnswered
+          pickCounts
+        />
+      );
+      const five = await screen.findByRole("button", { name: /^CT-5: / });
+      expect(five.getAttribute("tabindex")).toBe("0");
+      expect(five).toHaveAttribute("aria-pressed", "false");
+      expect(five.getAttribute("style")).toContain("cursor: pointer");
+      // CT-4: neither a race nor a count — still nothing to open.
+      const fourth = screen.getByRole("img", { name: "CT-4: no race on file" });
+      expect(fourth.getAttribute("tabindex")).toBe("-1");
+      five.focus();
+      expect(await screen.findByText(/Cy Dem/)).toBeInTheDocument();
+      await userEvent.keyboard("{Enter}");
+      expect(onPick).toHaveBeenCalledWith("2026-HOUSE-CT-5");
+      onPick.mockClear();
+      await userEvent.click(five);
+      expect(onPick).toHaveBeenCalledWith("2026-HOUSE-CT-5");
+      onPick.mockClear();
+      await userEvent.click(fourth);
+      expect(onPick).not.toHaveBeenCalled();
+    });
   });
 });

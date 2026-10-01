@@ -468,10 +468,13 @@ describe("U.S. Representative", () => {
     expect(drawer.getByText(/new congressional district lines/)).toBeInTheDocument();
     // Campaign wording, addressed to someone who is about to vote.
     expect(drawer.getByText(/new congressional district lines/).closest("p")).toHaveTextContent(
-      /^You vote in exactly one of these\. Texas votes on new congressional district lines this year, so your district/
+      /^You vote in exactly one of these\. Texas has new congressional district lines since your current representative was elected, so your district may not be the one they were elected in, and lookups/
+    );
+    expect(drawer.getByText(/new congressional district lines/).closest("p")).not.toHaveTextContent(
+      /this year/
     );
     expect(
-      drawer.getByText(/lookups by representative show today's districts, not these/)
+      drawer.getByText(/lookups by representative show the districts members hold today, not these/)
     ).toBeInTheDocument();
     // The state's own lookup does know the new lines.
     expect(
@@ -483,6 +486,41 @@ describe("U.S. Representative", () => {
     expect(drawer.queryByText(/surname/)).not.toBeInTheDocument();
     // Never an address field.
     expect(drawer.queryByLabelText(/address|zip/i)).not.toBeInTheDocument();
+  });
+
+  it("words new lines around the sitting member on the next cycle's ballot, before Jan 3", async () => {
+    // From Nov 18 to Jan 3 the page is on 2028's ballot while the members
+    // elected on the old lines still sit: the backend keeps the flag set.
+    // "votes on new lines this year" would be false there.
+    render(
+      <StateBallotClient
+        ballot={fourDistricts({
+          state: "TX",
+          stateName: "Texas",
+          cycleYear: 2028,
+          electionDate: "2028-11-07",
+          newDistrictLines: true,
+          houseRaces: [1, 2, 3, 4].map((d) =>
+            houseRace({
+              id: `2028-HOUSE-TX-${d}`,
+              cycleYear: 2028,
+              state: "TX",
+              district: d,
+              counties: [`County ${d}`],
+              pvi: 6,
+              pviLevel: "district",
+            })
+          ),
+        })}
+      />
+    );
+    const drawer = await openContest(/U\.S\. Representative/);
+    const intro = drawer.getByText(/new congressional district lines/).closest("p");
+    expect(intro).toHaveTextContent(
+      /Texas has new congressional district lines since your current representative was elected, so your district may not be the one they were elected in, and lookups/
+    );
+    expect(intro).not.toHaveTextContent(/this year/);
+    expect(drawer.queryByRole("link", { name: /house\.gov/ })).not.toBeInTheDocument();
   });
 
   it("links no lookup at all on new lines when the state has none of its own", async () => {

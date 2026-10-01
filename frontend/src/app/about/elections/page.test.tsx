@@ -34,6 +34,13 @@ describe("the elections methodology chapter", () => {
     expect(section).not.toHaveTextContent(/The same moments are posted/);
     expect(section).toHaveTextContent(/posts fewer moments than the feed shows/);
     expect(section).toHaveTextContent(/redrawn for this election/);
+    // Lookups by representative answer for the sitting member's district,
+    // which on the next cycle's page is not "the last election".
+    const finding = document.getElementById("finding-your-district")!;
+    expect(finding).toHaveTextContent(
+      /answers for the district your current member was elected in/
+    );
+    expect(finding).not.toHaveTextContent(/last election|votes on this year/);
     expect(screen.getAllByRole("heading").length).toBeGreaterThan(0);
   });
 

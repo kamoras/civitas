@@ -379,8 +379,8 @@ export default function StateResults({
               // so none is ever marked FLIP; say why, or the absence of
               // flips in a state that redrew reads as none happening.
               <p className="border-b border-white/[0.09] px-4 py-2 text-xs text-ink-min">
-                New district lines this year: no seat has a previous holder, so none is marked as
-                changing party.
+                New district lines: no seat has a previous holder, so none is marked as changing
+                party.
               </p>
             )}
             <ol>
@@ -405,6 +405,9 @@ export default function StateResults({
               picked={null}
               results={byDistrict}
               feedAnswered
+              // A count for a district the ballot doesn't list has a row of
+              // its own above (houseRows), so its shape is pickable too.
+              pickCounts
               // Striped too while this page's own refresh fails: an old
               // count never passes for a live one. (Its legend says "the
               // last count read, not live" — no blame on the feed.)

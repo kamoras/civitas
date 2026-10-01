@@ -76,6 +76,13 @@ import {
  * lean: beside the count, a lean reads as a prediction of it. A
  * district with no count shown while the state has counts for others
  * (`feedAnswered`) is hatched and says so — never "no votes yet".
+ *
+ * A shape with no race on the ballot still previews: "no race on file"
+ * by lean, and its count (if the state gave one) by results. Whether it
+ * can be picked is the caller's: the state's results section lists such a
+ * count as a row of its own and opts in with `pickCounts`, while the
+ * ballot's district picker has no race to open for it and leaves it a
+ * plain image, out of the tab order.
  */
 
 const DEM = "#82acff";
@@ -142,7 +149,13 @@ export default function DistrictMap({
   newLines = false,
   showLean = true,
   stale = false,
+  pickCounts = false,
 }: {
+  /** With `results`, a district with a count but no race on the ballot is
+   * pickable too, as the count's `raceId` — for a caller whose onPick lands
+   * on the count (StateResults' rows), not on a ballot race. Off, such a
+   * shape previews its count but is not a button. */
+  pickCounts?: boolean;
   /** The state's feed isn't being refreshed (its latest read failed, or
    * the backend has stopped reading it): every count is drawn with the
    * stale stripe and named "not live", as the national map does. */
@@ -219,6 +232,7 @@ export default function DistrictMap({
   const pickedDistrict = picked ? (races.find((r) => r.id === picked)?.district ?? null) : null;
   const focus = hovered ?? pickedDistrict;
   const focusRace = focus != null ? byDistrict.get(focus) : undefined;
+  const focusName = focus == null ? "" : focus === 0 ? `${state} at-large` : `${state}-${focus}`;
   const answered = feedAnswered ?? (!!results && results.size > 0);
   const drawn = races.filter((r) => r.district != null);
   const stateLevel = drawn.filter((r) => r.pviLevel === "state").length;
@@ -322,6 +336,9 @@ export default function DistrictMap({
               const district = geo.properties?.district as number;
               const race = byDistrict.get(district);
               const counted = results?.get(district);
+              // What a click opens: the ballot race, or — only where the
+              // caller lands picks on counts — the count's own race.
+              const pickId = race?.id ?? (pickCounts && counted ? counted.raceId : null);
               const { fill, opacity } = results
                 ? {
                     fill:
@@ -356,21 +373,21 @@ export default function DistrictMap({
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  // A shape with no race on file has nothing to open: not a
-                  // button, and out of the tab order.
-                  role={race ? "button" : "img"}
-                  tabIndex={race ? 0 : -1}
+                  // A shape with nothing to open is not a button, and is out
+                  // of the tab order; hovering it still previews it.
+                  role={pickId ? "button" : "img"}
+                  tabIndex={pickId ? 0 : -1}
                   aria-label={label}
-                  aria-pressed={race ? isPicked : undefined}
+                  aria-pressed={pickId ? isPicked : undefined}
                   onMouseEnter={() => setHovered(district)}
                   onMouseLeave={() => setHovered(null)}
                   onFocus={() => setHovered(district)}
                   onBlur={() => setHovered(null)}
-                  onClick={() => race && onPick(race.id)}
+                  onClick={() => pickId && onPick(pickId)}
                   onKeyDown={(e: KeyboardEvent) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      if (e.key === " ") e.preventDefault();
-                      if (race) onPick(race.id);
+                    if (pickId && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      onPick(pickId);
                     }
                   }}
                   style={{
@@ -379,7 +396,7 @@ export default function DistrictMap({
                     stroke: isPicked || isHovered ? "#00ff41" : unshaded ? UNSHADED_BORDER : BORDER,
                     strokeWidth: isPicked ? 2 : isHovered ? 1.2 : unshaded ? 0.8 : 0.6,
                     outline: "none",
-                    cursor: race ? "pointer" : "default",
+                    cursor: pickId ? "pointer" : "default",
                   }}
                 />
               );
@@ -392,16 +409,22 @@ export default function DistrictMap({
         aria-live="polite"
         className="min-h-[3.25rem] border-t border-white/10 px-3 py-2 font-mono text-xs"
       >
-        {focusRace && results ? (
+        {focus != null && results && (focusRace || results.has(focus)) ? (
+          // By results, a count with no ballot race previews like any other.
           <DistrictResultPreview
             state={state}
-            district={focusRace.district ?? 0}
-            result={results.get(focusRace.district ?? 0)}
+            district={focus}
+            result={results.get(focus)}
             feedAnswered={answered}
             stale={stale}
           />
         ) : focusRace ? (
           <DistrictPreview state={state} race={focusRace} showLean={showLean} />
+        ) : focus != null ? (
+          <span>
+            <span className="text-ink-hi">{focusName}</span>
+            <span className="text-ink-min"> · no race on file</span>
+          </span>
         ) : (
           <span className="text-ink-min">
             Hover or tab to a district to preview its race. Nothing is sent or stored.

@@ -108,24 +108,24 @@ export default async function ElectionsChapter() {
         <P>
           Pick your county and the page narrows to the district covering it. About 13% of counties
           span more than one district; those offer the two or three as a second tap. Where a county
-          isn&apos;t enough, a map of the districts lets you click yours. It draws the lines each
-          state votes on this year: the Census Bureau&apos;s 119th-Congress boundaries, and for the
-          nine states that redrew for 2026 their new lines, built from Census blocks. Districts are
-          shaded by partisan lean, and in the redrawn states that is the lean of the new district on
-          the ballot (Cook&apos;s 2026 figures for the new lines), not of the old seat with the same
-          number. A district with no lean of its own on file is left unshaded rather than given its
-          state&apos;s colour. A text filter over county names, candidates&apos; names and district
-          numbers works too. All of it runs on data already on the page: nothing is typed into a
-          lookup, sent or stored.
+          isn&apos;t enough, a map of the districts lets you click yours. It draws the lines the
+          ballot&apos;s House seats are contested on: the Census Bureau&apos;s 119th-Congress
+          boundaries, and for the nine states that redrew for 2026 their new lines, built from
+          Census blocks. Districts are shaded by partisan lean, and in the redrawn states that is
+          the lean of the new district on the ballot (Cook&apos;s 2026 figures for the new lines),
+          not of the old seat with the same number. A district with no lean of its own on file is
+          left unshaded rather than given its state&apos;s colour. A text filter over county names,
+          candidates&apos; names and district numbers works too. All of it runs on data already on
+          the page: nothing is typed into a lookup, sent or stored.
         </P>
         <P>
-          In a state voting on new lines, a lookup by representative — house.gov&apos;s, or your
-          current member&apos;s name — answers for the district you were in at the last election,
-          which on the new map can be a different place under the same number. Those pages point to
-          the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
-          a member of Congress running there is marked a &ldquo;sitting member&rdquo;, not the
-          &ldquo;incumbent&rdquo;: the district they hold today is on the old map, and no seat on
-          the new one has a previous holder.
+          In a state whose lines were redrawn after its sitting members were elected, a lookup by
+          representative — house.gov&apos;s, or your current member&apos;s name — answers for the
+          district your current member was elected in, which on the new map can be a different place
+          under the same number. Those pages point to the map, the counties and the state&apos;s own
+          ballot lookup instead. For the same reason a member of Congress running there is marked a
+          &ldquo;sitting member&rdquo;, not the &ldquo;incumbent&rdquo;: the district they hold
+          today is on the old map, and no seat on the new one has a previous holder.
         </P>
         <Sub title="The optional town selector">
           <P>

@@ -959,7 +959,8 @@ const HOUSE_ONE_EACH_RESULTS = "Each voter has exactly one of these on the ballo
  * district is a navigation problem: point at the map, pick your county,
  * or filter by a county, a candidate's name or a district number.
  *
- * In a state voting on new lines (ballot.newDistrictLines) every
+ * In a state whose lines were redrawn after its sitting members were
+ * elected (ballot.newDistrictLines) every
  * representative-based route answers for the OLD map: house.gov's lookup
  * and "your representative's name" both lead to the district today's
  * member was elected in, and on the new map that number is a different
@@ -1053,24 +1054,28 @@ function HouseDetail({
         <p className="mb-3 text-[13px] text-ink-lo">
           {resultsMode ? (
             <>
-              {HOUSE_ONE_EACH_RESULTS} This year&apos;s election in {stateName} is on{" "}
+              {HOUSE_ONE_EACH_RESULTS} This election in {stateName} was held on{" "}
               <strong className="font-semibold text-ink-hi">
                 new congressional district lines
               </strong>
-              , so
+              , so your district may not be the one your current representative was elected in
             </>
           ) : (
+            // Worded around the sitting member, not "this year": the flag
+            // stays set after the election until the members elected on
+            // the new lines take their seats (Jan 3), while the page is
+            // already on the next cycle's ballot.
             <>
-              {HOUSE_ONE_EACH} {stateName} votes on{" "}
+              {HOUSE_ONE_EACH} {stateName} has{" "}
               <strong className="font-semibold text-ink-hi">
                 new congressional district lines
               </strong>{" "}
-              this year, so
+              since your current representative was elected, so your district may not be the one
+              they were elected in
             </>
-          )}{" "}
-          your district may not be the one your current representative was elected in, and lookups
-          by representative show today&apos;s districts, not these. Point at the map, pick your
-          county, or filter by a county or district number
+          )}
+          , and lookups by representative show the districts members hold today, not these. Point at
+          the map, pick your county, or filter by a county or district number
           {lookupIsStateSpecific ? (
             <>
               {" "}

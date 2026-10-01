@@ -25,6 +25,7 @@ type MapProps = {
   feedAnswered?: boolean;
   showLean?: boolean;
   stale?: boolean;
+  pickCounts?: boolean;
   onPick: (raceId: string) => void;
 };
 const districtMapProps = vi.hoisted(() => [] as MapProps[]);
@@ -619,7 +620,7 @@ describe("the state page in results mode", () => {
     const drawer = within(screen.getByRole("dialog"));
     const intro = drawer.getByText(/new congressional district lines/).closest("p");
     expect(intro).toHaveTextContent(
-      /^Each voter has exactly one of these on the ballot\. This year's election in Ohio is on new congressional district lines, so your district/
+      /^Each voter has exactly one of these on the ballot\. This election in Ohio was held on new congressional district lines, so your district/
     );
     expect(intro).not.toHaveTextContent(/You vote in|votes on new/);
   });
@@ -727,7 +728,7 @@ describe("the state page in results mode", () => {
     render(<StateBallotClient ballot={ballot()} />);
     const house = await screen.findByRole("region", { name: "U.S. House" });
     expect(
-      within(house).getByText(/New district lines this year: no seat has a previous holder/)
+      within(house).getByText(/New district lines: no seat has a previous holder/)
     ).toBeInTheDocument();
   });
 
@@ -811,6 +812,22 @@ describe("the state page in results mode", () => {
     expect(drawerMaps.at(-1)?.stale).toBe(true);
     const resultsMaps = districtMapProps.filter((p) => p.showLean === undefined && p.results);
     expect(resultsMaps.at(-1)?.stale).toBe(true);
+  });
+
+  it("lets only the results section's map pick a count with no ballot race", async () => {
+    // StateResults lists such a count as a row of its own; the drawer's
+    // picks open a ballot race, which that district doesn't have.
+    fetchLiveResults.mockResolvedValue(live());
+    const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
+    render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
+    await screen.findByRole("region", { name: "U.S. House" });
+    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const resultsMaps = districtMapProps.filter((p) => p.showLean === undefined && p.results);
+    expect(resultsMaps.at(-1)?.pickCounts).toBe(true);
+    const drawerMaps = districtMapProps.filter((p) => p.showLean !== undefined && p.results);
+    expect(drawerMaps.length).toBeGreaterThan(0);
+    expect(drawerMaps.at(-1)?.pickCounts).toBeFalsy();
   });
 
   it("leaves the drawer's map live while refreshes succeed", async () => {
