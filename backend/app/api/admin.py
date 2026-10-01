@@ -22,6 +22,7 @@ from app.models import (
     ActionIssue,
     AnalysisCache,
     ApiCache,
+    ApiRequestCount,
     CampaignPromise,
     Donor,
     ExploreDocument,
@@ -459,6 +460,59 @@ def admin_load_times(
             for d in dates
         ],
         "byPath": by_path,
+    }
+
+
+@router.get("/api-usage", dependencies=[Depends(require_admin)])
+def admin_api_usage(
+    days: int = Query(30, ge=1, le=366), db: Session = Depends(get_visits_db),
+) -> dict:
+    """Public API and MCP use for the last N calendar days (ApiRequestCount).
+
+    ``days`` is zero-filled like visitor-stats, one entry per day: requests
+    over plain HTTP and as MCP tool calls, how many of all of them were
+    refused for the rate limit (429) or were otherwise errors (4xx/5xx),
+    and ``mcpConnections`` — tool listings, which a client makes when it
+    connects. ``totals`` sums the window; ``byEndpoint`` totals it per
+    endpoint, busiest first.
+    Counts only: nothing here identifies a caller, and none of it is in the
+    visitor figures (a program calling the API is not a visitor).
+    """
+    dates = _window_dates(days)
+    rows = (
+        db.query(ApiRequestCount.date, ApiRequestCount.endpoint, ApiRequestCount.channel,
+                 ApiRequestCount.status, ApiRequestCount.count)
+        .filter(ApiRequestCount.date >= dates[0])
+        .all()
+    )
+    per_day = {d: {"date": d, "http": 0, "mcp": 0, "rateLimited": 0, "errors": 0, "mcpConnections": 0}
+               for d in dates}
+    per_endpoint: dict[str, dict] = {}
+    for date, endpoint, channel, status, count in rows:
+        day = per_day.get(date)
+        if day is None:
+            continue
+        if endpoint == "tools/list":
+            day["mcpConnections"] += count
+            continue
+        day[channel] += count
+        if status == 429:
+            day["rateLimited"] += count
+        elif status >= 400:
+            day["errors"] += count
+        totals = per_endpoint.setdefault(
+            endpoint, {"endpoint": endpoint, "http": 0, "mcp": 0, "rateLimited": 0, "errors": 0},
+        )
+        totals[channel] += count
+        if status == 429:
+            totals["rateLimited"] += count
+        elif status >= 400:
+            totals["errors"] += count
+    keys = ("http", "mcp", "rateLimited", "errors", "mcpConnections")
+    return {
+        "days": list(per_day.values()),
+        "totals": {k: sum(day[k] for day in per_day.values()) for k in keys},
+        "byEndpoint": sorted(per_endpoint.values(), key=lambda e: e["http"] + e["mcp"], reverse=True),
     }
 
 

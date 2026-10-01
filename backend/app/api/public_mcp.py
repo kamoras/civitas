@@ -29,7 +29,8 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.types import Receive, Scope, Send
 
-from app.api.public import PREFIX, openapi_spec_dict
+from app.api.public import CHANNEL_HEADER, PREFIX, openapi_spec_dict
+from app.api.visits import record_api_request
 from app.api.rate_limit import client_ip
 from app.broadcast import SITE_URL
 from app.http_client import make_async_client
@@ -77,6 +78,9 @@ def _tool(name: str, path: str, op: dict) -> mcp_types.Tool:
 
 
 async def _list_tools(ctx, params) -> mcp_types.ListToolsResult:
+    # Counted like an endpoint: a client lists tools when it connects, so
+    # this is how often assistants pick the server up.
+    record_api_request("tools/list", "mcp", 200)
     return mcp_types.ListToolsResult(tools=[_tool(n, p, op) for n, (p, op) in _operations().items()])
 
 
@@ -93,7 +97,9 @@ async def _call_tool(ctx, params: mcp_types.CallToolRequestParams) -> mcp_types.
             path = path.replace("{" + p["name"] + "}", quote(str(args.pop(p["name"])), safe=""))
     request = ctx.request
     transport = httpx.ASGITransport(app=request.app, client=(client_ip(request), 0))
-    async with make_async_client(transport=transport, base_url="http://civitas") as client:
+    async with make_async_client(
+        transport=transport, base_url="http://civitas", headers={CHANNEL_HEADER: "mcp"},
+    ) as client:
         resp = await client.get(path, params=args)
     body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
     text = json.dumps(body, ensure_ascii=False) if not isinstance(body, str) else body

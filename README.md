@@ -1164,6 +1164,11 @@ Rate limit: 60 requests/minute per IP (`rate_limit.PUBLIC_READ_LIMIT`), shared
 by the API, MCP tool calls and the site's own Explore search. Headers:
 `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
 
+Use is counted per day, endpoint, channel (HTTP or MCP) and status, with
+nothing about the caller (`ApiRequestCount`), and shown in the admin
+dashboard's API tab (`GET /api/admin/api-usage`) — apart from the visitor
+figures, since a program calling the API is not a visitor.
+
 Score weights, industry codes and policy areas are also at `GET /api/config`,
 the lighter endpoint the frontend itself uses.
 

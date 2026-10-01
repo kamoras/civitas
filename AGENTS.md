@@ -621,6 +621,13 @@ bucket) — no hash, no User-Agent, no exact duration. The endpoint reads nothin
 about the caller at all. Keep it that way: a timing row that could be joined to
 a `SiteVisit` would turn a performance histogram into a per-visitor log.
 
+Public API and MCP use (`ApiRequestCount`) is counted the same way: one
+counter per (day, endpoint, channel, status), recorded by the public
+router's route class (`api/public.py` `_CountedRoute`) and written by the
+visit consumer, with nothing about the caller. It is not a visit and never
+reaches the visitor figures; it has its own admin tab. The channel header
+that marks an MCP tool call is cleared by nginx on every outside request.
+
 The site is served through Cloudflare, which by default rewrites pages on the
 way out: it injected its Web Analytics beacon (loaded from
 `static.cloudflareinsights.com`) and a JavaScript Detections script that sets

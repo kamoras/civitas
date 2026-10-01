@@ -2108,6 +2108,28 @@ class PageLoadTiming(VisitsBase):
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class ApiRequestCount(VisitsBase):
+    """Public API and MCP use, as daily counters — never per caller.
+
+    One counter per (date, endpoint, channel, status): "one more GET of
+    list_senators answered 200 over plain HTTP today". The endpoint is the
+    route's operation id, the channel is how it arrived (`http`, or `mcp`
+    for a tool call), and nothing about the caller is kept — no IP, no
+    hash, no User-Agent — so this cannot be joined to a SiteVisit or used
+    to follow anyone (AGENTS.md §8). Bounded by days x endpoints x 2
+    channels x the handful of statuses a route returns, whatever the
+    traffic. Kept apart from SiteVisit/PageView on purpose: a program
+    calling the API is not a visitor reading the site.
+    """
+    __tablename__ = "api_request_counts"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD, UTC
+    endpoint: Mapped[str] = mapped_column(String(64), primary_key=True)  # operation id, or tools/list
+    channel: Mapped[str] = mapped_column(String(8), primary_key=True)  # http | mcp
+    status: Mapped[int] = mapped_column(Integer, primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class StatewideNominee(Base):
     """A confirmed nominee for a STATEWIDE EXECUTIVE office (Governor,
     Lieutenant Governor, Attorney General, Secretary of State, Treasurer).
