@@ -25,9 +25,11 @@ import io
 import logging
 import re
 from datetime import date
+from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 import pdfplumber
+from lxml import html as lxml_html
 
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
@@ -141,3 +143,69 @@ def pdf_pages(raw: bytes) -> list[str]:
     that needs page boundaries (running headers and footers to drop)."""
     with pdfplumber.open(io.BytesIO(raw)) as pdf:
         return [page.extract_text() or "" for page in pdf.pages]
+
+
+def same_site(host: str, start_host: str) -> bool:
+    """`host` is the starting host or one of its subdomains. A state's site
+    spreads over subdomains of its own name — Colorado's Legislature lists
+    the 2026 Blue Book on leg.colorado.gov but publishes it from
+    content.leg.colorado.gov — and those are the same publisher. A sibling
+    or parent (the Secretary of State's sos.state.co.us, colorado.gov) is
+    not: a subdomain of the start, never the other way round."""
+    host, start_host = host.lower().removeprefix("www."), start_host.lower().removeprefix("www.")
+    return host == start_host or host.endswith("." + start_host)
+
+
+# Pages a county's election page links that the search also opens: the
+# year's election-information page, a news item announcing the booklet.
+_REPUBLISHED_HOP_PAGES = 6
+
+
+def _page_links(page_html: str) -> list[tuple[str, str]]:
+    tree = lxml_html.fromstring(page_html)
+    return [(a.get("href").strip(), " ".join(a.text_content().split())) for a in tree.xpath("//a[@href]")]
+
+
+def _names(href: str, text: str, year: int, words: tuple[str, ...]) -> bool:
+    haystack = unquote(f"{href} {text}").lower().replace("-", " ").replace("_", " ")
+    return str(year) in haystack and all(w in haystack for w in words)
+
+
+async def republished_candidates(
+    client: httpx.AsyncClient, landing_url: str, year: int, words: tuple[str, ...],
+) -> list[str] | None:
+    """Every link naming `year` and all of `words`, on a county election
+    office's page and on the same-site pages it links that name `year`
+    (one hop). Candidates only: which, if any, is the state's own document
+    is the reader's to decide by reading it (each reader's cover and
+    contents checks), never by its link. None when the county page itself
+    couldn't be fetched.
+
+    County offices file the state's booklet wherever their own site puts
+    documents — Augusta-Richmond's is under a news item, at a
+    /DocumentCenter/View/ address with no ".pdf" — so no link shape is
+    assumed."""
+    landing = await get_text(client, landing_url, f"republished copy page {landing_url}")
+    if landing is None:
+        return None
+    start_host = urlparse(landing_url).netloc
+    pages = [(landing_url, landing)]
+    for href, text in _page_links(landing):
+        url = urljoin(landing_url, href)
+        if len(pages) > _REPUBLISHED_HOP_PAGES:
+            break
+        if (
+            same_site(urlparse(url).netloc, start_host) and _names(href, text, year, ())
+            and url not in {u for u, _ in pages}
+        ):
+            html = await get_text(client, url, f"republished copy page {url}")
+            if html is not None:
+                pages.append((url, html))
+    candidates: list[str] = []
+    for page_url, html in pages:
+        for href, text in _page_links(html):
+            url = urljoin(page_url, href)
+            if _names(href, text, year, words) and url not in candidates:
+                candidates.append(url)
+    return candidates
+

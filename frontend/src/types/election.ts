@@ -190,6 +190,9 @@ export interface BallotMeasure {
   fiscalAuthority: string | null;
   sourceName: string;
   sourceUrl: string | null;
+  /** The county election office whose copy of the state's document was read, when the
+   * state's own site couldn't be (Georgia, Nevada). sourceName stays the state's. */
+  republishedBy: string | null;
   asOf: string | null;
 }
 

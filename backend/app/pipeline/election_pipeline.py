@@ -580,6 +580,7 @@ def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: st
     measure.title_authority = detail.get("title_authority")
     measure.fiscal_authority = detail.get("fiscal_authority")
     measure.source_url = detail.get("source_url")
+    measure.republished_by = detail.get("republished_by")
     measure.source_name = source_name
     # A measure that had been marked removed and is now back in the feed
     # is certified again — the reconciliation below is the only writer of

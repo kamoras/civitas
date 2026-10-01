@@ -23,6 +23,18 @@ def join_lines(text: str | list[str]) -> str | None:
     return clean_text(_WRAPPED_HYPHEN_RE.sub("", text))
 
 
+class SourceBlocked(Exception):
+    """Raised by a state's measure reader when the state's own page could
+    not be read at all — the fetch failed, or what came back is a bot
+    challenge rather than the page the reader knows (Georgia's and
+    Nevada's Secretaries of State put their whole sites behind Cloudflare
+    and Imperva). Distinct from a page that WAS read and refused: only
+    this one may fall back to a county's republication of the state's own
+    document (ballot_measures_pdf, `republished_by` in the registry),
+    because only here has the reader seen nothing it would have refused
+    on. The message says what couldn't be read, for the log."""
+
+
 class NotYetPublished(Exception):
     """Raised by a state's measure reader when the document it reads for
     this election has not been published YET — Maine's Citizen's Guide

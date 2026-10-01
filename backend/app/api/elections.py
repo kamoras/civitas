@@ -1629,6 +1629,7 @@ def _measure_json(measure) -> dict:
         "fiscalAuthority": measure.fiscal_authority,
         "sourceName": measure.source_name,
         "sourceUrl": measure.source_url,
+        "republishedBy": measure.republished_by,
         "asOf": _iso_utc(measure.as_of),
     }
 
