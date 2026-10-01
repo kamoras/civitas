@@ -45,16 +45,10 @@ from time_machine import escape_hatch
 
 _NS = 10**9
 
-if not os.environ.get("FREEZE_AT"):
-    raise RuntimeError("scripts/frozen_clock_plugin.py: set FREEZE_AT to the instant to run at")
-
-_travel = time_machine.travel(os.environ["FREEZE_AT"], tick=os.environ.get("FREEZE_TICK", "1") != "0")
-_travel.start()
-
-# One constant shift, taken once: a shift re-read on every call would move
-# by the nanoseconds between two reads, and a utime then a stat would not
-# round-trip.
-_OFFSET_NS = time.time_ns() - escape_hatch.time.time_ns()
+# Set by _install(): one constant shift, taken once. A shift re-read on
+# every call would move by the nanoseconds between two reads, and a utime
+# then a stat would not round-trip.
+_OFFSET_NS = 0
 
 # os.stat_result's fields beyond its ten visible ones, by name (st_atime,
 # st_atime_ns, st_blksize, ... as this platform has them).
@@ -120,7 +114,28 @@ def _utime(path, times=None, *, ns=None, **kwargs):
     return _real_utime(path, ns=(ns[0] - _OFFSET_NS, ns[1] - _OFFSET_NS), **kwargs)
 
 
-os.stat = _wrap_stat(os.stat)
-os.lstat = _wrap_stat(os.lstat)
-os.fstat = _wrap_stat(os.fstat)
-os.utime = _utime
+def _install(at: str) -> None:
+    global _OFFSET_NS
+    time_machine.travel(at, tick=os.environ.get("FREEZE_TICK", "1") != "0").start()
+    _OFFSET_NS = time.time_ns() - escape_hatch.time.time_ns()
+    os.stat = _wrap_stat(os.stat)
+    os.lstat = _wrap_stat(os.lstat)
+    os.fstat = _wrap_stat(os.fstat)
+    os.utime = _utime
+
+
+def pytest_configure(config):
+    """Loaded as a plugin without FREEZE_AT, the run would silently be on
+    the real clock: stop it instead. Only here, not at import, so importing
+    the module (CI's every-script import check) does nothing."""
+    import pytest
+
+    if not os.environ.get("FREEZE_AT"):
+        raise pytest.UsageError("scripts/frozen_clock_plugin.py: set FREEZE_AT to the instant to run at")
+
+
+# Travel at import, while pytest registers plugins and before conftest.py
+# imports the app, so the process-start Congress is computed on the
+# travelled clock.
+if os.environ.get("FREEZE_AT"):
+    _install(os.environ["FREEZE_AT"])
