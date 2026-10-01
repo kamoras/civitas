@@ -933,6 +933,12 @@ class ActionIssueSchema(CamelModel):
     # so this is what lets a reader check any one of them against the
     # outlet that made it. Empty for issues that predate the claim layer.
     fact_sources: list[str] = []
+    # The article each fact was quoted from, aligned with `facts`; the
+    # summary's outlet and article (it is a quoted claim too). Empty or None
+    # for issues that predate them.
+    fact_source_urls: list[str] = []
+    summary_source: str | None = None
+    summary_source_url: str | None = None
     # Subset of `facts` (by exact text) not present as of this issue's last
     # genuine content change — empty for an issue that's never been updated,
     # not "every fact", since that would just mean the issue is new, not

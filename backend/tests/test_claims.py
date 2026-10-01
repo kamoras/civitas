@@ -84,9 +84,10 @@ class TestFactsAndLede:
         # bsky_posted_facts / newFacts all compare them, so changing the
         # shape would ripple through all of them.
         claims = [_claim("A did X.", "AP"), _claim("B did Y.", "Roll Call")]
-        facts, sources = build_facts(claims)
+        facts, sources, urls = build_facts(claims)
         assert facts == ["A did X.", "B did Y."]
         assert sources == ["AP", "Roll Call"]
+        assert urls == [c.source_url for c in claims]  # each line links its article
 
     # The lede being a verbatim claim, not a synthesis, is asserted by
     # TestTheLedeIsNotRepeatedAsAFact below.
@@ -206,7 +207,7 @@ class TestTheLedeIsNotRepeatedAsAFact:
             _claim("Xi arrived in Washington.", "PBS NewsHour"),
         ]
         lede = build_lede(claims)
-        facts, sources = build_facts(claims[1:])
+        facts, sources, urls = build_facts(claims[1:])
         assert lede == "Trump and Xi will hold high-stakes meetings."
         assert lede not in facts
         assert facts == ["Xi arrived in Washington."]
@@ -217,7 +218,7 @@ class TestTheLedeIsNotRepeatedAsAFact:
         one claim is a lede with nothing corroborating it."""
         claims = [_claim("Only one thing happened.")]
         assert build_lede(claims)
-        assert build_facts(claims[1:]) == ([], [])
+        assert build_facts(claims[1:]) == ([], [], [])
 
 
 class TestExtractionUsesTheWholeCluster:

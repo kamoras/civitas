@@ -5173,12 +5173,17 @@ def _run_refresh(db: Session) -> int:
         # now the only path.
         title = filtered_cluster[0].title
         summary = claim_layer.build_lede(cluster_claims)
+        # The lede is a quoted claim like the facts, so it carries its
+        # outlet too: without it, the outlet whose line became the summary
+        # appeared only in the source list, and a reader saw fewer outlets
+        # under "In the coverage" than under sources (2026-10-01).
+        summary_source, summary_source_url = cluster_claims[0].source_name, cluster_claims[0].source_url
         # Facts are the SUPPORTING claims — the lede already states the
         # headline one. Passing the whole list made the summary a
         # verbatim duplicate of fact 1, which the first end-to-end run
         # against live articles showed immediately (Trump/Xi: the
         # summary and the first key fact were the same sentence).
-        facts, fact_sources = claim_layer.build_facts(cluster_claims[1:])
+        facts, fact_sources, fact_source_urls = claim_layer.build_facts(cluster_claims[1:])
 
         # Backstop, not the primary defence. Every word here is either a
         # verbatim span or a real outlet's headline, so this should
@@ -5359,6 +5364,9 @@ def _run_refresh(db: Session) -> int:
             # evidence — and a reader can check any fact against the
             # outlet that made it.
             "fact_sources": json.dumps(fact_sources),
+            "fact_source_urls": json.dumps(fact_source_urls),
+            "summary_source": summary_source,
+            "summary_source_url": summary_source_url,
             "source_urls": json.dumps(source_urls),
             "source_names": json.dumps(source_names),
             "policy_areas": json.dumps(policy_areas),

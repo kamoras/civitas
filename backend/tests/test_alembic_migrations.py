@@ -9,6 +9,8 @@ invisible until it broke production. Now it fails here, in CI, when
 someone changes a model without writing a revision.
 """
 
+import json
+
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
@@ -315,3 +317,27 @@ def test_a_raw_vote_date_on_an_issue_is_rewritten_iso(patched_engine):
     with eng.connect() as conn:
         rows = conn.execute(text("SELECT id, date, primary_article_date FROM action_issues ORDER BY id")).fetchall()
     assert [tuple(r) for r in rows] == [(1, "2026-09-28", "2026-09-28"), (2, "2026-09-29", "2026-09-29")]
+
+
+def test_existing_issues_get_their_facts_article_links_where_unambiguous(patched_engine):
+    """0030 links each stored fact to its article when the outlet the fact
+    names published exactly one of the issue's sources; two articles from
+    one outlet can't be told apart, so that fact stays unlinked."""
+    eng = patched_engine
+    database._run_migrations("0029")
+    required = [c["name"] for c in inspect(eng).get_columns("action_issues")
+                if not c["nullable"] and c.get("default") is None and c["name"] != "id"]
+    issue = {
+        "id": 1, "date": "2026-10-01", "primary_article_date": "2026-10-01",
+        "fact_sources": json.dumps(["NPR", "AP"]),
+        "source_names": json.dumps(["NPR", "AP", "AP"]),
+        "source_urls": json.dumps(["https://npr.org/a", "https://apnews.com/b", "https://apnews.com/c"]),
+    }
+    with eng.begin() as conn:
+        values = {name: "0" for name in required} | issue
+        conn.execute(text(f"INSERT INTO action_issues ({', '.join(values)}) VALUES "
+                          f"({', '.join(':' + k for k in values)})"), values)
+    database._run_migrations()
+    with eng.connect() as conn:
+        links = conn.execute(text("SELECT fact_source_urls FROM action_issues WHERE id = 1")).scalar()
+    assert json.loads(links) == ["https://npr.org/a", ""]
