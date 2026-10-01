@@ -6,6 +6,7 @@ around that call is (its vector_db_* summary keys were chromadb_* before
 the 2026-07 migration cleanup).
 """
 
+from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -112,8 +113,13 @@ class TestResetDuringElectionResults:
     def _seed(self, db):
         db.add(models.Race(id="2026-HOUSE-GA-2", cycle_year=2026, office="H", state="GA", district=2))
         db.add(models.Candidate(id="H1", race_id="2026-HOUSE-GA-2", name="SMITH, DANA", party="DEM"))
+        # The count last moved on Nov 5, whatever the real date: a default
+        # (the real clock) stamp holds the results window open to its
+        # January 3 cap from early December on.
+        counted = datetime(2026, 11, 5, 12)
         db.add(models.RaceResult(race_id="2026-HOUSE-GA-2", election_date="2026-11-03", source_name="x",
-                                 tallies="[]", votes_counted=0))
+                                 tallies="[]", votes_counted=0, first_reported_at=counted,
+                                 last_change_at=counted, fetched_at=counted))
         db.add(models.Senator(id="S1", name="A Senator", state="TX", party="R"))
         db.commit()
 

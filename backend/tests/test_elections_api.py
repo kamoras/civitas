@@ -547,9 +547,13 @@ class TestLiveResults:
 
     def _seed(self, db_session):
         import json as _json
+        from datetime import datetime
 
         from app.models import ElectionResultEvent, RaceResult
 
+        # Election night, not the real clock's now: the count's stamps are
+        # what the results window is measured from.
+        counted = datetime(2026, 11, 4, 3)
         _race(db_session, "2026-HOUSE-GA-2", "GA", "H", 2)
         _race(db_session, "2026-SEN-CO", "CO", "S", None)
         db_session.add(RaceResult(
@@ -558,10 +562,10 @@ class TestLiveResults:
             tallies=_json.dumps([{"name": "Ray Jones", "party": "REP", "votes": 600, "candidateId": None},
                                  {"name": "Dana Smith", "party": "DEM", "votes": 400, "candidateId": "H1"}]),
             votes_counted=1000, reporting_units=70, total_units=100, held_by_party="DEM",
-            flip_announced=True,
+            flip_announced=True, first_reported_at=counted, last_change_at=counted, fetched_at=counted,
         ))
         db_session.add(ElectionResultEvent(race_id="2026-HOUSE-GA-2", election_date="2026-11-03",
-                                           kind="flip", detail="{}"))
+                                           kind="flip", detail="{}", created_at=counted))
         db_session.flush()
 
     def test_campaign_phase_is_empty(self, db_session):

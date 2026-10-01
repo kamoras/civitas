@@ -108,3 +108,26 @@ class TestActiveElectionReadsTheCount:
         db_session.flush()
         got = active_election(db_session, today=date(2026, 11, 20))
         assert got.results_until == date(2026, 11, 16) + timedelta(days=RESULTS_GRACE_DAYS)
+
+
+class TestFreezeUtcnowPinsTheElectionDate:
+    """conftest.freeze_utcnow pins the election date too: a test frozen at
+    a September instant that reaches active_election() otherwise followed
+    the real calendar into the results window, then the next cycle."""
+
+    def test_the_frozen_instant_is_read_as_its_eastern_date(self, freeze_utcnow, db_session):
+        from app.api import elections
+        from app.election_phase import active_election
+
+        # 01:30 UTC on Nov 4 is still election day (Nov 3) in the East.
+        freeze_utcnow(datetime(2026, 11, 4, 1, 30))
+        assert active_election(db_session).phase == ELECTION_DAY
+        # Modules that imported the function by name read it too.
+        assert elections.election_today() == date(2026, 11, 3)
+
+    def test_a_date_the_test_pinned_itself_stands(self, freeze_utcnow, monkeypatch):
+        from app import election_phase
+
+        monkeypatch.setattr(election_phase, "election_today", lambda: date(2026, 10, 1))
+        freeze_utcnow(datetime(2026, 11, 20, 12))
+        assert election_phase.election_today() == date(2026, 10, 1)

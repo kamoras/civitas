@@ -725,6 +725,11 @@ def pytest_sessionfinish(session, exitstatus):
             session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
+# Captured before any test can patch it: freeze_utcnow tells a pin a test
+# made itself from the real function by identity.
+from app.election_phase import election_today as _REAL_ELECTION_TODAY  # noqa: E402
+
+
 @pytest.fixture()
 def freeze_utcnow(monkeypatch):
     """Pin the backend's clock: ``freeze_utcnow(datetime(...))``.
@@ -738,20 +743,33 @@ def freeze_utcnow(monkeypatch):
     tests did on 2026-09-30 (#779)."""
     import sys
 
-    from app import time_utils
+    from app import election_phase, time_utils
 
     real = time_utils.utcnow
+    real_election_today = _REAL_ELECTION_TODAY
+
+    def rebind(name, original, replacement):
+        # A module's own __dict__, never getattr: a lazy package's module
+        # __getattr__ (transformers) imports optional backends on any
+        # attribute it doesn't have.
+        for module in list(sys.modules.values()):
+            if (getattr(module, "__dict__", None) or {}).get(name) is original:
+                monkeypatch.setattr(module, name, replacement)
 
     def freeze(when):
         def frozen():
             return when
 
-        # A module's own __dict__, never getattr: a lazy package's module
-        # __getattr__ (transformers) imports optional backends on any
-        # attribute it doesn't have.
-        for module in list(sys.modules.values()):
-            if (getattr(module, "__dict__", None) or {}).get("utcnow") is real:
-                monkeypatch.setattr(module, "utcnow", frozen)
+        rebind("utcnow", real, frozen)
+        # The election date is the same clock read in Eastern time
+        # (election_phase.election_today): a test pinned to a September
+        # instant that reaches active_election() otherwise moves to the
+        # results window, then the next cycle, as the real calendar does.
+        # Unless the test (or an autouse fixture) already pinned the
+        # election date itself -- that pin is the date it means.
+        if election_phase.election_today is real_election_today:
+            today = election_phase.eastern_date(when)
+            rebind("election_today", real_election_today, lambda: today)
         return when
 
     return freeze
