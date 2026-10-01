@@ -10,7 +10,8 @@ from app.api import public
 from app.api.public_mcp import PATH, McpEndpoint
 from app.api.router import api_router
 from app.database import get_db
-from app.models import Senator
+from app.models import ApiRequestCount, Senator
+from tests.visits_helpers import _drain_queue_and_write
 
 HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 
@@ -88,3 +89,17 @@ async def test_errors_come_back_as_readable_tool_results(db_session):
         assert invalid["isError"] and "422" in invalid["content"][0]["text"]
         unknown = await mcp("tools/call", {"name": "drop_tables", "arguments": {}})
         assert unknown["isError"]
+
+
+async def test_tool_calls_and_connections_are_counted_on_the_mcp_channel(db_session):
+    async with mcp_client(db_session) as mcp:
+        await mcp("tools/list")
+        await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "jon-ossoff"}})
+        await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "nobody"}})
+    _drain_queue_and_write(db_session)
+    counts = {(r.endpoint, r.channel, r.status): r.count for r in db_session.query(ApiRequestCount).all()}
+    assert counts == {
+        ("tools/list", "mcp", 200): 1,
+        ("get_senator", "mcp", 200): 1,
+        ("get_senator", "mcp", 404): 1,
+    }

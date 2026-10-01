@@ -21,8 +21,12 @@ Conventions every route keeps, so a caller learns them once:
 
 from typing import Literal
 
+from collections.abc import Awaitable, Callable
+
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
 from app.api.rate_limit import PUBLIC_READ_LIMIT, PublicReadLimit
@@ -36,6 +40,7 @@ from app.api.response_helpers import (
     EXPLORE_DOC_TYPES,
     FAILURE_RETRY_S,
 )
+from app.api.visits import record_api_request
 from app.broadcast import SITE_URL
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
@@ -60,10 +65,48 @@ from app.services.representative_service import (
 )
 from app.services.senator_service import get_leaderboard, get_senator_by_id, get_states_with_counts
 
-router = APIRouter()
-
 # Where api/router.py mounts this router.
 PREFIX = "/api/public/v1"
+
+# Set by the MCP server on the requests its tool calls make (public_mcp.py),
+# so usage counts tell the two channels apart. nginx clears it on every
+# request from outside, so a caller can't claim to be MCP.
+CHANNEL_HEADER = "X-Civitas-Channel"
+
+
+class _CountedRoute(APIRoute):
+    """Counts each documented endpoint's requests by outcome
+    (visits.record_api_request -> ApiRequestCount), including the 404s,
+    422s and 429s raised before the handler returns. Undocumented routes
+    (the CORS preflight, the spec itself) are not API use and aren't
+    counted."""
+
+    def get_route_handler(self) -> Callable[[Request], Awaitable[Response]]:
+        handler = super().get_route_handler()
+        if not self.include_in_schema:
+            return handler
+        endpoint = self.name
+
+        async def counted(request: Request) -> Response:
+            channel = "mcp" if request.headers.get(CHANNEL_HEADER) == "mcp" else "http"
+            try:
+                response = await handler(request)
+            except HTTPException as exc:
+                record_api_request(endpoint, channel, exc.status_code)
+                raise
+            except RequestValidationError:
+                record_api_request(endpoint, channel, 422)
+                raise
+            except Exception:
+                record_api_request(endpoint, channel, 500)
+                raise
+            record_api_request(endpoint, channel, response.status_code)
+            return response
+
+        return counted
+
+
+router = APIRouter(route_class=_CountedRoute)
 
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
