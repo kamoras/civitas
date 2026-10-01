@@ -195,10 +195,10 @@ other party's; the loyalty is to the appointing president. Against same-party
 presidents alone the appointing president's edge is +9.7 points (t = 2.0), so
 comparing with every other president, as the score does, if anything
 understates it. Per justice the same-party effect is not distinguishable
-from zero except Roberts, who sides with other Republican administrations
-*less* often (−12.7 ± 6.5). For four of the nine (Gorsuch, Kavanaugh, Barrett,
-Jackson) it can't be measured at all: no other president of their
-appointer's party has held office since they joined the Court. A score split
+from zero for any sitting justice except one, and that one leans the other
+way (fewer votes for other same-party administrations). For four of the nine
+it can't be measured at all: no other president of their appointer's party
+has held office since they joined the Court. A score split
 into appointing president, same party and other party was considered on this
 evidence (2026-10-01) and not adopted: its middle term measures nothing on
 average and is undefined for nearly half the current Court.
@@ -208,8 +208,8 @@ is that a principled justice should sometimes vote against their usual side.
 Measured on divided decisions in the Supreme Court Database (each justice's
 own vote direction, against the side of the Court's median their Martin-Quinn
 position puts them on), the rate tracks distance from the median at Spearman
-−0.77 (p = 2e-7, 32 justices with 300+ divided votes): Roberts, at the median,
-votes against his side 42% of the time, Thomas 21%, Sotomayor 23%. It would
+−0.77 (p = 2e-7, 32 justices with 300+ divided votes): the justice nearest
+the median votes against their side about twice as often as those furthest out. It would
 rank justices by how centrist they are, the artifact that removed
 Consistency and Independence, so Martin-Quinn positions stay context, not
 score. A justice near the median is pivotal in close cases by construction,
