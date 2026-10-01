@@ -30,6 +30,26 @@ def _race(db, race_id, state, office="S", district=None, cycle_year=2026):
     return r
 
 
+@pytest.fixture()
+def on_date(monkeypatch, tmp_path):
+    """Pin the clock the elections API reads the cycle from, and serve the
+    bundled (checked-in) PVI file, so a test of which district lines a race
+    shows means the same thing on any date it runs."""
+    from app.pipeline.analyze import score_calculator
+    from app.pipeline.fetch import district_pvi
+
+    monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path / "none"))
+    monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
+    monkeypatch.setattr(score_calculator, "_district_pvi_stamp", None)
+    monkeypatch.setattr(district_pvi, "_file_cache", None)
+    monkeypatch.setattr(district_pvi, "_file_stamp", None)
+
+    def set_clock(dt):
+        monkeypatch.setattr("app.pipeline.election_pipeline.utcnow", lambda: dt)
+
+    return set_clock
+
+
 def _candidate(db, cand_id, race_id, name, **overrides):
     defaults = dict(party="DEM")
     defaults.update(overrides)
@@ -71,15 +91,62 @@ class TestListRaces:
         top = {c["id"]: c for c in data[0]["topCandidates"]}
         assert top["PETERS"]["incumbentChallenge"] is None
 
-    def test_house_race_uses_district_pvi_not_state_pvi(self, db_session):
+    def test_house_race_uses_district_pvi_not_state_pvi(self, db_session, on_date):
+        on_date(datetime(2026, 10, 1))
         _race(db_session, "2026-HOUSE-CA-12", "CA", office="H", district=12)
         db_session.commit()
 
         data = _body(elections.list_races(db_session))
-        assert data[0]["pvi"] == elections.get_district_pvi_map()["CA-12"]
+        assert data[0]["pvi"] == elections._election_district_pvi(2026)[0]["CA-12"]
         # The provenance flag tells the frontend which map the number came
         # from — a district figure, not the statewide fallback.
         assert data[0]["pviLevel"] == "district"
+
+    def test_2026_house_race_uses_the_lines_on_the_ballot(self, db_session, on_date):
+        """TN redrew for 2026: the race is on the new TN-9 (R+9), while the
+        sitting member — scored separately, from the bundled file's 119th-
+        Congress table — was elected in a D+23 seat."""
+        from app.pipeline.analyze import score_calculator
+
+        on_date(datetime(2026, 10, 1))
+        _race(db_session, "2026-HOUSE-TN-9", "TN", office="H", district=9)
+        db_session.commit()
+        data = _body(elections.list_races(db_session))
+        assert data[0]["pvi"] == 9
+        assert score_calculator.get_district_pvi_map()["TN-9"] == -23
+
+    def test_pvi_map_serves_and_labels_the_election_lines(self, on_date):
+        on_date(datetime(2026, 10, 1))
+        body = _body(elections.pvi_map())
+        assert body["cycleYear"] == 2026
+        assert body["districts"]["TX-35"] == 4
+        meta = body["meta"]["districts"]
+        assert "2026" in meta["lines"]
+        assert "revision 1374239063" in meta["source"]
+        # Dated by the pinned revision, not by the day it was fetched.
+        assert meta["asOf"] == "2026-09-10T19:01:33Z"
+        assert meta["revision"]["revid"] == 1374239063
+        assert (meta["congress"], meta["forCongress"]) == (120, 120)
+
+    def test_after_election_day_the_next_cycle_keeps_the_new_lines(self, db_session, on_date):
+        """Regression: from the day after the 2026 election the cycle is
+        2028 (121st Congress), which has no pinned table yet. The pages
+        must stay on the lines just voted on — the 120th's — not fall back
+        to the sitting 119th's, which put TX-35 back at D+19 on a map
+        where it is R+4."""
+        on_date(datetime(2026, 11, 10, 15))
+        body = _body(elections.pvi_map())
+        assert body["cycleYear"] == 2028
+        assert (body["districts"]["TX-35"], body["districts"]["TN-9"]) == (4, 9)
+        meta = body["meta"]["districts"]
+        assert (meta["congress"], meta["forCongress"]) == (120, 121)
+
+        _race(db_session, "2028-HOUSE-TX-35", "TX", office="H", district=35, cycle_year=2028)
+        db_session.commit()
+        data = _body(elections.list_races(db_session))
+        assert (data[0]["pvi"], data[0]["pviLevel"]) == (4, "district")
+        detail = _body(elections.race_detail("2028-HOUSE-TX-35", db_session))
+        assert detail["pvi"] == 4
 
     def test_only_current_cycle_races_returned(self, db_session):
         """Contract of /races: the CURRENT cycle only — load-bearing the

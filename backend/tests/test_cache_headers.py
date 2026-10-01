@@ -7,6 +7,7 @@ between runs was then answered 304 with the old body.
 """
 
 import gzip
+import threading
 import time
 from types import SimpleNamespace
 
@@ -225,7 +226,7 @@ def test_middleware_is_mounted_on_the_real_app():
 
 
 @pytest.fixture(scope="module")
-def real_client():
+def real_client(tmp_path_factory):
     """The real app's lifespan for real: init_db, the scheduler, the
     embedding-model preload thread, the visit consumer, the explore-index
     bootstrap — all of it.
@@ -244,17 +245,31 @@ def real_client():
     per-test.
     """
     from app.main import app
+    from tests.conftest import pin_population_references, redirect_data_volume, use_app_database
 
-    with TestClient(app) as client:
-        yield client
+    # Its scheduler beats the heartbeat file, and its startup rescore reads
+    # and writes the population references, on their own threads, for as
+    # long as the module runs — outside any one test's redirect of /data.
+    with pytest.MonkeyPatch.context() as mp:
+        redirect_data_volume(mp, tmp_path_factory.mktemp("data-volume"))
+        pin_population_references(mp, tmp_path_factory.mktemp("references"))
+        # A database of its own, one for every thread (see use_app_database):
+        # the run's in-memory one is a separate database per thread.
+        engines = use_app_database(mp, tmp_path_factory.mktemp("app-database"))
+        try:
+            with TestClient(app) as client:
+                yield client
+        finally:
+            for engine in engines:
+                engine.dispose()
 
 
 def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client):
     """Ordering check against the *real* middleware stack.
 
-    A probe route rather than a live endpoint: the app's own engine has no
-    schema in this environment, and a 500 from a missing table would tell
-    us nothing about middleware ordering, which is the thing under test.
+    A probe route rather than a live endpoint: a live endpoint's body
+    depends on what the database holds, and a 500 from it would tell us
+    nothing about middleware ordering, which is the thing under test.
     The body is padded past GZipMiddleware's 500-byte floor so compression
     genuinely engages — the cache middleware must sit inside it, hashing
     the uncompressed body, because gzip output carries a timestamp and
@@ -299,6 +314,34 @@ def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client)
         assert "Content-Encoding" not in conditional.headers
     finally:
         app.router.routes[:] = original_routes
+
+
+def test_real_app_s_database_is_one_database_for_every_thread(real_client):
+    """The schema the lifespan's init_db built (on TestClient's portal
+    thread) is there for a thread that never connected before, and the
+    pool can't close one thread's connection to make room for another's —
+    the in-memory default (SingletonThreadPool: a database per thread, five
+    at most) did both, and /api/health failed by test order."""
+    from sqlalchemy import inspect
+    from sqlalchemy.pool import SingletonThreadPool
+
+    from app.database import SessionLocal
+    from app.models import PipelineRun
+
+    assert not isinstance(SessionLocal.kw["bind"].pool, SingletonThreadPool)
+    seen = []
+
+    def count_runs():
+        with SessionLocal() as db:
+            seen.append((inspect(db.get_bind()).has_table("pipeline_runs"), db.query(PipelineRun).count()))
+
+    threads = [threading.Thread(target=count_runs) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    assert seen == [(True, 0)] * 8
+    assert real_client.get("/api/health").status_code == 200
 
 
 def test_real_app_leaves_health_uncached(real_client):

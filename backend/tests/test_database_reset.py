@@ -15,6 +15,19 @@ from app.database import reset_all_data
 from app.pipeline.run_tracker import DEAD_RUN_MESSAGE
 
 
+@pytest.fixture(autouse=True)
+def _no_bill_cache_rebuild_thread(monkeypatch):
+    """A reset ends by warming the bills collection (admin_reset_data), which
+    in the API role rebuilds it on a thread of its own, through
+    app.database.SessionLocal — here the test's one session. That thread
+    querying it while the test (or its teardown, disposing the engine)
+    uses it crashed the whole run (a segfault in sqlite3). The warm is
+    tested in test_bill_service.py; here it is only recorded."""
+    warmed = []
+    monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", lambda: warmed.append(1))
+    return warmed
+
+
 class TestResetAllDataVectorStoreSummary:
     def test_records_vector_db_collections_on_success(self, db_session, monkeypatch):
         monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
@@ -144,10 +157,6 @@ class TestResetGuard:
         from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 
         monkeypatch.setattr(action_center, "_run_refresh", lambda db: 7)
-        # The reset's bills-cache rebuild runs on a thread of its own; here
-        # it would share this test's one session with the assertions below.
-        # Its own test is test_a_reset_tells_the_api_processes_their_bills_are_stale.
-        monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", lambda: None)
         during = {}
 
         def wipe():
@@ -899,13 +908,14 @@ def test_a_run_whose_lease_was_lost_before_its_row_does_not_start(db_session):
     assert db_session.query(models.PipelineRun).count() == 0
 
 
-async def test_a_reset_tells_the_api_processes_their_bills_are_stale(db_session, monkeypatch):
+async def test_a_reset_tells_the_api_processes_their_bills_are_stale(
+    db_session, monkeypatch, _no_bill_cache_rebuild_thread,
+):
     # They hold a collection built from what was just wiped.
     from app.api.admin import admin_reset_data
 
     monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
-    warmed = []
-    monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", lambda: warmed.append(1))
+    warmed = _no_bill_cache_rebuild_thread
     with patch("app.database.reset_all_data", return_value={"senators": 0}):
         await admin_reset_data()
     assert warmed == [1]

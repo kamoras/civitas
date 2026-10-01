@@ -39,7 +39,6 @@ from app.models import (
 from app.pipeline.cache import api_cache_get
 from app.pipeline.analyze.score_calculator import (
     compute_overall_score,
-    get_district_pvi_map,
     get_pvi_meta,
     get_state_pvi_map,
 )
@@ -48,6 +47,7 @@ from app.pipeline.election_pipeline import current_election_cycle
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
+from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
 from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
 from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
@@ -188,6 +188,15 @@ def _seat_places(state: str, code: str, district: str | None, spec: dict) -> lis
 
 
 router = APIRouter(prefix="/elections")
+
+
+def _election_district_pvi(cycle_year: int) -> tuple[dict[str, int], dict | None]:
+    """District PVI on the lines a cycle's House races are fought on — the
+    Congress that election seats, NOT the sitting one member scoring uses.
+    In a redistricting year the two differ (2026: nine states redrew), and
+    a sitting member's old-lines lean describes a different district from
+    the one on the ballot."""
+    return district_pvi_for_congress(congress_for_election(cycle_year))
 
 
 def _pvi_for_race(race: Race, state_pvi: dict, district_pvi: dict) -> tuple[int | None, str | None]:
@@ -1098,7 +1107,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         .all()
     )
     state_pvi = get_state_pvi_map()
-    district_pvi = get_district_pvi_map()
+    district_pvi, _ = _election_district_pvi(cycle)
     # Fetched once per request, not once per incumbent candidate — a
     # state can have up to ~50 House races, and querying Representative/
     # Senator inside _incumbent_link per candidate would be exactly the
@@ -1260,7 +1269,7 @@ def list_races(db: Session = Depends(get_db)):
         .all()
     )
     state_pvi = get_state_pvi_map()
-    district_pvi = get_district_pvi_map()
+    district_pvi, _ = _election_district_pvi(current_election_cycle())
     markers = _ballot_basis_markers(db, current_election_cycle())
     data = [
         _race_summary(r, state_pvi, district_pvi, _race_complete(markers.get(r.state), r.state, r.id))
@@ -1276,16 +1285,26 @@ def pvi_map():
     publicly here with their provenance metadata (source, method, election
     window, as-of date) so the frontend can label what the number is and
     is not (2026-07 review F7)."""
+    cycle = current_election_cycle()
+    districts, district_meta = _election_district_pvi(cycle)
+    meta = get_pvi_meta()
+    if district_meta is not None or not districts:
+        # Describe the table actually served: the lines this cycle's
+        # races are on (or the newest pinned before them — see
+        # district_pvi_for_congress), not the sitting members'
+        # (get_pvi_meta's), and nothing when no table is served. Its asOf
+        # is the pinned revision's timestamp; fetchedOn is the fetch date.
+        meta["districts"] = district_meta
     return cached_json(
         {
             "states": get_state_pvi_map(),
-            "districts": get_district_pvi_map(),
-            "meta": get_pvi_meta(),
+            "districts": districts,
+            "meta": meta,
             # Lets the /elections directory page show "{cycleYear} MIDTERM
             # ELECTIONS" from the same fetch it already makes for map
             # coloring, instead of a second fetch of every race just to
             # read one field off the first result.
-            "cycleYear": current_election_cycle(),
+            "cycleYear": cycle,
             # The next federal Election Day, for the countdown in the page's
             # masthead (it used to live on the Action Center's elections tab,
             # removed 2026-09). A date, not a day count: the response is
@@ -1476,7 +1495,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Race not found")
 
     state_pvi = get_state_pvi_map()
-    district_pvi = get_district_pvi_map()
+    district_pvi, _ = _election_district_pvi(race.cycle_year)
     complete = _race_complete(_ballot_marker(db, race.state, race.cycle_year), race.state, race.id)
     candidates = sorted(_confirmed_or_all(race.candidates, race.state, complete), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     stale_incumbent_ids = _stale_incumbent_ids(race.candidates)

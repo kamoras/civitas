@@ -287,7 +287,7 @@ def test_pvi_fallback_matches_race_detail_behavior(db_session):
 
     data = _body(elections.state_ballot("CA", db_session))
     house = data["houseRaces"][0]
-    assert house["pvi"] == elections.get_district_pvi_map()["CA-12"]
+    assert house["pvi"] == elections._election_district_pvi(2026)[0]["CA-12"]
     assert house["pviLevel"] == "district"
 
 

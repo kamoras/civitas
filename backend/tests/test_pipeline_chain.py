@@ -2,6 +2,7 @@
 one before it did."""
 
 import asyncio
+import inspect
 import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -10,6 +11,11 @@ import pytest
 
 from app import pipeline_chain
 from app.pipeline_chain import CRASHED, Link, run_chain
+
+
+async def _passthrough(run_house):
+    """run_house_on_sitting_lines without its lease and lines check."""
+    return await run_house()
 
 
 def _completed():
@@ -141,7 +147,7 @@ class TestTriggers:
 
         started = []
         monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda target, **kw: started.append(target))
-        asyncio.run(admin.admin_trigger_pipeline(senator=senator, fetch_only=fetch_only, db=db_session))
+        admin.admin_trigger_pipeline(senator=senator, fetch_only=fetch_only, db=db_session)  # a plain def
         return started
 
     def test_a_full_trigger_runs_every_nightly_link_and_reports_them(self, db_session, monkeypatch):
@@ -151,6 +157,7 @@ class TestTriggers:
         mocks["run_senate_pipeline"] = AsyncMock(return_value={"status": "failed", "error": "boom"})
         with patch.multiple("app.scheduler", **mocks), \
              patch("app.scheduler.pipelines_running", return_value=False), \
+             patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", _passthrough), \
              patch("app.services.bill_service.warm_bill_collection_cache"), \
              patch("app.ops_alerts.send_ops_alert") as alert, \
              patch("app.ops_alerts.resolve_ops_alert"):
@@ -179,10 +186,11 @@ class TestTriggers:
         started = []
         monkeypatch.setattr(pipeline_api, "check_pipeline_token", lambda _a: None)
         monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda target, **kw: started.append(target))
-        await pipeline_api.trigger_pipeline(authorization="Bearer x", senator=None, fetch_only=False, db=db_session)
+        pipeline_api.trigger_pipeline(authorization="Bearer x", senator=None, fetch_only=False, db=db_session)
         mocks = {n: _completed() for n in self.NAMES}
         with patch.multiple("app.scheduler", **mocks), \
              patch("app.scheduler.pipelines_running", return_value=False), \
+             patch("app.pipeline.fetch.district_pvi.run_house_on_sitting_lines", _passthrough), \
              patch("app.services.bill_service.warm_bill_collection_cache"), \
              patch("app.ops_alerts.resolve_ops_alert"):
             await started[0]()
@@ -223,15 +231,20 @@ async def test_every_trigger_is_refused_while_a_chain_runs(db_session, monkeypat
 
     started = []
     monkeypatch.setattr(admin, "run_pipeline_in_thread", lambda target, **kw: started.append(target))
-    if "senator" in kwargs:
+    if endpoint in ("admin_trigger_pipeline", "admin_trigger_house_pipeline"):
         kwargs = {**kwargs, "db": db_session}
     monkeypatch.setitem(pipeline_chain._chains, 1, time.monotonic())
     with pytest.raises(HTTPException) as error:
-        await getattr(admin, endpoint)(**kwargs)
+        answer = getattr(admin, endpoint)(**kwargs)
+        if inspect.isawaitable(answer):
+            await answer
     assert error.value.status_code == 409 and not started
     pipeline_chain._chains.clear()
-    await getattr(admin, endpoint)(**kwargs)
+    answer = getattr(admin, endpoint)(**kwargs)
+    if inspect.isawaitable(answer):
+        await answer
     assert started
+    pipeline_chain._chains.clear()  # the full trigger's claim
 
 
 def test_pipelines_running_counts_live_runs_not_a_dead_runs_row(db_session, monkeypatch):

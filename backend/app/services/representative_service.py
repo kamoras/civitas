@@ -462,6 +462,13 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
         # Absent when the Clerk's list could not be read this run: keep the
         # last known date rather than erase it.
         existing.sworn_date = rep_data["swornDate"]
+    # The district lines these scores are computed on: the House run holds
+    # them fixed (the DISTRICT_LINES lease) from before it scores until it
+    # returns, so the table in effect now is the one scoring read. The
+    # breakdown recomputes on the same lines (_scorecard_common).
+    from app.pipeline.fetch.district_pvi import lines_congress
+
+    existing.district_lines_congress = lines_congress()
     existing.initials = rep_data.get("initials", existing.initials)
     existing.leadership_title = rep_data.get("leadershipTitle", existing.leadership_title)
     if "committees" in rep_data:

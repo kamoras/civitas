@@ -106,6 +106,7 @@ def test_district_pvi_sees_a_rewrite_by_another_process(tmp_path, monkeypatch):
 
     monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path))
     monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
+    monkeypatch.setattr(score_calculator, "_district_pvi_stamp", None)
     _write(tmp_path / "district_pvi.json", {"districts": {"AL-7": -13}}, 1000)
     assert score_calculator.get_district_pvi_map()["AL-7"] == -13
     _write(tmp_path / "district_pvi.json", {"districts": {"AL-7": -9}}, 2000)

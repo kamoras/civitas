@@ -30,13 +30,22 @@ def measure_les_reference(
     chamber: str, members: list[tuple[list[dict], str | None]], majority: str | None,
 ) -> dict | None:
     """`chamber`'s Legislative Effectiveness reference measured from
-    `members`, not persisted (None when too few members to measure)."""
+    `members`, not persisted (None when too few members to measure).
+
+    Labelled with the Congress of the bills measured — the newest among
+    them (every member's bills are windowed to one Congress) — not the
+    Congress the job holds: the startup rescore (les_rescore) measures the
+    STORED bills, which after a restart between noon ET on Jan 3 and the
+    next House/Senate run are still the outgoing Congress's while the job
+    already holds the new one. Only with no bills at all does it fall back
+    to the held Congress."""
     from app.pipeline.analyze.population_reference import LES_REFERENCE
     from app.pipeline.analyze.score_calculator import compute_les_reference
 
     previous = LES_REFERENCE.load().get(chamber) or {}
+    measured = max((b.get("congress") or 0 for bills, _ in members for b in bills), default=0)
     return compute_les_reference(
-        members, settings.CURRENT_CONGRESS, majority, previous.get("advancement_rates"),
+        members, measured or settings.CURRENT_CONGRESS, majority, previous.get("advancement_rates"),
     )
 
 

@@ -115,7 +115,17 @@ def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) ->
     how each party split. Served with the score so the list and the number
     can't disagree."""
     entity_dict = build_score_breakdown_entity(entity, lobbying_donation_attr=lobbying_donation_attr)
-    breakdown = explain_scores(entity_dict)
+    if entity_dict["district"] is None:
+        breakdown = explain_scores(entity_dict)
+    else:
+        # A House score is recomputed on the district lines it was stored
+        # on, which differ from the sitting ones between a change of
+        # Congress and the House run that rescores the member (or for good,
+        # for a member who left then) — see district_pvi.lines_of.
+        from app.pipeline.fetch.district_pvi import lines_of
+
+        with lines_of(getattr(entity, "district_lines_congress", None)):
+            breakdown = explain_scores(entity_dict)
     record = entity_dict["votingRecord"]["partyLineRecord"]
     facts = (breakdown.get("constituentAlignment") or {}).get("facts")
     if record and facts is not None:

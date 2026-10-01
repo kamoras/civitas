@@ -112,7 +112,8 @@ MEMBERS_URL = "https://voteview.com/static/data/out/members/{letter}{congress}_m
 SOURCE_DESC = (
     "Voteview (Lewis et al., voteview.com) per-congress member-ideology "
     "exports, nokken_poole_dim1 (nominate_dim1 when unpublished); seat lean from state_pvi.json / "
-    "district_pvi.json. Refreshed automatically each pipeline run by "
+    "district_pvi.json (the sitting Congress's district lines). Refreshed "
+    "automatically each pipeline run by "
     "app/pipeline/fetch/voteview.py."
 )
 METHOD_DESC = (

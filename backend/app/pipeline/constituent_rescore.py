@@ -58,10 +58,28 @@ def _member_dict(row, votes: list[dict], chamber: str) -> dict:
     }
 
 
-def rescore_stale_constituent_alignment(session_factory) -> list[str]:
+def rescore_stale_constituent_alignment(
+    session_factory, *, house_lines: int | None, chambers: tuple[str, ...] = ("senate", "house"),
+) -> list[str]:
     """Rescore each chamber whose persisted Constituent Alignment reference
     predates the current statistic. Returns the chambers rescored. Never
-    raises."""
+    raises.
+
+    `house_lines` is the Congress whose district lines the caller holds in
+    effect for the rescore (district_pvi.current_lines, taken by
+    main._rescore_house_on_current_lines in the startup-rescore writer).
+    Each rescored representative records it (district_lines_congress) in
+    the same commit as their new score, so the score breakdown — and the
+    overlap check measured from it just below — recompute on the lines the
+    score used. Recorded afterwards, the overlap check would read members
+    still recorded on older lines on those, beside scores rewritten on the
+    current ones, and a House run committing in between (another backend,
+    mid-rollout) would have its members stamped with this rescore's
+    lines.
+
+    `chambers` limits it to those (main._run_startup_rescore runs the
+    Senate alone, then main._rescore_house_on_current_lines the House under
+    the district lines' lease)."""
     from app.models import HousePipelineRun, PipelineRun, Representative, Senator
     from app.pipeline.analyze.ground_truth import _vote_query_for
     from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
@@ -75,6 +93,8 @@ def rescore_stale_constituent_alignment(session_factory) -> list[str]:
 
     done: list[str] = []
     for chamber in _stale_chambers():
+        if chamber not in chambers:
+            continue
         model, run = (Senator, PipelineRun) if chamber == "senate" else (Representative, HousePipelineRun)
         db = session_factory()
         try:
@@ -116,6 +136,8 @@ def rescore_stale_constituent_alignment(session_factory) -> list[str]:
                 if isinstance(confidence, dict):
                     confidence["constituentAlignmentVotePart"] = core["vote_part_status"]
                     row.score_confidence = json.dumps(confidence)
+                if chamber == "house":
+                    row.district_lines_congress = house_lines
             db.commit()
             # Persisted only once the scores it describes are committed: a
             # current-statistic reference is what marks the chamber done, so

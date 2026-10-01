@@ -58,6 +58,11 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
     lease.tracked_job) while it runs, so a reset in another process sees it,
     and it sees the reset — taken inside the job, past its own checks, so a
     tick that bails holds nothing another entry point would skip over."""
+    # start_writer runs the job inside app.config.scoring_congress: one
+    # Congress for the whole job — the nightly chain's Senate, Supplementary
+    # and House runs included — so its scored windows and House members'
+    # district lines move together, at the first job to start after noon ET
+    # on Jan 3.
     try:
         start_writer(target, name=name)
     except WritesHeld as held:
@@ -84,6 +89,24 @@ def warm_bills() -> None:
     warm_bill_collection_cache()
 
 
+async def run_house_on_the_sitting_lines() -> dict:
+    """The chain's House link: the House run settles the sitting Congress's
+    district lines first, under a lease it holds until its scoring is done
+    (fetch/district_pvi.run_house_on_sitting_lines), waiting out a District
+    PVI refresh or the startup rescore holding them. The sitting Congress is
+    the one this whole job holds (app.config.scoring_congress, via
+    start_writer) — the same value every scored window reads — so the first
+    job to start after noon ET on Jan 3 of an odd year (with the default
+    03:00 UTC schedule, the chain that starts that evening) switches windows
+    and lines together, to the new Congress's pinned table from disk — no
+    fetch, no restart — and a pin advanced in district_pvi_sources.json is
+    fetched the next run."""
+    from app.pipeline.fetch.district_pvi import run_house_on_sitting_lines
+
+    # Through the module's name at run time: tests patch it.
+    return await run_house_on_sitting_lines(lambda: run_house_pipeline())
+
+
 def nightly_links() -> "list[Link]":
     """The nightly run's pipelines, in order (app.pipeline_chain). A full
     trigger runs the same list (triggered_chain)."""
@@ -93,7 +116,7 @@ def nightly_links() -> "list[Link]":
     return [
         Link("Senate", lambda: run_senate_pipeline()),
         Link("Supplementary", lambda: run_supplementary_pipeline()),
-        Link("House", lambda: run_house_pipeline(), after=warm_bills),
+        Link("House", run_house_on_the_sitting_lines, after=warm_bills),
         Link("Stock trades", lambda: run_stock_trades_pipeline()),
         Link("Election", lambda: run_election_pipeline()),
     ]
@@ -135,7 +158,7 @@ def reporter(run_name: str):
     whichever run reports: a trigger that runs it cleanly clears the
     nightly one's alert."""
     from app.ops_alerts import resolve_ops_alert, send_ops_alert
-    from app.pipeline.run_tracker import skip_reason_text
+    from app.pipeline.run_tracker import SUPERSEDED, skip_reason_text
     from app.pipeline_chain import CRASHED, FAILED, ends_chain
 
     def report(link, outcome) -> None:
@@ -144,12 +167,24 @@ def reporter(run_name: str):
         tag = f"{run_name.lower()}-{slug}-{utcnow():%Y-%m-%d}"
         if outcome.status == "skipped":
             reason = (outcome.result or {}).get("reason")
+            if reason == SUPERSEDED:
+                # A House step whose job started before noon ET on Jan 3,
+                # after a newer job had moved to the new Congress: nothing is
+                # wrong, the next job scores the House on it
+                # (district_pvi._superseded). Not a skip to alert on — and it
+                # clears one left from before.
+                logger.info("%s step left to the next job: %s", link.label, skip_reason_text(SUPERSEDED))
+                resolve_ops_alert(skipped)
+                return
             logger.info("%s pipeline skipped — %s", link.label, reason or "unknown reason")
             rest = ("The rest of its chain is not run: every later pipeline would be refused the same way."
                     if ends_chain(outcome) else "The rest of its chain still runs.")
             send_ops_alert(
                 f"{run_name} {link.label} run skipped",
-                f"The {link.label} pipeline did not start because {skip_reason_text(reason)}. "
+                # Naming the lease's holder when the skip recorded it (a
+                # House run held off by a stuck District PVI refresh).
+                f"The {link.label} pipeline did not start because "
+                f"{skip_reason_text(reason, who=(outcome.result or {}).get('holder'))}. "
                 f"{link.label} data will be a day stale unless triggered again. {rest}",
                 dedupe_key=f"skipped-{tag}",
                 condition=skipped,
