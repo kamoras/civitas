@@ -362,7 +362,9 @@ export default function ScoresChapter() {
           </Item>
           <Item label="Bipartisan attraction (15%)">
             The share of cosponsors on the member&apos;s own bills who come from the other party,
-            compared with the chamber median.
+            compared with the median member of the same party. Democrats cosponsor across the aisle
+            more readily than Republicans under either party&apos;s majority, so a chamber-wide
+            median would score the other party&apos;s habits rather than the member.
           </Item>
         </List>
         <P>
