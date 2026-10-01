@@ -54,21 +54,32 @@ def test_expected_current_congress_tracks_the_clock():
         assert expected_current_congress() == 120
 
 
-@pytest.mark.parametrize("configured", [
-    pytest.param(120, id="silent_when_config_matches"),
+@pytest.mark.parametrize("configured, alerts", [
+    pytest.param(120, False, id="silent_when_config_matches"),
     # An operator who bumped early (or a mid-term convening edge) must
     # not trigger a spurious "stale" alert.
-    pytest.param(121, id="silent_when_config_is_ahead"),
+    pytest.param(121, False, id="silent_when_config_is_ahead"),
+    pytest.param(119, True, id="alerts_when_config_is_behind"),
 ])
-def test_congress_staleness_guard(configured):
+def test_congress_staleness_guard(configured, alerts):
+    # An environment pin (Settings(CURRENT_CONGRESS=...) is one): unpinned,
+    # the check advances the value to the clock first and returns before
+    # comparing, so a case built on the process's own settings could never
+    # alert, whatever the comparison said.
+    from app.config import Settings
     from app.ops_alerts import check_current_congress_staleness
 
-    with patch("app.config.settings.CURRENT_CONGRESS", configured), patch(
+    pinned = Settings(CURRENT_CONGRESS=configured)
+    assert pinned.current_congress_pinned
+    with patch("app.config.settings", pinned), patch(
         "app.pipeline.fetch.congress.expected_current_congress",
         return_value=120,
-    ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
+    ), patch("app.ops_alerts.send_ops_alert") as mock_alert, patch(
+        "app.ops_alerts.resolve_ops_alert",
+    ) as resolved:
         check_current_congress_staleness()
-    assert not mock_alert.called
+    assert mock_alert.called is alerts
+    assert resolved.called is not alerts
 
 
 def test_congress_staleness_guard_alerts_when_a_pin_is_behind_the_calendar():

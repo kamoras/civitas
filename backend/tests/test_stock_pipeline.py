@@ -16,16 +16,16 @@ import pytest
 
 from app.models import HousePipelineRun, PipelineRun, PipelineStatus, StockTradesPipelineRun
 from app.pipeline import stock_pipeline
+from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
 
 @pytest.fixture(autouse=True)
-def _reset_running_flag():
-    stock_pipeline._stock_pipeline_running = False
-    stock_pipeline._stock_pipeline_started_at = None
-    yield
-    stock_pipeline._stock_pipeline_running = False
-    stock_pipeline._stock_pipeline_started_at = None
+def _reset_running_flag(monkeypatch):
+    """A fresh in-process tracker for each test, the module's own put back
+    after. (This fixture used to assign two module globals the tracker
+    replaced — creating them, resetting nothing.)"""
+    monkeypatch.setattr(stock_pipeline, "_tracker", PipelineRunTracker())
 
 
 def _run(

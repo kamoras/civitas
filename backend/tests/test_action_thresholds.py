@@ -12,12 +12,10 @@ from app.pipeline.cache import api_cache_set
 
 
 @pytest.fixture(autouse=True)
-def _fresh_cache():
+def _fresh_cache(monkeypatch):
     """get() caches process-wide; a value one test loads must not reach
-    another test's thresholds."""
-    t._loaded = None
-    yield
-    t._loaded = None
+    another test's thresholds (monkeypatch puts back what was there)."""
+    monkeypatch.setattr(t, "_loaded", None)
 
 
 def _counts(pairs):
