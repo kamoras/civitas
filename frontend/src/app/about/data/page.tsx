@@ -88,7 +88,10 @@ export default function DataChapter() {
               holdings; the periodic reports since are scans, read by OCR, and their dates support
               no timeliness figure. Where a scanned report&apos;s date can&apos;t be read (one 2026
               presidential report is printed at half size), the trade is listed with the date marked
-              not legible, for members&apos; paper filings as for the president&apos;s.
+              not legible, for members&apos; paper filings as for the president&apos;s. A
+              trade&apos;s industry is the SEC&apos;s own industry code for the company behind it,
+              found by ticker or exact company name; bonds, funds and anything else the SEC
+              doesn&apos;t cover carry none rather than a guess.
             </Fact>
             <Fact label="Lobbying Disclosure Act registry (lda.gov)">
               Registered lobbying spending by organizations that appear among donors, and the bills

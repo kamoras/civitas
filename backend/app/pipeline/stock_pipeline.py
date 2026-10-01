@@ -9,8 +9,7 @@ rationale and the plan this was implemented from.
 
 FETCH -> match filer to a known senator/rep by name (the president's own
 filings need no matching — OGE indexes them under the office) -> resolve
-ticker to a company name (sec_tickers) -> classify industry (reusing the
-existing donor-industry embedding classifier, unmodified) -> compute
+ticker or name to the issuer's SEC industry code (sec_tickers) -> compute
 disclosure timeliness -> upsert.
 
 No profit/gain is computed anywhere in this module, for any filer: every
@@ -44,8 +43,9 @@ from app.pipeline.fetch.president_ptr import (
     fetch_ptr_filing_index as fetch_president_ptr_index,
 )
 from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
-from app.pipeline.fetch.ptr_common import TradeRow
-from app.pipeline.fetch.sec_tickers import resolve_tickers
+from app.pipeline.fetch.ptr_common import TICKER_RE, TradeRow
+from app.pipeline.fetch.fd_common import SENATE_ASSET_TYPE_CATEGORY, house_category, strip_house_code
+from app.pipeline.fetch.sec_tickers import SecUnavailable, issuer_industries
 from app.holdings_schedule import HOLDINGS_STEPS, PTR_REREAD_BUDGET
 from app.pipeline.holdings_pipeline import run_holdings_phases
 from app.pipeline.filer_matching import FilerMatcher, current_representatives, current_senators
@@ -60,7 +60,6 @@ from app.pipeline.fetch.senate_ptr import (
 )
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_tracked_run, run_in_progress, skip_reason_text
-from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 from app.services.president_service import current_president
 from app.time_utils import utcnow
 
@@ -135,67 +134,91 @@ def _compute_days_to_disclose(transaction_date: str | None, disclosure_date: str
         return 0
 
 
-async def _classify_rows_industry(
-    db: Session,
-    client: httpx.AsyncClient,
-    rows: list[TradeRow],
-) -> None:
-    """Mutate rows in place, setting `industry` from ticker -> company -> embedding.
+def _issuer_name(asset_name: str) -> str:
+    """A disclosed asset's text with the House's "[XX]" asset-type code and
+    a "(TICKER)" taken out and its line breaks collapsed — the part that can
+    be an issuer's name."""
+    name, _code = strip_house_code(asset_name)
+    return " ".join(TICKER_RE.sub(" ", name).split())
 
-    Rows with no ticker (virtual currency has no SEC ticker to resolve at
-    all; some congressional untickered lines are non-tradeable holdings
-    like rental property or private partnerships) run the *asset name
-    itself* through the same embedding classifier. The CRYPTO industry
-    prototype in industry_classifier.py matches crypto asset names
-    directly; a low-signal name like a rental-property description is
-    caught by the classifier's own confidence gate (SPREAD_THRESHOLD) and
-    stays UNCLASSIFIED, the same as it would if it had never been tried.
-    Same classifier, same learning store, no keyword list.
 
-    2026-08: this used to be House/Senate-disabled (an opt-in
-    classify_untickered flag, on only for presidential 278-Ts) on the
-    reasoning above about non-tradeable holdings — but that also silently
-    swept up Congress's genuinely-disclosed crypto holdings, leaving them
-    UNCLASSIFIED system-wide with no way to tell "crypto, unrecognized"
-    apart from "not even attempted." Unconditional now; this field is
-    UI-display-only, read by no scoring code (verified via grep across
-    app/pipeline/analyze), so an occasional noisy label on a non-tradeable
-    holding carries no scoring risk.
+def _declared_crypto(asset_name: str, asset_type: str | None) -> bool:
+    """Whether the filer declared the asset a cryptocurrency: the House's
+    "[CT]" code in the asset text, or the Senate's Asset Type column."""
+    _name, code = strip_house_code(asset_name)
+    if code:
+        return house_category(code) == "CRYPTO"
+    return SENATE_ASSET_TYPE_CATEGORY.get(" ".join((asset_type or "").split()).lower()) == "CRYPTO"
+
+
+async def _industries(
+    db: Session, client: httpx.AsyncClient, assets: list[tuple[str | None, str, str | None]],
+) -> list[str | None]:
+    """The industry of each (ticker, asset_name, asset_type), from
+    structured metadata only: a cryptocurrency the filer declared as one is
+    CRYPTO; anything else takes the industry of the SIC code the SEC
+    assigned its issuer, found by ticker, else by the asset's name matching
+    an SEC-registered company's exactly (sec_tickers.issuer_industries).
+    Everything else — a bond, a fund, a private company, a rental property,
+    an SEC code with no category of ours — is None (UNCLASSIFIED).
+
+    2026-09: this used to run the SEC company name (or, with no ticker,
+    the asset text itself) through the donor-industry embedding classifier.
+    Measured against the SEC's own SIC codes on the 1,299 production trade
+    names that have one, it agreed 30% of the time, and 65% at the most
+    confident margins: Broadcom, ConocoPhillips and PPG were LOBBYISTS,
+    GitLab and CoStar PRIVATE_PRISON, and all 18 Senate CRYPTO rows were
+    municipal bonds or ETF options. The prototypes describe donors, not
+    securities, and no threshold separated right from wrong. It also wrote
+    every trade name into the donor learning store, where its guesses
+    became kNN reference examples for donor classification.
+
+    This field is UI-display-only, read by no scoring code.
     """
-    tickers = [r.ticker for r in rows if r.ticker]
-    ticker_to_company: dict[str, str] = {}
-    if tickers:
-        ticker_to_company = await resolve_tickers(client, db, tickers)
+    names = [_issuer_name(asset_name) for _t, asset_name, _at in assets]
+    by_ticker, by_name = await issuer_industries(
+        client, db, sorted({t for t, _a, _at in assets if t}), sorted({n for n in names if n}),
+    )
+    return [
+        "CRYPTO" if _declared_crypto(asset_name, asset_type)
+        else by_ticker[ticker] if ticker in by_ticker
+        else by_name.get(name)
+        for (ticker, asset_name, asset_type), name in zip(assets, names)
+    ]
 
-    names = set(ticker_to_company.values())
-    names.update(r.asset_name.strip() for r in rows if not r.ticker and r.asset_name.strip())
-    if not names:
+
+async def _classify_rows_industry(db: Session, client: httpx.AsyncClient, rows: list[TradeRow]) -> None:
+    """Set each parsed row's `industry` (_industries). With the SEC down
+    the rows are stored UNCLASSIFIED and the nightly pass labels them
+    (_reclassify_stored_trades): a trade is not left unstored for it."""
+    try:
+        industries = await _industries(db, client, [(r.ticker, r.asset_name, r.asset_type) for r in rows])
+    except SecUnavailable as e:
+        logger.warning("Trade industries not set at ingest, SEC unavailable: %s", e)
         return
+    for row, industry in zip(rows, industries):
+        row.industry = industry
 
-    industries, _unknowns = classify_batch_with_learning(list(names), db)
-    # classify_batch_with_learning always returns an entry per name — a
-    # confident real industry, a learned value, or the literal string
-    # "OTHER" when it can't confidently place one (see its own source:
-    # results[name] = industry happens unconditionally, "OTHER" included).
-    # "OTHER" and "UNCLASSIFIED" are deliberately distinct display values
-    # elsewhere (config_definitions.py) — "OTHER" means "classified, and
-    # genuinely doesn't fit any category," which is real information for a
-    # donor. It is NOT that here: an untickered line's asset_name is often
-    # a non-tradeable holding (rental property, private partnership) that
-    # was never a classification candidate to begin with, and "OTHER" for
-    # those would surface a spurious industry badge in the UI (which only
-    # hides for exactly "UNCLASSIFIED", not "OTHER" — StockTrades.tsx)
-    # where none showed before. Skip "OTHER" here for both branches so an
-    # unplaceable name stays UNCLASSIFIED, the same as if it had never
-    # been tried (2026-08 audit, caught by independent review of #445).
-    for row in rows:
-        if row.ticker:
-            company = ticker_to_company.get(row.ticker.upper())
-            industry = industries.get(company) if company else None
-        else:
-            industry = industries.get(row.asset_name.strip())
-        if industry and industry != "OTHER":
-            row.industry = industry
+
+async def _reclassify_stored_trades(db: Session, client: httpx.AsyncClient) -> int:
+    """Bring every stored trade's industry up to date with _industries,
+    returning how many changed; with the SEC unavailable, none change
+    (SecUnavailable propagates). A row otherwise keeps the industry it was
+    stored with until its filing is read again, and that re-read is
+    rationed (PTR_REREAD_BUDGET) and skips filings that don't read; this
+    costs one cached SEC lookup per issuer."""
+    changed = 0
+    for model in (StockTrade, RepStockTrade, PresidentTrade):
+        rows = db.query(model).all()
+        industries = await _industries(
+            db, client, [(r.ticker, r.asset_name, getattr(r, "asset_type", None)) for r in rows],
+        )
+        for row, industry in zip(rows, industries):
+            if row.industry != (industry or "UNCLASSIFIED"):
+                row.industry = industry or "UNCLASSIFIED"
+                changed += 1
+        db.commit()
+    return changed
 
 
 def _trade(model, *, row: TradeRow, **owner):
@@ -220,6 +243,7 @@ def _trade(model, *, row: TradeRow, **owner):
         parse_confidence=row.parse_confidence,
         parser_version=PTR_PARSER_VERSION,
         **({"report_kind": row.report_kind} if model is PresidentTrade else {}),
+        **({"asset_type": row.asset_type} if model is StockTrade else {}),
     )
 
 
@@ -310,7 +334,7 @@ class _StoredSource:
     label: str
     model: type
     owner_key: str
-    fetch: Callable[[str, str, str | None], Awaitable[list[TradeRow]]]
+    fetch: Callable[[str, str, str | None], Awaitable[list[TradeRow] | None]]
 
 
 # A filing that didn't read is not tried again for this long, so a few dead
@@ -382,13 +406,27 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
             except Exception:
                 logger.exception("PTR re-read of %s filing %s failed", source.label, filing_id)
                 db.rollback()
-                rows = []
+                rows = None
+            stored = db.query(model).filter(model.filing_id == filing_id)
+            # A scan the current parser reads nothing from, fetched fine:
+            # what an older parser read from it goes. Before version 3 a
+            # scan's line reader took any two numbers for the amount and
+            # the first date for the transaction's — a bond's maturity
+            # (one stored trade was dated 2033) — and its whole line for
+            # the asset. A text filing that reads nothing is kept: that is
+            # the parser failing, not the filing.
+            if rows == [] and stored.filter(model.parse_confidence != "ocr").first() is None:
+                logger.info("PTR re-read: %s scan %s reads no rows now — dropping its older reading",
+                            source.label, filing_id)
+                stored.delete(synchronize_session="fetch")
+                db.commit()
+                read += 1
+                continue
             if not rows:
                 failed.append((failed_key, url))
                 if not read and len(failed) >= _REREAD_OUTAGE_AFTER:
                     break
                 continue
-            stored = db.query(model).filter(model.filing_id == filing_id)
             filer = getattr(stored.first(), source.owner_key)
             stored.delete(synchronize_session="fetch")
             for row in rows:
@@ -415,7 +453,9 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     return reread
 
 
-async def _reread_house_filing(client: httpx.AsyncClient, db: Session, doc_id: str, url: str) -> list[TradeRow]:
+async def _reread_house_filing(
+    client: httpx.AsyncClient, db: Session, doc_id: str, url: str,
+) -> list[TradeRow] | None:
     """A stored House filing read again, with its filing date from the
     Clerk's yearly index (cached; the year is in the PDF's path). The stored
     rows can't supply it: a scan read before PARSER_VERSION 5 stored each
@@ -441,8 +481,8 @@ def _annual_covered_through(db: Session, president_id: str) -> str | None:
     return f"{latest[:4]}-12-31" if latest else None
 
 
-async def _read_president_filing(db: Session, filing: dict) -> list[TradeRow]:
-    """A 278-T's rows, read inside its window (the term's start to the
+async def _read_president_filing(db: Session, filing: dict) -> list[TradeRow] | None:
+    """A 278-T's rows (None when it couldn't be fetched), read inside its window (the term's start to the
     filing's date, from OGE's index when the caller holds only its URL, as
     a re-read does) and without the transactions of a year an annual report
     covers: that report is their record (president_fd)."""
@@ -453,6 +493,8 @@ async def _read_president_filing(db: Session, filing: dict) -> list[TradeRow]:
         dates = {f["doc_id"]: f["filing_date"] for f in await fetch_president_ptr_index(db, president.name)}
         filing = {**filing, "filing_date": dates.get(filing["doc_id"])}
     rows = await fetch_president_ptr(db, {**filing, "not_before": president.term_start})
+    if rows is None:
+        return None
     covered = _annual_covered_through(db, president.id)
     # An undated row is the annual report's when its whole filing is: filed
     # by the year's end the report covers.
@@ -614,6 +656,16 @@ async def run_stock_trades_pipeline() -> dict:
                 logger.exception("PTR re-read failed")
                 db.rollback()
                 error_parts.append("Re-read of stored filings: failed — see server logs")
+            # Every stored trade's industry, whatever parser read it: not a
+            # trade phase either.
+            try:
+                reclassified = await _reclassify_stored_trades(db, client)
+                if reclassified:
+                    logger.info("Trade industries: %d stored trades reclassified", reclassified)
+            except Exception:
+                logger.exception("Trade industry reclassification failed")
+                db.rollback()
+                error_parts.append("Industry reclassification of stored trades: failed — see server logs")
             # Annual-report holdings: same sources, same best-effort
             # isolation (a failure leaves the trade rows above committed and
             # the stored holdings untouched). The phases live in
