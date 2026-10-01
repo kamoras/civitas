@@ -108,7 +108,7 @@ class TestComposeSpotlight:
         assert "#3 of 435 representatives." in text
 
     def test_it_fits_a_post_with_its_link(self):
-        s = _senator("Catherine Cortez Masto", state="NV", party="D", score=33.333)
+        s = _senator("Elena Ruiz Ortega", state="NV", party="D", score=33.333)
         text = compose_spotlight(s, 100, 100, "senate")
         assert len(text) + 1 + len("https://civitas-research.org/politicians/catherine-cortez-masto") <= 300
 

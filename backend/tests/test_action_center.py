@@ -2901,7 +2901,7 @@ class TestMentionsFullName:
         ("Rep. Donald Payne Jr. introduced it.", "Donald Payne Jr.", True),
         ("A statement from Harold Rogers Jr.", "Harold Rogers Jr.", True),
         ("Rep. Robert F. Kennedy spoke.", "Robert F. Kennedy", True),
-        ("Rep. Alexandria Ocasio-Cortez spoke.", "Alexandria Ocasio-Cortez", True),
+        ("Rep. Lena Ortiz-Hale spoke.", "Lena Ortiz-Hale", True),
         ("Sen. Kip O'Dwyer spoke.", "Kip O'Dwyer", True),
     ])
     def test_boundary_rule(self, text, name, expected):
