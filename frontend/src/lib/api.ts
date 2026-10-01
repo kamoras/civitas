@@ -1468,6 +1468,32 @@ export async function fetchAdminVisitorStats(
   });
 }
 
+/** Public API and MCP use (GET /api/admin/api-usage) — counts only. */
+export interface ApiUsageCounts {
+  http: number;
+  mcp: number;
+  rateLimited: number;
+  errors: number;
+}
+
+export interface ApiUsageDay extends ApiUsageCounts {
+  date: string;
+  /** MCP tool listings: a client makes one when it connects. */
+  mcpConnections: number;
+}
+
+export interface ApiUsage {
+  days: ApiUsageDay[];
+  totals: ApiUsageCounts & { mcpConnections: number };
+  byEndpoint: (ApiUsageCounts & { endpoint: string })[];
+}
+
+export async function fetchAdminApiUsage(token: string, days: number = 30): Promise<ApiUsage> {
+  return requestJson(`${API_BASE}/admin/api-usage?days=${days}`, "API usage failed", {
+    init: { headers: adminHeaders(token) },
+  });
+}
+
 export interface VisitorBreakdownEntry {
   name: string;
   count: number;
