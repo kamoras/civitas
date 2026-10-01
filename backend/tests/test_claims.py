@@ -45,25 +45,25 @@ class TestDedupeClaims:
 
 
 class TestExtractClaims:
-    SRC = ("A jury found Donald Trump liable for sexual abuse and defamation in the "
-           "case brought by E. Jean Carroll.")
+    SRC = ("A jury found Acme Corp liable for fraud and negligence in the "
+           "case brought by Jordan Ellis.")
 
     def _article(self):
-        return _Article(title="Jury finds Trump liable", summary=self.SRC)
+        return _Article(title="Jury finds Acme Corp liable", summary=self.SRC)
 
     def test_a_located_assertion_becomes_a_claim_with_provenance(self):
         claims = extract_claims([self._article()], lambda _s: {
-            "actor": "Donald Trump", "predicate": "liable for sexual abuse and defamation",
+            "actor": "Acme Corp", "predicate": "liable for fraud and negligence",
         })
         assert len(claims) == 1
-        assert claims[0].text == "Donald Trump liable for sexual abuse and defamation."
+        assert claims[0].text == "Acme Corp liable for fraud and negligence."
         assert claims[0].source_name == "Roll Call"
 
     def test_the_reversed_party_yields_no_claim(self):
         """Issue #376: both spans are verbatim, so only the
         asserted-together rule in post_composer refuses this."""
         claims = extract_claims([self._article()], lambda _s: {
-            "actor": "E. Jean Carroll", "predicate": "liable for sexual abuse and defamation",
+            "actor": "Jordan Ellis", "predicate": "liable for fraud and negligence",
         })
         assert claims == []
 
@@ -197,20 +197,20 @@ class TestOnTopic:
 
 class TestTheLedeIsNotRepeatedAsAFact:
     """Caught by the first end-to-end run against live articles, not by
-    any unit test: the Trump/Xi issue's summary and its first key fact
+    any unit test: an issue's summary and its first key fact
     were the same sentence, because build_lede takes claims[0] and
     build_facts was given the whole list."""
 
     def test_facts_exclude_the_claim_used_as_the_lede(self):
         claims = [
-            _claim("Trump and Xi will hold high-stakes meetings.", "The Hill"),
-            _claim("Xi arrived in Washington.", "PBS NewsHour"),
+            _claim("Two leaders will hold high-stakes meetings.", "The Hill"),
+            _claim("The delegation arrived in Washington.", "PBS NewsHour"),
         ]
         lede = build_lede(claims)
         facts, sources, urls = build_facts(claims[1:])
-        assert lede == "Trump and Xi will hold high-stakes meetings."
+        assert lede == "Two leaders will hold high-stakes meetings."
         assert lede not in facts
-        assert facts == ["Xi arrived in Washington."]
+        assert facts == ["The delegation arrived in Washington."]
         assert sources == ["PBS NewsHour"]
 
     def test_a_single_claim_leaves_no_supporting_facts(self):
