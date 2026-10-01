@@ -224,8 +224,8 @@ export default function DistrictMap({
         {results ? (
           // Every fill a district can get here: resultFill's (including
           // purple for a leader outside the two major parties and the dark
-          // "no votes yet"), plus the hatch for a district the feed gives
-          // no count for.
+          // "no votes yet"), plus the hatch for a district Civitas shows no
+          // count for.
           <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-ink-min">
             <li>red = R leads · blue = D leads · purple = other or unstated party leads</li>
             <li>fainter = under half in · solid = count listed as official, still not called</li>

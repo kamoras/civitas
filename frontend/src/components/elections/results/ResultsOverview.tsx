@@ -357,8 +357,8 @@ export default function ResultsOverview({
             {chamber === "H"
               ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
               : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in; with only one of its two races counted, it is shaded by that one, and the other is named as having no count."}{" "}
-            Hatched grey means the state&apos;s feed gives a count for its other chamber&apos;s
-            races but none for this one&apos;s — not that no votes are in.{" "}
+            Hatched grey means Civitas shows a count for the state&apos;s other chamber&apos;s races
+            but none for this one&apos;s — not that no votes are in.{" "}
             {refreshFailed ? (
               <>
                 This page couldn&apos;t refresh the count, so none of it is live: stripes over a
