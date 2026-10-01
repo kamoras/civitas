@@ -214,8 +214,9 @@ def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
     return kept
 
 
-def build_facts(claims: list[Claim], limit: int = MAX_FACTS) -> tuple[list[str], list[str]]:
-    """(facts, aligned source names).
+def build_facts(claims: list[Claim], limit: int = MAX_FACTS) -> tuple[list[str], list[str], list[str]]:
+    """(facts, aligned source names, aligned article URLs): each line on
+    the issue page names and links the article it was quoted from.
 
     Two aligned lists rather than a list of objects so `facts` keeps its
     `list[str]` shape — `previous_facts`, `bsky_posted_facts`, `newFacts`
@@ -223,7 +224,7 @@ def build_facts(claims: list[Claim], limit: int = MAX_FACTS) -> tuple[list[str],
     untouched.
     """
     chosen = claims[:limit]
-    return [c.text for c in chosen], [c.source_name for c in chosen]
+    return [c.text for c in chosen], [c.source_name for c in chosen], [c.source_url for c in chosen]
 
 
 def build_lede(claims: list[Claim]) -> str:

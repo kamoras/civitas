@@ -1317,6 +1317,12 @@ class ActionIssue(Base):
     # attribution where it exists without a migration backfilling
     # guesses.
     fact_sources: Mapped[str] = mapped_column(Text, default="[]")
+    # The article each fact was quoted from, aligned with `facts` (so a
+    # reader can open it), and the outlet and article of the summary, which
+    # is a quoted claim too. NULL / "[]" where an issue predates them.
+    fact_source_urls: Mapped[str | None] = mapped_column(Text, nullable=True, default="[]")
+    summary_source: Mapped[str | None] = mapped_column(String, nullable=True)
+    summary_source_url: Mapped[str | None] = mapped_column(String, nullable=True)
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
     # Unused: the "This concerns me / Not a priority" vote that counted into
     # these was removed in 2026-09. Still mapped, with their default, because

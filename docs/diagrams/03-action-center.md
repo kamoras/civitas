@@ -118,6 +118,15 @@ On 2026-10-01 78 of 300 clusters in three days were skipped as too few facts,
 and 7 of 10 sampled rejected claims were cut-short predicates; replaying the
 day's top six clusters, three passed the two-claim gate instead of none.
 
+**Every quoted line names and links its article.** The summary is the first
+verified claim and the coverage list the rest, so the outlet whose line became
+the summary used to appear only among the sources, and an issue built from two
+articles showed one outlet under "In the coverage". Each issue now stores the
+summary's outlet and article (`summary_source`, `summary_source_url`) and each
+fact's article (`fact_source_urls`), and the page links them. Issues from before
+2026-10 have their facts linked where the outlet a fact names published exactly
+one of the issue's sources (migration 0030).
+
 **Complete linkage, not single.** Every pair of articles in a cluster must be
 at least 0.40 alike. Single linkage (each article like one other) plus a
 centroid merge from 0.20 chained stories that only share a theme: on
