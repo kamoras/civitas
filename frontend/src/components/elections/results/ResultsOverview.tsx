@@ -319,7 +319,7 @@ export default function ResultsOverview({
                 <Swatch color={AWAITING_FILL} texture={AWAITING_SWATCH} /> NO VOTES YET
               </li>
               <li className="flex items-center gap-1.5">
-                {/* The state's feed counts its other chamber, not this one. */}
+                {/* A count for the state's other chamber, none for this one. */}
                 <Swatch color={AWAITING_FILL} texture={NO_COUNT_SWATCH} />{" "}
                 {NO_COUNT_TEXT.toUpperCase()}
               </li>
@@ -497,12 +497,12 @@ export default function ResultsOverview({
                       {badge.text}
                     </span>
                   </span>
-                  {/* A chamber the feed gives nothing for while it counts
-                      the other: that absence, never "no votes yet". */}
+                  {/* A chamber with no count shown while the other has
+                      one: that absence, never "no votes yet". */}
                   {summary.senate.length > 0 ? (
                     // Every Senate race the state holds — a regular and a
                     // special election each get a line, the regular first,
-                    // and one the feed hasn't counted says so.
+                    // and one with no count shown says so.
                     senateRows(summary.senate, results.senateRaces?.[state]).map((row) => (
                       <span key={row.raceId} className="text-sm text-ink-lo">
                         {row.result

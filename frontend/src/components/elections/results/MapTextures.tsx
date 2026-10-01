@@ -61,9 +61,9 @@ export function useMapTextures(staleFills: readonly string[] = []): {
         <rect width="6" height="6" fill={FEED_FAILED_FILL} />
         <rect width="2" height="6" fill={FEED_FAILED_MARK} />
       </pattern>
-      {/* No count from the state's feed: a district (DistrictMap) or a
-          whole chamber (the national map) the feed, while counting others,
-          gives nothing for. Hatched the other way from the amber stripes. */}
+      {/* No count shown here: a district (DistrictMap) or a whole
+          chamber (the national map) with no count while the state's others
+          have one. Hatched the other way from the amber stripes. */}
       <pattern
         id={ids.noCount}
         patternUnits="userSpaceOnUse"

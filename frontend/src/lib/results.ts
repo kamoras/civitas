@@ -47,15 +47,20 @@ export const POLLS_OPEN_FILL = "rgba(77, 227, 232, 0.16)";
  * and the page (WCAG 1.4.11; results.test.ts) — at 0.4 it was 2.66:1
  * against its base. */
 export const NO_COUNT_STRIPE = "rgba(205, 199, 188, 0.7)";
-/** The same absence for a whole chamber on the national map: a state whose
- * feed gives a count for its other chamber's races but none for this one's
- * (both its Senate contests skipped as indistinguishable, a contest dropped
- * as impossible or not matched to its race). AWAITING_FILL's colour, spelt
+/** The same absence for a whole chamber on the national map: a state with
+ * a count shown for its other chamber's races but none for this one's —
+ * the feed listed none, or Civitas set aside what it listed (both Senate
+ * contests skipped as indistinguishable, a contest dropped as impossible
+ * or not matched to its race). AWAITING_FILL's colour, spelt
  * differently so the map's textures (useMapTextures) can tell the two
  * apart: this one is hatched with NO_COUNT_STRIPE, that one dotted. */
 export const NO_COUNT_FILL = "rgb(42, 37, 32)";
-/** How every surface words that absence, for a district or a chamber. */
-export const NO_COUNT_TEXT = "no count from the state's feed";
+/** How every surface words that absence, for a district or a chamber.
+ * About Civitas's page, not the state's feed: the feed may well have
+ * reported the contest and Civitas set it aside (sync.py skips both Senate
+ * contests when it can't tell them apart; contest_is_sane drops an
+ * impossible count), so "no count from the state's feed" would be false. */
+export const NO_COUNT_TEXT = "no count shown here";
 export const NO_COUNT_SWATCH = `repeating-linear-gradient(45deg, ${NO_COUNT_STRIPE} 0 2px, transparent 2px 5px)`;
 
 /*
@@ -800,8 +805,8 @@ export interface StateShade {
 }
 
 /** The Senate races a state elects (LiveResults.senateRaces) that its
- * feed has given no count for, while it gives one for another: a state
- * electing both its senators whose feed counts only the regular race. */
+ * have no count shown, while another has one: a state electing both its
+ * senators with a count shown for only the regular race. */
 export function uncountedSenateRaces(
   listed: ListedSenateRace[] | undefined,
   races: LiveRaceResult[]
@@ -818,9 +823,9 @@ export function uncountedSenateRaces(
  * from the least-counted of them: under half in anywhere is faint, and
  * solid only once every one is official. A count whose feed is down or
  * behind keeps that fill and is marked `stale`. `races` is every count the
- * state's feed gave, both chambers: with some for the other chamber and
- * none for this one, this chamber is "no count from the state's feed"
- * (NO_COUNT_FILL), never "no votes yet". */
+ * state has, both chambers: with some for the other chamber and none for
+ * this one, this chamber is NO_COUNT_TEXT (NO_COUNT_FILL), never "no votes
+ * yet". */
 export function stateShade(
   state: string,
   races: LiveRaceResult[],
@@ -835,7 +840,7 @@ export function stateShade(
    * POLLS_OPEN_FILL, which says nothing about the count. */
   pollsOpen = false,
   /** The Senate races the state elects (LiveResults.senateRaces). One the
-   * feed hasn't counted, beside one it has, is named in the label as
+   * with no count shown, beside one with a count, is named in the label as
    * having no count — never left out, which reads as the state electing
    * one senator. The fill is the counted races'. */
   listedSenate: ListedSenateRace[] = []
@@ -847,9 +852,9 @@ export function stateShade(
   if (!mine.length) {
     if (!covered) return plain(UNCOVERED_FILL, `${state}: no live count here`);
     if (pollsOpen) return plain(POLLS_OPEN_FILL, `${state}: polls not yet closed`);
-    // The feed gives a count for the state's other chamber but none for
-    // this one: not "no votes yet", which says this chamber's count is
-    // under way, and not "feed not read" — it was read, and answered.
+    // A count for the state's other chamber but none for this one: not
+    // "no votes yet", which says this chamber's count is under way, and not
+    // "feed not read" — it was read, and answered.
     if (races.length > 0) return plain(NO_COUNT_FILL, `${state} ${what}: ${NO_COUNT_TEXT}`);
     if (feedDown) return plain(FEED_FAILED_FILL, `${state}: results feed not read`);
     return plain(AWAITING_FILL, `${state} ${what}: no votes yet`);

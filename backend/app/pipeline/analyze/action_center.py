@@ -4030,13 +4030,25 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 #   names him; "voters will mark green ribbons" is not Mark Green.
 # - A feed's printing is read against the person's FEC filing (_printed_given_start):
 #   Arkansas's feed prints "Congressman Steve Womack", and "Congressman"
-#   is not a word he filed or a short form of one (_short_form: no longer
-#   than the filed name and sharing its first two letters), so the given
-#   name is Steve and "Congressman Womack" states none. A printing whose
-#   short-form fit is followed by a word that fits nothing filed states
-#   no given name ("Representative Bob Latta" for ROBERT E). Limits: a
-#   title that passes as a short form ("Judge" for JUDITH) still reads as
-#   one, and with no filing of the surname in the race a printing stands.
+#   is not a word he filed or a short form of one, so the given name is
+#   Steve and "Congressman Womack" states none. A printed given name counts
+#   only if it is a name filed, or (_short_form) a short form no longer
+#   than the filed name sharing its first two letters ("Steve" for
+#   STEPHEN), or a word beginning with / extending the filed name
+#   ("Christopher" for CHRIS). So a nickname that changes the initial or
+#   the second letter — Bob/ROBERT, Bill/WILLIAM, Liz/ELIZABETH,
+#   Jim/JAMES, Tom/THOMAS, Jack/JOHN, Peggy/MARGARET — is not read from a
+#   feed's printing: a miss, never a wrong promotion (the filed given name
+#   and the ballot's own printing still name the candidate). A printing
+#   whose short-form fit is followed by a full word that fits nothing
+#   filed states no given name: "Representative Bob Latta" for ROBERT E,
+#   and likewise a printed middle name not on file ("Steve Allen Womack"
+#   beside a filing of STEPHEN alone) drops the printing's given name.
+#   Documented limits: a title no longer than the filed name and sharing
+#   its first two letters ("Sheriff" for SHERIDAN, "Judge" for JUDITH)
+#   still passes as a short form; a filing stating only an initial lets
+#   any word with that initial pass; and with no filing of the surname in
+#   the race a printing stands.
 # - Initials count only together: a quoted "A.J." is one name ("A.J.",
 #   "A. J.", "AJ"), as is a record of initials alone ("VANCE, J. D.");
 #   one bare letter is never a given name, and a quoted single letter
@@ -4137,22 +4149,31 @@ def _record_name(name: str | None) -> _RecordName:
 
 def _short_form(token: str, name: str) -> bool:
     """Whether printed `token` can be a short or long form of filed given
-    name (or nickname) `name`, without being it: one letter, the name's
-    initial; a name the filing states only as an initial, any word with
-    that initial; a printed word the filed name begins ("Christopher" for
-    CHRIS); or a printed word no longer than the filed name that shares
-    its first two letters ("Steve" for STEPHEN, "Chuck" for CHARLES).
+    name (or nickname) `name`, without being it. Exactly these pass: one
+    letter, the name's initial; a name the filing states only as an
+    initial, any word with that initial; a printed word that begins with
+    (extends) the filed name ("Christopher" for CHRIS); or a printed word
+    no longer than the filed name that shares its first two letters
+    ("Steve" for STEPHEN, "Chuck" for CHARLES).
 
     One shared initial is not enough for a word: about one word in twenty
     shares any given initial, and the word a feed prints before a name is
     most often a title — "Representative" for ROBERT, "Senator" for
     SARAH, "Congressman" for CHARLES each fail both the length and the
-    two-letter test. The cost is a short form that keeps only the initial
-    ("Jim" for JAMES, "Tom" for THOMAS): not read from a printing, a miss,
-    never a wrong promotion. What still passes is a title no longer than
-    the filed name and sharing its first two letters ("Judge" for JUDITH,
-    "Chair" for CHARLES): nothing in the filing tells those apart from a
-    short form."""
+    two-letter test. The cost is every nickname that changes the initial
+    or the second letter — Bob/ROBERT, Bill/WILLIAM, Liz/ELIZABETH,
+    Jim/JAMES, Tom/THOMAS, Jack/JOHN, Peggy/MARGARET: not read from a
+    feed's printing, a miss, never a wrong promotion (the filed given name
+    and the ballot's own printing still name the candidate). See also
+    _printed_given_start: a printed middle name not on file after a
+    short-form fit ("Steve Allen Womack" beside a filing of STEPHEN alone)
+    drops the printing's given name too.
+
+    Documented limits: a title no longer than the filed name and sharing
+    its first two letters ("Sheriff" for SHERIDAN, "Judge" for JUDITH,
+    "Chair" for CHARLES) still passes — nothing in the filing tells those
+    apart from a short form — and so does any word with the initial of a
+    filing that states only that initial."""
     name = name.replace(".", "")
     if not token or not name:
         return False

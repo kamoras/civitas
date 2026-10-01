@@ -318,13 +318,13 @@ describe("a state electing both senators, one counted", () => {
   it("lists the uncounted race on the state's row as having no count", () => {
     render(<ResultsOverview now={NOW} results={twoSeats()} states={["GA"]} />);
     expect(row()).toHaveTextContent("Senate: Jane Roe (D) leads");
-    expect(row()).toHaveTextContent("Senate (special): no count from the state's feed");
+    expect(row()).toHaveTextContent("Senate (special): no count shown here");
   });
 
   it("names both races in the map's label", () => {
     render(<ResultsOverview now={NOW} results={twoSeats()} states={["GA"]} />);
     expect(mapProps.current!.getStateLabel("GA")).toBe(
-      "GA Senate: regular race Democrat leads, 80% in; special race no count from the state's feed"
+      "GA Senate: regular race Democrat leads, 80% in; special race no count shown here"
     );
   });
 
@@ -398,28 +398,28 @@ describe("when this page's own refresh has failed", () => {
   });
 });
 
-describe("a chamber the state's feed gives no count for while it counts the other", () => {
+describe("a chamber with no count shown while the other has one", () => {
   const row = (state: string) =>
     within(screen.getByRole("region", { name: /By state/ })).getByRole("link", {
       name: new RegExp(`^${state}`),
     });
 
-  it("says the Senate has no count from the feed, not no votes yet, on the map and the row", () => {
+  it("says the Senate has no count shown, not no votes yet, on the map and the row", () => {
     // GA elects a senator; its feed counts a House race and no Senate one.
     render(
       <ResultsOverview now={NOW} results={results({ senateStates: ["GA"] })} states={["GA"]} />
     );
     const map = mapProps.current!;
-    expect(map.getStateLabel("GA")).toBe("GA Senate: no count from the state's feed");
+    expect(map.getStateLabel("GA")).toBe("GA Senate: no count shown here");
     expect(map.getStateLabel("GA")).not.toMatch(/no votes/);
     // Hatched (a texture), not the dotted "no votes yet".
     expect(map.getFillColor("GA")).toMatch(/-nocount\)$/);
-    expect(row("GA")).toHaveTextContent("Senate: no count from the state's feed");
+    expect(row("GA")).toHaveTextContent("Senate: no count shown here");
     expect(row("GA")).not.toHaveTextContent(/no votes/i);
-    expect(screen.getByText(/NO COUNT FROM THE STATE'S FEED/)).toBeInTheDocument();
+    expect(screen.getByText(/NO COUNT SHOWN HERE/)).toBeInTheDocument();
   });
 
-  it("says the House has no count from the feed when only the Senate race is counted", () => {
+  it("says the House has no count shown when only the Senate race has one", () => {
     const senate = race({ raceId: "2026-SEN-GA", office: "S", district: null });
     render(
       <ResultsOverview
@@ -430,9 +430,9 @@ describe("a chamber the state's feed gives no count for while it counts the othe
     );
     fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
     const map = mapProps.current!;
-    expect(map.getStateLabel("GA")).toBe("GA House: no count from the state's feed");
+    expect(map.getStateLabel("GA")).toBe("GA House: no count shown here");
     expect(map.getFillColor("GA")).toMatch(/-nocount\)$/);
-    expect(row("GA")).toHaveTextContent("HOUSE: NO COUNT FROM THE STATE'S FEED");
+    expect(row("GA")).toHaveTextContent("HOUSE: NO COUNT SHOWN HERE");
   });
 
   it("keeps 'no votes yet' for a state whose feed has given no count at all", () => {

@@ -1447,7 +1447,7 @@ def live_results(
         # tell "no race here" from "a race we have no count for".
         "senateStates": senate_states,
         # Which Senate races each of those states holds (regular first),
-        # so a race the state's feed hasn't counted is named as that.
+        # so a race with no count shown is named as that.
         "senateRaces": senate_races,
         # States voting on new congressional lines: their House seats have
         # no holder going in, so none can count as changing party.

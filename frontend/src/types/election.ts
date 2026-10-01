@@ -625,9 +625,9 @@ export interface LiveResults {
   /** States electing a senator this cycle. */
   senateStates: string[];
   /** Each of those states' Senate races (regular first): a state electing
-   * both its senators lists both, so a race its feed hasn't counted reads
-   * as "no count from the state's feed" beside the one it has. Optional
-   * for an older backend. */
+   * both its senators lists both, so a race with no count reads as "no
+   * count shown here" beside the one that has one. Optional for an older
+   * backend. */
   senateRaces?: Record<string, ListedSenateRace[]>;
   /** States voting on new congressional lines this cycle: their House
    * seats have no holder going in (heldBy null), so none can count as a

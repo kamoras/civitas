@@ -1569,7 +1569,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     return m;
   }, [live, ballot.state, stillVoting, feedDown]);
   // The feed has given this state a count for some race: a district with
-  // none of its own is "no count from the feed", not "no votes yet".
+  // none of its own is "no count shown here", not "no votes yet".
   const feedAnswered = !!live && live.races.length > 0;
   // The drawer's district map marks its counts not live exactly when the
   // results section's map does: the state's feed isn't being refreshed, or

@@ -71,7 +71,7 @@ import {
  * with `showLean` off (the page is in results mode) a map with no count to
  * shade by is drawn unshaded rather than by lean, and its preview names no
  * lean: beside the count, a lean reads as a prediction of it. A
- * district the state's feed gives no count for while it counts others
+ * district with no count shown while the state has counts for others
  * (`feedAnswered`) is hatched and says so — never "no votes yet".
  */
 
@@ -158,7 +158,7 @@ export default function DistrictMap({
   /** Live counts by district; when given, the map shades by the count. */
   results?: Map<number, LiveRaceResult>;
   /** The state's feed has given a count for some race (Senate or House):
-   * a district without one of its own is then "no count from the feed",
+   * a district without one of its own is then "no count shown here",
    * not "no votes yet". Defaults to any district having a count. */
   feedAnswered?: boolean;
 }) {
@@ -252,7 +252,7 @@ export default function DistrictMap({
                   className="inline-block h-2 w-3 border border-white/30"
                   style={{ background: `${NO_COUNT_SWATCH}, ${AWAITING_FILL}` }}
                 />
-                no count from the state&apos;s feed
+                no count shown here
               </li>
             )}
             {stale && (
@@ -449,7 +449,7 @@ function DistrictResultPreview({
       </span>
       {tied && <span className="text-ink-hi">TIED</span>}
       {!result && feedAnswered ? (
-        <span className="text-ink-min">no count from the state&apos;s feed</span>
+        <span className="text-ink-min">no count shown here</span>
       ) : !result || !result.votesCounted ? (
         <span className="text-ink-min">
           {result && flipNotShownText(result)

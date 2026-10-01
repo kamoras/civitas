@@ -312,7 +312,7 @@ describe("stateFill", () => {
     ).toMatch(/^rgba\(255,137,137, /);
   });
 
-  it("names a listed Senate race the feed hasn't counted beside the one it has", () => {
+  it("names a listed Senate race with no count shown beside the one with a count", () => {
     const listed = [
       { raceId: "2026-SEN-GA", isSpecial: false },
       { raceId: "2026-SEN-GA-SPECIAL", isSpecial: true },
@@ -322,12 +322,12 @@ describe("stateFill", () => {
     // Drawn as the counted race; both named, the special as uncounted.
     expect(shade.fill).toBe(resultFill(regular, true));
     expect(shade.label).toBe(
-      "GA Senate: regular race Republican leads, 80% in; special race no count from the state's feed"
+      "GA Senate: regular race Republican leads, 80% in; special race no count shown here"
     );
     // Only the special counted: still the regular named first.
     const special = race({ raceId: "2026-SEN-GA-SPECIAL", isSpecial: true, flip: false });
     expect(stateShade("GA", [special], "S", true, true, false, false, listed).label).toBe(
-      "GA Senate: regular race no count from the state's feed; special race Republican leads, 80% in"
+      "GA Senate: regular race no count shown here; special race Republican leads, 80% in"
     );
     // Both counted, or only one listed: as before.
     expect(stateShade("GA", [regular, special], "S", true, true, false, false, listed).label).toBe(
@@ -345,21 +345,21 @@ describe("stateFill", () => {
     expect(uncountedSenateRaces(undefined, [regular])).toEqual([]);
   });
 
-  it("calls a chamber the counting feed gives nothing for 'no count', not 'no votes yet'", () => {
+  it("calls a chamber with no count beside a counted one 'no count shown', not 'no votes yet'", () => {
     // The feed counts the state's House races but gives no Senate row.
     const house = [race({ office: "H", district: 1, raceId: "H1" })];
     const senate = stateShade("GA", house, "S", true, true);
     expect(senate.fill).toBe(NO_COUNT_FILL);
-    expect(senate.label).toBe("GA Senate: no count from the state's feed");
+    expect(senate.label).toBe("GA Senate: no count shown here");
     expect(senate.stale).toBe(false);
     // ...whatever the feed's latest read: it did answer, for the House.
     expect(stateShade("GA", house, "S", true, true, true).label).toBe(
-      "GA Senate: no count from the state's feed"
+      "GA Senate: no count shown here"
     );
     // The reverse: a Senate count and no House row.
     const onlySenate = stateShade("GA", [race()], "H", true, true);
     expect(onlySenate.fill).toBe(NO_COUNT_FILL);
-    expect(onlySenate.label).toBe("GA House: no count from the state's feed");
+    expect(onlySenate.label).toBe("GA House: no count shown here");
     // A chamber the feed lists but whose count is zero is still "no votes yet".
     expect(
       stateShade(
@@ -370,7 +370,7 @@ describe("stateFill", () => {
         true
       ).label
     ).toBe("GA Senate: no votes yet");
-    // No count from the feed at all: "no votes yet", as before.
+    // No count for either chamber: "no votes yet", as before.
     expect(stateShade("GA", [], "S", true, true).fill).toBe(AWAITING_FILL);
   });
 
@@ -797,7 +797,7 @@ describe("the count-less fills' textures", () => {
       [POLLS_OPEN_MARK, POLLS_OPEN_FILL],
       [FEED_FAILED_MARK, FEED_FAILED_FILL],
       [AWAITING_MARK, AWAITING_FILL],
-      // DistrictMap's "no count from the state's feed" hatch, drawn over
+      // DistrictMap's "no count shown here" hatch, drawn over
       // AWAITING_FILL beside every other count-less fill.
       [NO_COUNT_STRIPE, AWAITING_FILL],
     ]) {

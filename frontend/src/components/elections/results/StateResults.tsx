@@ -70,7 +70,7 @@ export default function StateResults({
 }) {
   const races = useMemo(() => results?.races ?? [], [results]);
   // Every Senate race on the ballot, with its count or none: once the
-  // state's feed is answering, one it gives no count for (both contests
+  // state's feed is answering, one with no count shown (both contests
   // unpaired, one dropped or unmatched) is a card saying so, as a House
   // district with none is a row. A count for a race the ballot doesn't
   // list is kept too.
@@ -97,7 +97,7 @@ export default function StateResults({
     return m;
   }, [house]);
   // Every district on the ballot, in order, with its count or none: a seat
-  // the feed gives no count for (unmatched, uncontested) is still a row,
+  // with no count shown (unmatched, uncontested, set aside) is still a row,
   // saying so, and the map has somewhere to land when it's picked. A count
   // for a district the ballot doesn't list is kept too.
   const houseRows = useMemo(() => {

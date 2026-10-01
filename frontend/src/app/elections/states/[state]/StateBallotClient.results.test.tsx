@@ -748,7 +748,7 @@ describe("the state page in results mode", () => {
     expect(document.activeElement).toBe(within(house).getByRole("listitem"));
   });
 
-  it("lists every district, saying which the feed gives no count for, and lands a pick there", async () => {
+  it("lists every district, saying which has no count shown, and lands a pick there", async () => {
     const three = [
       houseRace(),
       { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 },
@@ -781,7 +781,7 @@ describe("the state page in results mode", () => {
       "result-2026-HOUSE-OH-2",
       "result-2026-HOUSE-OH-3",
     ]);
-    expect(rows[1]).toHaveTextContent("OH-2No count from the state's feed");
+    expect(rows[1]).toHaveTextContent("OH-2No count shown here");
     expect(rows[1]).not.toHaveTextContent(/no votes/i);
     // The tally counts the independent's lead too.
     expect(house).toHaveTextContent("D 0 · R 1 · I 1 LEADING");
@@ -824,7 +824,7 @@ describe("the state page in results mode", () => {
     expect(drawerMaps.at(-1)?.stale).toBe(false);
   });
 
-  it("says a Senate race the counting feed gives nothing for has no count, not no votes", async () => {
+  it("says a Senate race with no count beside a counted one has no count shown, not no votes", async () => {
     const senateRace: RaceWithCandidates = {
       ...houseRace(),
       id: "2026-SEN-OH",
@@ -839,11 +839,11 @@ describe("the state page in results mode", () => {
     expect(card.tagName).toBe("ARTICLE");
     expect(within(card).getByRole("heading", { level: 2 })).toHaveTextContent("U.S. Senate");
     expect(card).toHaveTextContent("NO COUNT");
-    expect(card).toHaveTextContent(/No count from the state.s feed/);
+    expect(card).toHaveTextContent(/Civitas shows no count for this race/);
     expect(card).not.toHaveTextContent(/no votes/i);
   });
 
-  it("says a House district has no count when the feed counts only the Senate race", async () => {
+  it("says a House district has no count shown when only the Senate race has one", async () => {
     const senateRace: RaceWithCandidates = {
       ...houseRace(),
       id: "2026-SEN-OH",
@@ -863,7 +863,7 @@ describe("the state page in results mode", () => {
     const rows = within(house).getAllByRole("listitem");
     expect(rows).toHaveLength(2);
     for (const row of rows) {
-      expect(row).toHaveTextContent(/No count from the state.s feed/);
+      expect(row).toHaveTextContent(/No count shown here/);
       expect(row).not.toHaveTextContent(/no votes/i);
     }
     // The Senate race has its count, once.

@@ -135,9 +135,7 @@ describe("DistrictMap", () => {
     );
     // Its standing is in its accessible name, not in its colour alone.
     const shape = await screen.findByRole("button", { name: "CT-2: tied, 90% in" });
-    expect(
-      screen.getByRole("button", { name: "CT-3: no count from the state's feed" })
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "CT-3: no count shown here" })).toBeTruthy();
     expect(screen.getByText("no votes yet")).toBeInTheDocument();
     // Share is drawn as opacity over a near-black page: less in reads
     // dimmer, not lighter, so the key says "fainter", never "paler".
@@ -248,7 +246,7 @@ describe("DistrictMap", () => {
     ).toBeInTheDocument();
   });
 
-  it("hatches a district the counting state's feed gives no count for, and keys purple", async () => {
+  it("hatches a district with no count shown beside counted ones, and keys purple", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
     const ind = {
       raceId: "2026-HOUSE-CT-2",
@@ -283,17 +281,15 @@ describe("DistrictMap", () => {
       />
     );
     const other = await screen.findByRole("button", {
-      name: "CT-3: no count from the state's feed",
+      name: "CT-3: no count shown here",
     });
     expect(screen.getByRole("button", { name: "CT-2: independent leads, 90% in" })).toBeTruthy();
     expect(other.getAttribute("style") ?? "").toMatch(/fill: url\("?#tex-[^"]*-nocount/);
     expect(container.querySelector("pattern[id$='-nocount']")).not.toBeNull();
-    expect(screen.getByText("no count from the state's feed")).toBeInTheDocument();
+    expect(screen.getByText("no count shown here")).toBeInTheDocument();
     expect(screen.getByText(/purple = other or unstated party leads/)).toBeInTheDocument();
     other.focus();
-    await waitFor(() =>
-      expect(screen.getAllByText("no count from the state's feed")).toHaveLength(2)
-    );
+    await waitFor(() => expect(screen.getAllByText("no count shown here")).toHaveLength(2));
     expect(screen.queryByText("no votes counted yet")).not.toBeInTheDocument();
   });
 

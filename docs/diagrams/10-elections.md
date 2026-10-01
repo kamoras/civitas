@@ -455,19 +455,23 @@ count section saying when they close; only then does it read "… results" and
 
 **Every House district is listed** once a state's feed is answering: a
 district with no row of its own (a contest the feed doesn't list or that
-couldn't be matched, an uncontested seat) is a row saying "no count from the
-state's feed" and is hatched on the district map, so it is neither drawn as
-"no votes yet" nor missing, and picking it lands on its row. The Senate is
-held to the same rule: a Senate race on the ballot that the answering feed
-gives no row for (two seats with neither marked special, a contest dropped
-as impossible or left unmatched) is a NO COUNT card, and on `/elections` a
-chamber the feed gives nothing for while counting the state's other one is
-hatched and named "no count from the state's feed" (`NO_COUNT_FILL`, its own
-legend entry), on the map and on the state's row. A state electing both its
-senators whose feed counts only one of them is drawn by that one, and its map
-label and row name the other as "no count from the state's feed" — the
+couldn't be matched, a count dropped as impossible, an uncontested seat) is a
+row saying "No count shown here" and is hatched on the district map, so it is
+neither drawn as "no votes yet" nor missing, and picking it lands on its row.
+The Senate is held to the same rule: a Senate race on the ballot with no
+stored count while the feed answers (two seats with neither marked special,
+so both skipped; a contest dropped as impossible or left unmatched) is a NO
+COUNT card ("Civitas shows no count for this race, though it shows one for
+the state's other races"), and on `/elections` a chamber with no count while
+the state's other one has one is hatched and named "no count shown here"
+(`NO_COUNT_FILL`, `NO_COUNT_TEXT`, its own legend entry), on the map and on
+the state's row. A state electing both its senators with a count for only
+one of them is drawn by that one, and its map label and row name the other
+as "no count shown here" — the
 results payload lists each state's Senate races (`senateRaces`), so the
-uncounted race isn't simply missing. "No votes yet" is kept for
+uncounted race isn't simply missing. The wording is about Civitas's page, never
+the feed: the feed may well have reported a contest Civitas set aside, so no
+surface says the state's feed gave no count. "No votes yet" is kept for
 a chamber the feed does list, with nothing counted. A leader the
 feed gives no party the vocabulary knows is drawn purple, keyed on both
 maps, named "(other)", and counted in the seats-led tallies.
@@ -533,13 +537,22 @@ the first filed name or nickname (the filed name beginning it,
 "Steve" for STEPHEN), so "Congressman Steve Womack" (filed STEPHEN) is
 Steve and "Congressman Womack" states no given name. A short-form fit
 followed by a full word that fits nothing filed states none
-("Representative Bob Latta" for ROBERT E); a parenthesised word is a
-nickname only if it fits ("(Incumbent)" is not); a row linked to no
-candidate is read against the race's filings of that surname
-("Congressman Smith" beside SMITH, CHARLES states none). Exact limits: a
-title no longer than the filed name and sharing its first two letters
-still passes ("Judge" for JUDITH), a printing with no filing of that
-surname in the race stands as printed, and "Jim" for JAMES is a miss. Initials count only together ("A.J.", "A. J.", "AJ"; "J.D.
+("Representative Bob Latta" for ROBERT E), and so does a printed middle
+name not on file ("Steve Allen Womack" beside a filing of STEPHEN alone);
+a parenthesised word is a nickname only if it fits ("(Incumbent)" is
+not); a row linked to no candidate is read against the race's filings of
+that surname ("Congressman Smith" beside SMITH, CHARLES states none). So
+a printed given name counts only as a filed name, a short form sharing
+the filed name's first two letters, or a word beginning with / extending
+the filed name: a nickname that changes the initial or second letter —
+Bob/ROBERT, Bill/WILLIAM, Liz/ELIZABETH, Jim/JAMES, Tom/THOMAS,
+Jack/JOHN, Peggy/MARGARET — is not read from a feed's printing, a miss,
+never a wrong promotion (the filed given name and the ballot's own
+printing still work). Exact limits: a title no longer than the filed name
+and sharing its first two letters still passes ("Sheriff" for SHERIDAN,
+"Judge" for JUDITH), as does any word with the initial of a filing that
+states only an initial, and a printing with no filing of that surname in
+the race stands as printed. Initials count only together ("A.J.", "A. J.", "AJ"; "J.D.
 Vance" for a record of initials alone), never as one bare letter; a quoted
 single letter ("(I)") is an annotation. The name must be written as one:
 every word before the surname and the surname's last word capitalised

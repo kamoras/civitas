@@ -278,11 +278,14 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
   );
 }
 
-/** A House district on the ballot that the state's feed, while counting
- * others, gives no count for: a contest it doesn't list or that couldn't be
- * matched to the race, or an uncontested seat. Listed, so the table is
- * every district and the map has a row to land on, and worded as exactly
- * that absence — not "no votes yet", which says the count is under way. */
+/** A House district on the ballot with no count shown while the state's
+ * others have one: a contest the feed doesn't list or that couldn't be
+ * matched to the race, a count set aside as impossible, or an uncontested
+ * seat. Worded about Civitas's page ("No count shown here"), not the
+ * feed, which may have reported a contest Civitas set aside. Listed, so
+ * the table is every district and the map has a row to land on, and worded
+ * as exactly that absence — not "no votes yet", which says the count is
+ * under way. */
 export function HouseNoCountRow({
   raceId,
   state,
@@ -297,7 +300,7 @@ export function HouseNoCountRow({
       <span className="font-mono text-sm text-ink-hi">
         {raceLabel({ state, office: "H", district })}
       </span>
-      <span className="min-w-0 text-sm text-ink-min">No count from the state&apos;s feed</span>
+      <span className="min-w-0 text-sm text-ink-min">No count shown here</span>
       <span className="hidden font-mono text-xs text-ink-min sm:block">—</span>
       <span
         className={`${HOUSE_ROW_TAG} border border-dashed border-white/25 px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] text-ink-min`}
@@ -308,8 +311,8 @@ export function HouseNoCountRow({
   );
 }
 
-/** A Senate race on the state's ballot that the state's feed, while
- * counting its other races, gives no count for: both Senate contests left
+/** A Senate race on the state's ballot that Civitas shows no count for
+ * while it shows one for the state's other races: both Senate contests left
  * unpaired because neither is marked special, a contest dropped as an
  * impossible count, or one not matched to the race. The Senate's
  * counterpart of HouseNoCountRow, and worded as that absence — not "no
@@ -343,8 +346,7 @@ export function SenateNoCountCard({
         </span>
       </div>
       <p className="mt-2 text-sm text-ink-min">
-        No count from the state&apos;s feed for this race, though it gives one for the state&apos;s
-        other races.
+        Civitas shows no count for this race, though it shows one for the state&apos;s other races.
       </p>
     </article>
   );
