@@ -287,6 +287,61 @@ describe("a Senate race on a directory row", () => {
   });
 });
 
+describe("a state electing both senators, one counted", () => {
+  const twoSeats = (overrides: Partial<LiveResults> = {}) =>
+    results({
+      senateStates: ["GA"],
+      senateRaces: {
+        GA: [
+          { raceId: "2026-SEN-GA", isSpecial: false },
+          { raceId: "2026-SEN-GA-SPECIAL", isSpecial: true },
+        ],
+      },
+      races: [
+        race({
+          raceId: "2026-SEN-GA",
+          office: "S",
+          district: null,
+          flip: false,
+          leaderParty: "DEM",
+          candidates: [
+            { name: "Jane Roe", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
+            { name: "Sam Poe", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+          ],
+        }),
+      ],
+      ...overrides,
+    });
+  const row = () =>
+    within(screen.getByRole("region", { name: /By state/ })).getByRole("link", { name: /^GA/ });
+
+  it("lists the uncounted race on the state's row as having no count", () => {
+    render(<ResultsOverview now={NOW} results={twoSeats()} states={["GA"]} />);
+    expect(row()).toHaveTextContent("Senate: Jane Roe (D) leads");
+    expect(row()).toHaveTextContent("Senate (special): no count from the state's feed");
+  });
+
+  it("names both races in the map's label", () => {
+    render(<ResultsOverview now={NOW} results={twoSeats()} states={["GA"]} />);
+    expect(mapProps.current!.getStateLabel("GA")).toBe(
+      "GA Senate: regular race Democrat leads, 80% in; special race no count from the state's feed"
+    );
+  });
+
+  it("says the page's own failure, not the feed's, when it couldn't refresh", () => {
+    render(<ResultsOverview now={NOW} results={twoSeats()} states={["GA"]} refreshFailed />);
+    expect(row()).toHaveTextContent("Senate (special): no count as this page last read it");
+  });
+
+  it("reads as before against an older backend with no list", () => {
+    render(
+      <ResultsOverview now={NOW} results={twoSeats({ senateRaces: undefined })} states={["GA"]} />
+    );
+    expect(row()).toHaveTextContent("Senate: Jane Roe (D) leads");
+    expect(row()).not.toHaveTextContent("special");
+  });
+});
+
 describe("the Senate map's footnote", () => {
   it("says what a two-seat state is shaded by, as stateShade draws it", () => {
     render(<ResultsOverview now={NOW} results={results()} states={["GA"]} />);

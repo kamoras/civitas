@@ -624,6 +624,11 @@ export interface LiveResults {
   liveStates: string[];
   /** States electing a senator this cycle. */
   senateStates: string[];
+  /** Each of those states' Senate races (regular first): a state electing
+   * both its senators lists both, so a race its feed hasn't counted reads
+   * as "no count from the state's feed" beside the one it has. Optional
+   * for an older backend. */
+  senateRaces?: Record<string, ListedSenateRace[]>;
   /** States voting on new congressional lines this cycle: their House
    * seats have no holder going in (heldBy null), so none can count as a
    * seat changing party. Optional for an older backend. */
@@ -643,6 +648,12 @@ export interface LiveResults {
    * the browser can't read it) and the browser's clock on arrival — so the
    * page judges time by the server's clock (lib/results resultsNow). */
   clock?: { serverDate: number | null; receivedAt: number };
+}
+
+/** One Senate race a state elects this cycle (LiveResults.senateRaces). */
+export interface ListedSenateRace {
+  raceId: string;
+  isSpecial: boolean;
 }
 
 export interface LiveFeedStatus {

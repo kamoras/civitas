@@ -505,6 +505,31 @@ class TestLiveResults:
         assert "UT" in data["redrawnStates"] and "MO" not in data["redrawnStates"]
         assert data["pollsClose"]["GA"] == "2026-11-04T00:00:00Z"  # 7 PM ET
 
+    def test_senate_races_lists_each_seat_a_state_elects(self, db_session):
+        """A state electing both its senators lists both races, counted or
+        not, so the map can say the uncounted one has no count — and the
+        list is the cycle's, outside the results window too."""
+        from datetime import date
+        from unittest.mock import patch
+
+        self._seed(db_session)
+        special = _race(db_session, "2026-SEN-OH-SPECIAL", "OH", "S")
+        special.is_special = True
+        _race(db_session, "2026-SEN-OH", "OH", "S")
+        _race(db_session, "2024-SEN-TX", "TX", "S", cycle_year=2024)
+        db_session.flush()
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+        assert data["senateRaces"] == {
+            "CO": [{"raceId": "2026-SEN-CO", "isSpecial": False}],
+            "OH": [{"raceId": "2026-SEN-OH", "isSpecial": False},
+                   {"raceId": "2026-SEN-OH-SPECIAL", "isSpecial": True}],
+        }
+        assert data["senateStates"] == ["CO", "OH"]
+        with patch("app.election_phase.election_today", return_value=date(2026, 10, 1)):
+            data = _body(elections.live_results("CO", db_session))
+        assert set(data["senateRaces"]) == {"CO", "OH"}
+
     def test_flip_is_what_the_sync_announced_not_the_bar_right_now(self, db_session):
         """An announced flip whose count lost its reporting figures stays
         marked (the issue and posts keep it too); a count that clears the

@@ -33,8 +33,9 @@ import {
   stateFeedBehind,
   stateShade,
   summarizeState,
+  uncountedSenateRaces,
 } from "@/lib/results";
-import type { LiveRaceResult, LiveResults } from "@/types/election";
+import type { ListedSenateRace, LiveRaceResult, LiveResults } from "@/types/election";
 
 const DC_FILL = "rgba(255, 255, 255, 0.06)";
 
@@ -51,6 +52,27 @@ function Swatch({ color, texture }: { color: string; texture?: string }) {
   );
 }
 
+/** A Senate line's name: "Senate", or "Senate (special)" for the special
+ * race of a state listing more than one. */
+function senateName(isSpecial: boolean, several: boolean): string {
+  return several && isSpecial ? "Senate (special)" : "Senate";
+}
+
+/** A state's Senate lines: each counted race, and each race it elects
+ * (LiveResults.senateRaces) that the feed gave no count for, regular
+ * first. */
+function senateRows(
+  counted: LiveRaceResult[],
+  listed: ListedSenateRace[] | undefined
+): { raceId: string; isSpecial: boolean; result: LiveRaceResult | null; several: boolean }[] {
+  const uncounted = uncountedSenateRaces(listed, counted);
+  const several = counted.length + uncounted.length > 1;
+  return [
+    ...counted.map((r) => ({ raceId: r.raceId, isSpecial: r.isSpecial, result: r, several })),
+    ...uncounted.map((l) => ({ raceId: l.raceId, isSpecial: l.isSpecial, result: null, several })),
+  ].sort((a, b) => Number(a.isSpecial) - Number(b.isSpecial));
+}
+
 /** "Senate: Jane Roe (D) leads · early" — one Senate race on a directory
  * row, with "early" under half in, as the map draws it fainter. A count
  * the state lists as official still "leads · official count": never a
@@ -58,7 +80,7 @@ function Swatch({ color, texture }: { color: string; texture?: string }) {
  * while the figures show it (flipShown); a change of party announced
  * earlier that this count doesn't show says so instead. */
 function senateLine(r: LiveRaceResult, several: boolean): string {
-  const name = several ? `Senate${r.isSpecial ? " (special)" : ""}` : "Senate";
+  const name = senateName(r.isSpecial, several);
   // Announced earlier: said before "tied" and "no votes yet", as every
   // other surface says it, so no line drops what the counter counts.
   const announced = flipNotShownText(r) ? " · flip announced, not in latest count" : "";
@@ -193,7 +215,8 @@ export default function ResultsOverview({
       live.has(state),
       chamber === "H" || senateStates.has(state),
       readFailed(state),
-      voting(state)
+      voting(state),
+      results.senateRaces?.[state] ?? []
     );
     // A count this page couldn't refresh is not live either: striped like a
     // stale one (never solid, which passes for live), named for this
@@ -333,7 +356,7 @@ export default function ResultsOverview({
             official, and a race there still only leads — Civitas calls no race.{" "}
             {chamber === "H"
               ? "For the House, a state is shaded by the party leading the most of its districts, every party compared, and grey when two lead equally many. It stays fainter while any district has under half in, and turns solid only when every district's count is official."
-              : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in."}{" "}
+              : "A state electing both its senators is shaded by the party leading more of its two races, grey when two parties lead equally many, and fainter while either race has under half in; with only one of its two races counted, it is shaded by that one, and the other is named as having no count."}{" "}
             Hatched grey means the state&apos;s feed gives a count for its other chamber&apos;s
             races but none for this one&apos;s — not that no votes are in.{" "}
             {refreshFailed ? (
@@ -478,10 +501,15 @@ export default function ResultsOverview({
                       the other: that absence, never "no votes yet". */}
                   {summary.senate.length > 0 ? (
                     // Every Senate race the state holds — a regular and a
-                    // special election each get a line.
-                    summary.senate.map((r) => (
-                      <span key={r.raceId} className="text-sm text-ink-lo">
-                        {senateLine(r, summary.senate.length > 1)}
+                    // special election each get a line, the regular first,
+                    // and one the feed hasn't counted says so.
+                    senateRows(summary.senate, results.senateRaces?.[state]).map((row) => (
+                      <span key={row.raceId} className="text-sm text-ink-lo">
+                        {row.result
+                          ? senateLine(row.result, row.several)
+                          : `${senateName(row.isSpecial, true)}: ${
+                              refreshFailed ? "no count as this page last read it" : NO_COUNT_TEXT
+                            }`}
                       </span>
                     ))
                   ) : (

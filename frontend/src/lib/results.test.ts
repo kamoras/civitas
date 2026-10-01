@@ -37,6 +37,7 @@ import {
   showsResults,
   stateFill,
   stateShade,
+  uncountedSenateRaces,
   summarizeState,
   flipShown,
   flipNotShownTag,
@@ -309,6 +310,39 @@ describe("stateFill", () => {
         true
       ).fill
     ).toMatch(/^rgba\(255,137,137, /);
+  });
+
+  it("names a listed Senate race the feed hasn't counted beside the one it has", () => {
+    const listed = [
+      { raceId: "2026-SEN-GA", isSpecial: false },
+      { raceId: "2026-SEN-GA-SPECIAL", isSpecial: true },
+    ];
+    const regular = race({ flip: false, leaderParty: "REP" });
+    const shade = stateShade("GA", [regular], "S", true, true, false, false, listed);
+    // Drawn as the counted race; both named, the special as uncounted.
+    expect(shade.fill).toBe(resultFill(regular, true));
+    expect(shade.label).toBe(
+      "GA Senate: regular race Republican leads, 80% in; special race no count from the state's feed"
+    );
+    // Only the special counted: still the regular named first.
+    const special = race({ raceId: "2026-SEN-GA-SPECIAL", isSpecial: true, flip: false });
+    expect(stateShade("GA", [special], "S", true, true, false, false, listed).label).toBe(
+      "GA Senate: regular race no count from the state's feed; special race Republican leads, 80% in"
+    );
+    // Both counted, or only one listed: as before.
+    expect(stateShade("GA", [regular, special], "S", true, true, false, false, listed).label).toBe(
+      stateShade("GA", [regular, special], "S", true, true).label
+    );
+    expect(stateShade("GA", [regular], "S", true, true, false, false, listed.slice(0, 1))).toEqual(
+      stateShade("GA", [regular], "S", true, true)
+    );
+    // The House map is untouched by the Senate list.
+    const house = [race({ office: "H", district: 1, raceId: "H1" })];
+    expect(stateShade("GA", house, "H", true, true, false, false, listed)).toEqual(
+      stateShade("GA", house, "H", true, true)
+    );
+    expect(uncountedSenateRaces(listed, [regular, ...house])).toEqual([listed[1]]);
+    expect(uncountedSenateRaces(undefined, [regular])).toEqual([]);
   });
 
   it("calls a chamber the counting feed gives nothing for 'no count', not 'no votes yet'", () => {

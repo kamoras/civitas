@@ -3591,6 +3591,59 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         # nickname FEC doesn't quote ("Bob" for ROBERT) still names him.
         assert _person(["Bob Casey", "CASEY, ROBERT P JR", "Bob Casey"], None).leads == {"bob", "robert"}
 
+    @pytest.mark.parametrize("printed,filed,leads", [
+        # A title sharing only the filed name's initial is not a given name.
+        ("Senator Smith", "SMITH, SARAH", {"sarah"}),
+        ("Sen. Smith", "SMITH, SARAH", {"sarah"}),
+        ("Congressman Smith", "SMITH, CHARLES", {"charles"}),
+        # A short-form fit followed by a word that fits nothing filed: no
+        # printed given name ("Bob" is his, but nothing on file says so).
+        ("Representative Bob Latta", "LATTA, ROBERT E", {"robert"}),
+        ("Congressman Bill Womack", "WOMACK, CHARLES", {"charles"}),
+        ("Chair Bob Smith", "SMITH, CHARLES", {"charles"}),
+        # Short forms still read, title or not before them.
+        ("Congressman Chuck Womack", "WOMACK, CHARLES", {"chuck", "charles"}),
+        ("Steve Allen Womack", "WOMACK, STEPHEN ALLEN", {"steve", "stephen"}),
+        ("Christopher Smith", "SMITH, CHRIS", {"christopher", "chris"}),
+        # A short form keeping only the initial is a miss, not a guess.
+        ("Jim Smith", "SMITH, JAMES", {"james"}),
+        # A parenthesised annotation is no nickname; a fitting one is.
+        ("Jon Ossoff (Incumbent)", "OSSOFF, JON", {"jon"}),
+        ("Jon Ossoff (Dem)", "OSSOFF, JON", {"jon"}),
+        ("Robert (Bob) Latta", "LATTA, ROBERT E", {"robert"}),
+        ("Robert (Rob) Latta", "LATTA, ROBERT E", {"robert", "rob"}),
+    ])
+    def test_a_title_in_a_printing_is_not_a_given_name(self, printed, filed, leads):
+        from app.pipeline.analyze.action_center import _person
+
+        assert _person([printed, filed], printed).leads == leads
+
+    def test_a_title_in_an_unlinked_printing_is_not_a_given_name(self, db_session):
+        """Round 10: "Representative Bob Latta" linked to LATTA, ROBERT E,
+        and "Congressman Smith" linked to nothing beside SMITH, CHARLES,
+        once read the title as the given name, so "Representative Latta"
+        and "Congressman Smith" — surnames alone — promoted the flip."""
+        from app.models import Candidate, RaceResult
+
+        db = db_session
+        db.add(Candidate(id="c1", race_id="2026-HOUSE-AR-3", name="LATTA, ROBERT E", party="REP"))
+        db.add(Candidate(id="d1", race_id="2026-HOUSE-AR-4", name="SMITH, CHARLES", party="REP"))
+        db.commit()
+        db.add(RaceResult(race_id="2026-HOUSE-AR-3", election_date="2026-11-03", source_name="State results",
+                          tallies=json.dumps([
+                              {"name": "Representative Bob Latta", "votes": 10, "candidateId": "c1"},
+                              {"name": "Jane Doe", "votes": 9},
+                          ])))
+        db.add(RaceResult(race_id="2026-HOUSE-AR-4", election_date="2026-11-03", source_name="State results",
+                          tallies=json.dumps([{"name": "Congressman Smith", "votes": 10},
+                                              {"name": "Jane Roe", "votes": 9}])))
+        db.commit()
+        ar3 = self._flip_issue("2026-HOUSE-AR-3", "Arkansas's 3rd")
+        assert self._match(ar3, "Arkansas's 3rd District flips as Representative Latta trails", db=db) is None
+        assert self._match(ar3, "Arkansas's 3rd District flips as Robert Latta trails", db=db) is ar3
+        ar4 = self._flip_issue("2026-HOUSE-AR-4", "Arkansas's 4th")
+        assert self._match(ar4, "Arkansas's 4th District flips; Congressman Smith concedes", db=db) is None
+
     @pytest.mark.parametrize("district,names,text,named", [
         ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
          "Georgia's 2nd District: a Johnson aide said turnout was high", False),

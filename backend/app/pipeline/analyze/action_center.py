@@ -4030,8 +4030,13 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 #   names him; "voters will mark green ribbons" is not Mark Green.
 # - A feed's printing is read against the person's FEC filing (_printed_given_start):
 #   Arkansas's feed prints "Congressman Steve Womack", and "Congressman"
-#   is not a word he filed or one with his first filed initial, so the
-#   given name is Steve and "Congressman Womack" is a surname alone.
+#   is not a word he filed or a short form of one (_short_form: no longer
+#   than the filed name and sharing its first two letters), so the given
+#   name is Steve and "Congressman Womack" states none. A printing whose
+#   short-form fit is followed by a word that fits nothing filed states
+#   no given name ("Representative Bob Latta" for ROBERT E). Limits: a
+#   title that passes as a short form ("Judge" for JUDITH) still reads as
+#   one, and with no filing of the surname in the race a printing stands.
 # - Initials count only together: a quoted "A.J." is one name ("A.J.",
 #   "A. J.", "AJ"), as is a record of initials alone ("VANCE, J. D.");
 #   one bare letter is never a given name, and a quoted single letter
@@ -4130,30 +4135,66 @@ def _record_name(name: str | None) -> _RecordName:
     return _RecordName(last.strip(), names(given_part), nicknames, filed)
 
 
+def _short_form(token: str, name: str) -> bool:
+    """Whether printed `token` can be a short or long form of filed given
+    name (or nickname) `name`, without being it: one letter, the name's
+    initial; a name the filing states only as an initial, any word with
+    that initial; a printed word the filed name begins ("Christopher" for
+    CHRIS); or a printed word no longer than the filed name that shares
+    its first two letters ("Steve" for STEPHEN, "Chuck" for CHARLES).
+
+    One shared initial is not enough for a word: about one word in twenty
+    shares any given initial, and the word a feed prints before a name is
+    most often a title — "Representative" for ROBERT, "Senator" for
+    SARAH, "Congressman" for CHARLES each fail both the length and the
+    two-letter test. The cost is a short form that keeps only the initial
+    ("Jim" for JAMES, "Tom" for THOMAS): not read from a printing, a miss,
+    never a wrong promotion. What still passes is a title no longer than
+    the filed name and sharing its first two letters ("Judge" for JUDITH,
+    "Chair" for CHARLES): nothing in the filing tells those apart from a
+    short form."""
+    name = name.replace(".", "")
+    if not token or not name:
+        return False
+    if len(token) == 1 or len(name) == 1:
+        return token[0] == name[0]
+    if token.startswith(name):
+        return True
+    return len(token) <= len(name) and token[:2] == name[:2]
+
+
 def _given_fits(token: str, filings: list[_RecordName]) -> bool:
     """Whether a printed given-name token can be the filed person's: a
-    given name or nickname they filed, or the initial of their first filed
-    given name or of a nickname ("Steve" for STEPHEN, "S." for it too).
-    "Congressman" in Arkansas's "Congressman Steve Womack" is neither, so
-    it is not read as his given name — the filing decides what a name is,
-    not a list of titles."""
+    given name or nickname they filed, or a short form of their first
+    filed given name or of a nickname (_short_form: "Steve" for STEPHEN,
+    "S." for it too). "Congressman" in Arkansas's "Congressman Steve
+    Womack" is neither, so it is not read as his given name — the filing
+    decides what a name is, not a list of titles."""
     for filing in filings:
         if token in filing.given or token in filing.nicknames:
             return True
-        if filing.given and token[0] == filing.given[0][0]:
-            return True
-        if any(token[0] == n[0] for n in filing.nicknames):
+        if any(_short_form(token, n) for n in filing.given[:1] + filing.nicknames):
             return True
     return False
 
 
 def _printed_given_start(given: list[str], filings: list[_RecordName]) -> int | None:
-    """Where a printing's given names start: the first token that fits the
-    filing (_given_fits), passing over one followed by another fitting
-    full word that the filing doesn't state as a middle name ("Senator
-    Steve Womack" for STEPHEN: "Steve" fits by its initial as well, and
-    is the name). An exact first filed name or nickname always stands."""
-    exact = {f.given[0] for f in filings if f.given} | {n for f in filings for n in f.nicknames}
+    """Where a printing's given names start, or None when it states none
+    the filing can vouch for. The first token that fits the filing
+    (_given_fits) starts them, except:
+
+    - one that fits only as a short form, followed by another fitting
+      full word the filing doesn't state as a middle name, is passed over
+      ("Senator Steve Womack" for STEPHEN, were "Senator" to fit: "Steve"
+      fits as well, and is the name);
+    - one that fits only as a short form, followed by a full word that
+      neither fits nor is a filed middle name, means the printing states
+      no given name ("Representative Bob Latta" for ROBERT E, were
+      "Representative" to fit: "Bob" is his name, but nothing on file
+      says so, and the word before it is no name of his either).
+
+    An exact filed given name or nickname always stands."""
+    exact = {g for f in filings for g in f.given[:1]} | {n for f in filings for n in f.nicknames}
     filed_middles = {g for f in filings for g in f.given[1:]}
     fits = [_given_fits(g, filings) for g in given]
     for i, g in enumerate(given):
@@ -4162,8 +4203,10 @@ def _printed_given_start(given: list[str], filings: list[_RecordName]) -> int | 
         if g in exact:
             return i
         after = given[i + 1] if i + 1 < len(given) else None
-        if after is not None and fits[i + 1] and len(after) > 1 and after not in filed_middles:
-            continue
+        if after is not None and len(after) > 1 and after not in filed_middles:
+            if fits[i + 1]:
+                continue
+            return None
         return i
     return None
 
@@ -4182,12 +4225,15 @@ def _person(names: list[str | None], count_printing: str | None = None,
     honorific the ballot doesn't (Arkansas: "Congressman Steve Womack").
     The first printed token that fits the filing (_printed_given_start) is
     where its given names start, and words before it are not names; none
-    fitting, it states no given name. With no filing among `names`, the
-    race's own filings of that surname (`reference`) are checked the same
-    way, except that a printing none of whose tokens fits them stands as
-    printed (it may be someone else of that surname); with neither, it
-    stands as printed. A ballot's printing is the state's official one and
-    stands as printed."""
+    fitting, it states no given name, and a parenthesised word it prints
+    counts as a nickname only where it fits too. With no filing among
+    `names`, the race's own filings of that surname (`reference`) are
+    checked the same way: a printing none of whose words fits them states
+    no given name either ("Congressman Smith" beside SMITH, CHARLES), so a
+    different person of that surname whose filing the race lacks is a
+    miss, never "Congressman" read as a name. With neither, the printing
+    stands as printed. A ballot's printing is the state's own and stands
+    as printed."""
     records = [r for r in map(_record_name, filter(None, names)) if r.surname]
     if not records:
         return None
@@ -4198,7 +4244,6 @@ def _person(names: list[str | None], count_printing: str | None = None,
 
     checked = _record_name(count_printing) if count_printing else None
     filings = [r for r in records if r.filed and mine(r)]
-    strict = bool(filings)
     if not filings:
         filings = [r for r in map(_record_name, filter(None, reference)) if r.filed and mine(r)]
     leads, initials, middles = set(), set(), set()
@@ -4211,7 +4256,11 @@ def _person(names: list[str | None], count_printing: str | None = None,
             given = given[:-len(extra)]  # "catherine cortez" + "masto"
         if record == checked and not filed and filings:
             at = _printed_given_start(given, filings)
-            given = given[at:] if at is not None else ([] if strict else given)
+            given = given[at:] if at is not None else []
+            # A feed's parenthesised word is as likely an annotation
+            # ("(Incumbent)", "(Dem)") as a nickname: kept only where the
+            # filing vouches for it, as its given names are.
+            nicknames = [n for n in nicknames if _given_fits(n, filings)]
         leads.update(nicknames)
         middles.update(n for n in nicknames if "." not in n)
         if not given:

@@ -463,7 +463,11 @@ gives no row for (two seats with neither marked special, a contest dropped
 as impossible or left unmatched) is a NO COUNT card, and on `/elections` a
 chamber the feed gives nothing for while counting the state's other one is
 hatched and named "no count from the state's feed" (`NO_COUNT_FILL`, its own
-legend entry), on the map and on the state's row. "No votes yet" is kept for
+legend entry), on the map and on the state's row. A state electing both its
+senators whose feed counts only one of them is drawn by that one, and its map
+label and row name the other as "no count from the state's feed" — the
+results payload lists each state's Senate races (`senateRaces`), so the
+uncounted race isn't simply missing. "No votes yet" is kept for
 a chamber the feed does list, with nothing counted. A leader the
 feed gives no party the vocabulary knows is drawn purple, keyed on both
 maps, named "(other)", and counted in the seats-led tallies.
@@ -522,10 +526,20 @@ prefix fit, so "Donna Davis" is not Don Davis — then optionally a middle
 name or initial that doesn't contradict the record, then the whole surname
 (multi-word or hyphenated as a unit, accents and curly apostrophes folded,
 a suffix allowed after). A results feed's printed name (not the ballot's,
-which stands) is read against the person's FEC filing: its given name starts at the first word that is a filed name or
-shares the initial of the first filed name or nickname, so "Congressman
-Steve Womack" (filed STEPHEN) is Steve, and "Congressman Womack" is a
-surname alone. Initials count only together ("A.J.", "A. J.", "AJ"; "J.D.
+which stands) is read against the person's FEC filing: its given name
+starts at the first word that is a filed name or a short or long form of
+the first filed name or nickname (the filed name beginning it,
+"Christopher" for CHRIS; or no longer and sharing its first two letters,
+"Steve" for STEPHEN), so "Congressman Steve Womack" (filed STEPHEN) is
+Steve and "Congressman Womack" states no given name. A short-form fit
+followed by a full word that fits nothing filed states none
+("Representative Bob Latta" for ROBERT E); a parenthesised word is a
+nickname only if it fits ("(Incumbent)" is not); a row linked to no
+candidate is read against the race's filings of that surname
+("Congressman Smith" beside SMITH, CHARLES states none). Exact limits: a
+title no longer than the filed name and sharing its first two letters
+still passes ("Judge" for JUDITH), a printing with no filing of that
+surname in the race stands as printed, and "Jim" for JAMES is a miss. Initials count only together ("A.J.", "A. J.", "AJ"; "J.D.
 Vance" for a record of initials alone), never as one bare letter; a quoted
 single letter ("(I)") is an annotation. The name must be written as one:
 every word before the surname and the surname's last word capitalised

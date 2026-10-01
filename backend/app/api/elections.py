@@ -1424,9 +1424,18 @@ def live_results(
             }
             for r in rq.all()
         }
-    senate_states = sorted({
-        s for (s,) in db.query(Race.state).filter(Race.cycle_year == election.cycle, Race.office == "S")
-    })
+    # Every Senate race of the cycle, by state, in one query: a state
+    # electing both its senators (a regular and a special) whose feed has
+    # counted only one says the other has no count, rather than drawing
+    # the state as that one race.
+    senate_races: dict[str, list[dict]] = {}
+    for race_id, race_state, special in (
+        db.query(Race.id, Race.state, Race.is_special)
+        .filter(Race.cycle_year == election.cycle, Race.office == "S")
+        .order_by(Race.state, Race.is_special, Race.id)
+    ):
+        senate_races.setdefault(race_state, []).append({"raceId": race_id, "isSpecial": bool(special)})
+    senate_states = sorted(senate_races)
     return cached_json({
         "cycleYear": election.cycle,
         "phase": _phase_json(election),
@@ -1437,6 +1446,9 @@ def live_results(
         # Which states elect a senator this cycle, so the Senate map can
         # tell "no race here" from "a race we have no count for".
         "senateStates": senate_states,
+        # Which Senate races each of those states holds (regular first),
+        # so a race the state's feed hasn't counted is named as that.
+        "senateRaces": senate_races,
         # States voting on new congressional lines: their House seats have
         # no holder going in, so none can count as changing party.
         "redrawnStates": sorted(redrawn_states(election.cycle)),

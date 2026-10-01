@@ -9,6 +9,7 @@
 
 import type {
   ElectionPhaseInfo,
+  ListedSenateRace,
   LiveRaceResult,
   LiveResults,
   ResultEvent,
@@ -798,6 +799,17 @@ export interface StateShade {
   label: string;
 }
 
+/** The Senate races a state elects (LiveResults.senateRaces) that its
+ * feed has given no count for, while it gives one for another: a state
+ * electing both its senators whose feed counts only the regular race. */
+export function uncountedSenateRaces(
+  listed: ListedSenateRace[] | undefined,
+  races: LiveRaceResult[]
+): ListedSenateRace[] {
+  const counted = new Set(races.filter((r) => r.office === "S").map((r) => r.raceId));
+  return (listed ?? []).filter((l) => !counted.has(l.raceId));
+}
+
 /** A state on the national map, by chamber. One race (a Senate seat) is
  * drawn exactly as resultFill draws it. More than one — a House
  * delegation, or a state electing both its senators — is the party leading
@@ -821,7 +833,12 @@ export function stateShade(
   feedDown = false,
   /** The state's polls are still open (pollsStillOpen): drawn as
    * POLLS_OPEN_FILL, which says nothing about the count. */
-  pollsOpen = false
+  pollsOpen = false,
+  /** The Senate races the state elects (LiveResults.senateRaces). One the
+   * feed hasn't counted, beside one it has, is named in the label as
+   * having no count — never left out, which reads as the state electing
+   * one senator. The fill is the counted races'. */
+  listedSenate: ListedSenateRace[] = []
 ): StateShade {
   const what = chamber === "S" ? "Senate" : "House";
   const plain = (fill: string, label: string): StateShade => ({ fill, label, stale: false });
@@ -839,6 +856,22 @@ export function stateShade(
   }
   // A count to colour, stale when its feed isn't being read.
   const stale = covered && feedDown;
+  const uncounted = chamber === "S" ? uncountedSenateRaces(listedSenate, mine) : [];
+  if (chamber === "S" && uncounted.length) {
+    // Each race named, the regular first, the uncounted one as that.
+    const parts = [
+      ...mine.map((r) => ({ special: r.isSpecial, text: raceStatusText(r) })),
+      ...uncounted.map((l) => ({ special: l.isSpecial, text: NO_COUNT_TEXT })),
+    ].sort((a, b) => Number(a.special) - Number(b.special));
+    return {
+      // The counted races drawn as they would be alone.
+      fill: stateShade(state, mine, chamber, covered, hasRace, feedDown, pollsOpen).fill,
+      label: `${state} Senate: ${parts
+        .map((p) => `${p.special ? "special" : "regular"} race ${p.text}`)
+        .join("; ")}`,
+      stale,
+    };
+  }
   if (mine.length === 1) {
     return {
       fill: resultFill(mine[0], covered),

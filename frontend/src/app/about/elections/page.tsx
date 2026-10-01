@@ -241,12 +241,13 @@ export default async function ElectionsChapter() {
           count for while it counts the state&apos;s other races — a contest it doesn&apos;t list or
           that couldn&apos;t be matched, an uncontested seat — is listed and marked as exactly that,
           not as &ldquo;no votes yet&rdquo;; so is a whole chamber on the national map, hatched and
-          named &ldquo;no count from the state&apos;s feed&rdquo;. While a state&apos;s polls are
-          still open, its page stays a ballot-research page and the national map marks its polls
-          &ldquo;not yet closed&rdquo;: nothing is said about a count until its last polls close.
-          From election day the elections pages show no partisan lean, on a map or beside a
-          district, even where there is no count to show: next to a live count, a lean reads as a
-          prediction of it.
+          named &ldquo;no count from the state&apos;s feed&rdquo;, and, in a state electing both its
+          senators whose feed counts only one, the other race on that state&apos;s map label and
+          row. While a state&apos;s polls are still open, its page stays a ballot-research page and
+          the national map marks its polls &ldquo;not yet closed&rdquo;: nothing is said about a
+          count until its last polls close. From election day the elections pages show no partisan
+          lean, on a map or beside a district, even where there is no count to show: next to a live
+          count, a lean reads as a prediction of it.
         </P>
         <Sub title="Where the numbers come from">
           <P>
