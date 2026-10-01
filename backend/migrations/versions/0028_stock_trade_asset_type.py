@@ -6,16 +6,16 @@ declared cryptocurrency from anything else (stock_pipeline).
 Adds a nullable column only, so the previous image runs unchanged against the
 migrated schema.
 
-Revision ID: 0025
-Revises: 0024
-Create Date: 2026-09-29
+Revision ID: 0028
+Revises: 0027
+Create Date: 2026-10-01
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0025"
-down_revision = "0024"
+revision = "0028"
+down_revision = "0027"
 branch_labels = None
 depends_on = None
 
