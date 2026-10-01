@@ -441,6 +441,35 @@ export function WhatYouCanDo({
   );
 }
 
+/** An outlet's name, linking the article a line was quoted from when the
+ *  issue records it (issues before 2026-10 record only the name). */
+function OutletLink({ name, url }: { name: string; url?: string | null }) {
+  const href = safeHref(url);
+  return href ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
+    >
+      {name}
+    </a>
+  ) : (
+    <>{name}</>
+  );
+}
+
+/** The outlet of the issue's summary, which is a line quoted from one
+ *  article like the facts under it. */
+export function SummarySource({ issue }: { issue: ActionIssue }) {
+  if (!issue.summarySource) return null;
+  return (
+    <span className="ml-2 whitespace-nowrap font-mono text-xs text-ink-min">
+      <OutletLink name={issue.summarySource} url={issue.summarySourceUrl} />
+    </span>
+  );
+}
+
 /** Lines quoted verbatim from the reporting, each with its outlet. */
 export function Coverage({
   issue,
@@ -470,7 +499,7 @@ export function Coverage({
               {fact}
               {issue.factSources?.[i] && (
                 <span className="ml-2 whitespace-nowrap font-mono text-xs text-ink-min">
-                  {issue.factSources[i]}
+                  <OutletLink name={issue.factSources[i]} url={issue.factSourceUrls?.[i]} />
                 </span>
               )}
               {isNewFact(issue.newFacts, fact) && <NewFactTag />}
@@ -518,7 +547,7 @@ export function SourceList({ issue, className = "" }: { issue: ActionIssue; clas
       {names.map((name, i) => {
         const href = safeHref(issue.sourceUrls?.[i]);
         return (
-          <span key={name} className="flex items-baseline gap-2">
+          <span key={`${i}-${name}`} className="flex items-baseline gap-2">
             <span aria-hidden="true">·</span>
             {href ? (
               <a

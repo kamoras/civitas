@@ -17,6 +17,7 @@ import {
   IssueTags,
   SECTION_HEADING,
   SourceList,
+  SummarySource,
   TEXT_LINK,
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
@@ -187,6 +188,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </h1>
             <p className="mt-4 font-display text-base leading-relaxed text-ink sm:text-[17px]">
               {issue.summary}
+              <SummarySource issue={issue} />
             </p>
             {issue.status === "developing" && (
               <div className="mt-3">

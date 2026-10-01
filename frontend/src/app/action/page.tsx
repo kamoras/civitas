@@ -23,6 +23,7 @@ import {
   IssueTags,
   SECTION_HEADING,
   SourceList,
+  SummarySource,
   TEXT_LINK,
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
@@ -106,6 +107,7 @@ function IssueBody({
     <>
       <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
         {issue.summary}
+        <SummarySource issue={issue} />
       </p>
       {issue.status === "developing" && (
         <DevelopingDisclosure
