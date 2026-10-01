@@ -28,6 +28,23 @@
       "env": {
         "DATABASE_URL": "sqlite:////tmp/claude-1000/civitas-local/civitas.db"
       }
+    },
+    {
+      "name": "frontend-prod-pi",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "start",
+        "--",
+        "-p",
+        "3100"
+      ],
+      "port": 3100,
+      "env": {
+        "BACKEND_URL": "http://192.168.0.101:18000"
+      }
     }
   ]
 }
