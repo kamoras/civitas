@@ -95,9 +95,11 @@ export interface IncumbentRecord {
    * compute_overall_score — the same formula the leaderboard and
    * profile page use, not a separately-derived number). */
   score: number;
-  /** House: the district the member holds today, and it as the page
-   * names it ("TX-35") — on a redrawn map, not this race's number.
-   * Optional for an older backend. */
+  /** House: the district the member held going into this election, and
+   * it as the page names it ("TX-35") — on a redrawn map, not this race's
+   * number. Absent once the Congress this election seated sits (from noon
+   * ET on January 3, inside the results window), when the member table
+   * may already hold the winners. Optional for an older backend. */
   district?: number | null;
   seat?: string | null;
 }
@@ -106,8 +108,10 @@ export interface IncumbentRecord {
  * (GET /elections/states/{state}) populates this; other endpoints'
  * candidates don't carry it. */
 export interface BallotCandidate extends CandidateSummary {
-  /** Null unless this candidate is a sitting Senator/Representative AND
-   * a real, unambiguous match was found — never populated as a guess. */
+  /** Null unless this candidate is the incumbent going into this
+   * election (a member of the Congress it replaces) AND a real,
+   * unambiguous match to their scorecard was found — never populated as
+   * a guess. */
   incumbentRecord: IncumbentRecord | null;
 }
 

@@ -70,8 +70,8 @@ export default async function ElectionsChapter() {
           <span className="font-mono text-ink-hi">/elections/states/ST</span> is laid out as a
           research tool, not a mock ballot, and never marks a choice. On a computer it sets out the
           ballot in three columns — federal offices, state offices, then measures and local contests
-          — and opens any contest&apos;s research beside it: money raised, a sitting member&apos;s
-          voting record, news coverage. On a phone it opens one contest per screen.
+          — and opens any contest&apos;s research beside it: money raised, a member of
+          Congress&apos;s voting record, news coverage. On a phone it opens one contest per screen.
         </P>
         <P>
           Candidates appear under the name their state prints on its ballot. Each contest states the
@@ -124,8 +124,10 @@ export default async function ElectionsChapter() {
           current member&apos;s name — answers for the district your current member was elected in,
           which on the new map can be a different place under the same number. Those pages point to
           the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
-          a member of Congress running there is marked a &ldquo;sitting member&rdquo;, not the
-          &ldquo;incumbent&rdquo;: no seat on the new map has a previous holder.
+          a member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
+          day on, a &ldquo;member going in&rdquo;, since the results stay up until the new Congress
+          is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has a previous
+          holder.
         </P>
         <Sub title="The optional town selector">
           <P>

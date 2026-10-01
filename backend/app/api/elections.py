@@ -47,7 +47,7 @@ from app.pipeline.analyze.score_calculator import (
 from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.fetch.state_candidates_common import last_name_matches
 from app.election_phase import ActiveElection, active_election, election_today
-from app.live_results.sync import redrawn_states
+from app.live_results.sync import elected_congress_sits, redrawn_states
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
@@ -581,6 +581,19 @@ def _incumbent_link(
     sharing a last name is not a real scenario this needs to handle
     "close enough". Both lookups are precomputed once per state_ballot
     call (not queried per-candidate here) — see that function.
+
+    Once the Congress this race's election seated sits (elected_congress_sits:
+    from noon ET on January 3, which the results window can include), the
+    member tables may hold either Congress — the members going in until a
+    member run refreshes them, the winners after — and nothing stored says
+    which. A match is then still the candidate's own scorecard only on the
+    race's own seat (its district, or the state's senators) and only when
+    no other candidate in the race shares the surname: on a refreshed table
+    the seat holder is this race's winner, who may be that namesake. The
+    redrawn-map match across the delegation stops (a newly elected
+    namesake elsewhere in the state would pass its uniqueness check), and
+    no `district`/`seat` is said, since the table no longer tells the seat
+    held going in from the one held now.
     """
     if cand.incumbent_challenge != "I" or cand.id in stale_incumbent_ids:
         return None
@@ -593,21 +606,29 @@ def _incumbent_link(
     last_name = normalized_surname(cand.name)
     if not last_name:
         return None
+    seated = elected_congress_sits(race.cycle_year)
+    if seated and any(
+        other.id != cand.id and normalized_surname(other.name) == last_name for other in race.candidates
+    ):
+        return None
 
     if race.office == "H":
         rep = reps_by_district.get(race.district or 0)
         if rep and last_name_matches(last_name, rep.name):
+            if seated:
+                return {"id": rep.id, "score": compute_overall_score(rep)}
             return {"id": rep.id, "score": compute_overall_score(rep), "district": rep.district,
                     "seat": _seat_label(race.state, rep.district)}
-        if race.state in redrawn_states(race.cycle_year):
+        if not seated and race.state in redrawn_states(race.cycle_year):
             # A redrawn map renumbers seats: an incumbent can run in a
-            # district whose number another member holds today. Matched
-            # across the state's delegation, and only when unique.
+            # district whose number another member holds. Matched across
+            # the state's delegation, and only when unique.
             same = [r for r in reps_by_district.values() if last_name_matches(last_name, r.name)]
             if len(same) == 1:
-                # The district they hold today, which on a redrawn map is
-                # not this race's number: the page says "sitting member,
-                # TX-35", never "incumbent" of a seat they don't hold.
+                # The district they held going into the election, which on
+                # a redrawn map is not this race's number: the page says
+                # "sitting member, TX-35" ("member going in" from election
+                # day on), never "incumbent" of a seat they don't hold.
                 return {"id": same[0].id, "score": compute_overall_score(same[0]), "district": same[0].district,
                         "seat": _seat_label(race.state, same[0].district)}
         return None

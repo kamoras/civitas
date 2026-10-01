@@ -76,4 +76,19 @@ describe("incumbency badge", () => {
     render(<CandidateCard candidate={candidate({ incumbentChallenge: "C" })} redrawnSeat />);
     expect(screen.queryByText("CHALLENGER")).not.toBeInTheDocument();
   });
+
+  it("calls them the member going in from election day on, with the seat they held", () => {
+    render(
+      <CandidateCard
+        candidate={candidate({
+          incumbentChallenge: "I",
+          incumbentRecord: { id: "C001131", score: 50, district: 35, seat: "TX-35" },
+        })}
+        redrawnSeat
+        resultsMode
+      />
+    );
+    expect(screen.getByText("MEMBER GOING IN, TX-35")).toBeInTheDocument();
+    expect(screen.queryByText(/SITTING MEMBER/)).not.toBeInTheDocument();
+  });
 });

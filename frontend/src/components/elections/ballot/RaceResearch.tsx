@@ -11,7 +11,7 @@ import type { RaceCoverageItem, RaceWithCandidates } from "@/types/election";
 
 type Tab = "money" | "record" | "news";
 
-/** Voting records for the candidates who have one: a sitting member's
+/** Voting records for the candidates who have one: a member's
  * Representation Score, linked to their full scorecard. Everyone else is
  * listed too, marked "no scorecard" — not "no record", since the API links
  * a scorecard only on an unambiguous match and never guesses. */
@@ -21,8 +21,8 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
   return (
     <div>
       <p className="mb-3 text-[13px] text-ink-lo">
-        A sitting member of Congress has a Representation Score from their voting record, linked to
-        their full scorecard.
+        A member of Congress has a Representation Score from their voting record, linked to their
+        full scorecard.
       </p>
       <ul>
         {active.map((c) => (
@@ -69,12 +69,15 @@ export default function RaceResearch({
   coverage,
   supersededByPrimary = false,
   newLines = false,
+  resultsMode = false,
 }: {
   race: RaceWithCandidates;
   coverage: RaceCoverageItem[];
   supersededByPrimary?: boolean;
   /** StateBallot.newDistrictLines — how incumbency is worded. */
   newLines?: boolean;
+  /** From election day on — how incumbency is worded (incumbencyLabel). */
+  resultsMode?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("money");
   const base = useId();
@@ -155,6 +158,7 @@ export default function RaceResearch({
               race={race}
               supersededByPrimary={supersededByPrimary}
               newLines={newLines}
+              resultsMode={resultsMode}
             />
           )}
           {t.id === "record" && <RecordPanel race={race} />}

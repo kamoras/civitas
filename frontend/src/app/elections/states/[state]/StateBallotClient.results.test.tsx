@@ -902,4 +902,60 @@ describe("the state page in results mode", () => {
     await screen.findByText(/count hasn.t started yet/);
     expect(document.getElementById("result-2026-SEN-OH")).toBeNull();
   });
+
+  describe("a member of Congress running on new lines", () => {
+    // The results window can include Jan 3, when the Congress this
+    // election seated takes office: a defeated member no longer sits, and
+    // a re-elected one sits for the new seat. So the label says who they
+    // were going in, never "sitting".
+    const landsman = {
+      id: "c-landsman",
+      name: "LANDSMAN, GREG",
+      ballotName: "Greg Landsman",
+      party: "DEM",
+      confirmed: true,
+      incumbentChallenge: "I",
+      candidateStatus: "C",
+      hasRaisedFunds: true,
+      contributions: 1000,
+      cashOnHand: null,
+      lastFinancialsSync: "2026-10-01",
+      incumbentRecord: { id: "L000601", score: 61.5, district: 2, seat: "OH-2" },
+    } as RaceWithCandidates["candidates"][number];
+
+    it("is the member going in, with the seat they held, in the district picker and research", async () => {
+      fetchLiveResults.mockResolvedValue(live());
+      const two = [
+        { ...houseRace(), candidates: [landsman] },
+        { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 },
+      ];
+      render(<StateBallotClient ballot={ballot({ houseRaces: two, newDistrictLines: true })} />);
+      await screen.findByRole("region", { name: "U.S. House" });
+      const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+      await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+      const drawer = within(screen.getByRole("dialog"));
+      expect(drawer.getByText("Greg Landsman (member going in, OH-2)")).toBeInTheDocument();
+      expect(drawer.queryByText(/sitting member/i)).not.toBeInTheDocument();
+      await userEvent.click(drawer.getByRole("button", { name: /Greg Landsman/ }));
+      const research = within(screen.getByRole("dialog"));
+      expect(research.getByText("MEMBER GOING IN, OH-2")).toBeInTheDocument();
+      expect(research.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
+    });
+
+    it("is the member going in on a single new-lines seat's ballot box", async () => {
+      fetchLiveResults.mockResolvedValue(live());
+      render(
+        <StateBallotClient
+          ballot={ballot({
+            houseRaces: [{ ...houseRace(), candidates: [landsman] }],
+            newDistrictLines: true,
+          })}
+        />
+      );
+      await screen.findByRole("region", { name: "U.S. House" });
+      const box = screen.getByTestId("ballot-columns");
+      expect(within(box).getByText("MEMBER GOING IN, OH-2")).toBeInTheDocument();
+      expect(within(box).queryByText(/SITTING MEMBER/)).not.toBeInTheDocument();
+    });
+  });
 });

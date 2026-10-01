@@ -44,6 +44,7 @@ import {
   majorPartyOf,
   matchesDistrictQuery,
   pviColor,
+  redrawnMemberWords,
   stateBallotHref,
   termPhrase,
   tierCandidates,
@@ -874,10 +875,12 @@ function leanTextClass(race: {
  * the tierCandidates split — the leading D/R names, so a reader can find
  * their district by the names they know as well as by county.
  *
- * On new lines a sitting member is marked "(sitting member)", never "(I)":
- * they are not this district's incumbent (incumbencyLabel). From election
- * day the lean is left out, as it is from the page header: beside a live
- * count it reads as a prediction of it. */
+ * On new lines the member going into the election is marked "(sitting
+ * member)" — "(member going in)" from election day on, since the results
+ * window runs to January 3, when the new Congress sits — never "(I)": they
+ * are not this district's incumbent (incumbencyLabel). From election day
+ * the lean is left out, as it is from the page header: beside a live count
+ * it reads as a prediction of it. */
 function HouseDistrictOption({
   race,
   onPick,
@@ -893,7 +896,7 @@ function HouseDistrictOption({
   const redrawn = isRedrawnSeat(race, newLines);
   const incumbentMark = (c: { incumbentRecord?: { seat?: string | null } | null }) =>
     redrawn
-      ? ` (sitting member${c.incumbentRecord?.seat ? `, ${c.incumbentRecord.seat}` : ""})`
+      ? ` (${redrawnMemberWords(resultsMode).toLowerCase()}${c.incumbentRecord?.seat ? `, ${c.incumbentRecord.seat}` : ""})`
       : " (I)";
   const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c) === "REP");
@@ -962,12 +965,12 @@ const HOUSE_ONE_EACH_RESULTS = "Each voter has exactly one of these on the ballo
  * In a state whose lines were redrawn after its members were elected —
  * the members going into this election, or the ones sitting now
  * (ballot.newDistrictLines) — every
- * representative-based route answers for the OLD map: house.gov's lookup
- * and "your representative's name" both lead to the district today's
- * member was elected in, and on the new map that number is a different
- * place (a Hays County, Texas reader is in TX-35 today; the 2026 TX-35 is
- * Bexar, Guadalupe, Karnes and Wilson). There the copy offers only the
- * map, the counties and the state's own lookup. */
+ * representative-based route answers for lines other than this ballot's:
+ * house.gov's lookup and "your representative's name" both lead to the
+ * district that member was elected in, and on the new map that number is
+ * a different place (a Hays County, Texas reader was in TX-35 going into
+ * 2026; the 2026 TX-35 is Bexar, Guadalupe, Karnes and Wilson). There the
+ * copy offers only the map, the counties and the state's own lookup. */
 function HouseDetail({
   ballot,
   pickedId,
@@ -1043,6 +1046,7 @@ function HouseDetail({
           coverage={stories}
           supersededByPrimary={ballot.ballotBasis?.supersededByPrimary ?? false}
           newLines={newLines}
+          resultsMode={resultsMode}
         />
       </div>
     );
@@ -1199,10 +1203,13 @@ function ContestOverview({
   contest,
   ballot,
   onOpen,
+  resultsMode,
 }: {
   contest: BallotContest;
   ballot: StateBallot;
   onOpen: (key: string, houseRaceId?: string | null) => void;
+  /** From election day on — how incumbency is worded (incumbencyLabel). */
+  resultsMode: boolean;
 }) {
   // Shared as an image unless the box is only controls (the House district
   // picker), linking to the fragment that opens this contest.
@@ -1224,7 +1231,11 @@ function ContestOverview({
       const stories = ballot.coverage.filter((c) => c.race?.id === race.id).length;
       return box(
         <>
-          <BallotRaceRows race={race} newLines={ballot.newDistrictLines} />
+          <BallotRaceRows
+            race={race}
+            newLines={ballot.newDistrictLines}
+            resultsMode={resultsMode}
+          />
           <OpenButton
             label={`RESEARCH THIS RACE${stories ? ` · ${stories} ${stories === 1 ? "STORY" : "STORIES"}` : ""}`}
             onClick={() => onOpen(contest.key)}
@@ -1236,7 +1247,11 @@ function ContestOverview({
       if (ballot.houseRaces.length === 1) {
         return box(
           <>
-            <BallotRaceRows race={ballot.houseRaces[0]} newLines={ballot.newDistrictLines} />
+            <BallotRaceRows
+              race={ballot.houseRaces[0]}
+              newLines={ballot.newDistrictLines}
+              resultsMode={resultsMode}
+            />
             <OpenButton
               label="RESEARCH THIS RACE"
               onClick={() => onOpen("house", ballot.houseRaces[0].id)}
@@ -1668,6 +1683,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             coverage={ballot.coverage.filter((c) => c.race?.id === contest.race!.id)}
             supersededByPrimary={ballot.ballotBasis?.supersededByPrimary ?? false}
             newLines={ballot.newDistrictLines}
+            resultsMode={resultsMode}
           />
         );
       case "house":
@@ -1844,6 +1860,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                         contest={c}
                         ballot={ballot}
                         onOpen={openContest}
+                        resultsMode={resultsMode}
                       />
                     ))}
                   {col === "local" && (

@@ -53,21 +53,25 @@ export function getPartyMeta(c: { party: string; partyGroup?: string | null }) {
  * the exception worth marking.
  *
  * `redrawnSeat`: the race is a House seat on new district lines, where the
- * FEC's incumbency code is worded by incumbencyLabel. */
+ * FEC's incumbency code is worded by incumbencyLabel — differently from
+ * election day on (`resultsMode`). */
 export default function CandidateCard({
   candidate,
   showUnconfirmed = false,
   redrawnSeat = false,
+  resultsMode = false,
 }: {
   candidate: BallotCandidate;
   showUnconfirmed?: boolean;
   redrawnSeat?: boolean;
+  resultsMode?: boolean;
 }) {
   const pm = getPartyMeta(candidate);
   const incumbency = incumbencyLabel(
     candidate.incumbentChallenge,
     redrawnSeat,
-    candidate.incumbentRecord?.seat
+    candidate.incumbentRecord?.seat,
+    resultsMode
   );
   const cash = cashOnHandDisplay(candidate.cashOnHand);
   // UTC date only, sliced from the ISO string — deterministic across

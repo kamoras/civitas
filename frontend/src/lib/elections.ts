@@ -192,8 +192,9 @@ const FEC_INCUMBENCY: Record<string, string> = {
   O: "OPEN SEAT",
 };
 
-/** Whether `race` is a House seat on lines other than the ones today's
- * members were elected on (StateBallot.newDistrictLines). Senate seats are
+/** Whether `race` is a House seat on lines other than the ones its
+ * members were elected on — the members going into this election, or the
+ * ones sitting now (StateBallot.newDistrictLines). Senate seats are
  * statewide and never redrawn. */
 export function isRedrawnSeat(
   race: { office: string },
@@ -206,22 +207,39 @@ export function isRedrawnSeat(
  * nothing.
  *
  * On a redrawn seat (isRedrawnSeat) a district number names a different
- * place than the one today's member was elected in: Greg Casar holds TX-35
- * and runs in the new TX-37. "Incumbent" there claims a seat nobody holds
- * — the page itself says no seat on the new lines has a previous holder —
- * so "I" reads SITTING MEMBER, which is true of the person and claims
- * nothing about the district, and CHALLENGER / OPEN SEAT, which describe
- * the old seat, are not said at all. Where the payload names the seat the
- * member holds today (incumbentRecord.seat), it is said too:
- * "SITTING MEMBER, TX-35". */
+ * place than the one the member going into the election was elected in:
+ * Greg Casar held TX-35 and runs in the new TX-37. "Incumbent" there
+ * claims a seat nobody holds — the page itself says no seat on the new
+ * lines has a previous holder — so "I" names the person, not the
+ * district, and CHALLENGER / OPEN SEAT, which describe the old seat, are
+ * not said at all. Where the payload names the seat the member held going
+ * in (incumbentRecord.seat), it is said too.
+ *
+ * How "I" is worded depends on `resultsMode` (from election day on):
+ * before it the member is sitting — SITTING MEMBER, TX-35 — but the
+ * results window runs to January 3, when the Congress this election
+ * seated takes office, and from noon that day a defeated member no longer
+ * sits and a re-elected one sits for the new seat. So in results mode it
+ * reads MEMBER GOING IN, TX-35, true on any day of the window, the same
+ * framing as the district drawer's "your representative going into this
+ * election". redrawnMemberWords is that wording alone, for a page that
+ * sets it in its own case. */
+export function redrawnMemberWords(resultsMode: boolean): string {
+  return resultsMode ? "MEMBER GOING IN" : "SITTING MEMBER";
+}
+
 export function incumbencyLabel(
   code: string | null,
   redrawnSeat: boolean,
-  heldSeat?: string | null
+  heldSeat?: string | null,
+  resultsMode = false
 ): string | null {
   if (!code) return null;
-  if (redrawnSeat)
-    return code === "I" ? (heldSeat ? `SITTING MEMBER, ${heldSeat}` : "SITTING MEMBER") : null;
+  if (redrawnSeat) {
+    if (code !== "I") return null;
+    const member = redrawnMemberWords(resultsMode);
+    return heldSeat ? `${member}, ${heldSeat}` : member;
+  }
   return FEC_INCUMBENCY[code] ?? code;
 }
 

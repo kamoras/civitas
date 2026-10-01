@@ -148,6 +148,14 @@ def redrawn_states(cycle: int) -> set[str]:
     }
 
 
+def elected_congress_sits(cycle_year: int) -> bool:
+    """Whether the Congress the `cycle_year` election seated has taken
+    office (settings.CURRENT_CONGRESS: from the first job after noon ET on
+    January 3). From then the member tables may hold either Congress until
+    a member run refreshes them, and nothing stored says which."""
+    return congress_first_year(settings.CURRENT_CONGRESS) - 1 >= cycle_year
+
+
 def seat_holder_party(db: Session, race: Race) -> str | None:
     """The party that held this seat going into the election, or None when
     it can't be known without guessing.
@@ -168,7 +176,7 @@ def seat_holder_party(db: Session, race: Race) -> str | None:
     the holder is unknowable from it and None. A redrawn state's House
     seats are None either way (redrawn_states keeps them for their own
     cycle whoever sits)."""
-    if congress_first_year(settings.CURRENT_CONGRESS) - 1 >= race.cycle_year:
+    if elected_congress_sits(race.cycle_year):
         return None
     if race.office == "H":
         if race.state in redrawn_states(race.cycle_year):

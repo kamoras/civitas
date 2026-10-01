@@ -648,7 +648,7 @@ unlocks on its own once its 21-day settle window passes.
 
 ### The state ballot page
 
-`/elections/states/<ST>` is framed as ballot research, not a mock ballot: no marks, no "your picks", and every contest carries research signals (money raised against the race's top fundraiser, a sitting member's Representation Score, news count). It replaced a single 768px column of stacked panels (the news feed on top, one row per House district — 52 in California — and a box for every section, empty or not) that read as one endless scroll.
+`/elections/states/<ST>` is framed as ballot research, not a mock ballot: no marks, no "your picks", and every contest carries research signals (money raised against the race's top fundraiser, a member of Congress's Representation Score, news count). It replaced a single 768px column of stacked panels (the news feed on top, one row per House district — 52 in California — and a box for every section, empty or not) that read as one endless scroll.
 
 - **Desktop**: three printed-ballot columns (Federal | State | Measures · local), each contest a box with a shaded header and the ballot's own instruction ("Vote for one"), fitting about one screen. A contest's research opens in a drawer beside it with Previous/Next through the ballot.
 - **Phone**: an index of every contest, one line each; a contest opens on its own screen (one contest per screen, the voting-machine pattern). Checked by live screenshot at 390px (NC, CA, TX, AK, MD, 2026-09-27): the Money / Record / News tabs share the row equally, so the bar no longer shifts when the bold active tab changes width; the Previous/Next arrow is bound to its label with a no-break space so it never wraps onto a line of its own; and the election date in the page eyebrow never breaks at a hyphen.
@@ -731,8 +731,10 @@ two lists drift, so a page never calls a district new while serving the old
 seat's lean.
 The same list tells the election-night sync that a redrawn seat has no
 holder to measure a flip against, and lets an incumbent running under a new
-number link to their record — labelled a *sitting member* there, never the
-new district's incumbent (`incumbencyLabel` in `frontend/src/lib/elections.ts`). Regenerate after any redistricting:
+number link to their record — labelled a *sitting member* there (a *member
+going in* from election day on, when the results window can run past the
+new Congress's first day), never the new district's incumbent
+(`incumbencyLabel` in `frontend/src/lib/elections.ts`). Regenerate after any redistricting:
 
 ```bash
 python backend/scripts/build_county_district_crosswalk.py

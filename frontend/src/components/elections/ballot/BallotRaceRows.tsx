@@ -28,14 +28,17 @@ function raisedLabel(c: BallotCandidate): string {
  * click away in the drawer, and a 25-filer race laid flat in a ballot
  * column is exactly the endless list this page exists to avoid.
  *
- * `newLines` is StateBallot.newDistrictLines: on a redrawn House seat a
- * sitting member reads SITTING MEMBER, not INCUMBENT (incumbencyLabel). */
+ * `newLines` is StateBallot.newDistrictLines: on a redrawn House seat the
+ * member going into the election reads SITTING MEMBER — MEMBER GOING IN
+ * from election day on (`resultsMode`) — not INCUMBENT (incumbencyLabel). */
 export default function BallotRaceRows({
   race,
   newLines = false,
+  resultsMode = false,
 }: {
   race: RaceWithCandidates;
   newLines?: boolean;
+  resultsMode?: boolean;
 }) {
   const redrawn = isRedrawnSeat(race, newLines);
   const active = race.candidates.filter(isActiveCandidate);
@@ -65,7 +68,7 @@ export default function BallotRaceRows({
                   {candidateName(c)}
                   {c.incumbentChallenge === "I" && (
                     <span className="ml-2 whitespace-nowrap align-middle font-mono text-[10px] font-normal tracking-[0.08em] text-ink-lo">
-                      {incumbencyLabel("I", redrawn, c.incumbentRecord?.seat)}
+                      {incumbencyLabel("I", redrawn, c.incumbentRecord?.seat, resultsMode)}
                     </span>
                   )}
                 </span>

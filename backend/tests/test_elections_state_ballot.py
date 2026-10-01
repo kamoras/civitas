@@ -14,6 +14,7 @@ from app.models import (
     Candidate,
     MeasureCoverage,
     Race,
+    RaceResult,
     RaceCoverageItem,
     Representative,
     Senator,
@@ -606,6 +607,88 @@ class TestIncumbentRecordLink:
         assert data["senateRaces"][0]["candidates"][0]["incumbentRecord"]["score"] == (
             compute_overall_score(senator)
         )
+
+
+class TestIncumbentRecordOnceTheElectedCongressSits:
+    """The 2026 results window can include January 3, 2027. From noon that
+    day the 120th sits, and until a member run refreshes the roster it may
+    hold either Congress: the members going in, or the winners. A link
+    then is only ever the candidate's own scorecard, and says no seat."""
+
+    @staticmethod
+    def _on_jan_3(db, monkeypatch, congress):
+        """The page on Jan 3, still on the 2026 results (the count moved on
+        Dec 28), with `congress` sitting."""
+        from datetime import date
+
+        from app.config import settings
+
+        db.commit()
+        db.add(RaceResult(race_id=db.query(Race).first().id, election_date="2026-11-03", source_name="x",
+                          tallies="[]", votes_counted=0, first_reported_at=datetime(2026, 11, 4),
+                          last_change_at=datetime(2026, 12, 28), fetched_at=datetime(2026, 12, 28)))
+        db.commit()
+        monkeypatch.setattr("app.election_phase.election_today", lambda: date(2027, 1, 3))
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", congress)
+        data = _body(elections.state_ballot(db.query(Race).first().state, db))
+        assert data["cycleYear"] == 2026 and data["phase"]["phase"] == "results"
+        return data
+
+    @pytest.mark.parametrize("congress,linked", [(119, True), (120, False)])
+    def test_a_renumbered_member_is_matched_across_the_delegation_only_while_the_119th_sits(
+        self, db_session, monkeypatch, congress, linked,
+    ):
+        """On a refreshed roster a unique surname across the delegation can
+        be a newly elected namesake elsewhere in the state."""
+        _race(db_session, "2026-HOUSE-UT-3", "UT", office="H", district=3)
+        _candidate(db_session, "H1", "2026-HOUSE-UT-3", "MOVER, PAT", incumbent_challenge="I")
+        _representative(db_session, "R-MOVER", "Pat Mover", "UT", 1)
+        _representative(db_session, "R-OTHER", "Sam Other", "UT", 3)
+        record = self._on_jan_3(db_session, monkeypatch, congress)["houseRaces"][0]["candidates"][0]["incumbentRecord"]
+        if linked:
+            assert record == {"id": "R-MOVER", "score": record["score"], "district": 1, "seat": "UT-1"}
+        else:
+            assert record is None
+
+    @pytest.mark.parametrize("congress", [119, 120])
+    def test_the_races_own_seat_still_links_but_names_no_seat_once_the_120th_sits(
+        self, db_session, monkeypatch, congress,
+    ):
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "MCBATH, LUCY", incumbent_challenge="I")
+        _representative(db_session, "R-MCBATH", "Lucy McBath", "GA", 6)
+        record = self._on_jan_3(db_session, monkeypatch, congress)["houseRaces"][0]["candidates"][0]["incumbentRecord"]
+        assert record["id"] == "R-MCBATH"
+        if congress == 119:
+            assert record["seat"] == "GA-6"
+        else:
+            assert "seat" not in record and "district" not in record
+
+    def test_a_namesake_winner_on_a_refreshed_roster_is_never_linked_to_the_member_going_in(
+        self, db_session, monkeypatch,
+    ):
+        """The member going in lost to a challenger with the same surname,
+        and the roster now holds the winner: the seat's holder matches the
+        member's surname, but is the other candidate."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "SMITH, PAT", incumbent_challenge="I")
+        _candidate(db_session, "H2", "2026-HOUSE-GA-6", "SMITH, DANA", incumbent_challenge="C", party="REP")
+        _representative(db_session, "R-DANA", "Dana Smith", "GA", 6, party="R")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        assert all(c["incumbentRecord"] is None for c in data["houseRaces"][0]["candidates"])
+
+    @pytest.mark.parametrize("namesake,linked", [(False, True), (True, False)])
+    def test_a_senator_links_once_the_120th_sits_unless_a_rival_shares_the_surname(
+        self, db_session, monkeypatch, namesake, linked,
+    ):
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S1", "2026-SEN-GA", "OSSOFF, JON", incumbent_challenge="I")
+        if namesake:
+            _candidate(db_session, "S2", "2026-SEN-GA", "OSSOFF, DANA", incumbent_challenge="C", party="REP")
+        _senator(db_session, "SEN-OSSOFF", "Jon Ossoff", "GA")
+        data = self._on_jan_3(db_session, monkeypatch, 120)
+        record = next(c for c in data["senateRaces"][0]["candidates"] if c["id"] == "S1")["incumbentRecord"]
+        assert (record is not None and record["id"] == "SEN-OSSOFF") if linked else record is None
 
 
 class TestStaleIncumbentFlag:

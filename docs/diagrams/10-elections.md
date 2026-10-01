@@ -288,10 +288,25 @@ none of which sends anything anywhere:
   candidate's name (the representative's only when they are running
   again), or a district number. In a state whose lines were
   redrawn after its members were elected — those going into the election
-  (`cycle - 2`'s map) or those sitting now (`newDistrictLines`,
-  `live_results.sync.redrawn_states`) — the page offers counties and numbers only, and
-  drops the house.gov link: both answer by representative, i.e. for the
-  old map.
+  (`cycle - 2`'s map) or those sitting now; `newDistrictLines`
+  (`live_results.sync.redrawn_states`) covers both — the page offers
+  counties and numbers only, and drops the house.gov link: both answer by
+  representative, i.e. for the old map.
+
+On such a seat a member of Congress running is never called the new
+district's "incumbent" (`incumbencyLabel`): before election day they read
+SITTING MEMBER, and from election day on MEMBER GOING IN, since the results
+window runs to January 3 and from noon that day the Congress the election
+seated sits — a defeated member no longer does, and a re-elected one sits
+for the new seat. Where the API names the seat they held going in
+(`incumbentRecord.seat`) it is added ("MEMBER GOING IN, TX-35"). The API
+stops naming it once that Congress sits (`_incumbent_link`, the same
+`congress_first_year(CURRENT_CONGRESS) - 1 >= cycle` guard as
+`seat_holder_party`): the member table may hold either Congress until the
+member runs refresh it, so it links only a scorecard it can match without
+guessing — the race's own district or a senator, and only when no other
+candidate in the race shares the surname — and no longer matches a member
+across a redrawn state's delegation.
 
 On the national map (`RaceMap.tsx`), the eight states too small to tap —
 Rhode Island draws at 4×5 pixels on a phone — also get a labelled box off
