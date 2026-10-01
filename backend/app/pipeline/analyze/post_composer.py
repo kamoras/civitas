@@ -7,9 +7,10 @@ a source document and then tried to detect, afterwards, when that
 sentence was unacceptable. Three separate failures on 2026-09-23 showed
 why that cannot work:
 
-  * "VOTE VERONICA FERNANDEZ! ... She's better for Jersey than Booker!"
-    — an endorsement, published by a non-partisan platform.
-  * "Iran War Ends Quickly to Lower Prices" — the source said officials
+  * A candidate's name in capitals after "VOTE", with a line saying she
+    was better for the state than the incumbent — an endorsement,
+    published by a non-partisan platform.
+  * A headline saying a war "Ends Quickly" — the source said officials
     had CALLED FOR an end. The war had not ended.
   * "This coverage tracks the TX-4 House race and related election
     developments." — true, grounded, and empty. 60 of 160 race posts
@@ -91,8 +92,7 @@ def headline_source(title: str | None, summary: str | None) -> str:
     _ends_at_clause_boundary, and an actor at the end of a headline could
     be joined to a predicate opening the summary. Measured on a live run
     (2026-09-27): 11 of 40 articles lost a claim that ended at its
-    headline — "U.S. Supreme Court rejected a Republican attempt at
-    redistricting congressional seats in Missouri" among them — and most
+    headline — a court ruling on a state's congressional map among them — and most
     clusters then fell short of the two claims an issue needs. The break
     is marked here rather than by treating every newline as a boundary,
     because a wrapped line inside one sentence is a real input too.
@@ -110,7 +110,7 @@ def _is_verbatim(span: str, source: str) -> bool:
 
 # How many words may sit between the actor and its predicate in the
 # source and still count as the same assertion. Covers the reporting
-# verb a lede normally puts there ("A jury FOUND Donald Trump liable")
+# verb a lede normally puts there ("A jury FOUND the defendant liable")
 # without reaching across a clause boundary into a different subject.
 _MAX_GAP_WORDS = 3
 
@@ -122,12 +122,12 @@ def _asserted_together(actor: str, predicate: str, source: str) -> str | None:
     Checking each span verbatim but separately is not enough, and this
     is the exact hole that produced issue #376. Given
 
-        "A jury found Donald Trump liable for sexual abuse and
-         defamation in the case brought by E. Jean Carroll."
+        "A jury found the company liable for fraud in the case
+         brought by a former employee."
 
-    both "E. Jean Carroll" and "liable for sexual abuse and defamation"
-    are genuine verbatim spans, so a separate-span check happily
-    composes "E. Jean Carroll liable for sexual abuse and defamation" —
+    both "a former employee" and "liable for fraud" are genuine
+    verbatim spans, so a separate-span check happily composes
+    "a former employee liable for fraud" —
     naming the plaintiff as the party found liable. Two true fragments,
     one false sentence.
 
@@ -136,15 +136,16 @@ def _asserted_together(actor: str, predicate: str, source: str) -> str | None:
     the source's own direction instead of inventing one. It is also what
     stops a relationship being assembled out of unrelated halves, the
     class `ungrounded_relationship_claims` demonstrably misses (a
-    published story called Donald Trump Jr. Hunter Biden's son).
+    published story made one public figure another's son because the
+    two names sat in the same sentence).
     """
     found = _locate_assertion(actor, predicate, source)
     if found is None:
         return None
     # The gap is RETURNED so compose renders it. Dropping it changed who
     # acted: "OpenAI agent made unauthorized attempts" composed as "OpenAI
-    # made unauthorized attempts" (live, 2026-09-27), and "Trump's lawyer
-    # argued" would compose as "Trump argued". The published sentence is
+    # made unauthorized attempts" (live, 2026-09-27), and "the senator's
+    # lawyer argued" would compose as "the senator argued". The published sentence is
     # now one contiguous span of the source.
     tail, hit = found
     return tail[:hit.start()]
@@ -197,8 +198,8 @@ def _looks_like_an_actor(span: str) -> bool:
 
 # A predicate ending on one of these was cut mid-phrase: the model
 # located the right span but stopped before its object. Measured live
-# against real coverage, this produced "New Jersey Sen. Cory Booker
-# takes a selfie with." — verbatim, grounded, and not a sentence.
+# against real coverage, this produced "<a senator> takes a
+# selfie with." — verbatim, grounded, and not a sentence.
 _DANGLING_TAIL = frozenset({
     "with", "to", "of", "and", "or", "in", "for", "on", "by", "at",
     "from", "as", "that", "than", "into", "over", "after", "before",
@@ -243,8 +244,8 @@ def _ends_at_clause_boundary(predicate: str, source: str) -> bool:
         if not rest or _CLAUSE_END.match(rest):
             return True
         # A span may legitimately stop before a trailing modifier: the
-        # source may run on "...liable for sexual abuse and defamation
-        # IN THE CASE brought by E. Jean Carroll", and the shorter span
+        # source may run on "...liable for fraud IN THE CASE
+        # brought by a former employee", and the shorter span
         # is a complete assertion. Requiring punctuation alone rejected
         # that — a real claim — so what follows is allowed to be a
         # preposition or conjunction starting a new phrase. It may not
@@ -267,9 +268,9 @@ def _complete_predicate(actor: str, predicate: str, source: str) -> str | None:
 
     The model reliably finds who did it and the verb, and as reliably
     stops there: replayed on a live hour (2026-10-01), 7 of 10 located
-    claims were rejected as too short or cut mid-phrase — "Blackburn" +
-    "sues" from "Blackburn sues Jack Smith for obtaining her phone
-    records", "Supreme Court" + "grants review of" — though the prompt
+    claims were rejected as too short or cut mid-phrase — a senator's
+    surname + "sues" from a headline naming who was sued and why, "Supreme
+    Court" + "grants review of" — though the prompt
     asks for the whole phrase. The rest of the phrase is right there,
     after the verb, in the same sentence the source says it of that
     actor (_locate_assertion), so it is copied, never written: the result
@@ -344,7 +345,7 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     if len(predicate) < MIN_PREDICATE_CHARS:
         return None
     # A predicate that restates its own actor is malformed, not a fact:
-    # "Veronica Fernandez" + "VOTE VERONICA FERNANDEZ" are both verbatim
+    # "Jane Doe" + "VOTE JANE DOE" are both verbatim
     # spans of a real source, and concatenating them yields an imperative
     # wearing a subject. A well-formed predicate says what the actor did
     # WITHOUT naming them again, so containment anywhere — not just at
