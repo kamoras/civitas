@@ -357,12 +357,12 @@ async def fetch_ptr_filing_index(db: Session, president_name: str) -> list[dict]
     return filings
 
 
-async def fetch_and_parse_ptr(db: Session, filing: dict) -> list[TradeRow]:
+async def fetch_and_parse_ptr(db: Session, filing: dict) -> list[TradeRow] | None:
     """Download and parse one 278-T PDF into transaction rows.
 
-    Returns rows tagged with parse_confidence ("text" or "ocr"), or an empty
-    list if the PDF can't be fetched or holds no parseable transaction table
-    — never a fabricated row. `filing` may carry `not_before` (the start of
+    Returns rows tagged with parse_confidence ("text" or "ocr"), an empty
+    list if the PDF holds no parseable transaction, or None if it couldn't
+    be fetched or parsed — never a fabricated row. `filing` may carry `not_before` (the start of
     the term) and its `filing_date`: the window an OCR'd transaction date
     must fall in, since a filing reports no transaction after it was filed.
     """
@@ -375,13 +375,13 @@ async def fetch_and_parse_ptr(db: Session, filing: dict) -> list[TradeRow]:
     parsed_url = urlparse(pdf_url)
     if parsed_url.scheme != "https" or parsed_url.hostname not in _ALLOWED_PDF_HOSTS:
         logger.warning("Rejected non-allowlisted PTR URL: %s", pdf_url[:120])
-        return []
+        return None
 
     resp = await fetch_with_retry_requests(
         _rate_limiter, "GET", pdf_url, log_label="Presidential 278-T", timeout=60.0,
     )
     if resp is None or resp.status_code != 200:
-        return []
+        return None
 
     try:
         rows, confidence = parse_pdf_bytes(
@@ -389,7 +389,7 @@ async def fetch_and_parse_ptr(db: Session, filing: dict) -> list[TradeRow]:
         )
     except Exception as e:
         logger.error("Failed to parse presidential 278-T PDF %s: %s", pdf_url, e)
-        return []
+        return None
 
     for row in rows:
         row.parse_confidence = confidence

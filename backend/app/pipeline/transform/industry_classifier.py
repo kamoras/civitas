@@ -472,55 +472,6 @@ def classify_with_learning(
     return "OTHER", "unknown"
 
 
-def classify_batch_with_learning(
-    org_names: list[str],
-    db_session: Session | None = None,
-) -> tuple[dict[str, str], list[str]]:
-    """Batch classify with learning store.
-
-    Returns:
-        (results_dict, unknowns_list) where unknowns need LLM classification.
-    """
-    results: dict[str, str] = {}
-    unknowns: list[str] = []
-
-    known_from_db: dict[str, str] = {}
-    if db_session is not None:
-        unique_names = list({n.upper().strip() for n in org_names if n})
-        if unique_names:
-            rows = (
-                db_session.query(LearnedClassification)
-                .filter(
-                    LearnedClassification.entity_name.in_(unique_names),
-                    LearnedClassification.entity_type == "industry",
-                )
-                .all()
-            )
-            known_from_db = {r.entity_name: r.value for r in rows}
-
-    for name in org_names:
-        if not name:
-            results[name] = "OTHER"
-            continue
-
-        normalized = name.upper().strip()
-
-        if normalized in known_from_db:
-            results[name] = known_from_db[normalized]
-            continue
-
-        industry = classify_industry(name)
-        results[name] = industry
-
-        if industry != "OTHER":
-            if db_session is not None:
-                _store_classification(db_session, normalized, "industry", industry, 0.9, "embedding")
-        else:
-            unknowns.append(name)
-
-    return results, unknowns
-
-
 def _store_classification(
     db_session: Session,
     entity_name: str,

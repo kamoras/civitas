@@ -158,12 +158,16 @@ async def download_pdf(client: httpx.AsyncClient, url: str, headers: dict | None
 
 async def fetch_and_parse_ptr(
     client: httpx.AsyncClient, db: Session, filing: dict,
-) -> list[TradeRow]:
+) -> list[TradeRow] | None:
     """Download and parse one PTR PDF into transaction rows.
 
-    Returns rows tagged with parse_confidence ("text" or "ocr"). Returns an
-    empty list if the PDF can't be fetched or no transaction table is
-    found — never fabricates a row.
+    Returns rows tagged with parse_confidence ("text" or "ocr"); an empty
+    list when the PDF was read and holds no transaction the parser can read;
+    None when it couldn't be fetched or parsed at all — never a fabricated
+    row. `filing_date` (the index's) is each row's disclosure date, and a
+    scan's dates are read only up to it: a report can't disclose a later
+    transaction, and the first date on a bond's line is often its maturity
+    ("DUE 11/15/33").
     """
     cache_key = f"ptr-parsed-v{PTR_PARSER_VERSION}-{filing['doc_id']}"
     cached = api_cache_get(db, "house_ptr", cache_key, max_age_hours=24 * 30)
@@ -172,24 +176,27 @@ async def fetch_and_parse_ptr(
 
     pdf_bytes = await download_pdf(client, filing["pdf_url"])
     if pdf_bytes is None:
-        return []
+        return None
 
     # A scan's dates must fall on or before its filing date; a row whose
-    # date alone isn't legible is kept undated (ptr_common.ocr_extract_rows),
-    # with the filing date as its disclosure date.
+    # date alone isn't legible is kept undated (ptr_common.ocr_extract_rows).
     filed = filing.get("filing_date") or None
     try:
         rows, confidence = parse_pdf_bytes(pdf_bytes, not_after=filed, keep_undated=True)
     except Exception as e:
         logger.error("Failed to parse PTR PDF %s: %s", filing["pdf_url"], e)
-        return []
+        return None
 
     for row in rows:
-        if not row.disclosure_date and filed:
-            row.disclosure_date = filed
         row.parse_confidence = confidence
         row.source_url = filing["pdf_url"]
         row.filing_id = filing["doc_id"]
+        # The report's filing date is when the trade was disclosed, and the
+        # STOCK Act's 45 days run to it. The notification date the form
+        # also prints is when the filer learned of the trade, which the
+        # parser falls back to (and failing that, the trade's own date).
+        if filed:
+            row.disclosure_date = filed
 
     # The API cache stores plain JSON, not dataclasses — convert at this
     # boundary and reconstruct on the cache-hit path above. normal_ttl_hours
