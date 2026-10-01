@@ -146,6 +146,8 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             avg_approval=p.avg_approval,
             approval_trend=p.approval_trend,
             election_margin=p.election_margin,
+            approval_start=p.approval_start,
+            is_current=bool(p.is_current),
         ),
         "effectiveness": _effectiveness_core(
             jobs_created_millions=p.jobs_created_millions,
