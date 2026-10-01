@@ -101,3 +101,55 @@ def test_the_ballot_title_is_attributed_to_whoever_wrote_it():
         assert r.get("official_title") is None
     assert co._ballot_title_drafter("citizen initiative") == "Colorado Title Board"
     assert co._ballot_title_drafter(None) is None
+
+
+# ── 2026: real pages, and the whole-document rules ──────────────────────
+#
+# fixtures_co_bluebook_2026_page9/11.json are REAL page.extract_words()
+# output from the 2026 Blue Book (page indexes 9 and 11): Amendment 87,
+# whose YES column runs three lines past its NO column across a gutter
+# narrower than find_column_boundary's 15pt minimum, and Propositions 133
+# and 134, where 133's YES text repeats "child sex trafficking to" itself.
+PAGE_87 = json.loads((Path(__file__).parent / "fixtures_co_bluebook_2026_page9.json").read_text())
+PAGE_133 = json.loads((Path(__file__).parent / "fixtures_co_bluebook_2026_page11.json").read_text())
+
+
+def test_a_narrow_gutter_is_split_at_the_no_badge():
+    (m87,) = co.parse_page(_fake_page(PAGE_87))
+    assert m87["yes_means"] == (
+        "creates a graduated state income tax that increases revenue; uses the additional money for "
+        "K-12 education, health care, and early childhood care and education; and exempts additional "
+        "revenue collected from the state’s constitutional revenue limit."
+    )
+    assert m87["no_means"] == "keeps the current constitutional requirement for a flat state income tax rate."
+
+
+def test_a_phrase_the_official_text_repeats_is_kept():
+    m133 = next(m for m in co.parse_page(_fake_page(PAGE_133)) if m["number"] == "133")
+    assert m133["yes_means"].endswith("expands child sex trafficking to include buying sexual activity with a minor.")
+    assert m133["no_means"].startswith("keeps the existing felony criminal penalties")
+
+
+def _analysis_page(count: int):
+    """A Blue Book analysis page: its own header, and each measure opening
+    "Placed on the ballot by ..." without a Ballot Title section."""
+    words, top = [{"text": "Amendment", "x0": 45, "x1": 100, "top": 20, "size": 15}], 60
+    for _ in range(count):
+        for i, text in enumerate("Placed on the ballot by citizen initiative".split()):
+            words.append({"text": text, "x0": 115 + 40 * i, "x1": 150 + 40 * i, "top": top, "size": 9})
+        for i, text in enumerate("Amendment 81 proposes amending the Colorado Constitution to:".split()):
+            words.append({"text": text, "x0": 45 + 50 * i, "x1": 90 + 50 * i, "top": top + 20, "size": 13})
+        top += 200
+    return _fake_page(words)
+
+
+def test_only_the_quick_reference_guide_pages_are_read():
+    """Analysis sections also open with "Placed on the ballot by"; read as
+    measures they made every whole Blue Book fail (2022, 2024, 2026)."""
+    measures = co.parse_document([_fake_page(FIXTURE), _analysis_page(1), _analysis_page(1)])
+    assert [m["number"] for m in measures] == ["G", "H"]
+
+
+def test_a_guide_short_of_the_documents_analyses_is_refused():
+    with pytest.raises(ValueError, match="2 guide measures but 3 analysis sections"):
+        co.parse_document([_fake_page(FIXTURE), _analysis_page(2), _analysis_page(1)])

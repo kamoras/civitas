@@ -46,6 +46,16 @@ def test_looks_corrupted_flags_internal_repeat():
     assert geo.looks_corrupted("no change in who can marry no change in who marry.") is True
 
 
+def test_looks_corrupted_false_for_a_phrase_the_official_text_itself_repeats():
+    """Colorado's real 2026 Proposition 133 "yes" text: "child sex
+    trafficking to" twice, then different words — not a duplicated span."""
+    yes = (
+        "increases the penalties for child sex trafficking to life in prison without parole, and "
+        "expands child sex trafficking to include buying sexual activity with a minor."
+    )
+    assert geo.looks_corrupted(yes) is False
+
+
 def test_looks_corrupted_false_for_clean_sentences_that_share_a_tail():
     """Clean, punctuated sentences are not corrupted. The false-positive
     this deliberately avoids: two independently clean sentences (a real yes/no pair) that happen to share a long tail

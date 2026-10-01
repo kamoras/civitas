@@ -14,19 +14,23 @@ section (verified: even a real $39M tax measure has none here — Colorado
 publishes that separately, elsewhere in the Blue Book) — left null,
 same as any source that simply doesn't publish one.
 
-KNOWN GAP, not guessed around: 2024's format (14/14 measures found, 12/14
-with clean yes/no) is internally consistent, but 2022's is NOT — its
-legislature-referred constitutional amendments use a materially
-different sub-format with no "Ballot Title" label at all ("Amendment D
-proposes amending the Colorado Constitution to: ..."), while citizen-
-initiative measures that same year DO match 2024's shape. A future
-year that resembles 2022 fails the whole document (ingest_failed): a
-measure whose Ballot Title / What Your Vote Means sections can't be
-found raises rather than being dropped, because a Blue Book published
-one measure short would read as the complete ballot. Extending to that
-second sub-format needs a real 2022-shaped document to build against,
-not a guess at what "probably" changed. A document with no measure found
-at all raises too — never [].
+Only the Quick Ballot Reference Guide pages are read: those whose
+header line says so. The rest of the Blue Book repeats each measure in
+its analysis section, which also opens with "Placed on the ballot by"
+but follows it with "Amendment 81 proposes amending the Colorado
+Constitution to:" instead of a Ballot Title. Reading every page made
+every whole Blue Book fail — 2022, 2024 and 2026 alike, measured
+2026-10-01 — because those analysis sections read as malformed measures.
+(The "2022 sub-format" this module used to describe was that: analysis
+pages, not a second guide format.) The same analysis sections are the
+completeness check: one per measure, so the guide must list as many
+measures as the document has analyses (14 = 14 in 2024 and 2026, 11 = 11
+in 2022), or the document is refused rather than published short.
+
+A measure on a guide page whose Ballot Title / What Your Vote Means
+sections can't be found still raises rather than being dropped. 2022's
+guide still fails (a measure whose number badge isn't found); only the
+current cycle is ever ingested.
 
 Drafters: the 22pt title is the Blue Book's own headline (the
 Legislative Council's), not a ballot title, so no official_title is
@@ -52,6 +56,8 @@ TITLE_AUTHORITY = "Colorado Legislative Council"
 _TITLE_SIZE_MIN = 18.0
 _BADGE_X0_MAX = 90.0  # excludes the decorative badge, which sits left of the title
 
+_GUIDE_HEADER = "Quick Ballot Reference Guide"
+
 _PLACED_RE = re.compile(r"^Placed on the ballot by (.+?)\s*•", re.IGNORECASE)
 _YES_RE = re.compile(r'^(?:YES\s+)?A\s+[“"]?yes[”"]?\s+vote on (?:Amendment|Proposition)\s+\S+\s+(.*)$', re.IGNORECASE)
 _NO_RE = re.compile(r'^(?:NO\s+)?A\s+[“"]?no[”"]?\s+vote on (?:Amendment|Proposition)\s+\S+\s+(.*)$', re.IGNORECASE)
@@ -76,6 +82,34 @@ def _zone_text(page_rows: dict, row_ids: list[int], start: int, end: int | None)
     return clean_text(" ".join(lines_from_words(words)))
 
 
+def _placed_rows(page_rows: dict, row_ids: list[int]) -> list[int]:
+    """Rows that open a measure: "Placed on the ballot by ..." as the row's
+    first word (a sentence that merely mentions "Placed" doesn't count)."""
+    return [
+        rid for rid in row_ids
+        if page_rows[rid] and min(page_rows[rid], key=lambda w: w["x0"])["text"] == "Placed"
+    ]
+
+
+def _is_guide_page(page_rows: dict, row_ids: list[int]) -> bool:
+    if not row_ids:
+        return False
+    header = " ".join(w["text"] for w in sorted(page_rows[row_ids[0]], key=lambda w: w["x0"]))
+    return _GUIDE_HEADER in header
+
+
+def _vote_boundary(vote_words: list[dict]) -> float | None:
+    """Where the NO column starts: the large "NO" badge the guide prints at
+    the head of it. Colorado's gutter can be narrower than the generic
+    gap test's 15pt minimum where the YES text runs long (Amendment 87,
+    2026: 11-14pt), but the badge is the layout's own marker. The gap
+    test is the fallback for a guide without one."""
+    badge = next((w for w in vote_words if w["text"] == "NO" and w.get("size", 0) >= _TITLE_SIZE_MIN), None)
+    if badge is not None:
+        return badge["x0"] - 0.5
+    return find_column_boundary(vote_words)
+
+
 def parse_page(page) -> list[dict]:
     """Every measure on one Quick Ballot Reference Guide page, or [] if
     this page isn't in that format."""
@@ -83,7 +117,7 @@ def parse_page(page) -> list[dict]:
     page_rows = rows(words)
     row_ids = sorted(page_rows)
 
-    placed_rows = [rid for rid in row_ids if any(w["text"] == "Placed" for w in page_rows[rid])]
+    placed_rows = _placed_rows(page_rows, row_ids)
     if not placed_rows:
         return []
     title_rows = [rid for rid in row_ids if any(w["text"] == "Title" for w in page_rows[rid])]
@@ -155,7 +189,7 @@ def parse_page(page) -> list[dict]:
             w for rid in candidate_rows if vote_end is None or rid < vote_end
             for w in _row_words(page_rows, rid)
         ]
-        boundary = find_column_boundary(vote_words)
+        boundary = _vote_boundary(vote_words)
         yes_means = no_means = None
         if boundary is not None:
             left, right = split_by_fixed_boundary(vote_words, boundary)
@@ -200,10 +234,20 @@ def _ballot_title_drafter(origin: str | None) -> str | None:
 
 def parse_document(pages) -> list[dict]:
     results = []
+    analyses = 0
     for page in pages:
-        results.extend(parse_page(page))
+        page_rows = rows(page.extract_words())
+        row_ids = sorted(page_rows)
+        if _is_guide_page(page_rows, row_ids):
+            results.extend(parse_page(page))
+        else:
+            analyses += len(_placed_rows(page_rows, row_ids))
     if not results:
         # Every general-election Blue Book carries measures; one this
         # reader finds none in is a document it can't read, never "none".
         raise ValueError("CO Blue Book: no measure found")
+    if analyses != len(results):
+        # Each measure has one analysis section; a guide that lists fewer
+        # (or more) is one this reader misread, never a complete ballot.
+        raise ValueError(f"CO Blue Book: {len(results)} guide measures but {analyses} analysis sections")
     return results

@@ -25,7 +25,10 @@ senate_pipeline.py. Phases:
 """
 
 import logging
+import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 
 import httpx
@@ -40,7 +43,16 @@ from app.election_calendar import (
 )
 from app.election_phase import active_election, election_is_held
 from app.http_client import make_async_client
-from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
+from app.models import (
+    BALLOT_ONLY_ID_PREFIX,
+    Candidate,
+    ElectionPipelineRun,
+    MeasureCoverage,
+    PipelineStatus,
+    Race,
+    RaceCoverageItem,
+    ScoreSnapshot,
+)
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
 from app.pipeline.fetch.state_candidates import (
@@ -51,6 +63,7 @@ from app.pipeline.fetch.state_candidates import (
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline import lease
+from app.pipeline.fetch import ballot_measure_text, ballot_measures_pdf
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
 
@@ -914,6 +927,55 @@ def _past_expected_by(source: dict, election_day: str) -> bool:
     return utcnow().date() >= due
 
 
+class _ReaderReasons(logging.Handler):
+    """What a state's reader said about why it failed, in its own log lines.
+
+    A reader returns None for "could not read it" (36 of them, each for
+    its own reasons, each logging why), and the coverage row used to say
+    only "fetch failed" — the 403, the unrecognized page, the PDF that
+    wasn't found were in the log and nowhere an operator looks. This
+    keeps the reader's WARNING-and-above lines from app.pipeline.fetch
+    while one state is being read, on this thread only: the hourly jobs
+    log under the same loggers from threads of their own.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.thread = threading.get_ident()
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.thread == self.thread:
+            self.messages.append(record.getMessage().splitlines()[0][:300])
+
+
+@contextmanager
+def _reader_reasons() -> Iterator[list[str]]:
+    handler = _ReaderReasons()
+    fetch_logger = logging.getLogger("app.pipeline.fetch")
+    fetch_logger.addHandler(handler)
+    try:
+        yield handler.messages
+    finally:
+        fetch_logger.removeHandler(handler)
+
+
+async def _fetch_with_reasons(
+    client: httpx.AsyncClient, db: Session, state: str, year: int, election_day: str,
+) -> tuple[list[dict] | None, list[str]]:
+    """fetch_state_measures_pdf, and the reasons its reader gave for a
+    failure (_ReaderReasons). NotYetPublished propagates: that is an
+    answer, not a failure."""
+    with _reader_reasons() as reasons:
+        try:
+            return await ballot_measures_pdf.fetch_state_measures_pdf(client, db, state, year, election_day), reasons
+        except ballot_measure_text.NotYetPublished:
+            raise
+        except Exception as exc:
+            logger.exception("PDF measure fetch raised for %s", state)
+            return None, [*reasons, f"{type(exc).__name__}: {exc}"]
+
+
 async def _sync_pdf_measures(
     db: Session, client: httpx.AsyncClient, election_day: str, failing: list[str] | None = None,
 ) -> tuple[int, int, int]:
@@ -943,7 +1005,6 @@ async def _sync_pdf_measures(
     )
     from app.pipeline.fetch.ballot_measures_pdf import (
         cached_answer,
-        fetch_state_measures_pdf,
         forget_cached,
     )
     from app.pipeline.fetch.ballot_measure_text import NotYetPublished
@@ -957,7 +1018,7 @@ async def _sync_pdf_measures(
         source_name = source["source_name"]
         fresh = cached_answer(db, state, year) is None
         try:
-            listed = await fetch_state_measures_pdf(client, db, state, year, election_day)
+            listed, reasons = await _fetch_with_reasons(client, db, state, year, election_day)
         except NotYetPublished as awaited:
             prior = _coverage_row(db, state, election_day)
             # Measures the source itself reports as no longer on this
@@ -1031,14 +1092,12 @@ async def _sync_pdf_measures(
             failing.append(state)
             db.commit()
             continue
-        except Exception:
-            logger.exception("PDF measure fetch raised for %s", state)
-            listed = None
 
         if listed is None:
             _set_coverage(
                 db, state, election_day, MeasureCoverage.INGEST_FAILED,
-                source_name=source_name, error="fetch failed",
+                source_name=source_name,
+                error="; ".join(dict.fromkeys(reasons)) or "fetch failed (the reader logged no reason)",
             )
             failed += 1
             failing.append(state)
@@ -1136,7 +1195,7 @@ def _resolve_answered_notices(db: Session, election_day: str) -> None:
         resolve_ops_alert(f"ballot-measure-late-{state}-{election_day}")
 
 
-def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
+def _alert_ingest_failures(db: Session, failing: list[str], election_day: str) -> None:
     """One ops alert per night per set of failing states. The dedupe key
     carries the date and a digest of the states: send_ops_alert dedupes
     for as long as the key is remembered, so a constant key would make the
@@ -1152,6 +1211,14 @@ def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
         return
     states = sorted(set(failing))
     digest = hashlib.sha1("|".join(states).encode()).hexdigest()[:12]
+    # Each state's own reason, as its coverage row recorded it — what the
+    # reader said, so the alert answers "why" as well as "which".
+    reasons = dict(
+        db.query(MeasureCoverage.state, MeasureCoverage.error_detail)
+        .filter(MeasureCoverage.election_date == election_day, MeasureCoverage.state.in_(states))
+        .all()
+    )
+    why = "\n".join(f"- {state}: {reasons.get(state) or 'no reason recorded'}" for state in states)
     # Fail loud: a silently-broken adapter and a quiet week look identical
     # from the outside, and this is the one dataset where that ambiguity
     # costs a vote.
@@ -1161,7 +1228,7 @@ def _alert_ingest_failures(failing: list[str], election_day: str) -> None:
             "Ballot measure ingest failed",
             f"{len(states)} state(s) failed to ingest statewide ballot measures "
             f"for {election_day}: {', '.join(states)}. Those states render as 'not yet covered' "
-            f"rather than 'no measures' until this clears.",
+            f"rather than 'no measures' until this clears.\n{why}",
             dedupe_key=f"ballot-measure-ingest-{election_day}-{utcnow().date().isoformat()}-{digest}",
             condition=f"ballot-measure-ingest-{election_day}",
         )
@@ -1309,7 +1376,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
         _record_unread_state(db, state, election_day)
     db.commit()
 
-    _alert_ingest_failures(failing, election_day)
+    _alert_ingest_failures(db, failing, election_day)
     _resolve_answered_notices(db, election_day)
 
     return {
