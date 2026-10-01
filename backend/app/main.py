@@ -140,27 +140,6 @@ def _rescore_house_on_current_lines(session_factory) -> "tuple[list[str], object
             return rescore_stale_constituent_alignment(session_factory, house_lines=lines, chambers=("house",)), None
 
 
-def rescore_constituent_alignment_on_current_lines(session_factory) -> list[str]:
-    """The startup Constituent Alignment rescore (constituent_rescore.py) on
-    one read of the district table, recording that read's Congress on each
-    rescored representative in the same commit as their score. The file can
-    be rewritten meanwhile (another backend, mid-rollout); the Congress
-    recorded must be the lines the score used, so the breakdown — and the
-    overlap check the rescore re-measures from it — recompute on the same
-    ones. The Senate goes first and reads no lines; then one attempt at the
-    House (_rescore_house_on_current_lines — _startup_rescore retries it
-    while a refresh holds the lines). Never raises (the rescore's own
-    contract)."""
-    from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
-
-    done = rescore_stale_constituent_alignment(session_factory, house_lines=None, chambers=("senate",))
-    try:
-        return done + _rescore_house_on_current_lines(session_factory)[0]
-    except Exception:
-        logging.getLogger("app.main").exception("Startup rescore (house): taking the district lines failed")
-        return done
-
-
 def _run_startup_rescore(
     session_factory, *, deadline: float, poll_s: float, house_only: bool = False,
 ) -> "threading.Timer | None":

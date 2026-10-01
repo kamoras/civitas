@@ -1198,7 +1198,7 @@ class TestStoredScoresKeepTheirLines:
         (the old stamp_house_lines), every breakdown the overlap check read
         was on the 119th's lines beside a score just written on the 120th's.
         A former member keeps the lines their score was stored on."""
-        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.main import _rescore_house_on_current_lines
         from app.models import Representative
         from app.services import _scorecard_common
         from tests.test_constituent_rescore import _factory
@@ -1212,7 +1212,7 @@ class TestStoredScoresKeepTheirLines:
             return real(d)
 
         monkeypatch.setattr(_scorecard_common, "explain_scores", spy)
-        assert rescore_constituent_alignment_on_current_lines(_factory(db_session)) == ["house"]
+        assert _rescore_house_on_current_lines(_factory(db_session)) == (["house"], None)
 
         assert len(seen) == 40
         assert any(base[f"TN-{d}"] != new[f"TN-{d}"] for d, _ in seen)
@@ -1230,7 +1230,7 @@ class TestStoredScoresKeepTheirLines:
         rescore does afterwards re-stamps that member with the rescore's
         lines (the old separate stamp_house_lines bulk update did)."""
         import app.pipeline.analyze.signal_overlap as so
-        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.main import _rescore_house_on_current_lines
         from app.models import Representative
         from tests.test_constituent_rescore import _factory
 
@@ -1247,7 +1247,7 @@ class TestStoredScoresKeepTheirLines:
                 s.close()
 
         monkeypatch.setattr(so, "record_signal_overlap", a_house_run_commits)
-        assert rescore_constituent_alignment_on_current_lines(_factory(db_session)) == ["house"]
+        assert _rescore_house_on_current_lines(_factory(db_session)) == (["house"], None)
         db_session.expire_all()
         assert db_session.get(Representative, "H000").district_lines_congress == 121
         assert db_session.get(Representative, "H001").district_lines_congress == 120
@@ -1261,7 +1261,7 @@ class TestStoredScoresKeepTheirLines:
         commit scores on the old lines, recorded as the old lines, over the
         run's rows: it takes the lease, and leaves the House alone when it
         can't."""
-        from app.main import rescore_constituent_alignment_on_current_lines
+        from app.main import _rescore_house_on_current_lines
         from app.models import Representative
         from app.pipeline import lease
         from tests.test_constituent_rescore import _factory
@@ -1277,14 +1277,15 @@ class TestStoredScoresKeepTheirLines:
         db_session.get(Representative, "H000").score_constituent_alignment = 77
         db_session.commit()
         try:
-            assert "house" not in rescore_constituent_alignment_on_current_lines(_factory(db_session))
+            done, refused = _rescore_house_on_current_lines(_factory(db_session))
+            assert done == [] and refused is not None and refused.holder == dp.HOUSE_RUN_WHO
         finally:
             lease.release(db_session, lease.DISTRICT_LINES, token)
         db_session.expire_all()
         row = db_session.get(Representative, "H000")
         assert (row.district_lines_congress, row.score_constituent_alignment) == (120, 77)
         # With the lines free, the rescore does the House on the lines it holds.
-        assert rescore_constituent_alignment_on_current_lines(_factory(db_session)) == ["house"]
+        assert _rescore_house_on_current_lines(_factory(db_session)) == (["house"], None)
         db_session.expire_all()
         assert db_session.get(Representative, "H000").district_lines_congress == 120
 
@@ -1292,8 +1293,11 @@ class TestStoredScoresKeepTheirLines:
         """A stale Senate alone doesn't touch DISTRICT_LINES (a House run
         would wait on it for nothing), and runs even while a House run
         holds the lines — it reads none."""
-        from app.main import rescore_constituent_alignment_on_current_lines
+        import time
+
+        from app.main import _run_startup_rescore
         from app.pipeline import lease
+        from app.pipeline.constituent_rescore import _stale_chambers
         from tests.test_constituent_rescore import _factory, _make_stale, _seed_senate
 
         self._file(monkeypatch, tmp_path, 120)
@@ -1307,10 +1311,12 @@ class TestStoredScoresKeepTheirLines:
         real_job = lease.job
         monkeypatch.setattr(lease, "job", lambda tier, **kw: taken.append(tier) or real_job(tier, **kw))
         try:
-            assert rescore_constituent_alignment_on_current_lines(_factory(db_session)) == ["senate"]
+            # The production pass: the Senate rescored, no next pass scheduled.
+            assert _run_startup_rescore(_factory(db_session), deadline=time.monotonic() + 30, poll_s=0.01) is None
         finally:
             lease.release(db_session, lease.DISTRICT_LINES, token)
-        assert taken == []
+        assert "senate" not in _stale_chambers()
+        assert lease.DISTRICT_LINES not in taken
 
     def _stale_house_held_by_refresh(self, monkeypatch, tmp_path, db_session):
         from app.pipeline import lease

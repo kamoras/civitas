@@ -1306,9 +1306,10 @@ state in the query string is exposed to them.
 - Use `SimpleNamespace` or dicts for mock data in unit tests
 - Test scoring, classification, and validation logic — not LLM output
 - When changing scoring logic or classification, update corresponding tests to reflect the new expected behavior
-- Tests never write the data volume (`/data`): `conftest.py` points the
-  runtime paths into each test's `tmp_path` and refuses (and fails the test
-  on) any write that still reaches `/data`. A new runtime file under `/data`
+- Tests never read or write the data volume (`/data`): `conftest.py` points
+  the runtime paths into each test's `tmp_path` and refuses (and fails the
+  test on) any read or write that still reaches `/data` — a read would make
+  a result depend on the host's live data. A new runtime file under `/data`
   needs its path redirected there.
 - Code that opens its own sessions from several threads (`asyncio.to_thread`,
   a `threading.Timer`) gets `file_sessionmaker` (a file-backed database, a
