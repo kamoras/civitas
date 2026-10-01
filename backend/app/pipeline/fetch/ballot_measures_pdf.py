@@ -99,6 +99,17 @@ _ID_KEY_RE = re.compile(r"[^A-Za-z0-9]+")
 _FOLLOW_KEYWORDS = ("ballot", "measure", "amendment", "proposition", "referendum", "initiative", "voter guide", "pamphlet", "blue book")
 
 
+def _same_site(host: str, start_host: str) -> bool:
+    """`host` is the starting host or one of its subdomains. A state's site
+    spreads over subdomains of its own name — Colorado's Legislature lists
+    the 2026 Blue Book on leg.colorado.gov but publishes it from
+    content.leg.colorado.gov — and those are the same publisher. A sibling
+    or parent (the Secretary of State's sos.state.co.us, colorado.gov) is
+    not: a subdomain of the start, never the other way round."""
+    host, start_host = host.lower().removeprefix("www."), start_host.lower().removeprefix("www.")
+    return host == start_host or host.endswith("." + start_host)
+
+
 def _matches(haystack: str, year: int, keywords: tuple[str, ...], exclude: tuple[str, ...]) -> bool:
     if any(x in haystack for x in exclude):
         return False
@@ -144,8 +155,9 @@ async def discover_pdf_url_checked(
     archive, where "nov" alone also matched an unrelated "November 2024
     Presidential Election" link, needing "nov" AND "constitutional"
     together to pick the right document). Never leaves the starting
-    domain, so a page that happens to link an outside site (a news
-    article, a different state, Ballotpedia) can't pull this off course.
+    site (the starting host and its subdomains, _same_site), so a page
+    that happens to link an outside site (a news article, a different
+    state, Ballotpedia) can't pull this off course.
 
     None if no confident match anywhere in the crawl — never guesses.
 
@@ -191,7 +203,7 @@ async def discover_pdf_url_checked(
             if not any(k in haystack for k in _FOLLOW_KEYWORDS):
                 continue
             next_url = urljoin(url, href)
-            if urlparse(next_url).netloc == start_domain and next_url not in visited:
+            if _same_site(urlparse(next_url).netloc, start_domain) and next_url not in visited:
                 queue.append((next_url, depth + 1))
 
     # A crawl that stopped at its page budget with links still queued did

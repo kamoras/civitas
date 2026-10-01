@@ -196,6 +196,43 @@ async def test_discover_pdf_url_follows_a_link_to_find_the_pdf():
 
 
 @pytest.mark.asyncio
+async def test_discover_pdf_url_follows_the_start_hosts_own_subdomains():
+    """Colorado's Legislature lists the 2026 Blue Book on leg.colorado.gov
+    but publishes it from a page on content.leg.colorado.gov, the shape of
+    the real 2025 and 2026 listings. A subdomain of the start is the same
+    publisher; a parent or sibling host (colorado.gov, sos.state.co.us)
+    is not, and is never followed."""
+    pages = {
+        "https://leg.colorado.gov/bluebook": (
+            '<a href="https://content.leg.colorado.gov/publications/2026-blue-book">'
+            "2026 State Ballot Information Booklet</a>"
+            '<a href="https://colorado.gov/ballot-info">2026 Ballot information</a>'
+        ),
+        "https://content.leg.colorado.gov/publications/2026-blue-book": (
+            '<a href="/sites/default/files/2026-blue-book-en-accessible.pdf">English</a>'
+        ),
+    }
+    requested = []
+
+    async def fake_get(url, timeout=None):
+        requested.append(url)
+        return SimpleNamespace(text=pages[url], raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=fake_get)
+    url = await pdf.discover_pdf_url(client, "https://leg.colorado.gov/bluebook", 2026, keyword="blue")
+    assert url == "https://content.leg.colorado.gov/sites/default/files/2026-blue-book-en-accessible.pdf"
+    assert "https://colorado.gov/ballot-info" not in requested
+
+
+def test_same_site_is_the_start_host_or_its_subdomains_only():
+    assert pdf._same_site("content.leg.colorado.gov", "leg.colorado.gov")
+    assert pdf._same_site("leg.colorado.gov", "www.leg.colorado.gov")
+    assert not pdf._same_site("colorado.gov", "leg.colorado.gov")
+    assert not pdf._same_site("sos.state.co.us", "leg.colorado.gov")
+    assert not pdf._same_site("evilleg.colorado.gov", "leg.colorado.gov")
+
+
+@pytest.mark.asyncio
 async def test_discover_pdf_url_never_follows_a_link_off_the_starting_domain():
     """A link to an outside site (a news article, Ballotpedia, a
     different state) must never be followed — real risk this guards

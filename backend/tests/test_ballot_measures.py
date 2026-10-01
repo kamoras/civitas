@@ -7,15 +7,19 @@ voter in a state with 17 amendments that there is nothing to research.
 """
 
 import json
+import logging
+import threading
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
+from app import ops_alerts
 from app.api import elections
 from app.models import BallotMeasure, MeasureCoverage, Race
 from app.pipeline import election_pipeline
+from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
 from app.time_utils import utcnow
 
 
@@ -1108,17 +1112,48 @@ async def test_the_ingest_alert_fires_every_night_a_state_fails(monkeypatch, db_
 
     keys = []
     monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None, condition=None: keys.append(dedupe_key))
-    election_pipeline._alert_ingest_failures(["CA"], "2026-11-03")
-    election_pipeline._alert_ingest_failures(["CA", "MI"], "2026-11-03")
+    election_pipeline._alert_ingest_failures(db_session, ["CA"], "2026-11-03")
+    election_pipeline._alert_ingest_failures(db_session, ["CA", "MI"], "2026-11-03")
     assert len(set(keys)) == 2
     assert all(k.startswith(f"ballot-measure-ingest-2026-11-03-{utcnow().date().isoformat()}-") for k in keys)
     from datetime import datetime as dt
 
     monkeypatch.setattr(election_pipeline, "utcnow", lambda: dt(2026, 10, 30))
-    election_pipeline._alert_ingest_failures(["CA"], "2026-11-03")
+    election_pipeline._alert_ingest_failures(db_session, ["CA"], "2026-11-03")
     assert keys[-1] != keys[0]  # the next night, the same failure alerts again
-    election_pipeline._alert_ingest_failures([], "2026-11-03")
+    election_pipeline._alert_ingest_failures(db_session, [], "2026-11-03")
     assert len(keys) == 3
+
+
+@pytest.mark.asyncio
+async def test_a_failed_read_records_and_alerts_the_readers_own_reason(monkeypatch, db_session):
+    """The coverage row said only "fetch failed" while the log knew it was
+    a 403 (Georgia, 2026-10-01): the reason the reader logs is the one the
+    row and the alert carry. A warning another thread logs meanwhile is
+    not this state's reason."""
+    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: {"GA"})
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda state: _fake_pdf_source())
+    reader_log = logging.getLogger("app.pipeline.fetch.http_utils")
+
+    async def fake_fetch(client, db, state, year, election_date):
+        elsewhere = threading.Thread(target=lambda: reader_log.warning("Failed to fetch feed Alaska Beacon"))
+        elsewhere.start()
+        elsewhere.join()
+        reader_log.error("GA proposed constitutional amendments failed after 3 attempts: HTTP 403")
+        return None
+
+    monkeypatch.setattr(ballot_measures_pdf, "fetch_state_measures_pdf", fake_fetch)
+    failing: list[str] = []
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03", failing)
+
+    coverage = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "GA").one()
+    assert coverage.status == MeasureCoverage.INGEST_FAILED
+    assert coverage.error_detail == "GA proposed constitutional amendments failed after 3 attempts: HTTP 403"
+
+    bodies = []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None, condition=None: bodies.append(b))
+    election_pipeline._alert_ingest_failures(db_session, failing, "2026-11-03")
+    assert "- GA: GA proposed constitutional amendments failed after 3 attempts: HTTP 403" in bodies[0]
 
 
 @pytest.mark.asyncio

@@ -177,17 +177,40 @@ def looks_corrupted(text: str) -> bool:
     legitimate sentence used "the number of" twice for two different
     license types ("increase the number of licenses... limit the number
     of...licenses...") — a common 3-word phrase repeating by ordinary
-    coincidence, not corruption. 4 still catches California's real
-    corruption case ("no change in who" repeats exactly) while clearing
-    MA's false positive; verified against both real documents.
+    coincidence, not corruption.
+
+    And a repeated 4-gram counts only when the repeat carries on past it
+    (_repeat_carries_on): Colorado's real 2026 Proposition 133 says
+    "increases the penalties for child sex trafficking to life ... and
+    expands child sex trafficking to include ..." — four words repeated
+    by the official text itself, then different words at once. Corruption
+    is a duplicated span, and it continues: California's "no change in
+    who can marry" / "no change in who marry" goes on to "marry" in both.
+    A longer n-gram couldn't tell these apart (California's exact repeat
+    is only four words), but the continuation does, verified on all three
+    documents.
     """
     if not text.rstrip().endswith((".", "!", "?")):
         return True
-    words = [w.lower() for w in text.split()]
-    seen: set[tuple[str, ...]] = set()
+    # Compared without punctuation: a duplicated span's last word carries
+    # the sentence's full stop on one side only ("marry" / "marry.").
+    words = [w.lower().strip(".,;:!?\"“”'’()") for w in text.split()]
+    first_at: dict[tuple[str, ...], int] = {}
     for i in range(len(words) - _CONTAMINATION_NGRAM + 1):
         ngram = tuple(words[i:i + _CONTAMINATION_NGRAM])
-        if ngram in seen:
+        if ngram in first_at and _repeat_carries_on(words, first_at[ngram], i):
             return True
-        seen.add(ngram)
+        first_at.setdefault(ngram, i)
     return False
+
+
+def _repeat_carries_on(words: list[str], first: int, second: int) -> bool:
+    """Whether the words after two occurrences of the same n-gram match
+    too, allowing one word dropped from either (see looks_corrupted). A
+    repeat with nothing after it on one side can't show it is distinct,
+    so it counts."""
+    a = words[first + _CONTAMINATION_NGRAM:first + _CONTAMINATION_NGRAM + 2]
+    b = words[second + _CONTAMINATION_NGRAM:second + _CONTAMINATION_NGRAM + 2]
+    if not a or not b:
+        return True
+    return a[0] in b or b[0] in a
