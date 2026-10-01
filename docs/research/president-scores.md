@@ -87,10 +87,8 @@ of every president with polling, -14.2 points. Two things made that unfair.
 honeymoon fades from wherever it began. Across the 14 completed polling-era
 presidencies (UCSB American Presidency Project, 2026-10-01), the starting
 level (first-quarter average) explains 45% of the trend's variance:
-trend = 44.0 - 0.99 x start (r = -0.67, residual SD 11.9). Kennedy started
-at 75.5% and fell 14 points, about 16 less than presidents starting there
-did; Trump's first term started at 39.2% and rose 3.8, about 1.5 less than
-history predicts from that start. Scored against the flat average, a
+trend = 44.0 - 0.99 x start (r = -0.67, residual SD 11.9): a president who
+started 10 points higher went on to fall about 10 points further. Scored against the flat average, a
 president who began near the floor looked steady for having nowhere to fall.
 The trend is now scored against the fitted expectation for the president's
 own start, with the residual SD as the scale (`fit_trend_on_start`), refitted
@@ -108,21 +106,12 @@ poll (`sitting_window_reference`; a presidency shorter than the window is
 left out). Within that window the start still explains much of the change
 (r = -0.52).
 
-**Effect** (live data, 2026-10-01; Public Mandate before -> after):
-
-| President | Start | Trend | Before | After |
-|---|---|---|---|---|
-| Donald J. Trump (sitting, 598 days) | 41.0 | -5.6 | 29 | 13 |
-| Donald J. Trump (first term) | 39.2 | +3.8 | 38 | 24 |
-| Joseph R. Biden, Jr. | 50.2 | -10.8 | 33 | 25 |
-| Barack Obama | 52.0 | -2.7 | 50 | 44 |
-| William J. Clinton | 47.7 | +12.0 | 73 | 70 |
-| George W. Bush | 70.4 | -37.5 | 39 | 40 |
-| Dwight D. Eisenhower | 66.7 | -4.1 | 82 | 88 |
-| John F. Kennedy | 75.5 | -14.0 | 81 | 92 |
-
-Most completed presidencies move down a few points because the sitting
-president's 37% average no longer lowers the comparison average.
+**Effect** (live data, 2026-10-01): the sitting president's Public Mandate
+falls by about half, since a modest decline from a low start had been read as
+better than average; completed presidencies that started high and held their
+approval rise by 5 to 11 points; most others move down a few points, because the
+sitting president's partial-term average no longer lowers the comparison
+average.
 
 ## Also fixed
 

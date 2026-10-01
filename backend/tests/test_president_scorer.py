@@ -201,9 +201,9 @@ def test_the_trend_fit_finds_that_high_starters_fall_further():
 
 
 def test_a_small_decline_from_near_the_floor_is_not_rewarded():
-    """The user-reported case: approval falling 5.6 points from a start of
-    41% read as better than average (most presidents fall about 14), but
-    presidents who start that low have historically gained."""
+    """A small decline from a low start is judged against what presidents
+    starting that low went on to do, which is a gain, not against the
+    average fall of all presidents."""
     reference = {
         "avg_approval": {"mean": 51.9, "stdev": 9.0, "n": 14},
         "approval_trend": {"mean": -14.2, "stdev": 15.6, "n": 14},
