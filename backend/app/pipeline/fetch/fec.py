@@ -641,7 +641,7 @@ async def fetch_pac_receipts(
 CONTRIBUTION_TOTALS_CACHE_TTL_HOURS = 24 * 30
 # Pages of a committee's occupation totals read per cycle, at most. The FEC
 # sorts them largest first, and reading stops once a page adds under 1% of
-# what came before it (Cortez Masto's 2022 election: 4 pages hold 94% of
+# what came before it (a large 2022 Senate campaign: 4 pages hold 94% of
 # itemized money, 10 pages 97%).
 OCCUPATION_PAGES = 4
 _OCCUPATION_PAGE_FLOOR = 0.01
@@ -706,8 +706,8 @@ async def fetch_employer_totals(
 # The FEC's "contributions from committees to candidates" bulk file, one per
 # cycle: every PAC, party and candidate committee contribution to a
 # candidate, with the giving committee's id. The API's PAC receipts were read
-# 100 rows at a time and covered none of Cortez Masto's $3.4M; this file
-# holds all of it ($3.55M across her election's three cycles, within 3% of
+# 100 rows at a time and covered none of a large Senate campaign's $3.4M; this file
+# holds all of it ($3.55M across the election's three cycles, within 3% of
 # the FEC's own total, 2026-10-01).
 COMMITTEE_CONTRIBUTIONS_URL = "https://www.fec.gov/files/bulk-downloads/{year}/pas2{yy}.zip"
 # Transaction types that are contributions to the candidate: 24K a

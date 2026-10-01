@@ -4,7 +4,7 @@ works in, for classifying campaign contributions by the donor's occupation.
 Itemized FEC contributions name the donor's occupation and employer, and the
 FEC aggregates both per committee. The occupation totals cover far more of a
 campaign's money in a few requests than the employer totals do (2026-10-01,
-Cortez Masto's 2022 election: one page of occupations $12.9M of job-bearing
+a large 2022 Senate campaign: one page of occupations $12.9M of job-bearing
 money, one page of employers $1.6M), but an occupation names a job, not an
 industry. This file says which industry a job is in, from data:
 

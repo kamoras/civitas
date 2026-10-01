@@ -1125,7 +1125,7 @@ def _top_donor_concentration(funding: dict) -> tuple[float | None, int, float]:
     candidate's own money and transfers from its own committees. Until
     v6.26 the denominator was the itemized donors listed, a pool the
     sampled receipts capped near 100 donors, so a campaign of small gifts
-    (Sanders: 48 listed donors, $161,688 of $33.2M) read as too few donors
+    (a $33M Senate campaign with 48 listed donors, 2026-10) read as too few donors
     to measure and was scored a neutral 50 for needing almost no big
     donors at all."""
     donors = funding.get("topDonors") or []
@@ -1155,11 +1155,10 @@ def pac_population_fit(pairs: list[tuple[float, float]]) -> dict | None:
     size, which v6.22 fitted against, is not. It is the share's own
     denominator, and PAC dollars barely vary with it (r = 0.17), so the
     size fit (slope -0.98 in log-log) turned "share of the campaign from
-    PACs" back into "PAC dollars against the typical senator's": a senator
-    taking 5.4% of a $64M campaign from PACs scored 17 for being 1.7 times
-    a fitted 3.2% (Pearson 1897 and Kronmal 1993 on regressing a ratio on
-    its own denominator). Against population the same senator is 16 points
-    below what her state predicts."""
+    PACs" back into "PAC dollars against the typical senator's", and with
+    the gap taken in proportion, 5% of a large campaign scored 17 for being
+    1.7 times a fitted 3% (Pearson 1897 and Kronmal 1993 on regressing a
+    ratio on its own denominator)."""
     points = [(math.log(pop), share) for pop, share in pairs if pop and pop > 0]
     if len(points) < _MIN_FUNDING_REFERENCE_MEMBERS:
         return None

@@ -273,7 +273,7 @@ class TestFundingReference:
         assert len(scores) == 1
 
     def test_a_small_share_above_a_small_expectation_is_a_small_gap(self):
-        """The user-reported case: 5.4% from PACs against an expected 3.2%
+        """5.4% from PACs against an expected 3.2%
         scored 17 when the gap was taken in proportion (twice the
         expectation scored 0). In share points, measured against the
         chamber's own spread, it is a couple of points above typical."""

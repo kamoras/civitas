@@ -56,7 +56,7 @@ def test_measurable_industry_money_is_scored_on_its_mix_alone():
     campaign's industry money as unreliable however much of it there was."""
     one_industry = [{"industry": "HEALTHCARE", "total": 300_000}]
     assert components(funding(industries=one_industry))["Industry concentration"]["score"] == 0.0
-    # Sanders' shape: mostly small gifts, the itemized rest spread wide.
+    # Mostly small gifts, the itemized rest spread across many industries.
     spread_wide = [{"industry": ind, "total": 60_000} for ind in
                    ("EDUCATION", "HEALTHCARE", "LAWYERS", "MEDIA", "TECH", "REAL_ESTATE", "FINANCE", "CONSTRUCTION")]
     c = components(funding(small=68, industries=spread_wide))["Industry concentration"]

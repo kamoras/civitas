@@ -2,8 +2,8 @@
 breakdown (v6.26).
 
 Until 2026-10 both were built from one page of 100 receipts each, which
-covered under 1% of a large campaign's money (Cortez Masto: $300K of $34M
-of itemized individual money, none of her $3.4M from PACs). Now: every
+covered under 1% of a large campaign's money ($300K of one Senate campaign's $34M
+of itemized individual money, none of its $3.4M from PACs). Now: every
 committee contribution from the FEC's bulk file, itemized individual money
 by occupation, the employee side of donors by employer.
 """
@@ -100,8 +100,8 @@ def test_a_missing_source_falls_back_to_the_samples_not_to_zero():
 
 
 def test_a_small_gift_campaign_has_a_measurable_low_concentration():
-    """Sanders' case: 48 listed donors and $161,688 used to read as too few
-    donors to measure, a neutral 50. Over all outside money the top ten are
+    """A campaign of small gifts listed only a few dozen big donors, which used
+    to read as too few to measure, a neutral 50. Over all outside money the top ten are
     a sliver, which is the point."""
     funding = {"totalContributions": 33_229_708, "topDonors": [{"total": 16_000, "type": "Org/Employees"}] * 48}
     share, _, pool = _top_donor_concentration(funding)
