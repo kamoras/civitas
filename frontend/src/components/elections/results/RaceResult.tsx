@@ -116,7 +116,9 @@ export function RaceResultCard({
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[14rem_minmax(0,1fr)_5rem_7rem]"
           >
             <span className="min-w-0">
-              <span className="block truncate font-display text-base font-semibold text-ink-hi">
+              {/* Wraps, never cut short: the 14rem column cut "Mariannette
+                  Miller-Meeks" to "Miller-Mee…" at 320px. */}
+              <span className="block break-words font-display text-base font-semibold text-ink-hi">
                 {c.name}
               </span>
               <span className={`font-mono text-xs tracking-[0.1em] ${partyTextClass(c.party)}`}>

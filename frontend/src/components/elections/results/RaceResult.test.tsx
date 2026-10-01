@@ -83,6 +83,13 @@ describe("HouseResultRow", () => {
 });
 
 describe("RaceResultCard", () => {
+  it("wraps a long name rather than cutting it short", () => {
+    render(<RaceResultCard result={race({ office: "S", district: null })} />);
+    const name = screen.getByText("Ray Jones");
+    expect(name.className).not.toMatch(/truncate/);
+    expect(name.className).toContain("break-words");
+  });
+
   it("lands a #race- link clear of the fixed header", () => {
     render(<RaceResultCard result={race({ office: "S", district: null })} />);
     expect(screen.getByRole("article")).toHaveClass("scroll-mt-[var(--header-clearance)]");
