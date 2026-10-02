@@ -1080,6 +1080,9 @@ def funding_share_base(funding: dict) -> float:
 # distribution; below it the last persisted reference is kept.
 _MIN_FUNDING_REFERENCE_MEMBERS = 30
 
+# How a Funding Independence component that can't be measured says so.
+_NOT_MEASURED = "not measured, so the score is weighed over the other components"
+
 # A party needs this many measured members for its own industry-mix
 # deciles; fewer (an independent) is ranked against the chamber. The same
 # floor as Legislative Effectiveness's within-party comparison (v6.25).
@@ -1341,24 +1344,27 @@ def _funding_independence_core(
         )
     else:
         # No donor list, or no chamber reference yet.
-        concentration_score = 50.0
-        concentration_detail = "no donor list or chamber reference to compare with, neutral 50"
+        concentration_score = None
+        concentration_detail = f"no donor list or chamber reference to compare with; {_NOT_MEASURED}"
 
     # Component 4: industry concentration (folded in from the former
-    # Funding Diversity dimension, v6.5). Money too little of which is
-    # industry-classified is neutral 50 here — not Funding Diversity's
-    # grassroots-scaled fallback, which would count the small-donor share
-    # (component 2) a second time.
+    # Funding Diversity dimension, v6.5).
     industry_concentration_score, industry_concentration_detail = _industry_concentration(
-        funding, total_raised, missing_score=50.0, reference=ref, party=party,
+        funding, total_raised, reference=ref, party=party,
     )
 
-    score = clamp(
-        pac_score * (20 / 53)
-        + small_score * (10 / 53)
-        + concentration_score * (10 / 53)
-        + industry_concentration_score * (13 / 53)
-    )
+    # A component that can't be measured is left out and the others carry
+    # its weight. Counting it as a neutral 50 pulled every member toward 50
+    # by its weight for a gap in our data: a campaign scoring 100 on
+    # everything measured lost 12.3 points for an unmeasurable industry mix
+    # alone (13/53 of 50).
+    weighted = [
+        (w, c) for w, c in (
+            (20 / 53, pac_score), (10 / 53, small_score),
+            (10 / 53, concentration_score), (13 / 53, industry_concentration_score),
+        ) if c is not None
+    ]
+    score = clamp(sum(w * c for w, c in weighted) / sum(w for w, _ in weighted))
     return {
         "score": score,
         # The numbers the scorecard's sentence states, as numbers: the page
@@ -1401,13 +1407,13 @@ def _funding_independence_core(
             {
                 "label": "Top-donor concentration",
                 "weight": round(10 / 53, 4),
-                "score": round(concentration_score, 1),
+                "score": None if concentration_score is None else round(concentration_score, 1),
                 "detail": concentration_detail,
             },
             {
                 "label": "Industry concentration",
                 "weight": round(13 / 53, 4),
-                "score": round(industry_concentration_score, 1),
+                "score": None if industry_concentration_score is None else round(industry_concentration_score, 1),
                 "detail": industry_concentration_detail,
             },
         ],
@@ -2358,9 +2364,8 @@ def industry_hhi(funding: dict) -> tuple[float | None, int, float]:
 
 
 def _industry_concentration(
-    funding: dict, total_raised: float, missing_score: float, missing_label: str = "neutral",
-    reference: dict | None = None, party: str | None = None,
-) -> tuple[float, str]:
+    funding: dict, total_raised: float, reference: dict | None = None, party: str | None = None,
+) -> tuple[float | None, str]:
     """(score, detail) for industry concentration: how evenly the member's
     industry money spreads across industries, by the HHI of its mix
     (Parmigiani 2025 computes the same HHI per legislator). Small donors,
@@ -2375,7 +2380,9 @@ def _industry_concentration(
     means 27.6 D, 69.7 R, 2026-10-01); within party both average 50, as
     Legislative Effectiveness's coalition component compares (v6.25). A
     party with fewer than _MIN_PARTY_COHORT measured members is ranked
-    against the chamber; with no reference at all, `missing_score`.
+    against the chamber. Unmeasurable (too little classified money, or no
+    reference yet) is None: Funding Independence is then weighed over its
+    other components (_funding_independence_core).
 
     The shares are of the classified money, not of everything raised.
     Taken over everything raised (as top-donor concentration's are), the
@@ -2397,9 +2404,9 @@ def _industry_concentration(
     which is the classified money itself."""
     hhi, n, known = industry_hhi(funding)
     if hhi is None:
-        return missing_score, (
-            f"${known:,.0f} of industry-classified money, too little to measure its mix, "
-            f"{missing_label} {missing_score:.0f}"
+        return None, (
+            f"${known:,.0f} of industry-classified money, too little to measure its mix; "
+            f"{_NOT_MEASURED}"
         )
     share = known / total_raised if total_raised else 0.0
     ref = reference or {}
@@ -2411,7 +2418,7 @@ def _industry_concentration(
         score = _rank_score(hhi, ref["industry_hhi_deciles"])
         versus = f"chamber median {ref['industry_hhi_median']:.3f}"
     else:
-        return missing_score, f"HHI {hhi:.3f}, no chamber reference to compare with yet, {missing_label} {missing_score:.0f}"
+        return None, f"HHI {hhi:.3f}, no chamber reference to compare with yet; {_NOT_MEASURED}"
     return score, (
         f"HHI {hhi:.3f} across {n} industries ({versus}); ${known:,.0f} classified, "
         f"{share:.0%} of contributions"

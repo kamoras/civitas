@@ -126,7 +126,8 @@ export default function ScoresChapter() {
           <Step n={3} title="Top-donor concentration">
             How much of all the outside money came from the top ten donors, ranked against the rest
             of the chamber: the fewer big donors a campaign needs, the higher it scores. The
-            member&apos;s own money and transfers from their own committees are left out.
+            member&apos;s own money and transfers from their own committees are left out. Without a
+            donor list to measure, this part is left out of the score the same way.
           </Step>
           <Step n={4} title="Industry concentration">
             How spread out the money is across industries, measured with the Herfindahl-Hirschman
@@ -140,12 +141,13 @@ export default function ScoresChapter() {
             industry of the donor&apos;s stated occupation, where most people in that occupation
             work in one industry by Census Bureau survey data (lawyers in law, nurses in health
             care); a chief executive, a retiree or a job title the data can&apos;t place counts
-            toward no industry. When too little money can be assigned to tell, this counts as
-            neutral. Money from a party, candidate, joint-fundraising or leadership committee is
-            political money, not an industry&apos;s: the FEC&apos;s own registration of each
-            committee decides that, not its name. A state&apos;s home industry counts as
-            concentration like any other, because local economic weight plausibly gives an industry
-            more leverage over a member, not less.
+            toward no industry. When too little money can be assigned to tell, this part is left out
+            and the score is weighed over the other three, rather than counted as neutral. Money
+            from a party, candidate, joint-fundraising or leadership committee is political money,
+            not an industry&apos;s: the FEC&apos;s own registration of each committee decides that,
+            not its name. A state&apos;s home industry counts as concentration like any other,
+            because local economic weight plausibly gives an industry more leverage over a member,
+            not less.
           </Step>
         </Steps>
         <P>

@@ -8,7 +8,9 @@ import type { VoteRollCall } from "./senator";
 export interface ScoreBreakdownComponent {
   label: string;
   weight?: number;
-  score?: number;
+  /** null when the scorer couldn't measure it; the dimension is then
+   *  weighed over its other components. */
+  score?: number | null;
   detail: string;
 }
 

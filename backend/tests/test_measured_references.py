@@ -88,8 +88,8 @@ class TestIndustryConcentrationWithinParty:
                                             "median": 0.6, "n": 20}},
         }
         funding = self._with_mix(0.723607, 0.276393)  # HHI 0.6
-        d_score, d_detail = _industry_concentration(funding, 1_000_000, 50.0, reference=ref, party="D")
-        i_score, _ = _industry_concentration(funding, 1_000_000, 50.0, reference=ref, party="I")
+        d_score, d_detail = _industry_concentration(funding, 1_000_000, reference=ref, party="D")
+        i_score, _ = _industry_concentration(funding, 1_000_000, reference=ref, party="I")
         assert d_score == 50.0 and "D median" in d_detail  # the D median
         assert i_score == 10.0  # the chamber's top decile
 

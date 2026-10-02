@@ -8,8 +8,8 @@ Measured on FEC bulk data for 2020-2024 incumbents
 - Source breadth was a second copy of the small-donor share (R^2 0.79-0.86)
   and was removed.
 - The industry-concentration fallback toward "50 + 50 x small-donor share"
-  was a third copy; Funding Independence now falls back to a neutral 50,
-  and only when too little money is classified to measure a mix (v6.26).
+  was a third copy. Since v6.26 an industry mix too small to measure is
+  left out of the score rather than counted as a neutral 50.
 """
 
 from app.pipeline.analyze.score_calculator import (
@@ -45,9 +45,17 @@ def test_small_donor_share_reaches_the_score_through_one_component():
     assert changed == ["Small-donor share"]
 
 
-def test_unmeasurable_industry_concentration_is_neutral():
-    c = components(funding(small=60, industries=THIN))["Industry concentration"]
-    assert c["score"] == 50.0 and "neutral 50" in c["detail"]
+def test_an_unmeasurable_component_is_left_out_not_counted_as_50():
+    """Counting a component we couldn't measure as a neutral 50 dragged a
+    member scoring high on everything measured toward 50 by its weight. It
+    is listed as not measured and the score is weighed over the others."""
+    core = _funding_independence_core(funding(small=60, industries=THIN))
+    c = {x["label"]: x for x in core["components"]}
+    assert c["Industry concentration"]["score"] is None and "not measured" in c["Industry concentration"]["detail"]
+    assert c["Top-donor concentration"]["score"] is None  # no donor list
+    measured = [x for x in core["components"] if x["score"] is not None]
+    expected = sum(x["score"] * x["weight"] for x in measured) / sum(x["weight"] for x in measured)
+    assert abs(core["score"] - expected) <= 1  # rounded weights; the score is an int
 
 
 def test_measurable_industry_money_is_scored_on_its_mix_alone():
