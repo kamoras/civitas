@@ -11,12 +11,12 @@ import pytest
 
 from app.models import LearnedClassification
 from app.pipeline.transform.industry_classifier import (
-    primed_industry_lookups,
     INDUSTRY_DESCRIPTIONS,
     classify_industries_batch_scored,
     classify_industry,
     classify_industry_with_provenance,
     classify_with_learning,
+    primed_industry_lookups,
 )
 
 
